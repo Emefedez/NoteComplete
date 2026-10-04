@@ -654,6 +654,9 @@ input[type="checkbox"] {
   gap: 6px 18px;
 }
 .audio-bar h2 {
+  grid-row: 1;
+  grid-column: 1;
+  padding-right: 136px;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -1037,7 +1040,21 @@ header p { font-size: 13px; max-width: 65vw; }
 #transcriptWords { max-height: 160px; overflow: auto; line-height: 1.9; padding: 4px 0; }
 #transcriptWords button { display: inline; min-height: 0; padding: 2px 3px; border-radius: 3px; font-size: 14px; line-height: inherit; }
 #transcriptWords button[aria-current="true"] { background: var(--accent); color: white; }
-#audioDetails { display: none; }
+#audioDetails {
+  display: inline-flex;
+  grid-row: 1;
+  grid-column: 1;
+  justify-self: end;
+  align-self: center;
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.audio-bar:not(.expanded) .audio-meta,
+.audio-bar:not(.expanded) #audioState,
+.audio-bar:not(.expanded) #transcriptPanel { display: none; }
+#transcriptProgress { width: 100%; height: 6px; margin: 4px 0; accent-color: var(--accent); }
+#transcriptProgress[hidden] { display: none; }
 @media (max-width:700px) {
   header.chrome { min-height: 46px; padding: 3px 8px; }
   header .brand > div { display: block; }
@@ -1112,7 +1129,9 @@ header p { font-size: 13px; max-width: 65vw; }
 #drivePath { overflow-wrap: anywhere; min-width: 0; }
 #driveList { list-style: none; margin: 0; padding: 0; }
 #driveList li + li { border-top: 1px solid var(--line); }
-#driveList button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 4px; padding: 12px 8px; width: 100%; }
+#driveList button { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; text-align: left; padding: 10px 8px; width: 100%; }
+.drive-entry { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.drive-thumb { flex: none; width: 72px; height: 96px; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; background: var(--chrome); }
 #driveList strong { overflow-wrap: anywhere; }
 #driveList span { color: var(--muted); font-size: 12px; }
 #driveStatus { min-height: 2em; }

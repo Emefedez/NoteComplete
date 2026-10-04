@@ -15,6 +15,7 @@ class Element {
   close() { this.open = false; this.listeners.close?.(); }
 }
 function setup(t, overrides = {}) {
+  const thumbs = overrides.thumbs || { get: () => Promise.resolve(''), cancel() {} };
   const originals = Object.fromEntries(['document','window','location','localStorage'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis,key)]));
   t.after(() => { for(const [key,value] of Object.entries(originals)) { if(value) Object.defineProperty(globalThis,key,value); else delete globalThis[key]; } });
   const nodes = new Map(), node = id => { if(!nodes.has(id)) nodes.set(id,new Element()); return nodes.get(id); };
@@ -31,26 +32,27 @@ function setup(t, overrides = {}) {
     get ready(){ return this.connected||this.publicAccess; },
     clear(){ this.connected=false;this.token=''; },
     authorize(){ this.connected=true;this.token='test'; },
-    async folders(){ calls.push('list-folders');return {files:[folder]}; },
-    async children(){ calls.push('list-files');return {files:[file]}; },
+    async search(){ calls.push('search');return {files:[folder]}; },
+    async roots(){ calls.push('roots');return {files:[file]}; },
+    async children(...args){ calls.push('children');(overrides.filters ??= []).push(args[3] ?? '');return {files:[file]}; },
     async folder(reference){ calls.push('open-folder:'+reference.id);return folder; },
     async download(){ calls.push('download');return new File(['bytes'],file.name); },
-    ...Object.fromEntries(Object.entries(overrides).filter(([key])=>key!=='siteApiKey')),
+    ...Object.fromEntries(Object.entries(overrides).filter(([key])=>!['siteApiKey','thumbs','filters'].includes(key))),
   };
   let callback;
-  driveBrowser({ open:async file=>{opened.push(file);return true;},client,identityLoader:async()=>({}),authorize:(_id,_key,success)=>{callback=success;} });
-  return {node,opened,calls,client,authorize:()=>callback({})};
+  driveBrowser({ open:async file=>{opened.push(file);return true;},client,thumbs,identityLoader:async()=>({}),authorize:(_id,_key,success)=>{callback=success;} });
+  return {node,opened,calls,client,overrides,authorize:()=>callback({})};
 }
 test('Drive panel lists without downloading and opens only the chosen file', async t => {
   const ui=setup(t);
   await ui.node('driveOpen').onclick();
   ui.node('driveConnect').onclick();ui.authorize();await tick();
-  assert.deepEqual(ui.calls,['list-folders']);
+  assert.deepEqual(ui.calls,['search']);
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
-  assert.deepEqual(ui.calls,['list-folders','list-files']);
+  assert.deepEqual(ui.calls,['search','children']);
   assert.equal(ui.opened.length,0);
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
-  assert.deepEqual(ui.calls,['list-folders','list-files','download']);
+  assert.deepEqual(ui.calls,['search','children','download']);
   assert.equal(ui.opened[0].name,'Test.noteful');
   assert.equal(ui.node('driveDialog').open,false);
 });
@@ -80,7 +82,7 @@ test('an API key opens a public folder link and downloads without sign-in', asyn
   assert.equal(ui.node('driveFind').disabled,true);
   ui.node('driveFolderLink').value='https://drive.google.com/drive/folders/1Gm9OsGBbfXrtymnIUbHtDq3TO2KHllqs';
   ui.node('driveUseFolder').onclick();await tick();
-  assert.deepEqual(ui.calls,['open-folder:1Gm9OsGBbfXrtymnIUbHtDq3TO2KHllqs','list-files']);
+  assert.deepEqual(ui.calls,['open-folder:1Gm9OsGBbfXrtymnIUbHtDq3TO2KHllqs','children']);
   assert.equal(ui.node('driveBack').disabled,true);
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
   assert.equal(ui.opened[0].name,'Test.noteful');
@@ -97,4 +99,33 @@ test('the site key opens public links by default and a personal key overrides it
   assert.equal(ui.client.apiKey,'AIza-personal');
   ui.node('driveApiKey').value='';ui.node('driveApiKey').oninput();
   assert.equal(ui.client.apiKey,'AIza-site');
+});
+test('search filters inside a folder and a cleared box lists the top level', async t => {
+  const filters = [];
+  const ui = setup(t, { filters });
+  await ui.node('driveOpen').onclick();
+  ui.node('driveConnect').onclick();ui.authorize();await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
+  assert.deepEqual(ui.calls,['search','children']);
+  assert.equal(filters.at(-1),'');
+  ui.node('driveSearch').value='Examen';
+  ui.node('driveFind').onclick();await tick();
+  assert.equal(filters.at(-1),'Examen');
+  assert.deepEqual(ui.calls,['search','children','children']);
+  ui.node('driveBack').onclick();await tick();
+  ui.node('driveSearch').value='';
+  ui.node('driveFind').onclick();await tick();
+  assert.equal(ui.calls.at(-1),'roots');
+});
+test('file rows request a preview and closing the dialog cancels pending work', async t => {
+  const requested = [];
+  let cancelled = 0;
+  const ui = setup(t, { thumbs: { get: file => { requested.push(file.name); return Promise.resolve(''); }, cancel() { cancelled++; } } });
+  await ui.node('driveOpen').onclick();
+  ui.node('driveConnect').onclick();ui.authorize();await tick();
+  assert.deepEqual(requested,[]);
+  ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
+  assert.deepEqual(requested,['Test.noteful']);
+  ui.node('driveClose').onclick();
+  assert.equal(cancelled,1);
 });

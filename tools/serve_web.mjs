@@ -15,7 +15,7 @@ export function readerServer(){return http.createServer(async(req,res)=>{
   const file=path.resolve(root,rel);
   if(!file.startsWith(root)||rel.split(/[\\/]/).some(p=>p.startsWith('.')||p==='node_modules')||rel.endsWith('.map')){res.writeHead(403);return res.end();}
   const info=await stat(file);if(!info.isFile()){res.writeHead(404);return res.end();}
-  res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+  res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'credentialless'});
   if(req.method==='HEAD')return res.end();
   const stream=createReadStream(file);stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);
  }catch{res.writeHead(404);res.end('Not found');}

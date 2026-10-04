@@ -3,8 +3,17 @@ import { pipeline, env } from './vendor/transformers/transformers.min.js';
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 env.backends.onnx.wasm.wasmPaths = new URL('./vendor/transformers/', import.meta.url).href;
-env.backends.onnx.wasm.numThreads = 1;
-let transcriber;
+// Threads need cross-origin isolation plus SharedArrayBuffer; the app now serves both, older hosts stay single-threaded.
+const isolated = self.crossOriginIsolated && typeof SharedArrayBuffer === 'function';
+env.backends.onnx.wasm.numThreads = isolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
+
+const SAMPLE_RATE = 16000, CHUNK_SECONDS = 30, STRIDE_SECONDS = 5;
+// Mirrors the pipeline's internal chunk loop so transcription can report real progress.
+function chunkCount(samples) {
+  const whole = SAMPLE_RATE * CHUNK_SECONDS, stride = SAMPLE_RATE * STRIDE_SECONDS, step = whole - 2 * stride;
+  return samples.length <= whole ? 1 : Math.ceil((samples.length - whole) / step) + 1;
+}
+let transcriber, report = null;
 self.onmessage = async ({ data }) => {
   try {
     if (!['tiny', 'base', 'small'].includes(data.model)) throw Error('Unknown Whisper model');
@@ -12,14 +21,25 @@ self.onmessage = async ({ data }) => {
       device: 'wasm', dtype: 'q8',
       progress_callback: (progress) => self.postMessage({ type: 'progress', progress }),
     });
+    const model = transcriber.model;
+    if (model && typeof model.generate === 'function' && !model.noteCompleteProgress) {
+      model.noteCompleteProgress = true;
+      const generate = model.generate.bind(model);
+      model.generate = (...args) => generate(...args).then(result => { report?.(); return result; });
+    }
+    let done = 0;
+    const total = chunkCount(data.samples);
+    report = () => self.postMessage({ type: 'speaking', done: ++done, total });
     self.postMessage({ type: 'working' });
     const result = await transcriber(data.samples, {
       task: 'transcribe', return_timestamps: 'word',
       ...(data.language ? { language: data.language } : {}),
-      chunk_length_s: 30, stride_length_s: 5,
+      chunk_length_s: CHUNK_SECONDS, stride_length_s: STRIDE_SECONDS,
     });
+    report = null;
     self.postMessage({ type: 'complete', result });
   } catch (error) {
+    report = null;
     self.postMessage({ type: 'error', error: error.message || String(error) });
   }
 };

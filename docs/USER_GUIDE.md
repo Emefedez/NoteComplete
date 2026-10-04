@@ -32,13 +32,13 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |
 | Shapes | Draw a bounding box or use Insert for a line, rectangle, ellipse, triangle or arrow. New shapes are editable outlines. |
 
-Arrow keys on selection handles adjust geometry; Shift uses larger steps. Undo/redo are global across pages (Ctrl/Cmd Z and Shift Z). Escape or a cancelled pointer gesture discards its unfinished preview. Text-content/font editing and separate shape fill-color editing are not currently provided.
+Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-click an element on the page to remove it directly; Ctrl/Cmd Z restores it. Undo/redo are global across pages (Ctrl/Cmd Z and Shift Z). Escape or a cancelled pointer gesture discards its unfinished preview. Text-content/font editing and separate shape fill-color editing are not currently provided.
 
 **Layers** selects where to draw, creates/renames layers, controls visibility/opacity and locks them. Hidden or locked layers cannot be edited. New strokes inherit the selected layer.
 
 ## Audio
 
-Select a recording in the single player, then play, pause or seek. Nonempty recording names are shown unchanged; otherwise the UI generates a recording number/date. **Show handwriting** jumps to the first associated page. **Dim future handwriting** shows strokes at 20% opacity before pen-down and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay. Unrelated/untimed ink remains visible. Each recording retains its own playback position.
+Select a recording in the single player, then play, pause or seek. Nonempty recording names are shown unchanged; otherwise the UI generates a recording number/date. **Recording & sync** shrinks the bar back to the player even after the recording controls, handwriting options or transcript were opened, and expands them again. **Show handwriting** jumps to the first associated page. **Dim future handwriting** shows strokes at 20% opacity before pen-down and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay. Unrelated/untimed ink remains visible. Each recording retains its own playback position.
 
 The supplied native audio example contains one recording. Multiple-recording behavior is tested using an explicitly synthetic fixture. Codec support varies by browser/device; **Download** remains available when playback is unsupported.
 
@@ -46,7 +46,8 @@ The supplied native audio example contains one recording. Multiple-recording beh
 
 For notes with audio, expand **Transcript** in the playback controls and choose
 **Transcribe recording**. Whisper runs in a local WASM worker and detects
-the spoken language when **Detect language** is selected. Castellano is the
+the spoken language when **Detect language** is selected. A progress bar shows
+the model download and each transcription chunk while it runs. Castellano is the
 default, with Galego and English available alongside other language options.
 Expand **Language, model & audio** to select Tiny (fastest), Base (default) or
 Small (higher accuracy, more memory). Gain and the voice filter affect playback

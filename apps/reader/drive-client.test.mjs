@@ -17,14 +17,17 @@ test('Drive lists only requested folder metadata, escapes queries and follows ex
     calls.push({ url: new URL(url), options });
     return Response.json({ files: [{ id: 'note1', name: 'My note.noteful' }], nextPageToken: 'page2' });
   });
-  await client.folders("Noteful's \\ notes", '', undefined);
-  assert.equal(calls[0].url.searchParams.get('q'), "trashed = false and mimeType = 'application/vnd.google-apps.folder' and name contains 'Noteful\\'s \\\\ notes'");
+  await client.search("Noteful's \\ notes", '', undefined);
+  assert.equal(calls[0].url.searchParams.get('q'), "trashed = false and name contains 'Noteful\\'s \\\\ notes'");
   const folder = { id: 'folder1', resourceKey: 'secret-key' };
   const page = await client.children(folder, '', undefined);
-  await client.children(folder, page.nextPageToken, undefined);
+  await client.children(folder, page.nextPageToken, undefined, 'Examen');
   assert.equal(calls[2].url.searchParams.get('pageToken'), 'page2');
+  assert.equal(calls[2].url.searchParams.get('q'), "trashed = false and 'folder1' in parents and name contains 'Examen'");
   assert.equal(calls[1].url.searchParams.get('q'), "trashed = false and 'folder1' in parents");
   assert.equal(calls[1].options.headers['X-Goog-Drive-Resource-Keys'], 'folder1/secret-key');
+  await client.roots('', undefined);
+  assert.equal(calls[3].url.searchParams.get('q'), "trashed = false and 'root' in parents");
   for (const {url,options} of calls) {
     assert.equal(options.method, 'GET'); assert.equal(options.cache, 'no-store');
     assert.equal(options.headers.Authorization, 'Bearer test-token');
@@ -55,10 +58,10 @@ test('Drive authorization requires read-only scope and expiry; disconnect blocks
   const client = new DriveClient(async () => { calls++; return Response.json({files:[]}); });
   assert.throws(() => client.authorize({access_token:'x',scope:'https://www.googleapis.com/auth/drive',expires_in:3600}));
   assert.throws(() => client.authorize({access_token:'x',scope:DRIVE_SCOPE,expires_in:0}));
-  await assert.rejects(client.folders('Noteful'), /Connect/);
+  await assert.rejects(client.search('Noteful'), /Connect/);
   client.authorize({access_token:'x',scope:DRIVE_SCOPE,expires_in:3600});
   client.clear();
-  await assert.rejects(client.folders('Noteful'), /Connect/);
+  await assert.rejects(client.search('Noteful'), /Connect/);
   assert.equal(calls,0);
 });
 test('Drive handles expired permission and missing files without treating errors as note bytes', async () => {

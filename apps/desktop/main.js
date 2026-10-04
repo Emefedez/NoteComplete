@@ -22,7 +22,16 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler(() => false);
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
-    try { return await net.fetch(pathToFileURL(assetPath(root, request.url)).href); }
+    try {
+      const response = await net.fetch(pathToFileURL(assetPath(root, request.url)).href);
+      // Cross-origin isolation lets the speech engine use multiple WASM threads.
+      const headers = new Headers(response.headers);
+      headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+      headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
+      // File responses must never be cached: reloads pick up rebuilt assets.
+      headers.set('Cache-Control', 'no-store');
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
     catch { return new Response('Not found', { status: 404 }); }
   });
   const pendingAuth = new Map();

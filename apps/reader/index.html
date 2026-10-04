@@ -337,6 +337,7 @@
             <button id="downloadTranscript" type="button" hidden>Export transcript</button>
           </div>
           <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
+          <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
           <div id="transcriptWords" aria-label="Transcript words"></div>
           <div id="transcriptNavigation" class="transcript-controls" hidden>
             <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
@@ -386,7 +387,7 @@
   </details>
   <p class="muted">Google’s read-only permission covers Drive files. NoteComplete only browses and downloads; it never uploads, edits or deletes Drive files.</p>
   <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button><button id="driveDisconnect" type="button" disabled>Disconnect</button></div>
-  <div class="drive-search"><label>Folder name<input id="driveSearch" type="search" value="Noteful" /></label><button id="driveFind" type="button" disabled>Find folders</button></div>
+  <div class="drive-search"><label>Folder or note name<input id="driveSearch" type="search" value="Noteful" placeholder="Clear and search to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
   <details id="driveLinkSetup" class="drive-setup"><summary>Use a folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
   <div class="drive-heading"><strong id="drivePath">Choose your Noteful folder</strong><div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button></div></div>
   <p id="driveStatus" role="status" aria-live="polite">Connect to browse files.</p>

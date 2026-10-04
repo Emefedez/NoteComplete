@@ -46,6 +46,15 @@ export class TranscriptController {
   busy(value) {
     $('transcribeAudio').disabled = value || !this.asset;
     $('cancelTranscript').hidden = !value;
+    const bar = $('transcriptProgress');
+    bar.hidden = !value;
+    bar.removeAttribute('value');
+  }
+  progress(done, total) {
+    const bar = $('transcriptProgress');
+    if (!total) { bar.removeAttribute('value'); return; }
+    bar.value = Math.min(100, Math.round((done / total) * 100));
+    this.status(`Transcribing… ${bar.value}%. Playback remains available.`);
   }
   cancel() {
     this.generation++;
@@ -142,9 +151,12 @@ export class TranscriptController {
       this.worker.onerror = event => fail(event.message || 'The local speech engine could not start');
       this.worker.onmessage = ({ data }) => {
         if (generation !== this.generation) return;
-        if (data.type === 'progress' && data.progress.status === 'progress')
+        if (data.type === 'progress' && data.progress.status === 'progress') {
+          $('transcriptProgress').value = Math.round(data.progress.progress || 0);
           this.status(`Loading speech model: ${Math.round(data.progress.progress || 0)}% (${data.progress.file})`);
-        if (data.type === 'working') this.status('Transcribing on this device… Playback remains available.');
+        }
+        if (data.type === 'working') { $('transcriptProgress').removeAttribute('value'); this.status('Transcribing… Playback remains available.'); }
+        if (data.type === 'speaking') this.progress(data.done, data.total);
         if (data.type === 'error') fail(data.error);
         if (data.type === 'complete') {
           const words = timedWords(data.result.chunks, duration);

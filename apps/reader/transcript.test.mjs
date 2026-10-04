@@ -60,3 +60,21 @@ test('cancelling while bytes are being read prevents stale work from starting', 
   assert.equal(controller.worker, null);
   assert.deepEqual(controller.words, []);
 });
+test('transcription progress fills the bar and hides when idle', () => {
+  const nodes = new Map();
+  globalThis.document = {
+    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); },
+    createElement: element, createDocumentFragment: element, createTextNode: text => text,
+  };
+  const audio = { time: 0, audio: { paused: true }, seek() {} };
+  const controller = new TranscriptController(audio);
+  controller.select({ id: 'a' });
+  assert.equal(nodes.get('transcriptProgress').hidden, true);
+  controller.busy(true);
+  assert.equal(nodes.get('transcriptProgress').hidden, false);
+  controller.progress(1, 4);
+  assert.equal(nodes.get('transcriptProgress').value, 25);
+  assert.match(nodes.get('transcriptStatus').textContent, /25%/);
+  controller.busy(false);
+  assert.equal(nodes.get('transcriptProgress').hidden, true);
+});

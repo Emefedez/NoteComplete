@@ -274,6 +274,20 @@ function buildPages(sizes) {
     };
     el.onpointerup = pointerUp;
     el.onpointercancel = () => { p.audioTap = null; cancelGesture(); };
+    el.oncontextmenu = async (event) => {
+      // Right-click removes the element under the pointer; Ctrl+Z brings it back.
+      event.preventDefault();
+      if (!doc || editing || busy() || !p.view) return;
+      const [x, y] = point(event, p);
+      try {
+        const item = await call("pick", { page: p.index, x, y,
+          tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width });
+        if (!item || !doc || editing || busy()) return;
+        if (selection.item?.page === p.index && selection.item?.id === item.id) selection.clear();
+        await action("remove", { page: p.index, itemId: item.id });
+        status("Element removed. Press Ctrl+Z to undo it.");
+      } catch (error) { status(error.message, true); }
+    };
     el.onclick = async (event) => {
       if (!p.audioTap || tool !== "pan" || !p.view?.timings.length) return;
       p.audioTap = null;
@@ -1289,6 +1303,11 @@ $("audioDetails").onclick = () => {
  const expanded=$("audioBar").classList.toggle("expanded");
  $("audioDetails").setAttribute("aria-expanded",String(expanded));
 };
+// Desktop opens with the recording controls visible; the toggle still shrinks them at any time.
+if (matchMedia("(min-width: 701px)").matches) {
+ $("audioBar").classList.add("expanded");
+ $("audioDetails").setAttribute("aria-expanded", "true");
+}
 
 driveBrowser({ open: async file => {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");

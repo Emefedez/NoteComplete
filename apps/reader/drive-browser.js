@@ -1,11 +1,13 @@
 import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile } from './drive-client.js';
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
+import { driveThumbnails } from './drive-thumbs.js';
 
-export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess }) {
+export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null }) {
   const $ = id => document.getElementById(id);
   const dialog = $('driveDialog');
+  const previews = thumbs || driveThumbnails(client);
   let identity, controller, generation = 0, loading = false, importing = false;
-  let folder = null, trail = [], nextPage = '', search = 'Noteful';
+  let folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
   const configKey = 'notecomplete-drive-config-v1';
   let config = {};
   try { config = JSON.parse(localStorage.getItem(configKey)) || {}; } catch { /* Storage is optional. */ }
@@ -28,7 +30,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   function controls() {
     $('driveConnect').disabled = !identity || loading;
     $('driveDisconnect').disabled = importing || (!client.token && !loading);
-    $('driveFind').disabled = !client.connected || loading;
+    $('driveFind').disabled = loading || !(folder ? client.ready : client.connected);
     $('driveUseFolder').disabled = !client.ready || loading;
     // Public access can only browse from a folder link, not search the Drive.
     $('driveRefresh').disabled = !client.ready || loading || (client.publicAccess && !folder);
@@ -63,24 +65,44 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       const allowed = supported && (isFolder || file.capabilities?.canDownload !== false);
       button.dataset.unavailable = String(!allowed);
       detail.textContent = isFolder ? 'Folder · browse' : !supported ? 'Unsupported format' : !allowed ? 'Download restricted' : [file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? `${(Number(file.size) / 1048576).toFixed(1)} MB` : '', 'Download & open'].filter(Boolean).join(' · ');
-      button.append(name, detail);
+      const entry = document.createElement('div');
+      entry.className = 'drive-entry';
+      entry.append(name, detail);
+      if (isFolder || !allowed) button.append(entry);
+      else {
+        const preview = document.createElement('img');
+        preview.className = 'drive-thumb';
+        preview.alt = '';
+        button.append(preview, entry);
+        previews.get(file).then(url => { if (url) preview.src = url; else preview.remove?.(); });
+      }
       button.onclick = () => isFolder ? enter(file) : choose(file);
       item.append(button); fragment.append(item);
     }
     $('driveList').append(fragment);
   }
   async function fetchList(signal, valid, append = false) {
-    const page = folder ? await client.children(folder, append ? nextPage : '', signal) : await client.folders(search, append ? nextPage : '', signal);
+    const page = folder
+      ? await client.children(folder, append ? nextPage : '', signal, filter)
+      : search
+        ? await client.search(search, append ? nextPage : '', signal)
+        : await client.roots(append ? nextPage : '', signal);
     if (!valid()) return;
     if (!append) resetList();
     addFiles(page.files || []);
     nextPage = page.nextPageToken || '';
     const count = $('driveList').children.length;
-    message(page.incompleteSearch ? 'Some results are missing. Paste an exact folder link to open it.' : count ? `${count} ${folder ? 'items' : 'folders'} listed. ${nextPage ? 'More results available.' : ''}` : nextPage ? 'No items on this page. Load more results.' : folder ? 'This folder is empty.' : 'No matching folder found. Try another name or paste its Drive link.');
+    const context = folder ? filter ? 'matching items' : 'items' : 'folders and notes';
+    message(page.incompleteSearch ? 'Some results are missing. Paste an exact folder link to open it.'
+      : count ? `${count} ${context} listed. ${nextPage ? 'More results available.' : ''}`
+      : nextPage ? 'No items on this page. Load more results.'
+      : folder ? filter ? `Nothing matches “${filter}” in this folder.` : 'This folder is empty.'
+      : search ? 'No folders or notes match. Try another name, or clear the box to list the top level of Drive.'
+      : 'This level of Drive is empty.');
   }
   function enter(file) {
     if (loading) return;
-    trail.push(file); folder = file; resetList();
+    trail.push(file); folder = file; filter = ''; resetList();
     run((signal, valid) => { message('Loading folder…'); return fetchList(signal, valid); });
   }
   function choose(file) {
@@ -111,31 +133,34 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       authorize(identity, $('driveClientId').value.trim(), response => {
         if (version !== generation || !dialog.open) return;
         loading = false;
-        try { client.authorize(response); search = $('driveSearch').value.trim() || 'Noteful'; run((signal, valid) => fetchList(signal, valid)); }
+        try { client.authorize(response); search = $('driveSearch').value.trim() || 'Noteful'; filter = ''; run((signal, valid) => fetchList(signal, valid)); }
         catch (error) { message(error.message); controls(); }
       }, error => { if (version === generation) { loading = false; message(error.message); controls(); } });
     } catch (error) { loading = false; message(error.message); controls(); }
   };
   $('driveDisconnect').onclick = () => {
-    stop(); identity?.disconnect?.(); client.clear(); resetList(); trail = []; folder = null;
+    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = '';
     message('Disconnected on this device. No files were changed in Drive.'); controls();
   };
   $('driveFind').onclick = () => {
-    search = $('driveSearch').value.trim() || 'Noteful'; trail = []; folder = null; resetList();
+    const value = $('driveSearch').value.trim();
+    // Inside a folder the same box filters its children; at the top it searches names, or lists the top level when cleared.
+    if (folder) { filter = value; run((signal, valid) => fetchList(signal, valid)); return; }
+    search = value; filter = ''; trail = []; folder = null; resetList();
     run((signal, valid) => fetchList(signal, valid));
   };
   $('driveUseFolder').onclick = () => run(async (signal, valid) => {
     saveConfig(); const selected = await client.folder(folderReference($('driveFolderLink').value), signal);
     if (!valid()) return;
-    folder = selected; trail = [selected]; resetList(); await fetchList(signal, valid);
+    folder = selected; trail = [selected]; filter = ''; resetList(); await fetchList(signal, valid);
   });
   $('driveBack').onclick = () => {
-    trail.pop(); folder = trail.at(-1) || null; resetList(); run((signal, valid) => fetchList(signal, valid));
+    trail.pop(); folder = trail.at(-1) || null; filter = ''; resetList(); run((signal, valid) => fetchList(signal, valid));
   };
   $('driveRefresh').onclick = () => run((signal, valid) => fetchList(signal, valid));
   $('driveMore').onclick = () => run((signal, valid) => fetchList(signal, valid, true));
   $('driveClose').onclick = () => dialog.close();
   dialog.addEventListener('cancel', event => { if (importing) event.preventDefault(); });
-  dialog.addEventListener('close', stop);
+  dialog.addEventListener('close', () => { stop(); previews.cancel(); });
   controls();
 }

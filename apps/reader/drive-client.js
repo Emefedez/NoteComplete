@@ -2,7 +2,7 @@
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
 export const supportedDriveFile = file => /\.(noteful|nfedit|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
-const fields = 'id,name,mimeType,modifiedTime,size,resourceKey,capabilities(canDownload)';
+const fields = 'id,name,mimeType,modifiedTime,size,resourceKey,thumbnailLink,capabilities(canDownload)';
 const quote = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export function folderReference(value) {
   const input = value.trim();
@@ -51,11 +51,17 @@ export class DriveClient {
     if (pageToken) params.pageToken = pageToken;
     return (await this.request('files', params, signal, resource)).json();
   }
-  folders(name, pageToken, signal) {
-    return this.list(`trashed = false and mimeType = '${FOLDER_MIME}' and name contains '${quote(name)}'`, pageToken, signal);
+  // Folders and files together, so a note can be found by name without browsing into a folder.
+  search(name, pageToken, signal) {
+    return this.list(`trashed = false and name contains '${quote(name)}'`, pageToken, signal);
   }
-  children(folder, pageToken, signal) {
-    return this.list(`trashed = false and '${quote(folder.id)}' in parents`, pageToken, signal, folder);
+  // The top level of My Drive: everything that does not live inside a folder.
+  roots(pageToken, signal) {
+    return this.list(`trashed = false and 'root' in parents`, pageToken, signal);
+  }
+  children(folder, pageToken, signal, filter = '') {
+    const within = filter ? ` and name contains '${quote(filter)}'` : '';
+    return this.list(`trashed = false and '${quote(folder.id)}' in parents${within}`, pageToken, signal, folder);
   }
   async folder(reference, signal) {
     const file = await (await this.request('files/' + encodeURIComponent(reference.id), { fields, supportsAllDrives: 'true' }, signal, reference)).json();
@@ -66,5 +72,13 @@ export class DriveClient {
     if (!supportedDriveFile(file) || file.capabilities?.canDownload === false) throw Error('This file cannot be downloaded into NoteComplete.');
     const response = await this.request('files/' + encodeURIComponent(file.id), { alt: 'media', supportsAllDrives: 'true' }, signal, file);
     return new File([await response.blob()], file.name, { type: file.mimeType });
+  }
+  // Google renders previews for PDFs and images; note bytes are previewed locally instead.
+  async thumbnail(file, signal) {
+    if (!file.thumbnailLink) return '';
+    const headers = this.publicAccess ? {} : { Authorization: `Bearer ${this.token}` };
+    const response = await this.fetcher(file.thumbnailLink, { headers, signal, cache: 'force-cache', credentials: 'omit', redirect: 'follow' });
+    if (!response.ok) return '';
+    return URL.createObjectURL(await response.blob());
   }
 }
