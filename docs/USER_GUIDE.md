@@ -26,6 +26,10 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 
 The headphones button next to Layers (**A**) opens the recordings: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, show the handwriting written at that moment, dim ink not yet written, and download the recording. **Transcribe** runs Whisper on this device (choose the model and language); the transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
 
+## Sort and filter notes
+
+On Home, **Sort** orders Recent and Drive notes A–Z (default), by date or by size. The chips filter by modification date, notes with audio, size and Noteful tags. Filters stack, and selecting several tags keeps notes that have all of them. Recordings and tags are read from each note without downloading it. Tags of very large notes appear once they have been opened.
+
 ## Find in a note
 
 **Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.

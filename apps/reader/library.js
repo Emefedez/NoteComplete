@@ -181,6 +181,9 @@ export class Library {
   // Covers are keyed by file and version so a changed note gets a new one.
   coverKey(file) { return `${this.key(file)}@${file.modifiedTime || ''}`; }
   cover(key) { return this.store.get('covers', key).catch(() => null); }
+  // Filter facts (recordings, tags) per file version, like covers.
+  facts(key) { return this.store.get('settings', `facts:${key}`).catch(() => null); }
+  saveFacts(key, value) { return this.store.set('settings', `facts:${key}`, value).catch(() => {}); }
   // Extracted PDF text and OCR results, keyed by a fingerprint of the note's bytes.
   searchData(fingerprint) { return this.store.get('search', fingerprint).catch(() => null); }
   saveSearchData(fingerprint, value) { return this.store.set('search', fingerprint, value).catch(() => {}); }

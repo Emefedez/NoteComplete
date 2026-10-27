@@ -138,6 +138,15 @@
           <button id="emptyOpen" class="primary" data-icon="open" disabled>Open file…</button>
         </div>
       </div>
+      <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
+        <label class="filter-group sort-group"><span class="filter-label">Sort</span><select id="homeSort" data-native aria-label="Sort notes"></select></label>
+        <div class="filter-group" data-group="period" aria-label="Modified"><span class="filter-label">Modified</span></div>
+        <div class="filter-group" data-group="audio"><button type="button" class="chip" data-filter="audio" aria-pressed="false">With audio</button></div>
+        <div class="filter-group" data-group="sizes" aria-label="Size"><span class="filter-label">Size</span></div>
+        <div class="filter-group" data-group="tags" aria-label="Tags" hidden><span class="filter-label">Tags</span></div>
+        <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
+        <span id="filterSummary" class="muted"></span>
+      </div>
       <section id="recentSection" class="home-section" aria-labelledby="recentTitle" hidden>
         <h3 id="recentTitle">Recent</h3>
         <ul id="recentList" class="note-grid"></ul>

@@ -1254,7 +1254,14 @@ $("viewport").addEventListener("wheel", (e) => {
   const viewport = $("viewport"), box = viewport.getBoundingClientRect();
   if (!pinch) {
     const base = currentZoom();
-    pinch = { base, scale: 1, x: e.clientX - box.left, y: e.clientY - box.top };
+    pinch = { base, scale: 1, x: e.clientX - box.left, y: e.clientY - box.top, clientX: e.clientX, clientY: e.clientY };
+    // Anchor: the page point under the pointer, as fractions of that page.
+    const sheet = document.elementFromPoint(e.clientX, e.clientY)?.closest(".sheet");
+    const panel = sheet && panels.find((p) => p.el === sheet);
+    if (panel) {
+      const r = panel.el.getBoundingClientRect();
+      pinch.anchor = { panel, fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height };
+    }
     pinch.cx = viewport.scrollLeft + pinch.x;
     pinch.cy = viewport.scrollTop + pinch.y;
     $("pages").style.transformOrigin = `${pinch.cx}px ${pinch.cy}px`;
@@ -1268,12 +1275,19 @@ $("viewport").addEventListener("wheel", (e) => {
   $("zoomValue").value = Math.round(pinch.base * pinch.scale * 100) + "%";
   clearTimeout(pinch.timer);
   pinch.timer = setTimeout(() => {
-    const { base, scale, cx, cy, x, y } = pinch;
+    const { base, scale, cx, cy, x, y, anchor, clientX, clientY } = pinch;
     pinch = null;
     $("pages").style.transform = $("pages").style.transformOrigin = $("pages").style.willChange = "";
     setZoom(Math.round(base * scale * 1000) / 1000);
-    viewport.scrollLeft = cx * scale - x;
-    viewport.scrollTop = cy * scale - y;
+    if (anchor) {
+      // Put the same page point back under the pointer; gaps and centring do not scale.
+      const r = anchor.panel.el.getBoundingClientRect();
+      viewport.scrollLeft += r.left + anchor.fx * r.width - clientX;
+      viewport.scrollTop += r.top + anchor.fy * r.height - clientY;
+    } else {
+      viewport.scrollLeft = cx * scale - x;
+      viewport.scrollTop = cy * scale - y;
+    }
   }, 160);
 }, { passive: false });
 $("undo").onclick = () => {
@@ -1610,10 +1624,12 @@ const library = new Library();
 let notePath = "", noteEntryKey = "";
 const drive = driveBrowser({
   library,
+  onCards: () => home?.applyFilters(),
   open: async (file, driveFile) => {
     const opened = await openChosen(file);
     if (opened) {
       home.rememberCover(library.coverKey(driveFile), file);
+      home.rememberFacts(library.coverKey(driveFile), file);
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
       noteEntryKey = library.key(driveFile);
     }
@@ -1649,6 +1665,7 @@ async function openLocal() {
     noteEntryKey = "";
     const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
     home.rememberCover(entry.key, file);
+    home.rememberFacts(entry.key, file);
   } catch (error) {
     status(error.message, true);
   }

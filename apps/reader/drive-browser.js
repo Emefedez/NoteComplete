@@ -4,7 +4,7 @@ import { driveThumbnails } from './drive-thumbs.js';
 
 // The Drive section of the home screen. show()/hide() follow the home screen:
 // hiding cancels listings, downloads, previews and a pending sign-in.
-export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null }) {
+export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {} }) {
   const $ = id => document.getElementById(id);
   const previews = thumbs || driveThumbnails(client, { library });
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
@@ -98,6 +98,9 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         preview.loading = 'lazy';
         button.append(preview, entry);
         previews.get(file).then(url => { if (url) preview.src = url; else preview.classList?.add('missing'); });
+        // What the home filters look at; facts arrive after the cover.
+        button.note = { name: file.name, modified: Date.parse(file.modifiedTime) || 0, size: Number(file.size) || 0, facts: null };
+        previews.facts?.(file).then(facts => { if (facts) { button.note.facts = facts; onCards(); } });
         cards.set(entry, file);
         badge(entry, file);
       }
@@ -105,6 +108,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       item.append(button); fragment.append(item);
     }
     $('driveList').append(fragment);
+    onCards();
   }
   async function fetchList(signal, valid, append = false) {
     const page = folder

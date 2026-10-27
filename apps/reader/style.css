@@ -1047,7 +1047,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd, b
 .drive-signin.compact .drive-signin-icon svg { width: 24px; height: 24px; }
 .drive-signin.compact ol, .drive-signin.compact details, .drive-signin.compact p { display: none; }
 .drive-signin.compact > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.drive-signin.compact > div::before { content: "Browsing a public folder. Connect for your whole Drive."; color: var(--muted); font-size: 13px; }
+.drive-signin.compact > div:last-child::before { content: "Browsing a public folder. Connect for your whole Drive."; color: var(--muted); font-size: 13px; }
 .drive-setup { margin: 10px 0 0; }
 .drive-setup summary { padding-left: 0; color: var(--muted); }
 #driveStatus { min-height: 1.6em; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
@@ -1197,6 +1197,16 @@ button.danger:disabled { background: #e8b4b0; }
 .audio-panel .transcript-controls select { flex: 1; width: auto; }
 .transcript-word-edit { font: inherit; font-size: 14px; padding: 0 3px; border: 1px solid var(--accent); border-radius: 3px; }
 #transcriptEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Home filters: stackable chips */
+.home-filters { max-width: 1240px; margin: 16px auto 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.filter-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.filter-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.sort-group select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 12px; }
+.chip { min-height: 26px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 12px; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip-clear { min-height: 26px; padding: 2px 8px; font-size: 12px; color: var(--accent); }
+#filterSummary { font-size: 12px; }
+#empty .home-filters .chip, #empty .home-filters .chip-clear { min-height: 26px; padding: 2px 10px; }
 /* Study dialogs */
 .study-row { display: flex; gap: 12px; } .study-row > label { flex: 1; }
 .ocr-dialog input[type="text"] { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }

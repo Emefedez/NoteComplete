@@ -5,6 +5,19 @@
 // A few files load in parallel; cancel() drops queued and late results.
 import { FOLDER_MIME, supportedDriveFile } from './drive-client.js';
 import { noteCover } from './note-cover.js';
+import { noteFacts } from './note-facts.js';
+
+// Ranges already fetched serve later reads inside them (cover and facts share the head and tail).
+export function cachingReader(read) {
+  const chunks = [];
+  return async (start, end) => {
+    const hit = chunks.find(c => c.start <= start && c.end >= end);
+    if (hit) return (await hit.bytes).subarray(start - hit.start, end - hit.start);
+    const chunk = { start, end, bytes: read(start, end) };
+    chunks.push(chunk);
+    return chunk.bytes;
+  };
+}
 
 // Small JPEG data URLs keep the library store compact and survive reloads.
 export async function shrink(blob, width = 320) {
@@ -32,14 +45,21 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
       job().finally(() => { active--; pump(); });
     }
   }
+  const readers = new Map();
+  const readerFor = (file, signal) => {
+    const id = `${file.id}@${file.modifiedTime || ''}`;
+    if (!readers.has(id)) readers.set(id, cachingReader((start, end) => client.range(file, start, end, signal)));
+    return readers.get(id);
+  };
+  const isNote = file => /\.noteful$/i.test(file.name || '') && typeof client.range === 'function' && Number(file.size) > 0;
   async function produce(file, signal) {
     const key = library?.coverKey(file);
     const kept = key && await library.cover(key);
     if (kept) return kept;
     let url = '';
     if (typeof client.thumbnail === 'function' && file.thumbnailLink) url = await client.thumbnail(file, signal);
-    else if (/\.noteful$/i.test(file.name || '') && typeof client.range === 'function' && Number(file.size) > 0) {
-      const cover = await noteCover((start, end) => client.range(file, start, end, signal), Number(file.size));
+    else if (isNote(file)) {
+      const cover = await noteCover(readerFor(file, signal), Number(file.size));
       if (cover) url = await resize(new Blob([cover.bytes], { type: cover.mime }));
     }
     if (url.startsWith('blob:')) urls.push(url);
@@ -60,7 +80,25 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
         pump();
       });
     },
+    // Recordings and tags for filtering, cached per file version.
+    facts(file) {
+      if (!isNote(file) || file.capabilities?.canDownload === false) return Promise.resolve(null);
+      const token = generation, signal = controller.signal, key = library?.coverKey(file);
+      return new Promise(resolve => {
+        queue.push(async () => {
+          if (token !== generation) return resolve(null);
+          try {
+            const kept = key && await library.facts(key);
+            const facts = kept || await noteFacts(readerFor(file, signal), Number(file.size));
+            if (!kept && key) library.saveFacts(key, facts);
+            resolve(token === generation ? facts : null);
+          } catch { resolve(null); }
+        });
+        pump();
+      });
+    },
     cancel() {
+      readers.clear();
       generation++;
       controller.abort();
       controller = new AbortController();

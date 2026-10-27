@@ -37,6 +37,12 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Progress bar and percentage for Drive downloads.
 - ✅ `tools/update_appimage.py` rebuilds everything and replaces the installed AppImage, keeping `.previous`.
 
+## Home filters
+- ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
+- ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.
+- ✅ Recordings and tags are read with byte ranges, sharing the cover's head and tail reads, and kept per file version. Notes whose pages exceed 3 MB are marked "not yet read for tags" until opened once. *Browser test with four real notes on a simulated Drive.*
+- ✅ Releasing a pinch no longer shifts the document: the page point under the pointer is kept (measured drift under 1 px).
+
 ## Format
 - ✅ "7- ELECTRÓNICA DIGITAL Copiar 2": object kind 19 is a tag ("#SD I"). It renders as a pill and is searchable as text.
 
