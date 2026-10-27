@@ -185,7 +185,7 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
   - read-only first; contributing back (fork + pull request) later;
   - large notes: GitHub refuses files over 100 MB (Memoria 1 is 259 MB), so repositories need Git LFS or release assets for those; the app should read both;
   - downloaded files cached and reused like Drive copies.
-- [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets no larger than Noteful's maximum page (the owner gives 147456 × 14756 pt; confirm the exact limit and units against Noteful before building, since the two numbers differ by a factor of ten), laid out in reading order with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
+- [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way.
 
 ## Home filters
