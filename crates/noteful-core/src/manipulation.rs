@@ -257,7 +257,14 @@ impl Editor {
             .items
             .iter()
             .find(|i| i.id == id)
-            .map(|i| i.layer)
+            .map(|i| {
+                if i.locked() {
+                    Err(Error::new(0, "This item is locked in place"))
+                } else {
+                    Ok(i.layer)
+                }
+            })
+            .transpose()?
             .or_else(|| {
                 self.additions(page)
                     .find(|(key, _)| key == id)
@@ -403,7 +410,12 @@ impl Editor {
                     return self.selection(page, id).map(Some);
                 }
             }
-            for item in page_ref.items.iter().rev().filter(|i| i.layer == layer.id) {
+            for item in page_ref
+                .items
+                .iter()
+                .rev()
+                .filter(|i| i.layer == layer.id && !i.locked())
+            {
                 if !deleted.contains(item.id.as_str())
                     && hit_geometry(
                         p,

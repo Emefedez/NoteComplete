@@ -34,6 +34,19 @@ pub(crate) struct Item {
     pub text: Option<crate::RichText>,
 }
 impl Item {
+    /// Payload tag 21: "lock in place" (owner notes: the table image on page 13 of
+    /// the ACII training exam). Locked items cannot be selected or edited.
+    pub(crate) fn locked(&self) -> bool {
+        self.object
+            .as_ref()
+            .is_some_and(|o| o["6"]["21"].as_u64() == Some(1))
+    }
+    /// Tape: kind-3 objects with tool 9 = 2; payload tag 15 is 1 while tapped open.
+    pub(crate) fn tape(&self) -> Option<bool> {
+        let o = self.object.as_ref()?;
+        (o["6"]["1"].as_u64() == Some(3) && o["9"].as_u64() == Some(2))
+            .then(|| o["6"]["15"].as_u64() == Some(1))
+    }
     pub(crate) fn hit_points(&self) -> &[[f64; 2]] {
         self.stroke
             .as_ref()
@@ -91,8 +104,9 @@ pub(crate) fn color(c: &[f64; 4]) -> String {
         (c[2].clamp(0., 1.) * 255.).round()
     )
 }
+// Tool 0 is ink, 1 highlighter (multiplied), 2 tape (drawn as covering ink).
 fn composite(el: String, opacity: f64, tool: u64) -> Result<String> {
-    if tool > 1 || !(0.0..=1.0).contains(&opacity) {
+    if tool > 2 || !(0.0..=1.0).contains(&opacity) {
         return Err(Error::new(0, "Unsupported tool or opacity"));
     }
     Ok(format!(
@@ -177,6 +191,8 @@ fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> 
         format!("<g fill=\"{}\">{parts}</g>", color(rgba))
     }
 }
+/// Opacity of tape that has been tapped open.
+pub const TAPE_OPEN: f64 = 0.18;
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
     let kind = p["1"].as_u64().unwrap_or(0);
@@ -276,7 +292,18 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             return Err(Error::new(0, format!("Unsupported object type {kind}")));
         };
         radius = width / 2. * sx.abs().max(sy.abs());
-        format!("<g transform=\"scale({sx} {sy})\">{geometry}</g>")
+        let el = format!("<g transform=\"scale({sx} {sy})\">{geometry}</g>");
+        if kind == 3 && o["9"].as_u64() == Some(2) {
+            // Tape covers what is under it; tapped open it stays as a faint band.
+            let open = p["15"].as_u64() == Some(1);
+            format!(
+                "<g data-tape=\"object:{index}\" data-revealed=\"{}\" opacity=\"{}\">{el}</g>",
+                u8::from(open),
+                if open { TAPE_OPEN } else { 1. }
+            )
+        } else {
+            el
+        }
     };
     let svg = composite(
         format!(
@@ -516,5 +543,33 @@ impl Scene {
             layers,
             pdf_assets,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::object;
+    use serde_json::json;
+    // Shapes of the owner's ACII training exam: tape (kind 3, tool 2) and a locked image.
+    #[test]
+    fn tape_and_locked_objects() {
+        let tape = |open: u64| json!({"2":{"1":[544.4,982.8,1028.0,94.4,0.0]},"4":0,"5":1,"6":{"1":3,"2":[1028.0,94.4],"5":{"1":{"0":[0.9,0.8,0.9,1.0]},"2":0},"13":{"1":[0.0,0.0,1028.0,0.0,1028.0,94.4,0.0,94.4],"2":[0,1,1,1,4]},"15":open,"20":3.0},"8":1.0,"9":2});
+        let covered = object(&tape(0), None, 4).unwrap();
+        assert_eq!(covered.tape(), Some(false));
+        assert!(covered
+            .svg
+            .contains("data-tape=\"object:4\" data-revealed=\"0\" opacity=\"1\""));
+        let open = object(&tape(1), None, 5).unwrap();
+        assert_eq!(open.tape(), Some(true));
+        assert!(open
+            .svg
+            .contains(&format!("opacity=\"{}\"", super::TAPE_OPEN)));
+        assert!(!open.locked());
+        let mut shape = tape(0);
+        shape["9"] = json!(0);
+        shape["6"]["21"] = json!(1);
+        let locked = object(&shape, None, 6).unwrap();
+        assert!(locked.locked());
+        assert_eq!(locked.tape(), None);
     }
 }

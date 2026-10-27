@@ -183,6 +183,8 @@ async function load(file) {
     });
     // Both worker and UI retain the previous document until the replacement validates.
     reset();
+    tapeMode = "note";
+    tapeTaps.clear();
     find.reset(await fingerprint);
     const token = ++epoch;
     revision++;
@@ -303,7 +305,16 @@ function buildPages(sizes) {
       } catch (error) { status(error.message, true); }
     };
     el.onclick = async (event) => {
-      if (!p.audioTap || tool !== "pan" || !p.view?.timings.length) return;
+      if (!p.audioTap || tool !== "pan") return;
+      // Tapping tape uncovers or covers what is under it, as in Noteful.
+      const [tx, ty] = point(event, p);
+      const tape = [...(p.view?.tapes || [])].reverse().find(({ bounds: [bx, by, bw, bh] }) => tx >= bx && tx <= bx + bw && ty >= by && ty <= by + bh);
+      if (tape) {
+        p.audioTap = null;
+        toggleTape(p, tape);
+        return;
+      }
+      if (!p.view?.timings.length) return;
       p.audioTap = null;
       const note = epoch, [x, y] = point(event, p);
       try {
@@ -394,6 +405,34 @@ function pdfImage(href, place) {
   for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
     el.setAttribute(k, v);
   return el;
+}
+// Tape state is a view choice: a mode for the whole note plus per-tape taps.
+let tapeMode = "note";
+const tapeTaps = new Map();
+function tapeOpen(p, tape) {
+  const key = `${p.index}:${tape.id}`;
+  if (tapeTaps.has(key)) return tapeTaps.get(key);
+  return tapeMode === "note" ? tape.revealed : tapeMode === "revealed";
+}
+function applyTapes(p, render = p.render) {
+  for (const tape of p.view?.tapes || []) {
+    const el = render?.querySelector(`[data-tape="${tape.id}"]`);
+    if (!el) continue;
+    const open = tapeOpen(p, tape);
+    el.dataset.revealed = open ? "1" : "0";
+    el.setAttribute("opacity", open ? "0.18" : "1");
+  }
+}
+function toggleTape(p, tape) {
+  tapeTaps.set(`${p.index}:${tape.id}`, !tapeOpen(p, tape));
+  applyTapes(p);
+  status(tapeOpen(p, tape) ? "Tape lifted. Tap again to cover." : "Covered.");
+}
+function setTapeMode(mode) {
+  tapeMode = mode;
+  tapeTaps.clear();
+  for (const p of panels) applyTapes(p);
+  status(mode === "revealed" ? "All tape lifted." : mode === "covered" ? "All tape covering." : "Tape as saved in the note.");
 }
 async function renderThumbnail(panel) {
   if (panel.thumbnailLoading || panel.thumbnailReady || !doc) return;
@@ -545,6 +584,7 @@ async function renderPage(p, provided) {
     const render = document.createElement("div");
     render.className = "render";
     render.innerHTML = result.svg;
+    applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
     overlay.classList.add("overlay");
     overlay.setAttribute("viewBox", `0 0 ${p.size.join(" ")}`);
@@ -1096,6 +1136,12 @@ document.addEventListener("keydown", (e) => {
     for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && doc && !$("editor").hidden && ["+", "=", "-", "_", "0"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key === "0") setZoom("fit");
+    else stepZoom(e.key === "-" || e.key === "_" ? -1 : 1);
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "o") {
     e.preventDefault();
     openLocal();
@@ -1385,7 +1431,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -1413,6 +1459,9 @@ for (const menu of document.querySelectorAll("details.bar-menu")) {
   });
 }
 $("gotoPage").onclick = () => palette.open("page ");
+$("tapeReveal").onclick = () => setTapeMode("revealed");
+$("tapeCover").onclick = () => setTapeMode("covered");
+$("tapeNote").onclick = () => setTapeMode("note");
 $("findOpen").onclick = () => { showDocument(); find.open(); };
 $("ocrOpen").onclick = () => find.openOcr(page);
 // Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.

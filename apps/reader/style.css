@@ -947,6 +947,13 @@ main.drag {
 }
 
 /* Compact document chrome and floating tool settings preserve the canvas. */
+/* Compact tool row: icons with short labels in one low strip. */
+.toolbar { padding: 2px 10px; gap: 8px; }
+.toolbar button { min-height: 28px; padding: 3px 8px; }
+.toolbar .segmented button svg, .toolbar-actions button svg { width: 16px; height: 16px; }
+.toolbar-actions button { width: 30px; padding: 4px; }
+.sheet[data-tool="pan"] [data-tape] { cursor: pointer; }
+
 /* Global menubar: a native-style File/Edit/View row that compacts while scrolling. */
 header.chrome { min-height: 36px; padding: 2px 8px; justify-content: flex-start; gap: 2px; flex-wrap: nowrap; transition: min-height .16s ease, padding .16s ease; }
 header .brand { flex: 1 1 auto; min-width: 0; margin: 0 8px; justify-content: center; }

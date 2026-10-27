@@ -6,6 +6,10 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
+## Tape and locked items
+
+Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, tap a tape to lift it and tap again to cover; **View → Lift all tape / Cover with all tape / Tape as saved** applies to the whole note. Tape state is a viewing choice and is not saved. Items locked in place in Noteful cannot be selected, moved or erased. Zoom with <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd>, and <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the page; this works on any keyboard layout.
+
 ## Insert pages
 
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
