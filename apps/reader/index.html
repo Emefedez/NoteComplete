@@ -59,6 +59,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
+          <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
           <hr />
           <button data-proxy="zoomIn">Zoom in<kbd>Ctrl +</kbd></button>
@@ -370,6 +371,7 @@
               <select id="highlightMode" data-native hidden aria-label="Highlighter">
                 <option value="straight" selected>Straight</option>
                 <option value="free">Freehand</option>
+                <option value="box">Rectangle</option>
               </select>
             </div>
             <div class="choice-row swatches" data-for="color" role="radiogroup" aria-label="Color"></div>
@@ -567,10 +569,6 @@
       </div>
 
       <p id="warnings" class="muted"></p>
-      <details id="textInfo" hidden>
-        <summary>Text and fonts</summary>
-        <ul id="textRuns"></ul>
-      </details>
     </section>
   </main>
 

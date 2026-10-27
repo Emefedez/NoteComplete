@@ -6,6 +6,7 @@ fn line(layer: u32, tool: u16) -> Line {
         rgba: [1., 0.8, 0., 1.],
         layer,
         shape: None,
+        square: false,
         tool,
     }
 }
@@ -170,4 +171,50 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
             }
         )
         .is_err());
+}
+
+#[test]
+fn square_highlight_bands_have_square_ends_and_stay_inside_their_box_in_noteful() {
+    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let band = Line {
+        points: vec![[100., 200.], [300., 200.]],
+        width: 120.,
+        rgba: [1., 0.9, 0., 1.],
+        tool: 1,
+        layer: 0,
+        shape: None,
+        square: true,
+    };
+    assert!(
+        e.add_line(
+            0,
+            Line {
+                square: false,
+                ..band.clone()
+            }
+        )
+        .is_err(),
+        "round highlighter is limited to 100"
+    );
+    e.add_line(0, band).unwrap();
+    let svg = e.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+    assert!(svg.contains("stroke-linecap=\"butt\"") && svg.contains("mix-blend-mode:multiply"));
+    let bytes = e.export_noteful().unwrap();
+    let native = Editor::open(&bytes).unwrap();
+    assert_eq!(native.view(0).unwrap()["visible_imported"], 1);
+    // Noteful's round ends (radius 60) now reach exactly x = 100 and 300.
+    let package = noteful_core::Package::parse(&bytes).unwrap();
+    let stroke = package
+        .blocks
+        .iter()
+        .flat_map(|b| b.strokes.iter().flatten())
+        .next()
+        .unwrap();
+    let xs: Vec<f64> = stroke.points.iter().map(|p| p[0]).collect();
+    assert!(
+        (xs[0] - 160.).abs() < 0.5 && (xs.last().unwrap() - 240.).abs() < 0.5,
+        "{xs:?}"
+    );
+    let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap(), e.view(0).unwrap());
 }

@@ -11,6 +11,7 @@ fn line() -> Line {
         tool: 0,
         layer: 0,
         shape: None,
+        square: false,
     }
 }
 #[test]

@@ -717,13 +717,6 @@ input[type="checkbox"] {
 #warnings:empty {
   display: none;
 }
-#textInfo {
-  flex-shrink: 0;
-  font-size: 12px;
-  background: var(--surface);
-  max-height: 24vh;
-  overflow: auto;
-}
 main.drag {
   outline: 2px dashed var(--accent);
   outline-offset: -5px;
@@ -891,15 +884,10 @@ main.drag {
   .audio-transport button {
     min-height: 44px;
   }
-  #warnings,
-  #textInfo {
+  #warnings {
     order: 4;
     max-height: 15dvh;
     overflow: auto;
-  }
-  #textInfo summary {
-    font-size: 11px;
-    min-height: 28px;
   }
 }
 @media (pointer: coarse) {
@@ -1502,7 +1490,6 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .tab { flex: 0 1 180px; display: flex; align-items: center; gap: 2px; min-width: 120px; height: 26px; padding: 0 2px 0 10px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); cursor: default; user-select: none; }
 .tab:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .tab.current { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: 0 1px 2px #0001; }
-.tab.drop { box-shadow: inset 3px 0 0 var(--accent); }
 .tab-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .tab.current .tab-label { font-weight: 600; }
 .tab.dirty .tab-label::before { content: "● "; color: var(--accent); font-size: 9px; vertical-align: 1px; }
@@ -1538,3 +1525,8 @@ body.bar-compact .tab { height: 22px; }
 .text-swatches .swatch[aria-checked="true"]::before { box-shadow: 0 0 0 2px var(--menu), 0 0 0 4px var(--accent); }
 .text-format .color-label { width: 28px; height: 28px; margin-left: 2px; }
 .text-format input[type="color"] { width: 18px; height: 18px; }
+
+/* Drag to reorder (tools, tabs): the dragged item lifts and follows the
+   pointer; the others slide out of its way. */
+.reordering > * { transition: transform .16s ease; }
+.reordering > .dragging { position: relative; z-index: 2; transition: none; box-shadow: 0 6px 18px #0003; background: var(--surface); cursor: grabbing; opacity: .96; }

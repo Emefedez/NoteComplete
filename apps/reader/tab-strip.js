@@ -1,12 +1,14 @@
 // The tab strip in the top bar (desktop app): one tab per open note in this
 // window, + for a new tab, × to close, drag to reorder, the wheel scrolls it
 // sideways. With a single tab the bar shows the note title as before.
+import { sortable } from './reorder.js';
+
 const $ = id => document.getElementById(id);
 
 export function tabStrip(bridge, { dirty }) {
   if (!bridge) return { update() {} };
   const strip = $('tabStrip');
-  let tabs = [], dragged = null;
+  let tabs = [];
   function render(list) {
     tabs = list;
     document.body.classList.toggle('has-tabs', tabs.length > 1);
@@ -16,7 +18,7 @@ export function tabStrip(bridge, { dirty }) {
       el.className = 'tab' + (tab.current ? ' current' : '') + (tab.dirty ? ' dirty' : '');
       el.setAttribute('role', 'tab');
       el.setAttribute('aria-selected', String(tab.current));
-      el.draggable = true;
+      el.dataset.id = String(tab.id);
       el.title = tab.dirty ? `${tab.title} (unsaved changes)` : tab.title;
       const label = document.createElement('span');
       label.className = 'tab-label';
@@ -30,16 +32,6 @@ export function tabStrip(bridge, { dirty }) {
       el.append(label, close);
       el.onclick = () => tab.current || bridge.activate(tab.id);
       el.onauxclick = event => event.button === 1 && bridge.close(tab.id);
-      el.ondragstart = event => { dragged = tab.id; event.dataTransfer.effectAllowed = 'move'; };
-      el.ondragover = event => { if (dragged != null) { event.preventDefault(); el.classList.add('drop'); } };
-      el.ondragleave = () => el.classList.remove('drop');
-      el.ondrop = event => {
-        event.preventDefault();
-        el.classList.remove('drop');
-        if (dragged != null && dragged !== tab.id) bridge.move(dragged, tabs.findIndex(t => t.id === tab.id));
-        dragged = null;
-      };
-      el.ondragend = () => { dragged = null; };
       return el;
     }) : [];
     const add = document.createElement('button');
@@ -52,6 +44,8 @@ export function tabStrip(bridge, { dirty }) {
     strip.replaceChildren(...items, add);
     strip.querySelector('.tab.current')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+  // Drag a tab along the strip; the others slide aside, and it lands where dropped.
+  sortable(strip, { items: '.tab', ignore: '.tab-close', key: el => Number(el.dataset.id), onReorder: (order, id) => bridge.move(id, order.indexOf(id)) });
   strip.addEventListener('wheel', event => {
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) { strip.scrollLeft += event.deltaY; event.preventDefault(); }
   }, { passive: false });

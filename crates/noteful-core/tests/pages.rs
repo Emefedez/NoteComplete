@@ -9,6 +9,7 @@ fn line() -> Line {
         tool: 0,
         layer: 0,
         shape: None,
+        square: false,
     }
 }
 fn blank(w: f64, h: f64) -> NewPage {

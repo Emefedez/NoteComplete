@@ -107,6 +107,11 @@ The owner's requests from the latest review, in one place, with how each was che
 ## Seventh round
 - ✅ **Formatting text is now done on the text itself.** While you type, and whenever a typed text box is selected with Select, a format bar sits right above it: font (Sans, Serif, Mono, Handwriting), size, **B**, *I* and colour (swatches or any colour). Changes apply at once: live while typing, as one undoable change on a selected box. The last style you used is the one new boxes start with. Double-click a text box with Select to type in it. The Text tool no longer has a settings popup. Fonts and italic are exported to Noteful (the iPad fonts of the same names). *Core test (font, italic through export); browser test: bold and serif while typing without losing the cursor, recolour and resize a selected box, double-click to edit.*
 
+- ✅ **Reorder the tool row** (Pan, Pen, Lock, … and Image): drag a button along the row; it lifts and follows the pointer while the others slide aside. The order is remembered; View → Reset tool order restores it. A drag never counts as a click.
+- ✅ **Tab dragging** now works the same way (the tab moves with the pointer and the others make room) instead of lighting up the edge of the tab under it.
+- ✅ **Rectangle highlighter**: Highlight has a third mode, Rectangle; drag a box and it is highlighted with square edges. Exported to Noteful as a highlighter band whose round ends stay inside the box. *Core test (square ends, export inset, project); browser test.*
+- ✅ **"Text and fonts" bar removed** from the bottom of the page. It listed every text run with its size and font, a leftover inspection aid; a text box's font and size are shown in its format bar when selected.
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.

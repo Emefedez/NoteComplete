@@ -30,6 +30,7 @@ import { AudioProcessing } from "./audio-processing.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
+import { sortable } from "./reorder.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -901,15 +902,6 @@ function updateTools(result) {
     `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
   $("warnings").textContent = result.warnings.join(" ");
   $("svg").disabled = !panels[page]?.pdfReady;
-  $("textInfo").hidden = !result.texts?.length;
-  $("textRuns").replaceChildren();
-  for (const block of result.texts || [])
-    for (const r of block.runs) {
-      if (!r.text.replaceAll("\u200b", "")) continue;
-      const li = document.createElement("li");
-      li.textContent = `${r.text} · ${((r.font_size * 6) / 11).toLocaleString("en", { maximumFractionDigits: 2 })} pt · ${r.font_family || r.font_name || "System"}${r.bold ? " · bold" : ""}${r.italic ? " · italic" : ""}${r.underline ? " · underline" : ""}${r.strikethrough ? " · strikethrough" : ""}`;
-      $("textRuns").append(li);
-    }
 }
 function setPage(index) {
   if (index === page) return;
@@ -1274,7 +1266,9 @@ function pointerDown(e, p) {
     opacity: tool === "erase" ? 0.3 : tool === "highlight" ? 0.5 : tool === "tape" ? 0.85 : 1,
   }))
     el.setAttribute(k, v);
-  if (tool === "tape") el.setAttribute("stroke-linecap", "butt");
+  // Tape and highlighter rectangles are bands with square ends.
+  const box = (tool === "tape" && $("tapeMode").value === "box") || (tool === "highlight" && $("highlightMode").value === "box");
+  if (tool === "tape" || box) el.setAttribute("stroke-linecap", "butt");
   dot.setAttribute("r", width / 2);
   dot.setAttribute("fill", tool === "erase" ? "#ed6b55" : color);
   dot.setAttribute(
@@ -1285,6 +1279,7 @@ function pointerDown(e, p) {
   gesture = {
     id: e.pointerId,
     tool,
+    box,
     straight: tool === "tape" || (tool === "highlight" && $("highlightMode").value === "straight"),
     panel: p,
     points: [start],
@@ -1317,7 +1312,7 @@ function appendPoint(e) {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
   } else if (g.tool === "grab") {
     g.points = [g.start, point(e, g.panel)];
-  } else if (g.tool === "tape" && $("tapeMode").value === "box") {
+  } else if (g.box) {
     const end = point(e, g.panel), y = (g.start[1] + end[1]) / 2;
     g.width = Math.max(4, Math.abs(end[1] - g.start[1]));
     g.points = [[Math.min(g.start[0], end[0]), y], [Math.max(g.start[0], end[0]), y]];
@@ -1391,6 +1386,7 @@ function pointerUp(e) {
         rgba: [...rgba, 1],
         tool: g.tool === "highlight" ? 1 : g.tool === "tape" ? 2 : 0,
         layer: g.layer,
+        ...(g.box && g.tool === "highlight" ? { square: true } : {}),
         ...(g.tool === "shape"
           ? {
               shape: {
@@ -1440,9 +1436,7 @@ for (const button of document.querySelectorAll("[data-tool]"))
       tool === "select"
         ? "Tap an item to move or edit it."
         : tool === "highlight"
-          ? $("highlightMode").value === "straight"
-            ? "Straight highlight: drag between the endpoints."
-            : "Freehand highlight: draw on the page."
+          ? highlightHint()
           : tool === "grab"
             ? "Grab: drag a box to copy its text or ask AI about it."
           : tool === "tape"
@@ -1454,20 +1448,19 @@ for (const button of document.querySelectorAll("[data-tool]"))
               : "Draw on the selected layer.",
     );
   };
+function highlightHint() {
+  return { straight: "Straight highlight: drag between the endpoints.", free: "Freehand highlight: draw on the page.", box: "Rectangle highlight: drag a box over what to highlight." }[$("highlightMode").value];
+}
 $("highlightMode").onchange = () => {
   cancelGesture();
-  status(
-    $("highlightMode").value === "straight"
-      ? "Straight highlight: drag between the endpoints."
-      : "Freehand highlight: draw on the page.",
-  );
+  status(highlightHint());
 };
 $("shape").onchange = () =>
   document.querySelector('[data-tool="shape"]').click();
 // Tool settings are rows of visual choices, like the shapes; hidden selects and
 // the color input stay the data source the drawing code reads.
 const CHOICE_ICONS = {
-  highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>' },
+  highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>' },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
 };
 function buildChoices() {
@@ -1604,6 +1597,30 @@ const SHORTCUTS = [
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
+// The tool row can be put in any order by dragging its buttons; remembered here.
+const toolGroup = document.querySelector("#toolbar .segmented");
+const toolKey = (el) => el.dataset.tool || el.id;
+const toolItems = 'button[data-tool], #importImage';
+const defaultToolOrder = [...toolGroup.querySelectorAll(toolItems)].map(toolKey);
+function arrangeTools(order) {
+  const rank = (key) => { const i = order.indexOf(key); return i < 0 ? order.length + defaultToolOrder.indexOf(key) : i; };
+  for (const el of [...toolGroup.querySelectorAll(toolItems)].sort((a, b) => rank(toolKey(a)) - rank(toolKey(b)))) toolGroup.append(el);
+}
+try { const saved = JSON.parse(localStorage.getItem("notecomplete-tool-order") || "null"); if (Array.isArray(saved)) arrangeTools(saved); } catch { /* Optional. */ }
+sortable(toolGroup, {
+  items: toolItems,
+  key: toolKey,
+  onReorder: (order) => {
+    try { localStorage.setItem("notecomplete-tool-order", JSON.stringify(order)); } catch { /* Optional. */ }
+    if (!$("toolOptions").hidden) toolOptions();
+    status("Tool order saved. View → Reset tool order puts it back.");
+  },
+});
+$("resetToolOrder").onclick = () => {
+  arrangeTools(defaultToolOrder);
+  try { localStorage.removeItem("notecomplete-tool-order"); } catch { /* Optional. */ }
+  if (!$("toolOptions").hidden) toolOptions();
+};
 const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {

@@ -484,6 +484,21 @@ impl Editor {
                 z = z
                     .checked_add(1)
                     .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                // Noteful draws highlighter ends round: pull a square band's ends
+                // in by half its width so it stays inside its rectangle.
+                let line = if line.square && line.tool == 1 && line.points.len() == 2 {
+                    let mut l = line.clone();
+                    let [a, b] = [l.points[0], l.points[1]];
+                    let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+                    let t = (l.width / 2. / len.max(1e-9)).min(0.5);
+                    l.points = vec![
+                        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+                        [b[0] - (b[0] - a[0]) * t, b[1] - (b[1] - a[1]) * t],
+                    ];
+                    l
+                } else {
+                    line
+                };
                 new_stroke(&mut ink, &line, next_id, time, z);
             }
             set(

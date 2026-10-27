@@ -18,6 +18,9 @@ pub struct Line {
     pub layer: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<crate::Shape>,
+    /// Square ends (a highlighter rectangle): the band ends exactly at its points.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub square: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
@@ -240,7 +243,7 @@ impl Editor {
             || !points_valid(&line.points)
             || !line.width.is_finite()
             // Tape strips can cover a whole block of text; ink stays thin.
-            || !(0.1..=if line.tool == 2 { 2000. } else { 100. }).contains(&line.width)
+            || !(0.1..=if line.tool == 2 || line.square { 2000. } else { 100. }).contains(&line.width)
             || line
                 .rgba
                 .iter()
@@ -625,14 +628,18 @@ impl Editor {
 }
 
 pub(crate) fn added_svg(line: &Line) -> String {
-    let svg = line_svg(&line.points, line.width / 2., &line.rgba);
-    // Tape is a strip: square ends, so a drag can also lay a rectangle.
-    if line.tool == 2 && line.points.len() > 1 {
-        return svg.replacen(
+    let mut svg = line_svg(&line.points, line.width / 2., &line.rgba);
+    // Tape is a strip, and a highlighter rectangle a band: square ends, so a
+    // drag can lay a rectangle.
+    if (line.tool == 2 || line.square) && line.points.len() > 1 {
+        svg = svg.replacen(
             "stroke-linecap=\"round\" stroke-linejoin=\"round\"",
             "stroke-linecap=\"butt\" stroke-linejoin=\"miter\"",
             1,
         );
+    }
+    if line.tool == 2 {
+        return svg;
     }
     if line.tool == 1 {
         format!("<g opacity=\"0.5\" style=\"mix-blend-mode:multiply\">{svg}</g>")
