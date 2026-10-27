@@ -85,7 +85,15 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Dimming ink not yet written is off by default (I or the button turns it on).
 - ✅ The chat's Ask button is centred beside the question box.
 - ⚠️ Recent with several windows: one process now (single-instance), storage holds your 3 Recent notes, and two windows show Recent in the browser test, so I could not reproduce it. If Recent is missing again, a message now says why (storage error or no answer within 6 s) instead of hiding the section silently. Please tell me what it says.
-- ⏳ Lock tool for the user. Needs a new engine edit (lock/unlock item ids, undoable, kept in the project), hit-testing locked items in a Lock tool so they can be unlocked, the eraser and selection skipping them, and writing payload tag 21 into objects on native export (ink strokes have no lock field in the format, so their lock would live only in the project).
+
+## Fifth round (to do next)
+- ⚠️ **Copy text** (Grab → Copy text) said "The clipboard is not available here" in the desktop app. Cause: the app denied every web permission, clipboard writes included. It now allows only writing text to the clipboard (never reading), and only from the reader's own pages. *Fixed in code; not yet checked in the desktop app.*
+- ⏳ **Lock / unlock tool.** Reuse what exists: Noteful's own lock (payload tag 21) is already read and enforced. Plan: give the existing Adjust edit an optional `locked` field, so locking is undoable, saved in the project and written back as tag 21 on native export, with no new edit type. A Lock tool toggles items, and the eraser and selection skip locked ones. Ink strokes have no lock field in the format, so their lock would stay in the project only.
+- ⏳ **OCR as a background task**, with a bar chip and Stop like quizzes and transcription, instead of a dialog that has to stay open.
+- ⏳ **View → Compact toolbar does nothing**: fix it, or remove it.
+- ⏳ **Select and copy recognized (OCR) text with the cursor**, like PDF text, once a page has been recognized.
+- ⏳ **Text input tool**: add typed text boxes to a page.
+- ⏳ **Tabs in one window**: several notes open as tabs in the top bar, scrolling sideways when there are many, with a + button to open another note (close, reorder and similar).
 - ⏳ Resize a PDF page (or any page). Not started: needs a page-size change in the engine and in native export.
 
 ## Home filters

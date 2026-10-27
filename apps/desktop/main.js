@@ -29,8 +29,10 @@ if (!primary) app.quit();
 app.on('second-instance', () => { if (app.isReady()) createWindow(); });
 app.whenReady().then(() => {
   if (!primary) return;
-  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  // Only one web permission: writing text to the clipboard (Grab → Copy text), from the reader itself.
+  const allowed = (permission, url = '') => permission === 'clipboard-sanitized-write' && String(url).startsWith(home);
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.())));
+  session.defaultSession.setPermissionCheckHandler((_contents, permission, origin) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`));
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
     try {
