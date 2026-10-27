@@ -160,6 +160,7 @@ function canReplace() {
   );
 }
 function reset() {
+  resizeMode = null;
   selection.clear();
   cancelGesture();
   chromeState.reset();
@@ -295,7 +296,7 @@ function buildPages(sizes) {
     placeholder(p);
     fragment.append(el);
     el.onpointerdown = (e) => {
-      if (e.target.closest(".text-editor")) return;
+      if (e.target.closest(".text-editor, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
       pointerDown(e, p);
     };
@@ -723,6 +724,7 @@ async function renderPage(p, provided) {
     p.render = render;
     p.overlay = overlay;
     p.el.replaceChildren(render, overlay, lockMarks(result));
+    if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -1293,6 +1295,7 @@ for (const button of document.querySelectorAll("[data-tool]"))
       return;
     }
     tool = button.dataset.tool;
+    endResizeDrag();
     optionsOpen = toolSettingsAuto;
     if (tool !== "select") selection.clear();
     if (tool !== "grab") clearGrab();
@@ -1544,6 +1547,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
+    endResizeDrag();
     cancelGesture();
     setCompact(true);
     $("layersPanel").hidden = true;
@@ -1923,7 +1927,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2063,6 +2067,72 @@ $("resizePage").onclick = () => {
   $("resizeDialog").showModal();
 };
 $("resizeCancel").onclick = () => $("resizeDialog").close();
+// Resize by dragging: handles on the current page's right edge, bottom edge
+// and corner (content is anchored top left, so those are the edges that move).
+let resizeMode = null;
+function resizeFrame(p) {
+  const frame = document.createElement("div");
+  frame.className = "page-resize-frame";
+  const label = document.createElement("div");
+  label.className = "page-resize-label";
+  const done = document.createElement("button");
+  done.type = "button";
+  done.textContent = "Done";
+  done.onclick = () => endResizeDrag();
+  const text = document.createElement("span");
+  const show = (size) => {
+    frame.style.width = `${(size[0] / p.size[0]) * 100}%`;
+    frame.style.height = `${(size[1] / p.size[1]) * 100}%`;
+    text.textContent = `${mm(size[0])} × ${mm(size[1])} mm`;
+  };
+  label.append(text, done);
+  frame.append(label);
+  for (const edge of ["e", "s", "se"]) {
+    const handle = document.createElement("div");
+    handle.className = `page-resize-handle ${edge}`;
+    handle.title = { e: "Drag to change the width", s: "Drag to change the height", se: "Drag to change the size" }[edge];
+    handle.onpointerdown = (e) => {
+      if (e.button !== 0 || !doc || busy()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handle.setPointerCapture(e.pointerId);
+      const rect = p.el.getBoundingClientRect(), scale = rect.width / p.size[0];
+      let size = [...p.size];
+      handle.onpointermove = (m) => {
+        size = [
+          edge.includes("e") ? Math.max(50, (m.clientX - rect.left) / scale) : p.size[0],
+          edge.includes("s") ? Math.max(50, (m.clientY - rect.top) / scale) : p.size[1],
+        ];
+        show(size);
+      };
+      handle.onpointerup = handle.onpointercancel = (u) => {
+        handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
+        const next = size.map((v) => Math.round(v));
+        if (u.type === "pointerup" && next.some((v, i) => Math.abs(v - p.size[i]) >= 1))
+          action("resizePage", { page: p.index, size: next, focus: p.index });
+        else show(p.size);
+      };
+    };
+    frame.append(handle);
+  }
+  show(p.size);
+  return frame;
+}
+function startResizeDrag() {
+  const p = panels[page];
+  if (!doc || !p?.view) return;
+  endResizeDrag();
+  resizeMode = { page };
+  p.el.append(resizeFrame(p));
+  status("Drag the right or bottom border of the page. Done or Esc to finish.");
+}
+function endResizeDrag() {
+  if (!resizeMode) return;
+  resizeMode = null;
+  for (const frame of document.querySelectorAll(".page-resize-frame")) frame.remove();
+}
+$("resizeDrag").onclick = startResizeDrag;
+$("resizeDragInstead").onclick = () => { $("resizeDialog").close(); startResizeDrag(); };
 $("resizeConfirm").onclick = () => {
   const view = panels[page]?.view;
   // Whole units (exact in the project file); the original size is kept as it was.

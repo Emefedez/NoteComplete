@@ -102,6 +102,8 @@ The owner's requests from the latest review, in one place, with how each was che
 ## Sixth round
 - ✅ **Model dropdown** for Ask AI and Study instead of a text box: "Tool default", the models the chosen tool offers, and "Other…" for any name. Antigravity's list comes from the tool itself (`agy models`), so the chat and flashcards can use Google's models (Gemini 4 Argon, Gemini 3.8 Flash) as well as Claude and GPT-OSS through it; Claude Code offers Opus, Sonnet and Haiku; Codex offers the model in its settings. The choice is remembered per tool. Also fixed: opening Ask AI failed before the tool list was filled (a tool that is not installed made it throw). *Browser test with a fake bridge; the real lists were read from the installed tools.*
 
+- ✅ **Resize pages by dragging their borders**: Pages → Resize by dragging the borders (or "Drag the borders instead" in the Page size dialog) puts handles on the current page's right edge, bottom edge and corner. A dashed frame and the size in mm follow the pointer; releasing resizes the page (one undo step), and the handles stay for further changes until Done or Esc. Only the right and bottom borders move, because writing is anchored to the top-left corner. *Browser test: right edge 210 → 268 mm wide, corner shrink, Esc.*
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.
