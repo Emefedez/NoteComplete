@@ -28,7 +28,7 @@ export function renderAnswer(text) {
 }
 
 export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '' }) {
-  let history = [], busy = false, attachments = [];
+  let history = [], busy = false, attachments = [], topic = '';
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
@@ -129,6 +129,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     try {
       const page = currentPage(), { title } = documentInfo();
       const images = [], context = [];
+      if (topic) context.push(topic);
       if ($('chatPage').checked) {
         const { canvas } = await pageCanvas(page, 2200, { liftTape: true });
         images.push(await canvasImage(canvas, `page-${page + 1}`));
@@ -184,7 +185,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; $('chatMessages').replaceChildren(); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
@@ -192,6 +193,21 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   };
   return {
     attach,
+    // A conversation started in a quiz or flashcard window carries on here: its topic goes
+    // with every request until New, its turns join the history, then the new question is asked.
+    async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', question }) {
+      await open();
+      history = messages.slice(-10);
+      topic = about;
+      $('chatMessages').replaceChildren();
+      const from = add('user', title);
+      from.classList.add('chat-from');
+      for (const m of history) add(m.role, m.content);
+      if (image) attach(image, label);
+      $('chatSelection').checked = false;
+      $('chatPage').checked = false;
+      return ask(question);
+    },
     async askAbout({ question, image, label = 'a region of the notes' }) {
       await open();
       if (image) attach(image, label);

@@ -4,6 +4,8 @@
 // region when the question is shown, so nothing but coordinates is stored.
 // Scoring: 2 points for a correct answer, 1 if the hint was used, 0 if wrong.
 import { renderAnswer } from './chat.js';
+import { explainBox } from './explain.js';
+import { textBlock, notesBlock } from './ai-context.js';
 
 const $ = id => document.getElementById(id);
 
@@ -70,7 +72,19 @@ function showLarge(url, alt) {
   dialog.showModal();
 }
 
-export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck }) {
+// Clarify (C): the tutor prompt for one question; the correct option only once answered.
+export function clarifyPrompt(q, { answered = null, history = [], question = '', withImage = false } = {}) {
+  const talk = history.map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
+  const options = q.options.map((o, i) => `${i + 1}. ${o}`).join('\n');
+  return [
+    `A student taking a quiz on their own notes does not fully understand this question${answered ? ' and its answer' : ''}${withImage ? ' (the attached image is the part of the notes that answers it)' : ''}. Explain the idea it tests using the notes, clearly and briefly, in the question's language; a short example or steps help.${answered ? '' : ' Do not say which option is correct: they have not answered yet.'}`,
+    `Question: ${q.question}\nOptions:\n${options}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : ''}`,
+    talk && `Conversation so far:\n${talk}`,
+    question && `Student: ${question}`,
+  ].filter(Boolean).join('\n\n');
+}
+
+export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null }) {
   let quiz = null, hint = null;
   const store = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
   async function save() {
@@ -103,6 +117,9 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizHint').hidden = true;
     $('quizHint').replaceChildren();
     const q = quiz.questions[quiz.at];
+    // The ask box belongs to one question; its saved explanation shows under the options.
+    explain.close();
+    explain.showSaved(q || null);
     header();
     if (!q) {
       const { points, max } = score(quiz);
@@ -181,8 +198,42 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   $('quizHintButton').onclick = () => revealHint();
   $('quizNextButton').onclick = next;
   $('quizWhere').onclick = () => { const q = quiz.questions[quiz.at]; if (q?.source) { jump(q.source.page - 1); highlight(q.source.page - 1, q.source.box); } };
+  // Clarify in the quiz itself, like Ask AI on flashcards; the answer is kept with the question.
+  const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
+  const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
+  const explain = explainBox({
+    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question',
+    mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
+    handoff: continueInChat && (async ({ item: q, history, question }) => {
+      const answered = answerOf(q);
+      const about = `The conversation is about this quiz question from the student's notes${q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
+      const image = q.source ? hint || await capture(q.source).catch(() => null) : null;
+      continueInChat({ title: `From the quiz: ${q.question}`, about, messages: history, image, label: 'the part of the notes that answers the quiz question', question });
+    }),
+    unavailable: () => status('Clarify uses an AI tool installed on your computer and is available in the desktop app.', true),
+    // An explanation made after answering names the correct option: kept hidden until this question is answered.
+    saved: q => (q.explanation && (!q.explanation.withAnswer || answerOf(q)) ? q.explanation : null),
+    save: async (q, value) => { if (value) q.explanation = value; else delete q.explanation; await save(); },
+    prompt: (q, { history, question, withImage }) => clarifyPrompt(q, { answered: answerOf(q), history, question, withImage }),
+    async context(q, want) {
+      const out = { images: [], text: '', notes: [], savedFlags: { withAnswer: !!answerOf(q) } };
+      const page = q.source ? q.source.page - 1 : null;
+      if (want.page && q.source) {
+        const url = hint || await capture(q.source).catch(() => null);
+        if (url) out.images.push(await dataUrlImage(url, 'notes-region'));
+        out.text = textBlock(page, await pageText(page).catch(() => ''));
+      }
+      if (want.pdf && pagePdf && page !== null) {
+        const pdf = await pagePdf(page).catch(() => null);
+        if (pdf) { out.images.push(pdf); out.notes.push(`The attached PDF is the source document of page ${page + 1}.`); }
+      }
+      if (want.notes) out.text = [out.text, notesBlock(await notesText().catch(() => ''))].filter(Boolean).join('\n\n');
+      return out;
+    },
+  });
   $('quizClarify').onclick = async () => {
     const q = quiz.questions[quiz.at];
+    if (ai) return explain.ask(q);
     const url = hint || (q.source ? await capture(q.source).catch(() => null) : null);
     const answer = quiz.answers[quiz.at];
     clarify({
@@ -236,6 +287,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   $('quizRestart').onclick = () => { quiz.answers = {}; quiz.hinted = {}; quiz.at = 0; quiz.done = false; save(); show(); };
   // Keys while the quiz panel is open and expanded: 1-4 answer, H hint, C clarify, Enter next, M minimize.
   function onKey(event) {
+    // Esc closes the Clarify box even while typing a follow-up in it.
+    if (quiz && event.key === 'Escape' && explain.open && !$('quizPanel').hidden) { explain.close(); return true; }
     if (!quiz || $('quizPanel').hidden || event.target.matches?.('input,textarea,select,[contenteditable=true]') || event.ctrlKey || event.metaKey || event.altKey) return false;
     const k = event.key.toLowerCase();
     if (k === 'm') { $('quizPanel').classList.toggle('minimized'); return true; }
@@ -246,7 +299,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     if (k === 'x' && !$('quizDispute').hidden) { $('quizDispute').click(); return true; }
     if (k === 'v' && !$('quizCheck').hidden) { $('quizCheck').click(); return true; }
     if (k === 'enter' || k === 'arrowright') { next(); return true; }
-    if (k === 'escape') { $('quizPanel').classList.add('minimized'); return true; }
+    if (k === 'escape') { if (explain.open) explain.close(); else $('quizPanel').classList.add('minimized'); return true; }
     return false;
   }
   async function list() { return store(); }

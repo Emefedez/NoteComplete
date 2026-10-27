@@ -72,7 +72,7 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '' }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -551,7 +551,22 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     }
   }
   $('practiceAsk').onclick = () => ask();
-  $('practiceAskForm').onsubmit = event => { event.preventDefault(); const q = $('practiceAskInput').value.trim(); if (q) ask(q); };
+  // A follow-up moves the conversation to Ask AI with its thread, the card and its page.
+  $('practiceAskForm').onsubmit = async event => {
+    event.preventDefault();
+    const q = $('practiceAskInput').value.trim(), card = practice?.queue[0];
+    if (!q || !card) return;
+    if (!continueInChat) return ask(q);
+    const history = asking?.card === card && asking.history.length ? asking.history : (card.explanation?.text ? [{ role: 'user', content: 'Explain this card.' }, { role: 'assistant', content: card.explanation.text }] : []);
+    $('practiceAskInput').value = '';
+    closeAsk();
+    let image = null;
+    if (card.page) {
+      const { canvas } = await pageCanvas(card.page - 1, 1400, { liftTape: true }).catch(() => ({}));
+      if (canvas) { image = canvas.toDataURL('image/jpeg', 0.85); canvas.width = canvas.height = 0; }
+    }
+    continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q });
+  };
   $('practiceAskAgain').onclick = () => ask('', { again: true });
   $('practiceAskStop').onclick = () => ai?.cancel('card-ask');
   $('practiceAskClose').onclick = closeAsk;

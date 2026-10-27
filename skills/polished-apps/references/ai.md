@@ -32,7 +32,8 @@ CLI calls (prompt on stdin unless noted):
 - Don't tell the model that emphasised parts (highlights, taped answers) matter more; ask it to cover the material evenly. Show covered parts (tape lifted) only so they're readable.
 - Let the user pick the tool and model next to the request, remembered.
 - While waiting: elapsed seconds and Stop; stream when the tool can.
-- Store the last answer with the item (an explanation on a flashcard, a correction on a question), editable and marked "edited by you", and reuse it instead of asking again; "Ask again" replaces it.
+- Store the last answer with the item (an explanation on a flashcard, a correction on a question), editable and marked "edited by you", and reuse it instead of asking again; "Ask again" replaces it. Don't let a stored answer spoil an exercise: one that reveals the solution stays hidden until the user has answered.
+- Item boxes answer one thing; a follow-up moves the conversation to the main assistant panel with its thread and the item as pinned context (kept until "New"), instead of growing a second chat inside the item window.
 
 ## Prompts
 

@@ -2568,7 +2568,20 @@ function highlightRegion(index, box) {
   p.el.append(rect);
   setTimeout(() => rect.remove(), 2600);
 }
+// The source PDF a page is drawn on, to attach to an AI request.
+async function pagePdfOf(index) {
+  const view = panels[index]?.view || (await call("view", { page: index }));
+  if (!view?.pdf_background || !backgrounds) return null;
+  const bytes = await call("pdf", { resource: view.pdf_background.resource_id });
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
+}
+const continueInChat = (thread) => { showDocument(); return chat.continueThread(thread); };
 const quizzes = quizController({
+  ...studyDeps,
+  continueInChat,
+  markdown: (text) => call("markdownHtml", { text }),
+  pagePdf: (index) => pagePdfOf(index),
   library,
   key: () => `quizzes:${find.fingerprint || doc?.title || "note"}`,
   pageCanvas,
@@ -2590,6 +2603,7 @@ const quizzes = quizController({
 });
 const study = studyController({
   ...studyDeps,
+  continueInChat,
   library,
   fingerprint: () => find.fingerprint,
   jump: (p) => { showDocument(); jump(p); },
@@ -2597,14 +2611,7 @@ const study = studyController({
   jobs,
   quizzes,
   markdown: (text) => call("markdownHtml", { text }),
-  // The source PDF a page is drawn on, to attach to an AI request.
-  pagePdf: async (index) => {
-    const view = panels[index]?.view || (await call("view", { page: index }));
-    if (!view?.pdf_background || !backgrounds) return null;
-    const bytes = await call("pdf", { resource: view.pdf_background.resource_id });
-    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
-  },
+  pagePdf: (index) => pagePdfOf(index),
 });
 // The quiz and the flashcard practice are floating windows too.
 floatingWindow($("quizPanel"), { key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });

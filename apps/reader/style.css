@@ -1285,6 +1285,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .window-head > :is(button, a, .icon-button) { flex: none; }
 .window-head > :is(select, input, h2, strong, span) { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-head select { width: auto; max-width: 9.5em; }
+.chat-head > strong { flex: none; }
 .deck-head > input { flex: 1 1 4em; }
 .window-head :is(button, input, select, a) { cursor: pointer; }
 .in-tray { display: none !important; }
@@ -1383,7 +1384,8 @@ body.bar-compact .job-ready { min-height: 22px; padding: 0 8px; font-size: 11px;
 .deck-float-only { display: none; }
 /* Focus dimming behind the quiz and flashcard windows (the sun in their heads). */
 body.focus-dim::after { content: ""; position: fixed; inset: 0; z-index: 50; background: #0b0d11b3; pointer-events: none; animation: dim-in .2s ease; }
-body.focus-dim .quiz-panel, body.focus-dim .deck-dialog.floating { z-index: 60; }
+body.focus-dim .quiz-panel, body.focus-dim .deck-dialog.floating, body.focus-dim .chat-panel { z-index: 60; }
+.chat-messages .chat-from { align-self: stretch; max-width: none; background: var(--fill); color: var(--muted); font-size: 12px; }
 @keyframes dim-in { from { opacity: 0; } }
 .dim-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .quiz-panel-head .dim-toggle svg, .deck-head .dim-toggle svg { width: 16px; height: 16px; }

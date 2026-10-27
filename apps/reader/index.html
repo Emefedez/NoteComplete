@@ -537,6 +537,7 @@
           <div class="quiz-panel-body">
             <div id="quizPanelQuestion" class="quiz-question"></div>
             <div id="quizPanelOptions" class="quiz-options"></div>
+            <div id="quizExplainSaved"></div>
             <div id="quizHint" class="quiz-hint" hidden></div>
             <p id="quizCorrection" class="quiz-correction" hidden></p>
             <div id="quizCheckBox" class="quiz-check" hidden>
@@ -544,6 +545,7 @@
               <div id="quizCheckOptions" class="quiz-check-options" role="radiogroup" aria-label="Correct option"></div>
               <div class="quiz-actions"><span class="spacer"></span><button id="quizCheckCancel" type="button">Cancel</button><button id="quizCheckSave" type="button" class="primary">Save as correct answer</button></div>
             </div>
+            <div id="quizExplainBox"></div>
             <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
           </div>
         </aside>
@@ -733,7 +735,7 @@
         </span>
       </div>
       <div id="practiceAskThread" class="practice-ask-thread" role="log" aria-live="polite" aria-label="AI explanation"></div>
-      <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask something else about this card" aria-label="Follow-up question" /><button type="submit">Ask</button><button id="practiceAskStop" type="button" hidden>Stop</button><button id="practiceAskAgain" type="button" title="Ask for a new explanation; it replaces the saved one">Ask again</button><button id="practiceAskClose" type="button">Close</button></form>
+      <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask a follow-up (it continues in Ask AI)" aria-label="Follow-up question" /><button type="submit">Ask</button><button id="practiceAskStop" type="button" hidden>Stop</button><button id="practiceAskAgain" type="button" title="Ask for a new explanation; it replaces the saved one">Ask again</button><button id="practiceAskClose" type="button">Close</button></form>
     </div>
     <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceAsk" type="button" title="Ask AI to explain this card with its page (C)" hidden>Ask AI<kbd>C</kbd></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
   </div>
