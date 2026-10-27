@@ -244,6 +244,7 @@ impl Editor {
             .map(|(_, l)| l.clone())
             .ok_or_else(|| Error::new(0, "Shape not found"))?;
         if self.deleted(page).contains(id)
+            || self.is_locked(page, id)
             || line.shape.as_ref().is_none_or(|s| s.kind != shape.kind)
             || !self
                 .layers()
@@ -274,10 +275,14 @@ impl Editor {
         let adjustments = self.adjustments(page);
         let layers = self.layers();
         let editable = |id| layers.iter().any(|l| l.id == id && l.visible && !l.locked);
+        // Items locked in place are not eraser targets.
+        let locked =
+            |id: &str, native: bool| adjustments.get(id).and_then(|a| a.locked).unwrap_or(native);
         let mut ids = Vec::new();
         for item in &p.items {
             if !item.hit_points().is_empty()
                 && editable(item.layer)
+                && !locked(&item.id, item.locked())
                 && !deleted.contains(item.id.as_str())
                 && if let Some(a) = adjustments.get(item.id.as_str()) {
                     let points = if let Some(s) = &item.stroke {
@@ -304,6 +309,7 @@ impl Editor {
         }
         for (id, line) in self.additions(page) {
             if editable(line.layer)
+                && !locked(&id, false)
                 && !deleted.contains(id.as_str())
                 && if let Some(a) = adjustments.get(id.as_str()) {
                     let line = crate::manipulation::adjusted_line(line, a);
@@ -438,8 +444,32 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":p.items.iter().filter(|i| i.locked()).map(|i| json!({"id":i.id,"bounds":i.bounds})).collect::<Vec<_>>(),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
         )
+    }
+    /// Items locked in place on a page, with their current bounds.
+    fn locked_items(&self, page: usize) -> Vec<Value> {
+        let deleted = self.deleted(page);
+        let adjustments = self.adjustments(page);
+        let Ok(p) = self.page(page) else {
+            return vec![];
+        };
+        p.items
+            .iter()
+            .map(|i| (i.id.clone(), i.locked()))
+            .chain(self.additions(page).map(|(id, _)| (id, false)))
+            .chain(self.images(page).map(|(id, _)| (id, false)))
+            .filter(|(id, native)| {
+                !deleted.contains(id.as_str())
+                    && adjustments
+                        .get(id.as_str())
+                        .and_then(|a| a.locked)
+                        .unwrap_or(*native)
+            })
+            .filter_map(|(id, _)| {
+                Some(json!({"id": id, "bounds": self.current_bounds(page, &id).ok()?}))
+            })
+            .collect()
     }
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {

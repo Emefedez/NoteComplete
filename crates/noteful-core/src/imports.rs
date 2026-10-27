@@ -76,11 +76,16 @@ impl Image {
             f(
                 6,
                 7,
-                V::Fields(vec![
-                    f(1, 1, V::UInt(1)),
-                    f(2, 0x21, V::Pair([w, h])),
-                    f(10, 5, V::Text(resource.into())),
-                ]),
+                V::Fields(
+                    vec![
+                        f(1, 1, V::UInt(1)),
+                        f(2, 0x21, V::Pair([w, h])),
+                        f(10, 5, V::Text(resource.into())),
+                    ]
+                    .into_iter()
+                    .chain(a.locked.filter(|l| *l).map(|_| f(21, 0x801, V::UInt(1))))
+                    .collect(),
+                ),
             ),
             f(8, 4, V::Float(1.)),
             f(9, 1, V::UInt(0)),

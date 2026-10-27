@@ -1466,3 +1466,11 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .text-layer text { fill: transparent; font-family: sans-serif; white-space: pre; }
 .text-layer text::selection, .text-layer tspan::selection { fill: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .sheet[data-tool="pan"] .text-layer tspan { pointer-events: auto; cursor: text; }
+
+/* Lock tool: locked items show a dashed outline and a padlock. */
+.lock-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; display: none; overflow: visible; }
+.sheet[data-tool="lock"] .lock-layer { display: block; }
+.lock-layer rect { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); }
+.lock-layer circle { fill: var(--accent); }
+.lock-layer path { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linejoin: round; }
+.sheet[data-tool="lock"] { cursor: pointer; }

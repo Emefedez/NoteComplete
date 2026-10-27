@@ -72,3 +72,23 @@ fn imports_reject_bad_geometry_formats_and_locked_layers() {
     assert!(editor.add_image(0, image()).is_err());
     assert_eq!(editor.view(0).unwrap()["visible_added"], 0);
 }
+
+#[test]
+fn image_lock_is_written_as_native_tag_21_and_can_be_lifted_again() {
+    let mut editor = Editor::create_document("Lock", &[[600., 800.]], &[]).unwrap();
+    editor.add_image(0, image()).unwrap();
+    editor.set_locked(0, "image:0", true).unwrap();
+    let exported = Editor::open(&editor.export_noteful().unwrap()).unwrap();
+    // Reopened, the image is locked by Noteful's own flag.
+    assert!(exported.pick_item(0, [60., 60.], 0.).unwrap().is_none());
+    let found = exported.pick_lockable(0, [60., 60.], 0.).unwrap().unwrap();
+    assert_eq!(found["locked"], true);
+    let id = found["id"].as_str().unwrap().to_owned();
+    let mut reopened = Editor::open(&editor.export_noteful().unwrap()).unwrap();
+    reopened.set_locked(0, &id, false).unwrap();
+    let unlocked = Editor::open(&reopened.export_noteful().unwrap()).unwrap();
+    assert_eq!(
+        unlocked.pick_item(0, [60., 60.], 0.).unwrap().unwrap()["id"],
+        id.as_str()
+    );
+}

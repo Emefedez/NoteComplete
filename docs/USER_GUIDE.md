@@ -53,6 +53,8 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 **Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. Handwriting is read in a separate pass over the ink alone, so it is found on PDF pages too, even when their printed text is skipped. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. It then runs in the background with a chip in the bar (progress and **Stop**), so the dialog can close and you can keep reading. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
 
+**Lock in place.** The Lock tool (**O**) locks or unlocks the item you click. Locked items show a dashed outline and a padlock while the tool is chosen, and cannot be selected, moved or erased. Locks are undoable and saved in the project; on export an image's lock becomes Noteful's own (strokes and shapes keep theirs in the project only).
+
 **Selecting text.** With the Pan tool, the cursor turns into a text cursor over printed PDF text and over recognized words; drag to select and press **Ctrl+C** to copy, line by line in reading order. Dragging anywhere else still moves the page.
 
 ## Open from Google Drive

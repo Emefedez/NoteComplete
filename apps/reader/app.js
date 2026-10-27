@@ -417,6 +417,23 @@ function buildPageList() {
   markPage();
 }
 // Paper stays underneath so widened pages show blank paper beside the PDF.
+// Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
+function lockMarks(view) {
+  const svg = document.createElementNS(ns, "svg");
+  svg.classList.add("lock-layer");
+  svg.setAttribute("viewBox", `0 0 ${view.size.join(" ")}`);
+  const unit = Math.max(view.size[0], view.size[1]) / 120;
+  for (const { bounds: [x, y, w, h] } of view.locked || []) {
+    const rect = document.createElementNS(ns, "rect");
+    for (const [k, v] of Object.entries({ x: x - unit / 2, y: y - unit / 2, width: w + unit, height: h + unit, rx: unit / 2, "stroke-width": unit / 4, "stroke-dasharray": `${unit} ${unit / 2}` }))
+      rect.setAttribute(k, v);
+    const badge = document.createElementNS(ns, "g");
+    badge.setAttribute("transform", `translate(${x + w - unit * 1.6} ${y - unit * 1.4}) scale(${unit / 10})`);
+    badge.innerHTML = `<circle cx="12" cy="12" r="12"/><path d="M7 11h10v8H7zM9 11V8a3 3 0 0 1 6 0v3"/>`;
+    svg.append(rect, badge);
+  }
+  return svg;
+}
 function pdfImage(href, place) {
   const el = document.createElementNS(ns, "image");
   for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
@@ -618,7 +635,7 @@ async function renderPage(p, provided) {
     overlay.setAttribute("viewBox", `0 0 ${p.size.join(" ")}`);
     p.render = render;
     p.overlay = overlay;
-    p.el.replaceChildren(render, overlay);
+    p.el.replaceChildren(render, overlay, lockMarks(result));
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -835,7 +852,7 @@ async function action(op, args = {}) {
     updateTools(result);
     layerPanel(result.layers);
     // Ink edits change one page; undo, redo and layers may change any.
-    const only = ["draw", "erase", "remove"].includes(op) ? args.page : null;
+    const only = ["draw", "erase", "remove", "lock"].includes(op) ? args.page : null;
     for (const p of panels) {
       if (only != null && p.index !== only) continue;
       p.token++;
@@ -845,7 +862,9 @@ async function action(op, args = {}) {
     status(
       op === "erase"
         ? "Erased. You can undo this change."
-        : "Unsaved changes. Save your project to keep them.",
+        : op === "lock"
+          ? args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked."
+          : "Unsaved changes. Save your project to keep them.",
     );
   } catch (e) {
     if (token === epoch) status(e.message, true);
@@ -995,6 +1014,18 @@ function pointerDown(e, p) {
       top: $("viewport").scrollTop,
     };
     p.el.setPointerCapture(e.pointerId);
+    return;
+  }
+  if (tool === "lock") {
+    e.preventDefault();
+    const [x, y] = point(e, p), note = epoch;
+    call("pickLock", { page: p.index, x, y, tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width })
+      .then((item) => {
+        if (note !== epoch || tool !== "lock") return;
+        if (!item) return status("Nothing to lock here. Click a stroke, shape, image or text box.");
+        return action("lock", { page: p.index, itemId: item.id, locked: !item.locked });
+      })
+      .catch((error) => status(error.message, true));
     return;
   }
   if (tool === "grab") {
@@ -1351,13 +1382,13 @@ $("redo").onclick = () => {
 };
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
-const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab" };
+const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", o: "lock" };
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),

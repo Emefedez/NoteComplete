@@ -204,6 +204,18 @@ fn edit_object(
         .map(|n| V::Float(n.as_f64().unwrap()))
         .collect();
     set(nested(fs, 2)?, 1, 0x403, V::Array(values), time);
+    // Lock in place is payload tag 21 (u8 with clock) on images. Other kinds use
+    // tag 21 for other values, so their lock stays in the project only.
+    if let Some(locked) = a.locked {
+        let payload = nested(fs, 6)?;
+        let lockable = match field(payload, 21) {
+            Some(_) => payload.iter().any(|f| f.tag == 21 && f.wire_type == 0x801),
+            None => crate::manipulation::item_geometry(item).kind == "image",
+        };
+        if lockable {
+            set(payload, 21, 0x801, V::UInt(u64::from(locked)), time);
+        }
+    }
     if crate::manipulation::item_geometry(item).styled {
         let st = nested(nested(fs, 6)?, 7)?;
         set(

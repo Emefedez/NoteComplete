@@ -45,6 +45,8 @@ Translation, scale and rotation are required. `width` and `rgba` may be omitted 
 
 Validation requires finite translation within ±1e6, scale in 0.001–1000, rotation within ±36000, optional width in 0.1–100 and RGBA in 0–1. Target IDs must exist and remain visible, unlocked and undeleted at that point in history. Identity/repeated adjustments do not add an action. Each completed gesture or inspector change is one undo step. Current readers load older v1 histories; older readers must reject the unfamiliar `Adjust` action rather than silently omit it.
 
+`locked` (optional boolean) locks the item in place (the Lock tool): a locked item cannot be picked, adjusted, resized, removed or erased. Omitted, it keeps the previous adjustment's value, else the item's own state (Noteful payload tag 21 for imported objects, unlocked otherwise). A change of `locked` is its own edit and must not change any other parameter. On native export an image's lock is written as payload tag 21 (type 0x801, clocked u8), as are objects that already carry that field; other object kinds use tag 21 for other values, and ink has no lock field, so their lock stays in the project only.
+
 Native export transforms current geometry while retaining original imported IDs, audio timing and auxiliary stroke data. `.nfedit` keeps the unchanged source and complete edit history.
 
 ## Inserted pages (project version 3)

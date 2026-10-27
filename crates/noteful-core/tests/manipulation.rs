@@ -16,6 +16,7 @@ fn adjustment() -> Adjustment {
         rotation: 90.,
         width: Some(8.),
         rgba: Some([1., 0., 0., 1.]),
+        locked: None,
     }
 }
 #[test]
@@ -182,4 +183,40 @@ fn locked_deleted_and_invalid_adjustments_do_not_change_history() {
     e.undo();
     e.remove_item(0, "new:0").unwrap();
     assert!(e.adjust_item(0, "new:0", adjustment()).is_err());
+}
+
+#[test]
+fn locking_in_place_blocks_edits_until_unlocked_and_survives_reload() {
+    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    e.add_line(0, line()).unwrap();
+    e.set_locked(0, "new:0", true).unwrap();
+    // Locked: not picked for selection, not moved, not erased, not removed.
+    assert!(e.pick_item(0, [60., 10.], 2.).unwrap().is_none());
+    let found = e.pick_lockable(0, [60., 10.], 2.).unwrap().unwrap();
+    assert_eq!(
+        (found["id"].as_str(), found["locked"].as_bool()),
+        (Some("new:0"), Some(true))
+    );
+    assert!(e.adjust_item(0, "new:0", adjustment()).is_err());
+    assert_eq!(e.erase_path(0, &[[60., 10.]], 2.).unwrap(), 0);
+    assert!(e.remove_item(0, "new:0").is_err());
+    let view = e.view(0).unwrap();
+    assert_eq!(view["locked"][0]["id"], "new:0");
+    // Locking and a move cannot share one edit.
+    let mut both = adjustment();
+    both.locked = Some(false);
+    assert!(e.adjust_item(0, "new:0", both).is_err());
+    // The lock is saved in the project and undoable.
+    let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap()["locked"], view["locked"]);
+    e.undo();
+    assert!(e.pick_item(0, [60., 10.], 2.).unwrap().is_some());
+    e.redo();
+    e.set_locked(0, "new:0", false).unwrap();
+    // A move after unlocking keeps it unlocked (the adjustment omits `locked`).
+    e.adjust_item(0, "new:0", adjustment()).unwrap();
+    assert_eq!(e.view(0).unwrap()["locked"].as_array().unwrap().len(), 0);
+    assert_eq!(e.erase_path(0, &[[110., 50.]], 1.).unwrap(), 1);
+    let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap(), e.view(0).unwrap());
 }

@@ -12,6 +12,10 @@ pub struct Adjustment {
     pub rotation: f64,
     pub width: Option<f64>,
     pub rgba: Option<[f64; 4]>,
+    /// Lock in place, set by the Lock tool. `None` keeps the item's own state
+    /// (Noteful's payload tag 21 for objects, unlocked otherwise).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked: Option<bool>,
 }
 impl Default for Adjustment {
     fn default() -> Self {
@@ -21,6 +25,7 @@ impl Default for Adjustment {
             rotation: 0.,
             width: None,
             rgba: None,
+            locked: None,
         }
     }
 }
@@ -248,7 +253,21 @@ impl Editor {
             .map(|(_, l)| line_geometry(l))
             .ok_or_else(|| Error::new(0, "Item not found"))
     }
-    fn editable_layer(&self, page: usize, id: &str) -> Result<u32> {
+    /// Whether an item is locked in place: the Lock tool's choice, else the
+    /// native lock of imported objects.
+    pub(crate) fn is_locked(&self, page: usize, id: &str) -> bool {
+        self.adjustments(page)
+            .get(id)
+            .and_then(|a| a.locked)
+            .unwrap_or_else(|| {
+                self.page(page)
+                    .ok()
+                    .and_then(|p| p.items.iter().find(|i| i.id == id))
+                    .is_some_and(|i| i.locked())
+            })
+    }
+    /// The layer of a live item, if that layer is visible and unlocked.
+    fn item_layer(&self, page: usize, id: &str) -> Result<u32> {
         if self.deleted(page).contains(id) {
             return Err(Error::new(0, "Item was erased"));
         }
@@ -257,14 +276,7 @@ impl Editor {
             .items
             .iter()
             .find(|i| i.id == id)
-            .map(|i| {
-                if i.locked() {
-                    Err(Error::new(0, "This item is locked in place"))
-                } else {
-                    Ok(i.layer)
-                }
-            })
-            .transpose()?
+            .map(|i| i.layer)
             .or_else(|| {
                 self.additions(page)
                     .find(|(key, _)| key == id)
@@ -285,8 +297,48 @@ impl Editor {
         }
         Ok(layer)
     }
-    pub fn adjust_item(&mut self, page: usize, id: &str, adjustment: Adjustment) -> Result<()> {
-        self.editable_layer(page, id)?;
+    pub(crate) fn editable_layer(&self, page: usize, id: &str) -> Result<u32> {
+        let layer = self.item_layer(page, id)?;
+        if self.is_locked(page, id) {
+            return Err(Error::new(0, "This item is locked in place"));
+        }
+        Ok(layer)
+    }
+    /// Lock or unlock one item in place, as one undoable edit.
+    pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<()> {
+        if self.is_locked(page, id) == locked {
+            return Ok(());
+        }
+        let mut a = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        a.locked = Some(locked);
+        self.adjust_item(page, id, a)
+    }
+    pub fn adjust_item(&mut self, page: usize, id: &str, mut adjustment: Adjustment) -> Result<()> {
+        let current = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        // Moves and restyles leave the lock as it was; a lock change is its own edit.
+        if adjustment.locked.is_none() {
+            adjustment.locked = current.locked;
+        }
+        if adjustment.locked != current.locked {
+            let mut rest = adjustment.clone();
+            rest.locked = current.locked;
+            if rest != current {
+                return Err(Error::new(0, "Lock and move items in separate edits"));
+            }
+            self.item_layer(page, id)?;
+        } else {
+            self.editable_layer(page, id)?;
+        }
         let g = self.geometry(page, id)?;
         if !adjustment.valid()
             || (!g.styled && (adjustment.width.is_some() || adjustment.rgba.is_some()))
@@ -359,6 +411,38 @@ impl Editor {
         )
     }
     pub fn pick_item(&self, page: usize, p: [f64; 2], tolerance: f64) -> Result<Option<Value>> {
+        match self.pick(page, p, tolerance, false)? {
+            Some(id) => self.selection(page, &id).map(Some),
+            None => Ok(None),
+        }
+    }
+    /// The topmost item under a point, locked ones included, for the Lock tool.
+    pub fn pick_lockable(&self, page: usize, p: [f64; 2], tolerance: f64) -> Result<Option<Value>> {
+        Ok(self.pick(page, p, tolerance, true)?.map(|id| {
+            let locked = self.is_locked(page, &id);
+            json!({"id": id, "page": page, "locked": locked, "bounds": self.current_bounds(page, &id).ok()})
+        }))
+    }
+    /// Axis-aligned bounds of an item as it now sits (adjustments applied).
+    pub(crate) fn current_bounds(&self, page: usize, id: &str) -> Result<[f64; 4]> {
+        let g = self.geometry(page, id)?;
+        let adjustments = self.adjustments(page);
+        let a = adjustments.get(id).copied().cloned().unwrap_or_default();
+        let m = a.matrix(&g);
+        let [x, y, w, h] = g.bounds;
+        let corners: Vec<_> = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]
+            .iter()
+            .map(|c| point(m, *c))
+            .collect();
+        Ok(bounds(&corners))
+    }
+    fn pick(
+        &self,
+        page: usize,
+        p: [f64; 2],
+        tolerance: f64,
+        include_locked: bool,
+    ) -> Result<Option<String>> {
         if p.iter().any(|n| !n.is_finite())
             || !tolerance.is_finite()
             || !(0.0..=100.).contains(&tolerance)
@@ -369,6 +453,9 @@ impl Editor {
         let adjustments = self.adjustments(page);
         let deleted = self.deleted(page);
         let added: Vec<_> = self.additions(page).collect();
+        let skip = |id: &str, native: bool| {
+            !include_locked && adjustments.get(id).and_then(|a| a.locked).unwrap_or(native)
+        };
         for layer in self
             .layers()
             .iter()
@@ -377,6 +464,7 @@ impl Editor {
         {
             for (id, line) in added.iter().rev().filter(|(_, l)| l.layer == layer.id) {
                 if !deleted.contains(id.as_str())
+                    && !skip(id, false)
                     && hit_geometry(
                         p,
                         tolerance,
@@ -386,7 +474,7 @@ impl Editor {
                         false,
                     )
                 {
-                    return self.selection(page, id).map(Some);
+                    return Ok(Some(id.clone()));
                 }
             }
             for (id, image) in self
@@ -398,6 +486,7 @@ impl Editor {
             {
                 let item = image.item(id.clone());
                 if !deleted.contains(id.as_str())
+                    && !skip(id, false)
                     && hit_geometry(
                         p,
                         tolerance,
@@ -407,14 +496,14 @@ impl Editor {
                         true,
                     )
                 {
-                    return self.selection(page, id).map(Some);
+                    return Ok(Some(id.clone()));
                 }
             }
             for item in page_ref
                 .items
                 .iter()
                 .rev()
-                .filter(|i| i.layer == layer.id && !i.locked())
+                .filter(|i| i.layer == layer.id && !skip(&i.id, i.locked()))
             {
                 if !deleted.contains(item.id.as_str())
                     && hit_geometry(
@@ -426,7 +515,7 @@ impl Editor {
                         item.object.is_some(),
                     )
                 {
-                    return self.selection(page, &item.id).map(Some);
+                    return Ok(Some(item.id.clone()));
                 }
             }
         }

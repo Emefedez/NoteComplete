@@ -44,6 +44,10 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       });
       return;
     }
+    if (op === "pickLock") {
+      postMessage({ id, result: JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)) });
+      return;
+    }
     if (op === "selection") {
       postMessage({
         id,
@@ -65,6 +69,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       return;
     }
     if (op === "remove") session.remove_item(page, args.itemId);
+    if (op === "lock") session.set_locked(page, args.itemId, args.locked);
     if (op === "export") {
       const bytes = session.export_noteful();
       postMessage({ id, result: bytes }, [bytes.buffer]);

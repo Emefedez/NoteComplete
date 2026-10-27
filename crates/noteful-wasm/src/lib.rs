@@ -69,6 +69,27 @@ impl EditorSession {
             .map(|v| on_page(v, display));
         serde_json::to_string(&picked).map_err(js_error)
     }
+    /// The item under a point for the Lock tool, locked ones included.
+    pub fn pick_lockable(
+        &self,
+        page: usize,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+    ) -> Result<String, JsValue> {
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let picked = self
+            .inner
+            .pick_lockable(page, [x, y], tolerance)
+            .map_err(js_error)?
+            .map(|v| on_page(v, display));
+        serde_json::to_string(&picked).map_err(js_error)
+    }
+    pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        self.inner.set_locked(page, id, locked).map_err(js_error)
+    }
     pub fn selection(&self, page: usize, id: &str) -> Result<String, JsValue> {
         let display = page;
         let page = self.inner.slot(page).map_err(js_error)?;
