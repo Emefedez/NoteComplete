@@ -53,7 +53,9 @@ impl Stroke {
             return None;
         }
         let pairs: Vec<[f64; 2]> = aux[8..]
-            .chunks_exact(8)
+            .as_chunks::<8>()
+            .0
+            .iter()
             .map(|c| {
                 let v = |i: usize| f32::from_be_bytes(c[i..i + 4].try_into().unwrap()) as f64;
                 [v(0), v(4)]
