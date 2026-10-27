@@ -89,7 +89,9 @@ function createWindow() {
   const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480,
     // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
     title: 'NoteComplete', autoHideMenuBar: true });
-  windows.set(win.id, win);
+  // The id is read once: in 'closed' the window is already destroyed and win.id throws.
+  const id = win.id;
+  windows.set(id, win);
   win.on('resize', () => layout(win));
   win.on('close', event => {
     const unsaved = tabs.list(win.id).filter(t => t.dirty);
@@ -101,13 +103,13 @@ function createWindow() {
     else event.preventDefault();
   });
   win.on('closed', () => {
-    for (const tab of tabs.list(win.id)) {
+    for (const tab of tabs.list(id)) {
       tabs.remove(tab.id);
       const contents = views.get(tab.id)?.webContents;
       if (contents && !contents.isDestroyed()) contents.close();
       views.delete(tab.id);
     }
-    windows.delete(win.id);
+    windows.delete(id);
   });
   openTab(win);
   return win;
