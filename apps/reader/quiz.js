@@ -16,7 +16,7 @@ export const DEFAULT_QUIZ_PROMPT = `You write multiple-choice questions so a stu
 
 export function quizPrompt(instructions, { amount, language, title }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
-  return `${instructions.trim()}\nThe notes are "${title}". About ${amount} questions per page. ${lang} Handwriting, highlights and text under tape belong to the student.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"box":[0.05,0.3,0.95,0.5]}}]}`;
+  return `${instructions.trim()}\nThe notes are "${title}". About ${amount} questions per page. ${lang} Pages are shown with tape lifted so covered parts are readable; ask about all of each page's material evenly, not mainly what is taped or highlighted.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"box":[0.05,0.3,0.95,0.5]}}]}`;
 }
 
 const validBox = b => Array.isArray(b) && b.length === 4 && b.every(v => Number.isFinite(v) && v >= 0 && v <= 1) && b[2] - b[0] > 0.02 && b[3] - b[1] > 0.01;
@@ -60,6 +60,14 @@ export function wrongQuestions(quizzes) {
     seen.add(q.question);
     return true;
   })).map(q => ({ ...q }));
+}
+
+// A hint image shown large, fitted to the window.
+function showLarge(url, alt) {
+  const dialog = $('imageViewer'), img = $('imageViewerImage');
+  img.src = url; img.alt = alt;
+  dialog.onclick = () => dialog.close();
+  dialog.showModal();
 }
 
 export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck }) {
@@ -144,6 +152,12 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const img = document.createElement('img');
     img.alt = `Page ${q.source.page}`;
     if (url) img.src = url;
+    // Click (or Enter) shows it large; Esc or a click closes it.
+    if (url) {
+      img.tabIndex = 0; img.title = 'Show large';
+      img.onclick = () => showLarge(url, img.alt);
+      img.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); showLarge(url, img.alt); } };
+    }
     $('quizHint').replaceChildren(img);
     $('quizHintButton').hidden = true;
   }

@@ -1165,7 +1165,12 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .quiz-question p { margin: 0 0 6px; }
 .quiz-options kbd { margin-right: 4px; }
 .quiz-hint { margin: 8px 0; padding: 6px; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 12px; color: var(--muted); }
-.quiz-hint img { display: block; max-width: 100%; max-height: 260px; margin: 0 auto; border-radius: 4px; }
+.quiz-hint img { display: block; max-width: 100%; max-height: 260px; margin: 0 auto; border-radius: 4px; cursor: zoom-in; }
+/* A hint shown large: fitted to the window over a dark backdrop; any click closes it. */
+.image-viewer { max-width: none; max-height: none; width: 100vw; height: 100dvh; margin: 0; padding: 24px; border: 0; background: transparent; display: none; place-items: center; cursor: zoom-out; }
+.image-viewer[open] { display: grid; }
+.image-viewer::backdrop { background: #000c; }
+.image-viewer img { max-width: 100%; max-height: calc(100dvh - 48px); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow-dialog); }
 .quiz-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .quiz-actions button { padding: 3px 10px; font-size: 12px; gap: 6px; }
 .prompt-text { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--chrome); font: 12px/1.5 ui-monospace, monospace; resize: vertical; }
@@ -1188,6 +1193,10 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .quiz-check textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 12px; resize: vertical; }
 .quiz-check-options { display: grid; gap: 2px; font-size: 12px; }
 #quizDispute[data-armed="1"], #practiceDiscard[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
+/* Double check is for when something looks wrong: a light red, like other "fix it" actions. */
+#quizCheck, #practiceCheck { background: var(--danger-soft); color: var(--danger); }
+#quizCheck:hover, #practiceCheck:hover { background: color-mix(in srgb, var(--danger-soft) 80%, var(--danger)); }
+#quizCheck kbd, #practiceCheck kbd { border-color: color-mix(in srgb, var(--danger) 35%, transparent); color: inherit; }
 .zoom-input { width: 56px; padding: 3px 4px; border: 1px solid transparent; border-radius: 5px; background: transparent; text-align: center; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
 .zoom-input:hover, .zoom-input:focus { border-color: var(--line); background: var(--surface); }
 .drive-progress { display: block; width: min(420px, 100%); height: 6px; margin: -4px 0 10px; accent-color: var(--accent); }

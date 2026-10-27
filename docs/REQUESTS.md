@@ -149,6 +149,9 @@ The owner's requests from the latest review, in one place, with how each was che
 - [D] **Flashcards: I knew it / Not yet (2 / 1) work again** (the floating-practice rewrite had dropped them). *Browser test through a whole deck.*
 - [D] **The job chip's Stop button follows the pill** at every bar size (same 2 px gap on every side), and the title no longer slides under the chip. *Measured in normal, compact and narrow bars.*
 - [D] **Ask AI can read your Markdown notes**: My notes in the Ask AI panel (on when the note has notes) and a Notes chip in the flashcard Ask AI. Up to 20 000 characters go as text. *Browser test: typed notes reach the request; unticked, they don't.*
+- [D] **Quiz hints open large**: click (or Enter on) the hint image to see it fitted to the window; Esc or a click closes it. *Browser test: 1129×669, closes both ways, the quiz stays.*
+- [D] **Double check is light red** in the quiz and the flashcards: it is for when something looks wrong.
+- [D] **Quizzes and flashcards cover whole pages evenly.** They always saw the full page (tape lifted), but the flashcard instructions told the AI to weigh handwriting, highlights and taped parts heavily, which biased questions towards them. Both prompts now ask for all of each page's material evenly.
 - [ ] **Floating windows** (Ask AI, audio, quiz, flashcards): drag them anywhere by their head, resize from the corner, keep the head and × on screen, and _ □ × in the head: _ minimizes to a list near the windows to bring them back, □ makes them small or large, × closes.
 - [ ] **Export as PDF and as images** next to SVG: a row SVG · PDF · IMG, with a menu for the image type.
 

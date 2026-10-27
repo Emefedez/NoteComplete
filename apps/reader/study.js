@@ -66,7 +66,7 @@ export function cardVerdict(value, card) {
 
 export function prompts(kind, { amount, language, title }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
-  const intro = `You are helping a student study their own notes, "${title}". You get page images and the text extracted from those pages. Handwriting, highlights and anything under tape are the student's own emphasis and answers: weigh them heavily. Ignore slide decoration and page furniture.`;
+  const intro = `You are helping a student study their own notes, "${title}". You get page images and the text extracted from those pages. The images show any tape lifted, so covered parts are readable. Cover all the material on each page evenly (printed text, slides, typed notes and handwriting alike); being highlighted or under tape does not make something more important. Ignore slide decoration and page furniture.`;
   if (kind === 'cards')
     return `${intro}\nMake about ${amount} flashcards per page: one fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":<page number>}]}`;
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
