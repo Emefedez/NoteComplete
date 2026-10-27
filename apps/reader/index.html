@@ -660,7 +660,7 @@
 
 <dialog id="ocrDialog" class="ocr-dialog" aria-labelledby="ocrTitle">
   <h2 id="ocrTitle">Recognize text</h2>
-  <p>Finds handwriting and text in scanned pages so Find can search it. It runs on this device only when you start it; results are kept with this note.</p>
+  <p>Finds handwriting and text in scanned pages so Find can search it and you can select it. It runs on this device in the background (progress and Stop are in the bar); results are kept with this note.</p>
   <fieldset class="ocr-scope">
     <legend>Pages</legend>
     <label><input type="radio" name="ocrScope" value="page" checked /> Current page</label>
@@ -669,9 +669,8 @@
   </fieldset>
   <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
   <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
-  <progress id="ocrProgress" max="1" hidden></progress>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
-  <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
+  <div class="ocr-actions"><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
 </dialog>
 
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>

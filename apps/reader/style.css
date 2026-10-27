@@ -1459,3 +1459,10 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 /* Free position: room on both sides, so the trackpad can leave the pages anywhere. */
 #pages[data-align="free"] { align-items: flex-start; padding-inline: 50vw; }
 @media (max-width: 700px) { .page-free { display: none; } }
+
+/* Selectable PDF and recognized text: invisible words over the page; with the
+   Pan tool the cursor turns to a text cursor over them and drags select. */
+.text-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; user-select: text; -webkit-user-select: text; }
+.text-layer text { fill: transparent; font-family: sans-serif; white-space: pre; }
+.text-layer text::selection, .text-layer tspan::selection { fill: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.sheet[data-tool="pan"] .text-layer tspan { pointer-events: auto; cursor: text; }

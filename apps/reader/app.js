@@ -13,6 +13,7 @@ import { studyController } from "./study.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
+import { selectedText } from "./text-layer.js";
 import { resizable } from "./panels.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
@@ -308,6 +309,8 @@ function buildPages(sizes) {
       // Right-click removes the element under the pointer; Ctrl+Z brings it back.
       event.preventDefault();
       if (!doc || editing || busy() || !p.view) return;
+      // Not while text is selected: a right-click there means copy, not delete.
+      if (selectedText(window.getSelection())) return status("Press Ctrl+C to copy the selected text.");
       const [x, y] = point(event, p);
       try {
         const item = await call("pick", { page: p.index, x, y,
@@ -617,6 +620,7 @@ async function renderPage(p, provided) {
     p.overlay = overlay;
     p.el.replaceChildren(render, overlay);
     find.paint(p);
+    find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
     p.ink = indexTimedInk(render, result.timings);
     for (const item of p.ink) {
@@ -977,7 +981,9 @@ function pointerDown(e, p) {
   setPage(p.index);
   if (selection.down(e, p, tool)) return;
   if (tool === "pan") {
-    if (e.pointerType !== "mouse") return;
+    // On PDF or recognized words the mouse selects text instead of panning.
+    if (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan")) return;
+    window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
       id: e.pointerId,
@@ -1818,6 +1824,14 @@ for (const menu of document.querySelectorAll("details.bar-menu")) {
   });
 }
 $("gotoPage").onclick = () => palette.open("page ");
+// Text selected on a page copies as lines in reading order.
+document.addEventListener("copy", (event) => {
+  const text = selectedText(window.getSelection());
+  if (!text) return;
+  event.preventDefault();
+  event.clipboardData.setData("text/plain", text);
+  status(`Copied ${text.split(/\s+/).length} words.`);
+});
 // Grab tool: a region of a page for the AI chat, or its text for the clipboard.
 function grabRect(g) {
   const [a, b] = [g.start, g.points.at(-1)];
@@ -2034,6 +2048,7 @@ const find = findController({
   status,
   pageCanvas,
   documentInfo: () => ({ pages: doc?.pages || 0 }),
+  jobs: () => jobs,
 });
 const ai = window.notecompleteAI || null;
 const studyDeps = {

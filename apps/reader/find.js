@@ -1,8 +1,10 @@
 // Find in note: one box over typed text, the PDF text layer, OCR results and
 // transcripts. The index is built on first use and kept per note fingerprint;
-// OCR runs only when the user starts it from the Recognize text dialog.
+// OCR runs only when the user starts it from the Recognize text dialog, then
+// continues in the background as a job chip in the bar.
 import { SearchIndex } from './search-index.js';
 import { ocrWorker, recognizePage, mergeWords, OCR_LANGUAGES } from './ocr.js';
+import { textLayer } from './text-layer.js';
 
 const $ = id => document.getElementById(id);
 const ns = 'http://www.w3.org/2000/svg';
@@ -17,29 +19,36 @@ export async function noteFingerprint(file) {
   return 'note-v1:' + [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function findController({ call, library, backgrounds, panels, jump, audio, status, pageCanvas, documentInfo }) {
+export function findController({ call, library, backgrounds, panels, jump, audio, status, pageCanvas, documentInfo, jobs }) {
   let index = new SearchIndex(), fingerprint = '', stored = { pdf: {}, ocr: {} };
-  let building = null, generation = 0, hits = [], current = -1, debounce = 0, ocrRun = null;
+  let building = null, generation = 0, hits = [], current = -1, debounce = 0, ocrRun = null, loading = null;
   // Sources to search, any combination; remembered on this device.
   let sources = new Set(['text', 'pdf', 'ocr', 'audio']);
   try { const saved = JSON.parse(localStorage.getItem('notecomplete-find-sources')); if (Array.isArray(saved) && saved.length) sources = new Set(saved); } catch { /* Optional. */ }
 
   function reset(nextFingerprint) {
-    generation++; building = null; ocrRun?.cancel();
+    generation++; building = null; loading = null; ocrRun?.cancel();
     index = new SearchIndex(); fingerprint = nextFingerprint || ''; stored = { pdf: {}, ocr: {} };
     hits = []; current = -1;
     close();
   }
   const persist = () => fingerprint && library.saveSearchData(fingerprint, stored);
+  // PDF and OCR words kept for this note, read once.
+  function load() {
+    const token = generation;
+    return loading ||= (async () => {
+      const kept = fingerprint ? await library.searchData(fingerprint) : null;
+      if (token === generation && kept?.pdf) stored = { pdf: kept.pdf || {}, ocr: kept.ocr || {} };
+    })();
+  }
 
   // Index every page once: typed text, PDF text (kept), OCR (kept) and transcripts.
   function build() {
     if (building) return building;
     const token = generation;
     building = (async () => {
-      const kept = fingerprint ? await library.searchData(fingerprint) : null;
+      await load();
       if (token !== generation) return;
-      if (kept?.pdf) stored = { pdf: kept.pdf || {}, ocr: kept.ocr || {} };
       const { pages } = documentInfo();
       const timings = new Map();
       let extracted = false;
@@ -178,6 +187,21 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     });
     layer.replaceChildren(...rects);
   }
+  // Selectable PDF and recognized text over a rendered page (Pan tool).
+  async function selectable(p) {
+    const view = p?.view, token = generation;
+    if (!view) return;
+    await load();
+    const slot = view.slot ?? p.index;
+    if (view.pdf_background && !stored.pdf[slot]) {
+      stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
+      if (token === generation) persist();
+    }
+    if (token !== generation || p.view !== view || !p.el) return;
+    p.textLayer?.remove();
+    p.textLayer = textLayer(view.size, { pdf: stored.pdf[slot], ocr: stored.ocr[slot] });
+    p.el.append(p.textLayer);
+  }
   function go(i) {
     if (!hits.length) return;
     current = (i + hits.length) % hits.length;
@@ -210,7 +234,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   $('findListToggle').onclick = () => { $('findResults').hidden = !$('findResults').hidden || !hits.length; };
   $('findClose').onclick = close;
 
-  // Recognize text: chosen pages only, with progress and Cancel. Results are kept.
+  // Recognize text: chosen pages only. The dialog only starts it; the work
+  // runs as a background job with a chip and Stop. Results are kept per page.
   const languages = $('ocrLanguage');
   for (const [code, name] of Object.entries(OCR_LANGUAGES)) {
     const option = document.createElement('option');
@@ -223,9 +248,9 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const { pages } = documentInfo();
     $('ocrFrom').max = $('ocrTo').max = pages;
     $('ocrFrom').value = $('ocrTo').value = currentPage + 1;
-    $('ocrStatus').textContent = Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} pages already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use.';
-    $('ocrProgress').hidden = true;
-    $('ocrStart').disabled = false; $('ocrCancel').hidden = true;
+    $('ocrStatus').textContent = ocrRun ? 'Recognition is running in the background; its progress is in the bar. Stop it there to start another.'
+      : Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} ${Object.keys(stored.ocr).length === 1 ? 'page' : 'pages'} already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use.';
+    $('ocrStart').disabled = !!ocrRun;
     $('ocrDialog').showModal();
   }
   function selectedPages() {
@@ -237,35 +262,38 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     return Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
   }
   $('ocrStart').onclick = async () => {
+    if (ocrRun) return;
     const chosen = [...languages.selectedOptions].map(o => o.value);
     if (!chosen.length) { $('ocrStatus').textContent = 'Choose at least one language.'; return; }
     try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); } catch { /* Optional. */ }
+    $('ocrStart').disabled = true;
+    $('ocrStatus').textContent = 'Checking the pages…';
     await build();
-    const skipPdf = $('ocrSkipPdf').checked;
+    const skipPdf = $('ocrSkipPdf').checked, selected = selectedPages();
     const slots = new Map(), inked = new Set();
-    for (const p of selectedPages()) {
+    for (const p of selected) {
       const view = await call('view', { page: p });
       slots.set(p, view.slot ?? p);
       if (/data-item="stroke:/.test(view.svg)) inked.add(p);
     }
     // Pages with PDF text skip the whole-page pass, but their handwriting is still read.
     const whole = p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20);
-    const pages = selectedPages().filter(p => whole(p) || inked.has(p));
+    const pages = selected.filter(p => whole(p) || inked.has(p));
+    $('ocrStart').disabled = false;
     if (!pages.length) { $('ocrStatus').textContent = 'Those pages already have PDF text and no handwriting. Untick “Skip the printed text of PDF pages” to recognize them anyway.'; return; }
+    $('ocrDialog').close();
     const token = generation;
-    let cancelled = false, worker = null;
+    let cancelled = false, worker = null, done = 0;
     ocrRun = { cancel() { cancelled = true; worker?.terminate(); } };
-    $('ocrStart').disabled = true; $('ocrCancel').hidden = false; $('ocrProgress').hidden = false;
-    $('ocrProgress').removeAttribute('value');
+    const job = jobs().start('Recognize text', { kind: 'ocr', cancel: () => ocrRun?.cancel() });
     try {
-      $('ocrStatus').textContent = 'Loading the recognition engine…';
+      job.set(0, 'loading the engine');
       worker = await ocrWorker(chosen.join('+'), message => {
-        if (message.status === 'loading language traineddata' && message.progress < 1) $('ocrStatus').textContent = `Downloading language data… ${Math.round(message.progress * 100)}%`;
+        if (message.status === 'loading language traineddata' && message.progress < 1) job.set(0, `downloading language data ${Math.round(message.progress * 100)}%`);
       });
       for (const [n, page] of pages.entries()) {
         if (cancelled || token !== generation) break;
-        $('ocrStatus').textContent = `Recognizing page ${page + 1} (${n + 1} of ${pages.length})…`;
-        $('ocrProgress').value = n / pages.length;
+        job.set(n / pages.length, pages.length === 1 ? `page ${page + 1}` : `page ${page + 1} (${n + 1} of ${pages.length})`);
         // Up to three passes: the whole page, then the ink alone at two sizes
         // (handwriting reads differently at each); readings of one spot merge.
         const passes = [];
@@ -287,21 +315,23 @@ export function findController({ call, library, backgrounds, panels, jump, audio
         index.remove(u => u.source === 'ocr' && u.page === page);
         index.add({ page, source: 'ocr', words });
         persist();
+        done++;
+        // Recognized words become selectable on the page right away.
+        const panel = panels().find(p => p.index === page);
+        if (panel) selectable(panel);
       }
-      $('ocrProgress').value = 1;
-      $('ocrStatus').textContent = cancelled ? 'Stopped. Pages recognized so far are kept and searchable.' : `Done. ${pages.length} ${pages.length === 1 ? 'page' : 'pages'} recognized and added to Find.`;
       refresh();
+      if (token !== generation) job.fail('Recognition stopped: another note was opened.');
+      else if (cancelled) job.fail(`Recognition stopped. ${done} ${done === 1 ? 'page' : 'pages'} recognized so far are kept and searchable.`);
+      else job.finish(`Text recognized on ${done} ${done === 1 ? 'page' : 'pages'} and added to Find.`);
     } catch (error) {
-      if (!cancelled) $('ocrStatus').textContent = `Could not recognize text: ${error.message}`;
+      job.fail(cancelled ? `Recognition stopped. ${done} ${done === 1 ? 'page' : 'pages'} recognized so far are kept.` : `Could not recognize text: ${error.message}`);
     } finally {
       await worker?.terminate().catch?.(() => {});
       ocrRun = null;
-      $('ocrStart').disabled = false; $('ocrCancel').hidden = true;
     }
   };
-  $('ocrCancel').onclick = () => ocrRun?.cancel();
-  $('ocrClose').onclick = () => { ocrRun?.cancel(); $('ocrDialog').close(); };
-  $('ocrDialog').addEventListener('close', () => ocrRun?.cancel());
+  $('ocrClose').onclick = () => $('ocrDialog').close();
 
   // Pages were inserted or removed: rebuild positions, keep the stored text.
   function restructure() {
@@ -341,7 +371,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     return out;
   }
   return {
-    reset, open, close, paint, openOcr, restructure, pageText, wordsIn,
+    reset, open, close, paint, selectable, openOcr, restructure, pageText, wordsIn,
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },
