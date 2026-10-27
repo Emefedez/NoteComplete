@@ -2,7 +2,7 @@
 // Each question carries the current page (image with tape lifted + its text),
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
-import { canvasImage, textBlock } from './ai-context.js';
+import { canvasImage, textBlock, notesBlock } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
 import { renderMarkdown, plainText } from './rich-text.js';
 
@@ -27,7 +27,7 @@ export function renderAnswer(text) {
   return fragment;
 }
 
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox }) {
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '' }) {
   let history = [], busy = false, attachments = [];
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
@@ -79,6 +79,8 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       model.load(select.value);
     }
     $('chatNoteLabel').hidden = !notePath();
+    // My notes is on when the note has Markdown notes.
+    notesText().then(text => { if (!$('chatNotes').dataset.touched) $('chatNotes').checked = !!String(text || '').trim(); }).catch(() => {});
     $('chatPanel').hidden = false;
     if (!history.length && !$('chatMessages').children.length)
       add('assistant', 'Ask about this page or select something with **Select** first: a formula, a diagram, a sentence. I can see the page, its text and recognized handwriting, and lift the tape.');
@@ -133,6 +135,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         canvas.width = canvas.height = 0;
         context.push(textBlock(page, await pageText(page)));
       }
+      if ($('chatNotes').checked) {
+        const block = notesBlock(await notesText().catch(() => ''));
+        if (block) context.push(block);
+      }
       for (const [i, a] of attachments.splice(0).entries()) {
         images.push(await dataUrlImage(a.url, `region-${i + 1}`));
         context.push(`The student attached ${a.label} as the image "region-${i + 1}". Focus on it.`);
@@ -176,6 +182,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatForm').onsubmit = event => { event.preventDefault(); const q = $('chatInput').value; $('chatInput').value = ''; ask(q); };
   $('chatInput').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } };
   $('chatStop').onclick = () => ai?.cancel('chat');
+  $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
   $('chatClear').onclick = () => { history = []; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {

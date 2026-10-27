@@ -2491,6 +2491,8 @@ const studyDeps = {
   documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }),
   currentPage: () => page,
   notePath: () => notePath,
+  // The note's Markdown notes (loads the notes module on first use).
+  notesText: async () => (doc ? (await notesApi()).text : ""),
   status,
 };
 // Chat answers onto the page: a text box with the answer's text, wrapped to the

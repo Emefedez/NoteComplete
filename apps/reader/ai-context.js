@@ -25,6 +25,13 @@ export function textBlock(page, parts, limit = 6000) {
 }
 
 // Page images plus text for a list of display pages.
+// The user's own Markdown notes for the document, capped, as a prompt block.
+export function notesBlock(text, limit = 20000) {
+  const notes = String(text || '').trim();
+  if (!notes) return '';
+  const cut = notes.length > limit ? `${notes.slice(0, limit)}\n[… ${notes.length - limit} more characters not included]` : notes;
+  return `The student's own Markdown notes for this document (lines like "[p. 3]" tie a section to a page):\n${cut}`;
+}
 export async function pagesContext(pages, { pageCanvas, pageText, onProgress = () => {}, width = 2200 }) {
   const images = [], texts = [];
   for (const [n, page] of pages.entries()) {

@@ -2,7 +2,7 @@
 // note's pages (images with tape lifted, plus typed/PDF/OCR/audio text).
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
-import { pagesContext, jsonFrom } from './ai-context.js';
+import { pagesContext, jsonFrom, notesBlock } from './ai-context.js';
 import { quizPrompt, prepareQuestions, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { renderMarkdown } from './rich-text.js';
@@ -72,7 +72,7 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '' }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -376,8 +376,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   }
   // What goes with a card request: its page (image and text), the page's source PDF,
   // and the whole note through the note's MCP tools (slower: the tool may read other pages).
-  const material = () => ({ page: $('practiceAskPage').getAttribute('aria-pressed') === 'true', pdf: $('practiceAskPdf').getAttribute('aria-pressed') === 'true', note: $('practiceAskNote').getAttribute('aria-pressed') === 'true' });
-  for (const id of ['practiceAskPage', 'practiceAskPdf', 'practiceAskNote']) {
+  const pressed = id => $(id).getAttribute('aria-pressed') === 'true';
+  const material = () => ({ page: pressed('practiceAskPage'), pdf: pressed('practiceAskPdf'), notes: pressed('practiceAskNotes'), note: pressed('practiceAskNote') });
+  for (const id of ['practiceAskPage', 'practiceAskPdf', 'practiceAskNotes', 'practiceAskNote']) {
     $(id).onclick = () => {
       $(id).setAttribute('aria-pressed', String($(id).getAttribute('aria-pressed') !== 'true'));
       try { localStorage.setItem('notecomplete-card-material', JSON.stringify(material())); } catch { /* Optional. */ }
@@ -385,12 +386,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   }
   try {
     const saved = JSON.parse(localStorage.getItem('notecomplete-card-material') || 'null');
-    if (saved) for (const [id, on] of [['practiceAskPage', saved.page], ['practiceAskPdf', saved.pdf], ['practiceAskNote', saved.note]]) $(id).setAttribute('aria-pressed', String(!!on));
+    if (saved) for (const [id, on] of [['practiceAskPage', saved.page], ['practiceAskPdf', saved.pdf], ['practiceAskNotes', saved.notes], ['practiceAskNote', saved.note]]) $(id).setAttribute('aria-pressed', String(!!on));
   } catch { /* Optional. */ }
   const contexts = new Map();
   async function cardContext(card, want) {
     const out = { images: [], text: '', notes: [] };
-    if (!card.page) return out;
+    // The user's Markdown notes go as text, whatever the page.
+    const own = want.notes ? notesBlock(await notesText().catch(() => '')) : '';
+    if (!card.page) { out.text = own; return out; }
     const page = card.page - 1;
     if (want.page) {
       const k = `page:${page}`;
@@ -405,6 +408,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       if (pdf) { out.images.push(pdf); out.notes.push(`The attached PDF is the source document of page ${card.page}${pdf.page ? ` (its page ${pdf.page})` : ''}.`); }
       else out.notes.push('');
     }
+    out.text = [out.text, own].filter(Boolean).join('\n\n');
     return out;
   }
   let fixing = null;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ankiText, cleanCards, cleanQuestions, prompts, listLines } from './study.js';
-import { jsonFrom, textBlock } from './ai-context.js';
+import { jsonFrom, textBlock, notesBlock } from './ai-context.js';
 import { renderAnswer } from './chat.js';
 
 test('Anki export escapes tabs and newlines and tags pages', () => {
@@ -73,4 +73,12 @@ test('Asking AI about a card carries the card, the thread and the follow-up', as
   assert.match(next, /Conversation so far:\nStudent: Explain this card\.\n\nYou: Guarda carga\./);
   assert.match(next, /Student: ¿Y el refresco\?$/);
   assert.doesNotMatch(next, /attached image/);
+});
+
+test('Markdown notes go to AI requests as one capped block', () => {
+  assert.equal(notesBlock(''), '');
+  assert.equal(notesBlock('   \n'), '');
+  assert.match(notesBlock('# Tema 1\n[p. 3]\nLa DRAM se refresca.'), /own Markdown notes[\s\S]*La DRAM se refresca\.$/);
+  const long = notesBlock('x'.repeat(25), 10);
+  assert.match(long, /^[\s\S]*\nx{10}\n\[… 15 more characters not included\]$/);
 });

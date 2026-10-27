@@ -540,6 +540,7 @@
           <div class="chat-context">
             <label><input id="chatPage" type="checkbox" checked /> This page</label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
+            <label title="Your Markdown notes for this document"><input id="chatNotes" type="checkbox" /> My notes</label>
             <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
           </div>
           <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
@@ -715,6 +716,7 @@
         <span class="practice-ask-material" role="group" aria-label="Send with the question">
           <button id="practiceAskPage" type="button" class="chip" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
           <button id="practiceAskPdf" type="button" class="chip" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
+          <button id="practiceAskNotes" type="button" class="chip" aria-pressed="false" title="Your Markdown notes for this document">Notes</button>
           <button id="practiceAskNote" type="button" class="chip" aria-pressed="false" title="Lets the tool read any page of the note (slower)">Whole note</button>
         </span>
       </div>
