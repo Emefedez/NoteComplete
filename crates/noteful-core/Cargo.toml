@@ -11,3 +11,4 @@ serde = { version = "1", features = ["derive"] }
 base64 = "0.22"
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 tar = { version = "0.4.46", default-features = false }
+pdf-writer = "0.15.0"

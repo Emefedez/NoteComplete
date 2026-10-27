@@ -72,7 +72,6 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 - Exports to `.noteful` after editing have not yet been verified in Noteful itself.
 - Uploading a change to Google Drive and deleting a note there are tested against a fake server only.
 - A tab dragged out of the tab strip opens in its own window, but cannot be dropped onto another window's strip: Wayland does not tell the app where the pointer is outside its own windows.
-- Pages export as SVG only for now; PDF and image export are in progress.
 - Installers are unsigned previews, and Linux is the only tested platform.
 - Every request and its state (`[D]` done, `[!]` not yet verified, `[ ]` to do) is in [docs/REQUESTS.md](docs/REQUESTS.md).
 

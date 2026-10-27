@@ -274,6 +274,11 @@ pub fn markdown_html(src: &str) -> String {
 pub fn markdown_export(src: &str, title: &str) -> String {
     noteful_core::markdown_export(src, title)
 }
+/// Pages drawn as JPEGs, packed one after another, bound into one PDF (see page_pdf.rs).
+#[wasm_bindgen]
+pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>, JsValue> {
+    noteful_core::jpeg_pages_pdf(data, layout, title).map_err(|e| JsValue::from_str(&e))
+}
 #[wasm_bindgen]
 pub fn is_notecomplete(data: &[u8]) -> bool {
     noteful_core::is_notecomplete(data)

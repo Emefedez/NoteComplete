@@ -34,7 +34,13 @@
             <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
             <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note and its notes; NoteComplete opens it with both.">NC</button>
           </div>
-          <button id="svg" disabled>Export page as SVG</button>
+          <div class="menu-export" role="group" aria-label="Export pages as">
+            <span>Pages as</span>
+            <button id="svg" disabled data-palette="Export page as SVG" title="This page as SVG (vector)">SVG</button>
+            <button id="exportPdf" disabled data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)">PDF</button>
+            <button id="exportImage" disabled class="has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format">IMG<span class="caret"></span></button>
+          </div>
+          <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
           <hr />
           <button data-proxy="libraryChoose">Downloads folder…</button>
         </div>

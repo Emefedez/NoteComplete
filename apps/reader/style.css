@@ -1729,8 +1729,14 @@ body.bar-compact .tab { height: 22px; }
 /* File → Export: three compact choices in one row; full names on hover. */
 .menu-content .menu-export { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 12px; }
 .menu-content .menu-export > span { flex: 1; color: var(--ink); font-size: 13px; }
-.menu-content .menu-export button { flex: none; width: auto; min-width: 44px; min-height: 26px; padding: 0 8px; justify-content: center; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
-.menu-content .menu-export button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.menu-content .menu-export .has-caret { gap: 2px; }
+/* The image formats open under the export row, indented like a submenu. */
+.menu-sub { display: grid; margin: 0 6px 4px 18px; padding-left: 6px; border-left: 1px solid var(--line); }
+.menu-sub[hidden] { display: none; }
+.menu-sub button { justify-content: space-between; gap: 12px; }
+.menu-sub .muted { font-size: 11px; }
+.menu-content .menu-export button { flex: none; width: auto; min-width: 44px; min-height: 26px; padding: 0 8px; justify-content: center; border: 0; border-radius: var(--radius); background: var(--fill); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.menu-content .menu-export button:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
 
 /* Chat answers: Markdown with formulas; actions under each answer. */
 .chat-body > :first-child { margin-top: 0; } .chat-body > :last-child { margin-bottom: 0; }

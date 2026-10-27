@@ -15,6 +15,7 @@ import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
+import { pageExporter, IMAGE_TYPES } from "./page-export.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -1838,6 +1839,28 @@ $("save").onclick = () => save(false);
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");
+// Pages as PDF (every page, in the background) or the current page as an image; the IMG
+// button opens the format list under the row.
+const pageExport = pageExporter({ pageCanvas, call, documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }), currentPage: () => page, filename, download, jobs: { start: (...a) => jobs.start(...a) }, status });
+$("exportPdf").onclick = () => { closeMenus(); if (!busy()) pageExport.pdf(); };
+$("imageTypes").replaceChildren(...IMAGE_TYPES.map((t) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.setAttribute("role", "menuitem"); b.dataset.palette = `Export page as ${t.label}`;
+  b.innerHTML = `<span>${t.label}</span><span class="muted">${t.hint}</span>`;
+  b.onclick = () => { closeMenus(); pageExport.image(t.id); };
+  return b;
+}));
+$("exportImage").onclick = (e) => {
+  e.stopPropagation();
+  const open = $("imageTypes").hidden;
+  $("imageTypes").hidden = !open;
+  $("exportImage").setAttribute("aria-expanded", String(open));
+};
+function closeMenus() {
+  for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
+  $("imageTypes").hidden = true;
+  $("exportImage").setAttribute("aria-expanded", "false");
+}
 // Notes panel: Markdown beside the pages (notes.js, loaded on first use).
 let notes = null, notesLoading = null;
 function notesApi() {
@@ -2117,7 +2140,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2645,7 +2668,7 @@ const palette = commandPalette({
   list: $("paletteList"),
   commands: () => [
     ...[...document.querySelectorAll("#commandBar button[id], #commandBar .menu-content button")]
-      .filter((b) => b.id !== "paletteOpen" && b.dataset.proxy !== "paletteOpen" && b.textContent.trim())
+      .filter((b) => b.id !== "paletteOpen" && b.id !== "exportImage" && b.dataset.proxy !== "paletteOpen" && b.textContent.trim())
       .map((b) => ({
         id: b.id,
         title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + (b.dataset.palette || [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim()),

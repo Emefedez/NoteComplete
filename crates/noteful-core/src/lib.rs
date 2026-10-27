@@ -4,6 +4,8 @@
 
 mod editor;
 mod markdown;
+mod page_pdf;
+pub use page_pdf::jpeg_pages_pdf;
 pub use markdown::{
     is_notecomplete, markdown_export, markdown_html, markdown_pages, pack_notecomplete,
     page_marker, unpack_notecomplete,
