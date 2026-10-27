@@ -78,6 +78,8 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Eraser sizes: small, medium, large, extra large, remembered; the cursor shows the size.
 - ✅ Pages can sit on the left, in the middle or on the right when narrower than the window (three buttons in the page bar, remembered). The page bar is shorter (33 px).
 - ✅ View → "Tool settings" was a vague toggle that collapsed the toolbar. It is now two checkable items: **Auto-open tool settings** (on by default; when off, press the selected tool again to see its settings) and **Compact toolbar**. Pressing the selected tool always shows or hides its settings. Open menus now sit above the tool settings popup.
+- ✅ Quick list on Home: a Cards / List switch beside Sort. The list shows names, dates and sizes only; no covers are read and nothing is parsed from Drive files, so it appears as soon as Drive answers. Switching back to cards loads the covers. Filters by recordings or tags say they need the cards view. Remembered.
+- ✅ The note title is centred on the window, also in the compact bar (it sat between the menus and the buttons, whose widths differ). *Measured: centre at 700 of 1400 px.*
 - ⏳ Resize a PDF page (or any page). Not started: needs a page-size change in the engine and in native export.
 
 ## Home filters

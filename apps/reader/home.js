@@ -13,6 +13,7 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
     if (minutes < 1440) return `${Math.round(minutes / 60)} h ago`;
     return new Date(time).toLocaleDateString();
   };
+  let quick = false; // Quick list view: see setView.
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
   async function renderRecent() {
     let entries = [];
@@ -44,9 +45,11 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entry.name}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
-      library.cover(coverKey(entry)).then(url => { if (url) cover.src = url; else cover.classList.add('missing'); });
       button.note = { name: entry.name, modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
-      library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
+      if (!quick) {
+        library.cover(coverKey(entry)).then(url => { if (url) cover.src = url; else cover.classList.add('missing'); });
+        library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
+      }
       button.onclick = async () => {
         try {
           const file = await library.open(entry);
@@ -171,7 +174,8 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
       card.closest('li').hidden = !show;
       if (!show) { hidden++; if (filters.tags.length && card.note && card.note.facts?.tags == null) unknown++; }
     }
-    $('filterSummary').textContent = active ? `${hidden} hidden by filters${unknown ? ` · ${unknown} not yet read for tags (open them once)` : ''}` : '';
+    const needsFacts = quick && (filters.audio || filters.tags.length);
+    $('filterSummary').textContent = active ? `${hidden} hidden by filters${needsFacts ? ' · the quick list does not read recordings or tags; switch to cards for those filters' : unknown ? ` · ${unknown} not yet read for tags (open them once)` : ''}` : '';
     renderFiltersSoon();
   }
   let filterFrame = 0;
@@ -198,6 +202,16 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
       if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
     } catch { /* A missing cover only affects the Recent card. */ }
   }
+  // Cards with covers, or a quick list that reads nothing from the files (remembered).
+  function setView(view) {
+    quick = view === 'list';
+    document.body.classList.toggle('home-list', quick);
+    for (const b of document.querySelectorAll('[data-home-view]')) b.setAttribute('aria-checked', String(b.dataset.homeView === view));
+    try { localStorage.setItem('notecomplete-home-view', view); } catch { /* Optional. */ }
+    drive.setQuick?.(quick);
+  }
+  for (const b of document.querySelectorAll('[data-home-view]')) b.onclick = () => { const was = quick; setView(b.dataset.homeView); if (was && !quick) renderRecent(); };
+  try { setView(localStorage.getItem('notecomplete-home-view') === 'list' ? 'list' : 'cards'); } catch { setView('cards'); }
   let shown = false;
   return {
     show(hasDocument) {

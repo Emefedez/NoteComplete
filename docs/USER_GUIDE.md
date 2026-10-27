@@ -39,7 +39,7 @@ Text appears while it is transcribed, greyed until the timings are final. Transc
 
 ## Sort and filter notes
 
-On Home, **Sort** orders Recent and Drive notes A–Z (default), by date or by size. The chips filter by modification date, notes with audio, size and Noteful tags. Filters stack, and selecting several tags keeps notes that have all of them. Recordings and tags are read from each note without downloading it. Tags of very large notes appear once they have been opened.
+On Home, **Sort** orders Recent and Drive notes A–Z (default), by date or by size. The switch beside it shows notes as cards with covers or as a quick list that reads nothing from the files, for when you only want the list fast. The chips filter by modification date, notes with audio, size and Noteful tags. Filters stack, and selecting several tags keeps notes that have all of them. Recordings and tags are read from each note without downloading it. Tags of very large notes appear once they have been opened.
 
 ## Remove a note
 

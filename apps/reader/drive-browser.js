@@ -81,6 +81,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   // Covers and facts still to load. One that was cancelled (leaving Home) or failed
   // stays here and is asked for again the next time Home is shown.
   const pending = new Map();
+  // Quick list: covers and facts are not read until cards are shown again.
+  let quick = false;
   function load(preview) {
     const job = pending.get(preview);
     if (!job || job.busy) return;
@@ -126,7 +128,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         // What the home filters look at; facts arrive after the cover.
         button.note = { name: file.name, modified: Date.parse(file.modifiedTime) || 0, size: Number(file.size) || 0, facts: null };
         pending.set(preview, { file, button, cover: false, facts: false, busy: 0 });
-        load(preview);
+        if (!quick) load(preview);
         cards.set(entry, file);
         badge(entry, file);
       }
@@ -207,7 +209,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     visible = true; controls();
     if (!window.isSecureContext && !window.ReactNativeWebView && !window.notecompleteDrive) { message('Open NoteComplete over HTTPS or localhost to connect Google Drive.'); return; }
     for (const [entry, file] of cards) badge(entry, file);
-    for (const preview of [...pending.keys()]) load(preview);
+    if (!quick) for (const preview of [...pending.keys()]) load(preview);
     if (client.connected) { if (!$('driveList').children.length) run(resume); return; }
     if (client.publicAccess) $('driveLinkSetup').open = true;
     message(client.publicAccess ? 'Paste a folder shared as "Anyone with the link" to browse it without signing in, or connect Google Drive.' : '');
@@ -303,5 +305,10 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     report('Uploading to Drive…');
     return client.upload({ id: entry.driveId, resourceKey: entry.resourceKey }, blob);
   }
-  return { show, hide, update, trash, get busy() { return importing; } };
+  function setQuick(on) {
+    quick = on;
+    if (on) previews.cancel();
+    else if (visible) for (const preview of [...pending.keys()]) load(preview);
+  }
+  return { show, hide, update, trash, setQuick, get busy() { return importing; } };
 }

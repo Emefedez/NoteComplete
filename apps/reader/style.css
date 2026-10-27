@@ -1429,3 +1429,22 @@ details[open] > summary::after, .has-caret[aria-expanded="true"] .caret { transf
 #drawingOptions.erasing > :not(#eraseOptions) { display: none !important; }
 /* Open menus sit above the tool settings popup of the toolbar below. */
 header.chrome.command-bar { position: relative; z-index: 40; }
+
+/* Home: cards with covers, or a quick list that reads nothing from the files. */
+.home-view { display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--line); border-radius: 7px; }
+.home-view button { min-height: 26px; width: 30px; padding: 0; border-radius: 5px; color: var(--muted); }
+.home-view button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.home-view button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+body.home-list .note-grid { grid-template-columns: 1fr; gap: 4px; }
+body.home-list .note-card .note-cover, body.home-list .note-card .note-badge { display: none; }
+body.home-list .note-card { flex-direction: row; align-items: center; border-radius: 8px; }
+body.home-list .note-card .note-meta { flex: 1; flex-direction: row; align-items: baseline; gap: 12px; padding: 8px 48px 8px 12px; }
+body.home-list .note-card .note-meta strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.home-list .note-card .note-meta span { white-space: nowrap; }
+body.home-list .note-more { top: 50%; transform: translateY(-50%); }
+/* The note title is centred on the window, not between the menus and the buttons,
+   whose widths differ (more so in the compact bar). */
+@media (min-width: 901px) {
+  header.command-bar .brand { position: absolute; left: 50%; transform: translateX(-50%); max-width: 34vw; margin: 0; pointer-events: none; }
+  header.command-bar #jobArea { margin-left: auto; }
+}
