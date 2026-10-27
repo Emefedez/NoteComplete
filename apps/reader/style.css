@@ -1314,6 +1314,12 @@ body.bar-compact .job-chip button, body.bar-compact .job-ready { min-height: 20p
 .deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) .practice-card { height: min(24dvh, 200px); }
 /* Practice floats over the pages like the quiz: drag it by its head, M minimizes it. */
 .deck-float-only { display: none; }
+/* Focus dimming behind the quiz and flashcard windows (the sun in their heads). */
+body.focus-dim::after { content: ""; position: fixed; inset: 0; z-index: 50; background: #0b0d11b3; pointer-events: none; animation: dim-in .2s ease; }
+body.focus-dim .quiz-panel, body.focus-dim .deck-dialog.floating { z-index: 60; }
+@keyframes dim-in { from { opacity: 0; } }
+.dim-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.quiz-panel-head .dim-toggle svg, .deck-head .dim-toggle svg { width: 16px; height: 16px; }
 .deck-dialog.floating { position: fixed; inset: auto auto 14px 22px; z-index: var(--z-float, 27); margin: 0; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 8px 14px 12px; box-shadow: var(--shadow-pop); }
 .deck-dialog.floating[style*="top"] { bottom: auto; }
 .deck-dialog.floating .deck-float-only { display: inline-flex; }

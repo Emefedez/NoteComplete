@@ -2575,6 +2575,24 @@ const study = studyController({
     return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
   },
 });
+// Focus: the sun in the quiz and flashcard windows dims everything behind them
+// while one of them is open (the pages can still be scrolled underneath).
+let focusDim = false;
+try { focusDim = localStorage.getItem("notecomplete-focus-dim") === "1"; } catch { /* Optional. */ }
+function syncDim() {
+  const quiz = !$("quizPanel").hidden && !$("quizPanel").classList.contains("minimized");
+  const cards = $("deckDialog").open && $("deckDialog").classList.contains("floating") && !$("deckDialog").classList.contains("minimized");
+  document.body.classList.toggle("focus-dim", focusDim && (quiz || cards));
+  for (const id of ["quizDim", "deckDim"]) $(id).setAttribute("aria-pressed", String(focusDim));
+}
+for (const id of ["quizDim", "deckDim"]) $(id).onclick = () => {
+  focusDim = !focusDim;
+  try { localStorage.setItem("notecomplete-focus-dim", focusDim ? "1" : "0"); } catch { /* Optional. */ }
+  syncDim();
+};
+new MutationObserver(syncDim).observe($("quizPanel"), { attributes: true, attributeFilter: ["hidden", "class"] });
+new MutationObserver(syncDim).observe($("deckDialog"), { attributes: true, attributeFilter: ["open", "class"] });
+syncDim();
 // Q resumes the latest unfinished quiz of this note.
 async function resumeQuiz() {
   if (quizzes.current && !$("quizPanel").hidden) return $("quizPanel").classList.remove("minimized");
