@@ -229,6 +229,65 @@ fn edit_object(
     Ok(())
 }
 impl Editor {
+    /// Add records for inserted pages to the page collection (d:/2). Their tag-5
+    /// order keys fall between the display neighbours' keys, so native sorting by
+    /// that string reproduces the display order without touching existing pages.
+    fn insert_page_records(
+        &self,
+        collection: &mut [Field],
+        order: &[usize],
+        page_assets: &HashMap<String, String>,
+        time: u64,
+    ) -> Result<()> {
+        let originals = self.scene.pages.len();
+        let key_of = |records: &[V], id: &str| {
+            records
+                .iter()
+                .filter_map(V::as_fields)
+                .find(|fs| field(fs, 1).and_then(V::as_text) == Some(id))
+                .and_then(|fs| field(fs, 5).and_then(V::as_text))
+                .unwrap_or("")
+                .to_owned()
+        };
+        let records = array(collection, 0)?.clone();
+        let mut previous = String::new();
+        let mut added = Vec::new();
+        for (i, &slot) in order.iter().enumerate() {
+            let page = self.page(slot)?;
+            if slot < originals {
+                previous = key_of(&records, &page.id);
+                continue;
+            }
+            let next = order[i + 1..]
+                .iter()
+                .find(|&&s| s < originals)
+                .map(|&s| self.page(s).map(|p| key_of(&records, &p.id)))
+                .transpose()?;
+            let key = crate::pages::order_between(&previous, next.as_deref())
+                .ok_or_else(|| Error::new(0, "No order key between neighbouring pages"))?;
+            let spec = self
+                .inserted_spec(slot)
+                .ok_or_else(|| Error::new(0, "Inserted page missing"))?;
+            let set = page_assets.get(&page.id).cloned().unwrap_or_default();
+            added.push((
+                page.id.clone(),
+                V::Fields(vec![
+                    f(1, 5, V::Text(page.id.clone())),
+                    f(2, 7, V::Fields(vec![f(0, 5, V::Text(set))])),
+                    f(4, 7, V::Fields(Self::inserted_background(spec))),
+                    f(5, 5, V::Text(key.clone())),
+                ]),
+            ));
+            previous = key;
+        }
+        for (id, record) in added {
+            array(collection, 0)?.push(record);
+            array(collection, 1)?.push(V::Text(id));
+            array(collection, 2)?.push(V::UInt(time));
+            array(collection, 3)?.push(V::UInt(1));
+        }
+        Ok(())
+    }
     /// Flatten the applied history into a native container. Redo entries stay unapplied.
     pub fn export_noteful(&self) -> Result<Vec<u8>> {
         if self.cursor == 0 {
@@ -281,7 +340,10 @@ impl Editor {
             .collect();
         let mut next_id = 1u64;
         let mut page_assets = HashMap::new();
-        for (page_no, page) in self.scene.pages.iter().enumerate() {
+        let order = self.page_order();
+        let originals = self.scene.pages.len();
+        for &page_no in &order {
+            let page = self.page(page_no)?;
             let deleted = self.deleted(page_no);
             let adjustments = self.adjustments(page_no);
             let added: Vec<_> = self
@@ -485,7 +547,18 @@ impl Editor {
         let layers_changed = self.history[..self.cursor]
             .iter()
             .any(|e| matches!(e, Edit::Layer { .. }));
-        if !page_assets.is_empty() || layers_changed {
+        let pages_inserted = order.iter().any(|&s| s >= originals);
+        // PDFs added with inserted pages become ordinary resources.
+        for edit in &self.history[..self.cursor] {
+            if let Edit::InsertPages { pdf: Some(pdf), .. } = edit {
+                let bytes = self
+                    .added_pdf(&pdf.id)
+                    .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
+                array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
+                blocks.push((pdf.id.clone(), bytes.to_vec()));
+            }
+        }
+        if !page_assets.is_empty() || layers_changed || pages_inserted {
             for b in package
                 .blocks
                 .iter()
@@ -503,6 +576,9 @@ impl Editor {
                             }
                         }
                     }
+                }
+                if pages_inserted {
+                    self.insert_page_records(nested(&mut fields, 2)?, &order, &page_assets, time)?;
                 }
                 if layers_changed {
                     let collection = nested(&mut fields, 3)?;

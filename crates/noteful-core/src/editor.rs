@@ -47,6 +47,12 @@ pub(crate) enum Edit {
         page: usize,
         ids: Vec<String>,
     },
+    InsertPages {
+        at: usize,
+        pages: Vec<crate::NewPage>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pdf: Option<crate::NewPdf>,
+    },
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,6 +68,9 @@ pub struct Editor {
     pub scene: Scene,
     pub(crate) history: Vec<Edit>,
     pub(crate) cursor: usize,
+    /// Pages and PDFs added by InsertPages edits, rebuilt by `sync_inserted`.
+    pub(crate) inserted: Vec<crate::Page>,
+    pub(crate) added_pdfs: Vec<(String, Vec<u8>)>,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -123,12 +132,16 @@ impl Editor {
             scene,
             history: Vec::new(),
             cursor: 0,
+            inserted: Vec::new(),
+            added_pdfs: Vec::new(),
         })
     }
+    /// A page by slot (see pages.rs); hosts map display positions with `slot`.
     pub(crate) fn page(&self, page: usize) -> Result<&crate::Page> {
         self.scene
             .pages
             .get(page)
+            .or_else(|| self.inserted.get(page.checked_sub(self.scene.pages.len())?))
             .ok_or_else(|| Error::new(0, "Page outside document"))
     }
     pub(crate) fn deleted(&self, page: usize) -> HashSet<&str> {
@@ -166,9 +179,16 @@ impl Editor {
         self.history
             .try_reserve(1)
             .map_err(|e| Error::new(0, e.to_string()))?;
+        let pages_changed = matches!(edit, Edit::InsertPages { .. })
+            || self.history[self.cursor..]
+                .iter()
+                .any(|e| matches!(e, Edit::InsertPages { .. }));
         self.history.truncate(self.cursor);
         self.history.push(edit);
         self.cursor += 1;
+        if pages_changed {
+            self.sync_inserted()?;
+        }
         Ok(())
     }
     pub fn layers(&self) -> Vec<crate::Layer> {
@@ -379,15 +399,39 @@ impl Editor {
                 Some(t)
             })
             .collect();
+        let order = self.page_order();
+        // Recording page lists are slots; the host navigates by display position.
+        let recordings: Vec<_> = self
+            .scene
+            .recordings
+            .iter()
+            .map(|r| {
+                let mut r = serde_json::to_value(r).unwrap_or(Value::Null);
+                if let Some(pages) = r["pages"].as_array_mut() {
+                    for p in pages.iter_mut() {
+                        if let Some(d) = p.as_u64().and_then(|s| self.display_index(s as usize)) {
+                            *p = json!(d);
+                        }
+                    }
+                }
+                r
+            })
+            .collect();
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":self.scene.pages.len(),"page":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":self.scene.recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":self.scene.pages.iter().map(|p|p.size).collect::<Vec<_>>(),"pdf_background":p.pdf_background,"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
         )
     }
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if self.history.iter().any(|e| matches!(e, Edit::Image { .. })) {
+            version: if self
+                .history
+                .iter()
+                .any(|e| matches!(e, Edit::InsertPages { .. }))
+            {
+                3
+            } else if self.history.iter().any(|e| matches!(e, Edit::Image { .. })) {
                 2
             } else {
                 1
@@ -400,6 +444,9 @@ impl Editor {
         Ok(data)
     }
     pub fn pdf_bytes(&self, id: &str) -> Result<&[u8]> {
+        if let Some(bytes) = self.added_pdf(id) {
+            return Ok(bytes);
+        }
         let asset = self
             .scene
             .pdf_assets
@@ -421,7 +468,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1 | 2)
+            || !matches!(project.version, 1..=3)
             || project.cursor > project.history.len()
         {
             return Err(Error::new(0, "Unsupported or invalid project"));
@@ -457,6 +504,7 @@ impl Editor {
                     editor.resize_shape(page, &id, shape)?;
                 }
                 Edit::Layer { layer } => editor.set_layer(layer)?,
+                Edit::InsertPages { at, pages, pdf } => editor.insert_pages(at, pages, pdf)?,
                 Edit::Add { page, line } => editor.add_line(page, line)?,
                 Edit::Erase { page, ids } => {
                     let p = editor.page(page)?;

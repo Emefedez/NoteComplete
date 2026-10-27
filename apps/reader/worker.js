@@ -77,6 +77,8 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (op === "image") session.add_image(page, JSON.stringify(args.image));
     if (op === "erase")
       session.erase(page, JSON.stringify(args.points), args.radius);
+    if (op === "insertPages")
+      session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
     if (op === "undo") session.undo();
     if (op === "redo") session.redo();
     if (op === "audio" || op === "pdf") {

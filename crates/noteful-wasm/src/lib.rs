@@ -11,6 +11,7 @@ pub struct EditorSession {
 fn js_error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
+// JavaScript addresses pages by display position; the core edits stable slots.
 #[wasm_bindgen]
 impl EditorSession {
     #[wasm_bindgen(constructor)]
@@ -31,14 +32,17 @@ impl EditorSession {
         })
     }
     pub fn add_image(&mut self, page: usize, image: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .add_image(page, serde_json::from_str(image).map_err(js_error)?)
             .map_err(js_error)
     }
     pub fn view(&self, page: usize) -> Result<String, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         Ok(self.inner.view(page).map_err(js_error)?.to_string())
     }
     pub fn draw(&mut self, page: usize, line: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         let line = serde_json::from_str(line).map_err(js_error)?;
         self.inner.add_line(page, line).map_err(js_error)
     }
@@ -49,6 +53,7 @@ impl EditorSession {
         y: f64,
         tolerance: f64,
     ) -> Result<String, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         serde_json::to_string(
             &self
                 .inner
@@ -58,6 +63,7 @@ impl EditorSession {
         .map_err(js_error)
     }
     pub fn selection(&self, page: usize, id: &str) -> Result<String, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         Ok(self
             .inner
             .selection(page, id)
@@ -70,6 +76,7 @@ impl EditorSession {
         id: &str,
         adjustment: &str,
     ) -> Result<String, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .adjust_item(
                 page,
@@ -84,11 +91,27 @@ impl EditorSession {
             .to_string())
     }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.remove_item(page, id).map_err(js_error)
     }
     pub fn erase(&mut self, page: usize, path: &str, radius: f64) -> Result<usize, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         let path: Vec<[f64; 2]> = serde_json::from_str(path).map_err(js_error)?;
         self.inner.erase_path(page, &path, radius).map_err(js_error)
+    }
+    /// Insert pages before display position `at`; `pdf` adds its resource in the same step.
+    pub fn insert_pages(
+        &mut self,
+        at: usize,
+        pages: &str,
+        pdf: Option<String>,
+    ) -> Result<(), JsValue> {
+        let pages = serde_json::from_str(pages).map_err(js_error)?;
+        let pdf = pdf
+            .map(|p| serde_json::from_str(&p))
+            .transpose()
+            .map_err(js_error)?;
+        self.inner.insert_pages(at, pages, pdf).map_err(js_error)
     }
     pub fn undo(&mut self) {
         self.inner.undo();
@@ -97,6 +120,7 @@ impl EditorSession {
         self.inner.redo();
     }
     pub fn resize_shape(&mut self, page: usize, id: &str, shape: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .resize_shape(page, id, serde_json::from_str(shape).map_err(js_error)?)
             .map_err(js_error)

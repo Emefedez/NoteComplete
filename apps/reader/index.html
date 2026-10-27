@@ -487,6 +487,23 @@
   </form>
 </dialog>
 
+<dialog id="insertDialog" class="ocr-dialog" aria-labelledby="insertTitle">
+  <h2 id="insertTitle">Insert pages</h2>
+  <p id="insertSource" class="muted"></p>
+  <label class="ocr-languages">Position<select id="insertWhere"><option value="after">After the current page</option><option value="before">Before the current page</option><option value="end">At the end</option></select></label>
+  <div id="insertBlankOptions">
+    <label class="ocr-languages">Size<select id="insertPreset"></select></label>
+    <div id="insertCustom" class="insert-custom" hidden><label>Width <input id="insertWidth" type="number" min="20" max="5000" step="1" /> mm</label><label>Height <input id="insertHeight" type="number" min="20" max="5000" step="1" /> mm</label></div>
+    <label class="ocr-languages">Pages to add<input id="insertCount" type="number" min="1" max="100" value="1" /></label>
+  </div>
+  <div id="insertPdfOptions" hidden>
+    <label class="ocr-languages">PDF pages <span><input id="insertFrom" type="number" min="1" value="1" aria-label="First PDF page" /> to <input id="insertTo" type="number" min="1" value="1" aria-label="Last PDF page" /></span></label>
+    <label class="ocr-languages">Extra writing space<select id="insertSpace"></select></label>
+  </div>
+  <p id="insertStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="insertCancel" type="button">Cancel</button><button id="insertConfirm" type="button" class="primary">Insert</button></div>
+</dialog>
+
 <dialog id="ocrDialog" class="ocr-dialog" aria-labelledby="ocrTitle">
   <h2 id="ocrTitle">Recognize text</h2>
   <p>Finds handwriting and text in scanned pages so Find can search it. It runs on this device only when you start it; results are kept with this note.</p>

@@ -1,4 +1,4 @@
-# Noteful RE Project v1 (.nfedit)
+# Noteful RE Project (.nfedit), versions 1–3
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -46,6 +46,20 @@ Translation, scale and rotation are required. `width` and `rgba` may be omitted 
 Validation requires finite translation within ±1e6, scale in 0.001–1000, rotation within ±36000, optional width in 0.1–100 and RGBA in 0–1. Target IDs must exist and remain visible, unlocked and undeleted at that point in history. Identity/repeated adjustments do not add an action. Each completed gesture or inspector change is one undo step. Current readers load older v1 histories; older readers must reject the unfamiliar `Adjust` action rather than silently omit it.
 
 Native export transforms current geometry while retaining original imported IDs, audio timing and auxiliary stroke data. `.nfedit` keeps the unchanged source and complete edit history.
+
+## Inserted pages (project version 3)
+
+`InsertPages` adds pages before display position `at` (the page count appends), optionally with a PDF resource in the same undo step:
+
+```json
+{"kind":"InsertPages","at":2,"pages":[{"size":[2640,990],"pdf":{"resource":"pdf-1a2b","page_index":0,"rect":[0,0,1320,990]}}],"pdf":{"id":"pdf-1a2b","base64":"JVBERi0..."}}
+```
+
+Pages are addressed by stable **slots**: original pages keep `0..n`, inserted pages take `n, n+1, …` in history order (redo entries included), and every `page` field in the history is a slot. The display order is the original order with the applied insertions replayed, so ink drawn on a page stays on it when pages are inserted before it, and undo removes the inserted slots from the order without renumbering others. Without insertions slot and display position coincide, so v1/v2 projects are unchanged. Hosts convert display positions with `Editor::slot`; the WASM adapter does this for every page argument, and `view` reports both `page` (display) and `slot`.
+
+`size` is in page units; `pdf.resource` names an existing PDF of the note or the edit's own `pdf.id`; `rect` places the PDF page (background tag 9) and defaults to the whole page. Validation: finite sizes of at least 10 units, at most 2000 pages per edit, PDF bytes starting with `%PDF-`, alphanumeric/hyphen IDs not already used. Projects containing `InsertPages` are written as version 3.
+
+Native export writes inserted pages into the page collection (`d:/2`) with an editable-set ID when they have ink, background tag 0 = 1 plus tag 9 for PDF pages (blank pages use this project's paper JSON), and a tag-5 order key strictly between the display neighbours' keys, so sorting by that string reproduces the display order without changing existing page records. Added PDFs become ordinary resources. Official Noteful acceptance of these records is unverified.
 
 ## Native export
 

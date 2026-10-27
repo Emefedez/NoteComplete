@@ -9,6 +9,8 @@ mod manipulation;
 pub use manipulation::Adjustment;
 mod export;
 mod layer;
+mod pages;
+pub use pages::{NewPage, NewPdf, PdfPlacement};
 mod shape;
 pub use layer::Layer;
 pub use shape::{Shape, ShapeKind};

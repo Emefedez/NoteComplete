@@ -16,7 +16,8 @@ import { download } from "./download.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons } from "./icons.js";
 import { qualitySettings } from "./quality.js";
-import { PdfBackgrounds, backgroundPlacement } from "./pdf-background.js";
+import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
+import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, UNITS_PER_POINT } from "./insert-pages.js";
 import { AudioController } from "./audio.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
@@ -728,6 +729,10 @@ async function action(op, args = {}) {
     revision++;
     doc = result;
     savedState();
+    if (result.pages !== panels.length) {
+      restructure(result, args.focus ?? Math.min(page, result.pages - 1));
+      return;
+    }
     if (op === "draw" && args.line.shape && !gesture) {
       document.querySelector("[data-tool=select]").click();
       selection.selectId(args.page ?? page, `new:${result.edit_count - 1}`);
@@ -1380,7 +1385,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -1410,6 +1415,111 @@ for (const menu of document.querySelectorAll("details.bar-menu")) {
 $("gotoPage").onclick = () => palette.open("page ");
 $("findOpen").onclick = () => { showDocument(); find.open(); };
 $("ocrOpen").onclick = () => find.openOcr(page);
+// Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.
+function restructure(result, focus) {
+  observer?.disconnect();
+  thumbnailObserver?.disconnect();
+  selection.clear();
+  $("pages").replaceChildren();
+  buildPages(result.page_sizes);
+  $("pageNumber").max = result.pages;
+  updateTools(result);
+  layerPanel(result.layers);
+  find.restructure();
+  requestAnimationFrame(() => jump(Math.max(0, Math.min(focus, result.pages - 1))));
+  status(`${result.pages} pages. You can undo this change.`);
+}
+// Pages → Insert: blank pages of a chosen size, or pages of another PDF at native scale.
+let insertPdfSource = null;
+for (const [value, { label }] of Object.entries(PRESETS)) $("insertPreset").add(new Option(label, value));
+for (const [value, { label }] of Object.entries(SPACE)) $("insertSpace").add(new Option(label, value));
+$("insertPreset").onchange = () => {
+  $("insertCustom").hidden = $("insertPreset").value !== "custom";
+};
+function openInsert(pdf) {
+  insertPdfSource = pdf;
+  $("insertTitle").textContent = pdf ? "Insert PDF pages" : "Insert blank pages";
+  $("insertSource").textContent = pdf ? `${pdf.name}: ${pdf.sizes.length} ${pdf.sizes.length === 1 ? "page" : "pages"}. The PDF keeps its scale; extra space is blank paper beside it.` : "New pages use white paper.";
+  $("insertBlankOptions").hidden = !!pdf;
+  $("insertPdfOptions").hidden = !pdf;
+  const [w, h] = panels[page].size.map(unitsToMm);
+  $("insertWidth").value = Math.round(w);
+  $("insertHeight").value = Math.round(h);
+  $("insertCustom").hidden = $("insertPreset").value !== "custom";
+  if (pdf) {
+    $("insertFrom").max = $("insertTo").max = pdf.sizes.length;
+    $("insertFrom").value = 1;
+    $("insertTo").value = pdf.sizes.length;
+  }
+  $("insertStatus").textContent = "";
+  $("insertDialog").showModal();
+}
+$("insertBlank").onclick = () => doc && openInsert(null);
+$("insertPdf").onclick = () => doc && $("pdfPagesFile").click();
+$("pdfPagesFile").onchange = async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file || !doc) return;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pdf = await openPdf(bytes.slice());
+    const sizes = [];
+    try {
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
+        sizes.push([viewport.width, viewport.height]);
+        p.cleanup();
+      }
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+    openInsert({ name: file.name, bytes, sizes });
+  } catch (error) {
+    status(`Could not read that PDF: ${error.message}`, true);
+  }
+};
+// Units per PDF point in this note: from the current page's PDF when it has one.
+async function noteUnitsPerPoint() {
+  const view = panels[page]?.view;
+  if (!view?.pdf_background || !backgrounds) return UNITS_PER_POINT;
+  try {
+    const pdf = await backgrounds.document(view.pdf_background.resource_id);
+    const p = await pdf.getPage(view.pdf_background.page_index + 1);
+    const width = p.getViewport({ scale: 1 }).width;
+    p.cleanup();
+    const ratio = backgroundPlacement(view.pdf_background, view.size).width / width;
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : UNITS_PER_POINT;
+  } catch {
+    return UNITS_PER_POINT;
+  }
+}
+$("insertCancel").onclick = () => $("insertDialog").close();
+$("insertConfirm").onclick = async () => {
+  if (!doc || busy()) return;
+  const at = insertAt($("insertWhere").value, page, doc.pages);
+  let pages, pdf;
+  if (insertPdfSource) {
+    const count = insertPdfSource.sizes.length;
+    const from = Math.max(1, Math.min(count, Number($("insertFrom").value) || 1)) - 1;
+    const to = Math.max(from + 1, Math.min(count, Number($("insertTo").value) || count)) - 1;
+    const id = "pdf-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+    pages = pdfPages(id, insertPdfSource.sizes, from, to, $("insertSpace").value, await noteUnitsPerPoint());
+    let binary = "";
+    for (let i = 0; i < insertPdfSource.bytes.length; i += 0x8000)
+      binary += String.fromCharCode(...insertPdfSource.bytes.subarray(i, i + 0x8000));
+    pdf = { id, base64: btoa(binary) };
+  } else {
+    const size = blankSize($("insertPreset").value, panels[page].size, [Number($("insertWidth").value), Number($("insertHeight").value)]);
+    if (size.some((v) => !(v >= 10))) {
+      $("insertStatus").textContent = "Enter a width and height of at least 20 mm.";
+      return;
+    }
+    const count = Math.max(1, Math.min(100, Number($("insertCount").value) || 1));
+    pages = Array.from({ length: count }, () => ({ size }));
+  }
+  $("insertDialog").close();
+  await action("insertPages", { at, pages, pdf, focus: at });
+};
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 async function pageCanvas(index, width = 2200) {
   const view = await call("view", { page: index });

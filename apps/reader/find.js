@@ -44,18 +44,19 @@ export function findController({ call, library, backgrounds, panels, jump, audio
         if (token !== generation) return;
         if (page % 8 === 0) progress(`Indexing page ${page + 1} of ${pages}…`);
         const view = await call('view', { page });
+        const slot = view.slot ?? page;
         for (const text of view.texts || []) {
           const content = (text.runs || []).map(r => r.text).join('');
           index.add({ page, source: 'text', words: content.split(/\s+/).filter(Boolean).map(t => ({ text: t, box: text.bounds })) });
         }
         if (view.pdf_background) {
-          if (!stored.pdf[page]) {
-            stored.pdf[page] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
+          if (!stored.pdf[slot]) {
+            stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
             extracted = true;
           }
-          index.add({ page, source: 'pdf', words: stored.pdf[page] });
+          index.add({ page, source: 'pdf', words: stored.pdf[slot] });
         }
-        if (stored.ocr[page]) index.add({ page, source: 'ocr', words: stored.ocr[page] });
+        if (stored.ocr[slot]) index.add({ page, source: 'ocr', words: stored.ocr[slot] });
         for (const t of view.timings || []) {
           if (!timings.has(t.recording_id)) timings.set(t.recording_id, []);
           timings.get(t.recording_id).push({ page, start: t.start });
@@ -220,7 +221,9 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); } catch { /* Optional. */ }
     await build();
     const skipPdf = $('ocrSkipPdf').checked;
-    const pages = selectedPages().filter(p => !(skipPdf && (stored.pdf[p]?.length || 0) > 20));
+    const slots = new Map();
+    for (const p of selectedPages()) slots.set(p, (await call('view', { page: p })).slot ?? p);
+    const pages = selectedPages().filter(p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20));
     if (!pages.length) { $('ocrStatus').textContent = 'Those pages already have PDF text. Untick “Skip pages with PDF text” to recognize them anyway.'; return; }
     const token = generation;
     let cancelled = false, worker = null;
@@ -240,7 +243,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
         const words = await recognizePage(worker, canvas, scale);
         canvas.width = canvas.height = 0;
         if (cancelled || token !== generation) break;
-        stored.ocr[page] = words;
+        stored.ocr[slots.get(page)] = words;
         index.remove(u => u.source === 'ocr' && u.page === page);
         index.add({ page, source: 'ocr', words });
         persist();
@@ -260,8 +263,14 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   $('ocrClose').onclick = () => { ocrRun?.cancel(); $('ocrDialog').close(); };
   $('ocrDialog').addEventListener('close', () => ocrRun?.cancel());
 
+  // Pages were inserted or removed: rebuild positions, keep the stored text.
+  function restructure() {
+    generation++; building = null; ocrRun?.cancel();
+    index = new SearchIndex(); hits = []; current = -1;
+    if (!$('findBar').hidden) { build(); run(); }
+  }
   return {
-    reset, open, close, paint, openOcr,
+    reset, open, close, paint, openOcr, restructure,
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },
