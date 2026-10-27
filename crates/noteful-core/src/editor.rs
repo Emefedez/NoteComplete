@@ -26,6 +26,11 @@ pub(crate) enum Edit {
         page: usize,
         image: crate::Image,
     },
+    Retext {
+        page: usize,
+        id: String,
+        image: crate::Image,
+    },
     Adjust {
         page: usize,
         id: String,
@@ -418,6 +423,17 @@ impl Editor {
                 t["bounds"] = json!(i.bounds);
                 Some(t)
             })
+            .chain(
+                self.images(page)
+                    .filter(|(id, image)| image.text.is_some() && !deleted.contains(id.as_str()))
+                    .filter_map(|(id, image)| {
+                        let item = image.item(id.clone());
+                        let mut t = serde_json::to_value(item.text.as_ref()?).ok()?;
+                        t["bounds"] = json!(self.current_bounds(page, &id).ok()?);
+                        t["id"] = json!(id);
+                        Some(t)
+                    }),
+            )
             .collect();
         let order = self.page_order();
         // Recording page lists are slots; the host navigates by display position.
@@ -474,7 +490,12 @@ impl Editor {
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if self
+            version: if self.history.iter().any(|e| {
+                matches!(e, Edit::Retext { .. })
+                    || matches!(e, Edit::Image { image, .. } if image.text.is_some())
+            }) {
+                4
+            } else if self
                 .history
                 .iter()
                 .any(|e| matches!(e, Edit::InsertPages { .. }))
@@ -517,7 +538,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=3)
+            || !matches!(project.version, 1..=4)
             || project.cursor > project.history.len()
         {
             return Err(Error::new(0, "Unsupported or invalid project"));
@@ -529,6 +550,12 @@ impl Editor {
         for edit in project.history {
             match edit {
                 Edit::Image { page, image } => editor.add_image(page, image)?,
+                Edit::Retext { page, id, image } => {
+                    let text = image
+                        .text
+                        .ok_or_else(|| Error::new(0, "Missing edited text"))?;
+                    editor.edit_text(page, &id, text, [image.bounds[2], image.bounds[3]])?
+                }
                 Edit::Adjust {
                     page,
                     id,

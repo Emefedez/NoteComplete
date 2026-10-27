@@ -70,6 +70,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     }
     if (op === "remove") session.remove_item(page, args.itemId);
     if (op === "lock") session.set_locked(page, args.itemId, args.locked);
+    if (op === "editText") session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height);
     if (op === "export") {
       const bytes = session.export_noteful();
       postMessage({ id, result: bytes }, [bytes.buffer]);

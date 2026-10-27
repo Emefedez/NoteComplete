@@ -63,6 +63,18 @@ Pages are addressed by stable **slots**: original pages keep `0..n`, inserted pa
 
 Native export writes inserted pages into the page collection (`d:/2`) with an editable-set ID when they have ink, background tag 0 = 1 plus tag 9 for PDF pages (blank pages use this project's paper JSON), and a tag-5 order key strictly between the display neighbours' keys, so sorting by that string reproduces the display order without changing existing page records. Added PDFs become ordinary resources. Official Noteful acceptance of these records is unverified.
 
+## Text boxes (project version 4)
+
+A typed text box is an `Image` edit whose image has empty `base64` and `mime` and a `text` object: `{"text":"Hola\nmundo","font_size":20,"rgba":[0.8,0,0,1],"bold":true}`. Its `bounds` are the box in page units (the reader measures the text: 5 units of left padding, first baseline at 8 + size, line advance size + max(8, size / 5 + 8)). It is drawn, picked, adjusted, locked and removed like an added image, with id `image:<history index>`.
+
+```json
+{"kind":"Retext","page":0,"id":"image:3","image":{"base64":"","mime":"","bounds":[100,100,120,40],"layer":0,"text":{"text":"Adiós","font_size":20,"rgba":[0,0,0,1],"bold":false}}}
+```
+
+`Retext` replaces a text box's content, style and size (its top-left corner stays). The target must be a live, unlocked text box on a visible, unlocked layer; text must not be blank (removing the box is an `Erase`), at most 20 000 bytes, font size 2–400. Projects using either are version 4.
+
+Native export writes each text box as a kind-2 object with the field layout and wire types of `samples/texto.noteful`: rect `2/1` (float64 ×5), size pair `6/2`, and attributed text in `6/4` with fragments `[text, U+200B]`, counts `[5, 1]`, keys `[13, 10, 6, 2, 9, 10]` and pools 5 (family "Helvetica"), 6 (bold), 7 (color), 9 (paragraph) and 10 (sizes). Reopened, the core decodes the same text, size, color, weight and position.
+
 ## Native export
 
 `Editor::export_noteful()` and `EditorSession.export_noteful()` flatten the applied `.nfedit` history into a native `.noteful` archive. CLI: `noteful export project.nfedit > edited.noteful`. The source is never changed. With cursor zero, export returns the exact original bytes.

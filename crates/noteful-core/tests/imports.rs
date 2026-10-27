@@ -1,7 +1,7 @@
 use noteful_core::{Adjustment, Editor, Image, Package};
 
 fn image() -> Image {
-    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0 }
+    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0, text: None }
 }
 
 #[test]
@@ -91,4 +91,84 @@ fn image_lock_is_written_as_native_tag_21_and_can_be_lifted_again() {
         unlocked.pick_item(0, [60., 60.], 0.).unwrap().unwrap()["id"],
         id.as_str()
     );
+}
+
+#[test]
+fn text_boxes_render_edit_move_and_export_as_native_text() {
+    use noteful_core::TextBox;
+    let mut editor = Editor::create_document("Text", &[[600., 800.]], &[]).unwrap();
+    let text = |s: &str| TextBox {
+        text: s.into(),
+        font_size: 20.,
+        rgba: [0.8, 0., 0., 1.],
+        bold: true,
+    };
+    let image = |t: TextBox| Image {
+        base64: String::new(),
+        mime: String::new(),
+        bounds: [100., 100., 200., 40.],
+        layer: 0,
+        text: Some(t),
+    };
+    assert!(editor.add_image(0, image(text("  "))).is_err());
+    editor.add_image(0, image(text("Hola\nmundo"))).unwrap();
+    let view = editor.view(0).unwrap();
+    assert!(view["svg"].as_str().unwrap().contains(">Hola</tspan>"));
+    assert_eq!(view["texts"][0]["runs"][0]["text"], "Hola\nmundo");
+    assert_eq!(view["texts"][0]["runs"][0]["bold"], true);
+    let picked = editor.pick_item(0, [150., 120.], 0.).unwrap().unwrap();
+    assert_eq!(
+        (picked["id"].as_str(), picked["kind"].as_str()),
+        (Some("image:0"), Some("text"))
+    );
+    editor
+        .edit_text(0, "image:0", text("Adiós"), [120., 40.])
+        .unwrap();
+    editor
+        .adjust_item(
+            0,
+            "image:0",
+            Adjustment {
+                translation: [50., 0.],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(editor.view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .contains(">Adiós</tspan>"));
+    // Project round trip.
+    let restored = Editor::open_project(&editor.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap(), editor.view(0).unwrap());
+    // Native export: a kind-2 object the reader decodes back to the same text and place.
+    let bytes = editor.export_noteful().unwrap();
+    assert_eq!(Package::parse(&bytes).unwrap().rebuild().unwrap(), bytes);
+    let native = Editor::open(&bytes).unwrap();
+    let v = native.view(0).unwrap();
+    let run = &v["texts"][0]["runs"][0];
+    assert_eq!(
+        (
+            run["text"].as_str(),
+            run["font_size"].as_f64(),
+            run["bold"].as_bool()
+        ),
+        (Some("Adiós"), Some(20.), Some(true))
+    );
+    assert_eq!(run["rgba"], serde_json::json!([0.8, 0., 0., 1.]));
+    assert_eq!(
+        v["texts"][0]["bounds"],
+        serde_json::json!([150., 100., 120., 40.])
+    );
+    assert!(
+        v["warnings"].as_array().unwrap().is_empty(),
+        "{}",
+        v["warnings"]
+    );
+    editor.undo();
+    editor.undo();
+    assert!(editor.view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .contains(">mundo</tspan>"));
 }

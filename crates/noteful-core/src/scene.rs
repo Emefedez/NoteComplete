@@ -58,6 +58,9 @@ impl Item {
             .unwrap_or(&self.hit)
     }
 }
+pub(crate) fn fields_json(fs: &[Field]) -> Value {
+    fields(fs)
+}
 fn fields(fs: &[Field]) -> Value {
     Value::Object(
         fs.iter()

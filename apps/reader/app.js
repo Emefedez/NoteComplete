@@ -295,6 +295,7 @@ function buildPages(sizes) {
     placeholder(p);
     fragment.append(el);
     el.onpointerdown = (e) => {
+      if (e.target.closest(".text-editor")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
       pointerDown(e, p);
     };
@@ -417,6 +418,92 @@ function buildPageList() {
   markPage();
 }
 // Paper stays underneath so widened pages show blank paper beside the PDF.
+// Text tool: a text box typed in place. Its layout matches the core's text
+// rendering (first baseline 8 + size, line advance size + max(8, size/5 + 8),
+// 5 units of left padding), so the box does not jump when it is committed.
+$("textBold").onclick = () => $("textBold").setAttribute("aria-pressed", String($("textBold").getAttribute("aria-pressed") !== "true"));
+const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
+function textBoxSize(text, size, bold) {
+  const context = document.createElement("canvas").getContext("2d");
+  context.font = `${bold ? 700 : 400} ${size}px Helvetica, Arial, sans-serif`;
+  const lines = text.split("\n");
+  return [Math.ceil(Math.max(...lines.map((l) => context.measureText(l).width)) + 12), Math.ceil(8 + lines.length * textAdvance(size))];
+}
+let textEditor = null;
+async function openTextEditor(p, [x, y]) {
+  if (textEditor) return commitText();
+  if (!doc || editing || busy() || !p.view) return;
+  const layer = doc.layers.find((l) => l.id === activeLayer);
+  // A click on a typed text box edits it; elsewhere it starts a new one.
+  let existing = null;
+  try {
+    const item = await call("pick", { page: p.index, x, y, tolerance: 2 });
+    if (item?.kind === "text") {
+      existing = (p.view.texts || []).find((t) => t.id === item.id);
+      if (!existing) return status("Text from Noteful cannot be edited here yet; move it with Select.", true);
+    }
+  } catch { /* Nothing under the pointer. */ }
+  if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
+  const run = existing?.runs?.[0];
+  const size = run?.font_size || Number($("textSize").value), bold = run ? run.bold : $("textBold").getAttribute("aria-pressed") === "true";
+  const rgba = run?.rgba || [1, 3, 5].map((i) => parseInt($("color").value.slice(i, i + 2), 16) / 255).concat(1);
+  const [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - size * 0.8];
+  const area = document.createElement("textarea");
+  area.className = "text-editor";
+  area.wrap = "off";
+  area.spellcheck = true;
+  area.value = run ? existing.runs.map((r) => r.text).join("").replaceAll("\u200b", "") : "";
+  area.setAttribute("aria-label", "Text box");
+  const scale = () => p.el.clientWidth / p.size[0];
+  const fit = () => {
+    const s = scale(), [w, h] = textBoxSize(area.value || " ", size, bold);
+    Object.assign(area.style, {
+      left: `${(bx / p.size[0]) * 100}%`, top: `${(by / p.size[1]) * 100}%`,
+      width: `${Math.max(w, 40) * s}px`, height: `${h * s}px`,
+      font: `${bold ? 700 : 400} ${size * s}px/${textAdvance(size) * s}px Helvetica, Arial, sans-serif`,
+      padding: `${Math.max(0, 8 + 0.2 * size - (textAdvance(size) - size) / 2) * s}px 0 0 ${5 * s}px`,
+      color: `rgba(${rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${rgba[3]})`,
+    });
+  };
+  fit();
+  area.oninput = fit;
+  const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
+  hidden?.setAttribute("visibility", "hidden");
+  p.el.append(area);
+  textEditor = { p, area, existing, size, bold, rgba, bx, by, hidden, layer: activeLayer };
+  area.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeText(); }
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitText(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { commitText(); return; }
+    // Typing stays in the box: no tool or study shortcuts while editing.
+    e.stopPropagation();
+  });
+  area.addEventListener("blur", () => setTimeout(() => textEditor?.area === area && commitText(), 0));
+  requestAnimationFrame(() => area.focus());
+  status(existing ? "Editing text. Ctrl+Enter or a click outside finishes; Esc cancels." : "Type your text. Ctrl+Enter or a click outside finishes; Esc cancels.");
+}
+function closeText() {
+  if (!textEditor) return;
+  textEditor.hidden?.removeAttribute("visibility");
+  textEditor.area.remove();
+  textEditor = null;
+}
+async function commitText() {
+  const t = textEditor;
+  if (!t) return;
+  const value = t.area.value.replace(/\s+$/, "");
+  closeText();
+  const text = { text: value, font_size: t.size, rgba: t.rgba, bold: t.bold };
+  const [w, h] = textBoxSize(value || " ", t.size, t.bold);
+  if (t.existing) {
+    const before = t.existing.runs.map((r) => r.text).join("").replaceAll("\u200b", "");
+    if (value === before) return;
+    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id });
+    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
+  }
+  if (!value.trim()) return;
+  await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } });
+}
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
 function lockMarks(view) {
   const svg = document.createElementNS(ns, "svg");
@@ -780,6 +867,8 @@ function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
   $("tapeOptions").hidden = tool !== "tape";
+  $("textOptions").hidden = tool !== "text";
+  $("drawingOptions").classList.toggle("texting", tool === "text");
   $("drawingOptions").hidden = tool === "select";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
@@ -787,7 +876,7 @@ function toolOptions() {
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   $("toolOptions").hidden =
     chromeState.compact || !optionsOpen ||
-    (!["draw", "highlight", "shape", "tape", "erase"].includes(tool) &&
+    (!["draw", "highlight", "shape", "tape", "erase", "text"].includes(tool) &&
       !(tool === "select" && selection.item));
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   syncChoices();
@@ -852,7 +941,7 @@ async function action(op, args = {}) {
     updateTools(result);
     layerPanel(result.layers);
     // Ink edits change one page; undo, redo and layers may change any.
-    const only = ["draw", "erase", "remove", "lock"].includes(op) ? args.page : null;
+    const only = ["draw", "erase", "remove", "lock", "image", "editText"].includes(op) ? args.page : null;
     for (const p of panels) {
       if (only != null && p.index !== only) continue;
       p.token++;
@@ -1014,6 +1103,11 @@ function pointerDown(e, p) {
       top: $("viewport").scrollTop,
     };
     p.el.setPointerCapture(e.pointerId);
+    return;
+  }
+  if (tool === "text") {
+    e.preventDefault();
+    openTextEditor(p, point(e, p));
     return;
   }
   if (tool === "lock") {
@@ -1252,6 +1346,7 @@ $("shape").onchange = () =>
 const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
 const CHOICE_ICONS = {
   highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>' },
+  textSize: Object.fromEntries([12, 16, 22, 32, 48].map((v, i) => [v, `<text x="12" y="${15 + i}" text-anchor="middle" font-size="${9 + i * 3.5}" font-family="sans-serif" fill="currentColor" stroke="none">A</text>`])),
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
 };
 function buildChoices() {
@@ -1382,13 +1477,13 @@ $("redo").onclick = () => {
 };
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["O", "Lock: click an item to lock or unlock it in place"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
-const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", o: "lock" };
+const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),

@@ -208,6 +208,8 @@
             <span class="tool-name">Tape</span></button
           ><button data-tool="grab" aria-pressed="false">
             <span class="tool-name">Grab</span></button
+          ><button data-tool="text" aria-pressed="false">
+            <span class="tool-name">Text</span></button
           ><button data-tool="lock" aria-pressed="false" title="Lock in place: click an item to lock or unlock it">
             <span class="tool-name">Lock</span></button
           ><button data-tool="shape" aria-pressed="false">
@@ -365,6 +367,17 @@
                 <option value="straight" selected>Straight</option>
                 <option value="free">Freehand</option>
               </select>
+            </div>
+            <div id="textOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="textSize" role="radiogroup" aria-label="Text size"></div>
+              <select id="textSize" data-native hidden aria-label="Text size">
+                <option value="12">Small</option>
+                <option value="16" selected>Normal</option>
+                <option value="22">Large</option>
+                <option value="32">Heading</option>
+                <option value="48">Title</option>
+              </select>
+              <button id="textBold" type="button" class="text-bold" aria-pressed="false" title="Bold">B</button>
             </div>
             <div class="choice-row swatches" data-for="color" role="radiogroup" aria-label="Color"></div>
             <label class="color-label" title="Custom color"

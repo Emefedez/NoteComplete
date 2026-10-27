@@ -86,6 +86,21 @@ impl EditorSession {
             .map(|v| on_page(v, display));
         serde_json::to_string(&picked).map_err(js_error)
     }
+    /// Replace a text box's content; `text` is a TextBox, `size` its new [w, h].
+    pub fn edit_text(
+        &mut self,
+        page: usize,
+        id: &str,
+        text: &str,
+        width: f64,
+        height: f64,
+    ) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let text = serde_json::from_str(text).map_err(js_error)?;
+        self.inner
+            .edit_text(page, id, text, [width, height])
+            .map_err(js_error)
+    }
     pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.set_locked(page, id, locked).map_err(js_error)

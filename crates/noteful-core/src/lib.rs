@@ -4,7 +4,7 @@
 
 mod editor;
 mod imports;
-pub use imports::Image;
+pub use imports::{Image, TextBox};
 mod manipulation;
 pub use manipulation::Adjustment;
 mod export;

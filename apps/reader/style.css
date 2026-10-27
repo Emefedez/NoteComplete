@@ -1474,3 +1474,10 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .lock-layer circle { fill: var(--accent); }
 .lock-layer path { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linejoin: round; }
 .sheet[data-tool="lock"] { cursor: pointer; }
+
+/* Text tool: the box being typed sits exactly where the text will be drawn. */
+.text-editor { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.sheet[data-tool="text"] { cursor: text; }
+#drawingOptions.texting > [data-for="width"], #drawingOptions.texting > #width { display: none !important; }
+.text-bold { width: 30px; min-height: 28px; padding: 0; font-weight: 700; font-family: Georgia, serif; }
+.text-bold[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }

@@ -455,10 +455,14 @@ impl Editor {
                         &resource,
                         z,
                         adjustments.get(id.as_str()).copied(),
+                        time,
                     )),
                 ));
-                array(&mut index, 3)?.push(V::Text(resource.clone()));
-                blocks.push((resource, image.bytes()?));
+                // Text boxes are self-contained objects; pictures add a resource.
+                if image.text.is_none() {
+                    array(&mut index, 3)?.push(V::Text(resource.clone()));
+                    blocks.push((resource, image.bytes()?));
+                }
             }
             for (_, line) in added {
                 while ids.contains(&next_id) {
