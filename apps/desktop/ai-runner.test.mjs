@@ -16,6 +16,11 @@ test('each provider gets minimal permissions and its own output format', () => {
   assert.ok(!agy.args.includes('--dangerously-skip-permissions'));
   const codex = invocation('codex', { prompt: 'Q', images: ['/t/01.png'], dir: '/t', model: '' });
   assert.ok(codex.args.includes('read-only') && codex.args.includes('-i'));
+  // A PDF is listed for the tool to read; Codex gets only images as -i.
+  const withPdf = invocation('codex', { prompt: 'Q', images: ['/t/01.png', '/t/02-source.pdf'], dir: '/t', model: '' });
+  assert.equal(withPdf.args.filter(a => a === '-i').length, 1);
+  assert.match(withPdf.stdin, /Attached files[\s\S]*02-source\.pdf/);
+  assert.match(invocation('claude', { prompt: 'Q', images: ['/t/01-source.pdf'], dir: '/t', model: '' }).stdin, /01-source\.pdf/);
   assert.throws(() => invocation('shell', { prompt: 'Q', images: [], dir: '/t' }));
 });
 

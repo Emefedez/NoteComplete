@@ -25,11 +25,11 @@ export function textBlock(page, parts, limit = 6000) {
 }
 
 // Page images plus text for a list of display pages.
-export async function pagesContext(pages, { pageCanvas, pageText, onProgress = () => {} }) {
+export async function pagesContext(pages, { pageCanvas, pageText, onProgress = () => {}, width = 2200 }) {
   const images = [], texts = [];
   for (const [n, page] of pages.entries()) {
     onProgress(n, pages.length, page);
-    const { canvas } = await pageCanvas(page, 2200, { liftTape: true });
+    const { canvas } = await pageCanvas(page, width, { liftTape: true });
     images.push(await canvasImage(canvas, `page-${page + 1}`));
     canvas.width = canvas.height = 0;
     texts.push(textBlock(page, await pageText(page)));

@@ -52,7 +52,7 @@ export const STREAMS = new Set(['claude', 'antigravity']);
 
 // The command line for one request. `images` are absolute paths in `dir`.
 export function invocation(provider, { prompt, images, dir, model, mcp, stream = false }) {
-  const listed = images.length ? `\n\nPage images (read them):\n${images.map(i => `- ${i}`).join('\n')}` : '';
+  const listed = images.length ? `\n\nAttached files (read them):\n${images.map(i => `- ${i}`).join('\n')}` : '';
   if (provider === 'claude') {
     const format = stream ? ['stream-json', '--verbose', '--include-partial-messages'] : ['json'];
     const args = ['-p', '--output-format', ...format, '--add-dir', dir, '--strict-mcp-config', '--allowedTools', 'Read'];
@@ -75,9 +75,10 @@ export function invocation(provider, { prompt, images, dir, model, mcp, stream =
     const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', '--color', 'never', '-o', last];
     if (mcp) args.push('-c', `mcp_servers.notecomplete.command=${JSON.stringify(mcp)}`, '-c', 'mcp_servers.notecomplete.args=["mcp"]');
     if (model) args.push('-m', model);
-    for (const image of images) args.push('-i', image);
+    // Codex takes images as -i; other files (PDFs) are listed in the prompt for it to read.
+    for (const image of images) if (/\.(png|jpe?g)$/i.test(image)) args.push('-i', image);
     args.push('-');
-    return { args, stdin: prompt, parse: async () => readFile(last, 'utf8') };
+    return { args, stdin: prompt + (images.some(i => !/\.(png|jpe?g)$/i.test(i)) ? listed : ''), parse: async () => readFile(last, 'utf8') };
   }
   throw Error('Unknown AI provider.');
 }
@@ -151,9 +152,11 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
       try {
         dir = await mkdtemp(path.join(tmpdir(), 'notecomplete-ai-'));
         const files = [];
+        // Page images, and PDFs (the source PDF of a page) up to 60 MB.
+        const kinds = { 'image/png': 'png', 'image/jpeg': 'jpg', 'application/pdf': 'pdf' };
         for (const [i, image] of images.entries()) {
-          if (!(image?.bytes instanceof Uint8Array) || !['image/png', 'image/jpeg'].includes(image.type)) throw Error('Invalid page image.');
-          const file = path.join(dir, `${String(i + 1).padStart(2, '0')}-${String(image.label || 'page').replace(/[^\w.-]+/g, '_').slice(0, 40)}.${image.type === 'image/png' ? 'png' : 'jpg'}`);
+          if (!(image?.bytes instanceof Uint8Array) || !kinds[image.type] || (image.type === 'application/pdf' && image.bytes.length > 60e6)) throw Error('Invalid page image.');
+          const file = path.join(dir, `${String(i + 1).padStart(2, '0')}-${String(image.label || 'page').replace(/[^\w.-]+/g, '_').slice(0, 40)}.${kinds[image.type]}`);
           await writeFile(file, image.bytes);
           files.push(file);
         }

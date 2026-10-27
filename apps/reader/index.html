@@ -679,7 +679,7 @@
 </dialog>
 
 <dialog id="deckDialog" class="deck-dialog" aria-labelledby="deckTitleLabel">
-  <div class="deck-head"><label id="deckTitleLabel" class="sr-only" for="deckTitle">Deck name</label><input id="deckTitle" type="text" /><span id="deckCount" class="muted"></span><span id="deckSaved" class="muted"></span></div>
+  <div class="deck-head"><label id="deckTitleLabel" class="sr-only" for="deckTitle">Deck name</label><input id="deckTitle" type="text" /><span id="deckCount" class="muted"></span><span id="deckSaved" class="muted"></span><button id="deckMinimize" type="button" class="deck-float-only icon-button" title="Minimize (M)" aria-label="Minimize">–</button><button id="deckFloatClose" type="button" class="deck-float-only icon-button" title="Close; the deck is saved" aria-label="Close">×</button></div>
   <div id="deckList">
     <ol id="deckCards" class="deck-cards"></ol>
     <div class="ocr-actions"><button id="deckAdd" type="button">Add card</button><span class="spacer"></span><button id="deckClose" type="button">Close</button><button id="deckExport" type="button">Export to Anki…</button><button id="deckSave" type="button">Save</button><button id="deckPracticeStart" type="button" class="primary">Practise</button></div>
@@ -698,9 +698,28 @@
       <textarea id="practiceFixBack" rows="1" aria-label="Card answer"></textarea>
       <div class="quiz-actions"><span class="spacer"></span><button id="practiceFixCancel" type="button">Cancel</button><button id="practiceFixSave" type="button" class="primary">Save correction</button></div>
     </div>
+    <details id="practiceExplained" class="practice-explained" hidden>
+      <summary>Explanation <span id="practiceExplainedMeta" class="muted"></span></summary>
+      <div id="practiceExplainedText" class="practice-ask-answer chat-body"></div>
+      <div id="practiceExplainedTools" class="quiz-actions"><button id="practiceExplainedChange" type="button">Edit</button><button id="practiceExplainedAsk" type="button">Continue with AI<kbd>C</kbd></button></div>
+      <div id="practiceExplainedEdit" class="practice-explained-edit" hidden>
+        <textarea id="practiceExplainedArea" rows="3" aria-label="Explanation; you can correct it"></textarea>
+        <div class="quiz-actions"><span class="spacer"></span><button id="practiceExplainedCancel" type="button">Cancel</button><button id="practiceExplainedSave" type="button" class="primary">Save</button></div>
+      </div>
+    </details>
     <div id="practiceAskBox" class="practice-ask" hidden>
+      <div class="practice-ask-bar">
+        <select id="practiceAskProvider" data-native aria-label="AI tool"></select>
+        <select id="practiceAskModel" data-native aria-label="Model"></select>
+        <input id="practiceAskModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name" aria-label="Other model" hidden />
+        <span class="practice-ask-material" role="group" aria-label="Send with the question">
+          <button id="practiceAskPage" type="button" class="chip" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
+          <button id="practiceAskPdf" type="button" class="chip" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
+          <button id="practiceAskNote" type="button" class="chip" aria-pressed="false" title="Lets the tool read any page of the note (slower)">Whole note</button>
+        </span>
+      </div>
       <div id="practiceAskThread" class="practice-ask-thread" role="log" aria-live="polite" aria-label="AI explanation"></div>
-      <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask something else about this card" aria-label="Follow-up question" /><button type="submit">Ask</button><button id="practiceAskClose" type="button">Close</button></form>
+      <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask something else about this card" aria-label="Follow-up question" /><button type="submit">Ask</button><button id="practiceAskStop" type="button" hidden>Stop</button><button id="practiceAskAgain" type="button" title="Ask for a new explanation; it replaces the saved one">Ask again</button><button id="practiceAskClose" type="button">Close</button></form>
     </div>
     <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceAsk" type="button" title="Ask AI to explain this card with its page (C)" hidden>Ask AI<kbd>C</kbd></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
   </div>

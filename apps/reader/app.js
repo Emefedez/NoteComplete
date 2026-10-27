@@ -1601,7 +1601,7 @@ const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
-  ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card"],
+  ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
 // The tool row can be put in any order by dragging its buttons; remembered here.
@@ -1683,7 +1683,12 @@ document.addEventListener("keydown", (e) => {
     toggleKeyHints();
     return;
   }
-  if (document.querySelector("dialog[open]")) return;
+  // Flashcard practice floats over the pages: its keys come first.
+  if (study.key(e)) {
+    e.preventDefault();
+    return;
+  }
+  if (document.querySelector("dialog[open]:not(.floating)")) return;
   if (quizzes.key(e)) {
     e.preventDefault();
     return;
@@ -2561,6 +2566,14 @@ const study = studyController({
   jobs,
   quizzes,
   markdown: (text) => call("markdownHtml", { text }),
+  // The source PDF a page is drawn on, to attach to an AI request.
+  pagePdf: async (index) => {
+    const view = panels[index]?.view || (await call("view", { page: index }));
+    if (!view?.pdf_background || !backgrounds) return null;
+    const bytes = await call("pdf", { resource: view.pdf_background.resource_id });
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
+  },
 });
 // Q resumes the latest unfinished quiz of this note.
 async function resumeQuiz() {

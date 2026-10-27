@@ -72,7 +72,7 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -198,6 +198,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('deckSaved').textContent = unsaved ? 'Not saved yet' : 'Saved with this note';
     renderCards();
     $('deckList').hidden = false; $('deckPractice').hidden = true;
+    if ($('deckDialog').classList.contains('floating')) { $('deckDialog').close(); $('deckDialog').classList.remove('floating', 'minimized'); $('deckDialog').style.left = $('deckDialog').style.top = ''; }
     if (!$('deckDialog').open) $('deckDialog').showModal();
   }
   // Cards read like cards: question over answer. Clicking one edits it in place,
@@ -270,23 +271,61 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   };
   $('deckClose').onclick = () => $('deckDialog').close();
   $('deckDialog').addEventListener('close', () => { closeFix(); closeAsk(); });
-  // Flip-card practice: unknown cards come back once more at the end.
+  // Flip-card practice: unknown cards come back once more at the end. It runs in a
+  // floating window, like the quiz, so the pages stay visible and usable beside it.
+  const POSITION = 'notecomplete-practice-position';
+  function floatDeck(on) {
+    const dialog = $('deckDialog');
+    if (dialog.open) dialog.close();
+    dialog.classList.toggle('floating', on);
+    dialog.classList.remove('minimized');
+    dialog.style.left = dialog.style.top = '';
+    if (on) {
+      try { const at = JSON.parse(localStorage.getItem(POSITION) || 'null'); if (at) place(at.left, at.top); } catch { /* Optional. */ }
+      dialog.show();
+    } else dialog.showModal();
+  }
+  // Keep the window on screen wherever it is put.
+  function place(left, top) {
+    const dialog = $('deckDialog'), w = dialog.offsetWidth || 520, h = dialog.offsetHeight || 300;
+    dialog.style.left = `${Math.max(0, Math.min(innerWidth - Math.min(w, innerWidth), left))}px`;
+    dialog.style.top = `${Math.max(0, Math.min(innerHeight - 40, top))}px`;
+    void h;
+  }
+  $('deckDialog').querySelector('.deck-head').addEventListener('pointerdown', down => {
+    const dialog = $('deckDialog');
+    if (!dialog.classList.contains('floating') || down.button !== 0 || down.target.closest('input, button, select')) return;
+    const box = dialog.getBoundingClientRect(), dx = down.clientX - box.left, dy = down.clientY - box.top;
+    const move = e => place(e.clientX - dx, e.clientY - dy);
+    const up = () => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      try { localStorage.setItem(POSITION, JSON.stringify({ left: parseFloat(dialog.style.left), top: parseFloat(dialog.style.top) })); } catch { /* Optional. */ }
+    };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    down.preventDefault();
+  });
+  $('deckMinimize').onclick = () => $('deckDialog').classList.toggle('minimized');
+  $('deckFloatClose').onclick = () => $('deckDialog').close();
   $('deckPracticeStart').onclick = () => {
     const queue = deck.cards.filter(c => c.front.trim() && c.back.trim()).sort(() => Math.random() - 0.5);
     if (!queue.length) return;
     practice = { queue, known: 0, seen: 0, total: queue.length, again: new Set() };
     $('deckList').hidden = true; $('deckPractice').hidden = false;
+    floatDeck(true);
     showCard();
   };
+  const revealed = () => !$('practiceBack').hidden && !!practice?.queue[0];
   function showCard() {
     const card = practice.queue[0];
     closeFix(); closeAsk();
     $('practiceEdit').hidden = $('practiceCheck').hidden = $('practiceDiscard').hidden = $('practiceAsk').hidden = true;
     $('practiceDiscard').dataset.armed = ''; $('practiceDiscard').textContent = 'Discard';
+    $('practiceExplained').hidden = true;
     if (!card) {
       $('practiceFront').textContent = `Done: ${practice.known} of ${practice.total} known first time.`;
       $('practiceBack').textContent = ''; $('practiceBack').hidden = true; $('practiceReveal').hidden = true; $('practiceKnow').hidden = $('practiceAgain').hidden = true;
       $('practiceProgress').textContent = '';
+      $('practicePage').hidden = true;
       return;
     }
     $('practiceFront').textContent = card.front;
@@ -301,6 +340,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   $('practiceReveal').onclick = () => {
     $('practiceBack').hidden = false; $('practiceReveal').hidden = true; $('practiceKnow').hidden = $('practiceAgain').hidden = false;
     $('practiceEdit').hidden = $('practiceCheck').hidden = $('practiceDiscard').hidden = $('practiceAsk').hidden = false;
+    showExplained();
   };
   // Correcting a card while practising, as quizzes do: edit it, have the AI
   // double check it against its page, or discard it. Changes are saved at once.
@@ -311,6 +351,58 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     if (at >= 0) decks[at] = value; else decks.unshift(value);
     await library.store.set('settings', key(), decks);
     $('deckSaved').textContent = 'Saved with this note';
+  }
+  // The AI tool and model for card requests, chosen in the Ask AI box and remembered.
+  const cardModel = ai ? modelPicker($('practiceAskModel'), $('practiceAskModelOther'), ai) : null;
+  let providersLoaded = null;
+  function loadProviders() {
+    return providersLoaded ||= (async () => {
+      const select = $('practiceAskProvider'), providers = await ai.providers();
+      for (const p of providers) select.add(new Option(p.available ? p.label : `${p.label} (not installed)`, p.id));
+      let saved = '';
+      try { saved = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
+      select.value = providers.some(p => p.id === saved && p.available) ? saved : providers.find(p => p.available)?.id || providers[0]?.id || 'claude';
+      select.onchange = () => { try { localStorage.setItem('notecomplete-ai-provider', select.value); } catch { /* Optional. */ } cardModel.load(select.value); };
+      await cardModel.load(select.value);
+    })().catch(error => { providersLoaded = null; throw error; });
+  }
+  async function aiChoice() {
+    await loadProviders().catch(() => {});
+    const provider = $('practiceAskProvider').value || 'claude';
+    return { provider, model: cardModel?.value || '', label: $('practiceAskProvider').selectedOptions[0]?.textContent || 'your AI tool' };
+  }
+  // What goes with a card request: its page (image and text), the page's source PDF,
+  // and the whole note through the note's MCP tools (slower: the tool may read other pages).
+  const material = () => ({ page: $('practiceAskPage').getAttribute('aria-pressed') === 'true', pdf: $('practiceAskPdf').getAttribute('aria-pressed') === 'true', note: $('practiceAskNote').getAttribute('aria-pressed') === 'true' });
+  for (const id of ['practiceAskPage', 'practiceAskPdf', 'practiceAskNote']) {
+    $(id).onclick = () => {
+      $(id).setAttribute('aria-pressed', String($(id).getAttribute('aria-pressed') !== 'true'));
+      try { localStorage.setItem('notecomplete-card-material', JSON.stringify(material())); } catch { /* Optional. */ }
+    };
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem('notecomplete-card-material') || 'null');
+    if (saved) for (const [id, on] of [['practiceAskPage', saved.page], ['practiceAskPdf', saved.pdf], ['practiceAskNote', saved.note]]) $(id).setAttribute('aria-pressed', String(!!on));
+  } catch { /* Optional. */ }
+  const contexts = new Map();
+  async function cardContext(card, want) {
+    const out = { images: [], text: '', notes: [] };
+    if (!card.page) return out;
+    const page = card.page - 1;
+    if (want.page) {
+      const k = `page:${page}`;
+      if (!contexts.has(k)) contexts.set(k, pagesContext([page], { pageCanvas, pageText, width: 1400 }).catch(error => { contexts.delete(k); throw error; }));
+      const context = await contexts.get(k);
+      out.images.push(...context.images); out.text = context.text;
+    }
+    if (want.pdf && pagePdf) {
+      const k = `pdf:${page}`;
+      if (!contexts.has(k)) contexts.set(k, pagePdf(page).catch(() => null));
+      const pdf = await contexts.get(k);
+      if (pdf) { out.images.push(pdf); out.notes.push(`The attached PDF is the source document of page ${card.page}${pdf.page ? ` (its page ${pdf.page})` : ''}.`); }
+      else out.notes.push('');
+    }
+    return out;
   }
   let fixing = null;
   function closeFix() {
@@ -339,11 +431,10 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     fix.asking = true;
     $('practiceFixReason').textContent = 'Asking your AI tool to check this card against its page…';
     try {
-      let provider = 'claude', model = '';
-      try { provider = localStorage.getItem('notecomplete-ai-provider') || provider; model = localStorage.getItem('notecomplete-ai-model:' + provider) || ''; } catch { /* Optional. */ }
-      const context = card.page ? await pagesContext([card.page - 1], { pageCanvas, pageText }) : { images: [], text: '' };
+      const { provider, model } = await aiChoice(), want = material();
+      const context = await cardContext(card, { ...want, page: true });
       if (fixing !== fix) return;
-      const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, tag: 'card-check', prompt: `${cardCheckPrompt(card, !!card.page)}${context.text ? `\n\n${context.text}` : ''}` });
+      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-check', prompt: [cardCheckPrompt(card, !!card.page), ...context.notes.filter(Boolean), context.text].filter(Boolean).join('\n\n') });
       fix.asking = false;
       if (fixing !== fix) return;
       const verdict = cardVerdict(jsonFrom(text), card);
@@ -365,55 +456,119 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     status('Card corrected and saved with this note.');
   };
   $('practiceFixCancel').onclick = closeFix;
-  // Ask AI (C): the explanation streams in under the card; follow-ups keep the thread.
+
+  // The card's last explanation is kept with the deck: shown folded under the
+  // answer (the arrow opens it), editable, and reused instead of asking again.
+  const renderInto = (element, text) => markdown ? renderMarkdown(element, text, markdown).catch(() => element.replaceChildren(renderAnswer(text))) : Promise.resolve(element.replaceChildren(renderAnswer(text)));
+  function showExplained() {
+    const card = practice?.queue[0], saved = card?.explanation;
+    $('practiceExplained').hidden = !saved?.text || !revealed() || !$('practiceAskBox').hidden;
+    if ($('practiceExplained').hidden) return;
+    $('practiceExplainedEdit').hidden = true; $('practiceExplainedText').hidden = false; $('practiceExplainedTools').hidden = false;
+    $('practiceExplainedMeta').textContent = saved.edited ? 'edited by you' : saved.provider ? `from ${saved.provider}` : '';
+    renderInto($('practiceExplainedText'), saved.text);
+  }
+  $('practiceExplainedChange').onclick = () => {
+    const card = practice?.queue[0];
+    if (!card?.explanation) return;
+    $('practiceExplained').open = true;
+    $('practiceExplainedText').hidden = true; $('practiceExplainedTools').hidden = true;
+    $('practiceExplainedEdit').hidden = false;
+    $('practiceExplainedArea').value = card.explanation.text;
+    grow($('practiceExplainedArea'));
+    $('practiceExplainedArea').focus();
+  };
+  $('practiceExplainedArea').oninput = () => grow($('practiceExplainedArea'));
+  $('practiceExplainedSave').onclick = async () => {
+    const card = practice?.queue[0], text = $('practiceExplainedArea').value.trim();
+    if (!card) return;
+    card.explanation = text ? { ...card.explanation, text, edited: true, at: Date.now() } : undefined;
+    await saveDeck();
+    showExplained();
+    status(text ? 'Explanation saved with the card.' : 'Explanation removed from the card.');
+  };
+  $('practiceExplainedCancel').onclick = showExplained;
+  $('practiceExplainedAsk').onclick = () => ask();
+
+  // Ask AI (C): the explanation streams in under the card, with the tool, model and
+  // material chosen in the box; follow-ups keep the thread. The last answer is saved.
   let asking = null;
   function closeAsk() {
     if (asking?.busy) ai?.cancel('card-ask');
+    clearInterval(asking?.clock);
     asking = null;
     $('practiceAskBox').hidden = true;
+    $('practiceAskStop').hidden = true;
+    showExplained();
   }
-  async function ask(question = '') {
+  function openAsk(card) {
+    closeFix(); closeAsk();
+    asking = { card, history: [] };
+    $('practiceAskThread').replaceChildren();
+    $('practiceAskBox').hidden = false;
+    $('practiceExplained').hidden = true;
+    loadProviders().catch(error => status(error.message, true));
+    // A saved explanation opens as the thread's first answer: no new request.
+    if (card.explanation?.text) {
+      const reply = Object.assign(document.createElement('div'), { className: 'practice-ask-answer chat-body' });
+      $('practiceAskThread').append(reply);
+      renderInto(reply, card.explanation.text);
+      asking.history.push({ role: 'user', content: 'Explain this card.' }, { role: 'assistant', content: card.explanation.text });
+      return true;
+    }
+    return false;
+  }
+  async function ask(question = '', { again = false } = {}) {
     if (!ai) return unavailable();
     const card = practice?.queue[0];
     if (!card) return;
-    if (asking?.card !== card) {
-      closeFix(); closeAsk();
-      asking = { card, history: [], context: null };
-      $('practiceAskThread').replaceChildren();
-      $('practiceAskBox').hidden = false;
+    if (asking?.card !== card || again) {
+      const reused = openAsk(card);
+      if (again) { asking.history = []; $('practiceAskThread').replaceChildren(); }
+      else if (reused && !question) { $('practiceAskInput').focus(); return; }
     }
     const thread = asking;
     if (thread.busy) return;
     thread.busy = true;
     $('practiceAskInput').value = '';
+    $('practiceAskStop').hidden = false;
     if (question) $('practiceAskThread').append(Object.assign(document.createElement('p'), { className: 'practice-ask-question', textContent: question }));
-    const reply = Object.assign(document.createElement('div'), { className: 'practice-ask-answer chat-body', textContent: 'Asking your AI tool…' });
+    const reply = Object.assign(document.createElement('div'), { className: 'practice-ask-answer chat-body' });
     $('practiceAskThread').append(reply);
-    const render = text => markdown ? renderMarkdown(reply, text, markdown).catch(() => reply.replaceChildren(renderAnswer(text))) : Promise.resolve(reply.replaceChildren(renderAnswer(text)));
+    const started = Date.now();
+    let streamed = '';
     try {
-      let provider = 'claude', model = '';
-      try { provider = localStorage.getItem('notecomplete-ai-provider') || provider; model = localStorage.getItem('notecomplete-ai-model:' + provider) || ''; } catch { /* Optional. */ }
-      thread.context ||= card.page ? await pagesContext([card.page - 1], { pageCanvas, pageText }) : { images: [], text: '' };
+      const { provider, model, label } = await aiChoice(), want = material();
+      const waiting = () => { if (!streamed) reply.textContent = `Asking ${label}… ${Math.round((Date.now() - started) / 1000)} s`; };
+      waiting();
+      thread.clock = setInterval(waiting, 1000);
+      const context = await cardContext(card, want);
       if (asking !== thread) return;
-      const prompt = `${cardAskPrompt(card, !!card.page, thread.history, question)}${thread.context.text ? `\n\n${thread.context.text}` : ''}`;
+      const prompt = [cardAskPrompt(card, want.page && !!card.page, thread.history, question), ...context.notes.map(n => n || 'This page has no source PDF.'), context.text].filter(Boolean).join('\n\n');
       // Re-rendered at most every 120 ms while it streams, like the chat.
-      let streamed = '', timer = 0, rendering = Promise.resolve();
-      const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && render(streamed)); };
-      const { text } = await ai.run({ provider, model, notePath: notePath(), images: thread.context.images, tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
+      let timer = 0, rendering = Promise.resolve();
+      const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)); };
+      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
       clearTimeout(timer);
       await rendering;
       if (asking !== thread) return;
-      thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: text.trim() });
-      await render(text);
+      const answer = text.trim();
+      thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: answer });
+      await renderInto(reply, answer);
+      card.explanation = { text: question ? `${card.explanation?.text ? `${card.explanation.text}\n\n` : ''}**${question}**\n\n${answer}` : answer, provider: label, at: Date.now() };
+      await saveDeck();
     } catch (error) {
       if (asking === thread) { reply.textContent = error.message; reply.classList.add('chat-error'); }
     } finally {
       thread.busy = false;
-      if (asking === thread) $('practiceAskInput').focus();
+      clearInterval(thread.clock);
+      if (asking === thread) { $('practiceAskStop').hidden = true; $('practiceAskInput').focus(); }
     }
   }
   $('practiceAsk').onclick = () => ask();
   $('practiceAskForm').onsubmit = event => { event.preventDefault(); const q = $('practiceAskInput').value.trim(); if (q) ask(q); };
+  $('practiceAskAgain').onclick = () => ask('', { again: true });
+  $('practiceAskStop').onclick = () => ai?.cancel('card-ask');
   $('practiceAskClose').onclick = closeAsk;
   // Discard needs a second press: the card leaves the deck for good.
   $('practiceDiscard').onclick = async () => {
@@ -428,21 +583,22 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     status('Card discarded from the deck.');
     showCard();
   };
-  $('practiceKnow').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) practice.known++; practice.seen++; showCard(); };
-  $('practiceAgain').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) { practice.again.add(card); practice.queue.push(card); } practice.seen++; showCard(); };
-  // Practice keys: Space or Enter shows the answer, 1 not yet, 2 I knew it,
-  // E edit, V double check, X (twice) discard, C ask AI. Esc closes the open box.
-  // Listened on the document: once Show answer hides itself, focus is on the body.
-  document.addEventListener('keydown', e => {
-    if (!$('deckDialog').open) return;
-    if (e.key === 'Escape' && (fixing || asking)) { e.preventDefault(); closeFix(); closeAsk(); return; }
-    if ($('deckPractice').hidden || e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.('input,textarea,select')) return;
+  // Practice keys, asked first by the app's key handler (the window floats, so the
+  // pages keep their own keys otherwise): Space/Enter show the answer, 1 not yet,
+  // 2 I knew it, E edit, V double check, X (twice) discard, C ask AI, M minimize.
+  // Esc closes an open box.
+  function onKey(e) {
+    if (!$('deckDialog').open || $('deckPractice').hidden) return false;
+    if (e.key === 'Escape' && (fixing || asking)) { closeFix(); closeAsk(); return true; }
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.('input,textarea,select,[contenteditable=true]')) return false;
+    if (e.key.toLowerCase() === 'm' && $('deckDialog').classList.contains('floating')) { $('deckDialog').classList.toggle('minimized'); return true; }
+    if ($('deckDialog').classList.contains('minimized')) return false;
     const button = { ' ': 'practiceReveal', Enter: 'practiceReveal', 1: 'practiceAgain', 2: 'practiceKnow', e: 'practiceEdit', v: 'practiceCheck', x: 'practiceDiscard', c: 'practiceAsk' }[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-    if (!button || $(button).hidden) return;
-    e.preventDefault();
+    if (!button || $(button).hidden) return false;
     $(button).click();
-  });
-  $('practiceBackToList').onclick = () => { closeFix(); closeAsk(); $('deckPractice').hidden = true; $('deckList').hidden = false; renderCards(); };
+    return true;
+  }
+  $('practiceBackToList').onclick = () => { closeFix(); closeAsk(); $('deckPractice').hidden = true; $('deckList').hidden = false; floatDeck(false); renderCards(); };
 
   // Saved decks and quizzes of this note, in two lists. Deleting asks first and
   // can be undone until the dialog closes.
@@ -510,5 +666,5 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     } catch (error) { status(`Could not import: ${error.message}`, true); }
   };
   $('deckPickerClose').onclick = () => $('deckPickerDialog').close();
-  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, fillProviders };
+  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, fillProviders, key: onKey };
 }

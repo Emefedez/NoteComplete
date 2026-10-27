@@ -1312,6 +1312,31 @@ body.bar-compact .job-chip button, body.bar-compact .job-ready { min-height: 20p
 .practice-back[hidden] { display: block !important; visibility: hidden; }
 .practice-actions { flex-wrap: wrap; }
 .deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) .practice-card { height: min(24dvh, 200px); }
+/* Practice floats over the pages like the quiz: drag it by its head, M minimizes it. */
+.deck-float-only { display: none; }
+.deck-dialog.floating { position: fixed; inset: auto auto 14px 22px; z-index: var(--z-float, 27); margin: 0; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 8px 14px 12px; box-shadow: var(--shadow-pop); }
+.deck-dialog.floating[style*="top"] { bottom: auto; }
+.deck-dialog.floating .deck-float-only { display: inline-flex; }
+.deck-dialog.floating .deck-head { margin-bottom: 4px; cursor: move; user-select: none; }
+.deck-dialog.floating .deck-head input { font-size: 13px !important; pointer-events: none; }
+.deck-dialog.floating .practice-card { height: min(22dvh, 190px); margin: 4px 0 10px; }
+.deck-dialog.floating .deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) .practice-card { height: min(14dvh, 120px); }
+.deck-dialog.floating .practice-front { font-size: 17px; }
+.deck-dialog.floating .practice-back { font-size: 15px; }
+.deck-dialog.floating.minimized #deckPractice { display: none; }
+.deck-dialog.floating.minimized .deck-head { margin: 0; }
+/* The card's saved explanation: folded under the answer, the arrow opens it. */
+.practice-explained { margin: -4px 0 10px; text-align: left; }
+.practice-explained > summary { justify-content: flex-start; min-height: 26px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+.practice-explained > summary .muted { font-weight: 400; }
+.practice-explained .practice-ask-answer { max-height: min(26dvh, 240px); overflow: auto; }
+.practice-explained-edit { display: grid; gap: 6px; }
+.practice-explained-edit textarea { width: 100%; resize: none; overflow: hidden; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; line-height: 1.5; }
+.practice-ask-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.practice-ask-bar select { min-height: 26px; max-width: 160px; padding: 2px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 12px; }
+.practice-ask-bar .model-other { width: 140px; min-height: 26px; padding: 2px 6px; font-size: 12px; }
+.practice-ask-material { display: inline-flex; gap: 4px; margin-left: auto; }
+.practice-ask-material .chip { min-height: 24px; padding: 1px 9px; font-size: 11px; }
 .practice-ask { margin: -6px 0 14px; display: grid; gap: 6px; text-align: left; }
 .practice-ask-thread { max-height: min(30dvh, 300px); overflow: auto; display: grid; gap: 6px; }
 .practice-ask-answer { padding: 8px 11px; border-radius: var(--radius-box); background: var(--chrome); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
