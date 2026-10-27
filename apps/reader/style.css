@@ -1530,3 +1530,34 @@ body.bar-compact .tab { height: 22px; }
    pointer; the others slide out of its way. */
 .reordering > * { transition: transform .16s ease; }
 .reordering > .dragging { position: relative; z-index: 2; transition: none; box-shadow: 0 6px 18px #0003; background: var(--surface); cursor: grabbing; opacity: .96; }
+
+/* Notes: a Markdown panel beside the pages, like Layers; the left edge resizes it. */
+.notes-panel { position: relative; width: 380px; flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); }
+.notes-panel[hidden] { display: none; }
+.notes-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 2; }
+.notes-resize:hover { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.notes-head { gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.notes-head h2 { margin: 0; font-size: 14px; }
+.notes-head button { min-height: 26px; padding: 0 9px; font-size: 12px; }
+.notes-head [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.notes-follow { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.notes-commands:empty { display: none; }
+.notes-commands .TMCommandBar { display: flex; flex-wrap: wrap; height: auto; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--chrome); }
+.notes-editor { flex: 1; min-height: 0; overflow: auto; }
+.notes-editor .TinyMDE { min-height: 100%; box-sizing: border-box; padding: 12px 14px 40vh; border: 0; background: var(--surface); color: var(--ink); font: 14px/1.6 system-ui, sans-serif; outline: none; }
+.notes-editor .TinyMDE > [data-page] { display: table; margin: 8px 0 2px; padding: 0 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font: 600 12px/1.8 system-ui, sans-serif; font-variant-ligatures: none; cursor: pointer; }
+.notes-render { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 40vh; font: 14px/1.6 system-ui, sans-serif; color: var(--ink); }
+.notes-render h1, .notes-render h2, .notes-render h3 { line-height: 1.25; margin: 1em 0 .4em; color: var(--ink); font-weight: 700; text-transform: none; letter-spacing: 0; }
+.notes-render h1 { font-size: 1.6em; }
+.notes-render h2 { font-size: 1.3em; }
+.notes-render h3 { font-size: 1.1em; }
+.notes-render code { padding: 1px 4px; border-radius: 4px; background: var(--chrome); font-size: 13px; }
+.notes-render pre { padding: 10px; border-radius: 8px; background: var(--chrome); overflow: auto; }
+.notes-render blockquote { margin: 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.notes-render table { border-collapse: collapse; }
+.notes-render th, .notes-render td { padding: 4px 8px; border: 1px solid var(--line); }
+.notes-render img { max-width: 100%; }
+.notes-render .md-page { display: inline-block; margin: 12px 0 4px; padding: 1px 10px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+@media (max-width: 700px) {
+  .notes-panel { position: absolute; z-index: 4; inset: auto 0 0 0; width: auto !important; max-height: 70%; }
+}

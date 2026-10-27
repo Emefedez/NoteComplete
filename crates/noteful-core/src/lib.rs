@@ -3,6 +3,11 @@
 #![forbid(unsafe_code)]
 
 mod editor;
+mod markdown;
+pub use markdown::{
+    is_notecomplete, markdown_export, markdown_html, markdown_pages, pack_notecomplete,
+    page_marker, unpack_notecomplete,
+};
 mod imports;
 pub use imports::{Image, TextBox};
 mod manipulation;

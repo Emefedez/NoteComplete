@@ -78,6 +78,9 @@ struct Project {
     source_base64: String,
     pub(crate) history: Vec<Edit>,
     pub(crate) cursor: usize,
+    /// Markdown notes kept with the note (project version 5).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    markdown: String,
 }
 pub struct Editor {
     pub(crate) source: Vec<u8>,
@@ -87,6 +90,8 @@ pub struct Editor {
     /// Pages and PDFs added by InsertPages edits, rebuilt by `sync_inserted`.
     pub(crate) inserted: Vec<crate::Page>,
     pub(crate) added_pdfs: Vec<(String, Vec<u8>)>,
+    /// Markdown notes (see markdown.rs); not part of the edit history.
+    pub(crate) markdown: String,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -150,6 +155,7 @@ impl Editor {
             cursor: 0,
             inserted: Vec::new(),
             added_pdfs: Vec::new(),
+            markdown: String::new(),
         })
     }
     /// A page by slot (see pages.rs); hosts map display positions with `slot`.
@@ -502,7 +508,9 @@ impl Editor {
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if self.history.iter().any(|e| {
+            version: if !self.markdown.is_empty() {
+                5
+            } else if self.history.iter().any(|e| {
                 matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. })
                     || matches!(e, Edit::Image { image, .. } if image.text.is_some())
             }) {
@@ -521,6 +529,7 @@ impl Editor {
             source_base64: STANDARD.encode(&self.source),
             history: self.history.clone(),
             cursor: self.cursor,
+            markdown: self.markdown.clone(),
         })
         .map_err(|e| Error::new(0, e.to_string()))?;
         Ok(data)
@@ -550,7 +559,8 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=4)
+            || !matches!(project.version, 1..=5)
+            || project.markdown.len() > crate::markdown::MARKDOWN_LIMIT
             || project.cursor > project.history.len()
         {
             return Err(Error::new(0, "Unsupported or invalid project"));
@@ -623,6 +633,7 @@ impl Editor {
             }
         }
         editor.cursor = project.cursor;
+        editor.markdown = project.markdown;
         Ok(editor)
     }
 }

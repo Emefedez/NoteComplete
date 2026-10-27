@@ -14,11 +14,15 @@ NoteComplete is an independent desktop and web companion for people who take not
 
 ### Read and annotate
 - **Everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images, typed text, tape, locked items, tags and recordings, including widened pages and notebooks of hundreds of pages.
-- **Fix things up**: pen, highlighter, eraser (four sizes), shapes, tape (strips or rectangles, with washi patterns) and images; move, resize and restyle items; layers; undo/redo. Edits are non-destructive: the original file is never changed.
-- **Add pages**: blank pages of any size, or pages from another PDF at the note's scale with extra writing space.
+- **Fix things up**: pen, highlighter (straight, freehand or rectangle), eraser (four sizes), shapes, tape (strips or rectangles, with washi patterns), text boxes with a format bar (font, size, bold, italic, colour) and images; move, resize, restyle and lock items in place; layers; undo/redo. Drag the tool buttons into the order you like. Edits are non-destructive: the original file is never changed.
+- **Pages your way**: add blank pages of any size or pages from another PDF at the note's scale; resize any page from a menu or by dragging its borders, with the PDF kept in place.
+- **Select and copy text** from PDFs and from recognized handwriting, straight from the page.
 - **Night view** (<kbd>D</kbd>): white paper turns black and ink turns light, colours keep their hue. Pages can sit left, centred, right or wherever you leave them.
 
 <p align="center"><img src="docs/images/night.png" alt="Night view: a handwritten exam page with black paper and light ink" width="100%"></p>
+
+### Notes in Markdown
+A **Notes** panel (<kbd>N</kbd>) sits beside the pages: Markdown that is formatted and coloured as you type, with a formatted preview. **+ Page** ties a section to the page you are on; clicking it jumps there, and the notes follow you as you turn pages. Notes are kept with each note on the device and saved in projects. Export the note on its own (.noteful), with its notes as a Markdown file whose page breaks are marked (.noteful + .md), or as one **.notecomplete** file that holds both and opens in NoteComplete with its notes. The editor loads only when the panel is opened; rendering and the archive format are in the Rust core.
 
 ### Your library
 - **Google Drive on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook, or as a quick list that reads nothing at all.
@@ -41,7 +45,7 @@ Flashcards and quizzes are generated in the background by the AI tool you alread
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
 
 ### Feels like a desktop app
-A native-style File / Edit / View menubar that shrinks while you scroll, a <kbd>Ctrl</kbd>+<kbd>K</kbd> command search, single-key shortcuts for every tool, and <kbd>?</kbd> to show each button's key on the button itself.
+Tabs for several notes in one window (<kbd>Ctrl</kbd>+<kbd>T</kbd>, drag to reorder), a native-style File / Edit / View menubar that shrinks while you scroll, a <kbd>Ctrl</kbd>+<kbd>K</kbd> command search, single-key shortcuts for every tool, and <kbd>?</kbd> to show each button's key on the button itself.
 
 <p align="center"><img src="docs/images/keys.png" alt="Key badges on the toolbar buttons after pressing ?" width="100%"></p>
 

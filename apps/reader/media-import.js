@@ -23,6 +23,9 @@ export function fileKind(name, bytes) {
     new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
   )
     return "image";
+  // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
+  if (/\.notecomp(lete)?$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
+    return "notecomplete";
   if (
     /\.nfedit$/i.test(name) ||
     new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().startsWith("{")

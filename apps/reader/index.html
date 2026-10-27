@@ -28,7 +28,9 @@
           <button id="driveOpen">Google Drive</button>
           <hr />
           <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
-          <button id="native" disabled>Export .noteful <span class="experimental">Experimental</span></button>
+          <button id="native" disabled>Export Noteful (.noteful) <span class="experimental">Experimental</span></button>
+          <button id="nativeMarkdown" disabled title="The .noteful file and the notes as a .md file, with page breaks marked">Export Noteful + Markdown</button>
+          <button id="exportNotecomplete" disabled title="One .notecomplete file with the note and its notes; NoteComplete opens it with both">Export NoteComplete (.notecomplete)</button>
           <button id="svg" disabled>Export page as SVG</button>
           <hr />
           <button data-proxy="libraryChoose">Downloads folder…</button>
@@ -59,6 +61,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
+          <button data-proxy="notesToggle">Notes<kbd>N</kbd></button>
           <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
           <hr />
@@ -118,7 +121,7 @@
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.notecomplete,.notecomp,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -248,6 +251,13 @@
             data-icon="headphones"
             aria-expanded="false"
             hidden
+          ></button
+          ><button
+            id="notesToggle"
+            aria-label="Notes"
+            title="Notes: Markdown beside the pages (N)"
+            data-icon="note"
+            aria-expanded="false"
           ></button
           ><button
             id="layersToggle"
@@ -556,6 +566,20 @@
         <div id="viewport" tabindex="0" aria-label="Note pages">
           <div id="pages"></div>
         </div>
+        <aside id="notesPanel" class="chrome notes-panel" aria-label="Notes" hidden>
+          <div id="notesResize" class="notes-resize" title="Drag to resize"></div>
+          <div class="row notes-head">
+            <h2>Notes</h2>
+            <span class="spacer"></span>
+            <button id="notesMarker" type="button" title="Tie what follows to the page you are on">+ Page</button>
+            <button id="notesPreview" type="button" aria-pressed="false" title="Show the notes formatted">Preview</button>
+            <label class="notes-follow" title="Scroll the notes to the section of the page you are reading"><input id="notesFollow" type="checkbox" checked /> Follow</label>
+            <button id="closeNotes" type="button" aria-label="Close notes">×</button>
+          </div>
+          <div id="notesCommands" class="notes-commands"></div>
+          <div id="notesEditor" class="notes-editor"></div>
+          <div id="notesRender" class="notes-render" hidden></div>
+        </aside>
         <aside id="layersPanel" class="chrome" hidden>
           <div class="row">
             <h2>Layers</h2>

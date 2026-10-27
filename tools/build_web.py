@@ -64,6 +64,13 @@ def main():
     core=ROOT/'apps/reader/node_modules/tesseract.js-core'
     for name in ['tesseract-core-lstm.wasm.js','tesseract-core-simd-lstm.wasm.js','tesseract-core-relaxedsimd-lstm.wasm.js']: shutil.copy2(core/name,ocr/name)
     shutil.copy2(core/'LICENSE',ocr/'LICENSE-core')
+    # Markdown notes editor, loaded only when the Notes panel is opened.
+    mde=ROOT/'apps/reader/vendor/tinymde'
+    if mde.exists(): shutil.rmtree(mde)
+    mde.mkdir(parents=True,exist_ok=True)
+    tinymde=ROOT/'apps/reader/node_modules/tiny-markdown-editor'
+    for name in ['tiny-mde.min.js','tiny-mde.min.css']: shutil.copy2(tinymde/'dist'/name,mde/name)
+    shutil.copy2(tinymde/'LICENSE',mde/'LICENSE')
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))

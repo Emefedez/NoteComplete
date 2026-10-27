@@ -1,4 +1,4 @@
-import init, { EditorSession } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -11,7 +11,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       const bytes = new Uint8Array(args.bytes);
       let candidate;
       try {
-        candidate = args.sizes
+        candidate = args.notecomplete
+          ? EditorSession.open_notecomplete(bytes)
+          : args.sizes
           ? EditorSession.create_document(
               args.title,
               JSON.stringify(args.sizes),
@@ -32,6 +34,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       } finally {
         candidate?.free();
       }
+    } else if (op === "markdownHtml") {
+      postMessage({ id, result: markdown_html(args.text) });
+      return;
     } else if (!session) {
       throw Error("Open a document first.");
     }
@@ -42,6 +47,18 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
           session.pick_item(page, args.x, args.y, args.tolerance),
         ),
       });
+      return;
+    }
+    // Markdown notes: kept in the session (saved with projects and .notecomplete).
+    if (op === "getMarkdown" || op === "setMarkdown" || op === "exportMarkdown") {
+      if (op === "setMarkdown") session.set_markdown(args.text);
+      const text = session.markdown();
+      postMessage({ id, result: op === "exportMarkdown" ? markdown_export(text, args.title || "") : text });
+      return;
+    }
+    if (op === "exportNotecomplete") {
+      const bytes = session.export_notecomplete();
+      postMessage({ id, result: bytes }, [bytes.buffer]);
       return;
     }
     if (op === "pickLock") {

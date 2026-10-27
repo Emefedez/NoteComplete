@@ -112,6 +112,11 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ **Rectangle highlighter**: Highlight has a third mode, Rectangle; drag a box and it is highlighted with square edges. Exported to Noteful as a highlighter band whose round ends stay inside the box. *Core test (square ends, export inset, project); browser test.*
 - ✅ **"Text and fonts" bar removed** from the bottom of the page. It listed every text run with its size and font, a leftover inspection aid; a text box's font and size are shown in its format bar when selected.
 
+## Eighth round
+- ✅ **Markdown notes beside the pages** (View → Notes, **N**). A panel that docks like Layers (the pages make room; drag its left edge to resize). The editor is TinyMDE: Markdown is formatted and coloured as you type, with a formatting toolbar; **Preview** renders it with pulldown-cmark in the Rust core (raw HTML shown as text, unsafe links dropped). **+ Page** inserts a `<!-- page N -->` marker shown as a chip: click it to go to that page; **Follow** scrolls the notes to the current page's section. Notes autosave per note on the device and travel in projects (.nfedit version 5) and .notecomplete files. To keep the footprint small, the editor script loads only when the panel is first opened and is torn down when it closes.
+- ✅ **Exports**: File → Export Noteful (.noteful), Export Noteful + Markdown (the .noteful plus a .md where each marker becomes a visible "Page N" break), Export NoteComplete (.notecomplete: a tar with manifest.json, note.noteful and notes.md, written and read by the Rust core with the `tar` crate). Opening a .notecomplete (or .notecomp) loads the note with its notes. *Core tests (rendering, safety, export text, archive round trip); browser test: lazy loading, formatting while typing, page chip, preview, close, export, reopen with notes.*
+- ✅ **README** has a "Notes in Markdown" section (and now mentions text boxes, locking, page resizing, tabs and text selection).
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.

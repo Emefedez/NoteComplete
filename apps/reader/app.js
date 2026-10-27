@@ -172,6 +172,10 @@ function canReplace() {
 }
 function reset() {
   resizeMode = null;
+  if (notes?.visible) {
+    notes.close();
+    $("notesToggle").setAttribute("aria-expanded", "false");
+  }
   selection.clear();
   cancelGesture();
   chromeState.reset();
@@ -206,6 +210,7 @@ async function load(file) {
     const result = await call("open", {
       ...prepared,
       project: prepared.kind === "project",
+      notecomplete: prepared.kind === "notecomplete",
       page: 0,
     });
     // Both worker and UI retain the previous document until the replacement validates.
@@ -213,6 +218,7 @@ async function load(file) {
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);
+    notes?.load(find.fingerprint);
     const token = ++epoch;
     revision++;
     doc = result;
@@ -914,6 +920,7 @@ function setPage(index) {
   if (p.view) updateTools(p.view);
   else renderPage(p);
   updateZoom();
+  notes?.pageChanged(index);
 }
 // With a box (page units) the page scrolls so that box sits in the upper third.
 function jump(index, box) {
@@ -1592,7 +1599,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -1625,7 +1632,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#audioToggle": "A", "#audioPage": "⇧A", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -1647,6 +1654,7 @@ function shortcut(e) {
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
+  if (k === "n") return $("notesToggle").click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
   if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
   if (k === "i" && !$("audioToggle").hidden) return $("syncEnabled").click(), true;
@@ -1779,20 +1787,32 @@ $("drop").ondragleave = () => $("drop").classList.remove("drag");
 function filename() {
   return (doc?.title || "Note").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
 }
-async function save(native) {
+// Save the project, or export: Noteful alone, Noteful plus the notes as
+// Markdown (page breaks marked), or a .notecomplete archive holding both.
+async function save(native, as = native ? "noteful" : "project") {
   if (!doc || busy()) return;
   cancelGesture();
   editing = true;
   const token = epoch;
   try {
-    const data = await call(native ? "export" : "save");
+    await notes?.flush();
+    const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete" }[as];
+    const data = await call(op);
     if (token !== epoch) return;
     const delivery = await download(
       data,
-      filename() + (native ? ".noteful" : ".nfedit"),
-      native ? "application/octet-stream" : "application/json",
+      filename() + { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomplete" }[as],
+      as === "project" ? "application/json" : "application/octet-stream",
     );
     if (token !== epoch) return;
+    if (as === "markdown") {
+      const text = await call("exportMarkdown", { title: doc.title || filename() });
+      await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
+    }
+    if (as === "notecomplete" || as === "markdown") {
+      status(as === "markdown" ? ".noteful and .md files exported." : ".notecomplete file exported: the note and its notes.");
+      return;
+    }
     if (!native && !delivery.shared) {
       dirty = false;
       savedState();
@@ -1812,6 +1832,38 @@ async function save(native) {
 }
 $("save").onclick = () => save(false);
 $("native").onclick = () => save(true);
+$("nativeMarkdown").onclick = () => save(true, "markdown");
+$("exportNotecomplete").onclick = () => save(true, "notecomplete");
+// Notes panel: Markdown beside the pages (notes.js, loaded on first use).
+let notes = null, notesLoading = null;
+function notesApi() {
+  return notesLoading ||= import("./notes.js").then(({ notesController }) => {
+    notes = notesController({ call, jump, currentPage: () => page, store: library.store, status });
+    if (doc) return notes.load(find.fingerprint).then(() => notes);
+    return notes;
+  });
+}
+$("notesToggle").onclick = async () => {
+  const api = await notesApi();
+  if (api.visible) await api.close();
+  else await api.open();
+  $("notesToggle").setAttribute("aria-expanded", String(api.visible));
+  resize();
+};
+$("closeNotes").onclick = () => $("notesToggle").click();
+// The panel's left edge resizes it; the width is remembered.
+try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
+$("notesResize").onpointerdown = (down) => {
+  down.preventDefault();
+  const start = down.clientX, width = $("notesPanel").offsetWidth;
+  $("notesResize").setPointerCapture(down.pointerId);
+  $("notesResize").onpointermove = (e) => { $("notesPanel").style.width = `${Math.max(240, Math.min(innerWidth * 0.7, width + start - e.clientX))}px`; };
+  $("notesResize").onpointerup = () => {
+    $("notesResize").onpointermove = $("notesResize").onpointerup = null;
+    try { localStorage.setItem("notecomplete-notes-width", String($("notesPanel").offsetWidth)); } catch { /* Optional. */ }
+    resize();
+  };
+};
 $("svg").onclick = async () => {
   const p = panels[page];
   if (p?.pdfReady && !busy()) {
@@ -2061,7 +2113,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }

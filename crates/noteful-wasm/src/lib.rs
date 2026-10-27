@@ -118,6 +118,21 @@ impl EditorSession {
             .resize_page(page, [width, height], rect)
             .map_err(js_error)
     }
+    /// Open a `.notecomplete` archive: the note and its Markdown notes.
+    pub fn open_notecomplete(data: &[u8]) -> Result<EditorSession, JsValue> {
+        Ok(Self {
+            inner: noteful_core::Editor::open_notecomplete(data).map_err(js_error)?,
+        })
+    }
+    pub fn markdown(&self) -> String {
+        self.inner.markdown().to_owned()
+    }
+    pub fn set_markdown(&mut self, markdown: &str) -> Result<(), JsValue> {
+        self.inner.set_markdown(markdown).map_err(js_error)
+    }
+    pub fn export_notecomplete(&self) -> Result<Vec<u8>, JsValue> {
+        self.inner.export_notecomplete().map_err(js_error)
+    }
     pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.set_locked(page, id, locked).map_err(js_error)
@@ -249,6 +264,20 @@ fn summary(data: &[u8]) -> noteful_core::Result<String> {
 }
 
 /// Versioned, JavaScript-safe summary. Input is a Uint8Array; result is JSON text.
+/// Preview HTML for Markdown notes (raw HTML shown as text; see markdown.rs).
+#[wasm_bindgen]
+pub fn markdown_html(src: &str) -> String {
+    noteful_core::markdown_html(src)
+}
+/// Notes as a plain .md file, page markers turned into visible breaks.
+#[wasm_bindgen]
+pub fn markdown_export(src: &str, title: &str) -> String {
+    noteful_core::markdown_export(src, title)
+}
+#[wasm_bindgen]
+pub fn is_notecomplete(data: &[u8]) -> bool {
+    noteful_core::is_notecomplete(data)
+}
 #[wasm_bindgen]
 pub fn inspect_document(data: &[u8]) -> Result<String, JsValue> {
     summary(data).map_err(|error| JsValue::from_str(&error.to_string()))

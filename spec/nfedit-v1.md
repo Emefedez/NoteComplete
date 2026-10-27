@@ -83,6 +83,14 @@ Native export writes each text box as a kind-2 object with the field layout and 
 
 `ResizePage` sets a page slot's size. Ink, objects and text keep their page coordinates (the page grows or shrinks from its top-left corner). The PDF background keeps its rectangle unless `pdf_rect` (optional, only for PDF pages) gives a new one. Sizes must be finite, at least 10 units and within ±1e6; identical sizes add no action. Views report the current `size` and the page's `base_size` before resizes. Native export writes the size in background tag 1 and the PDF rectangle in background tag 9 (type 0x23, as on widened Noteful pages), so the PDF stays in place; inserted pages are written at their final size.
 
+## Markdown notes (project version 5)
+
+A project may carry the note's Markdown notes in a top-level `markdown` string (omitted when empty; at most 8 MiB). They are not part of the edit history. A line consisting of `<!-- page N -->` ties the text after it to display page N (1-based).
+
+## .notecomplete archives
+
+A `.notecomplete` file is a POSIX ustar archive with `manifest.json` (`{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`), `note.noteful` (the native export of the note) and `notes.md` (the notes, page markers kept). Readers require the manifest's format and the note entry; other entries are ignored.
+
 ## Native export
 
 `Editor::export_noteful()` and `EditorSession.export_noteful()` flatten the applied `.nfedit` history into a native `.noteful` archive. CLI: `noteful export project.nfedit > edited.noteful`. The source is never changed. With cursor zero, export returns the exact original bytes.
