@@ -1,3 +1,4 @@
+mod mcp;
 use noteful_core::Package;
 use std::{
     io::{self, Read, Write},
@@ -8,7 +9,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let cmd = args
         .next()
-        .ok_or("Usage: noteful inspect|verify|render|export <file|->")?;
+        .ok_or("Usage: noteful inspect|verify|render|export <file|->, or noteful mcp")?;
+    if cmd == "mcp" {
+        return mcp::serve();
+    }
     let source = args.next().ok_or("Missing input file (or - for stdin)")?;
     if args.next().is_some() {
         return Err("Too many arguments".into());

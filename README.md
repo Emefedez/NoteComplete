@@ -16,7 +16,11 @@ NoteComplete is an independent desktop and web companion for people who take not
 - **Feels like a desktop app**: a native-style File / Edit / View menubar that shrinks while you scroll, and a <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> command search (“page 12”, “export”, “highlight”).
 - **Private by default**: everything is processed locally. Drive access is read-only; nothing is uploaded.
 
-Coming next: text search across PDF text, on-demand handwriting OCR and transcripts; inserting pages with custom sizes or PDFs; flashcards and quizzes generated with your own Claude Code / Antigravity / Codex subscription; an MCP server for AI agents. See [next steps](DEVELOPMENT.md#next-steps).
+- **Find anything**: one search over typed text, PDF text, transcripts and, on request, OCR of handwriting and scans (<kbd>Ctrl</kbd>+<kbd>F</kbd>).
+- **Add pages**: blank pages of any size, or pages from another PDF at the note's scale with extra writing space beside them, like widened pages in Noteful.
+- **Study with your AI subscription**: the bundled MCP server lets Claude Code, Antigravity or Codex read your pages, handwriting included, and write Anki flashcard decks. See [AI agents](docs/MCP.md).
+
+Coming next: flashcards and quizzes inside the app, page reordering and deletion. See [next steps](DEVELOPMENT.md#next-steps).
 
 ## Get it
 
@@ -30,7 +34,7 @@ Coming next: text search across PDF text, on-demand handwriting OCR and transcri
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local `.noteful`, `.nfedit`, PDF or image.
 3. Save your work with **File → Save project** (`.nfedit`, keeps the original plus your edits) or export a `.noteful` with **File → Export** (experimental: modified exports have not yet been verified in Noteful itself).
 
-Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
+AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
 
 ## Build from source
 
