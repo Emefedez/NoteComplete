@@ -198,7 +198,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('deckSaved').textContent = unsaved ? 'Not saved yet' : 'Saved with this note';
     renderCards();
     $('deckList').hidden = false; $('deckPractice').hidden = true;
-    if ($('deckDialog').classList.contains('floating')) { $('deckDialog').close(); $('deckDialog').classList.remove('floating', 'minimized'); $('deckDialog').style.left = $('deckDialog').style.top = ''; }
+    if ($('deckDialog').classList.contains('floating')) { $('deckDialog').close(); $('deckDialog').classList.remove('floating', 'minimized'); for (const p of ['left', 'top', 'width', 'height', 'right', 'bottom', 'margin']) $('deckDialog').style[p] = ''; }
     if (!$('deckDialog').open) $('deckDialog').showModal();
   }
   // Cards read like cards: question over answer. Clicking one edits it in place,
@@ -273,37 +273,15 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   $('deckDialog').addEventListener('close', () => { closeFix(); closeAsk(); });
   // Flip-card practice: unknown cards come back once more at the end. It runs in a
   // floating window, like the quiz, so the pages stay visible and usable beside it.
-  const POSITION = 'notecomplete-practice-position';
   function floatDeck(on) {
     const dialog = $('deckDialog');
     if (dialog.open) dialog.close();
     dialog.classList.toggle('floating', on);
     dialog.classList.remove('minimized');
-    dialog.style.left = dialog.style.top = '';
-    if (on) {
-      try { const at = JSON.parse(localStorage.getItem(POSITION) || 'null'); if (at) place(at.left, at.top); } catch { /* Optional. */ }
-      dialog.show();
-    } else dialog.showModal();
+    // Place and size come from the floating window (floating.js) while it floats.
+    for (const p of ['left', 'top', 'width', 'height', 'right', 'bottom', 'margin']) dialog.style[p] = '';
+    if (on) { dialog.show(); if (document.activeElement === $('deckTitle')) $('deckTitle').blur(); } else dialog.showModal();
   }
-  // Keep the window on screen wherever it is put.
-  function place(left, top) {
-    const dialog = $('deckDialog'), w = dialog.offsetWidth || 520, h = dialog.offsetHeight || 300;
-    dialog.style.left = `${Math.max(0, Math.min(innerWidth - Math.min(w, innerWidth), left))}px`;
-    dialog.style.top = `${Math.max(0, Math.min(innerHeight - 40, top))}px`;
-    void h;
-  }
-  $('deckDialog').querySelector('.deck-head').addEventListener('pointerdown', down => {
-    const dialog = $('deckDialog');
-    if (!dialog.classList.contains('floating') || down.button !== 0 || down.target.closest('input, button, select')) return;
-    const box = dialog.getBoundingClientRect(), dx = down.clientX - box.left, dy = down.clientY - box.top;
-    const move = e => place(e.clientX - dx, e.clientY - dy);
-    const up = () => {
-      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
-      try { localStorage.setItem(POSITION, JSON.stringify({ left: parseFloat(dialog.style.left), top: parseFloat(dialog.style.top) })); } catch { /* Optional. */ }
-    };
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
-    down.preventDefault();
-  });
   $('deckMinimize').onclick = () => $('deckDialog').classList.toggle('minimized');
   $('deckFloatClose').onclick = () => $('deckDialog').close();
   $('deckPracticeStart').onclick = () => {

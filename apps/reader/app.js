@@ -14,7 +14,7 @@ import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
-import { resizable } from "./panels.js";
+import { floatingWindow } from "./floating.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -2036,8 +2036,8 @@ $("speechSettingsToggle").onclick = () => {
 };
 try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
-resizable($("audioBar"), "notecomplete-audio-panel", { scroll: true });
-resizable($("chatPanel"), "notecomplete-chat-panel");
+floatingWindow($("audioBar"), { key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
+floatingWindow($("chatPanel"), { key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
 $("audioClose").onclick = () => toggleAudio(false);
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
@@ -2576,13 +2576,17 @@ const study = studyController({
     return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
   },
 });
+// The quiz and the flashcard practice are floating windows too.
+floatingWindow($("quizPanel"), { key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
+floatingWindow($("deckDialog"), { key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });
 // Focus: the sun in the quiz and flashcard windows dims everything behind them
 // while one of them is open (the pages can still be scrolled underneath).
 let focusDim = false;
 try { focusDim = localStorage.getItem("notecomplete-focus-dim") === "1"; } catch { /* Optional. */ }
 function syncDim() {
-  const quiz = !$("quizPanel").hidden && !$("quizPanel").classList.contains("minimized");
-  const cards = $("deckDialog").open && $("deckDialog").classList.contains("floating") && !$("deckDialog").classList.contains("minimized");
+  const shown = (el) => !el.classList.contains("minimized") && !el.classList.contains("in-tray");
+  const quiz = !$("quizPanel").hidden && shown($("quizPanel"));
+  const cards = $("deckDialog").open && $("deckDialog").classList.contains("floating") && shown($("deckDialog"));
   document.body.classList.toggle("focus-dim", focusDim && (quiz || cards));
   for (const id of ["quizDim", "deckDim"]) $(id).setAttribute("aria-pressed", String(focusDim));
 }

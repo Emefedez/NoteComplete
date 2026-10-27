@@ -1248,9 +1248,43 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .panel-grip { position: absolute; z-index: 2; }
 .grip-left { left: -3px; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
 .grip-bottom { bottom: -3px; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
-.grip-corner { left: -4px; bottom: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
 .grip-top { top: -3px; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
-.grip-left:hover, .grip-bottom:hover, .grip-top:hover { background: var(--accent); opacity: .35; border-radius: 3px; }
+.grip-right { right: -3px; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.grip-bottom-left, .grip-bottom-right, .grip-top-left, .grip-top-right { width: 14px; height: 14px; z-index: 3; }
+.grip-bottom-left { left: -4px; bottom: -4px; cursor: nesw-resize; }
+.grip-bottom-right { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.grip-top-left { left: -4px; top: -4px; cursor: nwse-resize; }
+.grip-top-right { right: -4px; top: -4px; cursor: nesw-resize; }
+.grip-left:hover, .grip-right:hover, .grip-bottom:hover, .grip-top:hover { background: var(--accent); opacity: .35; border-radius: 3px; }
+/* The bottom-right corner shows a small mark that it can be dragged. */
+.grip-bottom-right::after { content: ""; position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border-right: 1.5px solid var(--line); border-bottom: 1.5px solid var(--line); }
+/* Floating windows: dragged by their head; _ puts them in the tray, □ makes them small or large. */
+.window-head { cursor: move; }
+/* A narrow window squeezes its head's selects and titles, never its buttons, so _ □ × stay inside. */
+.window-head { min-width: 0; overflow: hidden; }
+.window-head > :is(button, a, .icon-button) { flex: none; }
+.window-head > :is(select, input, h2, strong, span) { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head select { width: auto; max-width: 9.5em; }
+.deck-head > input { flex: 1 1 4em; }
+.window-head :is(button, input, select, a) { cursor: pointer; }
+.in-tray { display: none !important; }
+.dragging { user-select: none; }
+.window-away svg, .window-size svg { width: 14px; height: 14px; }
+.chat-panel.compact, .audio-panel.compact { height: auto !important; }
+.chat-panel.compact > :not(.chat-head, .panel-grip), .audio-panel.compact > .panel-body { display: none !important; }
+.quiz-panel.minimized { height: auto !important; width: auto !important; }
+.deck-dialog.floating.minimized { height: auto !important; }
+/* The floating practice scrolls inside, so its edge grips never add scrollbars. */
+.deck-dialog.floating[open] { display: flex; flex-direction: column; overflow: visible; }
+.deck-dialog.floating #deckPractice { flex: 1; min-height: 0; overflow: auto; }
+.window-tray { position: fixed; left: 12px; bottom: 12px; z-index: 62; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.window-tray-button { min-height: 26px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--menu); box-shadow: var(--shadow-pop); font-size: 12px; }
+.window-tray-menu { display: grid; min-width: 180px; padding: 5px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
+.window-tray-menu[hidden] { display: none; }
+.window-tray-menu button { justify-content: flex-start; }
+/* The tray opens upwards: its caret points up when closed. */
+.window-tray .caret { transform: translateY(3px) rotate(-135deg); }
+.window-tray [aria-expanded="true"] .caret { transform: rotate(45deg); }
 /* A small handle shows that the bottom edge can be dragged. */
 .grip-bottom::after { content: ""; position: absolute; left: 50%; bottom: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line); }
 .grip-bottom:hover::after { background: transparent; }
