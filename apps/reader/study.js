@@ -342,6 +342,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('practiceEdit').hidden = $('practiceCheck').hidden = $('practiceDiscard').hidden = $('practiceAsk').hidden = false;
     showExplained();
   };
+  // 2 / I knew it: the card is done. 1 / Not yet: it comes back once more at the end.
+  $('practiceKnow').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) practice.known++; practice.seen++; showCard(); };
+  $('practiceAgain').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) { practice.again.add(card); practice.queue.push(card); } practice.seen++; showCard(); };
   // Correcting a card while practising, as quizzes do: edit it, have the AI
   // double check it against its page, or discard it. Changes are saved at once.
   async function saveDeck() {
