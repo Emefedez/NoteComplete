@@ -1,4 +1,10 @@
-# NoteComplete
+# noteful-re: reverse engineering the Noteful format
+
+> **This branch is the research record.** It keeps everything used to work out the `.noteful` format: the Ghidra scripts and static-analysis evidence (`research/ghidra`, `research/evidence`), the independent Python parser/renderer oracle (`research/python`), the legacy comparison viewer, the corpus analysis and validation tools, and the Rust/Python parity checks. The format itself is described in [spec/noteful-v0.1.md](spec/noteful-v0.1.md) and the provenance in [docs/RESEARCH_HISTORY.md](docs/RESEARCH_HISTORY.md). A short writeup will be added here.
+>
+> The NoteComplete app built on these findings lives on [`main`](https://github.com/Emefedez/noteful-re/tree/main). Format discoveries land here first (with evidence and oracle parity) and are then ported to the client's core.
+
+## NoteComplete at the time of this snapshot
 
 *a RE noteful viewer*
 
