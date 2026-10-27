@@ -152,6 +152,7 @@ The owner's requests from the latest review, in one place, with how each was che
 - [D] **Quiz hints open large**: click (or Enter on) the hint image to see it fitted to the window; Esc or a click closes it. *Browser test: 1129×669, closes both ways, the quiz stays.*
 - [D] **Double check is light red** in the quiz and the flashcards: it is for when something looks wrong.
 - [D] **Quizzes and flashcards cover whole pages evenly.** They always saw the full page (tape lifted), but the flashcard instructions told the AI to weigh handwriting, highlights and taped parts heavily, which biased questions towards them. Both prompts now ask for all of each page's material evenly.
+- [!] **Interface size**: Ctrl+Shift+− / + / 0 (or View → Interface smaller / larger / 100%) scales the whole interface in every tab and window and is remembered; Ctrl+− / + / 0 stay the document's zoom. The window type the app uses has no built-in zoom, so the interface could not be scaled at all before. *Stub-Electron test: Spanish, US and numpad keys; not yet tried in the real app.*
 - [ ] **Floating windows** (Ask AI, audio, quiz, flashcards): drag them anywhere by their head, resize from the corner, keep the head and × on screen, and _ □ × in the head: _ minimizes to a list near the windows to bring them back, □ makes them small or large, × closes.
 - [ ] **Export as PDF and as images** next to SVG: a row SVG · PDF · IMG, with a menu for the image type.
 

@@ -211,6 +211,7 @@ header > .row {
   width: 290px;
   z-index: 30;
 }
+.menu-group { display: contents; }
 .menu-content button {
   width: 100%;
   justify-content: space-between;

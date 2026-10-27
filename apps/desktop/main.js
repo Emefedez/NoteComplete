@@ -25,6 +25,27 @@ const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
 // The reader's own chrome colour, painted before a tab has drawn anything so
 // new tabs and windows never flash white.
 const backdrop = () => nativeTheme.shouldUseDarkColors ? '#202328' : '#f7f8fa';
+// Interface size (the whole UI, like a browser's zoom), the same in every tab and
+// window and remembered: Ctrl+Shift+− / + / 0 or View → Interface size. Ctrl+− / + / 0
+// without Shift stay the document's zoom.
+const UI_SIZES = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
+let uiZoom = 1;
+const uiFile = () => path.join(app.getPath('userData'), 'interface.json');
+function setUiZoom(step) {
+  const at = UI_SIZES.findIndex(z => z >= uiZoom - 0.001);
+  uiZoom = step === 0 ? 1 : UI_SIZES[Math.max(0, Math.min(UI_SIZES.length - 1, (at < 0 ? 4 : at) + step))];
+  for (const view of views.values()) if (!view.webContents.isDestroyed()) view.webContents.setZoomFactor(uiZoom);
+  writeFile(uiFile(), JSON.stringify({ zoom: uiZoom })).catch(() => {});
+  return uiZoom;
+}
+// Which interface-size step a key press asks for (Shift held), on US and Spanish layouts.
+export function uiZoomStep(input) {
+  if (!(input.control || input.meta) || !input.shift || input.alt) return null;
+  if (input.key === '_' || input.code === 'NumpadSubtract') return -1;
+  if (input.key === '+' || input.key === '*' || input.code === 'NumpadAdd') return 1;
+  if (input.code === 'Digit0' || input.code === 'Numpad0') return 0;
+  return null;
+}
 function layout(win) {
   const { width, height } = win.getContentBounds();
   for (const tab of tabs.list(win.id)) views.get(tab.id)?.setBounds({ x: 0, y: 0, width, height });
@@ -54,8 +75,11 @@ function openTab(win) {
   contents.on('will-navigate', (event, url) => { if (!url.startsWith(home)) event.preventDefault(); });
   // Tab keys work in every tab; Ctrl+W must close the tab, not the window.
   // The tab's window is looked up each time: a tab can move to another window.
+  contents.on('did-finish-load', () => contents.setZoomFactor(uiZoom));
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
+    const size = uiZoomStep(input);
+    if (size !== null) { setUiZoom(size); event.preventDefault(); return; }
     const key = input.key.toLowerCase(), here = windowOf(contents);
     const step = key === 'tab' ? (input.shift ? -1 : 1) : key === 'pagedown' ? 1 : key === 'pageup' ? -1 : 0;
     if (!here) return;
@@ -149,8 +173,9 @@ if (!primary) app.quit();
 app.on('second-instance', () => {
   if (app.isReady()) createWindow();
 });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!primary) return;
+  try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
   // Only one web permission: writing text to the clipboard (Grab → Copy text), from the reader itself.
   const allowed = (permission, url = '') => permission === 'clipboard-sanitized-write' && String(url).startsWith(home);
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.())));
@@ -229,6 +254,7 @@ app.whenReady().then(() => {
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
   ipcMain.handle('tabs:close', guarded((event, id) => { if (tabs.windowOf(id) === tabs.windowOf(event.sender.id)) requestClose(id); }));
   ipcMain.handle('tabs:close-self', guarded(event => closeTab(event.sender.id)));
+  ipcMain.handle('ui:zoom', guarded((_event, step) => setUiZoom([-1, 0, 1].includes(step) ? step : 0)));
   ipcMain.handle('tabs:detach', guarded((event, id) => tabs.windowOf(id) === tabs.windowOf(event.sender.id) && detachTab(id)));
   // Keep the backdrop in step with the system theme.
   nativeTheme.on('updated', () => {

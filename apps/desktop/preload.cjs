@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
 });
 contextBridge.exposeInMainWorld('notecompleteWindows', {
+  zoom: step => ipcRenderer.invoke('ui:zoom', step),
   open: () => ipcRenderer.invoke('windows:new'),
   list: () => ipcRenderer.invoke('windows:list'),
   focus: id => ipcRenderer.invoke('windows:focus', id),
