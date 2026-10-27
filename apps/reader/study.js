@@ -42,6 +42,16 @@ export function cleanQuestions(value) {
     .map(q => ({ question: q.question.trim(), options: q.options.map(String), answer: q.answer, explanation: String(q.explanation || ''), page: Number.isInteger(q.page) ? q.page : undefined }));
 }
 
+// Double check of one flashcard while practising: the AI re-reads the card's
+// page and keeps or fixes the answer (and the question only if it must).
+export function cardCheckPrompt(card, withPage) {
+  return `A student practising a flashcard made from their notes thinks it may be wrong${withPage ? ' (the attached image and text are the page it comes from)' : ''}. Using the notes, check the answer and fix it if it is wrong, incomplete or misleading: keep it short and put each item of a list on its own line (\\n). Change the question only if it is ambiguous or does not match the answer. Write in the card's language.\nQuestion: ${card.front}\nAnswer: ${card.back}\nReply with ONLY JSON: {"correct": true or false, "front": "the question", "back": "the answer", "reason": "two or three sentences that cite the notes"}`;
+}
+export function cardVerdict(value, card) {
+  const text = (v, fallback) => typeof v === 'string' && v.trim() ? listLines(v.trim()) : fallback;
+  return { correct: value?.correct === true, front: text(value?.front, card.front), back: text(value?.back, card.back), reason: typeof value?.reason === 'string' ? value.reason.trim() : '' };
+}
+
 export function prompts(kind, { amount, language, title }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
   const intro = `You are helping a student study their own notes, "${title}". You get page images and the text extracted from those pages. Handwriting, highlights and anything under tape are the student's own emphasis and answers: weigh them heavily. Ignore slide decoration and page furniture.`;
@@ -247,6 +257,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     status('Anki deck exported. In Anki: File → Import, then choose the file.');
   };
   $('deckClose').onclick = () => $('deckDialog').close();
+  $('deckDialog').addEventListener('close', () => closeFix());
   // Flip-card practice: unknown cards come back once more at the end.
   $('deckPracticeStart').onclick = () => {
     const queue = deck.cards.filter(c => c.front.trim() && c.back.trim()).sort(() => Math.random() - 0.5);
@@ -257,6 +268,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   };
   function showCard() {
     const card = practice.queue[0];
+    closeFix();
+    $('practiceEdit').hidden = $('practiceCheck').hidden = $('practiceDiscard').hidden = true;
+    $('practiceDiscard').dataset.armed = ''; $('practiceDiscard').textContent = 'Discard';
     if (!card) {
       $('practiceFront').textContent = `Done: ${practice.known} of ${practice.total} known first time.`;
       $('practiceBack').textContent = ''; $('practiceBack').hidden = true; $('practiceReveal').hidden = true; $('practiceKnow').hidden = $('practiceAgain').hidden = true;
@@ -272,18 +286,101 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('practicePage').textContent = card.page ? `p. ${card.page}` : '';
     $('practicePage').onclick = () => jump(card.page - 1);
   }
-  $('practiceReveal').onclick = () => { $('practiceBack').hidden = false; $('practiceReveal').hidden = true; $('practiceKnow').hidden = $('practiceAgain').hidden = false; };
+  $('practiceReveal').onclick = () => {
+    $('practiceBack').hidden = false; $('practiceReveal').hidden = true; $('practiceKnow').hidden = $('practiceAgain').hidden = false;
+    $('practiceEdit').hidden = $('practiceCheck').hidden = $('practiceDiscard').hidden = false;
+  };
+  // Correcting a card while practising, as quizzes do: edit it, have the AI
+  // double check it against its page, or discard it. Changes are saved at once.
+  async function saveDeck() {
+    deck.title = $('deckTitle').value.trim() || deck.title;
+    const decks = await savedDecks(), value = { ...deck, cards: deck.cards.filter(c => c.front.trim() && c.back.trim()) };
+    const at = decks.findIndex(d => d.id === deck.id);
+    if (at >= 0) decks[at] = value; else decks.unshift(value);
+    await library.store.set('settings', key(), decks);
+    $('deckSaved').textContent = 'Saved with this note';
+  }
+  let fixing = null;
+  function closeFix() {
+    if (fixing?.asking) ai?.cancel('card-check');
+    fixing = null;
+    $('practiceFixBox').hidden = true;
+  }
+  function openFix() {
+    const card = practice?.queue[0];
+    if (!card) return null;
+    closeFix();
+    fixing = { card };
+    $('practiceFixReason').textContent = '';
+    $('practiceFixFront').value = card.front; $('practiceFixBack').value = card.back;
+    $('practiceFixBox').hidden = false;
+    for (const area of [$('practiceFixFront'), $('practiceFixBack')]) grow(area);
+    return fixing;
+  }
+  for (const area of [$('practiceFixFront'), $('practiceFixBack')]) area.oninput = () => grow(area);
+  $('practiceEdit').onclick = () => { if (openFix()) $('practiceFixBack').focus(); };
+  $('practiceCheck').onclick = async () => {
+    if (!ai) return unavailable();
+    const fix = openFix();
+    if (!fix) return;
+    const { card } = fix;
+    fix.asking = true;
+    $('practiceFixReason').textContent = 'Asking your AI tool to check this card against its page…';
+    try {
+      let provider = 'claude', model = '';
+      try { provider = localStorage.getItem('notecomplete-ai-provider') || provider; model = localStorage.getItem('notecomplete-ai-model:' + provider) || ''; } catch { /* Optional. */ }
+      const context = card.page ? await pagesContext([card.page - 1], { pageCanvas, pageText }) : { images: [], text: '' };
+      if (fixing !== fix) return;
+      const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, tag: 'card-check', prompt: `${cardCheckPrompt(card, !!card.page)}${context.text ? `\n\n${context.text}` : ''}` });
+      fix.asking = false;
+      if (fixing !== fix) return;
+      const verdict = cardVerdict(jsonFrom(text), card);
+      $('practiceFixReason').textContent = `${verdict.correct ? 'The card looks right.' : 'Suggested correction below; edit it if you like.'}${verdict.reason ? ` ${verdict.reason}` : ''}`;
+      $('practiceFixFront').value = verdict.front; $('practiceFixBack').value = verdict.back;
+      for (const area of [$('practiceFixFront'), $('practiceFixBack')]) grow(area);
+    } catch (error) {
+      fix.asking = false;
+      if (fixing === fix) $('practiceFixReason').textContent = `${error.message} You can still correct the card yourself here.`;
+    }
+  };
+  $('practiceFixSave').onclick = async () => {
+    const card = fixing?.card, front = $('practiceFixFront').value.trim(), back = $('practiceFixBack').value.trim();
+    if (!card || !front || !back) return;
+    card.front = front; card.back = back;
+    closeFix();
+    $('practiceFront').textContent = card.front; $('practiceBack').textContent = card.back;
+    await saveDeck();
+    status('Card corrected and saved with this note.');
+  };
+  $('practiceFixCancel').onclick = closeFix;
+  // Discard needs a second press: the card leaves the deck for good.
+  $('practiceDiscard').onclick = async () => {
+    const card = practice?.queue[0];
+    if (!card) return;
+    if (!$('practiceDiscard').dataset.armed) { $('practiceDiscard').dataset.armed = '1'; $('practiceDiscard').textContent = 'Press again to discard'; return; }
+    practice.queue.shift();
+    practice.total--;
+    deck.cards = deck.cards.filter(c => c !== card);
+    $('deckCount').textContent = `${deck.cards.length} cards`;
+    await saveDeck();
+    status('Card discarded from the deck.');
+    showCard();
+  };
   $('practiceKnow').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) practice.known++; practice.seen++; showCard(); };
   $('practiceAgain').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) { practice.again.add(card); practice.queue.push(card); } practice.seen++; showCard(); };
-  // Practice keys: Space or Enter shows the answer, 1 not yet, 2 I knew it.
-  $('deckDialog').addEventListener('keydown', e => {
+  // Practice keys: Space or Enter shows the answer, 1 not yet, 2 I knew it,
+  // E edit, V double check, X (twice) discard. Esc in the correction box closes it.
+  // Listened on the document: once Show answer hides itself, focus is on the body.
+  document.addEventListener('keydown', e => {
+    if (!$('deckDialog').open) return;
+    if (e.key === 'Escape' && fixing) { e.preventDefault(); closeFix(); return; }
     if ($('deckPractice').hidden || e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.('input,textarea,select')) return;
-    const button = { ' ': 'practiceReveal', Enter: 'practiceReveal', 1: 'practiceAgain', 2: 'practiceKnow' }[e.key];
+    const button = { ' ': 'practiceReveal', Enter: 'practiceReveal', 1: 'practiceAgain', 2: 'practiceKnow', e: 'practiceEdit', v: 'practiceCheck', x: 'practiceDiscard' }[e.key.length === 1 ? e.key.toLowerCase() : e.key];
     if (!button || $(button).hidden) return;
     e.preventDefault();
     $(button).click();
   });
-  $('practiceBackToList').onclick = () => { $('deckPractice').hidden = true; $('deckList').hidden = false; };
+  $('practiceBackToList').onclick = () => { closeFix(); $('deckPractice').hidden = true; $('deckList').hidden = false; renderCards(); };
 
   // Saved decks and quizzes of this note, in two lists. Deleting asks first and
   // can be undone until the dialog closes.

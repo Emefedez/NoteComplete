@@ -692,7 +692,13 @@
         <p id="practiceBack" class="practice-back" hidden></p>
       </div>
     </div>
-    <div class="ocr-actions"><button id="practicePage" type="button" hidden></button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
+    <div id="practiceFixBox" class="quiz-check practice-fix" hidden>
+      <p id="practiceFixReason" class="muted" role="status" aria-live="polite"></p>
+      <textarea id="practiceFixFront" rows="1" aria-label="Card question"></textarea>
+      <textarea id="practiceFixBack" rows="1" aria-label="Card answer"></textarea>
+      <div class="quiz-actions"><span class="spacer"></span><button id="practiceFixCancel" type="button">Cancel</button><button id="practiceFixSave" type="button" class="primary">Save correction</button></div>
+    </div>
+    <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
   </div>
 </dialog>
 

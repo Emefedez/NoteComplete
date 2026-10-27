@@ -48,3 +48,16 @@ test('inline numbered lists from the model are split into one item per line', ()
   for (const same of ['Hamming (8,4) y H(7,4)', 'Solo el paso 2) importa', '1) ya\n2) separado']) assert.equal(listLines(same), same);
   assert.match(prompts('cards', { amount: 1, language: '', title: 'T' }), /own line/);
 });
+
+test('A double-checked card keeps what the AI leaves out and splits list answers', async () => {
+  const { cardCheckPrompt, cardVerdict } = await import('./study.js');
+  const card = { front: '¿Qué guarda la DRAM?', back: 'Un bit en un biestable', page: 7 };
+  const prompt = cardCheckPrompt(card, true);
+  assert.match(prompt, /Question: ¿Qué guarda la DRAM\?\nAnswer: Un bit en un biestable\n/);
+  assert.match(prompt, /attached image/);
+  assert.doesNotMatch(cardCheckPrompt(card, false), /attached image/);
+  assert.deepEqual(cardVerdict({ correct: false, back: 'Tipos: 1) SRAM 2) DRAM', reason: ' Página 7. ' }, card),
+    { correct: false, front: card.front, back: 'Tipos:\n1) SRAM\n2) DRAM', reason: 'Página 7.' });
+  assert.deepEqual(cardVerdict(null, card), { correct: false, front: card.front, back: card.back, reason: '' });
+  assert.equal(cardVerdict({ correct: true, front: '  ', back: '' }, card).back, card.back);
+});

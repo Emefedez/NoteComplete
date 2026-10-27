@@ -127,6 +127,12 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ **Resize Ask AI and the audio panel vertically**: drag the top edge, the bottom edge (now with a visible handle) or the corner. The audio panel's grips scrolled away with its content; it now scrolls inside, so they stay on the frame. *Browser test: chat top 112 → 234, height 633 → 410; audio height 633 → 482 after scrolling its content.*
 - ✅ **The note's MCP tools now reach Antigravity too** (Codex already had them). Antigravity has no flag for it, so each request's temporary workspace carries a NoteComplete plugin (`.agents/plugins/notecomplete/`) with the server; your global Antigravity settings are not changed. *Checked with the real agy: it lists all seven notecomplete tools.*
 
+## Tenth round
+- ✅ **Closing a window no longer crashes** with "Object has been destroyed": the window's cleanup read its id after Electron had destroyed it. *Checked in the real app: closed through Hyprland, no error dialog.*
+- ⏳ **High power draw**: not found yet. Idle and hidden, the app uses about 1% of a core, even with Memoria 1 (259 MB) open, and loading it takes a few seconds of CPU. Drawing on screen and scrolling are still to be measured with the window visible.
+- ✅ **Correct flashcards while practising**, as quizzes allow. After Show answer: Edit (E) corrects the card yourself; Double check (V) has your AI tool check the card against its page (image and text) and puts its suggestion and reason in an editable box; Discard (X, press twice) removes a wrong card. Corrections save to the deck at once. *Browser test with a fake AI bridge: the request carries the card's page, the suggestion lands one item per line, saved and discarded cards are right in storage.*
+- ✅ The practice keys (1, 2) work after Show answer again: hiding that button had moved focus out of the dialog.
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.
