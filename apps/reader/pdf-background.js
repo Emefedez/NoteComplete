@@ -44,6 +44,13 @@ export function rasterTarget(original, cssWidth, pixelRatio = globalThis.deviceP
   };
 }
 
+// Where the PDF page sits on its Noteful page. Widened pages keep the PDF at
+// native scale in `rect`; older cores without it fill the whole page.
+export function backgroundPlacement(background, size) {
+  const [x, y, width, height] = background?.rect ?? [0, 0, size[0], size[1]];
+  return { x, y, width, height, share: width / size[0] };
+}
+
 export class PdfBackgrounds {
   constructor(read) {
     this.read = read;

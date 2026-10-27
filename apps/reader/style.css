@@ -1003,19 +1003,93 @@ main.drag {
 }
 
 /* Compact document chrome and floating tool settings preserve the canvas. */
-header.chrome { min-height: 48px; padding: 4px 12px; justify-content: flex-start; gap: 8px; }
+/* Global command bar: one row on every screen, replacing the old document menu. */
+header.chrome { min-height: 48px; padding: 4px 10px; justify-content: flex-start; gap: 6px; }
 header .app-icon, header h1 { display: none; }
-header .brand > div { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
-header p { font-size: 13px; max-width: 65vw; }
-.document-menu > summary { width: 40px; height: 40px; padding: 10px; }
-.document-menu > summary svg { display: block; }
-.document-menu .menu-content { left: 0; right: auto; width: min(290px, calc(100vw - 24px)); }
-.document-menu #open, .document-menu #save { width: 100%; max-width: none; font-size: 13px; gap: 8px; justify-content: flex-start; }
-.document-menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px; }
-#menuTitle { max-width: none; padding: 6px 10px; font-size: 12px; }
-.segmented > header.chrome { padding: 0; border: 0; min-height: 36px; background: transparent; }
-.segmented > header.chrome .brand { display: none; }
-.segmented > header.chrome .document-menu > summary { height: 36px; }
+header .brand { flex: 0 1 auto; min-width: 60px; margin-right: 6px; }
+header .brand > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+header p { font-size: 13px; max-width: 34vw; }
+.bar-icon { width: 36px; padding: 7px; flex: none; }
+.bar-icon svg, .bar-actions svg, .palette-trigger svg { width: 17px; height: 17px; flex: none; }
+.bar-actions { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.bar-actions > button, .bar-menu > summary { font-size: 13px; padding: 6px 9px; }
+.bar-menu > summary::after { content: ""; width: 6px; height: 6px; margin-left: 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); opacity: .6; }
+.bar-menu .menu-content { left: 0; right: auto; width: 250px; }
+.bar-menu[open] > summary { background: var(--accent-soft); color: var(--accent); }
+.palette-trigger { margin-left: auto; min-width: 0; gap: 8px; color: var(--muted); border: 1px solid var(--line); background: var(--chrome); padding: 5px 8px 5px 10px; }
+.palette-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+kbd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Home: recent notes and the Google Drive library. */
+#empty.home { margin: 0; padding: 22px clamp(16px, 4vw, 40px) 30px; text-align: left; overflow: auto; flex: 1; min-height: 0; width: 100%; }
+.home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto 8px; }
+#empty .home-head h2 { font-size: 24px; margin: 0 0 4px; }
+#empty .home-head p { margin: 0; line-height: 1.5; }
+.home-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#empty .home-actions button { min-height: 38px; padding-inline: 16px; }
+.home-section { max-width: 1240px; margin: 22px auto 0; }
+.home-section h3 { font-size: 15px; margin: 0; }
+#recentTitle { margin-bottom: 12px; }
+.note-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 14px; }
+.note-grid li { min-width: 0; }
+.note-card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; width: 100%; height: 100%; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; text-align: left; }
+.note-card:hover { border-color: var(--accent); background: var(--surface); box-shadow: 0 4px 16px #0001; }
+.note-cover { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--chrome); border-bottom: 1px solid var(--line); }
+.note-cover:not([src]), .note-cover.missing { background: repeating-linear-gradient(135deg, var(--chrome) 0 10px, var(--canvas) 10px 20px); }
+.note-meta { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px 11px; min-width: 0; }
+.note-meta strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.note-meta span { color: var(--muted); font-size: 12px; }
+.note-meta .note-badge { align-self: flex-start; margin-top: 3px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; }
+#driveList li:has(.folder-chip) { grid-column: auto; }
+.folder-chip { width: 100%; justify-content: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; }
+.folder-chip::before { content: ""; flex: none; width: 18px; height: 14px; margin-right: 4px; border: 1.6px solid var(--muted); border-radius: 2px 2px 3px 3px; border-top-width: 4px; }
+.folder-chip .note-meta { padding: 0; flex-direction: row; align-items: baseline; gap: 8px; }
+.drive-heading, .drive-actions, .drive-search { display: flex; align-items: center; gap: 8px; }
+.drive-heading { justify-content: space-between; margin: 0 0 10px; flex-wrap: wrap; }
+.drive-actions { flex-wrap: wrap; }
+.drive-search { flex-wrap: wrap; margin: 2px 0 6px; }
+#drivePath { overflow-wrap: anywhere; min-width: 0; flex: 1 1 200px; }
+.drive-filter { flex: 0 1 300px; min-width: 160px; }
+#driveSection input { display: block; width: 100%; min-width: 0; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.drive-filter input { margin-top: 0 !important; }
+#driveSection label { display: block; font-size: 13px; margin: 8px 0; }
+.drive-signin { display: flex; gap: 18px; align-items: flex-start; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); max-width: 760px; }
+.drive-signin-icon svg { width: 40px; height: 40px; color: var(--accent); }
+.drive-signin p { margin: 0 0 8px; line-height: 1.5; color: var(--ink) !important; }
+.drive-signin ol { margin: 0 0 14px; padding-left: 20px; line-height: 1.6; color: var(--muted); }
+.drive-signin.compact { padding: 10px 14px; align-items: center; }
+.drive-signin.compact .drive-signin-icon svg { width: 24px; height: 24px; }
+.drive-signin.compact ol, .drive-signin.compact details, .drive-signin.compact p { display: none; }
+.drive-signin.compact > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.drive-signin.compact > div::before { content: "Browsing a public folder. Connect for your whole Drive."; color: var(--muted); font-size: 13px; }
+.drive-setup { margin: 10px 0 0; }
+.drive-setup summary { padding-left: 0; color: var(--muted); }
+#driveStatus { min-height: 1.6em; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+#driveMore { margin: 14px auto 0; display: flex; }
+.home-foot { max-width: 1240px; margin: 30px auto 0; padding-top: 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.home-foot strong { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.home-foot .supported-formats { margin: 0 0 0 auto !important; }
+
+/* Mid widths: labels give way to icons before the bar can wrap or squeeze the palette button. */
+@media (max-width: 1180px) {
+  .bar-actions > button, .bar-menu > summary { width: 36px; padding: 7px; font-size: 0; gap: 0; }
+  .bar-menu > summary::after { display: none; }
+  .bar-actions > button[title], .bar-menu > summary { overflow: hidden; }
+  .palette-trigger kbd { display: none; }
+}
+header.chrome { flex-wrap: nowrap; }
+.palette-trigger { flex: 0 1 auto; }
+
+/* Command palette */
+.palette { padding: 0; width: min(620px, calc(100vw - 24px)); margin-top: 12vh; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); color: var(--ink); box-shadow: 0 24px 80px #0005; overflow: hidden; }
+.palette::backdrop { background: #0004; }
+#paletteInput { width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--line); background: transparent; font-size: 15px; outline: none; }
+#paletteList { list-style: none; margin: 0; padding: 6px; max-height: min(420px, 60dvh); overflow: auto; }
+#paletteList [role="option"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+#paletteList [aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.palette-group { padding: 8px 10px 3px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.palette-empty { padding: 14px 10px; color: var(--muted); font-size: 13px; }
 .toolbar { position: relative; }
 .tool-options { position: absolute; top: calc(100% + 6px); left: 12px; z-index: 20; width: max-content; max-width: calc(100% - 24px); padding: 7px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 5px 20px #0002; }
 .tool-options { top: calc(100% + 52px); }
@@ -1056,16 +1130,24 @@ header p { font-size: 13px; max-width: 65vw; }
 #transcriptProgress { width: 100%; height: 6px; margin: 4px 0; accent-color: var(--accent); }
 #transcriptProgress[hidden] { display: none; }
 @media (max-width:700px) {
-  header.chrome { min-height: 46px; padding: 3px 8px; }
+  header.chrome { min-height: 46px; padding: 3px 6px; gap: 2px; }
+  header .brand { min-width: 0; flex: 1 1 auto; margin-right: 0; }
   header .brand > div { display: block; }
-  header p { max-width: calc(100vw - 78px); }
+  header p { max-width: 40vw; }
   header #saveState { font-size: 10px; }
+  /* Narrow screens keep icons only; every action stays reachable from the palette. */
+  .bar-actions > button, .bar-menu > summary { width: 36px; padding: 7px; font-size: 0; gap: 0; }
+  .bar-menu > summary::after { display: none; }
+  .bar-actions #driveOpen, .bar-actions #save { display: none; }
+  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 52px; width: auto; }
+  .palette-trigger { width: 36px; padding: 7px; border-color: transparent; background: transparent; }
+  .palette-trigger span, .palette-trigger kbd { display: none; }
+  .palette { margin-top: 8px; }
+  .note-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .drive-signin { flex-direction: column; gap: 8px; padding: 14px; }
+  .home-foot .supported-formats { margin-left: 0 !important; }
   .segmented { gap: 1px; }
-  .segmented > header.chrome { flex: none; width: 32px; }
-  .segmented > header.chrome .document-menu > summary { width: 32px; padding: 6px; }
   .segmented button { min-width: 35px; font-size: 10px; }
-  .segmented .document-menu .menu-content { top: auto; bottom: calc(100% + 12px); }
-  .segmented .document-menu button { flex-direction: row; width: 100%; min-height: 40px; font-size: 13px; }
   .tool-options { top: auto; bottom: calc(100% + 6px); left: 6px; width: max-content; max-width: calc(100% - 12px); padding: 6px; border: 1px solid var(--line); max-height: 30dvh; }
   .tool-options button, .tool-options .select-trigger { min-height: 36px; }
   .tool-options .color-label { width: 36px; height: 36px; }
@@ -1110,28 +1192,4 @@ header p { font-size: 13px; max-width: 65vw; }
 .quality-sample { background: white; color: #222; border: 1px solid #ddd; border-radius: 8px; padding: 14px; }
 .quality-sample span { color: #888; }
 
-#driveDialog {
-  color: var(--ink); background: var(--surface); border: 1px solid var(--line);
-  border-radius: 16px; padding: 20px; width: min(640px, calc(100vw - 24px));
-  max-height: calc(100dvh - 24px); overflow: auto; box-shadow: 0 20px 80px #0004;
-}
-#driveDialog::backdrop { background: #0006; }
-#driveDialog h2 { margin: 0; font-size: 20px; }
-#driveDialog p { font-size: 13px; line-height: 1.5; }
-.drive-heading, .drive-actions, .drive-search { display: flex; align-items: center; gap: 8px; }
-.drive-heading { justify-content: space-between; margin: 12px 0; flex-wrap: wrap; }
-.drive-actions { flex-wrap: wrap; }
-.drive-search { align-items: flex-end; margin: 16px 0; }
-#driveDialog label { display: block; font-size: 13px; min-width: 0; flex: 1; }
-#driveDialog input { display: block; width: 100%; min-width: 0; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }
-.drive-setup { margin: 12px 0; }
-.drive-setup summary { padding-left: 0; }
-#drivePath { overflow-wrap: anywhere; min-width: 0; }
-#driveList { list-style: none; margin: 0; padding: 0; }
-#driveList li + li { border-top: 1px solid var(--line); }
-#driveList button { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; text-align: left; padding: 10px 8px; width: 100%; }
-.drive-entry { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.drive-thumb { flex: none; width: 72px; height: 96px; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; background: var(--chrome); }
-#driveList strong { overflow-wrap: anywhere; }
-#driveList span { color: var(--muted); font-size: 12px; }
-#driveStatus { min-height: 2em; }
+

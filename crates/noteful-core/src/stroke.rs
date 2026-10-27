@@ -27,6 +27,9 @@ pub struct Stroke {
     pub layer: u32,
     pub radius: f64,
     pub unknown: u32,
+    /// Flag 0x10: `[u32 opaque][u32 len][UTF-8 ID]` after the header. The ID names a
+    /// kind-23 object on the same page; points stay in page coordinates.
+    pub link: Option<(u32, String)>,
     pub points: Vec<[f64; 2]>,
     pub radii: Vec<f64>,
     pub bounds: Vec<f64>,
@@ -40,6 +43,7 @@ impl Stroke {
             "opaque_header_hex":hex(&self.header),"id_raw":format!("{:016x}",self.id),
             "flags":self.flags,"z_order_raw":self.z_order,"layer_raw":self.layer,
             "thickness_candidate":self.radius,"unknown_0x30":self.unknown,
+            "linked_object":self.link.as_ref().map(|l| &l.1),
             "point_count":self.points.len(),"encoding":if self.points.len()<=4 {"float32"} else {"quantized_uint16"},
             "float32_0x38_0x3c_0x40_0x44":&self.bounds[..self.bounds.len().min(4)],
             "uint16_pairs":self.quantized,"candidate_points":self.points,"radii":self.radii,
@@ -74,12 +78,23 @@ pub fn decode_strokes(data: &[u8]) -> Result<Vec<Stroke>> {
         let mut h = Cursor::new(&header, offset + 2);
         let id = h.uint(8)?;
         let flags = h.uint(2)? as u16;
-        if flags & !3 != 0 {
+        // Bit 2 (tape revealed, per noteful-mcp) does not change the layout.
+        if flags & !0x17 != 0 {
             return Err(Error::new(offset, "Unsupported stroke flags"));
         }
         h.take(16)?;
         let z_order = h.uint(8)?;
         let layer = h.uint(4)? as u32;
+        let link = if flags & 0x10 != 0 {
+            let opaque = r.uint(4)? as u32;
+            let n = r.uint(4)? as usize;
+            let at = r.at();
+            let id = std::str::from_utf8(r.take(n)?)
+                .map_err(|_| Error::new(at, "Invalid stroke link"))?;
+            Some((opaque, id.to_owned()))
+        } else {
+            None
+        };
         let radius = r.float(8)?;
         let unknown = r.uint(4)? as u32;
         let count = r.uint(4)? as usize;
@@ -134,6 +149,7 @@ pub fn decode_strokes(data: &[u8]) -> Result<Vec<Stroke>> {
             layer,
             radius,
             unknown,
+            link,
             points,
             radii,
             bounds,

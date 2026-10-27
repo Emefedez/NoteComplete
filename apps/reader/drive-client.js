@@ -27,12 +27,12 @@ export class DriveClient {
   // Without sign-in, an API key can read folders shared as "Anyone with the link".
   get publicAccess() { return !this.connected && !!this.apiKey; }
   get ready() { return this.connected || this.publicAccess; }
-  async request(route, params, signal, resource) {
+  async request(route, params, signal, resource, extra = {}) {
     if (!this.ready) { this.clear(); throw Error('Connect to Google Drive to continue. Your previous session may have expired.'); }
     const publicAccess = this.publicAccess;
     const url = new URL('https://www.googleapis.com/drive/v3/' + route);
     url.search = new URLSearchParams(publicAccess ? { ...params, key: this.apiKey } : params).toString();
-    const headers = publicAccess ? {} : { Authorization: `Bearer ${this.token}` };
+    const headers = publicAccess ? { ...extra } : { ...extra, Authorization: `Bearer ${this.token}` };
     if (resource?.resourceKey) headers['X-Goog-Drive-Resource-Keys'] = `${resource.id}/${resource.resourceKey}`;
     const response = await this.fetcher(url.href, { method: 'GET', headers, signal, cache: 'no-store', credentials: 'omit', redirect: 'error' });
     if (!response.ok) {
@@ -72,6 +72,19 @@ export class DriveClient {
     if (!supportedDriveFile(file) || file.capabilities?.canDownload === false) throw Error('This file cannot be downloaded into NoteComplete.');
     const response = await this.request('files/' + encodeURIComponent(file.id), { alt: 'media', supportsAllDrives: 'true' }, signal, file);
     return new File([await response.blob()], file.name, { type: file.mimeType });
+  }
+  // Bytes [start, end) of a file. Drive's alt=media honours Range, so note covers
+  // are read without downloading the note; a server ignoring it is cut off.
+  async range(file, start, end, signal) {
+    if (!supportedDriveFile(file) || file.capabilities?.canDownload === false) throw Error('This file cannot be downloaded into NoteComplete.');
+    const response = await this.request('files/' + encodeURIComponent(file.id), { alt: 'media', supportsAllDrives: 'true' }, signal, file, { Range: `bytes=${start}-${end - 1}` });
+    const length = Number(response.headers?.get?.('Content-Length'));
+    if (response.status !== 206 && !(length <= end - start)) {
+      await response.body?.cancel?.();
+      throw Error('Google Drive did not return a partial file.');
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return response.status === 206 ? bytes : bytes.subarray(start, end);
   }
   // Google renders previews for PDFs and images; note bytes are previewed locally instead.
   async thumbnail(file, signal) {

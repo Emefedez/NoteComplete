@@ -5,6 +5,9 @@ import {
   fileKind,
 } from "./media-import.js";
 import { driveBrowser } from "./drive-browser.js";
+import { Library } from "./library.js";
+import { homeScreen } from "./home.js";
+import { commandPalette } from "./command-palette.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -12,7 +15,7 @@ import { download } from "./download.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons } from "./icons.js";
 import { qualitySettings } from "./quality.js";
-import { PdfBackgrounds } from "./pdf-background.js";
+import { PdfBackgrounds, backgroundPlacement } from "./pdf-background.js";
 import { AudioController } from "./audio.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
@@ -22,11 +25,17 @@ const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 enhanceSelects();
 decorateIcons();
+// Command bar menus close on outside clicks and after choosing an item.
 document.addEventListener("click", (event) => {
-  const menu = $("documentMenu");
-  if (!menu.contains(event.target) || event.target.closest(".menu-content button"))
-    menu.open = false;
+  for (const menu of document.querySelectorAll("details.menu[open]"))
+    if (!menu.contains(event.target) || event.target.closest(".menu-content button"))
+      menu.open = false;
 });
+document.addEventListener("toggle", (event) => {
+  if (!event.target.matches?.("details.bar-menu") || !event.target.open) return;
+  for (const menu of document.querySelectorAll("details.bar-menu[open]"))
+    if (menu !== event.target) menu.open = false;
+}, true);
 document.addEventListener("pointerdown", (event) => {
   if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden)
     setCompact(true);
@@ -132,7 +141,6 @@ function canReplace() {
   );
 }
 function reset() {
-  document.body.prepend(document.querySelector("header.chrome"));
   selection.clear();
   cancelGesture();
   chromeState.reset();
@@ -145,8 +153,10 @@ function reset() {
   doc = null;
   $("pages").replaceChildren();
   $("editor").hidden = true;
-  $("empty").hidden = false;
+  $("title").textContent = "Home";
   dirty = false;
+  documentControls();
+  home?.show(false);
 }
 async function load(file) {
   if (!ready || busy()) {
@@ -179,15 +189,9 @@ async function load(file) {
       return call("pdf", { resource });
     });
     $("title").textContent = result.title || "Untitled note";
-    $("menuTitle").textContent = $("title").textContent;
-    document.querySelector(".segmented").prepend(document.querySelector("header.chrome"));
-    $("editor").hidden = false;
-    $("empty").hidden = true;
+    showDocument();
     $("pageNumber").max = result.pages;
-    $("save").disabled =
-      $("native").disabled =
-      $("importImage").disabled =
-        false;
+    documentControls();
     buildPages(result.page_sizes);
     updateTools(result);
     layerPanel(result.layers);
@@ -374,6 +378,13 @@ function buildPageList() {
   for (const panel of panels) thumbnailObserver.observe(panel.pageButton);
   markPage();
 }
+// Paper stays underneath so widened pages show blank paper beside the PDF.
+function pdfImage(href, place) {
+  const el = document.createElementNS(ns, "image");
+  for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
+    el.setAttribute(k, v);
+  return el;
+}
 async function renderThumbnail(panel) {
   if (panel.thumbnailLoading || panel.thumbnailReady || !doc) return;
   panel.thumbnailLoading = true;
@@ -386,16 +397,9 @@ async function renderThumbnail(panel) {
     if (result.pdf_background) {
       const thumb = panel.pageButton.querySelector(".page-thumb");
       const width = Math.max(80, thumb?.clientWidth || 128);
-      const image = await cache.image(result.pdf_background, panel.size, Math.min(width, 160));
-      const el = document.createElementNS(ns, "image");
-      for (const [key, value] of Object.entries({
-        href: image,
-        width: panel.size[0],
-        height: panel.size[1],
-        preserveAspectRatio: "none",
-      }))
-        el.setAttribute(key, value);
-      render.querySelector("[data-background]")?.replaceChildren(el);
+      const place = backgroundPlacement(result.pdf_background, panel.size);
+      const image = await cache.image(result.pdf_background, panel.size, Math.min(width, 160) * place.share);
+      render.querySelector("[data-background]")?.append(pdfImage(image, place));
     }
     const source = render.querySelector(":scope > svg");
     const target = panel.pageButton.querySelector(".page-thumb");
@@ -551,22 +555,15 @@ async function renderPage(p, provided) {
     updatePagePreview(p);
     if (result.pdf_background) {
       const displayWidth = p.el.clientWidth || p.size[0];
+      const place = backgroundPlacement(result.pdf_background, p.size);
       const image = await backgrounds.image(
         result.pdf_background,
         p.size,
-        displayWidth,
+        displayWidth * place.share,
         displayQuality,
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
-      const el = document.createElementNS(ns, "image");
-      for (const [k, v] of Object.entries({
-        href: image,
-        width: p.size[0],
-        height: p.size[1],
-        preserveAspectRatio: "none",
-      }))
-        el.setAttribute(k, v);
-      render.querySelector("[data-background]").replaceChildren(el);
+      render.querySelector("[data-background]").append(pdfImage(image, place));
       p.pdfReady = true;
       p.rasterWidth = displayWidth;
       updatePagePreview(p);
@@ -1067,7 +1064,12 @@ $("redo").onclick = () => {
   action("redo");
 };
 document.addEventListener("keydown", (e) => {
-  if ($("qualityDialog").open || $("driveDialog").open) return;
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if (!$("qualityDialog").open) palette.open();
+    return;
+  }
+  if ($("qualityDialog").open || $("paletteDialog").open) return;
   if (e.key === "Escape") {
     cancelGesture();
     setCompact(true);
@@ -1075,7 +1077,7 @@ document.addEventListener("keydown", (e) => {
     $("layersToggle").setAttribute("aria-expanded", "false");
     $("pagesPanel").classList.remove("open");
     syncPagePanel();
-    document.querySelector("details.menu").open = false;
+    for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -1100,7 +1102,7 @@ document.addEventListener("keydown", (e) => {
     action(e.shiftKey ? "redo" : "undo");
   }
 });
-$("open").onclick = $("emptyOpen").onclick = () => $("file").click();
+$("open").onclick = $("emptyOpen").onclick = () => openLocal();
 $("file").onchange = (e) => {
   if (e.target.files[0] && !busy() && canReplace())
     load(e.target.files[0]).catch(() => {});
@@ -1156,7 +1158,6 @@ async function save(native) {
           ? ".noteful file exported."
           : "Project saved.",
     );
-    document.querySelector("details.menu").open = false;
   } catch (e) {
     status(e.message, true);
   } finally {
@@ -1173,7 +1174,6 @@ $("svg").onclick = async () => {
       `${filename()}-p${page + 1}.svg`,
       "image/svg+xml",
     ).catch((e) => status(e.message, true));
-    document.querySelector("details.menu").open = false;
   }
 };
 window.addEventListener("beforeunload", (e) => {
@@ -1309,9 +1309,100 @@ if (matchMedia("(min-width: 701px)").matches) {
  $("audioDetails").setAttribute("aria-expanded", "true");
 }
 
-driveBrowser({ open: async file => {
+// Opening from Drive or Recent goes through the same unsaved-changes check as local files.
+async function openChosen(file) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
   if (!canReplace()) return false;
   await load(file);
   return true;
-} });
+}
+const library = new Library();
+const drive = driveBrowser({
+  library,
+  open: async (file, driveFile) => {
+    const opened = await openChosen(file);
+    if (opened) home.rememberCover(library.coverKey(driveFile), file);
+    return opened;
+  },
+});
+var home = homeScreen({ library, drive, open: openChosen, status });
+// The desktop bridge opens files itself so Recent can reopen them by path.
+async function openLocal() {
+  const bridge = window.notecompleteFiles;
+  if (!bridge?.openFile) return $("file").click();
+  try {
+    const chosen = await bridge.openFile();
+    if (!chosen) return;
+    const file = new File([chosen.bytes], chosen.name);
+    if (busy() || !canReplace()) return;
+    await load(file);
+    const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
+    home.rememberCover(entry.key, file);
+  } catch (error) {
+    status(error.message, true);
+  }
+}
+function showDocument() {
+  home.hide();
+  $("editor").hidden = false;
+  if (panels[page]) resize();
+}
+function showHome() {
+  if (!$("editor").hidden && doc) $("editor").hidden = true;
+  home.show(!!doc);
+}
+$("homeButton").onclick = showHome;
+$("homeBack").onclick = () => doc && showDocument();
+$("driveOpen").onclick = () => {
+  showHome();
+  $("driveSection").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+function documentControls() {
+  const open = !!doc;
+  for (const id of ["save", "native", "importImage", "insertBlank", "insertPdf", "studyCards", "studyQuiz"])
+    if ($(id)) $(id).disabled = !open;
+  if (!open) $("svg").disabled = true;
+}
+documentControls();
+home.show(false);
+
+const palette = commandPalette({
+  dialog: $("paletteDialog"),
+  input: $("paletteInput"),
+  list: $("paletteList"),
+  commands: () => [
+    ...[...document.querySelectorAll("#commandBar button[id], #commandBar .menu-content button")]
+      .filter((b) => b.id !== "paletteOpen" && b.textContent.trim())
+      .map((b) => ({
+        id: b.id,
+        title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + b.textContent.replace("Experimental", "").trim(),
+        group: b.closest(".bar-menu")?.querySelector("summary").textContent.trim() || "General",
+        enabled: () => !b.disabled && !b.hidden,
+        run: () => b.click(),
+      })),
+    { id: "home", title: "Home", group: "General", keywords: "recent files drive", run: showHome },
+    { id: "quality", title: "Display quality…", group: "General", keywords: "settings sharp performance contrast", run: () => $("qualityOpen").click() },
+    ...[...document.querySelectorAll("button[data-tool]")].map((b) => ({
+      id: "tool-" + b.dataset.tool,
+      title: "Tool: " + b.textContent.trim(),
+      group: "Tools",
+      enabled: () => !!doc && !$("editor").hidden,
+      run: () => b.click(),
+    })),
+    { id: "undo", title: "Undo", group: "Edit", hint: "Ctrl Z", enabled: () => !!doc?.can_undo, run: () => $("undo").click() },
+    { id: "redo", title: "Redo", group: "Edit", hint: "Ctrl Shift Z", enabled: () => !!doc?.can_redo, run: () => $("redo").click() },
+    { id: "layers", title: "Show layers", group: "View", enabled: () => !!doc, run: () => $("layersToggle").click() },
+    { id: "pagesPanel", title: "Show page list", group: "View", enabled: () => !!doc, run: () => $("pagesToggle")?.click() },
+    { id: "fit", title: "Zoom to fit width", group: "View", enabled: () => !!doc, run: () => setZoom("fit") },
+  ],
+  dynamic: (query) => {
+    const items = [];
+    const number = query.trim().match(/^(?:p(?:age|ágina)?\.?\s*|:)?(\d+)$/i);
+    if (number && doc) {
+      const target = Math.min(doc.pages, Math.max(1, Number(number[1])));
+      items.push({ id: "goto", title: `Go to page ${target} of ${doc.pages}`, group: "Navigate", run: () => { showDocument(); jump(target - 1); } });
+    }
+    return items;
+  },
+});
+$("paletteOpen").onclick = () => palette.open();

@@ -8,8 +8,13 @@ pub enum WireValue {
     UInt(u64),
     Float(f64),
     Pair([f64; 2]),
+    /// Type 0x23: four float64 values, observed as a CGRect (origin, size).
+    Rect([f64; 4]),
     Text(String),
-    Blob { offset: usize, bytes: Vec<u8> },
+    Blob {
+        offset: usize,
+        bytes: Vec<u8>,
+    },
     Fields(Vec<Field>),
     Array(Vec<WireValue>),
 }
@@ -56,6 +61,7 @@ impl WireValue {
             Self::UInt(v) => json!(v),
             Self::Float(v) => json!(v),
             Self::Pair(v) => json!(v),
+            Self::Rect(v) => json!(v),
             Self::Text(v) => json!(v),
             Self::Blob { offset, bytes } => {
                 json!({"offset":offset,"size":bytes.len(),"hex":hex(bytes)})
@@ -155,6 +161,7 @@ fn scalar(r: &mut Cursor<'_>, kind: u8, depth: usize, budget: &mut usize) -> Res
         3 => WireValue::Float(r.float(4)?),
         4 | 0x20 => WireValue::Float(r.float(8)?),
         0x21 => WireValue::Pair([r.float(8)?, r.float(8)?]),
+        0x23 => WireValue::Rect([r.float(8)?, r.float(8)?, r.float(8)?, r.float(8)?]),
         5..=7 => {
             let n = r.uint(4)? as usize;
             let origin = r.at();
@@ -229,6 +236,11 @@ fn encode_scalar(out: &mut Vec<u8>, kind: u8, value: &WireValue) -> Result<()> {
         (3, WireValue::Float(v)) => out.extend((*v as f32).to_be_bytes()),
         (4 | 0x20, WireValue::Float(v)) => out.extend(v.to_be_bytes()),
         (0x21, WireValue::Pair(v)) => {
+            for x in v {
+                out.extend(x.to_be_bytes());
+            }
+        }
+        (0x23, WireValue::Rect(v)) => {
             for x in v {
                 out.extend(x.to_be_bytes());
             }

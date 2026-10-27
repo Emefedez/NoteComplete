@@ -4,10 +4,10 @@ NoteComplete can list files in a Noteful folder and download a file when selecte
 
 ## Use it
 
-1. Open **☰ → Google Drive** and choose **Connect Google Drive**. If the deployment is not configured, enter its public OAuth web client ID under **Connection setup** first.
+1. Open **Home** (or **Drive** in the command bar) and choose **Connect Google Drive**. If the deployment is not configured, enter its public OAuth web client ID under **Connection setup** first.
 2. Complete Google's account selection and read-only consent in the sign-in popup.
 3. Search for **Noteful** (or your folder's actual name), then choose the matching folder — typing a note's name also lists matching notes directly. Clear the box and search again to list the top level of Drive, where files that do not live inside a folder appear. If several folders match, open the intended one; a folder link/ID can select it precisely.
-4. Browse subfolders. While inside a folder the same box filters its children by name. Each row shows its name, modification date and size when available, plus a first-page preview: Google's thumbnail for PDFs and images, or a local decode of the note's own first page (never uploaded; previewing downloads the note once, like opening it). Select a supported file to **Download & open**. Noteful, `.nfedit`, PDF, PNG, JPEG and WebP use the normal local decoder/import path.
+4. Browse subfolders. While inside a folder the same box filters its children by name. Each card shows its name, modification date and size, plus a cover: Google's thumbnail for PDFs and images, or the note's own embedded first-page JPEG read with HTTP Range requests (the trailer, index and cover only, about 320 KiB, never the whole note). Covers are kept per file version. Opened notes are kept in the downloads folder shown at the bottom of Home and reused while Drive reports the same modification time and size. Select a supported file to **Download & open**. Noteful, `.nfedit`, PDF, PNG, JPEG and WebP use the normal local decoder/import path.
 5. Use **Refresh** for the current listing, **Back** for the parent listing, and **Load more** for additional results. Downloads happen only on file selection. Unsupported formats and restricted downloads cannot be opened.
 
 Closing the panel cancels an in-progress listing/download. Opening a downloaded file checks for unsaved edits before replacing the document; declining leaves the current document open. Failed downloads and invalid files do not intentionally replace the current note. Disconnect drops the access token and the displayed listing. Reconnect when the session expires. Disconnect does not revoke the app's grant in your Google Account; permissions can also be removed in Google's account settings.
@@ -18,7 +18,7 @@ A folder shared as **Anyone with the link** can be browsed and downloaded withou
 
 1. In the same Google Cloud project, enable **Google Drive API** and create an **API key**. Restrict it to the Drive API and to the reader's website (HTTP referrer, for example `https://example.github.io/*`). The key is public by design and only reads public files.
 2. Set it in `<meta name="google-drive-api-key" content="AIza…">` in `apps/reader/index.html` before deploying. This shared key is the default for every visitor. Anyone can override it on their device with a personal key under **Connection setup → Personal Google API key**. The personal key is saved locally, and clearing it returns to the site's key.
-3. Open **☰ → Google Drive → Use a folder link**, paste the folder link and choose **Open folder**. Subfolders and downloads work the same way. Folder search needs sign-in.
+3. Open **Home → Google Drive → Use a public folder link**, paste the folder link and choose **Open folder**. Subfolders and downloads work the same way. Folder search needs sign-in.
 
 Signing in still takes precedence when connected. Without an API key or a sign-in, Google refuses all Drive API requests, so a public link alone cannot be opened.
 

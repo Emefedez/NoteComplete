@@ -11,8 +11,6 @@ class Element {
   closest() { return this; }
   querySelectorAll(tag) { return this.children.flatMap(child => [...(child.tag === tag ? [child] : []), ...child.querySelectorAll(tag)]); }
   addEventListener(type, fn) { this.listeners[type] = fn; }
-  showModal() { this.open = true; }
-  close() { this.open = false; this.listeners.close?.(); }
 }
 function setup(t, overrides = {}) {
   const thumbs = overrides.thumbs || { get: () => Promise.resolve(''), cancel() {} };
@@ -37,15 +35,15 @@ function setup(t, overrides = {}) {
     async children(...args){ calls.push('children');(overrides.filters ??= []).push(args[3] ?? '');return {files:[file]}; },
     async folder(reference){ calls.push('open-folder:'+reference.id);return folder; },
     async download(){ calls.push('download');return new File(['bytes'],file.name); },
-    ...Object.fromEntries(Object.entries(overrides).filter(([key])=>!['siteApiKey','thumbs','filters'].includes(key))),
+    ...Object.fromEntries(Object.entries(overrides).filter(([key])=>!['siteApiKey','thumbs','filters','library'].includes(key))),
   };
   let callback;
-  driveBrowser({ open:async file=>{opened.push(file);return true;},client,thumbs,identityLoader:async()=>({}),authorize:(_id,_key,success)=>{callback=success;} });
-  return {node,opened,calls,client,overrides,authorize:()=>callback({})};
+  const drive = driveBrowser({ open:async file=>{opened.push(file);return true;},client,thumbs,library:overrides.library,identityLoader:async()=>({}),authorize:(_id,_key,success)=>{callback=success;} });
+  return {node,opened,calls,client,overrides,drive,authorize:()=>callback({})};
 }
 test('Drive panel lists without downloading and opens only the chosen file', async t => {
   const ui=setup(t);
-  await ui.node('driveOpen').onclick();
+  await ui.drive.show();
   ui.node('driveConnect').onclick();ui.authorize();await tick();
   assert.deepEqual(ui.calls,['search']);
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
@@ -54,28 +52,27 @@ test('Drive panel lists without downloading and opens only the chosen file', asy
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
   assert.deepEqual(ui.calls,['search','children','download']);
   assert.equal(ui.opened[0].name,'Test.noteful');
-  assert.equal(ui.node('driveDialog').open,false);
 });
-test('closing Drive during a download ignores even a late successful response', async t => {
+test('leaving the home screen during a download ignores even a late successful response', async t => {
   let resolveDownload, signal;
   const ui=setup(t,{download:(_file,abort)=>{signal=abort;return new Promise(resolve=>{resolveDownload=resolve;});}});
-  await ui.node('driveOpen').onclick();ui.node('driveConnect').onclick();ui.authorize();await tick();
+  await ui.drive.show();ui.node('driveConnect').onclick();ui.authorize();await tick();
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
-  ui.node('driveList').querySelectorAll('button')[0].onclick();
-  ui.node('driveClose').onclick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
+  ui.drive.hide();
   assert.equal(signal.aborted,true);
   resolveDownload(new File(['bytes'],'late.noteful'));await tick();
   assert.equal(ui.opened.length,0);
 });
 test('late OAuth completion after dismissal does not reconnect or request files', async t => {
   const ui=setup(t);
-  await ui.node('driveOpen').onclick();ui.node('driveConnect').onclick();
-  ui.node('driveClose').onclick();ui.authorize();await tick();
+  await ui.drive.show();ui.node('driveConnect').onclick();
+  ui.drive.hide();ui.authorize();await tick();
   assert.equal(ui.client.connected,false);assert.deepEqual(ui.calls,[]);
 });
 test('an API key opens a public folder link and downloads without sign-in', async t => {
   const ui=setup(t);
-  await ui.node('driveOpen').onclick();
+  await ui.drive.show();
   assert.equal(ui.node('driveUseFolder').disabled,true);
   ui.node('driveApiKey').value='AIza-test';ui.node('driveApiKey').oninput();
   assert.equal(ui.node('driveUseFolder').disabled,false);
@@ -92,7 +89,7 @@ test('the site key opens public links by default and a personal key overrides it
   const ui=setup(t,{siteApiKey:'AIza-site'});
   assert.equal(ui.client.apiKey,'AIza-site');
   assert.equal(ui.node('driveApiKey').value,'');
-  await ui.node('driveOpen').onclick();
+  await ui.drive.show();
   assert.equal(ui.node('driveUseFolder').disabled,false);
   assert.equal(ui.node('driveLinkSetup').open,true);
   ui.node('driveApiKey').value='AIza-personal';ui.node('driveApiKey').oninput();
@@ -103,7 +100,7 @@ test('the site key opens public links by default and a personal key overrides it
 test('search filters inside a folder and a cleared box lists the top level', async t => {
   const filters = [];
   const ui = setup(t, { filters });
-  await ui.node('driveOpen').onclick();
+  await ui.drive.show();
   ui.node('driveConnect').onclick();ui.authorize();await tick();
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
   assert.deepEqual(ui.calls,['search','children']);
@@ -117,15 +114,41 @@ test('search filters inside a folder and a cleared box lists the top level', asy
   ui.node('driveFind').onclick();await tick();
   assert.equal(ui.calls.at(-1),'roots');
 });
-test('file rows request a preview and closing the dialog cancels pending work', async t => {
+test('file cards request a preview and leaving the home screen cancels pending work', async t => {
   const requested = [];
   let cancelled = 0;
   const ui = setup(t, { thumbs: { get: file => { requested.push(file.name); return Promise.resolve(''); }, cancel() { cancelled++; } } });
-  await ui.node('driveOpen').onclick();
+  await ui.drive.show();
   ui.node('driveConnect').onclick();ui.authorize();await tick();
   assert.deepEqual(requested,[]);
   ui.node('driveList').querySelectorAll('button')[0].onclick();await tick();
   assert.deepEqual(requested,['Test.noteful']);
-  ui.node('driveClose').onclick();
+  ui.drive.hide();
   assert.equal(cancelled,1);
+});
+test('a kept copy opens without downloading and new downloads are kept', async t => {
+  const kept = [];
+  let cachedFile = null;
+  const library = { cached: async () => cachedFile, keep: async (file, blob) => { kept.push(file.id); }, touch: async () => {}, key: f => 'drive:' + f.id };
+  const ui = setup(t, { library });
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick();
+  assert.deepEqual(ui.calls, ['search', 'children', 'download']);
+  assert.deepEqual(kept, ['file']);
+  cachedFile = new File(['kept'], 'Test.noteful');
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick();
+  assert.deepEqual(ui.calls, ['search', 'children', 'download'], 'no second download');
+  assert.equal(ui.opened.at(-1), cachedFile);
+});
+test('the last folder reopens after connecting', async t => {
+  const saved = new Map();
+  const ui = setup(t);
+  globalThis.localStorage = { getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v) };
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick();
+  assert.match(saved.get('notecomplete-drive-folder-v1'), /"id":"folder"/);
+  ui.drive.hide(); ui.client.clear();
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick(); await tick();
+  assert.deepEqual(ui.calls.slice(-2), ['open-folder:folder', 'children']);
 });

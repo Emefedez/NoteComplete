@@ -103,3 +103,16 @@ test('public access explains sharing and key errors', async () => {
     await assert.rejects(client.folder({ id: 'folder' }), pattern);
   }
 });
+test('ranged reads send Range, accept 206, and refuse a server that streams the whole file', async () => {
+  const seen = [];
+  const big = new Uint8Array(1 << 20);
+  const client = authorized(async (url, options) => {
+    seen.push(options.headers.Range);
+    if (options.headers.Range === 'bytes=0-15') return new Response(big.slice(0, 16), { status: 206, headers: { 'Content-Length': '16' } });
+    return new Response(big, { headers: { 'Content-Length': String(big.length) } });
+  });
+  const file = { id: 'one', name: 'A.noteful' };
+  assert.equal((await client.range(file, 0, 16)).length, 16);
+  await assert.rejects(client.range(file, 100, 200), /partial file/);
+  assert.deepEqual(seen, ['bytes=0-15', 'bytes=100-199']);
+});

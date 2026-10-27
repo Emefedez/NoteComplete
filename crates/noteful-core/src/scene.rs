@@ -55,6 +55,7 @@ fn value(v: &WireValue) -> Value {
         WireValue::UInt(n) => json!(n),
         WireValue::Float(n) => json!(n),
         WireValue::Pair(p) => json!(p),
+        WireValue::Rect(p) => json!(p),
         WireValue::Text(s) => json!(s),
         WireValue::Blob { .. } => Value::Null,
     }
@@ -379,6 +380,10 @@ impl Scene {
                 .map(|_| crate::PdfBackground {
                     resource_id: pdf_id.to_owned(),
                     page_index: pdf_page,
+                    rect: floats::<4>(&bg["9"])
+                        .ok()
+                        .filter(|r| r.iter().all(|v| v.abs() <= 1e6) && r[2] > 0. && r[3] > 0.)
+                        .unwrap_or([0., 0., size[0], size[1]]),
                 });
             let mut timings = Vec::new();
             let paper: Value = serde_json::from_str(text(&record["4"]["6"])).unwrap_or(Value::Null);
@@ -452,6 +457,11 @@ impl Scene {
                 }
                 if let Some(fs) = &b.fields {
                     for (i, o) in arr(&fields(fs)["5"]["0"]).iter().enumerate() {
+                        // Kind 23 groups flag-0x10 strokes, which already render as ink;
+                        // it has no drawable payload and stays untouched for export.
+                        if o["6"]["1"].as_u64() == Some(23) {
+                            continue;
+                        }
                         match object(o, Some(&package), i) {
                             Ok(item) => {
                                 if let Some(text) = &item.text {

@@ -139,6 +139,11 @@ fn edited_stroke(out: &mut Vec<u8>, s: &crate::Stroke) {
     style(out, &s.style);
     out.extend([0xf1, 1]);
     out.extend(s.header);
+    if let Some((opaque, id)) = &s.link {
+        out.extend(opaque.to_be_bytes());
+        out.extend((id.len() as u32).to_be_bytes());
+        out.extend(id.as_bytes());
+    }
     out.extend(s.radius.to_be_bytes());
     out.extend(s.unknown.to_be_bytes());
     out.extend((s.points.len() as u32).to_be_bytes());

@@ -44,6 +44,9 @@ pub struct AudioAsset {
 pub struct PdfBackground {
     pub resource_id: String,
     pub page_index: u64,
+    /// `[x, y, width, height]` in page units; background tag 9 when present,
+    /// otherwise the whole page. Widened pages keep the PDF at native scale.
+    pub rect: [f64; 4],
 }
 pub(crate) struct PdfAsset {
     pub id: String,

@@ -15,28 +15,45 @@
     rel="icon"
     href="./icon.svg"
   /><link rel="stylesheet" href="./style.css" />
-  <header class="chrome">
-    <details id="documentMenu" class="menu document-menu">
-      <summary aria-label="Document menu" title="Document menu" data-icon="menu"></summary>
-      <div class="menu-content">
-        <p id="menuTitle" class="muted">Local documents</p>
-        <button id="open" data-icon="open" disabled>Open document</button>
-        <button id="save" disabled>Save project</button>
-        <button id="driveOpen">Google Drive</button>
-        <button id="qualityOpen">Display quality</button>
-        <hr />
-        <button id="native" disabled>Export .noteful <span class="experimental">Experimental</span></button>
-        <button id="svg" disabled>Export page SVG</button>
-      </div>
-    </details>
+  <header class="chrome command-bar" id="commandBar">
+    <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and Google Drive"></button>
     <div class="brand">
       <span class="app-icon" data-icon="note"></span>
       <div>
         <h1>NoteComplete</h1>
-        <p id="title">Local documents</p>
+        <p id="title">Home</p>
         <span id="saveState" hidden>Unsaved changes</span>
       </div>
     </div>
+    <nav class="bar-actions" aria-label="Commands">
+      <button id="open" title="Open" data-icon="open" disabled>Open</button>
+      <button id="save" title="Save project" data-icon="save" disabled>Save</button>
+      <button id="driveOpen" title="Google Drive" data-icon="cloud">Drive</button>
+      <details class="menu bar-menu" id="pagesMenu">
+        <summary title="Pages" aria-label="Pages" data-icon="pages">Pages</summary>
+        <div class="menu-content">
+          <button id="insertBlank" disabled>Insert blank page…</button>
+          <button id="insertPdf" disabled>Insert PDF pages…</button>
+        </div>
+      </details>
+      <details class="menu bar-menu" id="exportMenu">
+        <summary title="Export" aria-label="Export" data-icon="export">Export</summary>
+        <div class="menu-content">
+          <button id="native" disabled>.noteful file <span class="experimental">Experimental</span></button>
+          <button id="svg" disabled>Current page as SVG</button>
+        </div>
+      </details>
+      <details class="menu bar-menu" id="studyMenu">
+        <summary title="Study" aria-label="Study" data-icon="cards">Study</summary>
+        <div class="menu-content">
+          <button id="studyCards" disabled>Generate flashcards…</button>
+          <button id="studyQuiz" disabled>Quiz me…</button>
+          <button id="studyOpenDeck">Review a saved deck…</button>
+        </div>
+      </details>
+    </nav>
+    <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
+    <button id="qualityOpen" class="bar-icon" data-icon="settings" aria-label="Display quality" title="Display quality"></button>
     <div hidden>
       <input
         id="file"
@@ -49,21 +66,64 @@
         accept="image/png,image/jpeg,image/webp"
         multiple
         hidden
-      />
+      /><input id="pdfPagesFile" type="file" accept=".pdf,application/pdf" hidden
+      /><input id="deckFile" type="file" accept=".json,application/json" hidden />
     </div>
   </header>
   <main id="drop">
     <div id="status" role="status" aria-live="polite">Loading engine…</div>
-    <section id="empty">
-      <div class="empty-icon" data-icon="note" aria-hidden="true"></div>
-      <h2>Open a document</h2>
-      <p>
-        Read, annotate and organize your notes.<br />Drop a file here to get
-        started.
-      </p>
-      <button id="emptyOpen" class="primary" disabled>Choose a file</button>
-      <p class="supported-formats">Noteful · PDF · PNG · JPEG · WebP</p>
-      <p class="privacy-note">Your documents stay on this device.</p>
+    <section id="empty" class="home" aria-labelledby="homeTitle">
+      <div class="home-head">
+        <div>
+          <h2 id="homeTitle">Your notes</h2>
+          <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive.</p>
+        </div>
+        <div class="home-actions">
+          <button id="homeBack" hidden>Back to document</button>
+          <button id="emptyOpen" class="primary" data-icon="open" disabled>Open file…</button>
+        </div>
+      </div>
+      <section id="recentSection" class="home-section" aria-labelledby="recentTitle" hidden>
+        <h3 id="recentTitle">Recent</h3>
+        <ul id="recentList" class="note-grid"></ul>
+      </section>
+      <section id="driveSection" class="home-section" aria-labelledby="driveTitle">
+        <div class="drive-heading">
+          <h3 id="driveTitle">Google Drive</h3>
+          <div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button><button id="driveDisconnect" type="button" disabled hidden>Disconnect</button></div>
+        </div>
+        <div id="driveSignin" class="drive-signin">
+          <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+          <div>
+            <p><strong>See your Noteful library here.</strong> NoteComplete only reads Drive; it never uploads, edits or deletes files.</p>
+            <ol>
+              <li>In Noteful, back up or export your notebooks to a Google Drive folder.</li>
+              <li>Choose <strong>Connect Google Drive</strong> and allow read-only access in the Google window.</li>
+              <li>Open that folder below. It reopens automatically next time, and opened notes are kept on this device.</li>
+            </ol>
+            <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
+            <details class="drive-setup">
+              <summary>Connection setup</summary>
+              <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
+              <p id="driveOrigin" class="muted"></p>
+              <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
+              <p class="muted">The app owner must enable the Drive API and register this website’s origin in Google Cloud. Enter the public client ID, never a client secret.</p>
+            </details>
+            <details id="driveLinkSetup" class="drive-setup"><summary>Use a public folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
+          </div>
+        </div>
+        <div id="driveBrowse" hidden>
+          <div class="drive-search"><strong id="drivePath">Find your Noteful folder</strong><label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
+        </div>
+        <p id="driveStatus" role="status" aria-live="polite"></p>
+        <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
+        <button id="driveMore" type="button" hidden>Load more</button>
+      </section>
+      <footer class="home-foot">
+        <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
+        <button id="libraryChoose" type="button" hidden>Change folder…</button>
+        <span class="supported-formats">Noteful · PDF · PNG · JPEG · WebP · Your documents stay on this device.</span>
+      </footer>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">
@@ -375,24 +435,9 @@
   </form>
 </dialog>
 
-<dialog id="driveDialog" aria-labelledby="driveTitle">
-  <div class="drive-heading"><h2 id="driveTitle">Google Drive</h2><button id="driveClose" type="button">Close</button></div>
-  <p>Browse your Noteful folder and download a document to open it. Edits and exports stay on your device.</p>
-  <details class="drive-setup">
-    <summary>Connection setup</summary>
-    <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
-    <p id="driveOrigin" class="muted"></p>
-    <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
-    <p class="muted">The app owner must enable the Drive API and register this website’s origin in Google Cloud. Enter the public client ID, never a client secret.</p>
-  </details>
-  <p class="muted">Google’s read-only permission covers Drive files. NoteComplete only browses and downloads; it never uploads, edits or deletes Drive files.</p>
-  <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button><button id="driveDisconnect" type="button" disabled>Disconnect</button></div>
-  <div class="drive-search"><label>Folder or note name<input id="driveSearch" type="search" value="Noteful" placeholder="Clear and search to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
-  <details id="driveLinkSetup" class="drive-setup"><summary>Use a folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
-  <div class="drive-heading"><strong id="drivePath">Choose your Noteful folder</strong><div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button></div></div>
-  <p id="driveStatus" role="status" aria-live="polite">Connect to browse files.</p>
-  <ul id="driveList" aria-label="Google Drive files"></ul>
-  <button id="driveMore" type="button" hidden>Load more</button>
+<dialog id="paletteDialog" class="palette" aria-label="Command palette">
+  <input id="paletteInput" type="search" role="combobox" aria-controls="paletteList" aria-expanded="true" autocomplete="off" placeholder="Type a command, a note name, or “page 12”" />
+  <ul id="paletteList" role="listbox"></ul>
 </dialog>
 
   <script type="module" src="./app.js"></script>

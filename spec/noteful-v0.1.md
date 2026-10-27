@@ -47,6 +47,7 @@ A field begins with uint16 tag and uint16 type. Base type is `type & 0xff`. Flag
 | 0x11 | uint16 |
 | 0x12, 0x14 | uint32 |
 | 0x21 | two float64 values |
+| 0x23 | four float64 values; observed as a CGRect `[x, y, width, height]` (owner notes, see below) |
 
 Repeated collections use tag 1 IDs, tag 2 clocks, tag 3 live flags and tag 0 live records. This is consistent with LWW metadata symbols; native conflict resolution is not validated. Signedness distinctions between equal-width integer types remain unresolved. Unknown fields of known wire types survive encoding unchanged.
 
@@ -63,6 +64,8 @@ Background variants must be distinguished:
 | 1, imported PDF | tag 4 string | tag 3 uint64 | tag 1 size |
 | 2, observed paper template | tag 3 string | tag 7 uint64 | tag 5 provider, tag 6 paper JSON |
 
+**Page and PDF geometry (owner notes, 2026-10).** Background tag 1 is the page size; pages need not share it. Noteful lets a page be widened beyond its PDF. Background tag 9 (type 0x23) is then the PDF page's rect in page units: in *Temas1+2* all 47 pages are 2242.6×990 with tag 9 `[0,0,1320,990]` for 720×540 pt slides; in *Memoria 1* 19 of 206 pages are 1857.2×1091.4 with tag 9 `[0,0,1543.5,1091.4]` for 841.9×595.3 pt pages. Both rects equal MediaBox × 11/6. Where tag 9 equals the page size or is absent, the PDF fills the page; PDFs with `/Rotate 90` reach the page through the rotated viewport. Tag 10 (same type) appeared once on a paper-template page, equal to tag 9; meaning unresolved. The reader draws the PDF into tag 9 over the paper fill. Both notes are owner files that are not in the corpus.
+
 The Practice book references one PDF across 193 pages. The text sample references an embedded ruled-paper PDF. Its paper JSON omits some colors/type fields; rendering only JSON caused a missing background and has been replaced by actual PDF rendering in the reader.
 
 The seven initial notes have size `[1091.3385826771655,1543.464566929134]`, with PDF size approximately `[595.2756,841.8898]`; ratio 11/6. The grid is ALSO drawn inside the PDF. It contains a white background and horizontal/vertical rectangles at spacing 24 and width 0.5. The JSON describes template settings, not ink. The seven 4599-byte PDFs have two file hashes but identical 3843-byte main graphic streams, SHA-256 `2afa806c3390ef51bccfa986ec1d3c516ed8892318c3b523f510bd874f058fb7`.
@@ -73,7 +76,7 @@ Layers live at `d:/3/0[]`: tag 1 name, 2 uint32 ID, 3 order string, 4 hidden fla
 
 Editable tags: 1 encoding version (281 in initial notes, 288 in Practice); 2 freehand blob; 3/4 uint64 ID/time arrays consistent with deletion bookkeeping; 5 object collection. Arrays 3/4 are not counts or IDs of currently visible strokes. Native tombstone/merge behavior needs further validation.
 
-Objects live at `set/5/0[]`. Tag 1 ID, `2/1` placement `[centerX,centerY,width,height,angleRadians]`, 4 layer, 5 z-order, 6 payload, 8 opacity, 9 tool. Payload tag 1 is kind, 2 native size. Image kind 1 uses resource ID tag 10; rich text kind 2 uses tag 4 content. Observed vector kinds 3/6/12/20/21 are described in the object rendering section below. Ink layout follows below.
+Objects live at `set/5/0[]`. Tag 1 ID, `2/1` placement `[centerX,centerY,width,height,angleRadians]`, 4 layer, 5 z-order, 6 payload, 8 opacity, 9 tool. Payload tag 1 is kind, 2 native size. Image kind 1 uses resource ID tag 10; rich text kind 2 uses tag 4 content. Observed vector kinds 3/6/12/20/21 are described in the object rendering section below. Kind 23 (owner notes) has only native size and tag 22 (uint, 288 observed) in its payload, plus object tag 7 naming another kind-23 object; flag-0x10 strokes reference it by ID (below). It is treated as an ink group without its own drawing and is preserved unchanged. Ink layout follows below.
 
 ## Ink
 
@@ -92,7 +95,7 @@ Editable set tag 2 contains a command stream. F102 is 44 bytes: opcode, four f64
 | 48 | unknown u32 |
 | 52 | u32 point count N |
 
-Flag 2 adds 8*N auxiliary bytes before geometry; meaning unresolved. D=3 for flag 1, otherwise D=2. N≤4 stores N*D raw f32 values. N>4 stores min/extent f32 pairs per dimension followed by N*D u16 coordinates, decoded as `min + q/65535 * extent`. Dimension three is radius, corroborated against 23 independent PDF endpoints; it does not establish device pressure.
+Flag 0x10 (owner notes: 1 stroke in *Memoria 1*, 3 in *Temas1+2*) inserts `[u32 opaque][u32 length][UTF-8 ID]` immediately after the 38-byte header; the ID is a kind-23 object on the same page whose frame contains the stroke, so points stay in page coordinates. Flag 4 (tape revealed, per the MIT-licensed noteful-mcp notes) is accepted without layout change; it is not observed here. Flag 2 adds 8*N auxiliary bytes before geometry; noteful-mcp describes it as a pixel-eraser mask (`u32 0, u32 N-1`, then per-segment f32 pairs) — not yet applied by this renderer. D=3 for flag 1, otherwise D=2. N≤4 stores N*D raw f32 values. N>4 stores min/extent f32 pairs per dimension followed by N*D u16 coordinates, decoded as `min + q/65535 * extent`. Dimension three is radius, corroborated against 23 independent PDF endpoints; it does not establish device pressure.
 
 Unsupported flags/commands retain the opaque blob and produce an ink diagnostic. Never scan forward for another signature after an error. Container verification may still succeed without semantic ink support.
 

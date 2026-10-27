@@ -1,85 +1,71 @@
-// First-page previews for listed notes: Google's thumbnail when it has one,
-// otherwise the local decoder in a throwaway worker, one file at a time.
+// Previews for listed Drive files, never by downloading a whole note:
+//   1. a cover already kept in the library for this file version;
+//   2. Google's thumbnail for PDFs and images;
+//   3. the note's own first-page JPEG, read with byte ranges (note-cover.js).
+// A few files load in parallel; cancel() drops queued and late results.
 import { FOLDER_MIME, supportedDriveFile } from './drive-client.js';
+import { noteCover } from './note-cover.js';
 
-export function driveThumbnails(client, width = 96) {
-  let worker = null, generation = 0, chain = Promise.resolve(), urls = [], controller = new AbortController();
-  function ensureWorker() {
-    return worker ||= new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+// Small JPEG data URLs keep the library store compact and survive reloads.
+export async function shrink(blob, width = 320) {
+  if (typeof createImageBitmap !== 'function') return URL.createObjectURL(blob);
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const scale = Math.min(1, width / bitmap.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL('image/jpeg', 0.8);
+    canvas.width = canvas.height = 0;
+    return url;
+  } finally { bitmap.close?.(); }
+}
+
+export function driveThumbnails(client, { library = null, resize = shrink, parallel = 4 } = {}) {
+  let generation = 0, controller = new AbortController(), active = 0;
+  const queue = [], urls = [];
+  function pump() {
+    while (active < parallel && queue.length) {
+      const job = queue.shift();
+      active++;
+      job().finally(() => { active--; pump(); });
+    }
   }
-  function decode(bytes, project, signal) {
-    const active = ensureWorker();
-    return new Promise((resolve, reject) => {
-      const id = Math.random().toString(36).slice(2);
-      const onmessage = ({ data }) => {
-        if (data.id !== id) return;
-        active.removeEventListener('message', onmessage);
-        data.error ? reject(Error(data.error)) : resolve(data.result);
-      };
-      active.addEventListener('message', onmessage);
-      signal.addEventListener?.('abort', () => reject(Error('aborted')), { once: true });
-      active.postMessage({ id, op: 'open', bytes, project }, [bytes]);
-    });
-  }
-  // The page SVG is self-contained; rasterize it small so rows never keep a full page around.
-  async function raster(svg) {
-    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
-    const source = parsed.documentElement;
-    const box = (source.getAttribute('viewBox') || '').split(/\s+/).map(Number);
-    const ratio = box.length === 4 && box[3] > 0 && box[2] > 0 ? box[3] / box[2] : 1.3;
-    source.setAttribute('width', width);
-    source.setAttribute('height', Math.max(1, Math.round(width * ratio)));
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(source)], { type: 'image/svg+xml' }));
-    try {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = Math.max(1, Math.round(width * ratio));
-      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-      const preview = canvas.toDataURL('image/jpeg', 0.7);
-      canvas.width = canvas.height = 0;
-      return preview;
-    } finally { URL.revokeObjectURL(url); }
-  }
-  async function local(file, token, signal) {
-    const downloaded = await client.download(file, signal);
-    if (token !== generation) return '';
-    const project = /\.nfedit$/i.test(file.name);
-    const bytes = project
-      ? new TextEncoder().encode(await downloaded.text())
-      : new Uint8Array(await downloaded.arrayBuffer());
-    const view = await decode(bytes.buffer, project, signal);
-    if (token !== generation) return '';
-    return view?.svg ? await raster(view.svg) : '';
+  async function produce(file, signal) {
+    const key = library?.coverKey(file);
+    const kept = key && await library.cover(key);
+    if (kept) return kept;
+    let url = '';
+    if (typeof client.thumbnail === 'function' && file.thumbnailLink) url = await client.thumbnail(file, signal);
+    else if (/\.noteful$/i.test(file.name || '') && typeof client.range === 'function' && Number(file.size) > 0) {
+      const cover = await noteCover((start, end) => client.range(file, start, end, signal), Number(file.size));
+      if (cover) url = await resize(new Blob([cover.bytes], { type: cover.mime }));
+    }
+    if (url.startsWith('blob:')) urls.push(url);
+    else if (url && key) library.saveCover(key, url);
+    return url;
   }
   return {
-    // Returns a preview URL for a listed file, or '' when none is available.
+    // Resolves to a preview URL for a listed file, or '' when there is none.
     get(file) {
-      if (file?.mimeType === FOLDER_MIME || !supportedDriveFile(file) || typeof client.download !== 'function') return Promise.resolve('');
-      const token = generation;
-      const job = async () => {
-        if (token !== generation) return '';
-        try {
-          const remote = typeof client.thumbnail === 'function' ? await client.thumbnail(file, controller.signal) : '';
-          if (remote) { urls.push(remote); return remote; }
-          // Google cannot render .noteful previews, so the first page is decoded on this device.
-          if (!/\.(noteful|nfedit)$/i.test(file.name || '')) return '';
-          return await local(file, token, controller.signal);
-        } catch { return ''; }
-      };
-      chain = chain.then(job, job);
-      return chain;
+      if (file?.mimeType === FOLDER_MIME || !supportedDriveFile(file) || file.capabilities?.canDownload === false) return Promise.resolve('');
+      const token = generation, signal = controller.signal;
+      return new Promise(resolve => {
+        queue.push(async () => {
+          if (token !== generation) return resolve('');
+          try { const url = await produce(file, signal); resolve(token === generation ? url : ''); }
+          catch { resolve(''); }
+        });
+        pump();
+      });
     },
     cancel() {
       generation++;
       controller.abort();
       controller = new AbortController();
-      worker?.terminate();
-      worker = null;
-      chain = Promise.resolve();
-      for (const url of urls) URL.revokeObjectURL(url);
-      urls = [];
+      for (const job of queue.splice(0)) job();
+      for (const url of urls.splice(0)) URL.revokeObjectURL(url);
     },
   };
 }

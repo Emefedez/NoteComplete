@@ -49,7 +49,7 @@ class Reader:
 
     def scalar(self, kind):
         fmts = {1: "B", 2: "Q", 3: "f", 4: "d", 0x11: "H",
-                0x12: "I", 0x13: "Q", 0x14: "I", 0x20: "d", 0x21: "dd"}
+                0x12: "I", 0x13: "Q", 0x14: "I", 0x20: "d", 0x21: "dd", 0x23: "dddd"}
         if kind in fmts:
             value = self.number(fmts[kind])
             vals = value if isinstance(value, list) else [value]
@@ -105,7 +105,7 @@ def encode_fields(fields):
     """Encode the supported wire types. Used for byte-exact round-trip checks."""
     def scalar(kind, value):
         fmts = {1: "B", 2: "Q", 3: "f", 4: "d", 0x11: "H", 0x12: "I",
-                0x13: "Q", 0x14: "I", 0x20: "d", 0x21: "dd"}
+                0x13: "Q", 0x14: "I", 0x20: "d", 0x21: "dd", 0x23: "dddd"}
         if kind in fmts:
             args = value if isinstance(value, list) else [value]
             return struct.pack(">" + fmts[kind], *args)
@@ -168,8 +168,16 @@ def decode_sample_strokes(blob):
             raise FormatError(f"Unsupported stroke command {command.hex()} at +0x{start:x}")
         prefix = r.take(38)
         flags = struct.unpack_from(">H", prefix, 8)[0]
-        if flags & ~3:
+        if flags & ~0x17:
             raise FormatError(f"Unsupported stroke flags 0x{flags:x} at +0x{start:x}")
+        link = None
+        if flags & 0x10:
+            # Linked stroke: [u32 opaque][u32 len][UTF-8 ID of a kind-23 object].
+            opaque, n = r.number("II")
+            try:
+                link = [opaque, r.take(n).decode("utf-8")]
+            except UnicodeDecodeError as e:
+                raise FormatError(f"Invalid stroke link at +0x{start:x}") from e
         thickness = r.number("d")
         unknown_30 = r.number("I")
         count = r.number("I")
@@ -196,6 +204,7 @@ def decode_sample_strokes(blob):
             "z_order_raw": struct.unpack_from(">Q", prefix, 26)[0],
             "layer_raw": struct.unpack_from(">I", prefix, 34)[0],
             "thickness_candidate": thickness, "unknown_0x30": unknown_30,
+            "linked_object": link[1] if link else None,
             "point_count": count, "encoding": encoding,
             "float32_0x38_0x3c_0x40_0x44": bounds[:4],
             "uint16_pairs": [point[:2] for point in pairs],
