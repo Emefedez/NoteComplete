@@ -128,17 +128,26 @@ pub(crate) fn stroke_svg(s: &Stroke) -> Result<String> {
     }
     let mut rgba = s.style.rgba;
     rgba[3] = 1.;
-    let el = if s.radii.is_empty() {
-        line_svg(&s.points, s.radius, &rgba)
+    // Partially erased strokes draw only their remaining runs.
+    let el: String = s
+        .visible_runs()
+        .iter()
+        .map(|(points, radii)| run_svg(points, radii, s.radius, &rgba))
+        .collect();
+    composite(el, s.style.rgba[3], u64::from(s.style.tool))
+}
+fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> String {
+    if radii.is_empty() {
+        line_svg(points, radius, rgba)
     } else {
         let mut parts = String::new();
-        for (p, r) in s.points.iter().zip(&s.radii) {
+        for (p, r) in points.iter().zip(radii) {
             parts.push_str(&format!(
                 "<circle cx=\"{}\" cy=\"{}\" r=\"{r}\"/>",
                 p[0], p[1]
             ));
         }
-        for (pp, rr) in s.points.windows(2).zip(s.radii.windows(2)) {
+        for (pp, rr) in points.windows(2).zip(radii.windows(2)) {
             let dx = pp[1][0] - pp[0][0];
             let dy = pp[1][1] - pp[0][1];
             let d = dx.hypot(dy);
@@ -165,9 +174,8 @@ pub(crate) fn stroke_svg(s: &Stroke) -> Result<String> {
                 pp[0][1] + rr[0] * by
             ));
         }
-        format!("<g fill=\"{}\">{parts}</g>", color(&rgba))
-    };
-    composite(el, s.style.rgba[3], u64::from(s.style.tool))
+        format!("<g fill=\"{}\">{parts}</g>", color(rgba))
+    }
 }
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];

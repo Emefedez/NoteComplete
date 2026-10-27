@@ -38,6 +38,80 @@ pub struct Stroke {
     pub style: Style,
 }
 impl Stroke {
+    /// Flag 2: the pixel eraser's per-segment mask, `[u32 0][u32 N-1]` then one
+    /// `(a, b)` f32 pair per segment: `[0, b]` erased at its start and
+    /// `[1 - a, 1]` towards its end (noteful-mcp notes). `None` when absent or
+    /// not in that shape, in which case the stroke renders whole.
+    pub fn eraser_mask(&self) -> Option<Vec<[f64; 2]>> {
+        let n = self.points.len();
+        let aux = &self.auxiliary;
+        if self.flags & 2 == 0 || n < 2 || aux.len() != n * 8 {
+            return None;
+        }
+        let word = |i: usize| u32::from_be_bytes(aux[i..i + 4].try_into().unwrap());
+        if word(0) != 0 || word(4) as usize != n - 1 {
+            return None;
+        }
+        let pairs: Vec<[f64; 2]> = aux[8..]
+            .chunks_exact(8)
+            .map(|c| {
+                let v = |i: usize| f32::from_be_bytes(c[i..i + 4].try_into().unwrap()) as f64;
+                [v(0), v(4)]
+            })
+            .collect();
+        pairs
+            .iter()
+            .flatten()
+            .all(|v| v.is_finite() && (-1e-3..=1. + 1e-3).contains(v))
+            .then_some(pairs)
+    }
+    /// Polylines still visible after pixel erasing, each with its radii (if any).
+    pub fn visible_runs(&self) -> Vec<(Vec<[f64; 2]>, Vec<f64>)> {
+        let Some(mask) = self.eraser_mask() else {
+            return vec![(self.points.clone(), self.radii.clone())];
+        };
+        let at = |i: usize, t: f64| {
+            let (p, q) = (self.points[i], self.points[i + 1]);
+            let r = (!self.radii.is_empty())
+                .then(|| self.radii[i] + (self.radii[i + 1] - self.radii[i]) * t);
+            ([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t], r)
+        };
+        let point = |i: usize| (self.points[i], self.radii.get(i).copied());
+        let mut out = Vec::new();
+        let mut cur: Vec<([f64; 2], Option<f64>)> = Vec::new();
+        let mut flush = |cur: &mut Vec<([f64; 2], Option<f64>)>| {
+            if cur.len() > 1 {
+                let (p, r): (Vec<_>, Vec<_>) = cur.drain(..).unzip();
+                out.push((p, r.into_iter().flatten().collect()));
+            }
+            cur.clear();
+        };
+        for (i, [a, b]) in mask.into_iter().enumerate() {
+            if a <= 0. && b <= 0. {
+                if cur.is_empty() {
+                    cur.push(point(i));
+                }
+                cur.push(point(i + 1));
+                continue;
+            }
+            if a + b >= 1. {
+                flush(&mut cur);
+                continue;
+            }
+            if b > 0. {
+                flush(&mut cur);
+                cur.push(at(i, b));
+            } else if cur.is_empty() {
+                cur.push(point(i));
+            }
+            cur.push(at(i, 1. - a));
+            if a > 0. {
+                flush(&mut cur);
+            }
+        }
+        flush(&mut cur);
+        out
+    }
     pub fn to_json(&self) -> Value {
         json!({"offset_in_blob":self.offset,"size":self.size,"record_prefix":"f101",
             "opaque_header_hex":hex(&self.header),"id_raw":format!("{:016x}",self.id),
