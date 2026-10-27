@@ -18,16 +18,18 @@ NoteComplete is an independent desktop and web companion for people who take not
 - **Pages your way**: add blank pages of any size or pages from another PDF at the note's scale; resize any page from a menu or by dragging its borders, with the PDF kept in place.
 - **Select and copy text** from PDFs and from recognized handwriting, straight from the page.
 - **Night view** (<kbd>D</kbd>): white paper turns black and ink turns light, colours keep their hue. Pages can sit left, centred, right or wherever you leave them.
+- **Export pages** from **File → Pages as**: SVG (this page, vector), PDF (every page as shown, each at its own size, made in the background) or IMG (this page as JPEG, WebP or PNG).
 
 <p align="center"><img src="docs/images/night.png" alt="Night view: a handwritten exam page with black paper and light ink" width="100%"></p>
 
 ### Notes in Markdown
-A **Notes** panel (<kbd>N</kbd>) sits beside the pages: Markdown that is formatted and coloured as you type, with a formatted preview. **+ Page** ties a section to the page you are on; clicking it jumps there, and the notes follow you as you turn pages. Notes are kept with each note on the device and saved in projects. Export the note on its own (.noteful), with its notes as a Markdown file whose page breaks are marked (.noteful + .md), or as one **.notecomp** file that holds both and opens in NoteComplete with its notes. The editor loads only when the panel is opened; rendering and the archive format are in the Rust core.
+A **Notes** panel (<kbd>N</kbd>) sits beside the pages: Markdown that is formatted and coloured as you type, with a formatted preview. **+ Page** ties a section to the page you are on; clicking it jumps there, and the notes follow you as you turn pages. Notes are kept with each note on the device and saved in projects, and **Ask AI** can read them. Export the note on its own (.noteful), with its notes as a Markdown file whose page breaks are marked (.noteful + .md), or as one **.notecomp** file that holds both and opens in NoteComplete with its notes. The editor loads only when the panel is opened; rendering and the archive format are in the Rust core.
 
 ### Your library
 - **Google Drive on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook, or as a quick list that reads nothing at all.
 - **Filters and sorting**: by date, size, recordings and Noteful tags; natural A–Z order.
-- **Kept on this device**: opened notes are saved to a folder you choose and reused until Drive has a newer version.
+- **Kept on this device**: opened notes are saved to a folder you choose. A note is never downloaded twice: Noteful backups upload unchanged notes again as new files, and NoteComplete recognises them by content.
+- **Newer versions**: opening a Drive note from Recent checks Drive first. If the iPad saved a newer version, choose it, keep your copy, keep both, or **compare** them page by page side by side. Taking the new version offers to bring its flashcards, quizzes and Markdown notes along.
 
 <p align="center"><img src="docs/images/home.png" alt="Home with recent notes, sort, view switch and filters" width="100%"></p>
 
@@ -40,16 +42,23 @@ One search (<kbd>Ctrl</kbd>+<kbd>F</kbd>) over typed text, PDF text, transcripts
 Play recordings with the handwriting appearing as it was written, tap ink to seek, and transcribe with Whisper on the device, Voxtype (local whisper.cpp) or Gemini through Antigravity. Text appears while it is transcribed; your AI tool can then revise it while every word keeps its time. Export as text, SRT, WebVTT or JSON.
 
 ### Study with your AI subscription
-Flashcards and quizzes are generated in the background by the AI tool you already use (Claude Code, Antigravity or Codex), from page images with tape lifted and the page text. Practise flashcards and export them to Anki; quizzes are saved, resumable and point to the part of your notes that answers each question. **Ask AI** (<kbd>Ctrl</kbd>+<kbd>J</kbd>) answers questions about a page or a region you grab. The bundled MCP server lets agents read your notebooks directly ([AI agents](docs/MCP.md)).
+Flashcards and quizzes are generated in the background by the AI tool you already use (Claude Code, Antigravity or Codex), from page images (tape lifted, so covered answers are readable) and the page text, covering each page evenly.
+- **Quizzes** are saved and resumable. A hint (<kbd>H</kbd>) shows the part of your notes that answers the question (click it to see it large); **Clarify** (<kbd>C</kbd>), **Dispute** (<kbd>X</kbd>) and **Double check** (<kbd>V</kbd>) let you question every answer, and wrong answers can be retaken.
+- **Flashcards** are practised in a window that floats beside your pages and exported to Anki. While practising, **Ask AI** (<kbd>C</kbd>) explains a card using its page, the page's source PDF, your notes or the whole note, with the tool and model you pick; the last explanation is kept with the card, folded under the answer, and you can edit it. **Edit** (<kbd>E</kbd>), **Double check** (<kbd>V</kbd>) and **Discard** (<kbd>X</kbd>) fix a card on the spot.
+- A sun in the quiz and flashcard windows **dims everything behind them** while you study.
+- **Ask AI** (<kbd>Ctrl</kbd>+<kbd>J</kbd>) answers questions about a page, a region you grab or your notes. The bundled MCP server lets agents read your notebooks directly ([AI agents](docs/MCP.md)).
 
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
 
 ### Feels like a desktop app
-Tabs for several notes in one window (<kbd>Ctrl</kbd>+<kbd>T</kbd>, drag to reorder), a native-style File / Edit / View menubar that shrinks while you scroll, a <kbd>Ctrl</kbd>+<kbd>K</kbd> command search, single-key shortcuts for every tool, and <kbd>?</kbd> to show each button's key on the button itself.
+- **Tabs and windows**: several notes in one window (<kbd>Ctrl</kbd>+<kbd>T</kbd>, drag to reorder); drag a tab out to give it a window of its own; opening the app again opens a new window.
+- **Floating windows**: Ask AI, audio, quizzes and flashcards can be dragged anywhere and resized from any edge or corner; **_** puts one away in a tray at the bottom left, **□** makes it small or large, **×** closes it.
+- A native-style File / Edit / View menubar that shrinks while you scroll, a <kbd>Ctrl</kbd>+<kbd>K</kbd> command search, single-key shortcuts for every tool, and <kbd>?</kbd> to show each button's key on the button itself.
+- **Interface size** with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>−</kbd> / <kbd>+</kbd> / <kbd>0</kbd> (the page zoom stays on <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>+</kbd> / <kbd>0</kbd>). No spell-check underlines: notes are written in many languages.
 
 <p align="center"><img src="docs/images/keys.png" alt="Key badges on the toolbar buttons after pressing ?" width="100%"></p>
 
-**Private by default**: everything is processed locally. Drive access is read-only unless you choose to upload a change or delete a note there. AI features run through your own tools; only Gemini transcription sends audio off the device.
+**Private by default**: everything is processed locally. Drive access is read-only unless you choose to upload a change or delete a note there. AI features run through your own tools and send only what you choose (by default the page you are on); only Gemini transcription sends audio off the device.
 
 Screenshots use the sample notes in [`samples/`](samples/).
 
@@ -75,6 +84,13 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 - The Google Drive sign-in is not remembered between sessions, so Recent can only check Drive for newer versions after you connect (or for a public folder with an API key).
 - Installers are unsigned previews, and Linux is the only tested platform.
 - Every request and its state (`[D]` done, `[!]` not yet verified, `[ ]` to do) is in [docs/REQUESTS.md](docs/REQUESTS.md).
+
+## Roadmap
+
+Planned, not started (details in [docs/REQUESTS.md](docs/REQUESTS.md)):
+- **Three file formats**, chosen on first save: Noteful (`.noteful`, maximum compatibility), NotePartial (`.ntpartial`, today's archive: the note plus its Markdown) and NoteComplete (`.notecomplete`, recommended: an open, documented ZIP package with pages, resources, notes and study material). Today's `.notecomp` files keep opening.
+- **Repositories** as a library source next to Google Drive: GitHub repositories with notes, files and solved exams, browsed from Home.
+- **Infinite canvas** in `.notecomplete`, split into sheets of up to Noteful's maximum page size when saved as `.noteful`.
 
 ## Build from source
 
@@ -114,5 +130,6 @@ Related work: [noteful-mcp](https://github.com/openninoor/noteful-mcp) (MIT) ind
 | `docs/` | User guide, Google Drive, builds, release notes |
 | `spec/`, `samples/`, `tests/fixtures/` | Format specification the core implements, sample corpus and synthetic fixtures |
 | `tools/` | Web build, local server and Expo helpers |
+| `skills/` | Claude Code skills that came out of this project ([polished-apps](skills/polished-apps/SKILL.md): how apps like this one are built) |
 
 Development procedure and architecture: [DEVELOPMENT.md](DEVELOPMENT.md).
