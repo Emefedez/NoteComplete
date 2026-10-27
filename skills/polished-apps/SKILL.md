@@ -68,6 +68,7 @@ Top bar (menubar · title/tabs · jobs · assistant · command search) → toolb
 - Long work runs in the background with a job chip (phase, elapsed time, progress, Stop); the UI never blocks.
 - Undo instead of confirmation; confirm only before losing data.
 - Reserve space for things that appear, so layout never jumps; new windows/views paint the backdrop colour first.
+- Spell check off by default (`spellcheck="false"` on `<html>`, Electron `webPreferences.spellcheck: false`): people write in several languages and a single-language checker underlines everything. Offer it as a setting with chosen languages if the app is mostly about writing.
 
 ## Accessibility
 

@@ -11,7 +11,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 
 const tabs = tabStore();
 const views = new Map(), windows = new Map();
-const webPreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
+// Spell check off: users write in several languages; offer it as a setting if needed.
+const webPreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
 // Same colour as the UI's --chrome token, so nothing flashes white.
 const backdrop = () => nativeTheme.shouldUseDarkColors ? '#202328' : '#f7f8fa';
