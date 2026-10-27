@@ -134,6 +134,7 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ The practice keys (1, 2) work after Show answer again: hiding that button had moved focus out of the dialog.
 - ✅ **One design language**: the viewer's look everywhere. 28px buttons with 6px corners, filled light buttons, the pale accent for chosen items and main actions (no solid blue), 8px dialogs and panels, wider dialogs with labels beside their fields, page scope as a row of choices, quiz options as filled rows. Pills stay for secondary things: tags, filters, the job chip, the toast. *Before/after screenshots of every dialog and panel, light and dark.*
 - ✅ **Multiple windows**: launching the app again opens a new window (Ctrl+T and + still make tabs). Dragging a tab out of the strip moves it to a window of its own, still loaded, with its edits. *Stub-Electron test of the main process; browser test of the drag.* ⚠️ Not yet tried in the real app. Dropping a tab onto another window's strip is not supported; Wayland doesn't tell the app where the pointer is outside its own windows.
+- ✅ **The quiz hint stays hidden until asked for**, also after answering (it used to open by itself once a question was answered). After answering, Hint (H) still shows the region, at no cost. *Browser check: answered question, no clipping shown.*
 - ✅ **No white flash on new tabs or windows**: they paint the reader's own background colour (light or dark) and the new tab appears once it has drawn, while the previous one stays up.
 
 ## Home filters

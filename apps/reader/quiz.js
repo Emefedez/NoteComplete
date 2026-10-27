@@ -120,7 +120,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
       button.onclick = () => choose(i);
       return button;
     }));
-    $('quizHintButton').hidden = !!answer || !q.source;
+    // The hint stays hidden until asked for, also after answering (then it costs nothing).
+    $('quizHintButton').hidden = !q.source;
     $('quizClarify').hidden = false;
     $('quizWhere').hidden = !q.source;
     $('quizWhere').textContent = q.source ? `Where it is: p. ${q.source.page}` : '';
@@ -130,7 +131,6 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizDispute').dataset.armed = '';
     $('quizCorrection').hidden = !q.correction?.note && q.correction?.answer === undefined;
     $('quizCorrection').textContent = q.correction ? `Your correction: option ${q.correction.answer + 1}${q.correction.note ? ` · ${q.correction.note}` : ''}` : '';
-    if (answer && q.source) revealHint(false);
   }
   async function revealHint(counts = true) {
     const q = quiz.questions[quiz.at];
