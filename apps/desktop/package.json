@@ -27,6 +27,7 @@
     "files": [
       "main.js",
       "asset-path.js",
+      "library-files.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

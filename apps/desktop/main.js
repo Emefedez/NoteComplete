@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
+import { libraryFiles } from './library-files.js';
 
 const home = 'notecomplete://reader/';
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
@@ -37,6 +38,27 @@ app.whenReady().then(() => {
   });
   const pendingAuth = new Map();
   const trusted = event => event.senderFrame === event.sender.mainFrame && event.senderFrame.url.startsWith(home);
+  // Downloads folder and Recent for the reader; see library-files.js for the limits.
+  const files = libraryFiles({ settingsFile: path.join(app.getPath('userData'), 'library.json'), defaultFolder: path.join(app.getPath('documents'), 'NoteComplete') });
+  const guarded = handler => async (event, ...args) => {
+    if (!trusted(event)) throw Error('Unexpected reader origin.');
+    return handler(event, ...args);
+  };
+  ipcMain.handle('files:folder', guarded(() => files.folder()));
+  ipcMain.handle('files:choose', guarded(async event => {
+    const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: 'Keep downloaded notes in…', defaultPath: await files.folder(), properties: ['openDirectory', 'createDirectory'] });
+    return chosen.canceled ? null : files.setFolder(chosen.filePaths[0]);
+  }));
+  ipcMain.handle('files:read', guarded((_event, name) => files.read(name)));
+  ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
+  ipcMain.handle('files:open', guarded(async event => {
+    const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs and images', extensions: ['noteful', 'nfedit', 'pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
+    if (chosen.canceled) return null;
+    const file = chosen.filePaths[0];
+    await files.remember(file);
+    return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
+  }));
+  ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
   ipcMain.on('drive:cancel', event => { if (trusted(event)) pendingAuth.get(event.sender.id)?.abort(); });
   ipcMain.handle('drive:sign-in', async event => {
     if (!trusted(event)) throw Error('Unexpected authentication origin.');
