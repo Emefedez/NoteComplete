@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>App</title>
+<link rel="stylesheet" href="./tokens.css" />
+<link rel="stylesheet" href="./components.css" />
+
+<!-- Top bar: menubar · title/tabs · jobs · assistant · command search -->
+<!-- Icon set: 24×24, stroke currentColor (class="icon"). The sparkle marks AI everywhere. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 11 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 5 3 11l6 6M3 11h11a6 6 0 0 1 6 6"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 5 6 6-6 6m6-6H10a6 6 0 0 0-6 6"/></symbol>
+</svg>
+
+<header class="bar">
+  <button class="icon-button" aria-label="Side menu" title="Side menu" aria-expanded="false" aria-controls="drawer"><svg class="icon"><use href="#i-menu"/></svg></button>
+  <nav class="menubar" role="menubar" aria-label="Application menu">
+    <details class="menu">
+      <summary role="menuitem">File</summary>
+      <div class="menu-content" role="menu">
+        <button role="menuitem">Open…<kbd>Ctrl O</kbd></button>
+        <button role="menuitem">New window<kbd>Ctrl Shift N</kbd></button>
+        <hr />
+        <button role="menuitem">Export…<kbd>Ctrl E</kbd></button>
+      </div>
+    </details>
+    <details class="menu"><summary role="menuitem">Edit</summary><div class="menu-content" role="menu"></div></details>
+    <details class="menu"><summary role="menuitem">View</summary><div class="menu-content" role="menu"></div></details>
+    <details class="menu"><summary role="menuitem">Help</summary>
+      <div class="menu-content" role="menu">
+        <button role="menuitem" data-open="palette">Search commands<kbd>Ctrl K</kbd></button>
+        <button role="menuitem">Keyboard shortcuts<kbd>?</kbd></button>
+      </div>
+    </details>
+  </nav>
+  <div class="brand"><span id="title">Untitled project</span><div id="tabs" class="tab-strip" role="tablist" aria-label="Open projects" hidden></div></div>
+  <div id="jobs" role="status" aria-live="polite"></div>
+  <button class="bar-ai" title="Ask AI (Ctrl J)"><svg class="icon"><use href="#i-spark"/></svg>Ask AI</button>
+  <button class="bar-command" data-open="palette" aria-keyshortcuts="Control+K Meta+K"><svg class="icon"><use href="#i-search"/></svg>Search<kbd>Ctrl K</kbd></button>
+</header>
+
+<!-- Toolbar: tools | transport/actions | readouts | view controls -->
+<div class="toolbar" role="toolbar" aria-label="Tools">
+  <div class="segmented" role="group" aria-label="Tool">
+    <button aria-pressed="true" title="Select (V)">Select</button>
+    <button aria-pressed="false" title="Zoom (Z)">Zoom</button>
+    <button aria-pressed="false" title="Measure (M)">Measure</button>
+  </div>
+  <span class="divider" role="separator"></span>
+  <button aria-label="Play" title="Play (Space)">▶</button>
+  <button aria-label="Stop" title="Stop">■</button>
+  <span class="timecode readout" aria-label="Position">00:00:01.250</span>
+  <span style="flex:1"></span>
+  <button class="has-caret" aria-expanded="false" aria-haspopup="menu" title="View options">Waveform<span class="caret"></span></button>
+  <button class="icon-button" aria-label="Undo" title="Undo (Ctrl Z)"><svg class="icon"><use href="#i-undo"/></svg></button>
+  <button class="icon-button" aria-label="Redo" title="Redo (Ctrl Shift Z)"><svg class="icon"><use href="#i-redo"/></svg></button>
+</div>
+
+<!-- Workspace: explorer | main view | inspector, bottom dock. Floating panels sit over the main view. -->
+<main class="workspace">
+  <aside class="dock dock-left" aria-label="Explorer">
+    <div class="dock-title">Channels</div>
+    <ul class="tree" role="tree" aria-label="Channels">
+      <li role="treeitem" aria-selected="true"><span class="swatch" style="--c: var(--series-1)"></span>Input A</li>
+      <li role="treeitem" aria-selected="false"><span class="swatch" style="--c: var(--series-2)"></span>Input B</li>
+      <li role="treeitem" aria-selected="false"><span class="swatch" style="--c: var(--series-3)"></span>Filtered</li>
+    </ul>
+  </aside>
+
+  <section class="main-view" aria-label="Main view">
+    <canvas id="view" tabindex="0" aria-label="Plot of the selected channels; arrow keys move the cursor"></canvas>
+    <div class="view-overlay"><!-- cursor, selection, handles, labels as DOM/SVG --></div>
+    <div class="find-bar" role="search" hidden><input type="search" aria-label="Find" /></div>
+    <aside class="side-panel" aria-label="Assistant" hidden>
+      <div class="panel-head"><strong>Assistant</strong><button aria-label="Close">×</button></div>
+      <div class="panel-body"></div>
+    </aside>
+  </section>
+
+  <aside class="dock dock-right inspector" aria-label="Inspector">
+    <details open>
+      <summary>Channel</summary>
+      <label class="prop"><span>Gain</span><input type="number" value="0" step="0.5" /><span class="unit">dB</span></label>
+      <label class="prop"><span>Offset</span><input type="number" value="0" /><span class="unit">mV</span></label>
+      <label class="prop"><span>Colour</span><select><option>Series 1</option></select><span></span></label>
+    </details>
+    <details open>
+      <summary>Filter</summary>
+      <label class="prop"><span>Low cut</span><input type="number" value="20" /><span class="unit">Hz</span></label>
+    </details>
+  </aside>
+
+  <section class="dock dock-bottom" aria-label="Bottom dock">
+    <div class="dock-tabs" role="tablist">
+      <button role="tab" aria-selected="true">Measurements</button>
+      <button role="tab" aria-selected="false">Console</button>
+    </div>
+    <div role="tabpanel" style="padding:8px 10px;font-size:12px" class="num"><!-- virtualized table --></div>
+  </section>
+</main>
+
+<!-- Status line: only live readouts -->
+<footer class="status" aria-label="Status">
+  <span class="readout">x 12.300 ms</span><span class="readout">y −3.20 dB</span>
+  <span class="spacer"></span><span>48 kHz · 2 ch</span>
+</footer>
+
+<!-- Dialog: wide, labels left, choices as a row, actions bottom-right -->
+<dialog class="sheet" aria-labelledby="exportTitle">
+  <h2 id="exportTitle">Export</h2>
+  <fieldset class="field" style="border:0;padding:0;margin:0 0 10px">
+    <legend style="float:left;padding:0">Range</legend>
+    <div class="choices">
+      <label><input type="radio" name="range" value="selection" checked /> Selection</label>
+      <label><input type="radio" name="range" value="all" /> Everything</label>
+    </div>
+  </fieldset>
+  <label class="field">Format<select><option>WAV 32-bit float</option><option>CSV</option></select></label>
+  <label class="check"><input type="checkbox" /> Open the folder when done</label>
+  <p class="muted" role="status" aria-live="polite"></p>
+  <div class="actions"><button>Cancel</button><button class="primary">Export</button></div>
+</dialog>
+
+<dialog class="palette" aria-label="Commands">
+  <input role="combobox" aria-controls="paletteList" aria-expanded="true" placeholder="Type a command, a file, or “go to 12.5 s”" />
+  <ul id="paletteList" role="listbox"></ul>
+</dialog>
+
+<!-- Side menu (drawer): settings, history, navigation on narrow screens -->
+<aside id="drawer" class="drawer" aria-label="Side menu" data-open="false">
+  <div class="panel-head"><strong>Project</strong><button class="icon-button" aria-label="Close">×</button></div>
+  <div class="panel-body"><!-- recent projects, settings sections as <details> --></div>
+</aside>
+
+<div class="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+// Main view pattern: colours from tokens, drawn at devicePixelRatio, redrawn only
+// when its size or data changes (no loop while idle). Decimate to ≤ 2 points per column.
+const canvas = document.getElementById('view'), ctx = canvas.getContext('2d');
+const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const data = Float32Array.from({ length: 200000 }, (_, i) => Math.sin(i / 900) * 0.6 + Math.sin(i / 37) * 0.15);
+function minMaxColumns(samples, columns) {
+  const out = new Float32Array(columns * 2), per = samples.length / columns;
+  for (let c = 0; c < columns; c++) {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = Math.floor(c * per), end = Math.floor((c + 1) * per); i < end; i++) { const v = samples[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    out[c * 2] = lo; out[c * 2 + 1] = hi;
+  }
+  return out;
+}
+function draw() {
+  const dpr = devicePixelRatio || 1, { width, height } = canvas.getBoundingClientRect();
+  canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = token('--line'); ctx.lineWidth = 1;
+  for (let y = 0.5; y < height; y += Math.round(height / 8)) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+  const cols = Math.max(1, Math.floor(width)), mm = minMaxColumns(data, cols), mid = height / 2, scale = height * 0.4;
+  ctx.strokeStyle = token('--series-1'); ctx.beginPath();
+  for (let c = 0; c < cols; c++) { ctx.moveTo(c + 0.5, mid - mm[c * 2 + 1] * scale); ctx.lineTo(c + 0.5, mid - mm[c * 2] * scale); }
+  ctx.stroke();
+}
+new ResizeObserver(draw).observe(canvas);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+</script>
+</html>
