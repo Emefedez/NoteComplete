@@ -156,6 +156,12 @@ The owner's requests from the latest review, in one place, with how each was che
 - [!] **Floating windows** (Ask AI, audio, quiz, flashcards): drag them anywhere by their head, resize them from any edge or corner (a mark shows the bottom-right one), and they stay inside the work area so the head and × are always reachable. The head has _ □ ×: _ puts the window in the tray at the bottom left (a pill with an arrow listing what is put away; choosing one brings it back in place), □ makes it small (head only) or large again, × closes. Place and size are remembered per window. A narrow Ask AI window used to push its × out of sight: its head now squeezes the selects instead. *Browser test (dark): drag, corner resize, pushed past edges and grown past the area with × still clickable, tray with two windows, restore one, close takes it off the tray.* Not yet tried in the real app.
 - [D] **Export as PDF and as images**: File → Pages as SVG · PDF · IMG. PDF holds every page as shown, each at its own size, made in the background with Stop (pages drawn here, bound by the Rust core with pdf-writer); IMG opens JPEG / WebP / PNG for the current page. *Browser test: 3-page A4 PDF (1.3 MB, title set), WebP page 160 KB; Rust tests for the PDF binder.*
 
+## Twelfth round
+- [D] **Drive notes are not downloaded again when nothing changed.** Noteful backups upload a new Drive file (new id) instead of updating the old one, so the app re-downloaded identical notes (259 MB for Memoria 1) and Recent showed two copies. Kept copies now record Drive's checksum (MD5, computed by the Rust core for older copies, once, only for same name and size): a file with the same content reuses the kept copy and its Recent entry moves to the new file. Identical duplicates already in Recent are merged once. *Unit tests; browser test with a fake Drive: no download, one Recent entry.*
+- [!] **Recent asks before opening an old copy.** Opening a Drive note from Recent asks Drive for the newest file with its name in its folder. If it differs, a dialog shows both dates and sizes: Open Drive version, Open my copy, Keep both, or Compare… *Needs Drive connected in that session (or a public folder with an API key); otherwise the copy opens and a note says it was not checked.*
+- [!] **Compare two versions side by side**: both versions open in their own background readers; pages are aligned like a text diff (an inserted page doesn't mark the rest as changed) and changed, added and removed pages are shown in pairs, with the same three choices. *Browser test with a fake Drive: "1 changed · 2 only in your copy".* Not yet tried with a real Drive.
+- [!] **Taking a new version offers to bring the study material**: flashcard decks (with saved explanations), quizzes and Markdown notes are stored per version, so the app asks which to copy to the new one (the old version keeps its own). *Browser test: the deck arrived on the new version.*
+
 ## Future: file formats and repositories (agreed, not started)
 
 Owner's idea (2026-10-28), with corrections and additions agreed in review.
@@ -179,6 +185,7 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
   - read-only first; contributing back (fork + pull request) later;
   - large notes: GitHub refuses files over 100 MB (Memoria 1 is 259 MB), so repositories need Git LFS or release assets for those; the app should read both;
   - downloaded files cached and reused like Drive copies.
+- [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets no larger than Noteful's maximum page (the owner gives 147456 × 14756 pt; confirm the exact limit and units against Noteful before building, since the two numbers differ by a factor of ten), laid out in reading order with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way.
 
 ## Home filters

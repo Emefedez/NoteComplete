@@ -1167,6 +1167,26 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .quiz-options kbd { margin-right: 4px; }
 .quiz-hint { margin: 8px 0; padding: 6px; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 12px; color: var(--muted); }
 .quiz-hint img { display: block; max-width: 100%; max-height: 260px; margin: 0 auto; border-radius: 4px; cursor: zoom-in; }
+/* Newer version in Drive, and the side-by-side comparison. */
+.version-facts { display: grid; grid-template-columns: 8.5em 1fr; gap: 4px 12px; margin: 0 0 12px; font-size: 13px; }
+.version-facts dt { color: var(--muted); } .version-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.compare-dialog { width: min(1100px, calc(100vw - 24px)); height: min(88dvh, 900px); padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-dialog); }
+.compare-dialog[open] { display: flex; flex-direction: column; gap: 8px; }
+.compare-dialog::backdrop { background: #0006; }
+.compare-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.compare-head h2 { margin: 0; font-size: 16px; }
+.compare-head p { margin: 0; font-size: 12px; }
+.compare-sides, .compare-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.compare-sides { font-size: 12px; font-weight: 600; color: var(--muted); }
+.compare-rows { flex: 1; min-height: 0; overflow: auto; list-style: none; margin: 0; padding: 0 2px; display: grid; gap: 14px; align-content: start; }
+.compare-row > p { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+.compare-row.changed > p { color: var(--accent); }
+.compare-row.added > p { color: var(--ok, #145c38); }
+.compare-row.removed > p { color: var(--danger); }
+.compare-pair figure { margin: 0; display: grid; place-items: center; min-height: 120px; border-radius: var(--radius); background: var(--fill); }
+.compare-pair figure.empty::after { content: "—"; color: var(--muted); }
+.compare-pair img { display: block; max-width: 100%; background: #fff; border-radius: 4px; }
+#carryList { margin: 0 0 12px; }
 /* A hint shown large: fitted to the window over a dark backdrop; any click closes it. */
 .image-viewer { max-width: none; max-height: none; width: 100vw; height: 100dvh; margin: 0; padding: 24px; border: 0; background: transparent; display: none; place-items: center; cursor: zoom-out; }
 .image-viewer[open] { display: grid; }

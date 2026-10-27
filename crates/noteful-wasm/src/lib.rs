@@ -279,6 +279,11 @@ pub fn markdown_export(src: &str, title: &str) -> String {
 pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>, JsValue> {
     noteful_core::jpeg_pages_pdf(data, layout, title).map_err(|e| JsValue::from_str(&e))
 }
+/// MD5 hex of a file, to match it with Google Drive's md5Checksum.
+#[wasm_bindgen]
+pub fn md5_hex(data: &[u8]) -> String {
+    noteful_core::md5_hex(data)
+}
 #[wasm_bindgen]
 pub fn is_notecomplete(data: &[u8]) -> bool {
     noteful_core::is_notecomplete(data)

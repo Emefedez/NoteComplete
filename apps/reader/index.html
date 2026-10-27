@@ -739,6 +739,25 @@
   </div>
 </dialog>
 
+<dialog id="versionDialog" class="ocr-dialog" aria-labelledby="versionTitle">
+  <h2 id="versionTitle">Newer version in Google Drive</h2>
+  <p id="versionText"></p>
+  <dl class="version-facts"><dt>Your copy</dt><dd id="versionMine"></dd><dt>Google Drive</dt><dd id="versionDrive"></dd></dl>
+  <div class="ocr-actions"><button id="versionCompare" type="button">Compare…</button><span class="spacer"></span><button id="versionOpenMine" type="button">Open my copy</button><button id="versionBoth" type="button" title="Download the Drive version and keep your copy too">Keep both</button><button id="versionOpenDrive" type="button" class="primary">Open Drive version</button></div>
+</dialog>
+<dialog id="compareDialog" class="compare-dialog" aria-labelledby="compareTitle">
+  <div class="compare-head"><h2 id="compareTitle">Compare</h2><p id="compareSummary" class="muted" role="status" aria-live="polite"></p></div>
+  <div class="compare-sides"><span id="compareLeftLabel"></span><span id="compareRightLabel"></span></div>
+  <ol id="compareRows" class="compare-rows"></ol>
+  <div class="ocr-actions"><span class="spacer"></span><button id="compareMine" type="button">Use my copy</button><button id="compareBoth" type="button">Keep both</button><button id="compareDrive" type="button" class="primary">Use Drive version</button></div>
+</dialog>
+<dialog id="carryDialog" class="ocr-dialog" aria-labelledby="carryTitle">
+  <h2 id="carryTitle">Bring your study material?</h2>
+  <p>Flashcards, quizzes and Markdown notes are kept per version of a file. Copy them to the new version (the old version keeps its own):</p>
+  <div id="carryList"></div>
+  <div class="ocr-actions"><button id="carrySkip" type="button">Skip</button><button id="carryBring" type="button" class="primary">Bring them</button></div>
+</dialog>
+
 <dialog id="imageViewer" class="image-viewer" aria-label="Hint, large"><img id="imageViewerImage" alt="" /></dialog>
 
 <dialog id="quizPromptDialog" class="deck-dialog" aria-labelledby="quizPromptTitle">

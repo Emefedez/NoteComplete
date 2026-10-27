@@ -4,7 +4,7 @@ import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, compareNotes } from './note-facts.js';
 
-export function homeScreen({ library, drive, open, status, current = () => ({}) }) {
+export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}) }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -15,7 +15,10 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
   };
   let quick = false; // Quick list view: see setView.
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
+  // Identical copies kept before checksums existed are merged once per session.
+  let merging = null;
   async function renderRecent() {
+    merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch(() => {});
     let entries = [];
     try { entries = await Promise.race([library.recent(), new Promise((_, reject) => setTimeout(() => reject(Error('the note storage did not answer')), 6000))]); }
     catch (error) {
@@ -63,6 +66,8 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
             await library.forget(entry.key);
             return renderRecent();
           }
+          // A Drive note may have a newer version there: the user picks first.
+          if (await versions?.openRecent(entry, file)) return renderRecent();
           await library.touch(entry.key);
           await open(file, entry);
         } catch (error) { status(error.message, true); }

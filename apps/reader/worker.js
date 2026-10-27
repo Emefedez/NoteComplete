@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -36,6 +36,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       }
     } else if (op === "markdownHtml") {
       postMessage({ id, result: markdown_html(args.text) });
+      return;
+    } else if (op === "md5") {
+      postMessage({ id, result: md5_hex(new Uint8Array(args.bytes)) });
       return;
     } else if (op === "jpegPagesPdf") {
       const result = jpeg_pages_pdf(args.data, args.layout, args.title);

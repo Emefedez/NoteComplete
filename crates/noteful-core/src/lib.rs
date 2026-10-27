@@ -6,6 +6,22 @@ mod editor;
 mod markdown;
 mod page_pdf;
 pub use page_pdf::jpeg_pages_pdf;
+
+/// MD5 of a file's bytes, as hex: Google Drive reports the same checksum, so a kept
+/// copy can be matched to a re-uploaded file without downloading it again.
+pub fn md5_hex(bytes: &[u8]) -> String {
+    use md5::{Digest, Md5};
+    Md5::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg(test)]
+mod md5_tests {
+    #[test]
+    fn matches_known_digests() {
+        assert_eq!(super::md5_hex(b""), "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(super::md5_hex(b"NoteComplete"), "73fd8b6ecb500921e5ef569f3d9771c3");
+    }
+}
 pub use markdown::{
     is_notecomplete, markdown_export, markdown_html, markdown_pages, pack_notecomplete,
     page_marker, unpack_notecomplete,

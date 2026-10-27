@@ -4,7 +4,7 @@ export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 export const DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
 export const supportedDriveFile = file => /\.(noteful|nfedit|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
-const fields = 'id,name,mimeType,modifiedTime,size,resourceKey,thumbnailLink,capabilities(canDownload)';
+const fields = 'id,name,mimeType,modifiedTime,size,md5Checksum,parents,resourceKey,thumbnailLink,capabilities(canDownload)';
 const quote = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export function folderReference(value) {
   const input = value.trim();
@@ -73,6 +73,18 @@ export class DriveClient {
       throw Error(`Google Drive request failed (${response.status}). Retry when online.`);
     }
     return response;
+  }
+  // The folder a file is in (for notes kept before folders were recorded).
+  async parentOf(id, signal) {
+    const response = await this.request(`files/${encodeURIComponent(id)}`, { fields: 'parents', supportsAllDrives: 'true' }, signal);
+    return (await response.json()).parents?.[0] || null;
+  }
+  // Files with this name in a folder (or anywhere when the folder is unknown), newest first:
+  // Noteful backups upload a new file with the same name instead of updating the old one.
+  async sameName(name, parent, signal) {
+    const q = `name = '${quote(name)}' and trashed = false` + (parent ? ` and '${quote(parent)}' in parents` : '');
+    const { files = [] } = await this.list(q, '', signal, parent ? { id: parent } : undefined);
+    return files.sort((a, b) => Date.parse(b.modifiedTime || 0) - Date.parse(a.modifiedTime || 0));
   }
   async list(query, pageToken, signal, resource) {
     const params = { q: query, fields: `nextPageToken,incompleteSearch,files(${fields})`, pageSize: '100', orderBy: 'folder,name_natural', spaces: 'drive', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' };

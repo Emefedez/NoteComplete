@@ -16,6 +16,7 @@ import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter, IMAGE_TYPES } from "./page-export.js";
+import { versionChooser } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -2089,14 +2090,20 @@ const drive = driveBrowser({
     return opened;
   },
 });
+// The kept copy's MD5 (the core computes it), to match Drive's md5Checksum.
+library.md5 = (bytes) => call("md5", { bytes: bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer });
+async function openFromLibrary(file, entry) {
+  const opened = await openChosen(file);
+  if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; }
+  return opened;
+}
+// Recent asks Drive for newer versions before opening a Drive note (versions.js).
+const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
 var home = homeScreen({
   library,
   drive,
-  open: async (file, entry) => {
-    const opened = await openChosen(file);
-    if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; }
-    return opened;
-  },
+  versions,
+  open: openFromLibrary,
   status,
   current: () => ({
     entryKey: noteEntryKey,

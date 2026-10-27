@@ -6,6 +6,7 @@ function fakeDirectory(name = 'Notes') {
   const files = new Map();
   return {
     name, files,
+    async removeEntry(file) { files.delete(file); },
     async getFileHandle(file, options) {
       if (!files.has(file) && !options?.create) throw Error('NotFound');
       return {
@@ -77,4 +78,44 @@ test('forgetting a Drive note can delete its kept copy and cover; local original
   assert.equal(dir.files.size, 0);
   assert.equal(await library.cover(library.coverKey(drive())), undefined);
   assert.deepEqual(await library.recent(), []);
+});
+
+// A stand-in for the core's md5_hex: the tests only need equal bytes to give equal sums.
+const fakeMd5 = async bytes => 'md5:' + [...bytes].join(',');
+
+test('a re-uploaded Drive note with the same content is not downloaded again', async () => {
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir }, md5: fakeMd5 });
+  await library.keep(drive({ id: 'old', md5Checksum: 'md5:1,2,3,4', parents: ['folder'] }), new Blob([new Uint8Array([1, 2, 3, 4])]));
+  // Noteful re-uploaded it: new id and date, same bytes.
+  const again = drive({ id: 'new', modifiedTime: '2026-10-28T09:00:00Z', md5Checksum: 'md5:1,2,3,4', parents: ['folder'] });
+  const hit = await library.cached(again);
+  assert.deepEqual([...new Uint8Array(await hit.arrayBuffer())], [1, 2, 3, 4]);
+  const recent = await library.recent();
+  assert.deepEqual(recent.map(e => [e.key, e.modifiedTime]), [['drive:new', '2026-10-28T09:00:00Z']]);
+  assert.equal(dir.files.size, 1);
+  // Different content is never reused.
+  assert.equal(await library.cached(drive({ id: 'other', md5Checksum: 'md5:9' })), null);
+});
+
+test('copies kept before checksums were stored are matched once by name and size', async () => {
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir }, md5: fakeMd5 });
+  await library.keep(drive({ id: 'legacy' }), new Blob([new Uint8Array([5, 6, 7, 8])]));
+  assert.equal((await library.entry(drive({ id: 'legacy' }))).md5, null);
+  const hit = await library.cached(drive({ id: 'fresh', modifiedTime: 'later', md5Checksum: 'md5:5,6,7,8' }));
+  assert.ok(hit);
+  assert.deepEqual((await library.recent()).map(e => e.key), ['drive:fresh']);
+});
+
+test('identical duplicates already in Recent are merged into the newest', async () => {
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir }, md5: fakeMd5 });
+  await library.keep(drive({ id: 'aaa111', modifiedTime: '2026-10-20T00:00:00Z' }), new Blob([new Uint8Array([1, 1, 1, 1])]));
+  await library.keep(drive({ id: 'bbb222', modifiedTime: '2026-10-27T00:00:00Z' }), new Blob([new Uint8Array([1, 1, 1, 1])]));
+  await library.keep(drive({ id: 'ccc333', name: 'Tema 3.noteful' }), new Blob([new Uint8Array([2, 2, 2, 2])]));
+  assert.equal(dir.files.size, 3);
+  assert.equal(await library.mergeDuplicates(), 1);
+  assert.deepEqual((await library.recent()).map(e => e.key).sort(), ['drive:bbb222', 'drive:ccc333']);
+  assert.equal(dir.files.size, 2);
 });

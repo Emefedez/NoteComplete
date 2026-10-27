@@ -177,6 +177,15 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     folder = null; trail = [];
     return fetchList(signal, valid);
   }
+  // The kept copy, or a download kept for next time. onProgress(received, total).
+  async function fetchFile(file, signal, onProgress = () => {}) {
+    let local = await library?.cached(file).catch(() => null);
+    if (local) { await library.touch(library.key(file)); return local; }
+    local = await client.download(file, signal, onProgress);
+    try { await library?.keep(file, local); }
+    catch (error) { message(`Opening without keeping a copy: ${error.message}`); }
+    return local;
+  }
   function choose(file) {
     run(async (signal, valid) => {
       let local = await library?.cached(file).catch(() => null);
@@ -310,5 +319,12 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     if (on) previews.cancel();
     else if (visible) for (const preview of [...pending.keys()]) load(preview);
   }
-  return { show, hide, update, trash, setQuick, get busy() { return importing; } };
+  // For Recent: the newest Drive files with an entry's name in its folder, and fetching one.
+  async function newest(entry) {
+    const parent = entry.parent || (client.connected ? await client.parentOf(entry.driveId).catch(() => null) : null) || (client.publicAccess ? folder?.id : null);
+    if (!parent && !client.connected) return [];
+    if (parent && !entry.parent) { entry.parent = parent; await library?.store.set('entries', entry.key, entry).catch(() => {}); }
+    return (await client.sameName(entry.name, parent)).filter(f => supportedDriveFile(f));
+  }
+  return { show, hide, update, trash, setQuick, newest, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
 }
