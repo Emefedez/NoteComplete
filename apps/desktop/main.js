@@ -12,7 +12,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 } }]);
 function createWindow() {
   const win = new BrowserWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480,
-    title: 'NoteComplete', webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) } });
+    // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
+    title: 'NoteComplete', autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) } });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(home)) event.preventDefault(); });
   win.loadURL(home).catch(error => dialog.showErrorBox('Could not open NoteComplete', error.message));

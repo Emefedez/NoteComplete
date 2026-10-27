@@ -95,9 +95,13 @@ const selection = new SelectionController({
   changed: toolOptions,
   status,
 });
+// Status is a transient toast, not a permanent strip; errors stay up longer.
+let statusTimer = 0;
 function status(text, error = false) {
   $("status").textContent = text;
-  $("status").className = error ? "error" : "";
+  $("status").className = (error ? "error " : "") + (text ? "show" : "");
+  clearTimeout(statusTimer);
+  if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
 }
 function call(op, args = {}) {
   return new Promise((resolve, reject) => {
@@ -144,6 +148,8 @@ function reset() {
   selection.clear();
   cancelGesture();
   chromeState.reset();
+  barState.reset();
+  document.body.classList.remove("bar-compact");
   setCompact(false);
   observer?.disconnect();
   thumbnailObserver?.disconnect();
@@ -651,7 +657,9 @@ function scrollViewport(key) {
   viewport.scrollBy({ left: delta[0], top: delta[1], behavior: "smooth" });
   return true;
 }
+const barState = new ChromeState();
 $("viewport").onscroll = () => {
+  document.body.classList.toggle("bar-compact", barState.observe($("viewport").scrollTop));
   cancelAnimationFrame(scrollFrame);
   scrollFrame = requestAnimationFrame(() => {
     if (!doc) return;
@@ -1080,6 +1088,11 @@ document.addEventListener("keydown", (e) => {
     for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "o") {
+    e.preventDefault();
+    openLocal();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     save(false);
@@ -1359,10 +1372,34 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "insertBlank", "insertPdf", "studyCards", "studyQuiz"])
+  for (const id of ["save", "native", "importImage", "gotoPage"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
+// Menu items that mirror toolbar controls share their handler and state.
+const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #commandBar [data-proxy-tool]")];
+function proxyTarget(item) {
+  return item.dataset.proxy
+    ? $(item.dataset.proxy)
+    : document.querySelector(`#toolbar button[data-tool="${item.dataset.proxyTool}"]`);
+}
+function syncMenus() {
+  for (const item of proxies) {
+    const target = proxyTarget(item);
+    const inEditor = target?.closest("#editor");
+    item.disabled = !target || target.disabled || target.hidden || (!!inEditor && (!doc || $("editor").hidden));
+    if (item.dataset.proxyTool) item.setAttribute("aria-checked", String(target?.getAttribute("aria-pressed") === "true"));
+  }
+}
+for (const item of proxies) item.onclick = () => proxyTarget(item)?.click();
+for (const menu of document.querySelectorAll("details.bar-menu")) {
+  menu.addEventListener("toggle", () => menu.open && syncMenus());
+  // Like a native menubar: once one menu is open, hovering another switches to it.
+  menu.querySelector("summary").addEventListener("pointerenter", () => {
+    if (!menu.open && document.querySelector("details.bar-menu[open]")) menu.open = true;
+  });
+}
+$("gotoPage").onclick = () => palette.open("page ");
 documentControls();
 home.show(false);
 
@@ -1372,28 +1409,15 @@ const palette = commandPalette({
   list: $("paletteList"),
   commands: () => [
     ...[...document.querySelectorAll("#commandBar button[id], #commandBar .menu-content button")]
-      .filter((b) => b.id !== "paletteOpen" && b.textContent.trim())
+      .filter((b) => b.id !== "paletteOpen" && b.dataset.proxy !== "paletteOpen" && b.textContent.trim())
       .map((b) => ({
         id: b.id,
-        title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + b.textContent.replace("Experimental", "").trim(),
+        title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim(),
+        hint: b.querySelector("kbd")?.textContent,
         group: b.closest(".bar-menu")?.querySelector("summary").textContent.trim() || "General",
-        enabled: () => !b.disabled && !b.hidden,
+        enabled: () => (b.dataset.proxy || b.dataset.proxyTool ? syncMenus() : 0, !b.disabled && !b.hidden),
         run: () => b.click(),
       })),
-    { id: "home", title: "Home", group: "General", keywords: "recent files drive", run: showHome },
-    { id: "quality", title: "Display quality…", group: "General", keywords: "settings sharp performance contrast", run: () => $("qualityOpen").click() },
-    ...[...document.querySelectorAll("button[data-tool]")].map((b) => ({
-      id: "tool-" + b.dataset.tool,
-      title: "Tool: " + b.textContent.trim(),
-      group: "Tools",
-      enabled: () => !!doc && !$("editor").hidden,
-      run: () => b.click(),
-    })),
-    { id: "undo", title: "Undo", group: "Edit", hint: "Ctrl Z", enabled: () => !!doc?.can_undo, run: () => $("undo").click() },
-    { id: "redo", title: "Redo", group: "Edit", hint: "Ctrl Shift Z", enabled: () => !!doc?.can_redo, run: () => $("redo").click() },
-    { id: "layers", title: "Show layers", group: "View", enabled: () => !!doc, run: () => $("layersToggle").click() },
-    { id: "pagesPanel", title: "Show page list", group: "View", enabled: () => !!doc, run: () => $("pagesToggle")?.click() },
-    { id: "fit", title: "Zoom to fit width", group: "View", enabled: () => !!doc, run: () => setZoom("fit") },
   ],
   dynamic: (query) => {
     const items = [];

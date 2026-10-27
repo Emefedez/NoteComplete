@@ -17,43 +17,80 @@
   /><link rel="stylesheet" href="./style.css" />
   <header class="chrome command-bar" id="commandBar">
     <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and Google Drive"></button>
-    <div class="brand">
-      <span class="app-icon" data-icon="note"></span>
-      <div>
-        <h1>NoteComplete</h1>
-        <p id="title">Home</p>
-        <span id="saveState" hidden>Unsaved changes</span>
-      </div>
-    </div>
-    <nav class="bar-actions" aria-label="Commands">
-      <button id="open" title="Open" data-icon="open" disabled>Open</button>
-      <button id="save" title="Save project" data-icon="save" disabled>Save</button>
-      <button id="driveOpen" title="Google Drive" data-icon="cloud">Drive</button>
+    <nav class="bar-actions" role="menubar" aria-label="Application menu">
+      <details class="menu bar-menu" id="fileMenu">
+        <summary role="menuitem">File</summary>
+        <div class="menu-content" role="menu">
+          <button data-proxy="homeButton">Home</button>
+          <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
+          <button id="driveOpen">Google Drive</button>
+          <hr />
+          <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
+          <button id="native" disabled>Export .noteful <span class="experimental">Experimental</span></button>
+          <button id="svg" disabled>Export page as SVG</button>
+          <hr />
+          <button data-proxy="libraryChoose">Downloads folder…</button>
+        </div>
+      </details>
+      <details class="menu bar-menu" id="editMenu">
+        <summary role="menuitem">Edit</summary>
+        <div class="menu-content" role="menu">
+          <button data-proxy="undo">Undo<kbd>Ctrl Z</kbd></button>
+          <button data-proxy="redo">Redo<kbd>Ctrl Shift Z</kbd></button>
+          <hr />
+          <button data-proxy-tool="pan" role="menuitemradio">Pan</button>
+          <button data-proxy-tool="select" role="menuitemradio">Select</button>
+          <button data-proxy-tool="draw" role="menuitemradio">Pen</button>
+          <button data-proxy-tool="highlight" role="menuitemradio">Highlight</button>
+          <button data-proxy-tool="erase" role="menuitemradio">Erase</button>
+          <button data-proxy-tool="shape" role="menuitemradio">Shapes</button>
+          <hr />
+          <button data-proxy="importImage">Insert image…</button>
+        </div>
+      </details>
+      <details class="menu bar-menu" id="viewMenu">
+        <summary role="menuitem">View</summary>
+        <div class="menu-content" role="menu">
+          <button data-proxy="pagesToggle">Page list</button>
+          <button data-proxy="layersToggle">Layers</button>
+          <button data-proxy="toolbarToggle">Tool settings</button>
+          <hr />
+          <button data-proxy="zoomIn">Zoom in</button>
+          <button data-proxy="zoomOut">Zoom out</button>
+          <button data-proxy="zoomFit">Fit page width</button>
+          <hr />
+          <button id="qualityOpen">Display quality…</button>
+        </div>
+      </details>
       <details class="menu bar-menu" id="pagesMenu">
-        <summary title="Pages" aria-label="Pages" data-icon="pages">Pages</summary>
-        <div class="menu-content">
+        <summary role="menuitem">Pages</summary>
+        <div class="menu-content" role="menu">
+          <button id="gotoPage" disabled>Go to page…</button>
+          <hr />
           <button id="insertBlank" disabled>Insert blank page…</button>
           <button id="insertPdf" disabled>Insert PDF pages…</button>
         </div>
       </details>
-      <details class="menu bar-menu" id="exportMenu">
-        <summary title="Export" aria-label="Export" data-icon="export">Export</summary>
-        <div class="menu-content">
-          <button id="native" disabled>.noteful file <span class="experimental">Experimental</span></button>
-          <button id="svg" disabled>Current page as SVG</button>
-        </div>
-      </details>
       <details class="menu bar-menu" id="studyMenu">
-        <summary title="Study" aria-label="Study" data-icon="cards">Study</summary>
-        <div class="menu-content">
+        <summary role="menuitem">Study</summary>
+        <div class="menu-content" role="menu">
           <button id="studyCards" disabled>Generate flashcards…</button>
           <button id="studyQuiz" disabled>Quiz me…</button>
-          <button id="studyOpenDeck">Review a saved deck…</button>
+          <button id="studyOpenDeck" disabled>Review a saved deck…</button>
+        </div>
+      </details>
+      <details class="menu bar-menu" id="helpMenu">
+        <summary role="menuitem">Help</summary>
+        <div class="menu-content" role="menu">
+          <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
         </div>
       </details>
     </nav>
+    <div class="brand">
+      <p id="title">Home</p>
+      <span id="saveState" hidden>Unsaved changes</span>
+    </div>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
-    <button id="qualityOpen" class="bar-icon" data-icon="settings" aria-label="Display quality" title="Display quality"></button>
     <div hidden>
       <input
         id="file"

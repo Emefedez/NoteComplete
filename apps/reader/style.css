@@ -250,17 +250,10 @@ main {
   display: flex;
   flex-direction: column;
 }
-#status {
-  padding: 5px 18px;
-  min-height: 29px;
-  font-size: 12px;
-  color: var(--muted);
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--line);
-}
 #status.error {
   color: #b83228;
   background: #fff0ee;
+  border-color: #f0c4bf;
 }
 #empty {
   margin: auto;
@@ -749,55 +742,6 @@ main.drag {
   }
 }
 @media (max-width: 700px) {
-  header.chrome {
-    min-height: 64px;
-    padding: 7px 10px;
-    gap: 8px;
-  }
-  .app-icon {
-    display: none;
-  }
-  header p {
-    font-size: 13px;
-    max-width: 38vw;
-  }
-  h1 {
-    font-size: 10px;
-  }
-  header > .row {
-    gap: 2px;
-  }
-  header button,
-  header summary {
-    min-height: 44px;
-    padding: 6px 8px;
-    font-size: 12px;
-  }
-  header #open {
-    font-size: 0;
-    gap: 0;
-    width: 44px;
-  }
-  header #open svg {
-    width: 21px;
-    height: 21px;
-  }
-  header summary svg {
-    display: none;
-  }
-  #save {
-    max-width: 75px;
-    white-space: normal;
-    line-height: 1.2;
-  }
-  #status {
-    padding: 5px 10px;
-    font-size: 11px;
-    min-height: 26px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   .workspace {
     order: 0;
   }
@@ -1003,23 +947,41 @@ main.drag {
 }
 
 /* Compact document chrome and floating tool settings preserve the canvas. */
-/* Global command bar: one row on every screen, replacing the old document menu. */
-header.chrome { min-height: 48px; padding: 4px 10px; justify-content: flex-start; gap: 6px; }
-header .app-icon, header h1 { display: none; }
-header .brand { flex: 0 1 auto; min-width: 60px; margin-right: 6px; }
-header .brand > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-header p { font-size: 13px; max-width: 34vw; }
-.bar-icon { width: 36px; padding: 7px; flex: none; }
-.bar-icon svg, .bar-actions svg, .palette-trigger svg { width: 17px; height: 17px; flex: none; }
-.bar-actions { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.bar-actions > button, .bar-menu > summary { font-size: 13px; padding: 6px 9px; }
-.bar-menu > summary::after { content: ""; width: 6px; height: 6px; margin-left: 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); opacity: .6; }
-.bar-menu .menu-content { left: 0; right: auto; width: 250px; }
+/* Global menubar: a native-style File/Edit/View row that compacts while scrolling. */
+header.chrome { min-height: 36px; padding: 2px 8px; justify-content: flex-start; gap: 2px; flex-wrap: nowrap; transition: min-height .16s ease, padding .16s ease; }
+header .brand { flex: 1 1 auto; min-width: 0; margin: 0 8px; justify-content: center; }
+header .brand p { font-size: 12px; font-weight: 600; max-width: 100%; }
+header #saveState { font-size: 11px; white-space: nowrap; }
+.bar-icon { width: 30px; min-height: 28px; padding: 5px; flex: none; }
+.bar-icon svg, .palette-trigger svg { width: 16px; height: 16px; flex: none; }
+.bar-actions { display: flex; align-items: center; gap: 0; flex: none; }
+.bar-menu > summary { min-height: 26px; padding: 3px 9px; font-size: 13px; border-radius: 5px; }
 .bar-menu[open] > summary { background: var(--accent-soft); color: var(--accent); }
-.palette-trigger { margin-left: auto; min-width: 0; gap: 8px; color: var(--muted); border: 1px solid var(--line); background: var(--chrome); padding: 5px 8px 5px 10px; }
+.bar-menu .menu-content { left: 0; right: auto; top: calc(100% + 3px); width: 250px; padding: 4px; }
+.bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 16px; }
+.bar-menu .menu-content button kbd { margin-left: auto; border: 0; background: none; padding: 0; }
+.bar-menu .menu-content hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+.bar-menu [role="menuitemradio"] { justify-content: flex-start; }
+.bar-menu [role="menuitemradio"]::before { content: ""; width: 12px; flex: none; text-align: center; }
+.bar-menu [role="menuitemradio"][aria-checked="true"]::before { content: "✓"; }
+.palette-trigger { flex: 0 1 auto; min-width: 0; min-height: 28px; gap: 8px; color: var(--muted); border: 1px solid var(--line); background: var(--chrome); padding: 2px 6px 2px 9px; }
 .palette-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-kbd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); white-space: nowrap; }
+kbd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* Scrolling down a document shrinks the bar to its most compact row. */
+body.bar-compact header.chrome { min-height: 26px; padding: 0 6px; }
+body.bar-compact .bar-menu > summary { min-height: 22px; padding: 1px 8px; font-size: 12px; }
+body.bar-compact .bar-icon { min-height: 22px; width: 26px; padding: 3px; }
+body.bar-compact .palette-trigger { min-height: 22px; padding: 0 6px; border-color: transparent; background: transparent; }
+body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd, body.bar-compact #saveState { display: none; }
+@media (max-width: 860px) {
+  .palette-trigger span, .palette-trigger kbd { display: none; }
+  .palette-trigger { border-color: transparent; background: transparent; }
+}
+
+/* Status: a transient toast that never takes layout space. */
+#status { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: 99px; background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+#status.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* Home: recent notes and the Google Drive library. */
 #empty.home { margin: 0; padding: 22px clamp(16px, 4vw, 40px) 30px; text-align: left; overflow: auto; flex: 1; min-height: 0; width: 100%; }
@@ -1071,16 +1033,6 @@ kbd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1p
 .home-foot strong { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .home-foot .supported-formats { margin: 0 0 0 auto !important; }
 
-/* Mid widths: labels give way to icons before the bar can wrap or squeeze the palette button. */
-@media (max-width: 1180px) {
-  .bar-actions > button, .bar-menu > summary { width: 36px; padding: 7px; font-size: 0; gap: 0; }
-  .bar-menu > summary::after { display: none; }
-  .bar-actions > button[title], .bar-menu > summary { overflow: hidden; }
-  .palette-trigger kbd { display: none; }
-}
-header.chrome { flex-wrap: nowrap; }
-.palette-trigger { flex: 0 1 auto; }
-
 /* Command palette */
 .palette { padding: 0; width: min(620px, calc(100vw - 24px)); margin-top: 12vh; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); color: var(--ink); box-shadow: 0 24px 80px #0005; overflow: hidden; }
 .palette::backdrop { background: #0004; }
@@ -1130,18 +1082,12 @@ header.chrome { flex-wrap: nowrap; }
 #transcriptProgress { width: 100%; height: 6px; margin: 4px 0; accent-color: var(--accent); }
 #transcriptProgress[hidden] { display: none; }
 @media (max-width:700px) {
-  header.chrome { min-height: 46px; padding: 3px 6px; gap: 2px; }
-  header .brand { min-width: 0; flex: 1 1 auto; margin-right: 0; }
-  header .brand > div { display: block; }
-  header p { max-width: 40vw; }
-  header #saveState { font-size: 10px; }
-  /* Narrow screens keep icons only; every action stays reachable from the palette. */
-  .bar-actions > button, .bar-menu > summary { width: 36px; padding: 7px; font-size: 0; gap: 0; }
-  .bar-menu > summary::after { display: none; }
-  .bar-actions #driveOpen, .bar-actions #save { display: none; }
-  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 52px; width: auto; }
-  .palette-trigger { width: 36px; padding: 7px; border-color: transparent; background: transparent; }
-  .palette-trigger span, .palette-trigger kbd { display: none; }
+  /* Phones: the menubar stays text and scrolls sideways if needed; menus open full width. */
+  header .brand { display: none; }
+  .bar-actions { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .bar-menu > summary { padding: 3px 7px; }
+  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; }
+  .bar-menu .menu-content button { min-height: 38px; }
   .palette { margin-top: 8px; }
   .note-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .drive-signin { flex-direction: column; gap: 8px; padding: 14px; }
