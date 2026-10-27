@@ -21,7 +21,7 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Focus dim | sun toggle in quiz and practice heads (`body.focus-dim`) |
 | Saved AI explanations | `card.explanation` in `study.js` (folded under the answer, editable, reused) |
 | AI review actions | quiz: Clarify C, Dispute X, Double check V; flashcards: Ask AI C (saved explanation, editable), Double check V, Edit E, Discard X |
-| Requests log | `docs/REQUESTS.md` (✅/⚠️/⏳ + how each was checked) |
+| Requests log | `docs/REQUESTS.md` (`[D]` done, `[!]` not yet verified, `[ ]` to do, + how each was checked) |
 
 ## Screens
 
