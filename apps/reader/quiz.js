@@ -175,7 +175,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     quiz.answers ||= {};
     quiz.at = Math.min(quiz.at || 0, quiz.questions.length);
     $('quizPanel').hidden = false;
-    $('quizPanel').classList.remove('minimized');
+    $('quizPanel').classList.remove('minimized', 'in-tray');
     show();
   }
   $('quizHintButton').onclick = () => revealHint();

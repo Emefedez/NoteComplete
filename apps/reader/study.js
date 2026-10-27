@@ -277,7 +277,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     const dialog = $('deckDialog');
     if (dialog.open) dialog.close();
     dialog.classList.toggle('floating', on);
-    dialog.classList.remove('minimized');
+    dialog.classList.remove('minimized', 'in-tray');
     // Place and size come from the floating window (floating.js) while it floats.
     for (const p of ['left', 'top', 'width', 'height', 'right', 'bottom', 'margin']) dialog.style[p] = '';
     if (on) { dialog.show(); if (document.activeElement === $('deckTitle')) $('deckTitle').blur(); } else dialog.showModal();

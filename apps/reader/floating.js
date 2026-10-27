@@ -170,10 +170,9 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   let wasShown = visible(), wasCompact = isCompact();
   new MutationObserver(() => {
     const closed = el.hidden || (el.tagName === 'DIALOG' && !el.open) || !enabled();
-    if (closed) {
-      if (trayed.delete(el)) renderTray();
-      if (el.classList.contains('in-tray')) el.classList.remove('in-tray');
-    }
+    if (closed && el.classList.contains('in-tray')) el.classList.remove('in-tray');
+    // Closed, or brought back by the app itself: off the tray.
+    if ((closed || !el.classList.contains('in-tray')) && trayed.delete(el)) renderTray();
     const shown = visible(), small = isCompact();
     if (shown && (!wasShown || (wasCompact && !small))) place();
     if (small !== wasCompact) sizeIcon();

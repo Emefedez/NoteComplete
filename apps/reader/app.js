@@ -2630,7 +2630,7 @@ new MutationObserver(syncDim).observe($("deckDialog"), { attributes: true, attri
 syncDim();
 // Q resumes the latest unfinished quiz of this note.
 async function resumeQuiz() {
-  if (quizzes.current && !$("quizPanel").hidden) return $("quizPanel").classList.remove("minimized");
+  if (quizzes.current && !$("quizPanel").hidden) return $("quizPanel").classList.remove("minimized", "in-tray");
   const open = (await quizzes.list()).find((q) => !q.done) || (await quizzes.list())[0];
   if (open) { showDocument(); quizzes.open(open); } else study.quiz();
 }
