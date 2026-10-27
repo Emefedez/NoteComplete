@@ -88,7 +88,8 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Roadmap
 
 Planned, not started (details in [docs/REQUESTS.md](docs/REQUESTS.md)):
-- **Three file formats**, chosen on first save: Noteful (`.noteful`, maximum compatibility), NotePartial (`.ntpartial`, today's archive: the note plus its Markdown) and NoteComplete (`.notecomplete`, recommended: an open, documented ZIP package with pages, resources, notes and study material). Today's `.notecomp` files keep opening.
+- **Three file formats**, chosen on first save: Noteful (`.noteful`, maximum compatibility), NotePartial (`.ntpartial`, today's archive: the note plus its Markdown) and NoteComplete (`.notecomp` by default, `.notecomplete` also accepted; recommended: an open, documented ZIP package with pages, resources, notes and study material). Files saved today keep opening: they are recognised by content.
+- **Choose which pages to export**: this page, a range, a list or every page, for SVG, PDF and images.
 - **Repositories** as a library source next to Google Drive: GitHub repositories with notes, files and solved exams, browsed from Home.
 - **Infinite canvas** in `.notecomplete`, split into sheets of up to Noteful's maximum page size when saved as `.noteful`.
 

@@ -14,7 +14,7 @@ To try in the real app or service (`[!]`):
 - Interface size (Ctrl+Shift+− / + / 0), floating windows (drag, resize, _ □ ×, tray).
 - Recent's newer-version check, the side-by-side comparison and carrying study material to a new version (fake Drive only).
 
-Planned, not started (`[ ]`): three file formats (.noteful / .ntpartial / .notecomplete), converters, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
+Planned, not started (`[ ]`): three file formats (.noteful / .ntpartial / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
 ## Study: quizzes and flashcards
 - [D] Generated in the background with real progress: a bar chip shows the phase, elapsed time and continuous progress, with Stop. *Browser test with a fake AI bridge.*
@@ -182,8 +182,8 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [ ] **Three formats, chosen when saving.** The first Save or Export asks which one and remembers it (NoteComplete by default); Save as… switches. Not asked on every new file.
   - **Noteful (.noteful)**: maximum compatibility with the official app. Markdown and study material stay outside (or are lost), and the app says so.
   - **NotePartial (.ntpartial)**: today's archive renamed: the original .noteful plus the Markdown notes. The bridge for people who still open the notebook in Noteful.
-  - **NoteComplete (.notecomplete), recommended**: a clean open format, easy to extract and to read with other tools.
-- [ ] **Keep opening what exists.** Today's .notecomp and .notecomplete archives keep opening forever: they are recognized by content, not extension, and read as NotePartial. Nothing a user saved stops opening.
+  - **NoteComplete (.notecomp, also opens .notecomplete), recommended**: a clean open format, easy to extract and to read with other tools. `.notecomp` is the default extension when saving; `.notecomplete` is accepted everywhere as the same format.
+- [ ] **Keep opening what exists.** Today's .notecomp and .notecomplete archives (tar: the note plus its Markdown) keep opening forever. Since the new format reuses those extensions, files are recognized by content, not extension: a tar archive is read as NotePartial, a ZIP package as NoteComplete. Nothing a user saved stops opening.
 - [ ] **NoteComplete as an open, documented package.** A ZIP (not tar: every system opens ZIP and single files can be read without unpacking the rest, like .docx/.epub) holding:
   - `manifest.json`: format version, title, page list and sizes, layers, where everything is;
   - `pages/NNN.json`: each page's ink, shapes, text and images in a documented JSON schema (in `spec/`), plus `pages/NNN.svg` as a preview any viewer can show;
@@ -198,6 +198,7 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
   - read-only first; contributing back (fork + pull request) later;
   - large notes: GitHub refuses files over 100 MB (Memoria 1 is 259 MB), so repositories need Git LFS or release assets for those; the app should read both;
   - downloaded files cached and reused like Drive copies.
+- [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
 - [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way.
 
