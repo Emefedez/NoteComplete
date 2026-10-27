@@ -1063,6 +1063,9 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd, b
 #findInput { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; }
 .find-row button { min-height: 30px; width: 30px; padding: 0; }
 .find-count { font-size: 12px; color: var(--muted); padding: 0 6px; white-space: nowrap; }
+.find-sources { display: flex; gap: 4px; margin: 6px 2px 0; flex-wrap: wrap; }
+.find-source { min-height: 22px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 99px; font-size: 11px; color: var(--muted); }
+.find-source[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .find-progress { margin: 6px 4px 0; font-size: 12px; color: var(--muted); }
 .find-results { list-style: none; margin: 6px 0 0; padding: 0; max-height: min(420px, 50dvh); overflow: auto; border-top: 1px solid var(--line); }
 .find-results button { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; width: 100%; padding: 7px 6px; text-align: left; justify-items: start; border-radius: 6px; }
@@ -1114,11 +1117,12 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .chat-form textarea { flex: 1; resize: none; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; font-size: 13px; }
 /* Background jobs in the bar */
 .job-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 360px; min-width: 0; padding: 2px 4px 2px 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 12px; color: var(--muted); }
-.job-chip #jobLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.job-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .job-track { flex: none; width: 70px; height: 5px; border-radius: 3px; background: var(--chrome); overflow: hidden; }
-#jobBar { display: block; height: 100%; width: 0; background: var(--accent); transition: width .5s linear; }
+.job-area { display: inline-flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.job-bar { display: block; height: 100%; width: 0; background: var(--accent); transition: width .5s linear; }
 .job-chip button { min-height: 22px; padding: 1px 8px; font-size: 12px; }
-.job-ready { min-height: 26px; padding: 2px 10px; background: var(--accent); color: #fff; border-radius: 99px; font-size: 12px; }
+.job-ready { min-height: 26px; padding: 2px 10px; background: var(--accent); color: #fff; border-radius: 99px; font-size: 12px; white-space: nowrap; }
 /* Quiz panel: floats over the pages, minimizes to a pill. */
 .quiz-panel { position: absolute; left: 22px; bottom: 14px; z-index: 27; width: min(460px, calc(100% - 24px)); max-height: calc(100% - 28px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); box-shadow: 0 10px 34px #0003; }
 .quiz-panel-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); }
@@ -1138,10 +1142,7 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .quiz-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .quiz-actions button { min-height: 28px; padding: 3px 10px; font-size: 12px; gap: 6px; }
 .prompt-text { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); font: 12px/1.5 ui-monospace, monospace; resize: vertical; }
-.deck-picker li { display: flex; gap: 6px; } .deck-picker li > button:first-child { flex: 1; } .deck-delete { width: 32px; }
 /* Chat resize grip and attachments */
-.chat-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; }
-.chat-resize:hover { background: linear-gradient(90deg, transparent 2px, var(--accent) 2px 4px, transparent 4px); }
 .chat-attachments { display: flex; gap: 6px; padding: 6px 8px 0; flex-wrap: wrap; }
 .chat-attachments figure { position: relative; margin: 0; }
 .chat-attachments img { display: block; height: 54px; max-width: 120px; object-fit: cover; border: 1px solid var(--line); border-radius: 6px; }
@@ -1164,8 +1165,14 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .zoom-input:hover, .zoom-input:focus { border-color: var(--line); background: var(--surface); }
 .drive-progress { display: block; width: min(420px, 100%); height: 6px; margin: -4px 0 10px; accent-color: var(--accent); }
 .note-grid li { position: relative; }
-.note-remove { position: absolute; top: 6px; right: 6px; width: 26px; min-height: 26px; padding: 0; border-radius: 50%; background: var(--menu); border: 1px solid var(--line); color: var(--muted); opacity: 0; }
-.note-grid li:hover .note-remove, .note-remove:focus-visible { opacity: 1; }
+.note-more { position: absolute; right: 8px; top: 8px; width: 30px; min-height: 24px; padding: 0; border-radius: 7px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1; opacity: 0.8; box-shadow: 0 1px 3px #0002; }
+.note-grid li:hover .note-more, .note-more:focus-visible, .note-more[aria-expanded="true"] { opacity: 1; color: var(--ink); }
+.note-menu { position: fixed; z-index: 80; width: 280px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--menu); box-shadow: 0 10px 30px #0003; display: grid; gap: 2px; }
+.note-menu > button { justify-content: flex-start; min-height: 30px; font-size: 13px; }
+.note-menu-title { margin: 2px 6px; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-menu .muted { margin: 0 6px 4px; font-size: 12px; line-height: 1.4; }
+.note-menu .danger-zone { margin: 4px 0 0; }
+#forgetStatus:empty { display: none; }
 .danger-zone { margin-top: 14px; padding: 8px 12px; border: 1px solid #e3a59f; border-radius: 8px; background: #fff5f4; }
 .danger-zone summary { color: #b83228; font-weight: 600; padding-left: 0; }
 .danger-zone p { font-size: 13px; }
@@ -1174,24 +1181,16 @@ button.danger { background: #c9302c; color: #fff; }
 button.danger:disabled { background: #e8b4b0; }
 @media (prefers-color-scheme: dark) { .danger-zone { background: #3a1f1d; border-color: #7a3a35; } .danger-zone input { background: #2a1b1a; color: inherit; } }
 /* Audio side panel: overlays the pages on the right so they never move. */
-.audio-panel { position: absolute; top: 10px; right: 22px; bottom: 12px; z-index: 26; width: min(330px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); box-shadow: 0 10px 34px #0003; }
+.audio-panel { position: absolute; top: 10px; right: 22px; bottom: 12px; z-index: 26; width: min(330px, calc(100% - 24px)); display: flex; flex-direction: column; padding: 10px 12px; overflow: auto; }
 .audio-panel:not([hidden]) ~ .chat-panel { right: calc(min(330px, 100% - 24px) + 32px); }
 .audio-head { display: flex; align-items: center; gap: 8px; }
 .audio-head h2 { flex: 1; margin: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audio-head button { width: 28px; min-height: 26px; padding: 0; }
 .audio-panel select { width: 100%; padding: 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 12px; }
-.audio-transport { display: flex; justify-content: center; align-items: center; gap: 14px; }
-.audio-transport button { width: 38px; min-height: 38px; padding: 0; border-radius: 50%; }
-.audio-transport svg { width: 20px; height: 20px; fill: currentColor; }
-.audio-transport .play { width: 52px; min-height: 52px; background: var(--accent); color: #fff; }
-.audio-transport .play svg { width: 24px; height: 24px; }
 .play[data-state="paused"] .icon-pause, .play[data-state="playing"] .icon-play { display: none; }
 .audio-panel #audioSeek { width: 100%; min-width: 0; flex: none; accent-color: var(--accent); }
 #audioTime { align-self: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 #audioState:empty { display: none; }
-.audio-options { display: grid; gap: 6px; font-size: 12px; }
-.audio-options button { justify-content: flex-start; border: 1px solid var(--line); min-height: 28px; }
-.audio-download { font-size: 12px; }
 .audio-panel .transcript-panel { border-top: 1px solid var(--line); padding-top: 6px; max-height: none !important; overflow: visible; }
 .audio-panel #transcriptWords { max-height: none; min-height: 60px; }
 .audio-panel .transcript-controls select { flex: 1; width: auto; }
@@ -1207,6 +1206,42 @@ button.danger:disabled { background: #e8b4b0; }
 .chip-clear { min-height: 26px; padding: 2px 8px; font-size: 12px; color: var(--accent); }
 #filterSummary { font-size: 12px; }
 #empty .home-filters .chip, #empty .home-filters .chip-clear { min-height: 26px; padding: 2px 10px; }
+/* Side panels share one look: floating card, resizable from left, bottom or corner. */
+.side-panel { border: 1px solid var(--line); border-radius: 12px; background: var(--menu); box-shadow: 0 10px 34px #0003; }
+.panel-grip { position: absolute; z-index: 2; }
+.grip-left { left: -3px; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.grip-bottom { bottom: -3px; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
+.grip-corner { left: -4px; bottom: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
+.grip-left:hover, .grip-bottom:hover { background: var(--accent); opacity: .35; border-radius: 3px; }
+/* Compact audio transport: squircle buttons like the rest of the app. */
+.audio-panel { gap: 6px; }
+.audio-transport { justify-content: flex-start; gap: 4px; }
+.audio-transport button, .audio-transport .icon-toggle { width: 32px; min-height: 32px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.audio-transport .play { width: 40px; min-height: 36px; border-radius: 9px; background: var(--accent); border-color: var(--accent); color: #fff; }
+.audio-transport svg { width: 17px; height: 17px; }
+.audio-transport > button:not(.icon-button) svg { fill: currentColor; }
+.audio-transport .play svg { width: 19px; height: 19px; }
+.icon-toggle { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); }
+.icon-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.icon-toggle svg, .audio-transport .icon-button svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.icon-toggle:has(input:checked) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-height: 26px; padding: 0; border-radius: 7px; color: var(--muted); }
+.icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.audio-seek { display: flex; align-items: center; gap: 8px; }
+.audio-seek output { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.audio-panel .audio-seek #audioSeek { flex: 1; width: auto; min-width: 0; }
+#transcriptWords.provisional { color: var(--muted); }
+#transcriptWords.provisional button { cursor: default; }
+/* Dark pages: invert lightness but keep hues, for the pages and their previews. */
+body.pages-dark .sheet > .render, body.pages-dark .page-thumb img, body.pages-dark .page-thumb svg { filter: var(--page-filter, none) invert(0.9) hue-rotate(180deg); }
+body.pages-dark .sheet { background: #1a1a1a; }
+body.pages-dark #viewport, body.pages-dark #pages { background: #0f1012; }
+.pages-dark-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Job chips follow the bar's compact height. */
+.job-chip, .job-ready { flex: 0 1 auto; min-width: 0; }
+body.bar-compact .job-chip { padding: 0 3px 0 8px; font-size: 11px; }
+body.bar-compact .job-chip button, body.bar-compact .job-ready { min-height: 20px; padding: 0 8px; font-size: 11px; }
+@media (max-width: 860px) { .job-chip #jobLabel, .job-chip > span:first-child { max-width: 120px; } .job-ready { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 /* Study dialogs */
 .study-row { display: flex; gap: 12px; } .study-row > label { flex: 1; }
 .ocr-dialog input[type="text"] { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }
@@ -1215,20 +1250,49 @@ button.danger:disabled { background: #e8b4b0; }
 .deck-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .deck-head input { flex: 1; font-size: 16px; font-weight: 600; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
 .deck-head input:focus { border-color: var(--line); background: var(--chrome); }
-.deck-cards { list-style: none; margin: 0 0 12px; padding: 0; max-height: min(60dvh, 520px); overflow: auto; display: grid; gap: 8px; counter-reset: card; }
-.deck-cards li { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: start; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
-.deck-cards textarea { width: 100%; resize: vertical; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); font: inherit; font-size: 13px; }
-.deck-cards li > div { display: flex; flex-direction: column; gap: 4px; }
-.deck-cards button { min-height: 26px; padding: 2px 7px; font-size: 12px; }
+.deck-cards { list-style: none; margin: 0 0 12px; padding: 2px; max-height: min(60dvh, 560px); overflow: auto; display: grid; gap: 10px; }
+.deck-card { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding: 12px 12px 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--chrome); box-shadow: 0 1px 2px #0001; }
+.deck-card-body { min-width: 0; border-radius: 8px; cursor: text; outline-offset: 4px; }
+.deck-card:not(.editing):hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.deck-card-front, .deck-card-back { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.deck-card-front { font-weight: 600; font-size: 15px; }
+.deck-card-back { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 14px; }
+.deck-card .empty { font-style: italic; opacity: 0.6; }
+.deck-card.editing .deck-card-body { display: grid; gap: 8px; }
+.deck-card textarea { width: 100%; resize: none; overflow: hidden; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; font-size: 14px; line-height: 1.45; }
+.deck-card textarea:first-child { font-weight: 600; }
+.deck-card-tools { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.deck-card-tools button { min-height: 24px; padding: 1px 8px; font-size: 12px; border-radius: 999px; }
+.deck-card-tools .card-delete { padding: 1px 6px; }
 .deck-practice, #quizDialog { text-align: center; }
-.practice-front { font-size: 20px; font-weight: 600; margin: 18px 0 10px; line-height: 1.4; }
-.practice-back { font-size: 16px; margin: 0 0 18px; padding: 12px; border-radius: 10px; background: var(--chrome); line-height: 1.5; white-space: pre-wrap; }
+/* Fixed card area: revealing the answer never resizes the dialog. */
+.practice-card { height: min(46dvh, 360px); margin: 8px 0 14px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--chrome); overflow: auto; display: flex; }
+/* The text block sits in the middle of the card; its lines start at a shared left edge. */
+.practice-text { margin: auto; width: fit-content; max-width: min(100%, 62ch); text-align: left; display: grid; gap: 14px; }
+.practice-front { font-size: 20px; font-weight: 600; margin: 0; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The hidden answer keeps its space so revealing it moves nothing. */
+.practice-back[hidden] { display: block !important; visibility: hidden; }
+.practice-back { font-size: 16px; margin: 0; padding-top: 14px; border-top: 1px dashed var(--line); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* "?" shows each button's key: inline after a label, as a corner badge on icon buttons. */
+body.show-keys [data-key]::after { content: attr(data-key); margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); font: 600 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; pointer-events: none; }
+body.show-keys [data-key][data-key-icon] { position: relative; overflow: visible; }
+body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px; right: -6px; margin: 0; padding: 0 3px; border-color: var(--ink); background: var(--ink); color: var(--surface); font-size: 9px; line-height: 1.3; z-index: 3; }
 .quiz-options { display: grid; gap: 8px; margin: 10px 0; text-align: left; }
 .quiz-options button { justify-content: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; white-space: normal; text-align: left; }
 .quiz-options button[data-result="right"] { border-color: #2a9d63; background: #e3f6ec; color: #145c38; }
 .quiz-options button[data-result="wrong"] { border-color: #c9453a; background: #fdeceb; color: #8e231b; }
-.deck-picker { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
-.deck-picker button { width: 100%; justify-content: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.saved-dialog { width: min(620px, calc(100vw - 24px)); }
+.saved-dialog h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.deck-picker { list-style: none; padding: 0; margin: 0 0 4px; display: grid; gap: 6px; max-height: 32dvh; overflow: auto; }
+.deck-picker:empty::before { content: "None yet."; color: var(--muted); font-size: 13px; }
+.deck-picker li { display: flex; gap: 6px; align-items: stretch; }
+.deck-picker .saved-open { flex: 1; min-width: 0; display: grid; justify-content: stretch; justify-items: start; gap: 2px; text-align: left; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.deck-picker .saved-open strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.deck-picker .saved-open span { font-size: 12px; color: var(--muted); }
+/* Delete is a small separate button that asks first; it never shares the row's click area. */
+.deck-picker .saved-delete { flex: none; width: 34px; padding: 0; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); }
+.deck-picker .saved-confirm { flex: 1; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #b83228; border-radius: 8px; font-size: 13px; }
+.deck-picker .saved-confirm .danger { color: #fff; background: #b83228; border-color: #b83228; }
 @media (prefers-color-scheme: dark) {
   .quiz-options button[data-result="right"] { background: #173a2a; color: #9be3bd; }
   .quiz-options button[data-result="wrong"] { background: #432220; color: #ffb7b0; }

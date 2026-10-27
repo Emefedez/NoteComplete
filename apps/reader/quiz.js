@@ -248,5 +248,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     await library.store.set('settings', key(), [value, ...(await store())]);
     open(value);
   }
-  return { open, key: onKey, list, remove, save, disputed, retakeWrong, get current() { return quiz; }, async add(value) { quiz = null; const all = (await store()).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); } };
+  return { open, key: onKey, list, remove, save, disputed, retakeWrong, get current() { return quiz; },
+    // Put a deleted quiz back (Undo in the saved list) without touching the open one.
+    async restore(value) { const all = (await store()).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); },
+    async add(value) { quiz = null; const all = (await store()).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); } };
 }

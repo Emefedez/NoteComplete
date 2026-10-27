@@ -22,12 +22,35 @@ async function storedTranscript(key, value) {
   } finally { db.close(); }
 }
 
+// Export formats: plain text, SRT and WebVTT subtitles (one cue per ~12 words), JSON words.
+const stamp = (t, comma) => {
+  const ms = Math.round(t * 1000), h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}${comma ? ',' : '.'}${String(ms % 1000).padStart(3, '0')}`;
+};
+export function transcriptExport(words, format) {
+  if (format === 'json') return JSON.stringify({ words }, null, 2);
+  if (format === 'txt') return words.map(w => w.text).join(' ').replace(/\s+([,.;:!?])/g, '$1') + '\n';
+  const cues = [];
+  for (let i = 0; i < words.length; i += 12) cues.push(words.slice(i, i + 12));
+  const body = cues.map((cue, i) => `${format === 'srt' ? `${i + 1}\n` : ''}${stamp(cue[0].start, format === 'srt')} --> ${stamp(cue.at(-1).end ?? cue.at(-1).start, format === 'srt')}\n${cue.map(w => w.text).join(' ')}\n`).join('\n');
+  return format === 'vtt' ? `WEBVTT\n\n${body}` : body;
+}
+// Segments with times (Voxtype pieces, Gemini) become words with interpolated starts.
+export function segmentWords(segments) {
+  return segments.flatMap(({ start, end, text }) => {
+    const parts = text.split(/\s+/).filter(Boolean), span = Math.max(0.2, (end ?? start) - start);
+    return parts.map((t, i) => ({ text: t, start: start + (span * i) / parts.length, end: start + (span * (i + 1)) / parts.length }));
+  });
+}
+const MIME = { txt: 'text/plain', srt: 'application/x-subrip', vtt: 'text/vtt', json: 'application/json' };
+
 export class TranscriptController {
   constructor(audio) {
     this.audio = audio;
-    this.generation = 0;
     this.words = [];
     this.results = new Map();
+    this.keys = new Map();
+    this.job = null;
     $('hideTranscript').onclick = () => { $('transcriptPanel').open = false; };
     $('transcriptPanel').ontoggle = () => this.update();
     $('transcriptPrevious').onclick = () => this.browse(-1);
@@ -36,47 +59,77 @@ export class TranscriptController {
     $('transcribeAudio').onclick = () => this.start();
     $('cancelTranscript').onclick = () => this.cancel();
     $('downloadTranscript').onclick = async () => {
-      try {
-        await download(new Blob([JSON.stringify({ words: this.words }, null, 2)],
-          { type: 'application/json' }), 'transcript.json', 'application/json');
-      } catch (error) { this.status(error.message); }
+      const format = $('transcriptFormat').value || 'txt';
+      try { await download(new Blob([transcriptExport(this.words, format)], { type: MIME[format] }), `transcript.${format}`, MIME[format]); }
+      catch (error) { this.status(error.message); }
+    };
+    $('transcriptBackend').onchange = () => {
+      try { localStorage.setItem('notecomplete-transcript-backend', $('transcriptBackend').value); } catch { /* Optional. */ }
+      this.describe();
     };
   }
-  status(message) { $('transcriptStatus').textContent = message; }
-  busy(value) {
-    $('transcribeAudio').disabled = value || !this.asset;
-    $('cancelTranscript').hidden = !value;
-    const bar = $('transcriptProgress');
-    bar.hidden = !value;
-    bar.removeAttribute('value');
+  // Backends: Whisper in the reader, plus what the desktop app finds (Voxtype, Gemini via Antigravity).
+  async loadBackends() {
+    const select = $('transcriptBackend');
+    if (select.dataset.loaded) return;
+    select.dataset.loaded = '1';
+    const extra = await globalThis.notecompleteTranscribe?.backends?.().catch(() => []) || [];
+    for (const b of extra) { const o = new Option(b.available ? b.label : `${b.label} · not installed`, b.id); o.disabled = !b.available; select.add(o); }
+    try { const saved = localStorage.getItem('notecomplete-transcript-backend'); if ([...select.options].some(o => o.value === saved && !o.disabled)) select.value = saved; } catch { /* Optional. */ }
+    this.describe();
   }
-  progress(done, total) {
-    const bar = $('transcriptProgress');
-    if (!total) { bar.removeAttribute('value'); return; }
-    bar.value = Math.min(100, Math.round((done / total) * 100));
-    this.status(`Transcribing… ${bar.value}%. Playback remains available.`);
+  backend() { return $('transcriptBackend').value || 'whisper'; }
+  describe() {
+    const b = this.backend();
+    $('transcriptModelRow').hidden = b !== 'whisper';
+    if (!this.job) this.status(b === 'antigravity' ? 'Gemini transcribes through your Antigravity account: the audio is sent to Google.' : b === 'voxtype' ? 'Voxtype transcribes on this computer with whisper.cpp, piece by piece.' : 'Whisper runs on this device and downloads its model on first use.');
+  }
+  status(message) { $('transcriptStatus').textContent = message; }
+  // Controls for the recording on screen: a job may be running for another one.
+  controls() {
+    const mine = this.job && this.job.asset.id === this.asset?.id;
+    $('transcribeAudio').disabled = !this.asset || !!this.job;
+    $('transcribeAudio').title = this.job && !mine ? 'Another recording is being transcribed; see the bar.' : '';
+    $('cancelTranscript').hidden = !this.job;
+    $('transcriptProgress').hidden = !mine;
+  }
+  progress(fraction, phase) {
+    if (!this.job) return;
+    this.job.chip?.set(fraction, phase);
+    if (this.job.asset.id === this.asset?.id) {
+      $('transcriptProgress').value = Math.round(fraction * 100);
+      this.status(`${phase} · playback remains available.`);
+    }
   }
   cancel() {
-    this.generation++;
-    this.worker?.terminate();
-    this.worker = null;
-    this.busy(false);
+    const job = this.job;
+    if (!job) return;
+    this.job = null;
+    job.cancelled = true;
+    job.worker?.terminate();
+    if (job.external) globalThis.notecompleteTranscribe?.cancel();
+    job.chip?.fail('Transcription cancelled.');
+    if (job.asset.id === this.asset?.id) this.render(this.results.get(job.asset.id) || []);
+    this.controls();
     this.status('Transcription cancelled.');
   }
-  reset() { this.select(null); this.results.clear(); }
+  reset() { this.cancel(); this.select(null); this.results.clear(); }
+  // Switching recordings keeps a running transcription going in the background.
   select(asset) {
-    this.cancel();
     this.asset = asset;
-    this.busy(false);
-    this.render(asset ? this.results.get(asset.id) || [] : []);
-    this.status('Whisper downloads its model on first use. Audio stays on this device. Transcripts are stored in this browser.');
+    this.editing = false;
+    this.render(asset ? this.results.get(asset.id) || (this.job?.asset.id === asset.id ? this.job.partial : []) || [] : [], this.job?.asset.id === asset?.id && !this.results.has(asset?.id));
+    this.controls();
+    this.loadBackends();
+    if (!this.job) this.describe();
   }
-  render(words) {
+  render(words, provisional = false) {
     this.words = words;
-    this.offset = 0;
+    this.provisional = provisional;
+    this.offset = provisional ? Math.max(0, Math.floor((words.length - 1) / 100) * 100) : 0;
     this.renderWindow();
-    $('downloadTranscript').hidden = !words.length;
-    $('transcriptEdit').hidden = !words.length;
+    $('downloadTranscript').hidden = $('transcriptFormat').hidden = !words.length || provisional;
+    $('transcriptEdit').hidden = !words.length || provisional;
     this.update();
   }
   browse(direction) {
@@ -91,11 +144,12 @@ export class TranscriptController {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = word.text;
-      button.title = this.editing ? 'Click to correct this word' : `Seek to ${word.start.toFixed(1)} seconds`;
-      button.onclick = () => (this.editing ? this.editWord(word, button) : this.audio.seek(word.start));
+      button.title = this.editing ? 'Click to correct this word' : Number.isFinite(word.start) ? `Seek to ${word.start.toFixed(1)} seconds` : '';
+      button.onclick = () => (this.editing ? this.editWord(word, button) : Number.isFinite(word.start) && this.audio.seek(word.start));
       fragment.append(button, document.createTextNode(' '));
       return button;
     });
+    $('transcriptWords').classList.toggle('provisional', !!this.provisional);
     $('transcriptWords').replaceChildren(fragment);
     $('transcriptNavigation').hidden = !this.words.length;
     $('transcriptPrevious').disabled = this.offset === 0;
@@ -103,7 +157,7 @@ export class TranscriptController {
     $('transcriptRange').textContent = `${this.offset + 1}–${Math.min(this.words.length, this.offset + 100)} / ${this.words.length}`;
   }
   update() {
-    if (!$('transcriptPanel').open) return;
+    if (!$('transcriptPanel').open || this.provisional) return;
     const index = wordAt(this.words, this.audio.time);
     if ($('transcriptFollow').checked && index >= 0 && (index < this.offset || index >= this.offset + 100)) {
       this.offset = Math.floor(index / 100) * 100;
@@ -121,10 +175,11 @@ export class TranscriptController {
         box.scrollTop += top - box.clientHeight / 2;
     }
   }
-  // Cache key for a recording under the current model, language and processing settings.
+  // Cache key for a recording under the chosen backend, model, language and processing settings.
   async key(asset, bytes) {
     const language = $('transcriptLanguage').value || '';
-    const model = $('transcriptModel').value || 'base';
+    const backend = this.backend();
+    const model = backend === 'whisper' ? $('transcriptModel').value || 'base' : backend;
     const settings = speechSettings();
     const buffer = bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     // Local-network HTTP readers can run WASM but may lack SubtleCrypto.
@@ -135,61 +190,72 @@ export class TranscriptController {
   async cached(asset) {
     if (this.results.has(asset.id)) return this.results.get(asset.id);
     const { key } = await this.key(asset, await this.audio.read(asset.id));
-    (this.keys ||= new Map()).set(asset.id, key);
+    this.keys.set(asset.id, key);
     const words = key ? await storedTranscript(key) : null;
     if (words) this.results.set(asset.id, words);
     return words;
   }
+  // One transcription at a time, kept as a background job with a chip in the bar.
   async start() {
-    if (!this.asset || this.worker) return;
-    const asset = this.asset, generation = ++this.generation;
-    this.busy(true);
+    if (!this.asset || this.job) return;
+    const asset = this.asset, backend = this.backend();
+    const name = this.audio.label?.(this.audio.entries.find(e => e.asset?.id === asset.id)) || 'recording';
+    const job = this.job = { asset, backend, partial: [] };
+    job.chip = this.jobs?.start(`Transcript · ${name}`, { kind: 'transcript', cancel: () => this.cancel() });
+    this.controls();
     $('transcriptPanel').open = true;
-    this.status('Preparing audio on this device…');
+    this.progress(0.02, 'Preparing audio');
+    const alive = () => this.job === job;
+    const shows = () => this.asset?.id === asset.id;
+    // Partial text, shown greyed while the rest is being transcribed.
+    const partial = words => { job.partial = words; if (shows() && !this.results.has(asset.id)) this.render(words, true); };
     try {
       const bytes = await this.audio.read(asset.id);
-      if (generation !== this.generation) return;
+      if (!alive()) return;
       const { buffer, language, model, settings, key } = await this.key(asset, bytes);
-      (this.keys ||= new Map()).set(asset.id, key);
-      if (generation !== this.generation) return;
+      this.keys.set(asset.id, key);
       const cached = key ? await storedTranscript(key).catch(() => null) : null;
-      if (generation !== this.generation) return;
-      if (cached) { this.finish(cached, asset); return; }
-      const { samples, duration } = await prepareSpeech(buffer, settings);
-      if (generation !== this.generation) return;
-      this.worker = new Worker(new URL('./transcript-worker.js', import.meta.url), { type: 'module' });
-      this.status('Loading Whisper on this device… First use needs a model download.');
-      const fail = message => {
-        if (generation !== this.generation) return;
-        this.worker?.terminate(); this.worker = null;
-        this.busy(false); this.status(`Could not transcribe: ${message}. You can retry.`);
-      };
-      this.worker.onerror = event => fail(event.message || 'The local speech engine could not start');
-      this.worker.onmessage = ({ data }) => {
-        if (generation !== this.generation) return;
-        if (data.type === 'progress' && data.progress.status === 'progress') {
-          $('transcriptProgress').value = Math.round(data.progress.progress || 0);
-          this.status(`Loading speech model: ${Math.round(data.progress.progress || 0)}% (${data.progress.file})`);
-        }
-        if (data.type === 'working') { $('transcriptProgress').removeAttribute('value'); this.status('Transcribing… Playback remains available.'); }
-        if (data.type === 'speaking') this.progress(data.done, data.total);
-        if (data.type === 'error') fail(data.error);
-        if (data.type === 'complete') {
-          const words = timedWords(data.result.chunks, duration);
-          this.worker.terminate(); this.worker = null;
-          this.finish(words, asset);
-          if (key) storedTranscript(key, words).catch(() => {
-            if (generation === this.generation) this.status('Transcript ready for this session. Browser storage is unavailable; export to keep it.');
-          });
-          else this.status('Transcript ready for this session. Export to keep it.');
-        }
-      };
-      this.worker.postMessage({ samples, language, model }, [samples.buffer]);
-    } catch (error) {
-      if (generation === this.generation) {
-        this.worker?.terminate(); this.worker = null;
-        this.busy(false); this.status(`Could not transcribe: ${error.message}. You can retry.`);
+      if (!alive()) return;
+      if (cached) return this.finish(cached, asset, job);
+      let words;
+      if (backend === 'whisper') {
+        const { samples, duration } = await prepareSpeech(buffer, settings);
+        if (!alive()) return;
+        words = await new Promise((resolve, reject) => {
+          const worker = job.worker = new Worker(new URL('./transcript-worker.js', import.meta.url), { type: 'module' });
+          this.progress(0.05, 'Loading Whisper (downloads once)');
+          worker.onerror = event => reject(Error(event.message || 'The local speech engine could not start'));
+          worker.onmessage = ({ data }) => {
+            if (!alive()) return;
+            if (data.type === 'progress' && data.progress.status === 'progress') this.progress(0.05 * (data.progress.progress || 0) / 100, `Loading speech model ${Math.round(data.progress.progress || 0)} %`);
+            if (data.type === 'speaking') {
+              this.progress(0.05 + 0.95 * data.done / data.total, `Transcribing ${Math.round(100 * data.done / data.total)} %`);
+              if (data.text) partial([...job.partial, ...data.text.split(/\s+/).filter(Boolean).map(text => ({ text }))]);
+            }
+            if (data.type === 'error') reject(Error(data.error));
+            if (data.type === 'complete') resolve(timedWords(data.result.chunks, duration));
+          };
+          worker.postMessage({ samples, language, model }, [samples.buffer]);
+        }).finally(() => { job.worker?.terminate(); job.worker = null; });
+      } else {
+        job.external = true;
+        this.progress(0.03, backend === 'antigravity' ? 'Sending audio to Gemini' : 'Splitting audio for Voxtype');
+        const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: new Uint8Array(buffer), language }, ({ done, total, segments }) => {
+          if (!alive()) return;
+          this.progress(0.03 + 0.97 * done / total, `Piece ${done} of ${total}`);
+          partial(segmentWords(segments));
+        });
+        words = segmentWords(segments);
       }
+      if (!alive()) return;
+      this.finish(words, asset, job);
+      if (key) storedTranscript(key, words).catch(() => { if (shows()) this.status('Transcript ready for this session; export it to keep it.'); });
+    } catch (error) {
+      if (!alive()) return;
+      this.job = null;
+      job.chip?.fail(`Could not transcribe: ${error.message}`);
+      if (shows()) { this.render(this.results.get(asset.id) || []); this.status(`Could not transcribe: ${error.message}. You can retry.`); }
+      this.controls();
     }
   }
   // Edit mode: a word becomes a text box; its timing is kept. Corrections are
@@ -227,10 +293,15 @@ export class TranscriptController {
     this.onwords?.(asset, this.words);
     if (key) storedTranscript(key, this.words).catch(() => this.status('Correction kept for this session only.'));
   }
-  finish(words, asset) {
+  finish(words, asset, job = this.job) {
+    if (job && this.job === job) this.job = null;
     this.results.set(asset.id, words);
     this.onwords?.(asset, words);
-    this.render(words); this.busy(false);
-    this.status(words.length ? 'Transcript ready. Click a word to seek. Automatic words and timings may need correction.' : 'No timed speech detected.');
+    job?.chip?.finish(words.length ? `Transcript ready: ${words.length} words.` : 'No speech detected.');
+    if (this.asset?.id === asset.id) {
+      this.render(words);
+      this.status(words.length ? 'Transcript ready. Click a word to seek. Automatic words and timings may need correction.' : 'No timed speech detected.');
+    }
+    this.controls();
   }
 }

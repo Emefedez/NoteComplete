@@ -6,12 +6,14 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
+Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) shows the pages dark: it inverts their lightness and keeps the hues, also in the page previews. It only changes the display.
+
 ## Study with your AI tool
 
 Study and Ask AI use an AI tool already installed and signed in on your computer (Claude Code, Antigravity or Codex) and run in the desktop app. Pages are sent as images with tape lifted, together with their typed, PDF, recognized and transcript text.
 
 - **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
-- **Study → Generate flashcards (Shift+C)** makes an editable deck to practise or export to Anki.
+- **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.
 - **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
 
 ## Tape and locked items
@@ -24,15 +26,28 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 
 ## Audio
 
-The headphones button next to Layers (**A**) opens the recordings: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, show the handwriting written at that moment, dim ink not yet written, and download the recording. **Transcribe** runs Whisper on this device (choose the model and language); the transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
+The headphones button next to Layers (**A**) opens the recordings in a side panel that resizes from its left edge, bottom edge or corner: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, go to the page where the recording starts (**Shift+A**), dim ink not yet written at this point (**I**), and download the recording. The transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
+
+**Transcribe** offers the engines found on this computer:
+- **Whisper on this device** (choose the model and language). Runs in the reader; the model downloads once.
+- **Voxtype** (desktop app, when `voxtype` and `ffmpeg` are installed): local whisper.cpp, in 30-second pieces.
+- **Gemini via Antigravity** (desktop app, when Antigravity is installed and signed in): ten-minute pieces, three at a time. The audio is sent to Google.
+
+Text appears while it is transcribed, greyed until the timings are final. Transcription runs in the background with a chip in the bar: switching recordings or closing the panel does not stop it, only **Cancel** or the chip's Stop does. Export the transcript as text, SRT, WebVTT or JSON with word times.
 
 ## Sort and filter notes
 
 On Home, **Sort** orders Recent and Drive notes A–Z (default), by date or by size. The chips filter by modification date, notes with audio, size and Noteful tags. Filters stack, and selecting several tags keeps notes that have all of them. Recordings and tags are read from each note without downloading it. Tags of very large notes appear once they have been opened.
 
+## Remove a note
+
+On Home, each Recent card has a **⋯** button in its top corner (or right-click the card). **Remove from this device** drops it from Recent; for Drive notes it also deletes the copy kept on this device, and Drive is not changed. If the note is open with unsaved changes, you can upload them to Drive first. **Also delete it in Google Drive** needs `DELETE` typed and moves the file to Drive's trash, where it can be restored for 30 days.
+
+In the Drive section, **Back** returns to the view you had before the last search, filter or folder change.
+
 ## Find in a note
 
-**Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
+**Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. The source chips under the box limit the search to any combination of Text, PDF, OCR and Audio, with a count for each; the choice is remembered. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
 
 **Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
 
@@ -66,25 +81,22 @@ Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-
 
 **Layers** selects where to draw, creates/renames layers, controls visibility/opacity and locks them. Hidden or locked layers cannot be edited. New strokes inherit the selected layer.
 
-## Audio
+## Audio details
 
-Select a recording in the single player, then play, pause or seek. Nonempty recording names are shown unchanged; otherwise the UI generates a recording number/date. **Recording & sync** shrinks the bar back to the player even after the recording controls, handwriting options or transcript were opened, and expands them again. **Show handwriting** jumps to the first associated page. **Dim future handwriting** shows strokes at 20% opacity before pen-down and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay. Unrelated/untimed ink remains visible. Each recording retains its own playback position.
-
-The supplied native audio example contains one recording. Multiple-recording behavior is tested using an explicitly synthetic fixture. Codec support varies by browser/device; **Download** remains available when playback is unsupported.
+Nonempty recording names are shown unchanged; otherwise the UI generates a recording number and date. Dimming shows strokes at 20% opacity before they were written and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay, and untimed ink remains visible. Each recording keeps its own playback position. Codec support varies by browser and device; **Download** remains available when playback is unsupported.
 
 ### On-device transcripts
 
-For notes with audio, expand **Transcript** in the playback controls and choose
-**Transcribe recording**. Whisper runs in a local WASM worker and detects
+With **Whisper on this device**, Whisper runs in a local WASM worker and detects
 the spoken language when **Detect language** is selected. A progress bar shows
 the model download and each transcription chunk while it runs. Castellano is the
 default, with Galego and English available alongside other language options.
-Expand **Language, model & audio** to select Tiny (fastest), Base (default) or
-Small (higher accuracy, more memory). Gain and the voice filter affect playback
+The model list offers Tiny (fastest), Base (default) or
+Small (higher accuracy, more memory). Under **Audio for transcription**, gain and the voice filter affect playback
 and transcription; normalization applies to transcription only. Processing never
 overwrites the original recording. Changes take effect on the next transcription.
 The cache distinguishes the model, language and audio settings.
-The first run downloads model weights from Hugging Face; audio is never uploaded.
+The first run downloads model weights from Hugging Face; Whisper never uploads audio (only the Gemini engine does).
 Downloaded weights are browser-cached when storage is available.
 
 Words follow playback and clicking a word seeks the same clock used for timed
@@ -95,10 +107,10 @@ Automatic transcription and word boundaries can be inaccurate, especially for
 noise or quiet speech. Processing speed and memory depend on the device.
 
 Transcripts are cached by audio content in this browser on secure origins
-(including localhost), and can be exported as JSON with word timestamps.
+(including localhost), separately for each engine.
 They are not included in `.nfedit` or `.noteful` exports. On LAN HTTP without
 SubtleCrypto, transcripts remain available for the session and can be exported.
-Use **Hide transcript** or its disclosure to collapse it. Long transcripts display
+Long transcripts display
 100 words at a time, with section arrows and optional automatic following. Hidden
 transcripts perform no word highlight updates. Speech workers terminate after
 completion or cancellation; page thumbnails retain small bitmaps only.

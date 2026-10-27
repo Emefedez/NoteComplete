@@ -29,6 +29,7 @@
       "asset-path.js",
       "library-files.js",
       "ai-runner.js",
+      "transcriber.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

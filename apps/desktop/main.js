@@ -6,6 +6,7 @@ import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { libraryFiles } from './library-files.js';
 import { aiRunner } from './ai-runner.js';
+import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 
 const home = 'notecomplete://reader/';
@@ -68,6 +69,13 @@ app.whenReady().then(() => {
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
   ipcMain.handle('ai:run', guarded((event, request) => ai.run(event.sender.id, request)));
   ipcMain.on('ai:cancel', event => { if (trusted(event)) ai.cancel(event.sender.id); });
+  // Other transcription backends; pieces stream back to the reader as they finish.
+  const asr = transcriber({ tools: () => ai.tools() });
+  ipcMain.handle('asr:backends', guarded(() => asr.backends()));
+  ipcMain.handle('asr:run', guarded((event, request) => asr.run(event.sender.id, request, (done, total, segments) => {
+    if (!event.sender.isDestroyed()) event.sender.send('asr:progress', { done, total, segments });
+  })));
+  ipcMain.on('asr:cancel', event => { if (trusted(event)) asr.cancel(event.sender.id); });
   // Several documents: each window is an independent reader; the command palette lists them.
   ipcMain.handle('windows:new', guarded(() => { createWindow(); }));
   ipcMain.handle('windows:list', guarded(event => BrowserWindow.getAllWindows().filter(w => !w.isDestroyed()).map(w => ({ id: w.webContents.id, title: w.getTitle(), current: w.webContents.id === event.sender.id }))));

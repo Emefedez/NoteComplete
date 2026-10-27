@@ -19,7 +19,13 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
     try { entries = await library.recent(); } catch { /* No storage: nothing to list. */ }
     $('recentSection').hidden = !entries.length;
     const fragment = document.createDocumentFragment();
-    for (const entry of entries) {
+    for (const entry of entries) fragment.append(...recentCard(entry));
+    $('recentList').replaceChildren(fragment);
+    applyFilters();
+  }
+  // One Recent card; an entry that cannot be shown is skipped instead of emptying the list.
+  function recentCard(entry) {
+    try {
       const item = document.createElement('li'), button = document.createElement('button');
       button.type = 'button';
       button.className = 'note-card';
@@ -34,9 +40,10 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
       meta.append(name, detail);
       button.append(cover, meta);
       const remove = document.createElement('button');
-      remove.type = 'button'; remove.className = 'note-remove'; remove.textContent = '×';
-      remove.title = 'Remove from this device'; remove.setAttribute('aria-label', `Remove ${entry.name} from this device`);
-      remove.onclick = event => { event.stopPropagation(); confirmRemove(entry); };
+      remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
+      remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entry.name}`); remove.setAttribute('aria-haspopup', 'menu');
+      remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
+      button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
       library.cover(coverKey(entry)).then(url => { if (url) cover.src = url; else cover.classList.add('missing'); });
       button.note = { name: entry.name, modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
       library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
@@ -53,14 +60,12 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
         } catch (error) { status(error.message, true); }
       };
       item.append(button, remove);
-      fragment.append(item);
-    }
-    $('recentList').replaceChildren(fragment);
-    applyFilters();
+      return [item];
+    } catch (error) { console.warn('Recent entry skipped', entry?.key, error); return []; }
   }
   // Remove a note from this device; for Drive notes, optionally upload the open
   // document's changes first, or (typed confirmation) move the Drive file to trash.
-  function confirmRemove(entry) {
+  function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', now = current();
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
     $('forgetTitle').textContent = `Remove “${entry.name.replace(/\.noteful$/i, '')}”`;
@@ -73,7 +78,9 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
     $('forgetConfirm').value = '';
     $('forgetDriveDelete').disabled = true;
     $('forgetStatus').textContent = changed ? 'This note is open with unsaved changes.' : '';
-    const done = async (text) => { await library.forget(entry.key, { deleteFile: isDrive }); $('forgetDialog').close(); status(text); renderRecent(); };
+    const close = () => { $('forgetDialog').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
+    const outside = event => { if (!$('forgetDialog').contains(event.target) && event.target !== anchor) close(); };
+    const done = async (text) => { await library.forget(entry.key, { deleteFile: isDrive }); close(); status(text); renderRecent(); };
     $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : 'Removed from Recent.');
     $('forgetUpload').onclick = async () => {
       try {
@@ -92,8 +99,16 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
         await done('Moved to Google Drive’s trash (restorable there for 30 days) and removed from this device.');
       } catch (error) { $('forgetStatus').textContent = error.message; }
     };
-    $('forgetCancel').onclick = () => $('forgetDialog').close();
-    $('forgetDialog').showModal();
+    $('forgetCancel').onclick = close;
+    // Drop down under the ⋯ button, or up when there is no room below.
+    const menu = $('forgetDialog');
+    menu.hidden = false;
+    anchor.setAttribute('aria-expanded', 'true');
+    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
+    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    setTimeout(() => document.addEventListener('pointerdown', outside, true));
+    $('forgetDanger').ontoggle = () => { if (menu.getBoundingClientRect().bottom > innerHeight - 8) menu.style.top = `${Math.max(8, innerHeight - menu.offsetHeight - 8)}px`; };
   }
   async function renderFolder() {
     try { $('libraryFolder').textContent = (await library.location()).label; }

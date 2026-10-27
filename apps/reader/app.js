@@ -13,6 +13,7 @@ import { studyController } from "./study.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
+import { resizable } from "./panels.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -1301,25 +1302,46 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"],
-  ["/", "Find in note"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "This list"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
+  ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
 const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab" };
+// "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
+const KEY_HINTS = {
+  ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
+  "#audioToggle": "A", "#audioPage": "⇧A", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
+  "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
+};
+for (const [selector, key] of Object.entries(KEY_HINTS))
+  for (const el of document.querySelectorAll(selector)) {
+    el.dataset.key = key;
+    // Icon buttons (no visible label) get a corner badge; labelled ones show the key after the label.
+    const label = [...el.childNodes].some((n) => (n.nodeType === 3 ? n.textContent.trim().length > 1 : !n.matches?.("svg, input, .sr-only")));
+    if (!label && key.length <= 2) el.dataset.keyIcon = "";
+  }
+function toggleKeyHints() {
+  const on = document.body.classList.toggle("show-keys");
+  status(on ? "Keys shown on buttons. Press ? again to hide them; Help lists them all." : "Key hints hidden.");
+}
 function shortcut(e) {
   const k = e.key;
-  if (k === "?") return $("shortcutsOpen").click(), true;
   if (!doc) return false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
+  if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
+  if (k === "i" && !$("audioToggle").hidden) return $("syncEnabled").click(), true;
   if (!$("audioToggle").hidden && ["j", "k", "l"].includes(k)) {
     if (k === "k") $("playAudio").click();
     else (k === "j" ? $("backAudio") : $("forwardAudio")).click();
     return true;
   }
+  if (k === "d") return $("pagesDark").click(), true;
   if (k === "q") return resumeQuiz(), true;
   if (k === "Q") return study.quiz(), true;
   if (k === "C") return study.cards(), true;
@@ -1334,6 +1356,11 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
+  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+    e.preventDefault();
+    toggleKeyHints();
+    return;
+  }
   if (document.querySelector("dialog[open]")) return;
   if (quizzes.key(e)) {
     e.preventDefault();
@@ -1607,7 +1634,17 @@ function toggleAudio(open = $("audioBar").hidden) {
   $("audioBar").hidden = !open;
   $("audioToggle").setAttribute("aria-expanded", String(open));
 }
+// Dark pages: inverts the document and its page previews (presentation only, never exported).
+function setDarkPages(on) {
+  document.body.classList.toggle("pages-dark", on);
+  $("pagesDark").setAttribute("aria-pressed", String(on));
+  try { localStorage.setItem("notecomplete-dark-pages", on ? "1" : ""); } catch { /* Optional. */ }
+}
+$("pagesDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
+try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
+resizable($("audioBar"), "notecomplete-audio-panel");
+resizable($("chatPanel"), "notecomplete-chat-panel");
 $("audioClose").onclick = () => toggleAudio(false);
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
@@ -1934,6 +1971,7 @@ const studyDeps = {
 };
 const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
 const jobs = jobChip({ status });
+audio.transcript.jobs = jobs;
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {
   const p = panels[index];

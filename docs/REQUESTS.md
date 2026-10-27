@@ -1,4 +1,4 @@
-# Requested changes (owner, 2026-10-27 → 28)
+# Requested changes (owner, 2026-10-27)
 
 The owner's requests from the latest review, in one place, with how each was checked. ✅ done · ⚠️ done, not verified against the real service · ⏳ to do.
 
@@ -36,6 +36,37 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Enter starts the Drive note search.
 - ✅ Progress bar and percentage for Drive downloads.
 - ✅ `tools/update_appimage.py` rebuilds everything and replaces the installed AppImage, keeping `.previous`.
+
+## Audio and transcription (second round)
+- ✅ Compact transport: square-rounded buttons in one row. "Go to where this recording starts" and "Dim ink not yet written" are two small icon buttons to the right of back/play/forward. The confusing "Show handwriting" label is gone.
+- ✅ Dimming checked in the browser with the Practice book recording: all timed ink dimmed at 0 s, two of three strokes shown at 10 s, all shown with dimming off. *If it still looks wrong on one of your notes, tell me which note and page.*
+- ✅ Transcription keeps running in the background: switching recordings or closing the panel no longer cancels it, and a bar chip shows its progress. Only Cancel stops it.
+- ✅ Text appears while transcribing (greyed until timings are final): Whisper sends each 30 s window, other engines each piece.
+- ✅ Engine choice: Whisper on this device; Voxtype (local whisper.cpp, 30 s pieces cut by ffmpeg); Gemini via Antigravity (cloud, 10-minute pieces three at a time, sends audio to Google). *The desktop pieces are tested with the real Voxtype and Antigravity CLIs.*
+- ✅ Export as text, SRT, WebVTT or JSON with word times.
+- ✅ The audio and Ask AI panels share one look and resize from the left edge, the bottom edge or the corner; sizes are remembered.
+
+## Reader (second round)
+- ✅ Dark pages (D, or the moon next to Pages): inverts the document's lightness, keeping hues, including the page previews. Presentation only.
+- ✅ Find can be limited to any combination of Text, PDF, OCR and Audio, with a count per source.
+- ✅ Recent cards: a ⋯ button in the card's top corner, always visible, opens a menu anchored to it (dropping up when there is no room below); right-clicking the card opens it too. It replaces the hover-only × and the centred dialog. *Removed a note and opened the menu by right-click in the browser.*
+- ✅ Background-job chips and "Open …" buttons shrink with the compact bar and truncate on narrow windows.
+- ⏸️ README with screenshots and a header graphic, using the sample corpus only (no private notes). **On hold** at the owner's request until the items below are done.
+
+## Flashcards and keys (third round)
+- ✅ The practice card has a fixed size: showing the answer no longer resizes the dialog. *Measured: 513 px before and after every reveal.*
+- ✅ Practice text is left-aligned inside a block centred in the card, so lines share one left edge; the hidden answer keeps its space, so the question does not move on reveal. *Question's left edge measured equal before and after.*
+- ✅ Cards before export are shown as readable cards (question over answer, page badge, ✕), not two clipped textareas. Click a card to edit it in place with fields that grow to the text; Esc or Ctrl+Enter finishes.
+- ✅ Answers keep the model's structure: the prompt asks for one list item per line, and inline enumerations ("1) … 2) … 3) …", "a) … b) …") are split one per line, also in decks saved earlier. Anki export keeps the breaks as `<br>`. *Unit test with the SECDED Hamming (8,4) answer: four lines.*
+- ✅ Practice keys: Space shows the answer, 1 not yet, 2 I knew it.
+- ✅ Decks deleted themselves when reopened from Study → Saved decks and quizzes. Cause: a style made each row's ✕ as wide as the open button, so the right half of every row deleted it at once. The saved list now has separate **Flashcard decks** and **Quizzes** sections; ✕ is a small separate button that asks "Delete …? Delete / Keep", and a deleted item can be restored with **Undo** until the dialog closes. *Browser test: Keep, Delete, Undo.*
+- ✅ Your lost 50-card ACII deck was recovered from the app's storage log and saved as `~/Downloads/ACII-mazo-recuperado.json`; bring it back with the new **Import deck…** button in the same dialog (with the ACII note open). *Import tested: 50 cards.*
+- ✅ **?** outside a text box toggles key badges on the buttons: tools, Ask AI, Layers, dark pages, audio transport, the new audio buttons (Shift A: go to the recording's page; I: dim ink), quiz minimize, practice. Labelled buttons show the key after the label, icon buttons a corner badge; Ctrl shortcuts stay in the menus. Help → Keyboard shortcuts still lists everything.
+
+## Open issues (reported, not yet fixed)
+- ⚠️ Drive: after searching (or filtering a folder), Back showed more folders than at first. Cause: Back always went up one folder, so from a reopened folder it fell to a Drive-wide name search. Back now returns to the view before the last search, filter or folder change. *Unit-tested; not yet checked against your real Drive.*
+- ⏳ Recent notes not appearing on Home (desktop app). Not reproduced: your installed app's storage still holds two Recent entries (ACII and AL-lite), and Recent shows in the browser test. A card that fails to render is now skipped instead of emptying the list. Needs: does the "Recent" heading show at all, and does it happen only after a Drive search?
+- ⏳ Some notes (for example *Discover Chinese*) never load their thumbnail. To investigate: how the cover is found in that file (byte-range read of the head and tail).
 
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.

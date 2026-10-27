@@ -139,21 +139,6 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     $('chatNoteLabel').hidden = !notePath() || $('chatProvider').value === 'antigravity';
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
   };
-  // Resize from the panel's left edge; the width is remembered.
-  {
-    const panel = $('chatPanel'), grip = $('chatResize');
-    try { const w = Number(localStorage.getItem('notecomplete-chat-width')); if (w >= 280) panel.style.width = `${w}px`; } catch { /* Optional. */ }
-    grip.onpointerdown = event => {
-      event.preventDefault();
-      grip.setPointerCapture(event.pointerId);
-      const right = panel.getBoundingClientRect().right;
-      grip.onpointermove = e => { panel.style.width = `${Math.max(280, Math.min(right - 40, right - e.clientX))}px`; };
-      grip.onpointerup = () => {
-        grip.onpointermove = grip.onpointerup = null;
-        try { localStorage.setItem('notecomplete-chat-width', String(panel.offsetWidth)); } catch { /* Optional. */ }
-      };
-    };
-  }
   return {
     attach,
     async askAbout({ question, image, label = 'a region of the notes' }) {

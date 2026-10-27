@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ankiText, cleanCards, cleanQuestions, prompts } from './study.js';
+import { ankiText, cleanCards, cleanQuestions, prompts, listLines } from './study.js';
 import { jsonFrom, textBlock } from './ai-context.js';
 import { renderAnswer } from './chat.js';
 
@@ -38,4 +38,13 @@ test('chat answers render as text, never as HTML', () => {
   const first = fragment.children[0].children;
   assert.equal(first[0].tag, 'strong');
   assert.ok(first.some(n => typeof n === 'string' && n.includes('<script>')), 'markup stays literal text');
+});
+
+test('inline numbered lists from the model are split into one item per line', () => {
+  const back = '1) No fallan P1P2P3 ni P4: todo perfecto. 2) No fallan P1P2P3 y sí falla P4: error en P4 (invertir P4). 3) Fallan P1P2P3 y P4: error simple corregible dentro de H(7,4). 4) Fallan P1P2P3 pero no falla P4: error doble.';
+  assert.equal(listLines(back).split('\n').length, 4);
+  assert.match(listLines(back), /^1\) No fallan[^\n]*perfecto\.\n2\) No fallan/);
+  assert.equal(listLines('Casos: a) lectura b) escritura'), 'Casos:\na) lectura\nb) escritura');
+  for (const same of ['Hamming (8,4) y H(7,4)', 'Solo el paso 2) importa', '1) ya\n2) separado']) assert.equal(listLines(same), same);
+  assert.match(prompts('cards', { amount: 1, language: '', title: 'T' }), /own line/);
 });

@@ -68,6 +68,7 @@
           <button id="tapeCover" disabled>Cover with all tape</button>
           <button id="tapeNote" disabled>Tape as saved</button>
           <hr />
+          <button data-proxy="pagesDark">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen">Display quality…</button>
         </div>
       </details>
@@ -105,8 +106,7 @@
       <p id="title">Home</p>
       <span id="saveState" hidden>Unsaved changes</span>
     </div>
-    <div id="jobChip" class="job-chip" role="status" hidden><span id="jobLabel"></span><span class="job-track"><span id="jobBar"></span></span><button id="jobStop" type="button" title="Stop">Stop</button></div>
-    <button id="jobReady" class="job-ready" type="button" hidden></button>
+    <div id="jobArea" class="job-area"></div>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
     <div hidden>
@@ -384,6 +384,14 @@
           aria-expanded="false"
           aria-controls="pagesPanel"
         ></button
+        ><button
+          id="pagesDark"
+          class="pages-dark-toggle"
+          aria-label="Dark pages"
+          title="Dark pages: invert the document's contrast (D)"
+          aria-pressed="false"
+          data-icon="moon"
+        ></button
         ><label
           >Page
           <input
@@ -406,30 +414,23 @@
       </div>
       <div class="workspace">
         <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
-        <section id="audioBar" class="audio-panel" hidden aria-label="Audio and transcript">
-          <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><button id="audioClose" type="button" aria-label="Close" title="Close (A)">×</button></div>
+        <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
+          <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
           <select id="recording" aria-label="Recording"></select>
           <div class="audio-transport">
             <button id="backAudio" type="button" aria-label="Back 10 seconds" title="Back 10 s (J)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7 5 12l6 5V7Zm8 0-6 5 6 5V7Z"/></svg></button>
             <button id="playAudio" type="button" class="play" data-state="paused" aria-label="Play" title="Play / pause (K)" disabled><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
             <button id="forwardAudio" type="button" aria-label="Forward 10 seconds" title="Forward 10 s (L)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 7 6 5-6 5V7ZM5 7l6 5-6 5V7Z"/></svg></button>
+            <span class="spacer"></span>
+            <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
+            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" checked /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
           </div>
-          <input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled />
-          <output id="audioTime">0:00 / 0:00</output>
+          <div class="audio-seek"><input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled /><output id="audioTime">0:00 / 0:00</output></div>
           <p id="audioState" role="status"></p>
-          <div class="audio-options">
-            <button id="audioPage" type="button">Show handwriting</button>
-            <label class="sync"><input id="syncEnabled" type="checkbox" checked /> Dim handwriting not yet written</label>
-            <a id="audioDownload" class="audio-download" hidden>Download recording</a>
-          </div>
           <details id="transcriptPanel" class="transcript-panel" open>
             <summary>Transcript <span class="muted">on this device</span></summary>
             <div class="transcript-controls">
-              <select id="transcriptModel" data-native aria-label="Whisper model">
-                <option value="tiny">Tiny · fastest</option>
-                <option value="base" selected>Base · balanced</option>
-                <option value="small">Small · more accurate</option>
-              </select>
+              <select id="transcriptBackend" data-native aria-label="Transcription engine"><option value="whisper">Whisper on this device</option></select>
               <select id="transcriptLanguage" data-native aria-label="Spoken language">
                 <option value="">Detect language</option>
                 <option value="spanish" selected>Castellano</option>
@@ -440,6 +441,13 @@
                 <option value="german">Deutsch</option>
                 <option value="italian">Italiano</option>
                 <option value="portuguese">Português</option>
+              </select>
+            </div>
+            <div id="transcriptModelRow" class="transcript-controls">
+              <select id="transcriptModel" data-native aria-label="Whisper model">
+                <option value="tiny">Tiny · fastest</option>
+                <option value="base" selected>Base · balanced</option>
+                <option value="small">Small · more accurate</option>
               </select>
             </div>
             <details class="transcript-settings">
@@ -455,6 +463,7 @@
               <button id="transcribeAudio" type="button" class="primary">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
               <button id="transcriptEdit" type="button" aria-pressed="false" hidden title="Click a word to correct it">Edit</button>
+              <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">Text</option><option value="srt">SRT subtitles</option><option value="vtt">WebVTT</option><option value="json">JSON (word times)</option></select>
               <button id="downloadTranscript" type="button" hidden>Export</button>
               <button id="hideTranscript" type="button" hidden>Hide</button>
             </div>
@@ -485,8 +494,7 @@
             <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
           </div>
         </aside>
-        <aside id="chatPanel" class="chat-panel" aria-label="Ask AI" hidden>
-          <div id="chatResize" class="chat-resize" title="Drag to resize" aria-hidden="true"></div>
+        <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
           <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div>
           <div class="chat-context">
             <label><input id="chatPage" type="checkbox" checked /> This page</label>
@@ -506,6 +514,7 @@
             <button id="findListToggle" type="button" aria-label="Show all matches" title="Show all matches">☰</button>
             <button id="findClose" type="button" aria-label="Close find" title="Close (Esc)">×</button>
           </div>
+          <div id="findSources" class="find-sources" role="group" aria-label="Search in"></div>
           <p id="findProgress" class="find-progress" hidden></p>
           <ol id="findResults" class="find-results" hidden></ol>
         </div>
@@ -601,8 +610,12 @@
   </div>
   <div id="deckPractice" class="deck-practice" hidden>
     <p id="practiceProgress" class="muted"></p>
-    <p id="practiceFront" class="practice-front"></p>
-    <p id="practiceBack" class="practice-back" hidden></p>
+    <div class="practice-card">
+      <div class="practice-text">
+        <p id="practiceFront" class="practice-front"></p>
+        <p id="practiceBack" class="practice-back" hidden></p>
+      </div>
+    </div>
     <div class="ocr-actions"><button id="practicePage" type="button" hidden></button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
   </div>
 </dialog>
@@ -614,10 +627,17 @@
   <div class="ocr-actions"><button id="quizPromptReset" type="button">Restore default</button><span class="spacer"></span><button id="quizPromptCancel" type="button">Cancel</button><button id="quizPromptSave" type="button" class="primary">Save</button></div>
 </dialog>
 
-<dialog id="deckPickerDialog" class="ocr-dialog" aria-label="Saved decks">
-  <h2>Saved decks</h2>
-  <ul id="deckPicker" class="deck-picker"></ul>
-  <div class="ocr-actions"><button id="deckPickerClose" type="button">Close</button></div>
+<dialog id="deckPickerDialog" class="ocr-dialog saved-dialog" aria-labelledby="savedTitle">
+  <h2 id="savedTitle">Saved for this note</h2>
+  <section aria-labelledby="savedDecksTitle">
+    <h3 id="savedDecksTitle">Flashcard decks</h3>
+    <ul id="deckPicker" class="deck-picker"></ul>
+  </section>
+  <section aria-labelledby="savedQuizzesTitle">
+    <h3 id="savedQuizzesTitle">Quizzes</h3>
+    <ul id="quizPicker" class="deck-picker"></ul>
+  </section>
+  <div class="ocr-actions"><button id="deckImport" type="button">Import deck…</button><span class="spacer"></span><button id="deckPickerClose" type="button">Close</button></div>
 </dialog>
 
 <dialog id="ocrDialog" class="ocr-dialog" aria-labelledby="ocrTitle">
@@ -636,18 +656,20 @@
   <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
 </dialog>
 
-<dialog id="forgetDialog" class="ocr-dialog" aria-labelledby="forgetTitle">
-  <h2 id="forgetTitle">Remove</h2>
-  <p id="forgetText"></p>
-  <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
-  <div class="ocr-actions"><button id="forgetCancel" type="button">Cancel</button><button id="forgetUpload" type="button" hidden>Upload changes to Drive, then remove</button><button id="forgetLocal" type="button" class="primary">Remove from this device</button></div>
+<div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
+  <p id="forgetTitle" class="note-menu-title"></p>
+  <p id="forgetText" class="muted"></p>
+  <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
+  <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
   <details id="forgetDanger" class="danger-zone" hidden>
     <summary>Also delete it in Google Drive…</summary>
-    <p>Moves the Drive file to Drive’s trash for everyone who can see it. It can be restored from Drive’s trash for 30 days. To confirm, type <strong>DELETE</strong>.</p>
+    <p>Moves the Drive file to Drive’s trash for everyone who can see it; it can be restored there for 30 days. Type <strong>DELETE</strong> to confirm.</p>
     <input id="forgetConfirm" type="text" autocomplete="off" spellcheck="false" aria-label="Type DELETE to confirm" />
     <button id="forgetDriveDelete" type="button" class="danger" disabled>Delete in Google Drive and here</button>
   </details>
-</dialog>
+  <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
+  <button id="forgetCancel" type="button" hidden>Cancel</button>
+</div>
 
 <dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">
   <h2 id="shortcutsTitle">Keyboard shortcuts</h2>

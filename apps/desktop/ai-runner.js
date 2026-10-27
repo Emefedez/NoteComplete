@@ -18,12 +18,12 @@ export const PROVIDERS = {
 // Desktop launchers often lack the shell's PATH (mise, npm, ~/.local/bin), so
 // ask the user's login shell once where the tools are.
 export function findTools(shell = process.env.SHELL || '/bin/bash') {
-  const names = Object.values(PROVIDERS).flatMap(p => p.names);
+  const names = [...Object.values(PROVIDERS).flatMap(p => p.names), 'voxtype', 'ffmpeg'];
   const script = names.map(n => `printf '%s=%s\\n' ${n} "$(command -v ${n} 2>/dev/null)"`).join('; ');
   return new Promise(resolve => {
     execFile(shell, ['-lic', script], { timeout: 15000, env: { ...process.env, TERM: 'dumb' } }, (_error, stdout = '') => {
       const found = Object.fromEntries(stdout.split('\n').map(l => l.match(/^([\w-]+)=(\/\S+)$/)).filter(Boolean).map(m => [m[1], m[2]]));
-      resolve(Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [id, p.names.map(n => found[n]).find(Boolean) || null])));
+      resolve({ ...Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [id, p.names.map(n => found[n]).find(Boolean) || null])), voxtype: found.voxtype || null, ffmpeg: found.ffmpeg || null });
     });
   });
 }
@@ -60,6 +60,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   let found;
   const running = new Map();
   return {
+    tools: async () => (found ||= await tools()),
     async providers() {
       found ||= await tools();
       return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));

@@ -36,6 +36,11 @@ Coming next: flashcards and quizzes inside the app, page reordering and deletion
 
 AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
 
+## Known issues
+
+- Some notes (for example *Discover Chinese*) **never** load their thumbnail on Home.
+- More open items are tracked in [docs/REQUESTS.md](docs/REQUESTS.md).
+
 ## Build from source
 
 Requirements: Rust 1.93+, Node 22.13+ and Python 3.11+.

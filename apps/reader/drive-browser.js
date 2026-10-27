@@ -9,6 +9,11 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   const previews = thumbs || driveThumbnails(client, { library });
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
   let folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
+  // Views to go back to: entering a folder, searching or filtering pushes the view it leaves.
+  // `box` is the search text that produced the current view.
+  let history = [], box = '';
+  const view = () => ({ trail: [...trail], folder, search, filter, box });
+  const push = () => { history.push(view()); if (history.length > 50) history.shift(); };
   const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1';
   const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
   const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
@@ -43,7 +48,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     // Public access can only browse from a folder link, not search the Drive.
     $('driveRefresh').disabled = !client.ready || loading || (client.publicAccess && !folder);
     $('driveBack').hidden = $('driveRefresh').hidden = !client.ready;
-    $('driveBack').disabled = !folder || loading || (client.publicAccess && trail.length <= 1);
+    $('driveBack').disabled = loading || !(history.length || (folder && !(client.publicAccess && trail.length <= 1)));
     $('driveMore').hidden = !nextPage;
     $('driveMore').disabled = loading || !client.ready;
     $('driveList').setAttribute('aria-busy', String(loading));
@@ -133,7 +138,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   const remember = () => store(folderKey, trail.map(({ id, name, resourceKey, mimeType }) => ({ id, name, resourceKey, mimeType })));
   function enter(file) {
     if (loading) return;
-    trail.push(file); folder = file; filter = ''; $('driveSearch').value = ''; resetList(); remember();
+    push(); trail.push(file); folder = file; filter = ''; box = ''; $('driveSearch').value = ''; resetList(); remember();
     run((signal, valid) => { message('Loading folder…'); return fetchList(signal, valid); });
   }
   async function resume(signal, valid) {
@@ -142,7 +147,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       try {
         const last = await client.folder(saved.at(-1), signal);
         if (!valid()) return;
-        trail = [...saved.slice(0, -1), last]; folder = last; filter = ''; $('driveSearch').value = '';
+        trail = [...saved.slice(0, -1), last]; folder = last; filter = ''; box = ''; $('driveSearch').value = '';
         return fetchList(signal, valid);
       } catch (error) { if (error.name === 'AbortError') throw error; /* Moved or deleted: search instead. */ }
     }
@@ -211,7 +216,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     }
   };
   $('driveDisconnect').onclick = () => {
-    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = '';
+    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = ''; history = []; box = '';
     config.connected = false; saveConfig();
     message('Disconnected on this device. No files were changed in Drive. Notes kept on this device stay available under Recent.'); controls();
   };
@@ -221,6 +226,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveFind').onclick = () => {
     const value = $('driveSearch').value.trim();
     // Inside a folder the same box filters its children; at the top it searches names, or lists the top level when cleared.
+    if (value === (folder ? filter : search)) return run((signal, valid) => fetchList(signal, valid));
+    push(); box = value;
     if (folder) { filter = value; run((signal, valid) => fetchList(signal, valid)); return; }
     search = value; filter = ''; trail = []; folder = null; resetList();
     run((signal, valid) => fetchList(signal, valid));
@@ -228,10 +235,15 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveUseFolder').onclick = () => run(async (signal, valid) => {
     saveConfig(); const selected = await client.folder(folderReference($('driveFolderLink').value), signal);
     if (!valid()) return;
-    folder = selected; trail = [selected]; filter = ''; $('driveSearch').value = ''; resetList(); remember(); await fetchList(signal, valid);
+    if (folder || client.connected) push(); folder = selected; trail = [selected]; filter = ''; box = ''; $('driveSearch').value = ''; resetList(); remember(); await fetchList(signal, valid);
   });
+  // Back returns to the previous view (before a search, filter or folder); without one it goes up a folder.
   $('driveBack').onclick = () => {
-    trail.pop(); folder = trail.at(-1) || null; filter = ''; resetList(); remember(); run((signal, valid) => fetchList(signal, valid));
+    const previous = history.pop();
+    if (previous) ({ trail, folder, search, filter, box } = { ...previous, trail: [...previous.trail] });
+    else { trail.pop(); folder = trail.at(-1) || null; filter = ''; box = ''; }
+    $('driveSearch').value = box;
+    resetList(); remember(); run((signal, valid) => fetchList(signal, valid));
   };
   $('driveRefresh').onclick = () => run((signal, valid) => fetchList(signal, valid));
   $('driveMore').onclick = () => run((signal, valid) => fetchList(signal, valid, true));

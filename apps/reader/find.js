@@ -20,6 +20,9 @@ export async function noteFingerprint(file) {
 export function findController({ call, library, backgrounds, panels, jump, audio, status, pageCanvas, documentInfo }) {
   let index = new SearchIndex(), fingerprint = '', stored = { pdf: {}, ocr: {} };
   let building = null, generation = 0, hits = [], current = -1, debounce = 0, ocrRun = null;
+  // Sources to search, any combination; remembered on this device.
+  let sources = new Set(['text', 'pdf', 'ocr', 'audio']);
+  try { const saved = JSON.parse(localStorage.getItem('notecomplete-find-sources')); if (Array.isArray(saved) && saved.length) sources = new Set(saved); } catch { /* Optional. */ }
 
   function reset(nextFingerprint) {
     generation++; building = null; ocrRun?.cancel();
@@ -96,8 +99,26 @@ export function findController({ call, library, backgrounds, panels, jump, audio
 
   function progress(text) { $('findProgress').textContent = text; $('findProgress').hidden = !text; }
   function refresh() { if (!$('findBar').hidden) run(); }
+  function renderSources(all) {
+    const counts = {};
+    for (const h of all) counts[h.source] = (counts[h.source] || 0) + 1;
+    $('findSources').replaceChildren(...Object.entries(BADGE).map(([source, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = `find-source ${source}`;
+      b.setAttribute('aria-pressed', String(sources.has(source)));
+      b.textContent = counts[source] ? `${label} ${counts[source]}` : label;
+      b.onclick = () => {
+        if (sources.has(source) && sources.size > 1) sources.delete(source); else sources.add(source);
+        try { localStorage.setItem('notecomplete-find-sources', JSON.stringify([...sources])); } catch { /* Optional. */ }
+        run();
+      };
+      return b;
+    }));
+  }
   function run() {
-    hits = index.search($('findInput').value);
+    const all = index.search($('findInput').value);
+    renderSources(all);
+    hits = all.filter(h => sources.has(h.source));
     current = hits.length ? Math.max(0, Math.min(current, hits.length - 1)) : -1;
     render();
     for (const p of panels()) paint(p);

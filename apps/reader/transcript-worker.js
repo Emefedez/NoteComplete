@@ -25,11 +25,16 @@ self.onmessage = async ({ data }) => {
     if (model && typeof model.generate === 'function' && !model.noteCompleteProgress) {
       model.noteCompleteProgress = true;
       const generate = model.generate.bind(model);
-      model.generate = (...args) => generate(...args).then(result => { report?.(); return result; });
+      model.generate = (...args) => generate(...args).then(result => { report?.(result); return result; });
     }
     let done = 0;
     const total = chunkCount(data.samples);
-    report = () => self.postMessage({ type: 'speaking', done: ++done, total });
+    // Each finished 30 s window is decoded once so the reader can show text as it comes.
+    report = result => {
+      let text = '';
+      try { text = transcriber.tokenizer.batch_decode(result?.sequences ?? result, { skip_special_tokens: true })[0]?.trim() || ''; } catch { /* Progress only. */ }
+      self.postMessage({ type: 'speaking', done: ++done, total, text });
+    };
     self.postMessage({ type: 'working' });
     const result = await transcriber(data.samples, {
       task: 'transcribe', return_timestamps: 'word',
