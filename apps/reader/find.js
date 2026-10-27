@@ -277,57 +277,85 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       if (/data-item="stroke:/.test(view.svg)) inked.add(p);
     }
     // Pages with PDF text skip the whole-page pass, but their handwriting is still read.
+    // Pages recognized before are kept, so a stopped run carries on from there.
     const whole = p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20);
-    const pages = selected.filter(p => whole(p) || inked.has(p));
+    const wanted = selected.filter(p => whole(p) || inked.has(p));
+    const pages = $('ocrRedo').checked ? wanted : wanted.filter(p => !stored.ocr[slots.get(p)]);
+    const skipped = wanted.length - pages.length;
     $('ocrStart').disabled = false;
-    if (!pages.length) { $('ocrStatus').textContent = 'Those pages already have PDF text and no handwriting. Untick “Skip the printed text of PDF pages” to recognize them anyway.'; return; }
+    if (!wanted.length) { $('ocrStatus').textContent = 'Those pages already have PDF text and no handwriting. Untick “Skip the printed text of PDF pages” to recognize them anyway.'; return; }
+    if (!pages.length) { $('ocrStatus').textContent = `All ${skipped} ${skipped === 1 ? 'page is' : 'pages are'} already recognized. Tick “Recognize again” to redo them.`; return; }
     $('ocrDialog').close();
     const token = generation;
-    let cancelled = false, worker = null, done = 0;
-    ocrRun = { cancel() { cancelled = true; worker?.terminate(); } };
+    let cancelled = false, worker = null, done = 0, stop;
+    // Stop ends the run at once: every wait (engine, page raster, recognition)
+    // races against it, so a page in progress cannot keep the job alive.
+    const stopped = new Promise(resolve => { stop = resolve; });
+    const STOPPED = Symbol('stopped');
+    const race = promise => Promise.race([promise, stopped.then(() => { throw STOPPED; })]);
+    // The engine is shut down once, after the page it is reading settles:
+    // Tesseract errors if it is terminated mid-job. Stop does not wait for it.
+    let busy = Promise.resolve();
+    const shut = () => {
+      const w = worker;
+      worker = null;
+      return w ? busy.catch(() => {}).then(() => w.terminate()).catch(() => {}) : Promise.resolve();
+    };
+    const read = (canvas, scale) => (busy = recognizePage(worker, canvas, scale));
+    ocrRun = { cancel() { cancelled = true; stop(); shut(); } };
     const job = jobs().start('Recognize text', { kind: 'ocr', cancel: () => ocrRun?.cancel() });
+    const kept = () => `${done} ${done === 1 ? 'page' : 'pages'} recognized${skipped ? ` (${skipped} done before)` : ''}`;
+    // Tesseract's memory only grows: a fresh engine every few pages keeps a
+    // whole-note run from piling it up.
+    const RECYCLE = 12;
+    const engine = async () => {
+      await shut();
+      worker = await race(ocrWorker(chosen.join('+'), message => {
+        if (message.status === 'loading language traineddata' && message.progress < 1) job.set(done / pages.length, `downloading language data ${Math.round(message.progress * 100)}%`);
+      }));
+    };
     try {
-      job.set(0, 'loading the engine');
-      worker = await ocrWorker(chosen.join('+'), message => {
-        if (message.status === 'loading language traineddata' && message.progress < 1) job.set(0, `downloading language data ${Math.round(message.progress * 100)}%`);
-      });
+      job.set(0, skipped ? `loading the engine; ${skipped} pages already done` : 'loading the engine');
+      await engine();
       for (const [n, page] of pages.entries()) {
         if (cancelled || token !== generation) break;
+        if (n && n % RECYCLE === 0) await engine();
         job.set(n / pages.length, pages.length === 1 ? `page ${page + 1}` : `page ${page + 1} (${n + 1} of ${pages.length})`);
         // Up to three passes: the whole page, then the ink alone at two sizes
         // (handwriting reads differently at each); readings of one spot merge.
         const passes = [];
         if (whole(page)) {
-          const { canvas, scale } = await pageCanvas(page);
-          passes.push(await recognizePage(worker, canvas, scale));
-          canvas.width = canvas.height = 0;
+          const { canvas, scale } = await race(pageCanvas(page));
+          try { passes.push(await race(read(canvas, scale))); }
+          finally { canvas.width = canvas.height = 0; }
         }
         if (inked.has(page)) for (const width of [1200, 3000]) {
           if (cancelled || token !== generation) break;
-          const ink = await pageCanvas(page, width, { inkOnly: true });
+          const ink = await race(pageCanvas(page, width, { inkOnly: true }));
           if (!ink) break;
-          passes.push(await recognizePage(worker, ink.canvas, ink.scale));
-          ink.canvas.width = ink.canvas.height = 0;
+          try { passes.push(await race(read(ink.canvas, ink.scale))); }
+          finally { ink.canvas.width = ink.canvas.height = 0; }
         }
         const words = mergeWords(...passes);
         if (cancelled || token !== generation) break;
         stored.ocr[slots.get(page)] = words;
         index.remove(u => u.source === 'ocr' && u.page === page);
         index.add({ page, source: 'ocr', words });
-        persist();
+        await persist();
         done++;
         // Recognized words become selectable on the page right away.
         const panel = panels().find(p => p.index === page);
         if (panel) selectable(panel);
       }
       refresh();
-      if (token !== generation) job.fail('Recognition stopped: another note was opened.');
-      else if (cancelled) job.fail(`Recognition stopped. ${done} ${done === 1 ? 'page' : 'pages'} recognized so far are kept and searchable.`);
-      else job.finish(`Text recognized on ${done} ${done === 1 ? 'page' : 'pages'} and added to Find.`);
+      if (token !== generation) job.fail(`Recognition stopped: another note was opened. ${kept()} are kept.`);
+      else if (cancelled) job.fail(`Recognition stopped. ${kept()}; they are kept, and the next run continues from there.`);
+      else job.finish(`Text recognized: ${kept()}, added to Find.`);
     } catch (error) {
-      job.fail(cancelled ? `Recognition stopped. ${done} ${done === 1 ? 'page' : 'pages'} recognized so far are kept.` : `Could not recognize text: ${error.message}`);
+      refresh();
+      job.fail(cancelled || error === STOPPED ? `Recognition stopped. ${kept()}; they are kept, and the next run continues from there.` : `Could not recognize text: ${error.message}. ${kept()} are kept.`);
     } finally {
-      await worker?.terminate().catch?.(() => {});
+      shut();
       ocrRun = null;
     }
   };

@@ -28,9 +28,12 @@
           <button id="driveOpen">Google Drive</button>
           <hr />
           <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
-          <button id="native" disabled>Export Noteful (.noteful) <span class="experimental">Experimental</span></button>
-          <button id="nativeMarkdown" disabled title="The .noteful file and the notes as a .md file, with page breaks marked">Export Noteful + Markdown</button>
-          <button id="exportNotecomplete" disabled title="One .notecomplete file with the note and its notes; NoteComplete opens it with both">Export NoteComplete (.notecomplete)</button>
+          <div class="menu-export" role="group" aria-label="Export">
+            <span>Export</span>
+            <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
+            <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
+            <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note and its notes; NoteComplete opens it with both.">NC</button>
+          </div>
           <button id="svg" disabled>Export page as SVG</button>
           <hr />
           <button data-proxy="libraryChoose">Downloads folder…</button>
@@ -724,6 +727,7 @@
   </fieldset>
   <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
   <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
+  <label class="ocr-skip"><input id="ocrRedo" type="checkbox" /> Recognize again pages already done (otherwise a stopped run continues where it left off)</label>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
 </dialog>

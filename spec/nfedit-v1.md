@@ -87,9 +87,9 @@ Native export writes each text box as a kind-2 object with the field layout and 
 
 A project may carry the note's Markdown notes in a top-level `markdown` string (omitted when empty; at most 8 MiB). They are not part of the edit history. A line consisting of `<!-- page N -->` ties the text after it to display page N (1-based).
 
-## .notecomplete archives
+## .notecomp archives
 
-A `.notecomplete` file is a POSIX ustar archive with `manifest.json` (`{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`), `note.noteful` (the native export of the note) and `notes.md` (the notes, page markers kept). Readers require the manifest's format and the note entry; other entries are ignored.
+A `.notecomp` file (readers also accept the longer `.notecomplete`) is a POSIX ustar archive with `manifest.json` (`{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`), `note.noteful` (the native export of the note) and `notes.md` (the notes, page markers kept). Readers require the manifest's format and the note entry; other entries are ignored.
 
 ## Native export
 

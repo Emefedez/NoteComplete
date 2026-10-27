@@ -1,6 +1,6 @@
 //! Markdown notes kept alongside a note: preview rendering (pulldown-cmark),
 //! page markers that tie a section to a page, the plain Markdown export, and
-//! the `.notecomplete` archive (a tar holding the note and its notes).
+//! the `.notecomp` archive (a tar holding the note and its notes).
 use crate::{Editor, Error, Result};
 use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
 use std::io::Read;
@@ -122,7 +122,7 @@ fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<(
         .map_err(|e| Error::new(0, e.to_string()))
 }
 
-/// A `.notecomplete` file: a tar with `manifest.json`, `note.noteful` (the
+/// A `.notecomp` file (also read as `.notecomplete`): a tar with `manifest.json`, `note.noteful` (the
 /// native note, as exported) and `notes.md` (the notes, page markers kept).
 pub fn pack_notecomplete(note: &[u8], markdown: &str, title: &str) -> Result<Vec<u8>> {
     let manifest = serde_json::json!({
@@ -142,7 +142,7 @@ pub fn is_notecomplete(data: &[u8]) -> bool {
     data.get(257..262) == Some(b"ustar")
 }
 
-/// The note and notes inside a `.notecomplete` file.
+/// The note and notes inside a `.notecomp` file.
 pub fn unpack_notecomplete(data: &[u8]) -> Result<(Vec<u8>, String)> {
     let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
     let mut archive = tar::Archive::new(data);

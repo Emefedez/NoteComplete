@@ -1788,7 +1788,7 @@ function filename() {
   return (doc?.title || "Note").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
 }
 // Save the project, or export: Noteful alone, Noteful plus the notes as
-// Markdown (page breaks marked), or a .notecomplete archive holding both.
+// Markdown (page breaks marked), or a .notecomp archive holding both.
 async function save(native, as = native ? "noteful" : "project") {
   if (!doc || busy()) return;
   cancelGesture();
@@ -1801,7 +1801,7 @@ async function save(native, as = native ? "noteful" : "project") {
     if (token !== epoch) return;
     const delivery = await download(
       data,
-      filename() + { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomplete" }[as],
+      filename() + { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp" }[as],
       as === "project" ? "application/json" : "application/octet-stream",
     );
     if (token !== epoch) return;
@@ -1810,7 +1810,7 @@ async function save(native, as = native ? "noteful" : "project") {
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
     if (as === "notecomplete" || as === "markdown") {
-      status(as === "markdown" ? ".noteful and .md files exported." : ".notecomplete file exported: the note and its notes.");
+      status(as === "markdown" ? ".noteful and .md files exported." : ".notecomp file exported: the note and its notes.");
       return;
     }
     if (!native && !delivery.shared) {
@@ -2582,7 +2582,7 @@ const palette = commandPalette({
       .filter((b) => b.id !== "paletteOpen" && b.dataset.proxy !== "paletteOpen" && b.textContent.trim())
       .map((b) => ({
         id: b.id,
-        title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim(),
+        title: (b.closest(".bar-menu") ? b.closest(".bar-menu").querySelector("summary").textContent.trim() + ": " : "") + (b.dataset.palette || [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim()),
         hint: b.querySelector("kbd")?.textContent,
         group: b.closest(".bar-menu")?.querySelector("summary").textContent.trim() || "General",
         enabled: () => (b.dataset.proxy || b.dataset.proxyTool ? syncMenus() : 0, !b.disabled && !b.hidden),
