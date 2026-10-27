@@ -150,10 +150,12 @@ header p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#saveState {
-  font-size: 11px;
-  color: var(--muted);
-}
+/* Save state: a small floppy disk; a dot marks unsaved changes. */
+.save-state { position: relative; flex: none; width: 24px; min-height: 22px; padding: 2px; border: 0; background: transparent; color: var(--muted); }
+.save-state svg { width: 15px; height: 15px; }
+.save-state:not(.dirty) { opacity: .55; }
+.save-state.dirty { color: var(--ink); }
+.save-state.dirty::after { content: ""; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--surface); }
 header > .row {
   flex-wrap: nowrap;
 }
@@ -974,7 +976,6 @@ main.drag {
 header.chrome { min-height: 36px; padding: 2px 8px; justify-content: flex-start; gap: 2px; flex-wrap: nowrap; transition: min-height .16s ease, padding .16s ease; }
 header .brand { flex: 1 1 auto; min-width: 0; margin: 0 8px; justify-content: center; }
 header .brand p { font-size: 12px; font-weight: 600; max-width: 100%; }
-header #saveState { font-size: 11px; white-space: nowrap; }
 .bar-icon { width: 30px; min-height: 28px; padding: 5px; flex: none; }
 .bar-icon svg, .palette-trigger svg { width: 16px; height: 16px; flex: none; }
 .bar-actions { display: flex; align-items: center; gap: 0; flex: none; }
@@ -996,7 +997,7 @@ body.bar-compact header.chrome { min-height: 26px; padding: 0 6px; }
 body.bar-compact .bar-menu > summary { min-height: 22px; padding: 1px 8px; font-size: 12px; }
 body.bar-compact .bar-icon { min-height: 22px; width: 26px; padding: 3px; }
 body.bar-compact .palette-trigger { min-height: 22px; padding: 0 6px; border-color: transparent; background: transparent; }
-body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd, body.bar-compact #saveState { display: none; }
+body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { display: none; }
 @media (max-width: 860px) {
   .palette-trigger span, .palette-trigger kbd { display: none; }
   .palette-trigger { border-color: transparent; background: transparent; }
@@ -1446,6 +1447,8 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
    whose widths differ (more so in the compact bar). */
 @media (min-width: 901px) {
   header.command-bar .brand { position: absolute; left: 50%; transform: translateX(-50%); max-width: 34vw; margin: 0; pointer-events: none; }
+  /* The disk hangs off the title's right edge so the title itself stays centred. */
+  header.command-bar .brand .save-state { position: absolute; left: calc(100% + 2px); top: 50%; transform: translateY(-50%); pointer-events: auto; }
   header.command-bar #jobArea { margin-left: auto; }
 }
 #empty .note-more { min-height: 18px; padding: 0; font-size: 13px; border-radius: 5px; }

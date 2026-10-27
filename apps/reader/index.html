@@ -59,7 +59,6 @@
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
-          <button data-proxy="toolbarToggle" role="menuitemcheckbox" aria-checked="false">Compact toolbar</button>
           <hr />
           <button data-proxy="zoomIn">Zoom in<kbd>Ctrl +</kbd></button>
           <button data-proxy="zoomOut">Zoom out<kbd>Ctrl −</kbd></button>
@@ -105,7 +104,7 @@
     </nav>
     <div class="brand">
       <p id="title">Home</p>
-      <span id="saveState" hidden>Unsaved changes</span>
+      <button id="saveState" class="save-state" data-icon="save" aria-label="Unsaved changes" title="Unsaved changes" hidden></button>
     </div>
     <div id="jobArea" class="job-area"></div>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>

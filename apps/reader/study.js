@@ -6,7 +6,7 @@ import { pagesContext, jsonFrom } from './ai-context.js';
 import { quizPrompt, prepareQuestions, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 
 const $ = id => document.getElementById(id);
-const BATCH = 6;
+const BATCH = 6, PARALLEL = 3;
 
 // Anki text import, same layout as the MCP server's write_anki_deck.
 export function ankiText(deck, cards) {
@@ -101,38 +101,54 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     for (let i = 0; i < pages.length; i += BATCH) batches.push(pages.slice(i, i + BATCH));
     $('studyDialog').close();
     cancelled = false;
-    const job = jobs.start(kind === 'cards' ? 'Flashcards' : 'Quiz', { pages: pages.length, batches: batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel(); } });
+    const job = jobs.start(kind === 'cards' ? 'Flashcards' : 'Quiz', { pages: pages.length, batches: batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel('study'); } });
     (async () => {
-      const results = [];
-      let prepared = 0;
-      try {
-        for (const [b, batch] of batches.entries()) {
-          const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: () => job.prepared(++prepared) });
-          if (cancelled) break;
-          job.asking(b, providerName);
-          const avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
-          const prompt = (kind === 'cards' ? prompts('cards', { amount, language, title }) : quizPrompt(instructions(), { amount, language, title }))
-            + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
-          const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}` });
-          if (cancelled) break;
-          const parsed = jsonFrom(text);
-          results.push(...(kind === 'cards' ? cleanCards(parsed) : prepareQuestions(parsed, batch)));
-          job.answered(b);
+      // A few batches at a time: each request mostly waits on the AI service,
+      // and page preparation for the next batch overlaps the ones in flight.
+      const answers = [];
+      let prepared = 0, next = 0, failure = null, prompt = '';
+      const lane = async () => {
+        while (!cancelled && !failure && next < batches.length) {
+          const b = next++, batch = batches[b];
+          try {
+            const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: () => job.prepared(++prepared) });
+            if (cancelled) return;
+            job.asking(b, providerName);
+            const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}`, tag: 'study' });
+            if (cancelled) return;
+            const parsed = jsonFrom(text);
+            answers[b] = kind === 'cards' ? cleanCards(parsed) : prepareQuestions(parsed, batch);
+            job.answered(b);
+          } catch (error) {
+            // One failed batch stops the rest; what came back is still kept.
+            failure ||= error;
+            cancelled = true;
+            ai.cancel('study');
+          }
         }
+      };
+      try {
+        const avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
+        prompt = (kind === 'cards' ? prompts('cards', { amount, language, title }) : quizPrompt(instructions(), { amount, language, title }))
+          + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
+        await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
+        const results = answers.flatMap(a => a || []);
+        if (failure && !results.length) throw failure;
         if (!results.length) return job.fail(cancelled ? 'Generation stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
+        const stopped = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
         const name = `${title} · p. ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
         if (kind === 'cards') {
           const value = { id: String(Date.now()), title: name, created: Date.now(), cards: results };
           const decks = await savedDecks();
           await library.store.set('settings', key(), [value, ...decks]);
-          job.finish(`${results.length} flashcards ready${cancelled ? ' (stopped early)' : ''}.`, { label: 'Open flashcards', run: () => showDeck(value) });
+          job.finish(`${results.length} flashcards ready${stopped}.`, { label: 'Open flashcards', run: () => showDeck(value) });
         } else {
           const value = { id: String(Date.now()), title: name, created: Date.now(), pages, questions: results, answers: {}, at: 0 };
           await quizzes.add(value);
-          job.finish(`Quiz ready: ${results.length} questions${cancelled ? ' (stopped early)' : ''}.`, { label: 'Start quiz', run: () => quizzes.open(value) });
+          job.finish(`Quiz ready: ${results.length} questions${stopped}.`, { label: 'Start quiz', run: () => quizzes.open(value) });
         }
       } catch (error) {
-        job.fail(cancelled ? 'Generation stopped.' : error.message);
+        job.fail(error === failure || !cancelled ? error.message : 'Generation stopped.');
       }
     })();
   };

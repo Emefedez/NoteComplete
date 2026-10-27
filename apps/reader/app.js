@@ -63,10 +63,16 @@ let request = 0,
   backgrounds = null;
 let mutationPending = 0;
 const busy = () => editing || mutationPending > 0;
+// A floppy disk beside the title: a dot while there are unsaved changes,
+// and a click saves like Ctrl S.
 function savedState() {
+  const label = dirty ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
   $("saveState").hidden = !doc;
-  $("saveState").textContent = dirty ? "Unsaved changes" : "Project saved";
+  $("saveState").classList.toggle("dirty", dirty);
+  $("saveState").setAttribute("aria-label", label);
+  $("saveState").title = label;
 }
+$("saveState").onclick = () => $("save").click();
 
 const chromeState = new ChromeState();
 let chromeSettling = false;
@@ -592,6 +598,17 @@ async function renderPage(p, provided) {
     const render = document.createElement("div");
     render.className = "render";
     render.innerHTML = result.svg;
+    // An edit redraws the page's ink; the PDF raster under it stays the same,
+    // so the existing image moves over at once instead of blinking out while
+    // the background cache answers.
+    const displayWidth = p.el.clientWidth || p.size[0];
+    // At another width the old raster (placed in page units) stays as a
+    // placeholder until the sharper one arrives.
+    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality]);
+    const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
+      ? p.render?.querySelector("[data-background] > image") : null;
+    if (previous) render.querySelector("[data-background]")?.append(previous);
+    const kept = pdfKey === p.pdfKey ? previous : null;
     applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
     overlay.classList.add("overlay");
@@ -600,7 +617,7 @@ async function renderPage(p, provided) {
     p.overlay = overlay;
     p.el.replaceChildren(render, overlay);
     find.paint(p);
-    p.pdfReady = !result.pdf_background;
+    p.pdfReady = !result.pdf_background || !!kept;
     p.ink = indexTimedInk(render, result.timings);
     for (const item of p.ink) {
       item.el.setAttribute("data-timed-ink", "");
@@ -612,8 +629,7 @@ async function renderPage(p, provided) {
     shapeHandles(p);
     if (p.index === page) updateTools(result);
     updatePagePreview(p);
-    if (result.pdf_background) {
-      const displayWidth = p.el.clientWidth || p.size[0];
+    if (result.pdf_background && !kept) {
       const place = backgroundPlacement(result.pdf_background, p.size);
       const image = await backgrounds.image(
         result.pdf_background,
@@ -623,6 +639,8 @@ async function renderPage(p, provided) {
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
       render.querySelector("[data-background]").append(pdfImage(image, place));
+      previous?.remove();
+      p.pdfKey = pdfKey;
       p.pdfReady = true;
       p.rasterWidth = displayWidth;
       updatePagePreview(p);
@@ -812,7 +830,10 @@ async function action(op, args = {}) {
     }
     updateTools(result);
     layerPanel(result.layers);
+    // Ink edits change one page; undo, redo and layers may change any.
+    const only = ["draw", "erase", "remove"].includes(op) ? args.page : null;
     for (const p of panels) {
+      if (only != null && p.index !== only) continue;
       p.token++;
       if (p.near || p.index === page)
         renderPage(p, p.index === result.page ? result : undefined);
@@ -1786,7 +1807,6 @@ function syncMenus() {
     const inEditor = target?.closest("#editor");
     item.disabled = !target || target.disabled || target.hidden || (!!inEditor && (!doc || $("editor").hidden));
     if (item.dataset.proxyTool) item.setAttribute("aria-checked", String(target?.getAttribute("aria-pressed") === "true"));
-    if (item.dataset.proxy === "toolbarToggle") item.setAttribute("aria-checked", String(chromeState.compact));
   }
 }
 for (const item of proxies) item.onclick = () => proxyTarget(item)?.click();
@@ -2054,7 +2074,7 @@ const quizzes = quizController({
     try { provider = localStorage.getItem("notecomplete-ai-provider") || provider; } catch { /* Optional. */ }
     const images = [];
     if (image) { const blob = await (await fetch(image)).blob(); images.push({ bytes: new Uint8Array(await blob.arrayBuffer()), type: "image/jpeg", label: "notes-region" }); }
-    const { text } = await ai.run({ provider, images, notePath, prompt: `A student disputes a quiz question about their notes${image ? " (the attached image is the region of the notes the quiz cites)" : ""}. Using the notes, decide which option is correct, or say that none is. Write in the question's language.\nQuestion: ${q.question}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}\nReply with ONLY JSON: {"answer": <index of the correct option, or null>, "reason": "two or three sentences that cite the notes"}` });
+    const { text } = await ai.run({ provider, images, notePath, tag: "check", prompt: `A student disputes a quiz question about their notes${image ? " (the attached image is the region of the notes the quiz cites)" : ""}. Using the notes, decide which option is correct, or say that none is. Write in the question's language.\nQuestion: ${q.question}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}\nReply with ONLY JSON: {"answer": <index of the correct option, or null>, "reason": "two or three sentences that cite the notes"}` });
     const value = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
     return { answer: Number.isInteger(value.answer) ? value.answer : null, reason: String(value.reason || "") };
   },

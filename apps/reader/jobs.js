@@ -1,17 +1,16 @@
 // Background jobs (quiz and flashcard generation, transcription), each shown as
 // a chip in the command bar so the reader stays usable. Progress moves
-// continuously: page preparation fills the first fifth, each AI batch then
-// creeps towards its share by elapsed time and jumps when the batch returns.
+// continuously: page preparation fills a fifth, each AI batch creeps towards
+// its share by elapsed time and jumps when it returns. Several batches may be
+// in flight at once (`inflight` holds their start times).
 // Jobs that know their own progress (transcription) set it directly.
 const $ = id => document.getElementById(id);
 
-export function progressAt({ prepared, pages, done, batches, started, expected = 45, fraction }, now = Date.now()) {
+export function progressAt({ prepared, pages, done, batches, inflight = [], expected = 45, fraction }, now = Date.now()) {
   if (Number.isFinite(fraction)) return Math.max(0, Math.min(0.99, fraction));
-  const prep = pages ? prepared / pages : 1;
-  if (prep < 1) return 0.2 * prep;
-  const slot = 0.8 / Math.max(1, batches);
-  const creep = started ? Math.min(0.92, 1 - Math.exp(-(now - started) / 1000 / expected)) : 0;
-  return Math.min(0.99, 0.2 + slot * (done + creep));
+  const prep = pages ? Math.min(1, prepared / pages) : 1;
+  const creep = inflight.reduce((sum, started) => sum + Math.min(0.92, 1 - Math.exp(-(now - started) / 1000 / expected)), 0);
+  return Math.min(0.99, 0.2 * prep + 0.8 * (done + creep) / Math.max(1, batches));
 }
 
 export function jobChip({ status }) {
@@ -21,7 +20,7 @@ export function jobChip({ status }) {
     for (const job of jobs) {
       const seconds = Math.round((Date.now() - job.begun) / 1000);
       job.label.textContent = `${job.title} · ${job.phase} · ${seconds} s`;
-      job.bar.style.width = `${Math.round(progressAt(job) * 100)}%`;
+      job.bar.style.width = `${Math.round(progressAt({ ...job, inflight: [...job.inflight.values()] }) * 100)}%`;
     }
     if (!jobs.size) { clearInterval(timer); timer = 0; }
   }
@@ -43,15 +42,19 @@ export function jobChip({ status }) {
       stop.onclick = () => cancel?.();
       el.append(label, track, stop);
       $('jobArea').append(el);
-      const job = { title, kind, pages, batches, prepared: 0, done: 0, started: 0, begun: Date.now(), phase: pages ? 'preparing pages' : 'starting', el, label, bar };
+      const job = { title, kind, pages, batches, prepared: 0, done: 0, inflight: new Map(), begun: Date.now(), phase: pages ? 'preparing pages' : 'starting', el, label, bar };
       jobs.add(job);
       timer ||= setInterval(render, 500);
       render();
       const end = () => { jobs.delete(job); el.remove(); render(); };
+      const asking = () => {
+        job.phase = batches > 1 ? `${job.provider} · ${job.done} of ${batches} parts done${job.inflight.size ? `, ${job.inflight.size} running` : ''}` : `${job.provider} reading the pages`;
+        render();
+      };
       return {
-        prepared(n) { job.prepared = n; job.phase = `preparing page ${n} of ${pages}`; render(); },
-        asking(batch, provider) { job.started = Date.now(); job.phase = `${provider} reading batch ${batch + 1} of ${batches}`; render(); },
-        answered(batch) { job.done = batch + 1; job.started = 0; render(); },
+        prepared(n) { job.prepared = n; if (!job.inflight.size) job.phase = `preparing page ${n} of ${pages}`; render(); },
+        asking(batch, provider) { job.inflight.set(batch, Date.now()); job.provider = provider; asking(); },
+        answered(batch) { job.done++; job.inflight.delete(batch); asking(); },
         set(fraction, phase) { job.fraction = fraction; if (phase) job.phase = phase; render(); },
         finish(message, action) { end(); status(message); if (action) ready(message, action); },
         fail(message) { end(); status(message, true); },

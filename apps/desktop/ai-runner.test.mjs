@@ -35,3 +35,22 @@ test('runs a provider in a temporary folder, passes images and cleans up', async
   await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x', images: [{ bytes: png, type: 'text/html' }] }), /Invalid page image/);
   await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x', model: 'a; rm -rf' }), /Invalid model/);
 });
+
+test('requests run side by side and Stop cancels only its own tag', async () => {
+  // A slow fake "claude": each request takes 0.4 s.
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-fake-'));
+  const fake = path.join(bin, 'claude');
+  await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nsleep 0.4\nprintf \'{"result":"done"}\'\n');
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
+  const started = Date.now();
+  const batches = [1, 2, 3].map(() => runner.run('w1', { provider: 'claude', prompt: 'x', tag: 'study' }));
+  const chat = runner.run('w1', { provider: 'claude', prompt: 'x', tag: 'chat' });
+  await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x' }), /Too many/);
+  await new Promise(r => setTimeout(r, 100));
+  runner.cancel('w1', 'study');
+  for (const r of await Promise.allSettled(batches)) assert.match(r.reason?.message, /stopped/);
+  assert.equal((await chat).text, 'done');
+  assert.ok(Date.now() - started < 1500, 'requests ran in parallel');
+  await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x', tag: 'a b' }), /Invalid request tag/);
+});

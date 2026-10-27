@@ -76,7 +76,7 @@ app.whenReady().then(() => {
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
   ipcMain.handle('ai:run', guarded((event, request) => ai.run(event.sender.id, request)));
-  ipcMain.on('ai:cancel', event => { if (trusted(event)) ai.cancel(event.sender.id); });
+  ipcMain.on('ai:cancel', (event, tag) => { if (trusted(event)) ai.cancel(event.sender.id, typeof tag === 'string' ? tag : ''); });
   // Other transcription backends; pieces stream back to the reader as they finish.
   const asr = transcriber({ tools: () => ai.tools() });
   ipcMain.handle('asr:backends', guarded(() => asr.backends()));

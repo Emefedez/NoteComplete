@@ -54,30 +54,41 @@ export function invocation(provider, { prompt, images, dir, model, mcp }) {
   throw Error('Unknown AI provider.');
 }
 
+export const MAX_PARALLEL = 4;
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
 
 export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   let found;
+  // Several requests per window may run at once (study batches, chat); each
+  // carries a tag so Stop cancels only its own.
   const running = new Map();
+  const children = owner => running.get(owner) || running.set(owner, new Set()).get(owner);
   return {
     tools: async () => (found ||= await tools()),
     async providers() {
       found ||= await tools();
       return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));
     },
-    cancel(owner) { running.get(owner)?.kill('SIGTERM'); },
+    cancel(owner, tag = '') {
+      for (const r of running.get(owner) || []) if (!tag || r.tag === tag) { r.cancelled = true; r.child?.kill('SIGTERM'); }
+    },
     // One request: write images, run the tool in the temporary folder, return its answer.
-    async run(owner, { provider, prompt, images = [], model = '', notePath = '' }) {
+    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
       if (typeof model !== 'string' || !/^[\w.:/-]{0,80}$/.test(model)) throw Error('Invalid model name.');
+      if (typeof tag !== 'string' || !/^[\w-]{0,40}$/.test(tag)) throw Error('Invalid request tag.');
       found ||= await tools();
       const binary = found[provider];
       if (!binary) throw Error(`${PROVIDERS[provider].label} was not found. Install it and sign in, then restart NoteComplete.`);
-      if (running.has(owner)) throw Error('Another AI request is still running.');
-      const dir = await mkdtemp(path.join(tmpdir(), 'notecomplete-ai-'));
+      if (children(owner).size >= MAX_PARALLEL) throw Error('Too many AI requests are running.');
+      // Hold the slot while images are written, so a cancel then still applies.
+      const entry = { child: null, tag, cancelled: false };
+      children(owner).add(entry);
+      let dir = '';
       try {
+        dir = await mkdtemp(path.join(tmpdir(), 'notecomplete-ai-'));
         const files = [];
         for (const [i, image] of images.entries()) {
           if (!(image?.bytes instanceof Uint8Array) || !['image/png', 'image/jpeg'].includes(image.type)) throw Error('Invalid page image.');
@@ -88,8 +99,9 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
         const mcp = mcpBinary && notePath && path.isAbsolute(notePath) ? mcpBinary : null;
         const call = invocation(provider, { prompt: notePath && mcp ? `${prompt}\n\nThe note file is ${notePath}; the notecomplete MCP tools can read any of its pages.` : prompt, images: files, dir, model, mcp });
         const output = await new Promise((resolve, reject) => {
+          if (entry.cancelled) return reject(Error('The AI request was stopped.'));
           const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
-          running.set(owner, child);
+          entry.child = child;
           let out = '', err = '';
           const timer = setTimeout(() => child.kill('SIGTERM'), 10 * 60 * 1000);
           child.stdout.on('data', d => { out += d; });
@@ -97,7 +109,6 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           child.on('error', reject);
           child.on('close', (code, signal) => {
             clearTimeout(timer);
-            running.delete(owner);
             if (signal) reject(Error('The AI request was stopped.'));
             else if (code) reject(Error(`${PROVIDERS[provider].label} failed: ${tail(err || out) || `exit ${code}`}`));
             else resolve(out);
@@ -109,8 +120,8 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
         if (typeof text !== 'string' || !text.trim()) throw Error(`${PROVIDERS[provider].label} returned no answer.`);
         return { text };
       } finally {
-        running.delete(owner);
-        await rm(dir, { recursive: true, force: true });
+        children(owner).delete(entry);
+        if (dir) await rm(dir, { recursive: true, force: true });
       }
     },
   };

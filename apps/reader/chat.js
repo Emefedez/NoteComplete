@@ -119,7 +119,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
       const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
-      const { text } = await ai.run({ provider: $('chatProvider').value, prompt, images, notePath: useNote ? notePath() : '' });
+      const { text } = await ai.run({ provider: $('chatProvider').value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' });
       history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });
       waiting.replaceChildren(renderAnswer(text));
     } catch (error) {
@@ -132,7 +132,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   }
   $('chatForm').onsubmit = event => { event.preventDefault(); const q = $('chatInput').value; $('chatInput').value = ''; ask(q); };
   $('chatInput').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } };
-  $('chatStop').onclick = () => ai?.cancel();
+  $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatClose').onclick = close;
   $('chatClear').onclick = () => { history = []; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {

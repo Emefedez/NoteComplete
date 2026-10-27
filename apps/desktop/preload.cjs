@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('notecompleteTranscribe', {
 contextBridge.exposeInMainWorld('notecompleteAI', {
   providers: () => ipcRenderer.invoke('ai:providers'),
   run: request => ipcRenderer.invoke('ai:run', request),
-  cancel: () => ipcRenderer.send('ai:cancel'),
+  cancel: tag => ipcRenderer.send('ai:cancel', typeof tag === 'string' ? tag : ''),
 });
 contextBridge.exposeInMainWorld('notecompleteDrive', {
   signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),

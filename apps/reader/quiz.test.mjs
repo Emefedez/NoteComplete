@@ -44,9 +44,15 @@ test('the quiz prompt carries the instructions, language and JSON shape', () => 
 });
 
 test('job progress moves continuously within each batch', () => {
-  const base = { pages: 12, prepared: 12, batches: 2, done: 0, started: 1000 };
-  assert.equal(progressAt({ ...base, prepared: 6 }), 0.1);
+  const base = { pages: 12, prepared: 12, batches: 2, done: 0, inflight: [1000] };
+  assert.equal(progressAt({ ...base, prepared: 6, inflight: [] }), 0.1);
   const early = progressAt(base, 1000 + 5000), later = progressAt(base, 1000 + 40000);
   assert.ok(early > 0.2 && later > early && later < 0.6, `${early} ${later}`);
-  assert.ok(Math.abs(progressAt({ ...base, done: 1, started: 0 }) - 0.6) < 1e-9);
+  assert.ok(Math.abs(progressAt({ ...base, done: 1, inflight: [] }) - 0.6) < 1e-9);
+});
+
+test('job progress grows while preparation and answers interleave', () => {
+  // 36 pages in 6 batches, 3 in flight: the bar must not wait for all pages.
+  const p = progressAt({ pages: 36, prepared: 18, batches: 6, done: 2, inflight: [0, 0, 0] }, 20000);
+  assert.ok(p > 0.35 && p < 0.8, String(p));
 });
