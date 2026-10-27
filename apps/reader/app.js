@@ -1669,12 +1669,17 @@ function setDarkPages(on) {
 $("pagesDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 // Page position (left, middle, right) when pages are narrower than the window; remembered.
 function setPageAlign(align) {
+  // Keep the current page where it is on screen while the layout changes.
+  const sheet = panels[page]?.el, before = sheet?.getBoundingClientRect().left;
   $("pages").dataset.align = align;
+  if (sheet && before !== undefined) $("viewport").scrollLeft += sheet.getBoundingClientRect().left - before;
   for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === align));
+  $("pageAlignFree").setAttribute("aria-pressed", String(align === "free"));
   try { localStorage.setItem("notecomplete-page-align", align); } catch { /* Optional. */ }
 }
 for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick = () => setPageAlign(b.dataset.align);
-try { setPageAlign(["left", "right"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
+$("pageAlignFree").onclick = () => setPageAlign($("pages").dataset.align === "free" ? "center" : "free");
+try { setPageAlign(["left", "right", "free"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
 // Audio for transcription: a small popover under the transport row.
 $("speechSettingsToggle").onclick = () => {
   const open = $("speechSettings").hidden;

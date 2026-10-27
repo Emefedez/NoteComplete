@@ -419,6 +419,7 @@
           ><button type="button" role="radio" data-align="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button
           ><button type="button" role="radio" data-align="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
         </div>
+        <button id="pageAlignFree" type="button" class="page-free" aria-pressed="false" title="Free position: pages stay where you scroll them (trackpad), with no centring" aria-label="Free page position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
         <div class="zoom-controls" role="group" aria-label="Page zoom">
           <button id="zoomFit" aria-label="Fit page width" aria-pressed="true">
             Fit</button
@@ -439,7 +440,7 @@
             <button id="forwardAudio" type="button" aria-label="Forward 10 seconds" title="Forward 10 s (L)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 7 6 5-6 5V7ZM5 7l6 5-6 5V7Z"/></svg></button>
             <span class="spacer"></span>
             <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
-            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" checked /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
+            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
             <button id="speechSettingsToggle" type="button" class="icon-button has-caret" aria-expanded="false" aria-controls="speechSettings" title="Audio for transcription: gain, voice filter, normalize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="caret" aria-hidden="true"></span><span class="sr-only">Audio for transcription</span></button>
           </div>
           <div id="speechSettings" class="speech-settings" hidden>

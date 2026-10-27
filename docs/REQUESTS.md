@@ -51,7 +51,7 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Find can be limited to any combination of Text, PDF, OCR and Audio, with a count per source.
 - ✅ Recent cards: a ⋯ button in the card's top corner, always visible, opens a menu anchored to it (dropping up when there is no room below); right-clicking the card opens it too. It replaces the hover-only × and the centred dialog. *Removed a note and opened the menu by right-click in the browser.*
 - ✅ Background-job chips and "Open …" buttons shrink with the compact bar and truncate on narrow windows.
-- ⏸️ README with screenshots and a header graphic, using the sample corpus only (no private notes). **On hold** at the owner's request until the items below are done.
+- ✅ README with a header banner and screenshots (reader, night view, Home, Find, flashcards, key badges), all made from the sample notes in `samples/`.
 
 ## Flashcards and keys (third round)
 - ✅ The practice card has a fixed size: showing the answer no longer resizes the dialog. *Measured: 513 px before and after every reveal.*
@@ -80,6 +80,12 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ View → "Tool settings" was a vague toggle that collapsed the toolbar. It is now two checkable items: **Auto-open tool settings** (on by default; when off, press the selected tool again to see its settings) and **Compact toolbar**. Pressing the selected tool always shows or hides its settings. Open menus now sit above the tool settings popup.
 - ✅ Quick list on Home: a Cards / List switch beside Sort. The list shows names, dates and sizes only; no covers are read and nothing is parsed from Drive files, so it appears as soon as Drive answers. Switching back to cards loads the covers. Filters by recordings or tags say they need the cards view. Remembered.
 - ✅ The note title is centred on the window, also in the compact bar (it sat between the menus and the buttons, whose widths differ). *Measured: centre at 700 of 1400 px.*
+- ✅ The Cards / List switch no longer stretches the filter row; the ⋯ on Recent cards sits small in the bottom-right corner.
+- ✅ Free page position: a button beside the left / middle / right buttons leaves the pages wherever the trackpad puts them, sideways too, with no centring. Switching keeps the page where it is on screen. *Measured.*
+- ✅ Dimming ink not yet written is off by default (I or the button turns it on).
+- ✅ The chat's Ask button is centred beside the question box.
+- ⚠️ Recent with several windows: one process now (single-instance), storage holds your 3 Recent notes, and two windows show Recent in the browser test, so I could not reproduce it. If Recent is missing again, a message now says why (storage error or no answer within 6 s) instead of hiding the section silently. Please tell me what it says.
+- ⏳ Lock tool for the user. Needs a new engine edit (lock/unlock item ids, undoable, kept in the project), hit-testing locked items in a Lock tool so they can be unlocked, the eraser and selection skipping them, and writing payload tag 21 into objects on native export (ink strokes have no lock field in the format, so their lock would live only in the project).
 - ⏳ Resize a PDF page (or any page). Not started: needs a page-size change in the engine and in native export.
 
 ## Home filters

@@ -1,30 +1,57 @@
+<p align="center"><img src="docs/images/banner.svg" alt="NoteComplete: your Noteful notebooks on the desktop, no Mac required" width="100%"></p>
+
 # NoteComplete
 
 **Your Noteful notebooks on the desktop, no Mac required.**
 
-NoteComplete is an independent desktop and web companion for people who take notes in [Noteful](https://noteful.app) on an iPad. It opens `.noteful` notebooks on Linux, Windows, macOS, in a browser or on Android, so you can read, review and tidy up your notes from your computer while the iPad stays your notebook.
+NoteComplete is an independent desktop and web companion for people who take notes in [Noteful](https://noteful.app) on an iPad. It opens `.noteful` notebooks on Linux (the main target today), Windows, macOS or in a browser, so you can read, review, search and study your notes from your computer while the iPad stays your notebook.
 
 > NoteComplete is not affiliated with or endorsed by Noteful. It reads the format through independent reverse engineering; see [How it reads Noteful files](#how-it-reads-noteful-files).
 
+<p align="center"><img src="docs/images/reader.png" alt="A notebook open in NoteComplete with the page list, the tools and the audio panel" width="100%"></p>
+
 ## What it does
 
-- **Read everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images, typed text and recordings, including pages widened beyond their PDF and notebooks of hundreds of pages and recordings.
-- **Your Google Drive library on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook.
-- **Notes kept on this device**: opened notes are saved to a downloads folder you choose and reused until Drive has a newer version. Recent notes open instantly, even offline.
-- **Fix things up**: pen, highlighter, eraser, shapes and images; move, resize and restyle existing items; layers; undo/redo. Edits are non-destructive: the original file is never changed.
-- **Listen along**: play recordings with handwriting that appears as it was written, seek by tapping ink, and transcribe on-device with Whisper.
-- **Feels like a desktop app**: a native-style File / Edit / View menubar that shrinks while you scroll, and a <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> command search (“page 12”, “export”, “highlight”).
-- **Private by default**: everything is processed locally. Drive access is read-only; nothing is uploaded.
+### Read and annotate
+- **Everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images, typed text, tape, locked items, tags and recordings, including widened pages and notebooks of hundreds of pages.
+- **Fix things up**: pen, highlighter, eraser (four sizes), shapes, tape (strips or rectangles, with washi patterns) and images; move, resize and restyle items; layers; undo/redo. Edits are non-destructive: the original file is never changed.
+- **Add pages**: blank pages of any size, or pages from another PDF at the note's scale with extra writing space.
+- **Night view** (<kbd>D</kbd>): white paper turns black and ink turns light, colours keep their hue. Pages can sit left, centred, right or wherever you leave them.
 
-- **Find anything**: one search over typed text, PDF text, transcripts and, on request, OCR of handwriting and scans (<kbd>Ctrl</kbd>+<kbd>F</kbd>).
-- **Add pages**: blank pages of any size, or pages from another PDF at the note's scale with extra writing space beside them, like widened pages in Noteful.
-- **Study with your AI subscription**: the bundled MCP server lets Claude Code, Antigravity or Codex read your pages, handwriting included, and write Anki flashcard decks. See [AI agents](docs/MCP.md).
+<p align="center"><img src="docs/images/night.png" alt="Night view: a handwritten exam page with black paper and light ink" width="100%"></p>
 
-Coming next: flashcards and quizzes inside the app, page reordering and deletion. See [next steps](DEVELOPMENT.md#next-steps).
+### Your library
+- **Google Drive on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook, or as a quick list that reads nothing at all.
+- **Filters and sorting**: by date, size, recordings and Noteful tags; natural A–Z order.
+- **Kept on this device**: opened notes are saved to a folder you choose and reused until Drive has a newer version.
+
+<p align="center"><img src="docs/images/home.png" alt="Home with recent notes, sort, view switch and filters" width="100%"></p>
+
+### Find anything
+One search (<kbd>Ctrl</kbd>+<kbd>F</kbd>) over typed text, PDF text, transcripts and recognized handwriting, limited to any mix of sources. Handwriting recognition runs on this device on request, in a separate pass over the ink, so it also works on PDF pages.
+
+<p align="center"><img src="docs/images/find.png" alt="Find with source chips: Text, PDF, OCR and Audio" width="100%"></p>
+
+### Listen along
+Play recordings with the handwriting appearing as it was written, tap ink to seek, and transcribe with Whisper on the device, Voxtype (local whisper.cpp) or Gemini through Antigravity. Text appears while it is transcribed; your AI tool can then revise it while every word keeps its time. Export as text, SRT, WebVTT or JSON.
+
+### Study with your AI subscription
+Flashcards and quizzes are generated in the background by the AI tool you already use (Claude Code, Antigravity or Codex), from page images with tape lifted and the page text. Practise flashcards and export them to Anki; quizzes are saved, resumable and point to the part of your notes that answers each question. **Ask AI** (<kbd>Ctrl</kbd>+<kbd>J</kbd>) answers questions about a page or a region you grab. The bundled MCP server lets agents read your notebooks directly ([AI agents](docs/MCP.md)).
+
+<p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
+
+### Feels like a desktop app
+A native-style File / Edit / View menubar that shrinks while you scroll, a <kbd>Ctrl</kbd>+<kbd>K</kbd> command search, single-key shortcuts for every tool, and <kbd>?</kbd> to show each button's key on the button itself.
+
+<p align="center"><img src="docs/images/keys.png" alt="Key badges on the toolbar buttons after pressing ?" width="100%"></p>
+
+**Private by default**: everything is processed locally. Drive access is read-only unless you choose to upload a change or delete a note there. AI features run through your own tools; only Gemini transcription sends audio off the device.
+
+Screenshots use the sample notes in [`samples/`](samples/).
 
 ## Get it
 
-**Installers.** Tagged releases attach a Linux AppImage, macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview. Builds are unsigned previews; see [builds](docs/BUILDS.md).
+**Installers.** Tagged releases attach a Linux AppImage, macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview. Builds are unsigned previews; Linux is the tested platform for now. See [builds](docs/BUILDS.md).
 
 **Browser.** Build and serve the web app (below), then open it in any modern browser. It also installs as a PWA.
 
@@ -39,6 +66,8 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Known issues
 
 - Some notes (for example *Discover Chinese*) never loaded their thumbnail on Home until reloaded; fixed in the latest build (covers are now retried).
+- Pages cannot be resized yet, and there is no tool to lock items in place yourself (items locked in Noteful are respected).
+- Exports to `.noteful` after editing have not yet been verified in Noteful itself.
 - More open items are tracked in [docs/REQUESTS.md](docs/REQUESTS.md).
 
 ## Build from source

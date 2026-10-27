@@ -17,7 +17,12 @@ export function homeScreen({ library, drive, open, status, current = () => ({}) 
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
   async function renderRecent() {
     let entries = [];
-    try { entries = await library.recent(); } catch { /* No storage: nothing to list. */ }
+    try { entries = await Promise.race([library.recent(), new Promise((_, reject) => setTimeout(() => reject(Error('the note storage did not answer')), 6000))]); }
+    catch (error) {
+      // Say why instead of silently hiding Recent (seen with several windows open).
+      console.warn('Recent could not be read', error);
+      status(`Recent notes could not be read: ${error?.message || error}. Reopen the window to retry.`, true);
+    }
     $('recentSection').hidden = !entries.length;
     const fragment = document.createDocumentFragment();
     for (const entry of entries) fragment.append(...recentCard(entry));

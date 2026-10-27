@@ -6,7 +6,7 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
-Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) is a night view: white paper turns black and dark ink light, colours keep their hue (red ink stays red), also in the page previews and while drawing. It only changes the display. The three buttons beside the zoom place the pages on the left, in the middle or on the right when they are narrower than the window. **Ctrl+F** opens Find and closes it again. Choosing a tool opens its settings under it; press the tool again to hide or show them. **View → Auto-open tool settings** turns the automatic opening off, and **View → Compact toolbar** collapses the bars.
+Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) is a night view: white paper turns black and dark ink light, colours keep their hue (red ink stays red), also in the page previews and while drawing. It only changes the display. The three buttons beside the zoom place the pages on the left, in the middle or on the right when they are narrower than the window; the button next to them leaves the pages wherever you scroll them. **Ctrl+F** opens Find and closes it again. Choosing a tool opens its settings under it; press the tool again to hide or show them. **View → Auto-open tool settings** turns the automatic opening off, and **View → Compact toolbar** collapses the bars.
 
 ## Study with your AI tool
 
@@ -26,7 +26,7 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 
 ## Audio
 
-The headphones button next to Layers (**A**) opens the recordings in a side panel that resizes from its left edge, bottom edge or corner: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, go to the page where the recording starts (**Shift+A**), dim ink not yet written at this point (**I**), and download the recording. The transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
+The headphones button next to Layers (**A**) opens the recordings in a side panel that resizes from its left edge, bottom edge or corner: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, go to the page where the recording starts (**Shift+A**), dim ink not yet written at this point (**I**, off by default), and download the recording. The transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
 
 **Transcribe** offers the engines found on this computer:
 - **Whisper on this device** (choose the model and language). Runs in the reader; the model downloads once.
