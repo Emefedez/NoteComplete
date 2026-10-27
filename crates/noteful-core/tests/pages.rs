@@ -157,3 +157,69 @@ fn invalid_insertions_are_rejected_without_changing_history() {
     assert_eq!(editor.view(0).unwrap()["edit_count"], 0);
     assert!(editor.slot(1).is_err());
 }
+
+#[test]
+fn resized_pages_keep_their_pdf_in_place_through_undo_project_and_export() {
+    let source = include_bytes!("../../../samples/Examen wuolah.noteful");
+    let mut editor = Editor::open(source).unwrap();
+    let original = sizes(&editor);
+    let [w, h] = original[0];
+    let pdf = editor.view(0).unwrap()["pdf_background"]["rect"].clone();
+    assert!(editor.resize_page(0, [5., h], None).is_err());
+    // Wider page: writing space on the right, the PDF stays at native scale.
+    editor.resize_page(0, [w * 1.5, h], None).unwrap();
+    editor.add_line(0, line()).unwrap();
+    let view = editor.view(0).unwrap();
+    assert_eq!(view["size"], serde_json::json!([w * 1.5, h]));
+    assert_eq!(view["pdf_background"]["rect"], pdf);
+    assert!(view["svg"]
+        .as_str()
+        .unwrap()
+        .contains(&format!("viewBox=\"0 0 {} {h}\"", w * 1.5)));
+    // An inserted page can be resized too, and its PDF fitted to the new size.
+    editor
+        .insert_pages(3, vec![blank(400., 300.)], None)
+        .unwrap();
+    editor.resize_page(3, [800., 300.], None).unwrap();
+    editor
+        .resize_page(2, [w, h * 2.], Some([0., 0., w, h * 2.]))
+        .unwrap();
+    assert_eq!(sizes(&editor)[0], [w * 1.5, h]);
+    assert_eq!(sizes(&editor)[3], [800., 300.]);
+    // Project and native export both carry the sizes and PDF rectangles.
+    let restored = Editor::open_project(&editor.save_project().unwrap()).unwrap();
+    let (a, b) = (restored.view(2).unwrap(), editor.view(2).unwrap());
+    for (k, v) in a.as_object().unwrap() {
+        assert!(
+            v == &b[k],
+            "{k}: {} vs {}",
+            v.to_string().chars().take(300).collect::<String>(),
+            b[k].to_string().chars().take(300).collect::<String>()
+        );
+    }
+    let bytes = editor.export_noteful().unwrap();
+    assert_eq!(Package::parse(&bytes).unwrap().rebuild().unwrap(), bytes);
+    let native = Editor::open(&bytes).unwrap();
+    assert_eq!(sizes(&native), sizes(&editor));
+    for page in [0, 2] {
+        assert_eq!(
+            native.view(page).unwrap()["pdf_background"]["rect"],
+            editor.view(page).unwrap()["pdf_background"]["rect"]
+        );
+    }
+    assert_eq!(
+        native.view(0).unwrap()["visible_imported"]
+            .as_u64()
+            .unwrap(),
+        view["visible_imported"].as_u64().unwrap() + 1
+    );
+    // Undo walks back the resizes one at a time.
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    assert_eq!(sizes(&editor)[0], [w * 1.5, h]);
+    editor.undo();
+    editor.undo();
+    assert_eq!(sizes(&editor), original);
+}

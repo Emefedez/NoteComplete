@@ -277,9 +277,19 @@ impl Editor {
                 .transpose()?;
             let key = crate::pages::order_between(&previous, next.as_deref())
                 .ok_or_else(|| Error::new(0, "No order key between neighbouring pages"))?;
-            let spec = self
+            let mut spec = self
                 .inserted_spec(slot)
-                .ok_or_else(|| Error::new(0, "Inserted page missing"))?;
+                .ok_or_else(|| Error::new(0, "Inserted page missing"))?
+                .clone();
+            // A resized inserted page is written at its final size and placement.
+            let (size, background) = self.page_geometry(slot)?;
+            spec.size = size;
+            if let (Some(p), Some(b)) = (spec.pdf.as_mut(), background) {
+                if b.rect != [0., 0., size[0], size[1]] || p.rect.is_some() {
+                    p.rect = Some(b.rect);
+                }
+            }
+            let spec = &spec;
             let set = page_assets.get(&page.id).cloned().unwrap_or_default();
             added.push((
                 page.id.clone(),
@@ -564,6 +574,16 @@ impl Editor {
             .iter()
             .any(|e| matches!(e, Edit::Layer { .. }));
         let pages_inserted = order.iter().any(|&s| s >= originals);
+        let resized: Vec<usize> = order
+            .iter()
+            .copied()
+            .filter(|&s| {
+                s < originals
+                    && self.history[..self.cursor]
+                        .iter()
+                        .any(|e| matches!(e, Edit::ResizePage { page, .. } if *page == s))
+            })
+            .collect();
         // PDFs added with inserted pages become ordinary resources.
         for edit in &self.history[..self.cursor] {
             if let Edit::InsertPages { pdf: Some(pdf), .. } = edit {
@@ -574,7 +594,7 @@ impl Editor {
                 blocks.push((pdf.id.clone(), bytes.to_vec()));
             }
         }
-        if !page_assets.is_empty() || layers_changed || pages_inserted {
+        if !page_assets.is_empty() || layers_changed || pages_inserted || !resized.is_empty() {
             for b in package
                 .blocks
                 .iter()
@@ -589,6 +609,23 @@ impl Editor {
                                 .and_then(|id| page_assets.get(id))
                             {
                                 set(nested(fs, 2)?, 0, 5, V::Text(new.clone()), time);
+                            }
+                        }
+                    }
+                }
+                // Resized pages: background tag 1 is the page size and tag 9 the
+                // PDF's rectangle, written so the PDF keeps its place and scale.
+                for &slot in &resized {
+                    let id = self.page(slot)?.id.clone();
+                    let (size, background) = self.page_geometry(slot)?;
+                    for v in array(nested(&mut fields, 2)?, 0)? {
+                        if let V::Fields(fs) = v {
+                            if field(fs, 1).and_then(V::as_text) == Some(id.as_str()) {
+                                let bg = nested(fs, 4)?;
+                                set(bg, 1, 0x21, V::Pair(size), time);
+                                if let Some(b) = &background {
+                                    set(bg, 9, 0x23, V::Rect(b.rect), time);
+                                }
                             }
                         }
                     }

@@ -52,6 +52,14 @@ pub(crate) enum Edit {
         page: usize,
         ids: Vec<String>,
     },
+    /// A page's new size; content keeps its page coordinates (anchored top
+    /// left). `pdf_rect` moves or scales its PDF; otherwise the PDF stays put.
+    ResizePage {
+        page: usize,
+        size: [f64; 2],
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pdf_rect: Option<[f64; 4]>,
+    },
     InsertPages {
         at: usize,
         pages: Vec<crate::NewPage>,
@@ -412,7 +420,8 @@ impl Editor {
             }
             content.push_str("</g>");
         }
-        let [w, h] = p.size;
+        let (size, pdf_background) = self.page_geometry(page)?;
+        let [w, h] = size;
         let texts: Vec<_> = p
             .items
             .iter()
@@ -460,7 +469,7 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
         )
     }
     /// Items locked in place on a page, with their current bounds.
@@ -491,7 +500,7 @@ impl Editor {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
             version: if self.history.iter().any(|e| {
-                matches!(e, Edit::Retext { .. })
+                matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. })
                     || matches!(e, Edit::Image { image, .. } if image.text.is_some())
             }) {
                 4
@@ -581,6 +590,11 @@ impl Editor {
                 }
                 Edit::Layer { layer } => editor.set_layer(layer)?,
                 Edit::InsertPages { at, pages, pdf } => editor.insert_pages(at, pages, pdf)?,
+                Edit::ResizePage {
+                    page,
+                    size,
+                    pdf_rect,
+                } => editor.resize_page(page, size, pdf_rect)?,
                 Edit::Add { page, line } => editor.add_line(page, line)?,
                 Edit::Erase { page, ids } => {
                     let p = editor.page(page)?;

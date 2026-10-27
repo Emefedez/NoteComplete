@@ -80,6 +80,7 @@
           <hr />
           <button id="insertBlank" disabled>Insert blank page…</button>
           <button id="insertPdf" disabled>Insert PDF pages…</button>
+          <button id="resizePage" disabled>Page size…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="studyMenu">
@@ -615,6 +616,16 @@
   </div>
   <p id="insertStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="insertCancel" type="button">Cancel</button><button id="insertConfirm" type="button" class="primary">Insert</button></div>
+</dialog>
+
+<dialog id="resizeDialog" class="ocr-dialog" aria-labelledby="resizeTitle">
+  <h2 id="resizeTitle">Page size</h2>
+  <p id="resizeCurrent" class="muted"></p>
+  <label class="ocr-languages">New size<select id="resizePreset" data-native></select></label>
+  <div id="resizeCustom" class="insert-custom" hidden><label>Width <input id="resizeWidth" type="number" min="10" max="5000" step="1" /> mm</label><label>Height <input id="resizeHeight" type="number" min="10" max="5000" step="1" /> mm</label></div>
+  <label id="resizeFitRow" class="ocr-skip"><input id="resizeFit" type="checkbox" /> Scale the PDF to fill the new size (otherwise it keeps its size and place)</label>
+  <p class="muted">Writing and drawings stay where they are on the page. Undo restores the previous size.</p>
+  <div class="ocr-actions"><button id="resizeCancel" type="button">Cancel</button><button id="resizeConfirm" type="button" class="primary">Resize</button></div>
 </dialog>
 
 <dialog id="studyDialog" class="ocr-dialog" aria-labelledby="studyTitle">

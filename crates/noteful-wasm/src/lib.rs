@@ -101,6 +101,23 @@ impl EditorSession {
             .edit_text(page, id, text, [width, height])
             .map_err(js_error)
     }
+    /// Resize a page (display position); `pdf_rect` (JSON [x, y, w, h]) moves its PDF.
+    pub fn resize_page(
+        &mut self,
+        page: usize,
+        width: f64,
+        height: f64,
+        pdf_rect: Option<String>,
+    ) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let rect = pdf_rect
+            .map(|r| serde_json::from_str(&r))
+            .transpose()
+            .map_err(js_error)?;
+        self.inner
+            .resize_page(page, [width, height], rect)
+            .map_err(js_error)
+    }
     pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.set_locked(page, id, locked).map_err(js_error)

@@ -189,6 +189,51 @@ impl Editor {
         }
         self.commit(Edit::InsertPages { at, pages, pdf })
     }
+    /// A slot's size and PDF placement after the applied resizes.
+    pub(crate) fn page_geometry(&self, slot: usize) -> Result<([f64; 2], Option<PdfBackground>)> {
+        let p = self.page(slot)?;
+        let (mut size, mut background) = (p.size, p.pdf_background.clone());
+        for edit in &self.history[..self.cursor] {
+            if let Edit::ResizePage {
+                page,
+                size: s,
+                pdf_rect,
+            } = edit
+            {
+                if *page == slot {
+                    size = *s;
+                    if let (Some(b), Some(r)) = (background.as_mut(), pdf_rect) {
+                        b.rect = *r;
+                    }
+                }
+            }
+        }
+        Ok((size, background))
+    }
+    /// Resize one page (a slot), as one undoable edit.
+    pub fn resize_page(
+        &mut self,
+        slot: usize,
+        size: [f64; 2],
+        pdf_rect: Option<[f64; 4]>,
+    ) -> Result<()> {
+        let (current, background) = self.page_geometry(slot)?;
+        if !finite(&size)
+            || size.iter().any(|v| *v < 10.)
+            || pdf_rect
+                .is_some_and(|r| !finite(&r) || r[2] <= 0. || r[3] <= 0. || background.is_none())
+        {
+            return Err(Error::new(0, "Invalid page size"));
+        }
+        if size == current && pdf_rect.is_none_or(|r| background.is_some_and(|b| b.rect == r)) {
+            return Ok(());
+        }
+        self.commit(Edit::ResizePage {
+            page: slot,
+            size,
+            pdf_rect,
+        })
+    }
     pub(crate) fn added_pdf(&self, id: &str) -> Option<&[u8]> {
         self.added_pdfs
             .iter()

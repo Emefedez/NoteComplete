@@ -23,7 +23,7 @@ import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons } from "./icons.js";
 import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
-import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, UNITS_PER_POINT } from "./insert-pages.js";
+import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
 import { AudioController } from "./audio.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
@@ -928,8 +928,9 @@ async function action(op, args = {}) {
     revision++;
     doc = result;
     savedState();
-    if (result.pages !== panels.length) {
-      restructure(result, args.focus ?? Math.min(page, result.pages - 1));
+    // Inserted pages, or a page size changed (a resize, or its undo/redo).
+    if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
+      restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : undefined);
       return;
     }
     if (op === "draw" && args.line.shape && !gesture) {
@@ -1922,7 +1923,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2017,7 +2018,7 @@ $("tapeNote").onclick = () => setTapeMode("note");
 $("findOpen").onclick = () => { showDocument(); find.open(); };
 $("ocrOpen").onclick = () => find.openOcr(page);
 // Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.
-function restructure(result, focus) {
+function restructure(result, focus, message) {
   observer?.disconnect();
   thumbnailObserver?.disconnect();
   selection.clear();
@@ -2027,9 +2028,55 @@ function restructure(result, focus) {
   updateTools(result);
   layerPanel(result.layers);
   find.restructure();
-  requestAnimationFrame(() => jump(Math.max(0, Math.min(focus, result.pages - 1))));
-  status(`${result.pages} pages. You can undo this change.`);
+  requestAnimationFrame(() => {
+    jump(Math.max(0, Math.min(focus, result.pages - 1)));
+    status(message || `${result.pages} pages. You can undo this change.`);
+  });
 }
+// Pages → Page size: presets, extra writing space or a custom size; the PDF
+// keeps its place unless it is scaled to the new size.
+const RESIZE_PRESETS = {
+  right50: "Add space on the right (half width)", right100: "Add space on the right (full width)", below50: "Add space below (half height)",
+  a4: PRESETS.a4.label, a4l: PRESETS.a4l.label, letter: PRESETS.letter.label, slide43: PRESETS.slide43.label, slide169: PRESETS.slide169.label,
+  original: "Original size", custom: "Custom size",
+};
+for (const [value, label] of Object.entries(RESIZE_PRESETS)) $("resizePreset").add(new Option(label, value));
+$("resizePreset").onchange = () => { $("resizeCustom").hidden = $("resizePreset").value !== "custom"; };
+const mm = (units) => Math.round(unitsToMm(units));
+function resizeTarget() {
+  const view = panels[page]?.view, base = view?.base_size || view?.size;
+  const preset = $("resizePreset").value;
+  if (SPACE[preset]) return base.map((v, i) => v * SPACE[preset].grow[i]);
+  if (preset === "original") return [...base];
+  if (preset === "custom") return [Number($("resizeWidth").value), Number($("resizeHeight").value)].map(mmToUnits);
+  return PRESETS[preset].mm.map(mmToUnits);
+}
+$("resizePage").onclick = () => {
+  const view = panels[page]?.view;
+  if (!doc || !view) return;
+  $("resizeCurrent").textContent = `Page ${page + 1} is ${mm(view.size[0])} × ${mm(view.size[1])} mm.`;
+  $("resizeWidth").value = mm(view.size[0]);
+  $("resizeHeight").value = mm(view.size[1]);
+  $("resizeFitRow").hidden = !view.pdf_background;
+  $("resizeFit").checked = false;
+  $("resizeCustom").hidden = $("resizePreset").value !== "custom";
+  $("resizeDialog").showModal();
+};
+$("resizeCancel").onclick = () => $("resizeDialog").close();
+$("resizeConfirm").onclick = () => {
+  const view = panels[page]?.view;
+  // Whole units (exact in the project file); the original size is kept as it was.
+  const size = $("resizePreset").value === "original" ? resizeTarget() : resizeTarget().map((v) => Math.round(v));
+  if (!view || size.some((v) => !Number.isFinite(v) || v < 10)) return status("Choose a valid size.", true);
+  let pdfRect;
+  if (view.pdf_background && $("resizeFit").checked) {
+    // The PDF fills the page as far as its own proportions allow, centred.
+    const [, , w, h] = view.pdf_background.rect, scale = Math.min(size[0] / w, size[1] / h);
+    pdfRect = [(size[0] - w * scale) / 2, (size[1] - h * scale) / 2, w * scale, h * scale];
+  }
+  $("resizeDialog").close();
+  action("resizePage", { page, size, pdfRect, focus: page });
+};
 // Pages → Insert: blank pages of a chosen size, or pages of another PDF at native scale.
 let insertPdfSource = null;
 for (const [value, { label }] of Object.entries(PRESETS)) $("insertPreset").add(new Option(label, value));

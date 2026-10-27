@@ -75,6 +75,14 @@ A typed text box is an `Image` edit whose image has empty `base64` and `mime` an
 
 Native export writes each text box as a kind-2 object with the field layout and wire types of `samples/texto.noteful`: rect `2/1` (float64 ×5), size pair `6/2`, and attributed text in `6/4` with fragments `[text, U+200B]`, counts `[5, 1]`, keys `[13, 10, 6, 2, 9, 10]` and pools 5 (family "Helvetica"), 6 (bold), 7 (color), 9 (paragraph) and 10 (sizes). Reopened, the core decodes the same text, size, color, weight and position.
 
+## Page sizes (project version 4)
+
+```json
+{"kind":"ResizePage","page":0,"size":[1637,1543.46],"pdf_rect":[0,0,1091.34,1543.46]}
+```
+
+`ResizePage` sets a page slot's size. Ink, objects and text keep their page coordinates (the page grows or shrinks from its top-left corner). The PDF background keeps its rectangle unless `pdf_rect` (optional, only for PDF pages) gives a new one. Sizes must be finite, at least 10 units and within ±1e6; identical sizes add no action. Views report the current `size` and the page's `base_size` before resizes. Native export writes the size in background tag 1 and the PDF rectangle in background tag 9 (type 0x23, as on widened Noteful pages), so the PDF stays in place; inserted pages are written at their final size.
+
 ## Native export
 
 `Editor::export_noteful()` and `EditorSession.export_noteful()` flatten the applied `.nfedit` history into a native `.noteful` archive. CLI: `noteful export project.nfedit > edited.noteful`. The source is never changed. With cursor zero, export returns the exact original bytes.
