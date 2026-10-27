@@ -227,7 +227,10 @@ mod tests {
         assert_eq!(page_marker("<!-- page 0 -->"), None);
         // AI answers use LaTeX; the host typesets these spans.
         let math = markdown_html("02 $\\rightarrow$ 03 and $$x^2$$");
-        assert!(math.contains("<span class=\"math math-inline\">\\rightarrow</span>"), "{math}");
+        assert!(
+            math.contains("<span class=\"math math-inline\">\\rightarrow</span>"),
+            "{math}"
+        );
         assert!(math.contains("math-display"));
     }
     #[test]
