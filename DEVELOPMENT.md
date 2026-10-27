@@ -1,12 +1,11 @@
 # Development guide
 
-This is the current development and validation procedure. The [research provenance and history](docs/RESEARCH_HISTORY.md) separately records the owner's prior work, what was supplied, how the assistant used it, and the resulting evidence. The [native format specification](spec/noteful-v0.1.md) documents observed semantics; [`.nfedit`](spec/nfedit-v1.md) documents this project's edit history and writer.
+This is the current development and validation guide for the NoteComplete client. Format research and its provenance are on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. The [native format specification](spec/noteful-v0.1.md) documents observed semantics; [`.nfedit`](spec/nfedit-v1.md) documents this project's edit history and writer.
 
 ## Architecture
 
 | Component | Responsibility |
 |---|---|
-| `research/python/` | Independent parser/renderer used as a regression oracle; historical viewer and migration scripts remain research tools. |
 | `crates/noteful-core/` | Portable decoding, scene extraction and editing; no filesystem, network or UI APIs, and `forbid(unsafe_code)`. |
 | `crates/noteful-cli/`, `crates/noteful-wasm/` | CLI and browser adapters to the shared core. |
 | `apps/reader/` | Virtualized pages, SVG ink, PDF rasterization, imports, editing UI, audio and local speech processing. |
@@ -18,97 +17,21 @@ Source bytes remain immutable during editing. `.nfedit` stores the original arch
 
 Selection gestures preview one SVG item at most once per animation frame and send one adjustment when the gesture ends. Item patches retain PDF/audio nodes. Hidden and locked layers are excluded from editing.
 
-## Procedure: from supplied evidence to implementation
+## Format research
 
-### 1. Record the handoff and ownership
+The format work behind the core (Ghidra scripts and static-analysis evidence, the independent Python parser/renderer oracle, the legacy comparison viewer, corpus analysis and Rust/Python parity checks, and the evidence-to-implementation procedure) lives on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. New format variants found in real notes are analysed and documented there first; this branch carries the [specification](spec/noteful-v0.1.md) the core implements and synthetic regression tests for each variant (for example `crates/noteful-core/tests/page_geometry.rs`).
 
-For each contribution, record who supplied it, its source, whether it is prior research, an original native sample, a native export, a tool-generated result, a synthetic fixture or a product requirement. Record original filename, size and SHA-256 for binary evidence. Preserve the original bytes. Do not infer authorship from a filename or from possession of a file.
-
-Keep prior explanations and hypotheses distinguishable from conclusions reached during the new analysis. Link handoff records from [research history](docs/RESEARCH_HISTORY.md); use `samples/manifest.json` for retained corpus files. Do not retroactively add generated evidence to `research/evidence/initial-inputs.json`, which describes the original handoff.
-
-### 2. Form a testable question
-
-Prefer a native sample with one changed feature and, when available, an independently exported reference or the owner's explicit ground truth. State what the comparison can establish: field boundaries, text traits, geometric position, compositing or timing. Product requests such as a hamburger menu or speech recognition belong in application requirements, not the recovered format specification.
-
-### 3. Analyze without replacing evidence
-
-Use indexed resource extents and the strict parser. Write extractions and reports under ignored `work/`; leave corpus originals and committed measurement baselines unchanged. Use native symbol names and static pseudocode as corroborating leads, interpreted alongside sample bytes. Label provisional interpretations and retain unknown channels without inventing meanings.
-
-For optional Ghidra extraction, use the matching recorded binary and a separate project:
-
-```sh
-"$GHIDRA_HOME/support/analyzeHeadless" "$PROJECT_DIRECTORY" "$PROJECT_NAME" \
-  -process Noteful -noanalysis -readOnly -scriptPath research/ghidra \
-  -postScript NotefulTargets.java work/ghidra-targets
-```
-
-Run `NotefulTextTargets.java` with a separate output directory for text. `GHIDRA_HOME` points to the installation's `libexec`; use a supported JDK. Addresses in the scripts are specific to the binary fingerprint in `research/evidence/binary.json`. Ghidra and the historical external database are not required for ordinary builds.
-
-### 4. Validate the interpretation
-
-- **Byte round-trip:** require exact parsing/re-encoding and malformed-input rejection. This validates syntax and preservation.
-- **Independent reference:** compare with native thumbnails/PDF exports or supplied ground truth for visual and semantic claims.
-- **Implementation parity:** compare Rust with the independent Python oracle. Agreement checks consistency, not official interoperability.
-- **Synthetic regression:** isolate corner cases and label generated fixtures explicitly. A synthetic multiple-recording test cannot establish every native pause/splice behavior.
-- **Native interoperability:** import modified exports into official Noteful before claiming compatibility. This remains outstanding.
-
-Update the observed format specification only with the supporting evidence and scope of the conclusion. Record superseded hypotheses in research history instead of silently presenting them as facts.
-
-### 5. Implement at the appropriate layer
-
-Put format semantics in the portable core, host integration in adapters/wrappers, and UI/performance behavior in the reader. Preserve opaque fields and resource bytes where supported. Keep new product formats and inferred speech timings distinct from decoded native data. Add focused regressions for correctness risks and use UI checks for layout/interaction changes.
-
-### 6. Build, check and report the actual result
-
-Follow [README build and validation commands](README.md#validate). Web runtime tests require a fresh WASM/web build. Use [BUILDS.md](docs/BUILDS.md) for package workflows, signing and Android's hosted-reader requirement.
-
-Report separately: source changes implemented, automated checks passed, packages actually built, application execution observed, and physical-device/native interoperability still untested. A workflow file, successful target compilation or generated Android project is not a completed device test. Record validation limits beside the claim rather than implying universal support.
-
-## Repository and documentation maintenance
+## Documentation map
 
 - `README.md`: entry point, build commands and documentation map.
-- `docs/RESEARCH_HISTORY.md`: attribution, supplied inputs, derived evidence and development history.
-- `DEVELOPMENT.md`: current architecture, contribution procedure and tool inventory.
+- `DEVELOPMENT.md`: architecture, next steps and validation limits.
 - `docs/USER_GUIDE.md`: current user-facing behavior.
-- `docs/BUILDS.md`: packaging procedure and its validation/signing limits.
+- `docs/GOOGLE_DRIVE.md`, `docs/BUILDS.md`: Drive setup; packaging procedure and its validation/signing limits.
 - `spec/`: observed native semantics and the project's own editing format.
 
-Keep procedural instructions in their owning document and link to them elsewhere. Preserve corpus manifests and small evidence baselines. Generated media, reports, dependencies, bindings and packages belong in ignored directories. Historical scripts remain explicitly marked; do not run obsolete migration scripts against current source. The [earlier cleanup record](docs/RESEARCH_HISTORY.md#historical-evidence-cleanup) documents retained provenance and the external backup.
+Generated media, reports, dependencies, bindings and packages belong in ignored directories (`work/`, `pkg`, `vendor`). The corpus in `samples/` and the synthetic fixtures in `tests/fixtures/` are required by the Rust and WASM tests.
 
-## Python tool inventory
-
-All commands below run from the repository root. Core oracle scripts require only Python's standard library; optional evidence tools list their extra dependencies. Generated output belongs under ignored `work/`.
-
-| Script | Purpose / invocation | Dependencies and output |
-|---|---|---|
-| `research/python/noteful.py` | Strict parser/encoder, semantic inspection; `python3 research/python/noteful.py samples/nota_1linea.noteful --extract work/one-line` | Standard library; extraction refuses an existing destination; preserves original input. `--view` opens the historical viewer. |
-| `research/python/render_note.py` | Importable independent SVG scene oracle | Standard library; approximate paper/ink rendering, no production PDF rasterizer. |
-| `research/python/rich_text.py` | Importable attributed-text pool decoder and SVG text renderer | Standard library; exercised by text tests and scene parity. |
-| `research/python/rust_backend.py` | Historical adapter running the Rust CLI parser through the Python renderer | Built `target/debug/noteful` or release CLI; no silent Python fallback. |
-| `research/python/viewer.py` | Optional historical loopback viewer; `python3 research/python/viewer.py --no-browser --port 8770` | Standard library; serves the corpus and independent PDF reference locally. `--engine rust` uses the migration adapter. Not the product app. |
-| `tools/build_web.py` | Build WASM bindings and stage browser dependencies | Rust, matching wasm-bindgen CLI, Node/npm, Python 3.11+; no sample notes copied into the app. |
-| `tools/build_examples.py` | Optional static research gallery | Standard library; writes `work/examples/`, not app assets. |
-| `tools/analyze_corpus.py` | Recreate extracted blocks, diagnostic SVG and corpus comparison | Standard library; writes `work/reports/` and `work/extracted/`. |
-| `tools/validate_geometry.py` | Compare decoded initial stroke positions with native JPEG thumbnails | Pillow; reads originals directly, writes `work/reports/geometry-validation.json`. Position evidence only. |
-| `tools/validate_variable_width.py` | Independently measure PDF caps against the third coordinate channel | NumPy and pypdf; writes `work/reports/variable-width-validation.json`. Does not overwrite the committed baseline. |
-| `tools/check_rust_parity.py` | Compare Rust fields/semantics and round-trip against Python | Rust CLI + standard library; current report under `work/reports/`. |
-| `tools/check_scene_parity.py` | Compare ordered native/Python SVG primitives and inherited transforms | Rust CLI + standard library; tolerance 2e-5 internal units; no pixel-equivalence claim. |
-| `tools/check_export.py` | Decode native writer output independently and check original media bytes | Rust CLI + standard library; current report under `work/reports/`. |
-| `tools/build_audio_fixture.py` | Regenerate the synthetic 0.25-second WAV resource fixture | Standard library; intentionally writes the named test fixture and a scratch report. |
-| `tools/build_multi_audio_fixture.py` | Regenerate the synthetic two-recording fixture | Standard library; intentionally writes the named test fixture. |
-| `research/python/historical/update_decoder.py` | Preserved one-off early migration script | Historical only: expects obsolete `tools/noteful.py`; do not run against current source. Its replacement logic is already superseded by the maintained parser. |
-| `tests/test_noteful.py`, `test_text.py`, `test_viewer.py` | Parser, text, rendering and historical HTTP regression tests | `python3 -m unittest discover -s tests -v`; standard library. |
-
-Optional evidence environment:
-
-```sh
-python3 -m venv work/evidence-env
-work/evidence-env/bin/pip install Pillow numpy pypdf
-work/evidence-env/bin/python tools/validate_geometry.py
-work/evidence-env/bin/python tools/validate_variable_width.py
-```
-
-The tests cover observed corpus syntax, malformed inputs, scene correspondence, media preservation, timing, edit history and writer output. CI checks desktop operating systems and Android/iOS compilation targets as well as actual WASM runtime behavior. Target compilation and Expo bundles do not prove physical-device file selection, codec playback or sharing.
+The tests cover observed corpus syntax, malformed inputs, media preservation, timing, edit history and writer output. CI checks desktop operating systems and Android/iOS compilation targets as well as actual WASM runtime behavior. Target compilation and Expo bundles do not prove physical-device file selection, codec playback or sharing.
 
 ## Reader rendering and speech settings
 

@@ -27,7 +27,7 @@ file_size - 4     uint32 index_size
 | 11 | 0x0402 | Absolute uint64 offsets |
 | 12 | 0x0402 | uint64 lengths |
 
-Arrays 10/11/12 align by index. `n:<ID>` is note metadata, `d:<ID>` drawing metadata. Unprefixed IDs can be media or editable sets. Static `PackageFileReader` at `0x100adf3d8` corroborates the trailer, magic and index; see [static-analysis evidence](../docs/RESEARCH_HISTORY.md#static-analysis).
+Arrays 10/11/12 align by index. `n:<ID>` is note metadata, `d:<ID>` drawing metadata. Unprefixed IDs can be media or editable sets. Static `PackageFileReader` at `0x100adf3d8` corroborates the trailer, magic and index; see [static-analysis evidence](https://github.com/Emefedez/noteful-re/tree/reverse-engineering/docs/RESEARCH_HISTORY.md#static-analysis).
 
 Example `nota_1linea.noteful`: note metadata offset 4/505 bytes; JPEG 509/120141; drawing metadata 120650/1042; PDF 121692/4599; editable set 126291/304; index 126595/464; trailer 127059/16.
 
@@ -101,7 +101,7 @@ Unsupported flags/commands retain the opaque blob and produce an ink diagnostic.
 
 ## Highlighter over images
 
-Object tag 8 is opacity and tag 9 selects normal ink (0) or highlighter (1) in the corpus. The supplied PDF uses `/BM /Multiply`, fill alpha `/ca 0.5` and stroke alpha `/CA 0.5`. The PDF state excerpt is recorded in [independent visual evidence](../docs/RESEARCH_HISTORY.md#independent-visual-validation). The page-2 yellow line has width 28 and tool 1, above a JPEG photograph.
+Object tag 8 is opacity and tag 9 selects normal ink (0) or highlighter (1) in the corpus. The supplied PDF uses `/BM /Multiply`, fill alpha `/ca 0.5` and stroke alpha `/CA 0.5`. The PDF state excerpt is recorded in [independent visual evidence](https://github.com/Emefedez/noteful-re/tree/reverse-engineering/docs/RESEARCH_HISTORY.md#independent-visual-validation). The page-2 yellow line has width 28 and tool 1, above a JPEG photograph.
 
 Shapes and freehand ink share a single compositing operation per object/stroke: Multiply at 0.5 for highlighter, multiplied by the original object/color alpha. This avoids darkening self-overlapping pieces separately. The actual embedded PDF is inserted as an SVG image below the ink in the product reader. Layer groups compose in order with their opacity.
 
@@ -122,7 +122,7 @@ New UI shapes are fixed-width stroke outlines (line, rectangle, ellipse, triangl
 
 For 23 exam strokes with flag 1, the third sample dimension matches the initial circle radius in the independent exported PDF. It is not normalized Apple Pencil pressure. The old diagnostic `pressure_candidate` alias is retained, but `radii` is the supported interpretation.
 
-Independent endpoint comparisons: maximum center error 0.000128113 internal units, maximum radius error 0.000071836. Circle selection used position/circularity, not the candidate radius. See [the retained radius measurements](../research/evidence/variable-width-validation.json). A prior failed nearest-outline experiment is described in the [research history](../docs/RESEARCH_HISTORY.md#independent-visual-validation) and does not support the renderer.
+Independent endpoint comparisons: maximum center error 0.000128113 internal units, maximum radius error 0.000071836. Circle selection used position/circularity, not the candidate radius. See [the retained radius measurements](https://github.com/Emefedez/noteful-re/blob/reverse-engineering/research/evidence/variable-width-validation.json). A prior failed nearest-outline experiment is described in the [research history](https://github.com/Emefedez/noteful-re/tree/reverse-engineering/docs/RESEARCH_HISTORY.md#independent-visual-validation) and does not support the renderer.
 
 Rendering uses a union of sample discs and their external tangents, composed once. It preserves measured endpoints and varying width but does not reproduce the native filtering/Bezier smoothing exactly. Auxiliary channel bytes are preserved without assigning unproven eraser/pressure semantics.
 
@@ -156,7 +156,7 @@ Content tags: 1 opaque clock/ID; 2 UTF-8 fragments; 3 attribute-change counts pe
 | 11 / 12 | Line height / spacing | 10 |
 | 13 / 14 | Family / PostScript name | 5 |
 
-Content, size, bold, italic and family are checked against the user's real sample. Underline/strike are supported by static UIKit mappings in [100a485ec.c](../research/evidence/ghidra-text/100a485ec.c) and [100a49e04.c](../research/evidence/ghidra-text/100a49e04.c), plus synthetic inheritance tests. No native underlined/struck text sample has been supplied yet.
+Content, size, bold, italic and family are checked against the user's real sample. Underline/strike are supported by static UIKit mappings in [100a485ec.c](https://github.com/Emefedez/noteful-re/blob/reverse-engineering/research/evidence/ghidra-text/100a485ec.c) and [100a49e04.c](https://github.com/Emefedez/noteful-re/blob/reverse-engineering/research/evidence/ghidra-text/100a49e04.c), plus synthetic inheritance tests. No native underlined/struck text sample has been supplied yet.
 
 Rust/Python render escaped SVG text/tspan elements with whitespace, explicit line breaks, size, weight, italic and simple decorations. Unknown attributes retain readable text plus a warning. Fonts resolve from the destination platform, falling back to Arial/sans-serif; Apple fonts are not redistributed.
 

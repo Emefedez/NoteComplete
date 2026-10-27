@@ -56,7 +56,7 @@ node apps/reader/test.mjs              # after a web build
 
 ## How it reads Noteful files
 
-Noteful's format is undocumented. NoteComplete's Rust core comes from the [noteful-re](https://github.com/Emefedez/noteful-re) reverse-engineering project, which holds the evidence corpus, the independent Python oracle, the [format specification](spec/noteful-v0.1.md) and parity checks. A short writeup of how the format was worked out will be published there.
+Noteful's format is undocumented. NoteComplete's Rust core comes from the noteful-re reverse-engineering effort. Its tools and evidence (Ghidra scripts, the independent Python oracle, the legacy viewer and the parity checks) are kept on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch of this repository, where a short writeup of how the format was worked out will be published. The resulting [format specification](spec/noteful-v0.1.md) is kept here.
 
 Related work: [noteful-mcp](https://github.com/openninoor/noteful-mcp) (MIT) independently reads and writes Noteful notebooks for AI agents.
 
@@ -68,6 +68,7 @@ Related work: [noteful-mcp](https://github.com/openninoor/noteful-mcp) (MIT) ind
 | `apps/desktop/`, `apps/mobile/` | Electron desktop shell and Expo wrapper |
 | `crates/` | Rust core (format, scene, editing, export), CLI and WASM adapter |
 | `docs/` | User guide, Google Drive, builds, release notes |
-| `spec/`, `research/`, `samples/`, `tests/`, `tools/` | Format research, evidence corpus and checks shared with noteful-re |
+| `spec/`, `samples/`, `tests/fixtures/` | Format specification the core implements, sample corpus and synthetic fixtures |
+| `tools/` | Web build, local server and Expo helpers |
 
 Development procedure and architecture: [DEVELOPMENT.md](DEVELOPMENT.md).
