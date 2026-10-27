@@ -71,6 +71,14 @@ def main():
     tinymde=ROOT/'apps/reader/node_modules/tiny-markdown-editor'
     for name in ['tiny-mde.min.js','tiny-mde.min.css']: shutil.copy2(tinymde/'dist'/name,mde/name)
     shutil.copy2(tinymde/'LICENSE',mde/'LICENSE')
+    # Math typesetting for AI answers and notes, loaded only when there is math.
+    tex=ROOT/'apps/reader/vendor/katex'
+    if tex.exists(): shutil.rmtree(tex)
+    tex.mkdir(parents=True,exist_ok=True)
+    katex=ROOT/'apps/reader/node_modules/katex'
+    for name in ['katex.mjs','katex.min.css']: shutil.copy2(katex/'dist'/name,tex/name)
+    shutil.copytree(katex/'dist/fonts',tex/'fonts',ignore=shutil.ignore_patterns('*.ttf','*.woff'))
+    shutil.copy2(katex/'LICENSE',tex/'LICENSE')
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))

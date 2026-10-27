@@ -4,6 +4,7 @@
 // file through the bundled MCP server so the AI can look at other pages.
 import { canvasImage, textBlock } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
+import { renderMarkdown, plainText } from './rich-text.js';
 
 const $ = id => document.getElementById(id);
 
@@ -26,13 +27,36 @@ export function renderAnswer(text) {
   return fragment;
 }
 
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers }) {
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox }) {
   let history = [], busy = false, attachments = [];
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
+  // Answers render as Markdown (lists, tables, code, formulas). Under each, T
+  // puts its text in a text box on the current page; ⧉ copies it.
+  function answer(item, content) {
+    const body = item.querySelector('.chat-body') || item.appendChild(Object.assign(document.createElement('div'), { className: 'chat-body' }));
+    return renderMarkdown(body, content, markdown).catch(() => { body.replaceChildren(renderAnswer(content)); });
+  }
+  function actions(item, content) {
+    const row = document.createElement('div');
+    row.className = 'chat-actions';
+    const box = document.createElement('button');
+    box.type = 'button';
+    box.className = 'chat-to-text';
+    box.textContent = 'T';
+    box.title = 'Put this answer in a text box on the current page';
+    box.onclick = () => toTextBox?.(plainText(content));
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = '⧉';
+    copy.title = 'Copy this answer';
+    copy.onclick = () => navigator.clipboard.writeText(plainText(content)).then(() => status('Answer copied.'), () => status('The clipboard is not available here.', true));
+    row.append(box, copy);
+    item.append(row);
+  }
   function add(role, content, note = '') {
     const item = document.createElement('li');
     item.className = `chat-${role}`;
-    if (role === 'assistant') item.append(renderAnswer(content));
+    if (role === 'assistant') answer(item, content);
     else item.textContent = content;
     if (note) { const small = document.createElement('small'); small.textContent = note; item.append(small); }
     $('chatMessages').append(item);
@@ -54,7 +78,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       try { select.value = localStorage.getItem('notecomplete-ai-provider') || select.querySelector('option:not([disabled])')?.value; } catch { /* Optional. */ }
       model.load(select.value);
     }
-    $('chatNoteLabel').hidden = !notePath() || select.value === 'antigravity';
+    $('chatNoteLabel').hidden = !notePath();
     $('chatPanel').hidden = false;
     if (!history.length && !$('chatMessages').children.length)
       add('assistant', 'Ask about this page or select something with **Select** first: a formula, a diagram, a sentence. I can see the page, its text and recognized handwriting, and lift the tape.');
@@ -126,9 +150,21 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
       const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
-      const { text } = await ai.run({ provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' });
+      // The answer appears while it is written; Markdown is re-rendered at most
+      // every 120 ms so long answers stay cheap.
+      let streamed = '', timer = 0, rendering = Promise.resolve();
+      const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
+      const { text } = await ai.run({ provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' }, delta => {
+        if (!streamed) waiting.querySelector('small')?.remove();
+        streamed += delta;
+        timer ||= setTimeout(show, 120);
+      });
+      clearTimeout(timer);
+      await rendering;
       history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });
-      waiting.replaceChildren(renderAnswer(text));
+      waiting.querySelector('small')?.remove();
+      await answer(waiting, text);
+      actions(waiting, text.trim());
     } catch (error) {
       waiting.replaceChildren(error.message);
       waiting.classList.add('chat-error');
@@ -143,7 +179,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatClose').onclick = close;
   $('chatClear').onclick = () => { history = []; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {
-    $('chatNoteLabel').hidden = !notePath() || $('chatProvider').value === 'antigravity';
+    $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
     model.load($('chatProvider').value);
   };

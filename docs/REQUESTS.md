@@ -120,6 +120,13 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ **OCR could not be stopped, and a new run started over.** Stop now ends the run at once (it had to wait for the page being read, which could hang); pages already recognized are kept after every page and skipped by the next run, so a stopped run continues where it left off (tick "Recognize again" to redo them). For long runs the recognition engine is restarted every 12 pages, so its memory does not keep growing. *Browser test: stopped during page 2 in 54 ms, the next run did only pages 2–3, a third run found everything done.*
 - ✅ **README** has a "Notes in Markdown" section (and now mentions text boxes, locking, page resizing, tabs and text selection).
 
+## Ninth round
+- ✅ **Ask AI answers stream** as they are written (Claude Code's stream events and Antigravity's step updates; Codex gives its answer at the end). The bubble re-renders at most every 120 ms.
+- ✅ **Answers render properly**: Markdown through the Rust renderer (lists, tables, code, headings, quotes) and formulas typeset with KaTeX (`$\rightarrow$` shows as an arrow). KaTeX loads only when an answer or note has math. The Notes preview typesets math too.
+- ✅ **T under each answer** puts its text into a text box on the current page (lists keep their bullets, formulas become characters such as →, lines wrap to the page), selected so it can be dragged into place; ⧉ copies the text.
+- ✅ **Resize Ask AI and the audio panel vertically**: drag the top edge, the bottom edge (now with a visible handle) or the corner. The audio panel's grips scrolled away with its content; it now scrolls inside, so they stay on the frame. *Browser test: chat top 112 → 234, height 633 → 410; audio height 633 → 482 after scrolling its content.*
+- ✅ **The note's MCP tools now reach Antigravity too** (Codex already had them). Antigravity has no flag for it, so each request's temporary workspace carries a NoteComplete plugin (`.agents/plugins/notecomplete/`) with the server; your global Antigravity settings are not changed. *Checked with the real agy: it lists all seven notecomplete tools.*
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.

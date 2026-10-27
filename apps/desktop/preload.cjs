@@ -38,7 +38,14 @@ contextBridge.exposeInMainWorld('notecompleteTranscribe', {
 contextBridge.exposeInMainWorld('notecompleteAI', {
   providers: () => ipcRenderer.invoke('ai:providers'),
   models: provider => ipcRenderer.invoke('ai:models', provider),
-  run: request => ipcRenderer.invoke('ai:run', request),
+  // onDelta(text) receives the answer while it is written, when the tool streams.
+  run: (request, onDelta) => {
+    if (typeof onDelta !== 'function') return ipcRenderer.invoke('ai:run', request);
+    const stream = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const listener = (_event, id, text) => { if (id === stream) onDelta(text); };
+    ipcRenderer.on('ai:delta', listener);
+    return ipcRenderer.invoke('ai:run', { ...request, stream }).finally(() => ipcRenderer.removeListener('ai:delta', listener));
+  },
   cancel: tag => ipcRenderer.send('ai:cancel', typeof tag === 'string' ? tag : ''),
 });
 contextBridge.exposeInMainWorld('notecompleteDrive', {

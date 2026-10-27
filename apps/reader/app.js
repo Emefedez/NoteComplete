@@ -2032,7 +2032,7 @@ $("speechSettingsToggle").onclick = () => {
 };
 try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
-resizable($("audioBar"), "notecomplete-audio-panel");
+resizable($("audioBar"), "notecomplete-audio-panel", { scroll: true });
 resizable($("chatPanel"), "notecomplete-chat-panel");
 $("audioClose").onclick = () => toggleAudio(false);
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
@@ -2489,7 +2489,36 @@ const studyDeps = {
   notePath: () => notePath,
   status,
 };
-const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
+// Chat answers onto the page: a text box with the answer's text, wrapped to the
+// page, near the top of what is in view; selected so it can be dragged.
+function wrapText(text, style, width) {
+  const context = document.createElement("canvas").getContext("2d");
+  context.font = cssFont(style);
+  return text.split("\n").map((line) => {
+    const out = [];
+    let current = "";
+    for (const word of line.split(" ")) {
+      const next = current ? `${current} ${word}` : word;
+      if (current && context.measureText(next).width > width) { out.push(current); current = word; }
+      else current = next;
+    }
+    return [...out, current].join("\n");
+  }).join("\n");
+}
+async function answerToTextBox(text) {
+  const p = panels[page], layer = doc?.layers.find((l) => l.id === activeLayer);
+  if (!doc || !p?.view || !text.trim()) return;
+  if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true);
+  const style = { ...textDefaults }, wrapped = wrapText(text, style, p.size[0] * 0.8 - 12);
+  const [w, h] = textBoxSize(wrapped, style);
+  const rect = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect(), scale = rect.width / p.size[0];
+  const y = Math.min(Math.max(0, (view.top - rect.top) / scale) + 40, Math.max(20, p.size[1] - h - 20));
+  await action("image", { page, image: { base64: "", mime: "", bounds: [p.size[0] * 0.08, y, w, h], layer: activeLayer, text: textPayload(wrapped, style) } });
+  document.querySelector('#toolbar [data-tool="select"]').click();
+  await selection.selectId(page, `image:${doc.edit_count - 1}`);
+  status("Answer added as a text box: drag it into place, double-click to edit.");
+}
+const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: answerToTextBox });
 const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
 audio.transcript.context = () => ({ title: doc?.title || "" });

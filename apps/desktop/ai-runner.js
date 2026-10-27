@@ -1,11 +1,13 @@
 // Runs the user's own AI command-line tools for the reader (flashcards, quiz,
 // chat). They use their existing logins, so no API keys pass through
 // NoteComplete. Page images go to a private temporary folder that the tool may
-// read; tools that can call MCP also get the bundled `noteful mcp` server for
-// the open note. Permissions stay minimal: Claude may only Read and use the
-// note server, Codex runs read-only, Antigravity gets only the folder.
+// read; every tool also gets the bundled `noteful mcp` server for the open
+// note (Claude and Codex by flags, Antigravity as a plugin in the request's
+// own temporary workspace, so its global settings are untouched). Permissions
+// stay minimal: Claude may only Read and use the note server, Codex runs
+// read-only, Antigravity gets only the folder.
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -28,19 +30,45 @@ export function findTools(shell = process.env.SHELL || '/bin/bash') {
   });
 }
 
-// The command line for one request. `images` are absolute paths in `dir`.
-export function invocation(provider, { prompt, images, dir, model, mcp }) {
-  const listed = images.length ? `\n\nPage images (read them):\n${images.map(i => `- ${i}`).join('\n')}` : '';
+// Streamed output, one JSON object per line: the text pieces of the answer as
+// they are written (Claude Code stream events, Antigravity step updates) and
+// the final answer.
+export function streamLine(provider, line) {
+  let value;
+  try { value = JSON.parse(line); } catch { return {}; }
   if (provider === 'claude') {
-    const args = ['-p', '--output-format', 'json', '--add-dir', dir, '--strict-mcp-config', '--allowedTools', 'Read'];
-    if (mcp) args.push('--mcp-config', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } }), '--allowedTools', 'mcp__notecomplete');
-    if (model) args.push('--model', model);
-    return { args, stdin: prompt + listed, parse: out => JSON.parse(out).result };
+    if (value.type === 'result') return { final: value.result };
+    const e = value.type === 'stream_event' ? value.event : null;
+    return e?.type === 'content_block_delta' && e.delta?.type === 'text_delta' ? { delta: e.delta.text } : {};
   }
   if (provider === 'antigravity') {
-    const args = ['-p', prompt + listed, '--output-format', 'json', '--add-dir', dir, '--print-timeout', '600s'];
+    if (value.event === 'result') return { final: value.result?.response };
+    const step = value.event === 'step_update' ? value.step_update : null;
+    return step?.step_type === 'agent_response' && typeof step.text_delta === 'string' ? { delta: step.text_delta } : {};
+  }
+  return {};
+}
+export const STREAMS = new Set(['claude', 'antigravity']);
+
+// The command line for one request. `images` are absolute paths in `dir`.
+export function invocation(provider, { prompt, images, dir, model, mcp, stream = false }) {
+  const listed = images.length ? `\n\nPage images (read them):\n${images.map(i => `- ${i}`).join('\n')}` : '';
+  if (provider === 'claude') {
+    const format = stream ? ['stream-json', '--verbose', '--include-partial-messages'] : ['json'];
+    const args = ['-p', '--output-format', ...format, '--add-dir', dir, '--strict-mcp-config', '--allowedTools', 'Read'];
+    if (mcp) args.push('--mcp-config', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } }), '--allowedTools', 'mcp__notecomplete');
     if (model) args.push('--model', model);
-    return { args, stdin: null, parse: out => JSON.parse(out).response };
+    return { args, stdin: prompt + listed, parse: out => (stream ? lastFinal(provider, out) : JSON.parse(out).result) };
+  }
+  if (provider === 'antigravity') {
+    const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', '--add-dir', dir, '--print-timeout', '600s'];
+    if (model) args.push('--model', model);
+    // A workspace plugin: .agents/plugins/<name>/{plugin.json, mcp_config.json}.
+    const files = mcp ? [
+      ['.agents/plugins/notecomplete/plugin.json', JSON.stringify({ name: 'notecomplete', description: 'Read the open NoteComplete note' })],
+      ['.agents/plugins/notecomplete/mcp_config.json', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } })],
+    ] : [];
+    return { args, stdin: null, files, parse: out => (stream ? lastFinal(provider, out) : JSON.parse(out).response) };
   }
   if (provider === 'codex') {
     const last = path.join(dir, 'answer.txt');
@@ -75,6 +103,7 @@ async function listModels(provider, binary, home = homedir()) {
   return [];
 }
 
+const lastFinal = (provider, out) => out.split('\n').map(l => streamLine(provider, l).final).filter(f => typeof f === 'string').at(-1);
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
 
 export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
@@ -104,7 +133,8 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
       for (const r of running.get(owner) || []) if (!tag || r.tag === tag) { r.cancelled = true; r.child?.kill('SIGTERM'); }
     },
     // One request: write images, run the tool in the temporary folder, return its answer.
-    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }) {
+    // `onDelta` receives the answer's text pieces while it is written (tools that stream).
+    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }, onDelta = null) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
@@ -128,14 +158,29 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           files.push(file);
         }
         const mcp = mcpBinary && notePath && path.isAbsolute(notePath) ? mcpBinary : null;
-        const call = invocation(provider, { prompt: notePath && mcp ? `${prompt}\n\nThe note file is ${notePath}; the notecomplete MCP tools can read any of its pages.` : prompt, images: files, dir, model, mcp });
+        const stream = !!onDelta && STREAMS.has(provider);
+        const call = invocation(provider, { prompt: notePath && mcp ? `${prompt}\n\nThe note file is ${notePath}; the notecomplete MCP tools can read any of its pages.` : prompt, images: files, dir, model, mcp, stream });
+        for (const [name, content] of call.files || []) {
+          await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
+          await writeFile(path.join(dir, name), content);
+        }
         const output = await new Promise((resolve, reject) => {
           if (entry.cancelled) return reject(Error('The AI request was stopped.'));
           const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
           entry.child = child;
-          let out = '', err = '';
+          let out = '', err = '', pending = '';
           const timer = setTimeout(() => child.kill('SIGTERM'), 10 * 60 * 1000);
-          child.stdout.on('data', d => { out += d; });
+          child.stdout.on('data', d => {
+            out += d;
+            if (!stream) return;
+            pending += d;
+            const lines = pending.split('\n');
+            pending = lines.pop();
+            for (const line of lines) {
+              const { delta } = streamLine(provider, line);
+              if (delta) onDelta(delta);
+            }
+          });
           child.stderr.on('data', d => { err += d; });
           child.on('error', reject);
           child.on('close', (code, signal) => {

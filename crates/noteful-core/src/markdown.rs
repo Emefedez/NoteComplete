@@ -51,7 +51,8 @@ pub fn markdown_html(src: &str) -> String {
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_FOOTNOTES;
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_MATH;
     let events = Parser::new_ext(src, options).map(|event| match event {
         Event::Html(raw) | Event::InlineHtml(raw) => match page_marker(&raw) {
             Some(n) => Event::Html(
@@ -224,6 +225,10 @@ mod tests {
         assert!(md.contains("\n---\n\n**Page 10**\n") && !md.contains("<!--"));
         assert_eq!(page_marker("  <!--page 3-->  "), Some(3));
         assert_eq!(page_marker("<!-- page 0 -->"), None);
+        // AI answers use LaTeX; the host typesets these spans.
+        let math = markdown_html("02 $\\rightarrow$ 03 and $$x^2$$");
+        assert!(math.contains("<span class=\"math math-inline\">\\rightarrow</span>"), "{math}");
+        assert!(math.contains("math-display"));
     }
     #[test]
     fn archives_round_trip_and_reject_other_files() {

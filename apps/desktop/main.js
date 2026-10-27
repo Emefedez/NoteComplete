@@ -175,7 +175,12 @@ app.whenReady().then(() => {
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
   ipcMain.handle('ai:models', guarded((_event, provider) => ai.models(String(provider))));
-  ipcMain.handle('ai:run', guarded((event, request) => ai.run(event.sender.id, request)));
+  // A request with a stream id gets its answer's pieces as 'ai:delta' messages.
+  ipcMain.handle('ai:run', guarded((event, request) => {
+    const id = typeof request?.stream === 'string' && /^[\w-]{1,40}$/.test(request.stream) ? request.stream : null;
+    const { stream: _stream, ...rest } = request || {};
+    return ai.run(event.sender.id, rest, id ? text => { if (!event.sender.isDestroyed()) event.sender.send('ai:delta', id, text); } : null);
+  }));
   ipcMain.on('ai:cancel', (event, tag) => { if (trusted(event)) ai.cancel(event.sender.id, typeof tag === 'string' ? tag : ''); });
   // Other transcription backends; pieces stream back to the reader as they finish.
   const asr = transcriber({ tools: () => ai.tools() });

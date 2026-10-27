@@ -4,6 +4,8 @@
 // page: clicking one jumps there, and with Follow pages the notes scroll to
 // the current page's section. Loaded on first use; the editor is destroyed
 // when the panel closes, so nothing of it runs while it is hidden.
+import { renderMarkdown } from './rich-text.js';
+
 const $ = id => document.getElementById(id);
 let library = null;
 function loadEditor() {
@@ -67,7 +69,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
     $('notesEditor').replaceChildren();
   }
   async function render() {
-    $('notesRender').innerHTML = await call('markdownHtml', { text });
+    await renderMarkdown($('notesRender'), text, value => call('markdownHtml', { text: value }));
     follow(currentPage());
   }
   // Scroll the notes (not the caret) to the section of page `index` (0-based).

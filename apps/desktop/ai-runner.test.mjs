@@ -63,3 +63,32 @@ test('Antigravity model listing is parsed into ids and labels', async () => {
   assert.equal((await runner.models('claude'))[0].id, 'opus');
   assert.deepEqual(await runner.models('antigravity'), []);
 });
+
+test('streamed answers arrive in pieces and end with the full answer', async () => {
+  const { streamLine } = await import('./ai-runner.js');
+  assert.deepEqual(streamLine('claude', '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"uno "}}}'), { delta: 'uno ' });
+  assert.deepEqual(streamLine('claude', '{"type":"result","result":"uno dos"}'), { final: 'uno dos' });
+  assert.deepEqual(streamLine('antigravity', '{"event":"step_update","step_update":{"step_type":"agent_response","text_delta":"uno\\n"}}'), { delta: 'uno\n' });
+  assert.deepEqual(streamLine('antigravity', '{"event":"result","result":{"response":"uno dos"}}'), { final: 'uno dos' });
+  assert.deepEqual(streamLine('claude', 'not json'), {});
+  // A fake streaming "claude" writing three pieces with pauses.
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-fake-'));
+  const fake = path.join(bin, 'claude');
+  const piece = t => `{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"${t}"}}}`;
+  await writeFile(fake, `#!/bin/sh\ncat >/dev/null\necho '${piece('Hola ')}'\nsleep 0.2\necho '${piece('mundo')}'\nsleep 0.2\necho '{"type":"result","result":"Hola mundo"}'\n`);
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
+  const seen = [];
+  const { text } = await runner.run('w1', { provider: 'claude', prompt: 'x' }, d => seen.push([d, Date.now()]));
+  assert.equal(text, 'Hola mundo');
+  assert.deepEqual(seen.map(s => s[0]), ['Hola ', 'mundo']);
+  assert.ok(seen[1][1] - seen[0][1] >= 150, 'pieces arrive as they are written');
+});
+
+test('Antigravity gets the note server as a plugin in its own workspace', () => {
+  const agy = invocation('antigravity', { prompt: 'Q', images: [], dir: '/t', model: '', mcp: '/app/noteful' });
+  const [manifest, config] = agy.files;
+  assert.equal(manifest[0], '.agents/plugins/notecomplete/plugin.json');
+  assert.deepEqual(JSON.parse(config[1]).mcpServers.notecomplete, { command: '/app/noteful', args: ['mcp'] });
+  assert.deepEqual(invocation('antigravity', { prompt: 'Q', images: [], dir: '/t', model: '' }).files, []);
+});
