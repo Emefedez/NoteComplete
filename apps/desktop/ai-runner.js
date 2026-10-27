@@ -6,7 +6,7 @@
 // note server, Codex runs read-only, Antigravity gets only the folder.
 import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 export const PROVIDERS = {
@@ -55,6 +55,26 @@ export function invocation(provider, { prompt, images, dir, model, mcp }) {
 }
 
 export const MAX_PARALLEL = 4;
+// Models offered per tool. Antigravity lists its own (Gemini, Claude, …);
+// Claude Code takes its aliases; Codex has no listing, so the model set in its
+// config is offered. Any other name can still be typed in the reader.
+export function parseAgyModels(out) {
+  return out.split('\n').map(l => l.match(/^([\w.:/-]+)\t(.+)$/)).filter(Boolean).map(m => ({ id: m[1], label: m[2].trim() }));
+}
+const CLAUDE_MODELS = [{ id: 'opus', label: 'Opus (latest)' }, { id: 'sonnet', label: 'Sonnet (latest)' }, { id: 'haiku', label: 'Haiku (latest)' }];
+async function listModels(provider, binary, home = homedir()) {
+  if (provider === 'claude') return CLAUDE_MODELS;
+  if (provider === 'codex') {
+    const config = await readFile(path.join(home, '.codex', 'config.toml'), 'utf8').catch(() => '');
+    const model = config.match(/^model\s*=\s*"([\w.:/-]+)"/m)?.[1];
+    return model ? [{ id: model, label: `${model} (from Codex settings)` }] : [];
+  }
+  if (provider === 'antigravity') {
+    return new Promise(resolve => execFile(binary, ['models'], { timeout: 30000, env: { ...process.env, NO_COLOR: '1' } }, (_e, stdout = '') => resolve(parseAgyModels(stdout))));
+  }
+  return [];
+}
+
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
 
 export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
@@ -63,11 +83,22 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   // carries a tag so Stop cancels only its own.
   const running = new Map();
   const children = owner => running.get(owner) || running.set(owner, new Set()).get(owner);
+  const models = new Map();
   return {
     tools: async () => (found ||= await tools()),
     async providers() {
       found ||= await tools();
       return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));
+    },
+    // The models a tool offers; an empty list when it is missing or says nothing.
+    async models(provider) {
+      if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
+      found ||= await tools();
+      if (!found[provider]) return [];
+      if (!models.has(provider)) models.set(provider, listModels(provider, found[provider]));
+      const list = await models.get(provider);
+      if (!list.length) models.delete(provider);
+      return list;
     },
     cancel(owner, tag = '') {
       for (const r of running.get(owner) || []) if (!tag || r.tag === tag) { r.cancelled = true; r.child?.kill('SIGTERM'); }

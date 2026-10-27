@@ -529,7 +529,7 @@
           </div>
         </aside>
         <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
-          <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div>
+          <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><select id="chatModel" data-native aria-label="Model" title="Model"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div><input id="chatModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
           <div class="chat-context">
             <label><input id="chatPage" type="checkbox" checked /> This page</label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
@@ -637,7 +637,8 @@
     <label><input type="radio" name="studyScope" value="all" /> Whole note</label>
   </fieldset>
   <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
-  <label class="ocr-languages">Model <span class="muted">(optional; the tool's default when empty)</span><input id="studyModel" type="text" autocomplete="off" placeholder="e.g. sonnet, gemini-3-pro, gpt-6-mini" /></label>
+  <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
+  <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
   <div class="study-row">
     <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>2</option><option selected>4</option><option>6</option><option>10</option></select></label>
     <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>

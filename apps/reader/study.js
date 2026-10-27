@@ -4,6 +4,7 @@
 // and exported to Anki's text import.
 import { pagesContext, jsonFrom } from './ai-context.js';
 import { quizPrompt, prepareQuestions, DEFAULT_QUIZ_PROMPT } from './quiz.js';
+import { modelPicker } from './model-picker.js';
 
 const $ = id => document.getElementById(id);
 const BATCH = 6, PARALLEL = 3;
@@ -54,16 +55,18 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
   const savedDecks = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
+  const model = ai ? modelPicker($('studyModel'), $('studyModelOther'), ai) : null;
   async function fillProviders() {
     const select = $('studyProvider');
-    if (select.options.length) return;
+    if (select.options.length) return model.load(select.value);
     const providers = await ai.providers();
     for (const p of providers) select.add(new Option(p.available ? p.label : `${p.label} (not installed)`, p.id, false, false));
     const first = providers.find(p => p.available);
     let saved = '';
     try { saved = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
     select.value = providers.some(p => p.id === saved && p.available) ? saved : first?.id || providers[0]?.id;
-    try { $('studyModel').value = localStorage.getItem('notecomplete-ai-model') || ''; } catch { /* Optional. */ }
+    select.onchange = () => model.load(select.value);
+    await model.load(select.value);
   }
   function unavailable() {
     status('Flashcards, quizzes and chat use AI tools installed on your computer (Claude Code, Antigravity or Codex) and are available in the desktop app.', true);
@@ -92,9 +95,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   }
   $('studyGo').onclick = () => {
     if (jobs.busy('ai')) return;
-    const provider = $('studyProvider').value, model = $('studyModel').value.trim();
+    const provider = $('studyProvider').value, chosen = model.value;
     const providerName = $('studyProvider').selectedOptions[0].textContent;
-    try { localStorage.setItem('notecomplete-ai-provider', provider); localStorage.setItem('notecomplete-ai-model', model); } catch { /* Optional. */ }
+    try { localStorage.setItem('notecomplete-ai-provider', provider); localStorage.setItem('notecomplete-ai-model:' + provider, chosen); } catch { /* Optional. */ }
     const pages = chosenPages(), title = documentInfo().title, kind = mode;
     const amount = $('studyAmount').value, language = $('studyLanguage').value;
     const batches = [];
@@ -114,7 +117,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
             const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: () => job.prepared(++prepared) });
             if (cancelled) return;
             job.asking(b, providerName);
-            const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}`, tag: 'study' });
+            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}`, tag: 'study' });
             if (cancelled) return;
             const parsed = jsonFrom(text);
             answers[b] = kind === 'cards' ? cleanCards(parsed) : prepareQuestions(parsed, batch);

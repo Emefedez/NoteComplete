@@ -1481,3 +1481,9 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 #drawingOptions.texting > [data-for="width"], #drawingOptions.texting > #width { display: none !important; }
 .text-bold { width: 30px; min-height: 28px; padding: 0; font-weight: 700; font-family: Georgia, serif; }
 .text-bold[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* Model choice: a dropdown; "Other…" reveals a box for a name typed by hand. */
+#chatModel { max-width: 150px; }
+.chat-panel .model-other { margin: 0 10px 6px; }
+.model-other { box-sizing: border-box; width: 100%; }
+.chat-head strong { white-space: nowrap; }

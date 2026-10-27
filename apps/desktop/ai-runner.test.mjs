@@ -54,3 +54,12 @@ test('requests run side by side and Stop cancels only its own tag', async () => 
   assert.ok(Date.now() - started < 1500, 'requests ran in parallel');
   await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x', tag: 'a b' }), /Invalid request tag/);
 });
+
+test('Antigravity model listing is parsed into ids and labels', async () => {
+  const { parseAgyModels } = await import('./ai-runner.js');
+  assert.deepEqual(parseAgyModels('Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n'),
+    [{ id: 'gemini-4-argon-high', label: 'Gemini 4 Argon (High)' }, { id: 'claude-opus-5-5-low', label: 'Claude Opus 5.5 (Low)' }]);
+  const runner = aiRunner({ tools: async () => ({ claude: '/bin/true', antigravity: null, codex: null }) });
+  assert.equal((await runner.models('claude'))[0].id, 'opus');
+  assert.deepEqual(await runner.models('antigravity'), []);
+});

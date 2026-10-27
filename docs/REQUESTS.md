@@ -99,6 +99,9 @@ The owner's requests from the latest review, in one place, with how each was che
 - ⏳ **Tabs in one window**: several notes open as tabs in the top bar, scrolling sideways when there are many, with a + button to open another note (close, reorder and similar).
 - ✅ **Resize a page** (Pages → Page size…), PDF or not: add writing space on the right (half or full width) or below, a standard size (A4, Letter, slides), the original size, or a custom size in mm. Writing stays where it is; the PDF keeps its size and place unless you tick "Scale the PDF to fill the new size" (then it fills the page as far as its proportions allow, centred). One undo step; saved in the project; native export writes the size and the PDF rectangle the way Noteful's own widened pages do. *Core test: resize, insert + resize, PDF fit, project, export → reopen with the same sizes and PDF rectangles, undo; browser test on the Examen PDF page.*
 
+## Sixth round
+- ✅ **Model dropdown** for Ask AI and Study instead of a text box: "Tool default", the models the chosen tool offers, and "Other…" for any name. Antigravity's list comes from the tool itself (`agy models`), so the chat and flashcards can use Google's models (Gemini 4 Argon, Gemini 3.8 Flash) as well as Claude and GPT-OSS through it; Claude Code offers Opus, Sonnet and Haiku; Codex offers the model in its settings. The choice is remembered per tool. Also fixed: opening Ask AI failed before the tool list was filled (a tool that is not installed made it throw). *Browser test with a fake bridge; the real lists were read from the installed tools.*
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.

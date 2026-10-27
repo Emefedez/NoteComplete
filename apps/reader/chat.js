@@ -3,6 +3,7 @@
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
 import { canvasImage, textBlock } from './ai-context.js';
+import { modelPicker } from './model-picker.js';
 
 const $ = id => document.getElementById(id);
 
@@ -27,6 +28,7 @@ export function renderAnswer(text) {
 
 export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers }) {
   let history = [], busy = false, attachments = [];
+  const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   function add(role, content, note = '') {
     const item = document.createElement('li');
     item.className = `chat-${role}`;
@@ -44,8 +46,13 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     }
     const select = $('chatProvider');
     if (!select.options.length) {
-      for (const p of await providers()) select.add(new Option(p.label, p.id, false, false)).disabled = !p.available;
+      for (const p of await providers()) {
+        const option = new Option(p.available ? p.label : `${p.label} (not installed)`, p.id);
+        option.disabled = !p.available;
+        select.add(option);
+      }
       try { select.value = localStorage.getItem('notecomplete-ai-provider') || select.querySelector('option:not([disabled])')?.value; } catch { /* Optional. */ }
+      model.load(select.value);
     }
     $('chatNoteLabel').hidden = !notePath() || select.value === 'antigravity';
     $('chatPanel').hidden = false;
@@ -119,7 +126,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
       const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
-      const { text } = await ai.run({ provider: $('chatProvider').value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' });
+      const { text } = await ai.run({ provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' });
       history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });
       waiting.replaceChildren(renderAnswer(text));
     } catch (error) {
@@ -138,6 +145,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath() || $('chatProvider').value === 'antigravity';
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
+    model.load($('chatProvider').value);
   };
   return {
     attach,

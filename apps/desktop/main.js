@@ -75,6 +75,7 @@ app.whenReady().then(() => {
   const bundled = app.isPackaged ? path.join(process.resourcesPath, 'noteful') : fileURLToPath(new URL('../../target/release/noteful', import.meta.url));
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
+  ipcMain.handle('ai:models', guarded((_event, provider) => ai.models(String(provider))));
   ipcMain.handle('ai:run', guarded((event, request) => ai.run(event.sender.id, request)));
   ipcMain.on('ai:cancel', (event, tag) => { if (trusted(event)) ai.cancel(event.sender.id, typeof tag === 'string' ? tag : ''); });
   // Other transcription backends; pieces stream back to the reader as they finish.
