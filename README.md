@@ -1,97 +1,73 @@
 # NoteComplete
 
-*a RE noteful viewer*
+**Your Noteful notebooks on the desktop, no Mac required.**
 
-A local-first reader and editor for Noteful notes, powered by a portable Rust core. The web app runs in desktop and mobile browsers. Expo Go provides the Android/iOS development entry point using the same reader.
+NoteComplete is an independent desktop and web companion for people who take notes in [Noteful](https://noteful.app) on an iPad. It opens `.noteful` notebooks on Linux, Windows, macOS, in a browser or on Android, so you can read, review and tidy up your notes from your computer while the iPad stays your notebook.
 
-Read embedded PDF pages, images, ink, text and synchronized audio; draw, highlight, erase, edit object geometry/style, manage layers and save projects. Native `.noteful` export is experimental: modified files have not yet been validated in official Noteful. No fixed note-size or note-count cap is imposed.
+> NoteComplete is not affiliated with or endorsed by Noteful. It reads the format through independent reverse engineering; see [How it reads Noteful files](#how-it-reads-noteful-files).
 
-## Run the web reader
+## What it does
 
-Requirements: Rust 1.93+, Node 22.13+ and Python 3.11+. Install the WASM target and a wasm-bindgen CLI matching `Cargo.lock`:
+- **Read everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images, typed text and recordings, including pages widened beyond their PDF and notebooks of hundreds of pages and recordings.
+- **Your Google Drive library on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook.
+- **Notes kept on this device**: opened notes are saved to a downloads folder you choose and reused until Drive has a newer version. Recent notes open instantly, even offline.
+- **Fix things up**: pen, highlighter, eraser, shapes and images; move, resize and restyle existing items; layers; undo/redo. Edits are non-destructive: the original file is never changed.
+- **Listen along**: play recordings with handwriting that appears as it was written, seek by tapping ink, and transcribe on-device with Whisper.
+- **Feels like a desktop app**: a native-style File / Edit / View menubar that shrinks while you scroll, and a <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> command search (“page 12”, “export”, “highlight”).
+- **Private by default**: everything is processed locally. Drive access is read-only; nothing is uploaded.
+
+Coming next: text search across PDF text, on-demand handwriting OCR and transcripts; inserting pages with custom sizes or PDFs; flashcards and quizzes generated with your own Claude Code / Antigravity / Codex subscription; an MCP server for AI agents. See [next steps](DEVELOPMENT.md#next-steps).
+
+## Get it
+
+**Installers.** Tagged releases attach a Linux AppImage, macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview. Builds are unsigned previews; see [builds](docs/BUILDS.md).
+
+**Browser.** Build and serve the web app (below), then open it in any modern browser. It also installs as a PWA.
+
+### Getting notes from the iPad
+
+1. In Noteful, back up or export your notebooks to a Google Drive folder (or copy `.noteful` files to your computer any other way).
+2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local `.noteful`, `.nfedit`, PDF or image.
+3. Save your work with **File → Save project** (`.nfedit`, keeps the original plus your edits) or export a `.noteful` with **File → Export** (experimental: modified exports have not yet been verified in Noteful itself).
+
+Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
+
+## Build from source
+
+Requirements: Rust 1.93+, Node 22.13+ and Python 3.11+.
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.128 --locked --root work/wasm-tools
 python3 tools/build_web.py
-node tools/serve_web.mjs 8767
+node tools/serve_web.mjs 8767          # http://127.0.0.1:8767/
 ```
 
-Open [localhost:8767](http://127.0.0.1:8767/) and choose **Open document**. Files are processed in the browser. No Noteful installation or decoding server is needed. The build stages WASM and PDF.js in `apps/reader/`; serve that directory with a static HTTP server. Original test notes are not copied into the app.
+Desktop: `cd apps/desktop && npm ci && npm run stage && npm start` (or `npm run dist` for a package). Mobile (Expo Go, SDK 57): `cd apps/mobile && npm ci && npm start`. Package workflows and signing limits: [builds](docs/BUILDS.md).
 
-## Google Drive
-
-Browse your Noteful folder and download selected files with read-only Google Drive access in the web reader and installed Android/desktop builds. Configure the appropriate Google OAuth client for each platform. See [setup and platform support](docs/GOOGLE_DRIVE.md). No changes are uploaded back to Drive.
-
-## Reader settings
-
-Open the hamburger menu → **Display quality** for Performance, Balanced or Sharp presets and sliders for PDF resolution, pixel budget, contrast and brightness. Settings stay on this device. Use Balanced first; Performance reduces memory use on phones.
-
-The collapsible transcript supports on-device Whisper Tiny, Base and Small, language selection, gain, voice filtering and timed word/ink navigation. See the [user guide](docs/USER_GUIDE.md) for imports, audio, quality settings and exports.
-
-## Expo Go
-
-After building the web reader:
+Checks:
 
 ```sh
-cd apps/mobile
-npm ci
-npm start
+cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+node --test apps/reader/*.test.mjs apps/mobile/*.test.mjs apps/desktop/*.test.mjs tools/*.test.mjs
+node apps/reader/test.mjs              # after a web build
 ```
 
-Use Expo Go compatible with SDK 57 and scan the QR on the same Wi-Fi. The command owns both Metro and the LAN reader server; Ctrl-C stops both. See [mobile setup and Android file opening](docs/USER_GUIDE.md#mobile-and-android-file-opening).
+## How it reads Noteful files
 
-## Installable packages
+Noteful's format is undocumented. NoteComplete's Rust core comes from the [noteful-re](https://github.com/Emefedez/noteful-re) reverse-engineering project, which holds the evidence corpus, the independent Python oracle, the [format specification](spec/noteful-v0.1.md) and parity checks. A short writeup of how the format was worked out will be published there.
 
-GitHub Actions workflows build Android APK previews and desktop packages: Linux AppImage, macOS DMG/ZIP (Apple Silicon and Intel), and Windows installers. Run them manually from **Actions** for artifacts, or push a `v*` tag to build all platforms and attach installers plus checksums to a GitHub prerelease. See [build instructions](docs/BUILDS.md) for artifacts, Android's required hosted-reader URL, and signing limitations.
-
-## Documentation
-
-- [User guide](docs/USER_GUIDE.md): controls, files, playback, exports and mobile setup.
-- [Research provenance and history](docs/RESEARCH_HISTORY.md): your starting RE work, supplied material, how Codex used it, and derived findings.
-- [Development](DEVELOPMENT.md): current architecture, evidence-to-implementation procedure, tools and remaining validation.
-- [Builds](docs/BUILDS.md): package workflows, artifacts, configuration and signing limits.
-- [Native format](spec/noteful-v0.1.md): observed byte grammar, objects, text, audio and rendering semantics.
-- [Project format and native writer](spec/nfedit-v1.md): edit history, validation and export behavior.
+Related work: [noteful-mcp](https://github.com/openninoor/noteful-mcp) (MIT) independently reads and writes Noteful notebooks for AI agents.
 
 ## Repository
 
 | Directory | Purpose |
 |---|---|
-| `crates/` | Rust core, CLI and WASM adapter |
-| `apps/reader/`, `apps/mobile/`, `apps/desktop/` | Browser UI, Expo wrapper and Electron desktop shell |
-| `samples/` | One unchanged corpus: ten native notes, 204 pages, one independent PDF reference; hashes in `manifest.json` |
-| `tests/` | Python regressions and explicitly synthetic fixtures |
-| `research/python/`, `research/legacy-viewer/` | Preserved independent oracle and historical comparison UI |
-| `research/ghidra/`, `research/evidence/` | Static-analysis scripts and small retained evidence baselines |
-| `tools/` | Build, serve, fixture generation and evidence checks |
-| `work/` | Ignored reports, optional galleries, extracted blocks and local tooling |
+| `apps/reader/` | The NoteComplete app (web, and the UI of every build) |
+| `apps/desktop/`, `apps/mobile/` | Electron desktop shell and Expo wrapper |
+| `crates/` | Rust core (format, scene, editing, export), CLI and WASM adapter |
+| `docs/` | User guide, Google Drive, builds, release notes |
+| `spec/`, `research/`, `samples/`, `tests/`, `tools/` | Format research, evidence corpus and checks shared with noteful-re |
 
-The corpus is required by tests; it is not a demo bundle. Generated WASM/vendor files and installed dependencies are ignored. Large process extractions and caches are not versioned.
-
-## Validate
-
-```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-python3 -m unittest discover -s tests -v
-python3 tools/check_rust_parity.py
-python3 tools/check_scene_parity.py
-python3 tools/check_export.py
-node apps/reader/test.mjs
-node --test apps/reader/*.test.mjs apps/mobile/*.test.mjs apps/desktop/*.test.mjs tools/*.test.mjs
-```
-
-WASM runtime tests require the web build above. Python checks write current reports under `work/reports/`. In `apps/mobile`, run `npm run check`, `npm test` and `npm run export`. CI runs desktop conformance, Android/iOS core target checks, WASM execution and Expo bundling. Device execution remains separate from compilation.
-
-## CLI
-
-```sh
-cargo run -p noteful-cli -- inspect 'samples/Practice book (vol. 1).noteful'
-cargo run -p noteful-cli -- verify 'samples/Examen wuolah.noteful'
-cargo run -p noteful-cli -- render 'samples/texto.noteful' > scene.json
-cargo run -p noteful-cli -- export project.nfedit > edited.noteful
-```
-
-`render` emits SVG with PDF descriptors for the host adapter. `verify` checks binary round-trip, not complete visual equivalence. Export writes binary bytes to stdout; use a new filename.
+Development procedure and architecture: [DEVELOPMENT.md](DEVELOPMENT.md).
