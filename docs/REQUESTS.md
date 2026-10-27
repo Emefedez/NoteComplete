@@ -156,6 +156,31 @@ The owner's requests from the latest review, in one place, with how each was che
 - [!] **Floating windows** (Ask AI, audio, quiz, flashcards): drag them anywhere by their head, resize them from any edge or corner (a mark shows the bottom-right one), and they stay inside the work area so the head and × are always reachable. The head has _ □ ×: _ puts the window in the tray at the bottom left (a pill with an arrow listing what is put away; choosing one brings it back in place), □ makes it small (head only) or large again, × closes. Place and size are remembered per window. A narrow Ask AI window used to push its × out of sight: its head now squeezes the selects instead. *Browser test (dark): drag, corner resize, pushed past edges and grown past the area with × still clickable, tray with two windows, restore one, close takes it off the tray.* Not yet tried in the real app.
 - [D] **Export as PDF and as images**: File → Pages as SVG · PDF · IMG. PDF holds every page as shown, each at its own size, made in the background with Stop (pages drawn here, bound by the Rust core with pdf-writer); IMG opens JPEG / WebP / PNG for the current page. *Browser test: 3-page A4 PDF (1.3 MB, title set), WebP page 160 KB; Rust tests for the PDF binder.*
 
+## Future: file formats and repositories (agreed, not started)
+
+Owner's idea (2026-10-28), with corrections and additions agreed in review.
+
+- [ ] **Three formats, chosen when saving.** The first Save or Export asks which one and remembers it (NoteComplete by default); Save as… switches. Not asked on every new file.
+  - **Noteful (.noteful)**: maximum compatibility with the official app. Markdown and study material stay outside (or are lost), and the app says so.
+  - **NotePartial (.ntpartial)**: today's archive renamed: the original .noteful plus the Markdown notes. The bridge for people who still open the notebook in Noteful.
+  - **NoteComplete (.notecomplete), recommended**: a clean open format, easy to extract and to read with other tools.
+- [ ] **Keep opening what exists.** Today's .notecomp and .notecomplete archives keep opening forever: they are recognized by content, not extension, and read as NotePartial. Nothing a user saved stops opening.
+- [ ] **NoteComplete as an open, documented package.** A ZIP (not tar: every system opens ZIP and single files can be read without unpacking the rest, like .docx/.epub) holding:
+  - `manifest.json`: format version, title, page list and sizes, layers, where everything is;
+  - `pages/NNN.json`: each page's ink, shapes, text and images in a documented JSON schema (in `spec/`), plus `pages/NNN.svg` as a preview any viewer can show;
+  - `resources/`: original PDFs, images and audio, as they are;
+  - `notes.md`: the Markdown notes;
+  - `study/`: flashcard decks, quizzes, corrections and saved AI explanations (today they live in the app's storage, so sharing a note loses them);
+  - optionally `original.noteful`, so going back to Noteful is lossless for unchanged notes.
+- [ ] **Converters.** Noteful → NoteComplete (one way, straightforward from the core's model). NoteComplete → Noteful is also feasible for everything Noteful can show, since the core already writes `.noteful` exports for edited notes; only what Noteful cannot represent (Markdown, study material) is dropped, with a warning.
+- [ ] **Repositories as a library source.** GitHub repositories with notes, files and solved exams, browsed from Home like Google Drive:
+  - an index `notecomplete.json` at the repository root lists subjects, notes and solved exams, with titles and tags (so the app need not crawl the tree);
+  - public repositories without an account; private ones with a token (device sign-in) or the user's own `gh`;
+  - read-only first; contributing back (fork + pull request) later;
+  - large notes: GitHub refuses files over 100 MB (Memoria 1 is 259 MB), so repositories need Git LFS or release assets for those; the app should read both;
+  - downloaded files cached and reused like Drive copies.
+- [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way.
+
 ## Home filters
 - [D] Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - [D] Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.
