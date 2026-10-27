@@ -309,8 +309,7 @@ main {
   margin: 0 0 20px;
 }
 #empty button {
-  min-height: 42px;
-  padding-inline: 22px;
+  padding-inline: 12px;
 }
 #empty .supported-formats {
   margin: 18px 0 6px;
@@ -623,7 +622,7 @@ h2 {
   accent-color: var(--accent);
 }
 .layer button {
-  min-height: 34px;
+  min-height: var(--control);
   padding: 4px 6px;
   font-size: 12px;
 }
@@ -650,7 +649,7 @@ input[type="checkbox"] {
 }
 #selectionFields input[type="number"] {
   width: 65px;
-  min-height: 34px;
+  min-height: var(--control);
   padding: 4px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1028,7 +1027,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 #empty .home-head h2 { font-size: 24px; margin: 0 0 4px; }
 #empty .home-head p { margin: 0; line-height: 1.5; }
 .home-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-#empty .home-actions button { min-height: 38px; padding-inline: 16px; }
+#empty .home-actions button { padding-inline: 12px; }
 .home-section { max-width: 1240px; margin: 22px auto 0; }
 .home-section h3 { font-size: 15px; margin: 0; }
 #recentTitle { margin-bottom: 12px; }
@@ -1478,7 +1477,7 @@ header.chrome.command-bar { position: relative; z-index: 40; }
 
 /* Home: cards with covers, or a quick list that reads nothing from the files. */
 .home-view { align-self: center; display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--line); border-radius: 7px; }
-#empty .home-view button { min-height: 24px; width: 28px; padding: 0; border-radius: 5px; color: var(--muted); }
+#empty .home-view button { min-height: 24px; width: 28px; padding: 0; border-radius: var(--radius); color: var(--muted); }
 .home-view button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 #empty .home-view button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
 body.home-list .note-grid { grid-template-columns: 1fr; gap: 4px; }
@@ -1544,9 +1543,10 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .tab-strip { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
 .tab-strip::-webkit-scrollbar { display: none; }
 .tab-strip[hidden] { display: none; }
-.tab { flex: 0 1 180px; display: flex; align-items: center; gap: 2px; min-width: 120px; height: 26px; padding: 0 2px 0 10px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); cursor: default; user-select: none; }
+.tab { flex: 0 1 180px; display: flex; align-items: center; gap: 2px; min-width: 120px; height: 26px; padding: 0 2px 0 10px; border: 1px solid transparent; border-radius: var(--radius); color: var(--muted); cursor: default; user-select: none; }
 .tab:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .tab.current { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: 0 1px 2px #0001; }
+.tab.detaching { opacity: .5; outline: 1px dashed var(--accent); outline-offset: -1px; }
 .tab-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .tab.current .tab-label { font-weight: 600; }
 .tab.dirty .tab-label::before { content: "● "; color: var(--accent); font-size: 9px; vertical-align: 1px; }

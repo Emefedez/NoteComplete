@@ -3,17 +3,24 @@
 // reported when it is dropped. A press without a drag stays a normal click.
 const THRESHOLD = 6;
 
+// A drag counts as pulled out of the row once the pointer is this far above or
+// below it, or out of the window.
+const DETACH = 48;
+export function pulledOut({ x, y }, row, view) {
+  return y < row.top - DETACH || y > row.bottom + DETACH || x < 0 || y < 0 || x > view.width || y > view.height;
+}
+
 // Where an item at `x` (its centre) belongs among the others' centres.
 export function slotFor(x, centres) {
   return centres.filter(c => c < x).length;
 }
 
-export function sortable(container, { items, key, onReorder, ignore = '' }) {
+export function sortable(container, { items, key, onReorder, onDetach = null, ignore = '' }) {
   container.addEventListener('pointerdown', down => {
     const item = down.target.closest(items);
     if (!item || down.button !== 0 || !container.contains(item) || (ignore && down.target.closest(ignore))) return;
     const startX = down.clientX, pointer = down.pointerId;
-    let dragging = false, grab = 0;
+    let dragging = false, grab = 0, out = false;
     const siblings = () => [...container.querySelectorAll(items)];
     const move = event => {
       if (event.pointerId !== pointer) return;
@@ -24,6 +31,12 @@ export function sortable(container, { items, key, onReorder, ignore = '' }) {
         item.classList.add('dragging');
         container.classList.add('reordering');
         try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
+      }
+      // Pulled out of the row: it will open in a window of its own when dropped.
+      if (onDetach) {
+        out = siblings().length > 1 && pulledOut({ x: event.clientX, y: event.clientY }, container.getBoundingClientRect(), { width: innerWidth, height: innerHeight });
+        item.classList.toggle('detaching', out);
+        if (out) return;
       }
       // Lay the item where its centre now falls, animating the others (FLIP).
       item.style.transform = '';
@@ -54,14 +67,16 @@ export function sortable(container, { items, key, onReorder, ignore = '' }) {
       removeEventListener('pointerup', up);
       removeEventListener('pointercancel', up);
       if (!dragging) return;
-      item.classList.remove('dragging');
+      item.classList.remove('dragging', 'detaching');
       container.classList.remove('reordering');
       item.style.transform = '';
       // The press became a drag: its click must not also choose the item.
       const swallow = e => { e.stopPropagation(); e.preventDefault(); };
       addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => removeEventListener('click', swallow, { capture: true }), 0);
-      if (event.type === 'pointerup') onReorder(siblings().map(key), key(item));
+      if (event.type !== 'pointerup') return;
+      if (out) onDetach(key(item));
+      else onReorder(siblings().map(key), key(item));
     };
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);

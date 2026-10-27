@@ -1,6 +1,7 @@
 // The tab strip in the top bar (desktop app): one tab per open note in this
 // window, + for a new tab, × to close, drag to reorder, the wheel scrolls it
-// sideways. With a single tab the bar shows the note title as before.
+// sideways, and a tab dragged out of the strip opens in a window of its own.
+// With a single tab the bar shows the note title as before.
 import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
@@ -45,7 +46,9 @@ export function tabStrip(bridge, { dirty }) {
     strip.querySelector('.tab.current')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   // Drag a tab along the strip; the others slide aside, and it lands where dropped.
-  sortable(strip, { items: '.tab', ignore: '.tab-close', key: el => Number(el.dataset.id), onReorder: (order, id) => bridge.move(id, order.indexOf(id)) });
+  // Dragged out of the strip, it moves to a new window, note and edits included.
+  sortable(strip, { items: '.tab', ignore: '.tab-close', key: el => Number(el.dataset.id),
+    onReorder: (order, id) => bridge.move(id, order.indexOf(id)), onDetach: id => bridge.detach(id) });
   strip.addEventListener('wheel', event => {
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) { strip.scrollLeft += event.deltaY; event.preventDefault(); }
   }, { passive: false });

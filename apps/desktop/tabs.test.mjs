@@ -29,3 +29,15 @@ test('windows keep their own tabs', () => {
   assert.deepEqual(s.all().map(t => [t.window, t.id]), [[1, 'a'], [2, 'b'], [2, 'c']]);
   assert.equal(s.move('a', 'x'), false);
 });
+
+test('a tab moved to another window keeps its title and becomes active there', () => {
+  const s = tabStore();
+  s.add(1, 'a'); s.add(1, 'b');
+  s.update('b', { title: 'Memoria 1', dirty: true });
+  assert.deepEqual(s.transfer('b', 2), { window: 1, active: 'a', left: 1 });
+  assert.deepEqual(s.list(2), [{ id: 'b', title: 'Memoria 1', dirty: true, active: true }]);
+  assert.deepEqual(s.list(1).map(t => t.id), ['a']);
+  assert.equal(s.windowOf('b'), 2);
+  assert.equal(s.transfer('b', 2), null);
+  assert.equal(s.transfer('x', 3), null);
+});

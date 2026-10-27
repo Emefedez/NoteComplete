@@ -1,4 +1,4 @@
-import { app, BaseWindow, WebContentsView, dialog, net, protocol, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, WebContentsView, dialog, nativeTheme, net, protocol, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -21,6 +21,9 @@ const tabs = tabStore();
 const views = new Map(), windows = new Map();
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
+// The reader's own chrome colour, painted before a tab has drawn anything so
+// new tabs and windows never flash white.
+const backdrop = () => nativeTheme.shouldUseDarkColors ? '#202328' : '#f7f8fa';
 function layout(win) {
   const { width, height } = win.getContentBounds();
   for (const tab of tabs.list(win.id)) views.get(tab.id)?.setBounds({ x: 0, y: 0, width, height });
@@ -42,28 +45,50 @@ function activate(win, id) {
 }
 function openTab(win) {
   const view = new WebContentsView({ webPreferences });
+  view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   contents.on('will-navigate', (event, url) => { if (!url.startsWith(home)) event.preventDefault(); });
   // Tab keys work in every tab; Ctrl+W must close the tab, not the window.
+  // The tab's window is looked up each time: a tab can move to another window.
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
-    const key = input.key.toLowerCase();
+    const key = input.key.toLowerCase(), here = windowOf(contents);
     const step = key === 'tab' ? (input.shift ? -1 : 1) : key === 'pagedown' ? 1 : key === 'pageup' ? -1 : 0;
-    if (key === 't' && !input.shift) openTab(win);
+    if (!here) return;
+    if (key === 't' && !input.shift) openTab(here);
     else if (key === 'w' && !input.shift) requestClose(id);
-    else if (step) activate(win, tabs.neighbour(win.id, step));
+    else if (step) activate(here, tabs.neighbour(here.id, step));
     else return;
     event.preventDefault();
   });
   contents.on('destroyed', () => views.delete(id));
+  // The new tab is shown once it has drawn its page (or after a moment), so
+  // switching never shows an empty frame; the old tab stays up until then.
+  view.setVisible(false);
+  win.contentView.addChildView(view);
+  layout(win);
+  let shown = false;
+  const show = () => { const here = windowOf(contents); if (shown || !here) return; shown = true; activate(here, id); };
+  contents.once('dom-ready', () => setTimeout(show, 30));
+  setTimeout(show, 700);
+  contents.loadURL(home).catch(error => dialog.showErrorBox('Could not open NoteComplete', error.message));
+  return id;
+}
+// A tab dragged out of its strip moves to a new window, still loaded.
+function detachTab(id) {
+  const from = windows.get(tabs.windowOf(id)), view = views.get(id);
+  if (!from || !view || tabs.list(from.id).length < 2) return false;
+  const win = createWindow({ tab: false });
+  from.contentView.removeChildView(view);
+  const result = tabs.transfer(id, win.id);
   win.contentView.addChildView(view);
   layout(win);
   activate(win, id);
-  contents.loadURL(home).catch(error => dialog.showErrorBox('Could not open NoteComplete', error.message));
-  return id;
+  activate(from, result.active);
+  return true;
 }
 // Closing asks the reader first (it confirms unsaved changes itself).
 function requestClose(id) {
@@ -85,8 +110,8 @@ function closeTab(id) {
     win.close();
   } else activate(win, result.active);
 }
-function createWindow() {
-  const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480,
+function createWindow({ tab = true } = {}) {
+  const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480, backgroundColor: backdrop(),
     // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
     title: 'NoteComplete', autoHideMenuBar: true });
   // The id is read once: in 'closed' the window is already destroyed and win.id throws.
@@ -111,22 +136,17 @@ function createWindow() {
     }
     windows.delete(id);
   });
-  openTab(win);
+  if (tab) openTab(win);
   return win;
 }
-const focusedWindow = () => BaseWindow.getFocusedWindow() ?? [...windows.values()].at(-1);
 // One process per profile: a second launch would find IndexedDB and Local Storage
 // locked (Recent, decks and settings would come up empty), so it opens a window here.
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
-// A second launch opens a tab in the window in front.
+// Launching the app again (menu, dock, terminal) opens a new window; Ctrl+T
+// and + make tabs from inside a window.
 app.on('second-instance', () => {
-  if (!app.isReady()) return;
-  const win = focusedWindow();
-  if (!win) return createWindow();
-  if (win.isMinimized()) win.restore();
-  win.focus();
-  openTab(win);
+  if (app.isReady()) createWindow();
 });
 app.whenReady().then(() => {
   if (!primary) return;
@@ -208,6 +228,12 @@ app.whenReady().then(() => {
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
   ipcMain.handle('tabs:close', guarded((event, id) => { if (tabs.windowOf(id) === tabs.windowOf(event.sender.id)) requestClose(id); }));
   ipcMain.handle('tabs:close-self', guarded(event => closeTab(event.sender.id)));
+  ipcMain.handle('tabs:detach', guarded((event, id) => tabs.windowOf(id) === tabs.windowOf(event.sender.id) && detachTab(id)));
+  // Keep the backdrop in step with the system theme.
+  nativeTheme.on('updated', () => {
+    for (const win of windows.values()) win.setBackgroundColor(backdrop());
+    for (const view of views.values()) view.setBackgroundColor(backdrop());
+  });
   ipcMain.handle('tabs:move', guarded((event, id, index) => {
     const win = windowOf(event.sender);
     if (win && tabs.windowOf(id) === win.id && tabs.move(id, index)) broadcast(win);

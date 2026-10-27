@@ -26,6 +26,15 @@ export function tabStore() {
       if (!w.order.length) windows.delete(tab.window);
       return { window: tab.window, active: w.active, left: w.order.length };
     },
+    // Move a tab to another window (dragged out of its strip), made active there.
+    transfer(tabId, windowId) {
+      const tab = tabs.get(tabId);
+      if (!tab || tab.window === windowId) return null;
+      const { title, dirty } = tab, from = this.remove(tabId);
+      this.add(windowId, tabId);
+      Object.assign(tabs.get(tabId), { title, dirty });
+      return from;
+    },
     activate(tabId) {
       const tab = tabs.get(tabId);
       if (!tab) return false;
