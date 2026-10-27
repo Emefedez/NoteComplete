@@ -54,6 +54,16 @@ def main():
     runtime=ROOT/'apps/reader/node_modules/onnxruntime-web/dist'
     for name in ['ort-wasm-simd-threaded.asyncify.mjs','ort-wasm-simd-threaded.asyncify.wasm']:
         shutil.copy2(runtime/name,speech/name)
+    # Text recognition engine, loaded only on request; language data is fetched on first use.
+    ocr=ROOT/'apps/reader/vendor/tesseract'
+    if ocr.exists(): shutil.rmtree(ocr)
+    ocr.mkdir(parents=True,exist_ok=True)
+    tesseract=ROOT/'apps/reader/node_modules/tesseract.js'
+    for name in ['tesseract.esm.min.js','worker.min.js']: shutil.copy2(tesseract/'dist'/name,ocr/name)
+    shutil.copy2(tesseract/'LICENSE.md' if (tesseract/'LICENSE.md').exists() else tesseract/'LICENSE',ocr/'LICENSE')
+    core=ROOT/'apps/reader/node_modules/tesseract.js-core'
+    for name in ['tesseract-core-lstm.wasm.js','tesseract-core-simd-lstm.wasm.js','tesseract-core-relaxedsimd-lstm.wasm.js']: shutil.copy2(core/name,ocr/name)
+    shutil.copy2(core/'LICENSE',ocr/'LICENSE-core')
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))

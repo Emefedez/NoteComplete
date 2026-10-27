@@ -24,6 +24,7 @@ export class AudioController {
  get time(){return this.audio.currentTime||0;}
  tick(now=0){if(!this.lastTick||now-this.lastTick>=50){this.lastTick=now;this.changed();this.transcript?.update();}if(!this.audio.paused)this.frame=requestAnimationFrame(time=>this.tick(time));}
  seek(t){if(this.audio.readyState){this.audio.currentTime=t;this.update();}}
+ label(entry){return recordingName(entry?.recording,Math.max(0,this.entries.indexOf(entry)));}
  async seekRecording(id,time){
   const index=this.entries.findIndex(entry=>entry.recording?.id===id);
   if(index<0||!this.entries[index].asset||!Number.isFinite(time)||time<0)return false;

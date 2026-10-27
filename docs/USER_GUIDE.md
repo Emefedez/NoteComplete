@@ -6,6 +6,12 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
+## Find in a note
+
+**Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
+
+**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
+
 ## Open from Google Drive
 
 Choose **☰ → Google Drive** in the browser or an installed NoteComplete build, connect your account, find the Noteful folder and select a file to download and open. Subfolders, Refresh and paginated listings are supported. Local edits are never uploaded to Drive. Unsaved edits are checked before opening a downloaded document. See [Google Drive setup and platform support](GOOGLE_DRIVE.md).

@@ -120,22 +120,35 @@ export class TranscriptController {
         box.scrollTop += top - box.clientHeight / 2;
     }
   }
-  async start() {
-    if (!this.asset || this.worker) return;
-    const asset = this.asset, generation = ++this.generation;
+  // Cache key for a recording under the current model, language and processing settings.
+  async key(asset, bytes) {
     const language = $('transcriptLanguage').value || '';
     const model = $('transcriptModel').value || 'base';
     const settings = speechSettings();
+    const buffer = bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    // Local-network HTTP readers can run WASM but may lack SubtleCrypto.
+    const digest = globalThis.crypto?.subtle ? await crypto.subtle.digest('SHA-256', buffer) : null;
+    return { buffer, language, model, settings, key: digest ? `whisper-v2:${model}:${language}:${JSON.stringify(settings)}:` + [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('') : null };
+  }
+  // A transcript made earlier with the current settings, without transcribing.
+  async cached(asset) {
+    if (this.results.has(asset.id)) return this.results.get(asset.id);
+    const { key } = await this.key(asset, await this.audio.read(asset.id));
+    const words = key ? await storedTranscript(key) : null;
+    if (words) this.results.set(asset.id, words);
+    return words;
+  }
+  async start() {
+    if (!this.asset || this.worker) return;
+    const asset = this.asset, generation = ++this.generation;
     this.busy(true);
     $('transcriptPanel').open = true;
     this.status('Preparing audio on this device…');
     try {
       const bytes = await this.audio.read(asset.id);
       if (generation !== this.generation) return;
-      const buffer = bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-      // Local-network HTTP readers can run WASM but may lack SubtleCrypto.
-      const digest = globalThis.crypto?.subtle ? await crypto.subtle.digest('SHA-256', buffer) : null;
-      const key = digest ? `whisper-v2:${model}:${language}:${JSON.stringify(settings)}:` + [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('') : null;
+      const { buffer, language, model, settings, key } = await this.key(asset, bytes);
+      if (generation !== this.generation) return;
       const cached = key ? await storedTranscript(key).catch(() => null) : null;
       if (generation !== this.generation) return;
       if (cached) { this.finish(cached, asset); return; }
@@ -178,6 +191,7 @@ export class TranscriptController {
   }
   finish(words, asset) {
     this.results.set(asset.id, words);
+    this.onwords?.(asset, words);
     this.render(words); this.busy(false);
     this.status(words.length ? 'Transcript ready. Click a word to seek. Automatic words and timings may need correction.' : 'No timed speech detected.');
   }

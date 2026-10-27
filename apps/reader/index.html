@@ -38,6 +38,8 @@
           <button data-proxy="undo">Undo<kbd>Ctrl Z</kbd></button>
           <button data-proxy="redo">Redo<kbd>Ctrl Shift Z</kbd></button>
           <hr />
+          <button id="findOpen" disabled>Find…<kbd>Ctrl F</kbd></button>
+          <hr />
           <button data-proxy-tool="pan" role="menuitemradio">Pan</button>
           <button data-proxy-tool="select" role="menuitemradio">Select</button>
           <button data-proxy-tool="draw" role="menuitemradio">Pen</button>
@@ -66,6 +68,7 @@
         <summary role="menuitem">Pages</summary>
         <div class="menu-content" role="menu">
           <button id="gotoPage" disabled>Go to page…</button>
+          <button id="ocrOpen" disabled>Recognize text (OCR)…</button>
           <hr />
           <button id="insertBlank" disabled>Insert blank page…</button>
           <button id="insertPdf" disabled>Insert PDF pages…</button>
@@ -346,6 +349,18 @@
         </div>
       </div>
       <div class="workspace">
+        <div id="findBar" class="find-bar" role="search" hidden>
+          <div class="find-row">
+            <input id="findInput" type="search" aria-label="Find in note" placeholder="Find in note: text, PDF, OCR, audio" autocomplete="off" />
+            <span id="findCount" class="find-count" aria-live="polite"></span>
+            <button id="findPrev" type="button" aria-label="Previous match" title="Previous match (Shift Enter)" disabled>↑</button>
+            <button id="findNext" type="button" aria-label="Next match" title="Next match (Enter)" disabled>↓</button>
+            <button id="findListToggle" type="button" aria-label="Show all matches" title="Show all matches">☰</button>
+            <button id="findClose" type="button" aria-label="Close find" title="Close (Esc)">×</button>
+          </div>
+          <p id="findProgress" class="find-progress" hidden></p>
+          <ol id="findResults" class="find-results" hidden></ol>
+        </div>
         <aside id="pagesPanel" aria-label="Page navigation">
           <div class="panel-heading">
             <h2>Pages</h2>
@@ -470,6 +485,22 @@
     <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
+</dialog>
+
+<dialog id="ocrDialog" class="ocr-dialog" aria-labelledby="ocrTitle">
+  <h2 id="ocrTitle">Recognize text</h2>
+  <p>Finds handwriting and text in scanned pages so Find can search it. It runs on this device only when you start it; results are kept with this note.</p>
+  <fieldset class="ocr-scope">
+    <legend>Pages</legend>
+    <label><input type="radio" name="ocrScope" value="page" checked /> Current page</label>
+    <label><input type="radio" name="ocrScope" value="range" /> Pages <input id="ocrFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="ocrTo" type="number" min="1" value="1" aria-label="To page" /></label>
+    <label><input type="radio" name="ocrScope" value="all" /> Whole note <span class="muted">(slow on long notes)</span></label>
+  </fieldset>
+  <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
+  <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip pages with PDF text</label>
+  <progress id="ocrProgress" max="1" hidden></progress>
+  <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

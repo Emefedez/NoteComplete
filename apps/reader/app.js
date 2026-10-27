@@ -8,6 +8,7 @@ import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { commandPalette } from "./command-palette.js";
+import { findController, noteFingerprint } from "./find.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -172,6 +173,7 @@ async function load(file) {
   editing = true;
   status("Opening document…");
   try {
+    const fingerprint = noteFingerprint(file).catch(() => "");
     const prepared = await prepareDocument(file);
     const result = await call("open", {
       ...prepared,
@@ -180,6 +182,7 @@ async function load(file) {
     });
     // Both worker and UI retain the previous document until the replacement validates.
     reset();
+    find.reset(await fingerprint);
     const token = ++epoch;
     revision++;
     doc = result;
@@ -547,6 +550,7 @@ async function renderPage(p, provided) {
     p.render = render;
     p.overlay = overlay;
     p.el.replaceChildren(render, overlay);
+    find.paint(p);
     p.pdfReady = !result.pdf_background;
     p.ink = indexTimedInk(render, result.timings);
     for (const item of p.ink) {
@@ -622,16 +626,15 @@ function setPage(index) {
   else renderPage(p);
   updateZoom();
 }
-function jump(index) {
+// With a box (page units) the page scrolls so that box sits in the upper third.
+function jump(index, box) {
   if (!doc || !Number.isInteger(index) || index < 0 || index >= doc.pages)
     return;
   cancelGesture();
   setPage(index);
-  const viewport = $("viewport");
-  viewport.scrollTop +=
-    panels[index].el.getBoundingClientRect().top -
-    viewport.getBoundingClientRect().top -
-    24;
+  const viewport = $("viewport"), rect = panels[index].el.getBoundingClientRect();
+  const within = box ? (box[1] / panels[index].size[1]) * rect.height - viewport.clientHeight / 3 : -24;
+  viewport.scrollTop += rect.top - viewport.getBoundingClientRect().top + Math.max(-24, within);
   status(`Page ${index + 1}.`);
 }
 function scrollViewport(key) {
@@ -1093,6 +1096,11 @@ document.addEventListener("keydown", (e) => {
     openLocal();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f" && doc && $("editor").hidden === false) {
+    e.preventDefault();
+    find.open();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     save(false);
@@ -1372,7 +1380,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -1400,6 +1408,53 @@ for (const menu of document.querySelectorAll("details.bar-menu")) {
   });
 }
 $("gotoPage").onclick = () => palette.open("page ");
+$("findOpen").onclick = () => { showDocument(); find.open(); };
+$("ocrOpen").onclick = () => find.openOcr(page);
+// Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
+async function pageCanvas(index, width = 2200) {
+  const view = await call("view", { page: index });
+  const holder = document.createElement("div");
+  holder.innerHTML = view.svg;
+  const svg = holder.querySelector("svg"), [w, h] = view.size, scale = width / w;
+  if (view.pdf_background) {
+    const place = backgroundPlacement(view.pdf_background, view.size);
+    // rasterTarget renders at twice the requested CSS width.
+    const href = await backgrounds.image(view.pdf_background, view.size, (width * place.share) / 2);
+    svg.querySelector("[data-background]").append(pdfImage(href, place));
+  }
+  const height = Math.round(h * scale);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    return { canvas, scale };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+const find = findController({
+  call,
+  library,
+  backgrounds: () => backgrounds,
+  panels: () => panels,
+  jump,
+  audio,
+  status,
+  pageCanvas,
+  documentInfo: () => ({ pages: doc?.pages || 0 }),
+});
+audio.transcript.onwords = (asset, words) =>
+  find.transcribed(audio.entries.find((entry) => entry.asset?.id === asset.id), words);
 documentControls();
 home.show(false);
 
@@ -1421,6 +1476,8 @@ const palette = commandPalette({
   ],
   dynamic: (query) => {
     const items = [];
+    const phrase = query.trim().match(/^(?:find|buscar)\s+(.+)$/i);
+    if (phrase && doc) items.push({ id: "find", title: `Find “${phrase[1]}” in this note`, group: "Navigate", run: () => { showDocument(); find.find(phrase[1]); } });
     const number = query.trim().match(/^(?:p(?:age|ágina)?\.?\s*|:)?(\d+)$/i);
     if (number && doc) {
       const target = Math.min(doc.pages, Math.max(1, Number(number[1])));

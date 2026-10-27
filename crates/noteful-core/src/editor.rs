@@ -372,7 +372,12 @@ impl Editor {
             .items
             .iter()
             .filter(|i| !deleted.contains(i.id.as_str()))
-            .filter_map(|i| i.text.as_ref())
+            .filter_map(|i| {
+                // Bounds let search highlight typed text like PDF and OCR words.
+                let mut t = serde_json::to_value(i.text.as_ref()?).ok()?;
+                t["bounds"] = json!(i.bounds);
+                Some(t)
+            })
             .collect();
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{content}</svg>");
         Ok(

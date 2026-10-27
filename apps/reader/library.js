@@ -8,9 +8,10 @@
 export function idbStore(name = 'notecomplete-library') {
   let db;
   const open = () => db ||= new Promise((resolve, reject) => {
-    const request = indexedDB.open(name, 1);
+    const request = indexedDB.open(name, 2);
     request.onupgradeneeded = () => {
-      for (const store of ['entries', 'covers', 'settings']) request.result.createObjectStore(store);
+      for (const store of ['entries', 'covers', 'settings', 'search'])
+        if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -31,7 +32,7 @@ export function idbStore(name = 'notecomplete-library') {
 }
 
 export function memoryStore() {
-  const stores = { entries: new Map(), covers: new Map(), settings: new Map() };
+  const stores = { entries: new Map(), covers: new Map(), settings: new Map(), search: new Map() };
   return {
     get: async (store, key) => stores[store].get(key),
     set: async (store, key, value) => { stores[store].set(key, value); },
@@ -161,5 +162,8 @@ export class Library {
   // Covers are keyed by file and version so a changed note gets a new one.
   coverKey(file) { return `${this.key(file)}@${file.modifiedTime || ''}`; }
   cover(key) { return this.store.get('covers', key).catch(() => null); }
+  // Extracted PDF text and OCR results, keyed by a fingerprint of the note's bytes.
+  searchData(fingerprint) { return this.store.get('search', fingerprint).catch(() => null); }
+  saveSearchData(fingerprint, value) { return this.store.set('search', fingerprint, value).catch(() => {}); }
   saveCover(key, url) { return this.store.set('covers', key, url).catch(() => {}); }
 }
