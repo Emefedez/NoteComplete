@@ -29,6 +29,7 @@ import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints } from "./shapes.js";
+import { tabStrip } from "./tab-strip.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 enhanceSelects();
@@ -67,6 +68,7 @@ const busy = () => editing || mutationPending > 0;
 // A floppy disk beside the title: a dot while there are unsaved changes,
 // and a click saves like Ctrl S.
 function savedState() {
+  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: !!doc && dirty });
   const label = dirty ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
   $("saveState").hidden = !doc;
   $("saveState").classList.toggle("dirty", dirty);
@@ -75,6 +77,12 @@ function savedState() {
 }
 $("saveState").onclick = () => $("save").click();
 
+// Desktop tabs: the strip in the top bar; title and unsaved state go to the window.
+const tabBar = tabStrip(window.notecompleteTabs || null, { dirty: () => !!doc && dirty });
+if (window.notecompleteTabs) {
+  $("newTab").hidden = false;
+  $("newTab").onclick = () => window.notecompleteTabs.open();
+}
 const chromeState = new ChromeState();
 let chromeSettling = false;
 let panels = [],
@@ -177,6 +185,7 @@ function reset() {
   $("editor").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
+  tabBar.update({ title: "Home", dirty: false });
   dirty = false;
   documentControls();
   home?.show(false);
@@ -217,6 +226,7 @@ async function load(file) {
     });
     $("title").textContent = result.title || "Untitled note";
     document.title = `${$("title").textContent} — NoteComplete`;
+    tabBar.update({ title: $("title").textContent, dirty });
     showDocument();
     $("pageNumber").max = result.pages;
     documentControls();
@@ -2405,8 +2415,8 @@ const palette = commandPalette({
   ],
   dynamic: (query) => {
     const items = otherWindows
-      .filter((w) => !query.trim() || w.title.toLowerCase().includes(query.trim().toLowerCase()) || "window".startsWith(query.trim().toLowerCase()))
-      .map((w) => ({ id: `window-${w.id}`, title: `Window: ${w.title}`, group: "Windows", run: () => windows.focus(w.id) }));
+      .filter((w) => !query.trim() || w.title.toLowerCase().includes(query.trim().toLowerCase()) || ["tab", "window"].some((k) => k.startsWith(query.trim().toLowerCase())))
+      .map((w) => ({ id: `window-${w.id}`, title: `Tab: ${w.title}`, group: "Open notes", run: () => windows.focus(w.id) }));
     const phrase = query.trim().match(/^(?:find|buscar)\s+(.+)$/i);
     if (phrase && doc) items.push({ id: "find", title: `Find “${phrase[1]}” in this note`, group: "Navigate", run: () => { showDocument(); find.find(phrase[1]); } });
     const number = query.trim().match(/^(?:p(?:age|ágina)?\.?\s*|:)?(\d+)$/i);

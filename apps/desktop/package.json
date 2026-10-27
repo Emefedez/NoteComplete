@@ -30,6 +30,7 @@
       "library-files.js",
       "ai-runner.js",
       "transcriber.js",
+      "tabs.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

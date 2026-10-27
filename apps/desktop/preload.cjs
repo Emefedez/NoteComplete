@@ -13,6 +13,19 @@ contextBridge.exposeInMainWorld('notecompleteWindows', {
   list: () => ipcRenderer.invoke('windows:list'),
   focus: id => ipcRenderer.invoke('windows:focus', id),
 });
+// Tabs in this window: the reader draws the strip and reports its title and
+// unsaved state; closing asks the reader first (onCloseRequest).
+contextBridge.exposeInMainWorld('notecompleteTabs', {
+  list: () => ipcRenderer.invoke('tabs:list'),
+  open: () => ipcRenderer.invoke('tabs:new'),
+  activate: id => ipcRenderer.invoke('tabs:activate', id),
+  close: id => ipcRenderer.invoke('tabs:close', id),
+  closeSelf: () => ipcRenderer.invoke('tabs:close-self'),
+  move: (id, index) => ipcRenderer.invoke('tabs:move', id, index),
+  update: state => ipcRenderer.invoke('tabs:update', { title: String(state?.title ?? ''), dirty: state?.dirty === true }),
+  onList: callback => ipcRenderer.on('tabs:list', (_event, list) => callback(list)),
+  onCloseRequest: callback => ipcRenderer.on('tabs:close-request', () => callback()),
+});
 contextBridge.exposeInMainWorld('notecompleteTranscribe', {
   backends: () => ipcRenderer.invoke('asr:backends'),
   run: (request, onProgress) => {

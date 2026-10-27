@@ -23,6 +23,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="homeButton">Home</button>
           <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
+          <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
           <button id="driveOpen">Google Drive</button>
           <hr />
@@ -107,6 +108,7 @@
     <div class="brand">
       <p id="title">Home</p>
       <button id="saveState" class="save-state" data-icon="save" aria-label="Unsaved changes" title="Unsaved changes" hidden></button>
+      <div id="tabStrip" class="tab-strip" role="tablist" aria-label="Open notes" hidden></div>
     </div>
     <div id="jobArea" class="job-area"></div>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
