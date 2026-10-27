@@ -381,12 +381,19 @@ impl Editor {
                         } else {
                             String::new()
                         },
-                        added_svg(
-                            &adjustments
-                                .get(id.as_str())
-                                .map(|a| crate::manipulation::adjusted_line(line, a))
-                                .unwrap_or_else(|| (*line).clone())
-                        )
+                        {
+                            let svg = added_svg(
+                                &adjustments
+                                    .get(id.as_str())
+                                    .map(|a| crate::manipulation::adjusted_line(line, a))
+                                    .unwrap_or_else(|| (*line).clone()),
+                            );
+                            if line.tool == 2 {
+                                crate::scene::tape_with_pattern(&svg)
+                            } else {
+                                svg
+                            }
+                        }
                     ));
                     added += 1;
                 }
@@ -423,7 +430,12 @@ impl Editor {
                 r
             })
             .collect();
-        let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{content}</svg>");
+        let defs = if content.contains("nc-tape-pattern") {
+            crate::scene::TAPE_DEFS
+        } else {
+            ""
+        };
+        let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
             json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":p.items.iter().filter(|i| i.locked()).map(|i| json!({"id":i.id,"bounds":i.bounds})).collect::<Vec<_>>(),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
         )
@@ -542,6 +554,14 @@ impl Editor {
 
 pub(crate) fn added_svg(line: &Line) -> String {
     let svg = line_svg(&line.points, line.width / 2., &line.rgba);
+    // Tape is a strip: square ends, so a drag can also lay a rectangle.
+    if line.tool == 2 && line.points.len() > 1 {
+        return svg.replacen(
+            "stroke-linecap=\"round\" stroke-linejoin=\"round\"",
+            "stroke-linecap=\"butt\" stroke-linejoin=\"miter\"",
+            1,
+        );
+    }
     if line.tool == 1 {
         format!("<g opacity=\"0.5\" style=\"mix-blend-mode:multiply\">{svg}</g>")
     } else {

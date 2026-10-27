@@ -41,12 +41,14 @@
           <hr />
           <button id="findOpen" disabled>Find…<kbd>Ctrl F</kbd></button>
           <hr />
-          <button data-proxy-tool="pan" role="menuitemradio">Pan</button>
-          <button data-proxy-tool="select" role="menuitemradio">Select</button>
-          <button data-proxy-tool="draw" role="menuitemradio">Pen</button>
-          <button data-proxy-tool="highlight" role="menuitemradio">Highlight</button>
-          <button data-proxy-tool="erase" role="menuitemradio">Erase</button>
-          <button data-proxy-tool="shape" role="menuitemradio">Shapes</button>
+          <button data-proxy-tool="pan" role="menuitemradio">Pan<kbd>V</kbd></button>
+          <button data-proxy-tool="select" role="menuitemradio">Select<kbd>S</kbd></button>
+          <button data-proxy-tool="draw" role="menuitemradio">Pen<kbd>P</kbd></button>
+          <button data-proxy-tool="highlight" role="menuitemradio">Highlight<kbd>H</kbd></button>
+          <button data-proxy-tool="erase" role="menuitemradio">Erase<kbd>E</kbd></button>
+          <button data-proxy-tool="tape" role="menuitemradio">Tape<kbd>T</kbd></button>
+          <button data-proxy-tool="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
+          <button data-proxy-tool="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
           <hr />
           <button data-proxy="importImage">Insert image…</button>
         </div>
@@ -82,9 +84,11 @@
       <details class="menu bar-menu" id="studyMenu">
         <summary role="menuitem">Study</summary>
         <div class="menu-content" role="menu">
-          <button id="studyCards" disabled>Generate flashcards…</button>
-          <button id="studyQuiz" disabled>Quiz me…</button>
-          <button id="studyOpenDeck" disabled>Review a saved deck…</button>
+          <button id="studyCards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
+          <button id="studyQuiz" disabled>Quiz me…<kbd>Shift Q</kbd></button>
+          <button id="studyResume" disabled>Resume quiz<kbd>Q</kbd></button>
+          <button id="studyRetake" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
+          <button id="studyOpenDeck" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
           <hr />
           <button id="chatOpen" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
         </div>
@@ -93,6 +97,7 @@
         <summary role="menuitem">Help</summary>
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
+          <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
         </div>
       </details>
     </nav>
@@ -100,6 +105,8 @@
       <p id="title">Home</p>
       <span id="saveState" hidden>Unsaved changes</span>
     </div>
+    <div id="jobChip" class="job-chip" role="status" hidden><span id="jobLabel"></span><span class="job-track"><span id="jobBar"></span></span><button id="jobStop" type="button" title="Stop">Stop</button></div>
+    <button id="jobReady" class="job-ready" type="button" hidden></button>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
     <div hidden>
@@ -188,6 +195,8 @@
             <span class="tool-name">Erase</span></button
           ><button data-tool="tape" aria-pressed="false">
             <span class="tool-name">Tape</span></button
+          ><button data-tool="grab" aria-pressed="false">
+            <span class="tool-name">Grab</span></button
           ><button data-tool="shape" aria-pressed="false">
             <span class="tool-name">Shapes</span>
           </button>
@@ -313,19 +322,29 @@
                 Insert
               </button>
             </div>
+            <div id="tapeOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="tapeMode" role="radiogroup" aria-label="Tape shape"></div>
+              <select id="tapeMode" data-native hidden aria-label="Tape shape">
+                <option value="band" selected>Strip</option>
+                <option value="box">Rectangle</option>
+              </select>
+            </div>
             <div id="highlightOptions" class="option-group" hidden>
-              <select id="highlightMode" aria-label="Highlighter">
+              <div class="choice-row" data-for="highlightMode" role="radiogroup" aria-label="Highlighter"></div>
+              <select id="highlightMode" data-native hidden aria-label="Highlighter">
                 <option value="straight" selected>Straight</option>
                 <option value="free">Freehand</option>
               </select>
             </div>
-            <label class="color-label"
+            <div class="choice-row swatches" data-for="color" role="radiogroup" aria-label="Color"></div>
+            <label class="color-label" title="Custom color"
               ><input
                 type="color"
                 id="color"
                 value="#246bce"
-                aria-label="Color" /></label
-            ><select id="width" aria-label="Stroke width">
+                aria-label="Custom color" /></label
+            ><div class="choice-row" data-for="width" role="radiogroup" aria-label="Stroke width"></div
+            ><select id="width" data-native hidden aria-label="Stroke width">
               <option value="1">1 pt</option>
               <option value="2" selected>2 pt</option>
               <option value="4">4 pt</option>
@@ -368,7 +387,24 @@
         </div>
       </div>
       <div class="workspace">
+        <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
+        <aside id="quizPanel" class="quiz-panel" aria-label="Quiz" hidden>
+          <div class="quiz-panel-head"><button id="quizMini" type="button" class="quiz-mini" title="Expand quiz (M)"></button><span id="quizPanelProgress" class="muted"></span><button id="quizMinimize" type="button" title="Minimize (M)" aria-label="Minimize">–</button><button id="quizPanelClose" type="button" title="Close; progress is saved" aria-label="Close">×</button></div>
+          <div class="quiz-panel-body">
+            <div id="quizPanelQuestion" class="quiz-question"></div>
+            <div id="quizPanelOptions" class="quiz-options"></div>
+            <div id="quizHint" class="quiz-hint" hidden></div>
+            <p id="quizCorrection" class="quiz-correction" hidden></p>
+            <div id="quizCheckBox" class="quiz-check" hidden>
+              <textarea id="quizCheckText" rows="4" aria-label="Checked answer; you can edit it"></textarea>
+              <div id="quizCheckOptions" class="quiz-check-options" role="radiogroup" aria-label="Correct option"></div>
+              <div class="quiz-actions"><span class="spacer"></span><button id="quizCheckCancel" type="button">Cancel</button><button id="quizCheckSave" type="button" class="primary">Save as correct answer</button></div>
+            </div>
+            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
+          </div>
+        </aside>
         <aside id="chatPanel" class="chat-panel" aria-label="Ask AI" hidden>
+          <div id="chatResize" class="chat-resize" title="Drag to resize" aria-hidden="true"></div>
           <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div>
           <div class="chat-context">
             <label><input id="chatPage" type="checkbox" checked /> This page</label>
@@ -376,6 +412,7 @@
             <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
           </div>
           <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
+          <div id="chatAttachments" class="chat-attachments" hidden></div>
           <form id="chatForm" class="chat-form"><textarea id="chatInput" rows="2" placeholder="Ask about this page, or select something first with Select" aria-label="Question"></textarea><button id="chatSend" type="submit" class="primary">Ask</button><button id="chatStop" type="button" hidden>Stop</button></form>
         </aside>
         <div id="findBar" class="find-bar" role="search" hidden>
@@ -547,9 +584,8 @@
     <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>2</option><option selected>4</option><option>6</option><option>10</option></select></label>
     <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>
   </div>
-  <progress id="studyProgress" max="1" hidden></progress>
   <p id="studyStatus" class="muted" role="status" aria-live="polite"></p>
-  <div class="ocr-actions"><button id="studyStop" type="button" hidden>Stop</button><button id="studyClose" type="button">Close</button><button id="studyGo" type="button" class="primary">Generate</button></div>
+  <div class="ocr-actions"><button id="studyPromptEdit" type="button" hidden>Edit quiz instructions…</button><span class="spacer"></span><button id="studyClose" type="button">Close</button><button id="studyGo" type="button" class="primary">Generate in background</button></div>
 </dialog>
 
 <dialog id="deckDialog" class="deck-dialog" aria-labelledby="deckTitleLabel">
@@ -566,12 +602,11 @@
   </div>
 </dialog>
 
-<dialog id="quizDialog" class="deck-dialog" aria-labelledby="quizQuestion">
-  <p id="quizProgress" class="muted"></p>
-  <p id="quizQuestion" class="practice-front"></p>
-  <div id="quizOptions" class="quiz-options"></div>
-  <p id="quizExplain" class="muted"></p>
-  <div class="ocr-actions"><button id="quizPage" type="button" hidden></button><span class="spacer"></span><button id="quizClose" type="button">Close</button><button id="quizNext" type="button" class="primary" hidden>Next</button></div>
+<dialog id="quizPromptDialog" class="deck-dialog" aria-labelledby="quizPromptTitle">
+  <h2 id="quizPromptTitle">Quiz instructions</h2>
+  <p class="muted">These instructions are sent to your AI tool with the pages. The reply format and the language are added automatically.</p>
+  <textarea id="quizPromptText" class="prompt-text" rows="14" spellcheck="false"></textarea>
+  <div class="ocr-actions"><button id="quizPromptReset" type="button">Restore default</button><span class="spacer"></span><button id="quizPromptCancel" type="button">Cancel</button><button id="quizPromptSave" type="button" class="primary">Save</button></div>
 </dialog>
 
 <dialog id="deckPickerDialog" class="ocr-dialog" aria-label="Saved decks">
@@ -594,6 +629,12 @@
   <progress id="ocrProgress" max="1" hidden></progress>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
+</dialog>
+
+<dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">
+  <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
+  <table class="shortcuts"><tbody id="shortcutsList"></tbody></table>
+  <div class="ocr-actions"><button id="shortcutsClose" type="button" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

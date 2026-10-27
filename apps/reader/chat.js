@@ -26,7 +26,7 @@ export function renderAnswer(text) {
 }
 
 export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers }) {
-  let history = [], busy = false;
+  let history = [], busy = false, attachments = [];
   function add(role, content, note = '') {
     const item = document.createElement('li');
     item.className = `chat-${role}`;
@@ -68,6 +68,25 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     canvas.width = canvas.height = 0;
     return { image: await canvasImage(crop, 'selection', 1200), kind: item.kind };
   }
+  // Images added from the Grab tool or a quiz question, sent with the next question.
+  function attach(url, label) {
+    attachments.push({ url, label });
+    renderAttachments();
+  }
+  function renderAttachments() {
+    $('chatAttachments').hidden = !attachments.length;
+    $('chatAttachments').replaceChildren(...attachments.map((a, i) => {
+      const item = document.createElement('figure'), img = document.createElement('img'), remove = document.createElement('button');
+      img.src = a.url; img.alt = a.label;
+      remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove'; remove.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
+      item.append(img, remove);
+      return item;
+    }));
+  }
+  async function dataUrlImage(url, label) {
+    const blob = await (await fetch(url)).blob();
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), type: blob.type === 'image/png' ? 'image/png' : 'image/jpeg', label };
+  }
   async function ask(question) {
     if (busy || !question.trim()) return;
     busy = true;
@@ -83,6 +102,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         canvas.width = canvas.height = 0;
         context.push(textBlock(page, await pageText(page)));
       }
+      for (const [i, a] of attachments.splice(0).entries()) {
+        images.push(await dataUrlImage(a.url, `region-${i + 1}`));
+        context.push(`The student attached ${a.label} as the image "region-${i + 1}". Focus on it.`);
+      }
+      renderAttachments();
       if ($('chatSelection').checked) {
         const picked = await selectionImage(page);
         if (picked) { images.push(picked.image); context.push(`The student selected a ${picked.kind} on page ${page + 1}; its crop is the image labelled "selection". Focus on it.`); }
@@ -115,5 +139,28 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     $('chatNoteLabel').hidden = !notePath() || $('chatProvider').value === 'antigravity';
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
   };
-  return { open, close, toggle: () => ($('chatPanel').hidden ? open() : close()), get visible() { return !$('chatPanel').hidden; } };
+  // Resize from the panel's left edge; the width is remembered.
+  {
+    const panel = $('chatPanel'), grip = $('chatResize');
+    try { const w = Number(localStorage.getItem('notecomplete-chat-width')); if (w >= 280) panel.style.width = `${w}px`; } catch { /* Optional. */ }
+    grip.onpointerdown = event => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      const right = panel.getBoundingClientRect().right;
+      grip.onpointermove = e => { panel.style.width = `${Math.max(280, Math.min(right - 40, right - e.clientX))}px`; };
+      grip.onpointerup = () => {
+        grip.onpointermove = grip.onpointerup = null;
+        try { localStorage.setItem('notecomplete-chat-width', String(panel.offsetWidth)); } catch { /* Optional. */ }
+      };
+    };
+  }
+  return {
+    attach,
+    async askAbout({ question, image, label = 'a region of the notes' }) {
+      await open();
+      if (image) attach(image, label);
+      $('chatSelection').checked = false;
+      return ask(question);
+    },
+    open, close, toggle: () => ($('chatPanel').hidden ? open() : close()), get visible() { return !$('chatPanel').hidden; } };
 }

@@ -11,6 +11,8 @@ import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController } from "./study.js";
 import { chatController } from "./chat.js";
+import { quizController } from "./quiz.js";
+import { jobChip } from "./jobs.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -725,6 +727,7 @@ $("viewport").onscroll = () => {
 function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
+  $("tapeOptions").hidden = tool !== "tape";
   $("drawingOptions").hidden = tool === "select";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   $("toolOptions").hidden =
@@ -732,6 +735,14 @@ function toolOptions() {
     (!["draw", "highlight", "shape", "tape"].includes(tool) &&
       !(tool === "select" && selection.item));
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
+  syncChoices();
+  if (!$("toolOptions").hidden) {
+    const anchor = document.querySelector(`#toolbar [data-tool="${tool}"]`), bar = $("toolbar").getBoundingClientRect();
+    if (anchor && !matchMedia("(max-width: 700px)").matches) {
+      const left = anchor.getBoundingClientRect().left - bar.left;
+      $("toolOptions").style.left = `${Math.max(8, Math.min(left, bar.width - $("toolOptions").offsetWidth - 8))}px`;
+    }
+  }
   const settingsLabel = $("toolOptions").hidden ? "Show tool settings" : "Hide tool settings";
   $("toolbarToggle").setAttribute("aria-label", settingsLabel);
   $("toolbarToggle").title = settingsLabel;
@@ -943,6 +954,16 @@ function pointerDown(e, p) {
     p.el.setPointerCapture(e.pointerId);
     return;
   }
+  if (tool === "grab") {
+    e.preventDefault();
+    const start = point(e, p), el = document.createElementNS(ns, "rect");
+    el.setAttribute("class", "grab-rect");
+    p.overlay.append(el);
+    $("grabMenu").hidden = true;
+    gesture = { id: e.pointerId, tool, panel: p, start, points: [start], el, dot: document.createElementNS(ns, "g") };
+    p.el.setPointerCapture(e.pointerId);
+    return;
+  }
   const layer = doc.layers.find((l) => l.id === activeLayer);
   if (tool !== "erase" && (!layer?.visible || layer.locked)) {
     status("Select a visible, unlocked layer.", true);
@@ -963,6 +984,7 @@ function pointerDown(e, p) {
     opacity: tool === "erase" ? 0.3 : tool === "highlight" ? 0.5 : tool === "tape" ? 0.85 : 1,
   }))
     el.setAttribute(k, v);
+  if (tool === "tape") el.setAttribute("stroke-linecap", "butt");
   dot.setAttribute("r", width / 2);
   dot.setAttribute("fill", tool === "erase" ? "#ed6b55" : color);
   dot.setAttribute(
@@ -989,6 +1011,11 @@ function pointerDown(e, p) {
 function preview() {
   const g = gesture;
   if (!g || g.tool === "pan") return;
+  if (g.tool === "grab") {
+    const [x, y, w, h] = grabRect(g);
+    for (const [k, v] of Object.entries({ x, y, width: w, height: h })) g.el.setAttribute(k, v);
+    return;
+  }
   g.el.setAttribute("points", g.points.map((p) => p.join(",")).join(" "));
   g.dot.style.display = g.points.length > 1 ? "none" : "";
   g.dot.setAttribute("cx", g.points[0][0]);
@@ -998,6 +1025,13 @@ function appendPoint(e) {
   const g = gesture;
   if (g.tool === "shape") {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
+  } else if (g.tool === "grab") {
+    g.points = [g.start, point(e, g.panel)];
+  } else if (g.tool === "tape" && $("tapeMode").value === "box") {
+    const end = point(e, g.panel), y = (g.start[1] + end[1]) / 2;
+    g.width = Math.max(4, Math.abs(end[1] - g.start[1]));
+    g.points = [[Math.min(g.start[0], end[0]), y], [Math.max(g.start[0], end[0]), y]];
+    g.el.setAttribute("stroke-width", g.width);
   } else if (g.straight) {
     g.points = highlightPoints(g.start, point(e, g.panel));
   } else {
@@ -1035,10 +1069,16 @@ function pointerUp(e) {
   gesture = null;
   g.panel.stale = false;
   g.panel.el.releasePointerCapture(e.pointerId);
+  if (g.tool === "grab") {
+    const rect = grabRect(g);
+    if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); return; }
+    showGrabMenu(g.panel, rect, g.el);
+    return;
+  }
   // Tape tool: a tap lifts or covers the tape under it; a drag lays new tape.
   if (g.tool === "tape") {
-    const [a, b] = [g.start, g.points.at(-1)];
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < g.width / 3) {
+    const [a, b] = [g.start, point(e, g.panel)];
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 8) {
       g.el.remove();
       g.dot.remove();
       const tape = [...(g.panel.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => a[0] >= x && a[0] <= x + w && a[1] >= y && a[1] <= y + h);
@@ -1083,6 +1123,7 @@ for (const button of document.querySelectorAll("[data-tool]"))
     }
     tool = button.dataset.tool;
     if (tool !== "select") selection.clear();
+    if (tool !== "grab") clearGrab();
     chromeState.reset($("viewport").scrollTop);
     setCompact(false);
     for (const p of panels) p.el.dataset.tool = tool;
@@ -1108,6 +1149,8 @@ for (const button of document.querySelectorAll("[data-tool]"))
           ? $("highlightMode").value === "straight"
             ? "Straight highlight: drag between the endpoints."
             : "Freehand highlight: draw on the page."
+          : tool === "grab"
+            ? "Grab: drag a box to copy its text or ask AI about it."
           : tool === "tape"
             ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
           : tool === "erase"
@@ -1127,6 +1170,50 @@ $("highlightMode").onchange = () => {
 };
 $("shape").onchange = () =>
   document.querySelector('[data-tool="shape"]').click();
+// Tool settings are rows of visual choices, like the shapes; hidden selects and
+// the color input stay the data source the drawing code reads.
+const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
+const CHOICE_ICONS = {
+  highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>' },
+  tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
+};
+function buildChoices() {
+  for (const row of document.querySelectorAll(".choice-row[data-for]")) {
+    const id = row.dataset.for, source = $(id);
+    const values = id === "color" ? SWATCHES : [...source.options].map((o) => o.value);
+    row.replaceChildren(...values.map((value) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.value = value;
+      b.setAttribute("role", "radio");
+      if (id === "color") {
+        b.className = "swatch";
+        b.style.setProperty("--swatch", value);
+        b.title = value;
+      } else {
+        const label = source.querySelector(`option[value="${value}"]`).textContent;
+        b.title = label;
+        b.setAttribute("aria-label", label);
+        const line = id === "width" ? `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(1, Number(value) / 3))}"/>` : CHOICE_ICONS[id][value];
+        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${line}</svg>`;
+      }
+      b.onclick = () => {
+        source.value = value;
+        source.dispatchEvent(new Event("change"));
+        syncChoices();
+      };
+      return b;
+    }));
+  }
+}
+function syncChoices() {
+  for (const row of document.querySelectorAll(".choice-row[data-for]")) {
+    const value = $(row.dataset.for).value.toLowerCase();
+    for (const b of row.children) b.setAttribute("aria-checked", String(b.dataset.value.toLowerCase() === value));
+  }
+}
+buildChoices();
+$("color").addEventListener("input", syncChoices);
 // The visible shape row drives the (hidden) select that the drawing code reads.
 function syncShapePicker() {
   for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
@@ -1144,6 +1231,36 @@ $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
 $("zoomIn").onclick = () => stepZoom(1);
 new ResizeObserver(resize).observe($("viewport"));
+// Trackpad pinch (and Ctrl+wheel) zooms towards the pointer. During the gesture
+// only a CSS transform scales the pages; the real zoom, with one re-raster of
+// the visible PDFs, is applied when the gesture pauses.
+let pinch = null;
+$("viewport").addEventListener("wheel", (e) => {
+  if (!e.ctrlKey || !doc) return;
+  e.preventDefault();
+  const viewport = $("viewport"), box = viewport.getBoundingClientRect();
+  if (!pinch) {
+    const base = currentZoom();
+    pinch = { base, scale: 1, x: e.clientX - box.left, y: e.clientY - box.top };
+    pinch.cx = viewport.scrollLeft + pinch.x;
+    pinch.cy = viewport.scrollTop + pinch.y;
+    $("pages").style.transformOrigin = `${pinch.cx}px ${pinch.cy}px`;
+    $("pages").style.willChange = "transform";
+  }
+  const step = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0075));
+  pinch.scale = Math.max(0.1 / pinch.base, Math.min(4 / pinch.base, pinch.scale * step));
+  $("pages").style.transform = `scale(${pinch.scale})`;
+  $("zoomValue").textContent = Math.round(pinch.base * pinch.scale * 100) + "%";
+  clearTimeout(pinch.timer);
+  pinch.timer = setTimeout(() => {
+    const { base, scale, cx, cy, x, y } = pinch;
+    pinch = null;
+    $("pages").style.transform = $("pages").style.transformOrigin = $("pages").style.willChange = "";
+    setZoom(Math.round(base * scale * 1000) / 1000);
+    viewport.scrollLeft = cx * scale - x;
+    viewport.scrollTop = cy * scale - y;
+  }, 160);
+}, { passive: false });
 $("undo").onclick = () => {
   cancelGesture();
   action("undo");
@@ -1152,6 +1269,30 @@ $("redo").onclick = () => {
   cancelGesture();
   action("redo");
 };
+// Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
+const SHORTCUTS = [
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"],
+  ["/", "Find in note"], ["L", "Layers"], ["A", "Audio and transcript"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "This list"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
+  ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
+];
+const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab" };
+function shortcut(e) {
+  const k = e.key;
+  if (k === "?") return $("shortcutsOpen").click(), true;
+  if (!doc) return false;
+  const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
+  if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
+  if (k === "/") return showDocument(), find.open(), true;
+  if (k.toLowerCase() === "l" && !e.shiftKey) return $("layersToggle").click(), true;
+  if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
+  if (k === "q") return resumeQuiz(), true;
+  if (k === "Q") return study.quiz(), true;
+  if (k === "C") return study.cards(), true;
+  if (k === "D") return study.saved(), true;
+  if (k === "W") return showDocument(), quizzes.retakeWrong(), true;
+  return false;
+}
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
@@ -1159,6 +1300,11 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
+  if (document.querySelector("dialog[open]")) return;
+  if (quizzes.key(e)) {
+    e.preventDefault();
+    return;
+  }
   if (e.key === "Escape") {
     cancelGesture();
     setCompact(true);
@@ -1203,6 +1349,10 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
     return;
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && shortcut(e)) {
+    e.preventDefault();
+    return;
+  }
   if (
     !e.target.matches?.("button,[role=option],[data-handle]") &&
     !e.metaKey &&
@@ -1492,7 +1642,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -1520,6 +1670,59 @@ for (const menu of document.querySelectorAll("details.bar-menu")) {
   });
 }
 $("gotoPage").onclick = () => palette.open("page ");
+// Grab tool: a region of a page for the AI chat, or its text for the clipboard.
+function grabRect(g) {
+  const [a, b] = [g.start, g.points.at(-1)];
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])];
+}
+let grabbed = null;
+function showGrabMenu(p, rect, el) {
+  grabbed?.el.remove();
+  grabbed = { page: p.index, rect, el };
+  const box = p.el.getBoundingClientRect(), work = document.querySelector(".workspace").getBoundingClientRect(), k = box.width / p.size[0];
+  const menu = $("grabMenu");
+  menu.hidden = false;
+  menu.style.left = `${Math.max(8, Math.min(work.width - menu.offsetWidth - 8, box.left - work.left + rect[0] * k))}px`;
+  menu.style.top = `${Math.max(8, Math.min(work.height - 44, box.top - work.top + (rect[1] + rect[3]) * k + 8))}px`;
+}
+function clearGrab() {
+  grabbed?.el.remove();
+  grabbed = null;
+  $("grabMenu").hidden = true;
+}
+async function grabImage() {
+  const { page: index, rect: [x, y, w, h] } = grabbed;
+  const { canvas, scale } = await pageCanvas(index, 2200, { liftTape: true });
+  const crop = document.createElement("canvas");
+  crop.width = Math.max(1, Math.round(w * scale));
+  crop.height = Math.max(1, Math.round(h * scale));
+  crop.getContext("2d").drawImage(canvas, x * scale, y * scale, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  canvas.width = canvas.height = 0;
+  return crop.toDataURL("image/jpeg", 0.88);
+}
+$("grabCopy").onclick = async () => {
+  if (!grabbed) return;
+  const text = await find.wordsIn(grabbed.page, grabbed.rect);
+  if (!text) return status("No text there yet. Run Pages → Recognize text (OCR) on this page to copy handwriting.", true);
+  try { await navigator.clipboard.writeText(text); status(`Copied ${text.split(/\s+/).length} words.`); }
+  catch { status("The clipboard is not available here.", true); }
+  clearGrab();
+};
+$("grabAttach").onclick = async () => {
+  if (!grabbed) return;
+  chat.attach(await grabImage(), `a region of page ${grabbed.page + 1}`);
+  await chat.open();
+  clearGrab();
+};
+$("grabAsk").onclick = async () => {
+  if (!grabbed) return;
+  chat.attach(await grabImage(), `a region of page ${grabbed.page + 1}`);
+  await chat.open();
+  $("chatInput").placeholder = "What would you like to know about this region?";
+  $("chatInput").focus();
+  clearGrab();
+};
+$("grabCancel").onclick = clearGrab;
 $("tapeReveal").onclick = () => setTapeMode("revealed");
 $("tapeCover").onclick = () => setTapeMode("covered");
 $("tapeNote").onclick = () => setTapeMode("note");
@@ -1684,14 +1887,66 @@ const studyDeps = {
   notePath: () => notePath,
   status,
 };
+const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
+const jobs = jobChip({ status });
+// Briefly outline the region of a page that answers a quiz question.
+function highlightRegion(index, box) {
+  const p = panels[index];
+  if (!p?.el || !box) return;
+  const [x0, y0, x1, y1] = box, rect = document.createElement("div");
+  rect.className = "region-flash";
+  Object.assign(rect.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
+  p.el.append(rect);
+  setTimeout(() => rect.remove(), 2600);
+}
+const quizzes = quizController({
+  library,
+  key: () => `quizzes:${find.fingerprint || doc?.title || "note"}`,
+  pageCanvas,
+  jump: (p) => { showDocument(); jump(p); },
+  highlight: highlightRegion,
+  clarify: ({ question, image }) => { showDocument(); chat.askAbout({ question, image, label: "the part of the notes that answers the quiz question" }); },
+  status,
+  // Double check: the AI re-reads the region and says which option is right and why.
+  factCheck: async (q, image) => {
+    if (!ai) throw Error("Double check needs the desktop app and an AI tool.");
+    let provider = "claude";
+    try { provider = localStorage.getItem("notecomplete-ai-provider") || provider; } catch { /* Optional. */ }
+    const images = [];
+    if (image) { const blob = await (await fetch(image)).blob(); images.push({ bytes: new Uint8Array(await blob.arrayBuffer()), type: "image/jpeg", label: "notes-region" }); }
+    const { text } = await ai.run({ provider, images, notePath, prompt: `A student disputes a quiz question about their notes${image ? " (the attached image is the region of the notes the quiz cites)" : ""}. Using the notes, decide which option is correct, or say that none is. Write in the question's language.\nQuestion: ${q.question}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}\nReply with ONLY JSON: {"answer": <index of the correct option, or null>, "reason": "two or three sentences that cite the notes"}` });
+    const value = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    return { answer: Number.isInteger(value.answer) ? value.answer : null, reason: String(value.reason || "") };
+  },
+});
 const study = studyController({
   ...studyDeps,
   library,
   fingerprint: () => find.fingerprint,
   jump: (p) => { showDocument(); jump(p); },
   download,
+  jobs,
+  quizzes,
 });
-const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
+// Q resumes the latest unfinished quiz of this note.
+async function resumeQuiz() {
+  if (quizzes.current && !$("quizPanel").hidden) return $("quizPanel").classList.remove("minimized");
+  const open = (await quizzes.list()).find((q) => !q.done) || (await quizzes.list())[0];
+  if (open) { showDocument(); quizzes.open(open); } else study.quiz();
+}
+$("studyResume").onclick = resumeQuiz;
+$("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
+$("shortcutsOpen").onclick = () => {
+  $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
+    const row = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");
+    for (const part of keys.split(" / ")) { const k = document.createElement("kbd"); k.textContent = part; a.append(k, " "); }
+    b.textContent = what;
+    row.append(a, b);
+    return row;
+  }));
+  $("shortcutsDialog").showModal();
+};
+$("shortcutsClose").onclick = () => $("shortcutsDialog").close();
 $("studyCards").onclick = () => study.cards();
 $("studyQuiz").onclick = () => study.quiz();
 $("studyOpenDeck").onclick = () => study.saved();

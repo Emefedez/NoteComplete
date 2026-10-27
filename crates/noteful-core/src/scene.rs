@@ -197,6 +197,13 @@ fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> 
 }
 /// Opacity of tape that has been tapped open.
 pub const TAPE_OPEN: f64 = 0.18;
+/// Washi-tape look: light diagonal stripes drawn over a copy of each tape (class
+/// `nc-tape-pattern`). Page SVGs define it once; the CSS overrides the copy's paint.
+pub(crate) const TAPE_DEFS: &str = "<defs><pattern id=\"ncTape\" width=\"14\" height=\"14\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\"><rect width=\"6\" height=\"14\" fill=\"#fff\" fill-opacity=\"0.42\"/></pattern><style>.nc-tape-pattern path,.nc-tape-pattern rect,.nc-tape-pattern circle,.nc-tape-pattern polygon{fill:url(#ncTape)!important;stroke:none!important}.nc-tape-pattern polyline{stroke:url(#ncTape)!important}</style></defs>";
+/// A tape's own drawing plus its striped copy.
+pub(crate) fn tape_with_pattern(el: &str) -> String {
+    format!("{el}<g class=\"nc-tape-pattern\">{el}</g>")
+}
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
     let kind = p["1"].as_u64().unwrap_or(0);
@@ -301,9 +308,10 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             // Tape covers what is under it; tapped open it stays as a faint band.
             let open = p["15"].as_u64() == Some(1);
             format!(
-                "<g data-tape=\"object:{index}\" data-revealed=\"{}\" opacity=\"{}\">{el}</g>",
+                "<g data-tape=\"object:{index}\" data-revealed=\"{}\" opacity=\"{}\">{}</g>",
                 u8::from(open),
-                if open { TAPE_OPEN } else { 1. }
+                if open { TAPE_OPEN } else { 1. },
+                tape_with_pattern(&el)
             )
         } else {
             el
@@ -476,7 +484,7 @@ impl Scene {
                     match stroke_svg(s).map(|svg| {
                         if s.style.tool == 2 {
                             let open = s.flags & 4 != 0;
-                            format!("<g data-tape=\"stroke:{i}\" data-revealed=\"{}\" opacity=\"{}\">{svg}</g>", u8::from(open), if open { TAPE_OPEN } else { 1. })
+                            format!("<g data-tape=\"stroke:{i}\" data-revealed=\"{}\" opacity=\"{}\">{}</g>", u8::from(open), if open { TAPE_OPEN } else { 1. }, tape_with_pattern(&svg))
                         } else {
                             svg
                         }

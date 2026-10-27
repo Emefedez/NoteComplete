@@ -3,6 +3,7 @@
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
 import { pagesContext, jsonFrom } from './ai-context.js';
+import { quizPrompt, prepareQuestions, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 
 const $ = id => document.getElementById(id);
 const BATCH = 6;
@@ -31,8 +32,9 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath }) {
-  let mode = 'cards', running = false, cancelled = false, deck = null, practice = null, quiz = null;
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes }) {
+  let mode = 'cards', cancelled = false, deck = null, practice = null;
+  const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
   const savedDecks = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
   async function fillProviders() {
@@ -58,9 +60,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('studyAmountLabel').firstChild.textContent = kind === 'cards' ? 'Cards per page ' : 'Questions per page ';
     $('studyFrom').max = $('studyTo').max = pages;
     $('studyFrom').value = $('studyTo').value = currentPage() + 1;
-    $('studyStatus').textContent = 'Your AI tool reads the chosen pages (tape lifted) and their text. Nothing is sent anywhere else.';
-    $('studyProgress').hidden = true;
-    $('studyGo').disabled = false; $('studyStop').hidden = true;
+    $('studyStatus').textContent = jobs.busy ? 'Another generation is still running; it can be stopped from the bar.' : 'Runs in the background: keep reading while your AI tool works. Pages are sent as images with tape lifted, plus their text.';
+    $('studyGo').disabled = jobs.busy;
+    $('studyPromptEdit').hidden = kind !== 'quiz';
     $('studyDialog').showModal();
   }
   function chosenPages() {
@@ -71,40 +73,63 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     const to = scope === 'page' ? from : Math.max(from, Math.min(pages, Number($('studyTo').value) || from));
     return Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
   }
-  $('studyGo').onclick = async () => {
-    if (running) return;
+  $('studyGo').onclick = () => {
+    if (jobs.busy) return;
     const provider = $('studyProvider').value, model = $('studyModel').value.trim();
+    const providerName = $('studyProvider').selectedOptions[0].textContent;
     try { localStorage.setItem('notecomplete-ai-provider', provider); localStorage.setItem('notecomplete-ai-model', model); } catch { /* Optional. */ }
-    const pages = chosenPages(), title = documentInfo().title;
-    running = true; cancelled = false;
-    $('studyGo').disabled = true; $('studyStop').hidden = false; $('studyProgress').hidden = false;
-    const results = [];
-    try {
-      for (let i = 0; i < pages.length && !cancelled; i += BATCH) {
-        const batch = pages.slice(i, i + BATCH);
-        $('studyProgress').value = i / pages.length;
-        const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: (n, total, page) => { $('studyStatus').textContent = `Preparing page ${page + 1}…`; } });
-        if (cancelled) break;
-        $('studyStatus').textContent = `Asking ${$('studyProvider').selectedOptions[0].textContent} about pages ${batch[0] + 1}–${batch.at(-1) + 1}… (this can take a minute)`;
-        const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images,
-          prompt: `${prompts(mode, { amount: $('studyAmount').value, language: $('studyLanguage').value, title })}\n\n${context.text}` });
-        const parsed = jsonFrom(text);
-        results.push(...(mode === 'cards' ? cleanCards(parsed) : cleanQuestions(parsed)));
+    const pages = chosenPages(), title = documentInfo().title, kind = mode;
+    const amount = $('studyAmount').value, language = $('studyLanguage').value;
+    const batches = [];
+    for (let i = 0; i < pages.length; i += BATCH) batches.push(pages.slice(i, i + BATCH));
+    $('studyDialog').close();
+    cancelled = false;
+    const job = jobs.start(kind === 'cards' ? 'Flashcards' : 'Quiz', { pages: pages.length, batches: batches.length, cancel: () => { cancelled = true; ai.cancel(); } });
+    (async () => {
+      const results = [];
+      let prepared = 0;
+      try {
+        for (const [b, batch] of batches.entries()) {
+          const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: () => job.prepared(++prepared) });
+          if (cancelled) break;
+          job.asking(b, providerName);
+          const avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
+          const prompt = (kind === 'cards' ? prompts('cards', { amount, language, title }) : quizPrompt(instructions(), { amount, language, title }))
+            + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
+          const { text } = await ai.run({ provider, model, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}` });
+          if (cancelled) break;
+          const parsed = jsonFrom(text);
+          results.push(...(kind === 'cards' ? cleanCards(parsed) : prepareQuestions(parsed, batch)));
+          job.answered(b);
+        }
+        if (!results.length) return job.fail(cancelled ? 'Generation stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
+        const name = `${title} · p. ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
+        if (kind === 'cards') {
+          const value = { id: String(Date.now()), title: name, created: Date.now(), cards: results };
+          const decks = await savedDecks();
+          await library.store.set('settings', key(), [value, ...decks]);
+          job.finish(`${results.length} flashcards ready${cancelled ? ' (stopped early)' : ''}.`, { label: 'Open flashcards', run: () => showDeck(value) });
+        } else {
+          const value = { id: String(Date.now()), title: name, created: Date.now(), pages, questions: results, answers: {}, at: 0 };
+          await quizzes.add(value);
+          job.finish(`Quiz ready: ${results.length} questions${cancelled ? ' (stopped early)' : ''}.`, { label: 'Start quiz', run: () => quizzes.open(value) });
+        }
+      } catch (error) {
+        job.fail(cancelled ? 'Generation stopped.' : error.message);
       }
-      $('studyProgress').value = 1;
-      if (!results.length) throw Error(cancelled ? 'Stopped before anything was made.' : 'The AI returned nothing usable. Try again or choose other pages.');
-      $('studyDialog').close();
-      if (mode === 'cards') showDeck({ id: String(Date.now()), title: `${title} · p. ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`, created: Date.now(), cards: results }, true);
-      else startQuiz(results);
-    } catch (error) {
-      $('studyStatus').textContent = error.message;
-    } finally {
-      running = false;
-      $('studyGo').disabled = false; $('studyStop').hidden = true;
-    }
+    })();
   };
-  $('studyStop').onclick = () => { cancelled = true; ai.cancel(); $('studyStatus').textContent = 'Stopping…'; };
-  $('studyClose').onclick = () => { if (running) $('studyStop').onclick(); $('studyDialog').close(); };
+  $('studyClose').onclick = () => $('studyDialog').close();
+  $('studyPromptEdit').onclick = () => {
+    $('quizPromptText').value = instructions();
+    $('quizPromptDialog').showModal();
+  };
+  $('quizPromptSave').onclick = () => {
+    try { localStorage.setItem('notecomplete-quiz-prompt', $('quizPromptText').value.trim() || DEFAULT_QUIZ_PROMPT); } catch { /* Optional. */ }
+    $('quizPromptDialog').close();
+  };
+  $('quizPromptReset').onclick = () => { $('quizPromptText').value = DEFAULT_QUIZ_PROMPT; };
+  $('quizPromptCancel').onclick = () => $('quizPromptDialog').close();
 
   // Deck review: every card editable, then save, practise or export.
   function showDeck(value, unsaved = false) {
@@ -187,57 +212,28 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   $('practiceAgain').onclick = () => { const card = practice.queue.shift(); if (!practice.again.has(card)) { practice.again.add(card); practice.queue.push(card); } practice.seen++; showCard(); };
   $('practiceBackToList').onclick = () => { $('deckPractice').hidden = true; $('deckList').hidden = false; };
 
-  // Multiple-choice quiz with explanations.
-  function startQuiz(questions) {
-    quiz = { questions: questions.sort(() => Math.random() - 0.5), at: 0, right: 0, answered: false };
-    $('quizDialog').showModal();
-    showQuestion();
-  }
-  function showQuestion() {
-    const q = quiz.questions[quiz.at];
-    $('quizNext').hidden = true;
-    $('quizExplain').textContent = '';
-    if (!q) {
-      $('quizQuestion').textContent = `Score: ${quiz.right} of ${quiz.questions.length}.`;
-      $('quizOptions').replaceChildren();
-      $('quizProgress').textContent = '';
-      $('quizPage').hidden = true;
-      return;
-    }
-    quiz.answered = false;
-    $('quizProgress').textContent = `Question ${quiz.at + 1} of ${quiz.questions.length} · ${quiz.right} right`;
-    $('quizQuestion').textContent = q.question;
-    $('quizPage').hidden = !q.page;
-    $('quizPage').textContent = q.page ? `p. ${q.page}` : '';
-    $('quizPage').onclick = () => jump(q.page - 1);
-    $('quizOptions').replaceChildren(...q.options.map((option, i) => {
-      const button = document.createElement('button');
-      button.type = 'button'; button.textContent = option;
-      button.onclick = () => {
-        if (quiz.answered) return;
-        quiz.answered = true;
-        if (i === q.answer) quiz.right++;
-        for (const [j, b] of [...$('quizOptions').children].entries()) b.dataset.result = j === q.answer ? 'right' : j === i ? 'wrong' : '';
-        $('quizExplain').textContent = (i === q.answer ? 'Correct. ' : 'Not quite. ') + q.explanation;
-        $('quizNext').hidden = false;
-      };
-      return button;
-    }));
-  }
-  $('quizNext').onclick = () => { quiz.at++; showQuestion(); };
-  $('quizClose').onclick = () => $('quizDialog').close();
-
+  // Saved decks and quizzes of this note, quizzes with their progress.
   async function openSaved() {
-    const decks = await savedDecks();
-    if (!decks.length) { status('No saved decks for this note yet. Use Study → Generate flashcards.'); return; }
-    $('deckPicker').replaceChildren(...decks.map(d => {
+    const decks = await savedDecks(), saved = await quizzes.list();
+    if (!decks.length && !saved.length) { status('Nothing saved for this note yet. Use Study → Generate flashcards or Quiz me.'); return; }
+    const row = (text, run, remove) => {
       const item = document.createElement('li'), button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = `${d.title} · ${d.cards.length} cards · ${new Date(d.created).toLocaleDateString()}`;
-      button.onclick = () => { $('deckPickerDialog').close(); showDeck(d); };
-      item.append(button);
+      button.type = 'button'; button.textContent = text;
+      button.onclick = () => { $('deckPickerDialog').close(); run(); };
+      const del = document.createElement('button');
+      del.type = 'button'; del.textContent = '✕'; del.title = 'Delete'; del.className = 'deck-delete';
+      del.onclick = async () => { await remove(); item.remove(); };
+      item.append(button, del);
       return item;
-    }));
+    };
+    $('deckPicker').replaceChildren(
+      ...saved.map(q => {
+        const answered = Object.keys(q.answers || {}).length;
+        const points = Object.entries(q.answers || {}).reduce((n, [i, a]) => n + (a.choice === q.questions[i]?.answer ? (a.hinted ? 1 : 2) : 0), 0);
+        return row(`Quiz · ${q.title} · ${answered}/${q.questions.length} answered · ${points} pts`, () => quizzes.open(q), () => quizzes.remove(q.id));
+      }),
+      ...decks.map(d => row(`Flashcards · ${d.title} · ${d.cards.length} cards`, () => showDeck(d), async () => library.store.set('settings', key(), (await savedDecks()).filter(x => x.id !== d.id)))),
+    );
     $('deckPickerDialog').showModal();
   }
   $('deckPickerClose').onclick = () => $('deckPickerDialog').close();

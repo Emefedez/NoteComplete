@@ -277,8 +277,31 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       if (unit.page === page) (parts[unit.source] ||= []).push(unit.words.map(w => w.text).join(' '));
     return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join('\n')]));
   }
+  // Text inside a page region (page units), in reading order: PDF, OCR and typed words.
+  async function wordsIn(page, [rx, ry, rw, rh]) {
+    await build();
+    const picked = [];
+    for (const unit of index.units) {
+      if (unit.page !== page || unit.source === 'audio') continue;
+      for (const w of unit.words) {
+        const [x, y, bw, bh] = w.box || [];
+        const cx = x + bw / 2, cy = y + bh / 2;
+        if (w.box && cx >= rx && cx <= rx + rw && cy >= ry && cy <= ry + rh) picked.push({ text: w.text, x, y: cy, h: bh, source: unit.source });
+      }
+    }
+    // Prefer one source where both cover the region (PDF text over OCR of the same words).
+    const sources = new Set(picked.map(w => w.source));
+    const use = sources.has('pdf') ? picked.filter(w => w.source !== 'ocr' || !picked.some(p => p.source === 'pdf' && Math.abs(p.y - w.y) < w.h)) : picked;
+    use.sort((a, b) => (Math.abs(a.y - b.y) < Math.min(a.h, b.h) * 0.6 ? a.x - b.x : a.y - b.y));
+    let out = '', last = null;
+    for (const w of use) {
+      out += !last ? w.text : Math.abs(w.y - last.y) < Math.min(w.h, last.h) * 0.6 ? ` ${w.text}` : `\n${w.text}`;
+      last = w;
+    }
+    return out;
+  }
   return {
-    reset, open, close, paint, openOcr, restructure, pageText,
+    reset, open, close, paint, openOcr, restructure, pageText, wordsIn,
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },
