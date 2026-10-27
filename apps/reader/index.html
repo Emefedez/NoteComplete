@@ -663,9 +663,9 @@
   <h2 id="studyTitle">Generate flashcards</h2>
   <fieldset class="ocr-scope">
     <legend>Pages</legend>
-    <label><input type="radio" name="studyScope" value="page" checked /> Current page</label>
+    <div><label><input type="radio" name="studyScope" value="page" checked /> Current page</label>
     <label><input type="radio" name="studyScope" value="range" /> Pages <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
-    <label><input type="radio" name="studyScope" value="all" /> Whole note</label>
+    <label><input type="radio" name="studyScope" value="all" /> Whole note</label></div>
   </fieldset>
   <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
   <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
@@ -727,9 +727,9 @@
   <p>Finds handwriting and text in scanned pages so Find can search it and you can select it. It runs on this device in the background (progress and Stop are in the bar); results are kept with this note.</p>
   <fieldset class="ocr-scope">
     <legend>Pages</legend>
-    <label><input type="radio" name="ocrScope" value="page" checked /> Current page</label>
+    <div><label><input type="radio" name="ocrScope" value="page" checked /> Current page</label>
     <label><input type="radio" name="ocrScope" value="range" /> Pages <input id="ocrFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="ocrTo" type="number" min="1" value="1" aria-label="To page" /></label>
-    <label><input type="radio" name="ocrScope" value="all" /> Whole note <span class="muted">(slow on long notes)</span></label>
+    <label><input type="radio" name="ocrScope" value="all" /> Whole note <span class="muted">(slow on long notes)</span></label></div>
   </fieldset>
   <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
   <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
