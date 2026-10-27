@@ -42,7 +42,7 @@ export function homeScreen({ library, drive, open, status }) {
             return renderRecent();
           }
           await library.touch(entry.key);
-          await open(file);
+          await open(file, entry);
         } catch (error) { status(error.message, true); }
       };
       item.append(button);

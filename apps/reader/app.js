@@ -9,6 +9,8 @@ import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
+import { studyController } from "./study.js";
+import { chatController } from "./chat.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -162,6 +164,7 @@ function reset() {
   $("pages").replaceChildren();
   $("editor").hidden = true;
   $("title").textContent = "Home";
+  document.title = "NoteComplete";
   dirty = false;
   documentControls();
   home?.show(false);
@@ -201,6 +204,7 @@ async function load(file) {
       return call("pdf", { resource });
     });
     $("title").textContent = result.title || "Untitled note";
+    document.title = `${$("title").textContent} — NoteComplete`;
     showDocument();
     $("pageNumber").max = result.pages;
     documentControls();
@@ -725,7 +729,7 @@ function toolOptions() {
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   $("toolOptions").hidden =
     chromeState.compact ||
-    (!["draw", "highlight", "shape"].includes(tool) &&
+    (!["draw", "highlight", "shape", "tape"].includes(tool) &&
       !(tool === "select" && selection.item));
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   const settingsLabel = $("toolOptions").hidden ? "Show tool settings" : "Hide tool settings";
@@ -956,7 +960,7 @@ function pointerDown(e, p) {
     "stroke-width": width,
     "stroke-linecap": "round",
     "stroke-linejoin": "round",
-    opacity: tool === "erase" ? 0.3 : tool === "highlight" ? 0.5 : 1,
+    opacity: tool === "erase" ? 0.3 : tool === "highlight" ? 0.5 : tool === "tape" ? 0.85 : 1,
   }))
     el.setAttribute(k, v);
   dot.setAttribute("r", width / 2);
@@ -969,7 +973,7 @@ function pointerDown(e, p) {
   gesture = {
     id: e.pointerId,
     tool,
-    straight: tool === "highlight" && $("highlightMode").value === "straight",
+    straight: tool === "tape" || (tool === "highlight" && $("highlightMode").value === "straight"),
     panel: p,
     points: [start],
     start,
@@ -1031,6 +1035,18 @@ function pointerUp(e) {
   gesture = null;
   g.panel.stale = false;
   g.panel.el.releasePointerCapture(e.pointerId);
+  // Tape tool: a tap lifts or covers the tape under it; a drag lays new tape.
+  if (g.tool === "tape") {
+    const [a, b] = [g.start, g.points.at(-1)];
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < g.width / 3) {
+      g.el.remove();
+      g.dot.remove();
+      const tape = [...(g.panel.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => a[0] >= x && a[0] <= x + w && a[1] >= y && a[1] <= y + h);
+      if (tape) toggleTape(g.panel, tape);
+      else status("Drag across what you want to cover with tape.");
+      return;
+    }
+  }
   if (g.tool === "erase")
     action("erase", { page: g.panel.index, points: g.points, radius: 10 });
   else {
@@ -1043,7 +1059,7 @@ function pointerUp(e) {
         points: g.points,
         width: g.width,
         rgba: [...rgba, 1],
-        tool: g.tool === "highlight" ? 1 : 0,
+        tool: g.tool === "highlight" ? 1 : g.tool === "tape" ? 2 : 0,
         layer: g.layer,
         ...(g.tool === "shape"
           ? {
@@ -1079,6 +1095,9 @@ for (const button of document.querySelectorAll("[data-tool]"))
     } else if (tool === "draw") {
       $("color").value = "#246bce";
       $("width").value = "2";
+    } else if (tool === "tape") {
+      $("color").value = "#e3c6e6";
+      $("width").value = "40";
     }
     toolOptions();
     refreshSelects();
@@ -1089,6 +1108,8 @@ for (const button of document.querySelectorAll("[data-tool]"))
           ? $("highlightMode").value === "straight"
             ? "Straight highlight: drag between the endpoints."
             : "Freehand highlight: draw on the page."
+          : tool === "tape"
+            ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
           : tool === "erase"
             ? "Drag to erase whole strokes."
             : tool === "pan"
@@ -1106,6 +1127,18 @@ $("highlightMode").onchange = () => {
 };
 $("shape").onchange = () =>
   document.querySelector('[data-tool="shape"]').click();
+// The visible shape row drives the (hidden) select that the drawing code reads.
+function syncShapePicker() {
+  for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
+    b.setAttribute("aria-checked", String(b.dataset.shape === $("shape").value));
+}
+for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
+  b.onclick = () => {
+    $("shape").value = b.dataset.shape;
+    syncShapePicker();
+    if (tool !== "shape") document.querySelector('[data-tool="shape"]').click();
+  };
+syncShapePicker();
 $("pageNumber").onchange = () => jump(Number($("pageNumber").value) - 1);
 $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
@@ -1122,7 +1155,7 @@ $("redo").onclick = () => {
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
-    if (!$("qualityDialog").open) palette.open();
+    if (!$("qualityDialog").open) openPalette();
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
@@ -1145,6 +1178,17 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "o") {
     e.preventDefault();
     openLocal();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n") {
+    e.preventDefault();
+    $("newWindow").click();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "j" && doc) {
+    e.preventDefault();
+    showDocument();
+    chat.toggle();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f" && doc && $("editor").hidden === false) {
@@ -1176,8 +1220,10 @@ document.addEventListener("keydown", (e) => {
 });
 $("open").onclick = $("emptyOpen").onclick = () => openLocal();
 $("file").onchange = (e) => {
-  if (e.target.files[0] && !busy() && canReplace())
+  if (e.target.files[0] && !busy() && canReplace()) {
+    notePath = "";
     load(e.target.files[0]).catch(() => {});
+  }
   e.target.value = "";
 };
 $("importImage").onclick = () => $("imageFile").click();
@@ -1389,15 +1435,29 @@ async function openChosen(file) {
   return true;
 }
 const library = new Library();
+// The open note's file on disk (desktop), so AI tools can read other pages via MCP.
+let notePath = "";
 const drive = driveBrowser({
   library,
   open: async (file, driveFile) => {
     const opened = await openChosen(file);
-    if (opened) home.rememberCover(library.coverKey(driveFile), file);
+    if (opened) {
+      home.rememberCover(library.coverKey(driveFile), file);
+      notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
+    }
     return opened;
   },
 });
-var home = homeScreen({ library, drive, open: openChosen, status });
+var home = homeScreen({
+  library,
+  drive,
+  open: async (file, entry) => {
+    const opened = await openChosen(file);
+    if (opened) notePath = await library.pathOf(entry).catch(() => "");
+    return opened;
+  },
+  status,
+});
 // The desktop bridge opens files itself so Recent can reopen them by path.
 async function openLocal() {
   const bridge = window.notecompleteFiles;
@@ -1408,6 +1468,7 @@ async function openLocal() {
     const file = new File([chosen.bytes], chosen.name);
     if (busy() || !canReplace()) return;
     await load(file);
+    notePath = chosen.path;
     const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
     home.rememberCover(entry.key, file);
   } catch (error) {
@@ -1431,7 +1492,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyOpenDeck", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -1570,10 +1631,11 @@ $("insertConfirm").onclick = async () => {
   await action("insertPages", { at, pages, pdf, focus: at });
 };
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
-async function pageCanvas(index, width = 2200) {
+async function pageCanvas(index, width = 2200, { liftTape = false } = {}) {
   const view = await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
+  if (liftTape) for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", "0.18");
   const svg = holder.querySelector("svg"), [w, h] = view.size, scale = width / w;
   if (view.pdf_background) {
     const place = backgroundPlacement(view.pdf_background, view.size);
@@ -1612,6 +1674,41 @@ const find = findController({
   pageCanvas,
   documentInfo: () => ({ pages: doc?.pages || 0 }),
 });
+const ai = window.notecompleteAI || null;
+const studyDeps = {
+  ai,
+  pageCanvas,
+  pageText: (p) => find.pageText(p),
+  documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }),
+  currentPage: () => page,
+  notePath: () => notePath,
+  status,
+};
+const study = studyController({
+  ...studyDeps,
+  library,
+  fingerprint: () => find.fingerprint,
+  jump: (p) => { showDocument(); jump(p); },
+  download,
+});
+const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
+$("studyCards").onclick = () => study.cards();
+$("studyQuiz").onclick = () => study.quiz();
+$("studyOpenDeck").onclick = () => study.saved();
+$("chatOpen").onclick = $("chatToggle").onclick = () => { if (doc) { showDocument(); chat.toggle(); } };
+// Bars above the pages may change height (menubar compaction, wrapping tool
+// row); scroll by the same amount in that frame so the pages never move.
+{
+  let top = null;
+  const keep = () => {
+    if (!doc || $("editor").hidden) return void (top = null);
+    const now = $("viewport").getBoundingClientRect().top;
+    if (top !== null && now !== top) $("viewport").scrollTop += now - top;
+    top = now;
+  };
+  const watch = new ResizeObserver(keep);
+  for (const el of [$("commandBar"), $("toolbar"), document.querySelector(".navigation")].filter(Boolean)) watch.observe(el);
+}
 audio.transcript.onwords = (asset, words) =>
   find.transcribed(audio.entries.find((entry) => entry.asset?.id === asset.id), words);
 documentControls();
@@ -1634,7 +1731,9 @@ const palette = commandPalette({
       })),
   ],
   dynamic: (query) => {
-    const items = [];
+    const items = otherWindows
+      .filter((w) => !query.trim() || w.title.toLowerCase().includes(query.trim().toLowerCase()) || "window".startsWith(query.trim().toLowerCase()))
+      .map((w) => ({ id: `window-${w.id}`, title: `Window: ${w.title}`, group: "Windows", run: () => windows.focus(w.id) }));
     const phrase = query.trim().match(/^(?:find|buscar)\s+(.+)$/i);
     if (phrase && doc) items.push({ id: "find", title: `Find “${phrase[1]}” in this note`, group: "Navigate", run: () => { showDocument(); find.find(phrase[1]); } });
     const number = query.trim().match(/^(?:p(?:age|ágina)?\.?\s*|:)?(\d+)$/i);
@@ -1645,4 +1744,12 @@ const palette = commandPalette({
     return items;
   },
 });
-$("paletteOpen").onclick = () => palette.open();
+// Other open windows (desktop) appear in the palette so any of them can be brought forward.
+const windows = window.notecompleteWindows || null;
+let otherWindows = [];
+async function openPalette(query = "") {
+  otherWindows = windows ? (await windows.list().catch(() => [])).filter((w) => !w.current) : [];
+  palette.open(query);
+}
+$("paletteOpen").onclick = () => openPalette();
+$("newWindow").onclick = () => (windows ? windows.open() : window.open(location.href, "_blank"));

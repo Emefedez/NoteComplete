@@ -22,7 +22,9 @@ const paths = {
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
  cloud:'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8H7Z',
  cards:'M7 4h12v14H7zM4 7v13h12',
- save:'M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm2 0v6h9V3M7 21v-7h10v7'
+ save:'M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm2 0v6h9V3M7 21v-7h10v7',
+ spark:'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 11 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z',
+ tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');

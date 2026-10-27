@@ -5,6 +5,8 @@ import path from 'node:path';
 import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { libraryFiles } from './library-files.js';
+import { aiRunner } from './ai-runner.js';
+import { existsSync } from 'node:fs';
 
 const home = 'notecomplete://reader/';
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
@@ -59,6 +61,23 @@ app.whenReady().then(() => {
     return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
+  // Flashcards, quizzes and chat through the user's own AI CLIs; see ai-runner.js.
+  const bundled = app.isPackaged ? path.join(process.resourcesPath, 'noteful') : fileURLToPath(new URL('../../target/release/noteful', import.meta.url));
+  const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
+  ipcMain.handle('ai:providers', guarded(() => ai.providers()));
+  ipcMain.handle('ai:run', guarded((event, request) => ai.run(event.sender.id, request)));
+  ipcMain.on('ai:cancel', event => { if (trusted(event)) ai.cancel(event.sender.id); });
+  // Several documents: each window is an independent reader; the command palette lists them.
+  ipcMain.handle('windows:new', guarded(() => { createWindow(); }));
+  ipcMain.handle('windows:list', guarded(event => BrowserWindow.getAllWindows().filter(w => !w.isDestroyed()).map(w => ({ id: w.webContents.id, title: w.getTitle(), current: w.webContents.id === event.sender.id }))));
+  ipcMain.handle('windows:focus', guarded((_event, id) => {
+    const win = BrowserWindow.getAllWindows().find(w => w.webContents.id === id);
+    if (!win) return false;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    return true;
+  }));
   ipcMain.on('drive:cancel', event => { if (trusted(event)) pendingAuth.get(event.sender.id)?.abort(); });
   ipcMain.handle('drive:sign-in', async event => {
     if (!trusted(event)) throw Error('Unexpected authentication origin.');

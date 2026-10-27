@@ -218,7 +218,8 @@ impl Editor {
         if let Some(shape) = &line.shape {
             line.points = shape.points();
         }
-        if line.tool > 1
+        // Tools: 0 pen, 1 highlighter, 2 tape (exported as native tape ink).
+        if line.tool > 2
             || !self
                 .layers()
                 .iter()
@@ -374,7 +375,12 @@ impl Editor {
             for (id, line) in additions.iter().filter(|(_, l)| l.layer == layer.id) {
                 if !deleted.contains(id.as_str()) {
                     content.push_str(&format!(
-                        "<g data-item=\"{id}\">{}</g>",
+                        "<g data-item=\"{id}\"{}>{}</g>",
+                        if line.tool == 2 {
+                            format!(" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\"")
+                        } else {
+                            String::new()
+                        },
                         added_svg(
                             &adjustments
                                 .get(id.as_str())
@@ -419,7 +425,7 @@ impl Editor {
             .collect();
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).collect::<Vec<_>>(),"locked":p.items.iter().filter(|i| i.locked()).map(|i| json!({"id":i.id,"bounds":i.bounds})).collect::<Vec<_>>(),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page(*s).map(|p| p.size)).collect::<Result<Vec<_>>>()?,"pdf_background":p.pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":p.items.iter().filter(|i| i.locked()).map(|i| json!({"id":i.id,"bounds":i.bounds})).collect::<Vec<_>>(),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
         )
     }
     pub fn save_project(&self) -> Result<String> {

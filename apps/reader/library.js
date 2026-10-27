@@ -151,6 +151,13 @@ export class Library {
   async recent(limit = 24) {
     return (await this.store.values('entries')).sort((a, b) => b.openedAt - a.openedAt).slice(0, limit);
   }
+  // Where a kept or local note lives on disk (desktop only), for AI tools that read files.
+  async pathOf(entry) {
+    if (!entry) return '';
+    if (entry.source === 'local') return entry.path;
+    const folder = await this.location();
+    return folder.kind === 'folder' ? `${folder.label.replace(/\/$/, '')}/${entry.filename}` : '';
+  }
   async open(entry) {
     if (entry.source === 'local') {
       const bytes = await this.bridge?.readRecent(entry.path);

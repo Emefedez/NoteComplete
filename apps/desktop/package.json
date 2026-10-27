@@ -28,6 +28,7 @@
       "main.js",
       "asset-path.js",
       "library-files.js",
+      "ai-runner.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",
@@ -58,6 +59,12 @@
       ],
       "category": "Office"
     },
-    "icon": "build/icon.png"
+    "icon": "build/icon.png",
+    "extraResources": [
+      {
+        "from": "../../target/release/noteful",
+        "to": "noteful"
+      }
+    ]
   }
 }

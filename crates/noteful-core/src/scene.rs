@@ -41,8 +41,12 @@ impl Item {
             .as_ref()
             .is_some_and(|o| o["6"]["21"].as_u64() == Some(1))
     }
-    /// Tape: kind-3 objects with tool 9 = 2; payload tag 15 is 1 while tapped open.
+    /// Tape: kind-3 objects with tool 9 = 2 (payload tag 15 is 1 while tapped
+    /// open), or ink in style 2 (stroke flag 4 while tapped open, per noteful-mcp).
     pub(crate) fn tape(&self) -> Option<bool> {
+        if let Some(s) = &self.stroke {
+            return (s.style.tool == 2).then_some(s.flags & 4 != 0);
+        }
         let o = self.object.as_ref()?;
         (o["6"]["1"].as_u64() == Some(3) && o["9"].as_u64() == Some(2))
             .then(|| o["6"]["15"].as_u64() == Some(1))
@@ -469,7 +473,14 @@ impl Scene {
                             }
                         }
                     }
-                    match stroke_svg(s) {
+                    match stroke_svg(s).map(|svg| {
+                        if s.style.tool == 2 {
+                            let open = s.flags & 4 != 0;
+                            format!("<g data-tape=\"stroke:{i}\" data-revealed=\"{}\" opacity=\"{}\">{svg}</g>", u8::from(open), if open { TAPE_OPEN } else { 1. })
+                        } else {
+                            svg
+                        }
+                    }) {
                         Ok(svg) => items.push(Item {
                             id: format!("stroke:{i}"),
                             stroke: Some(Stroke {

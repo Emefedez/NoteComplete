@@ -269,11 +269,20 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     index = new SearchIndex(); hits = []; current = -1;
     if (!$('findBar').hidden) { build(); run(); }
   }
+  // A page's text by source (text, pdf, ocr, audio) for AI context.
+  async function pageText(page) {
+    await build();
+    const parts = {};
+    for (const unit of index.units)
+      if (unit.page === page) (parts[unit.source] ||= []).push(unit.words.map(w => w.text).join(' '));
+    return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join('\n')]));
+  }
   return {
-    reset, open, close, paint, openOcr, restructure,
+    reset, open, close, paint, openOcr, restructure, pageText,
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },
     get visible() { return !$('findBar').hidden; },
+    get fingerprint() { return fingerprint; },
   };
 }

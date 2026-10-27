@@ -954,6 +954,12 @@ main.drag {
 .toolbar-actions button { width: 30px; padding: 4px; }
 .sheet[data-tool="pan"] [data-tape] { cursor: pointer; }
 
+/* Shapes: a row of the shapes themselves instead of a word list. */
+.shape-picker { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.shape-picker button { width: 32px; min-height: 28px; padding: 3px; }
+.shape-picker svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.shape-picker button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+
 /* Global menubar: a native-style File/Edit/View row that compacts while scrolling. */
 header.chrome { min-height: 36px; padding: 2px 8px; justify-content: flex-start; gap: 2px; flex-wrap: nowrap; transition: min-height .16s ease, padding .16s ease; }
 header .brand { flex: 1 1 auto; min-width: 0; margin: 0 8px; justify-content: center; }
@@ -1074,6 +1080,55 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd, b
 .ocr-dialog select { padding: 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }
 .ocr-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (prefers-color-scheme: dark) { .find-snippet mark { background: #7a6210; } }
+
+/* Ask AI: a floating panel on the right, like the find bar. */
+.bar-ai { min-height: 28px; padding: 2px 10px; gap: 6px; color: var(--accent); border: 1px solid var(--line); background: var(--surface); flex: none; }
+.bar-ai svg { width: 15px; height: 15px; }
+body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
+.chat-panel { position: absolute; top: 10px; right: 22px; bottom: 12px; z-index: 26; width: min(400px, calc(100% - 24px)); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); box-shadow: 0 10px 34px #0003; overflow: hidden; }
+.chat-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.chat-head strong { margin-right: auto; font-size: 13px; }
+.chat-head select { padding: 3px 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 12px; }
+.chat-head button { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+.chat-context { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.chat-context label { display: inline-flex; align-items: center; gap: 4px; }
+.chat-messages { list-style: none; margin: 0; padding: 10px; flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.chat-messages li { max-width: 92%; padding: 8px 11px; border-radius: 10px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.chat-messages li p { margin: 0 0 6px; } .chat-messages li p:last-child { margin: 0; }
+.chat-messages code { font: 12px ui-monospace, monospace; background: var(--chrome); padding: 0 3px; border-radius: 3px; }
+.chat-messages small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.chat-user { align-self: flex-end; background: var(--accent); color: #fff; white-space: pre-wrap; }
+.chat-assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); }
+.chat-error { color: #b83228; }
+.chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); align-items: flex-end; }
+.chat-form textarea { flex: 1; resize: none; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; font-size: 13px; }
+/* Study dialogs */
+.study-row { display: flex; gap: 12px; } .study-row > label { flex: 1; }
+.ocr-dialog input[type="text"] { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }
+.deck-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 40px); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 80px #0004; }
+.deck-dialog::backdrop { background: #0006; }
+.deck-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.deck-head input { flex: 1; font-size: 16px; font-weight: 600; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
+.deck-head input:focus { border-color: var(--line); background: var(--chrome); }
+.deck-cards { list-style: none; margin: 0 0 12px; padding: 0; max-height: min(60dvh, 520px); overflow: auto; display: grid; gap: 8px; counter-reset: card; }
+.deck-cards li { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: start; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.deck-cards textarea { width: 100%; resize: vertical; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); font: inherit; font-size: 13px; }
+.deck-cards li > div { display: flex; flex-direction: column; gap: 4px; }
+.deck-cards button { min-height: 26px; padding: 2px 7px; font-size: 12px; }
+.deck-practice, #quizDialog { text-align: center; }
+.practice-front { font-size: 20px; font-weight: 600; margin: 18px 0 10px; line-height: 1.4; }
+.practice-back { font-size: 16px; margin: 0 0 18px; padding: 12px; border-radius: 10px; background: var(--chrome); line-height: 1.5; white-space: pre-wrap; }
+.quiz-options { display: grid; gap: 8px; margin: 10px 0; text-align: left; }
+.quiz-options button { justify-content: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; white-space: normal; text-align: left; }
+.quiz-options button[data-result="right"] { border-color: #2a9d63; background: #e3f6ec; color: #145c38; }
+.quiz-options button[data-result="wrong"] { border-color: #c9453a; background: #fdeceb; color: #8e231b; }
+.deck-picker { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.deck-picker button { width: 100%; justify-content: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+@media (prefers-color-scheme: dark) {
+  .quiz-options button[data-result="right"] { background: #173a2a; color: #9be3bd; }
+  .quiz-options button[data-result="wrong"] { background: #432220; color: #ffb7b0; }
+}
+@media (max-width: 860px) { .bar-ai span { display: none; } .bar-ai { width: 32px; padding: 4px; border-color: transparent; } }
 
 /* Command palette */
 .palette { padding: 0; width: min(620px, calc(100vw - 24px)); margin-top: 12vh; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); color: var(--ink); box-shadow: 0 24px 80px #0005; overflow: hidden; }

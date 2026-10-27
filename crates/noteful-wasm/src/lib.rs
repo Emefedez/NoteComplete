@@ -12,6 +12,13 @@ fn js_error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 // JavaScript addresses pages by display position; the core edits stable slots.
+// Item payloads name their page, so they are reported back as the display position.
+fn on_page(mut v: serde_json::Value, display: usize) -> serde_json::Value {
+    if v.get("page").is_some_and(|p| p.is_u64()) {
+        v["page"] = json!(display);
+    }
+    v
+}
 #[wasm_bindgen]
 impl EditorSession {
     #[wasm_bindgen(constructor)]
@@ -53,22 +60,19 @@ impl EditorSession {
         y: f64,
         tolerance: f64,
     ) -> Result<String, JsValue> {
+        let display = page;
         let page = self.inner.slot(page).map_err(js_error)?;
-        serde_json::to_string(
-            &self
-                .inner
-                .pick_item(page, [x, y], tolerance)
-                .map_err(js_error)?,
-        )
-        .map_err(js_error)
+        let picked = self
+            .inner
+            .pick_item(page, [x, y], tolerance)
+            .map_err(js_error)?
+            .map(|v| on_page(v, display));
+        serde_json::to_string(&picked).map_err(js_error)
     }
     pub fn selection(&self, page: usize, id: &str) -> Result<String, JsValue> {
+        let display = page;
         let page = self.inner.slot(page).map_err(js_error)?;
-        Ok(self
-            .inner
-            .selection(page, id)
-            .map_err(js_error)?
-            .to_string())
+        Ok(on_page(self.inner.selection(page, id).map_err(js_error)?, display).to_string())
     }
     pub fn adjust_item(
         &mut self,
@@ -76,6 +80,7 @@ impl EditorSession {
         id: &str,
         adjustment: &str,
     ) -> Result<String, JsValue> {
+        let display = page;
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .adjust_item(
@@ -84,11 +89,7 @@ impl EditorSession {
                 serde_json::from_str(adjustment).map_err(js_error)?,
             )
             .map_err(js_error)?;
-        Ok(self
-            .inner
-            .item_patch(page, id)
-            .map_err(js_error)?
-            .to_string())
+        Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
     }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
