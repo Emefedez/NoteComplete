@@ -39,10 +39,10 @@ details[open] > summary::after, .has-caret[aria-expanded="true"] .caret { transf
 
 /* Side menu / drawer: slides over the workspace from an edge (settings, history,
    navigation on narrow screens). Docks are for things used while working. */
-.drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: var(--z-popover); width: min(320px, 86vw); display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--menu); box-shadow: var(--shadow-pop); transform: translateX(-102%); transition: transform .18s ease; }
+.drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: var(--z-drawer); width: min(320px, 86vw); display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--menu); box-shadow: var(--shadow-pop); transform: translateX(-102%); transition: transform .18s ease; }
 .drawer.right { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line); transform: translateX(102%); }
 .drawer[data-open="true"] { transform: none; }
-.drawer-scrim { position: fixed; inset: 0; z-index: calc(var(--z-popover) - 1); background: #0003; }
+.drawer-scrim { position: fixed; inset: 0; z-index: calc(var(--z-drawer) - 1); background: #0003; }
 @media (min-width: 901px) { .drawer-scrim { background: transparent; } }
 .primary { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .primary:hover { background: var(--accent-hover); }

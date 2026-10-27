@@ -48,6 +48,7 @@
   --z-float: 27;       /* floating tool panel */
   --z-popover: 28;     /* selection menus */
   --z-bar: 40;
+  --z-drawer: 45;      /* side menus slide over the top bar */
   --z-toast: 70;
   --z-context: 80;
   --z-select: 1000;

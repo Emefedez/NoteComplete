@@ -59,7 +59,7 @@ Rules:
 
 ## Layering
 
-Use the `--z-*` scale (tokens.css): in-view overlays 1–9 (cursors, selections, hit marks, handles), tool options 20, find 25, floating panels 26–27, popovers 28, top bar 40, toast 70, context menus 80, custom select lists 1000. Dialogs use `showModal()` (top layer). Canvas apps: draw data in a canvas, put interactive handles and text in an absolutely positioned DOM/SVG layer above it.
+Use the `--z-*` scale (tokens.css): in-view overlays 1–9 (cursors, selections, hit marks, handles), tool options 20, find 25, floating panels 26–27, popovers 28, top bar 40, drawers 45, toast 70, context menus 80, custom select lists 1000. Dialogs use `showModal()` (top layer). Canvas apps: draw data in a canvas, put interactive handles and text in an absolutely positioned DOM/SVG layer above it.
 
 ## Dialogs
 
