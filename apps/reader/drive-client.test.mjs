@@ -116,3 +116,13 @@ test('ranged reads send Range, accept 206, and refuse a server that streams the 
   await assert.rejects(client.range(file, 100, 200), /partial file/);
   assert.deepEqual(seen, ['bytes=0-15', 'bytes=100-199']);
 });
+test('writes need the separate write grant: upload replaces content, trash only trashes', async () => {
+  const calls = [];
+  const client = authorized(async (url, options) => { calls.push([options.method, new URL(url).pathname, options.body instanceof Blob ? 'blob' : options.body]); return new Response('{"id":"one","modifiedTime":"t2"}'); });
+  await assert.rejects(client.upload({ id: 'one' }, new Blob(['x'])), /Allow NoteComplete/);
+  assert.throws(() => client.authorizeWrite({ access_token: 'w', scope: 'https://www.googleapis.com/auth/drive.readonly', expires_in: 3600 }), /not granted/);
+  client.authorizeWrite({ access_token: 'w', scope: 'https://www.googleapis.com/auth/drive', expires_in: 3600 });
+  assert.equal((await client.upload({ id: 'one' }, new Blob(['x']))).modifiedTime, 't2');
+  await client.trash({ id: 'one' });
+  assert.deepEqual(calls, [['PATCH', '/upload/drive/v3/files/one', 'blob'], ['PATCH', '/drive/v3/files/one', '{"trashed":true}']]);
+});

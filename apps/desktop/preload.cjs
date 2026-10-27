@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   choose: () => ipcRenderer.invoke('files:choose'),
   read: name => ipcRenderer.invoke('files:read', name),
   write: (name, bytes) => ipcRenderer.invoke('files:write', name, bytes),
+  remove: name => ipcRenderer.invoke('files:remove', name),
   openFile: () => ipcRenderer.invoke('files:open'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
 });
@@ -18,6 +19,6 @@ contextBridge.exposeInMainWorld('notecompleteAI', {
   cancel: () => ipcRenderer.send('ai:cancel'),
 });
 contextBridge.exposeInMainWorld('notecompleteDrive', {
-  signIn: () => ipcRenderer.invoke('drive:sign-in'),
+  signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),
   cancel: () => ipcRenderer.send('drive:cancel'),
 });

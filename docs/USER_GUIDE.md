@@ -6,6 +6,14 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
+## Study with your AI tool
+
+Study and Ask AI use an AI tool already installed and signed in on your computer (Claude Code, Antigravity or Codex) and run in the desktop app. Pages are sent as images with tape lifted, together with their typed, PDF, recognized and transcript text.
+
+- **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
+- **Study → Generate flashcards (Shift+C)** makes an editable deck to practise or export to Anki.
+- **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
+
 ## Tape and locked items
 
 Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, tap a tape to lift it and tap again to cover; **View → Lift all tape / Cover with all tape / Tape as saved** applies to the whole note. Tape state is a viewing choice and is not saved. Items locked in place in Noteful cannot be selected, moved or erased. Zoom with <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd>, and <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the page; this works on any keyboard layout.
@@ -13,6 +21,10 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 ## Insert pages
 
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
+
+## Audio
+
+The headphones button next to Layers (**A**) opens the recordings: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, show the handwriting written at that moment, dim ink not yet written, and download the recording. **Transcribe** runs Whisper on this device (choose the model and language); the transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
 
 ## Find in a note
 

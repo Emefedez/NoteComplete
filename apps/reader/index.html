@@ -171,6 +171,7 @@
           <div class="drive-search"><strong id="drivePath">Find your Noteful folder</strong><label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
         </div>
         <p id="driveStatus" role="status" aria-live="polite"></p>
+        <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
         <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
         <button id="driveMore" type="button" hidden>Load more</button>
       </section>
@@ -220,6 +221,14 @@
             title="Ctrl/⌘ Shift Z"
             aria-label="Redo"
             data-icon="redo"
+          ></button
+          ><button
+            id="audioToggle"
+            aria-label="Audio and transcript"
+            title="Audio and transcript (A)"
+            data-icon="headphones"
+            aria-expanded="false"
+            hidden
           ></button
           ><button
             id="layersToggle"
@@ -382,12 +391,76 @@
             Fit</button
           ><span class="zoom-divider" aria-hidden="true"></span
           ><button id="zoomOut" aria-label="Zoom out">−</button
-          ><output id="zoomValue" aria-label="Zoom level">100%</output
+          ><input id="zoomValue" class="zoom-input" type="text" inputmode="numeric" aria-label="Zoom level; type a percentage" title="Type a zoom percentage and press Enter" value="Fit" /
           ><button id="zoomIn" aria-label="Zoom in">+</button>
         </div>
       </div>
       <div class="workspace">
         <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
+        <section id="audioBar" class="audio-panel" hidden aria-label="Audio and transcript">
+          <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><button id="audioClose" type="button" aria-label="Close" title="Close (A)">×</button></div>
+          <select id="recording" aria-label="Recording"></select>
+          <div class="audio-transport">
+            <button id="backAudio" type="button" aria-label="Back 10 seconds" title="Back 10 s (J)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7 5 12l6 5V7Zm8 0-6 5 6 5V7Z"/></svg></button>
+            <button id="playAudio" type="button" class="play" data-state="paused" aria-label="Play" title="Play / pause (K)" disabled><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+            <button id="forwardAudio" type="button" aria-label="Forward 10 seconds" title="Forward 10 s (L)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 7 6 5-6 5V7ZM5 7l6 5-6 5V7Z"/></svg></button>
+          </div>
+          <input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled />
+          <output id="audioTime">0:00 / 0:00</output>
+          <p id="audioState" role="status"></p>
+          <div class="audio-options">
+            <button id="audioPage" type="button">Show handwriting</button>
+            <label class="sync"><input id="syncEnabled" type="checkbox" checked /> Dim handwriting not yet written</label>
+            <a id="audioDownload" class="audio-download" hidden>Download recording</a>
+          </div>
+          <details id="transcriptPanel" class="transcript-panel" open>
+            <summary>Transcript <span class="muted">on this device</span></summary>
+            <div class="transcript-controls">
+              <select id="transcriptModel" data-native aria-label="Whisper model">
+                <option value="tiny">Tiny · fastest</option>
+                <option value="base" selected>Base · balanced</option>
+                <option value="small">Small · more accurate</option>
+              </select>
+              <select id="transcriptLanguage" data-native aria-label="Spoken language">
+                <option value="">Detect language</option>
+                <option value="spanish" selected>Castellano</option>
+                <option value="galician">Galego</option>
+                <option value="english">English</option>
+                <option value="catalan">Català</option>
+                <option value="french">Français</option>
+                <option value="german">Deutsch</option>
+                <option value="italian">Italiano</option>
+                <option value="portuguese">Português</option>
+              </select>
+            </div>
+            <details class="transcript-settings">
+              <summary>Audio for transcription</summary>
+              <div class="transcript-controls">
+                <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
+                <label><input id="speechVoice" type="checkbox" /> Voice filter</label>
+                <label><input id="speechNormalize" type="checkbox" checked /> Normalize</label>
+              </div>
+              <p class="muted">Gain and voice filter also apply to playback. Larger models need more memory and time; each downloads on first use.</p>
+            </details>
+            <div class="transcript-controls">
+              <button id="transcribeAudio" type="button" class="primary">Transcribe</button>
+              <button id="cancelTranscript" type="button" hidden>Cancel</button>
+              <button id="transcriptEdit" type="button" aria-pressed="false" hidden title="Click a word to correct it">Edit</button>
+              <button id="downloadTranscript" type="button" hidden>Export</button>
+              <button id="hideTranscript" type="button" hidden>Hide</button>
+            </div>
+            <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
+            <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
+            <div id="transcriptWords" aria-label="Transcript words"></div>
+            <div id="transcriptNavigation" class="transcript-controls" hidden>
+              <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
+              <output id="transcriptRange"></output>
+              <button id="transcriptNext" type="button" aria-label="Next transcript section">→</button>
+              <label><input id="transcriptFollow" type="checkbox" checked /> Follow audio</label>
+            </div>
+          </details>
+          <audio id="audio" preload="metadata"></audio>
+        </section>
         <aside id="quizPanel" class="quiz-panel" aria-label="Quiz" hidden>
           <div class="quiz-panel-head"><button id="quizMini" type="button" class="quiz-mini" title="Expand quiz (M)"></button><span id="quizPanelProgress" class="muted"></span><button id="quizMinimize" type="button" title="Minimize (M)" aria-label="Minimize">–</button><button id="quizPanelClose" type="button" title="Close; progress is saved" aria-label="Close">×</button></div>
           <div class="quiz-panel-body">
@@ -448,84 +521,7 @@
           <div id="layersList"></div>
         </aside>
       </div>
-      <section
-        id="audioBar"
-        class="audio-bar chrome"
-        hidden
-        aria-label="Recordings"
-      >
-        <h2 id="recordingTitle"></h2>
-        <button id="audioDetails" aria-controls="audioMeta" aria-expanded="false">Recording &amp; sync</button>
-        <div id="audioMeta" class="row audio-meta">
-          <span class="audio-icon" data-icon="headphones"></span
-          ><select id="recording" aria-label="Recording"></select
-          ><button id="audioPage">Show handwriting</button
-          ><label class="sync"
-            ><input id="syncEnabled" type="checkbox" checked />Dim future
-            handwriting</label
-          ><span class="spacer"></span><a id="audioDownload" hidden>Download</a>
-        </div>
-        <div class="row audio-transport">
-          <button id="backAudio" aria-label="Back 10 seconds">−10</button
-          ><button id="playAudio" disabled>Play</button
-          ><button id="forwardAudio" aria-label="Forward 10 seconds">+10</button
-          ><input
-            id="audioSeek"
-            type="range"
-            min="0"
-            max="0"
-            step=".01"
-            value="0"
-            aria-label="Audio position"
-            disabled
-          /><output id="audioTime">0:00 / 0:00</output>
-        </div>
-        <p id="audioState" role="status"></p>
-        <details id="transcriptPanel" class="transcript-panel">
-          <summary>Transcript <span class="muted">On device · show / hide</span></summary>
-          <button id="hideTranscript" type="button">Hide transcript</button>
-          <details class="transcript-settings">
-            <summary>Language, model &amp; audio</summary>
-          <div class="transcript-controls">
-            <select id="transcriptLanguage" aria-label="Spoken language">
-              <option value="">Detect language</option>
-              <option value="spanish" selected>Castellano</option>
-              <option value="galician">Galego</option>
-              <option value="english">English</option>
-              <option value="catalan">Catalan</option>
-              <option value="french">French</option>
-              <option value="german">German</option>
-              <option value="italian">Italian</option>
-              <option value="portuguese">Portuguese</option>
-            </select>
-            <select id="transcriptModel" aria-label="Whisper model">
-              <option value="tiny">Tiny · fastest</option>
-              <option value="base" selected>Base · balanced</option>
-              <option value="small">Small · higher accuracy</option>
-            </select>
-            <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
-            <label><input id="speechVoice" type="checkbox" />Voice filter</label>
-            <label><input id="speechNormalize" type="checkbox" checked />Normalize for transcription</label>
-          </div>
-          <p class="muted">Gain and voice filter apply to playback and transcription. Larger models need more memory and time; each model downloads on first use.</p>
-          </details>
-          <div class="transcript-controls">
-            <button id="transcribeAudio" type="button">Transcribe recording</button>
-            <button id="cancelTranscript" type="button" hidden>Cancel</button>
-            <button id="downloadTranscript" type="button" hidden>Export transcript</button>
-          </div>
-          <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
-          <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
-          <div id="transcriptWords" aria-label="Transcript words"></div>
-          <div id="transcriptNavigation" class="transcript-controls" hidden>
-            <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
-            <output id="transcriptRange"></output>
-            <button id="transcriptNext" type="button" aria-label="Next transcript section">→</button>
-            <label><input id="transcriptFollow" type="checkbox" checked />Follow audio</label>
-          </div>
-        </details>
-        <audio id="audio" preload="metadata"></audio>
-      </section>
+
       <p id="warnings" class="muted"></p>
       <details id="textInfo" hidden>
         <summary>Text and fonts</summary>
@@ -629,6 +625,19 @@
   <progress id="ocrProgress" max="1" hidden></progress>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
+</dialog>
+
+<dialog id="forgetDialog" class="ocr-dialog" aria-labelledby="forgetTitle">
+  <h2 id="forgetTitle">Remove</h2>
+  <p id="forgetText"></p>
+  <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="forgetCancel" type="button">Cancel</button><button id="forgetUpload" type="button" hidden>Upload changes to Drive, then remove</button><button id="forgetLocal" type="button" class="primary">Remove from this device</button></div>
+  <details id="forgetDanger" class="danger-zone" hidden>
+    <summary>Also delete it in Google Drive…</summary>
+    <p>Moves the Drive file to Drive’s trash for everyone who can see it. It can be restored from Drive’s trash for 30 days. To confirm, type <strong>DELETE</strong>.</p>
+    <input id="forgetConfirm" type="text" autocomplete="off" spellcheck="false" aria-label="Type DELETE to confirm" />
+    <button id="forgetDriveDelete" type="button" class="danger" disabled>Delete in Google Drive and here</button>
+  </details>
 </dialog>
 
 <dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">

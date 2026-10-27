@@ -76,6 +76,7 @@ export class TranscriptController {
     this.offset = 0;
     this.renderWindow();
     $('downloadTranscript').hidden = !words.length;
+    $('transcriptEdit').hidden = !words.length;
     this.update();
   }
   browse(direction) {
@@ -90,8 +91,8 @@ export class TranscriptController {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = word.text;
-      button.title = `Seek to ${word.start.toFixed(1)} seconds`;
-      button.onclick = () => this.audio.seek(word.start);
+      button.title = this.editing ? 'Click to correct this word' : `Seek to ${word.start.toFixed(1)} seconds`;
+      button.onclick = () => (this.editing ? this.editWord(word, button) : this.audio.seek(word.start));
       fragment.append(button, document.createTextNode(' '));
       return button;
     });
@@ -134,6 +135,7 @@ export class TranscriptController {
   async cached(asset) {
     if (this.results.has(asset.id)) return this.results.get(asset.id);
     const { key } = await this.key(asset, await this.audio.read(asset.id));
+    (this.keys ||= new Map()).set(asset.id, key);
     const words = key ? await storedTranscript(key) : null;
     if (words) this.results.set(asset.id, words);
     return words;
@@ -148,6 +150,7 @@ export class TranscriptController {
       const bytes = await this.audio.read(asset.id);
       if (generation !== this.generation) return;
       const { buffer, language, model, settings, key } = await this.key(asset, bytes);
+      (this.keys ||= new Map()).set(asset.id, key);
       if (generation !== this.generation) return;
       const cached = key ? await storedTranscript(key).catch(() => null) : null;
       if (generation !== this.generation) return;
@@ -188,6 +191,41 @@ export class TranscriptController {
         this.busy(false); this.status(`Could not transcribe: ${error.message}. You can retry.`);
       }
     }
+  }
+  // Edit mode: a word becomes a text box; its timing is kept. Corrections are
+  // stored with the cached transcript and reach Find and the AI context.
+  toggleEdit() {
+    this.editing = !this.editing;
+    $('transcriptEdit').setAttribute('aria-pressed', String(this.editing));
+    $('transcriptEdit').textContent = this.editing ? 'Done' : 'Edit';
+    this.status(this.editing ? 'Click a word to correct it; Enter keeps it, Esc cancels, an empty word is removed.' : 'Corrections saved.');
+    this.renderWindow();
+  }
+  editWord(word, button) {
+    const input = document.createElement('input');
+    input.value = word.text; input.className = 'transcript-word-edit';
+    input.size = Math.max(3, word.text.length + 1);
+    button.replaceWith(input);
+    input.focus(); input.select();
+    const finish = save => {
+      if (!input.isConnected) return;
+      if (save) {
+        const text = input.value.trim();
+        if (text) word.text = text;
+        else this.words.splice(this.words.indexOf(word), 1);
+        this.saveEdits();
+      }
+      this.renderWindow();
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
+    input.onblur = () => finish(true);
+  }
+  saveEdits() {
+    const asset = this.asset, key = asset && this.keys?.get(asset.id);
+    if (!asset) return;
+    this.results.set(asset.id, this.words);
+    this.onwords?.(asset, this.words);
+    if (key) storedTranscript(key, this.words).catch(() => this.status('Correction kept for this session only.'));
   }
   finish(words, asset) {
     this.results.set(asset.id, words);

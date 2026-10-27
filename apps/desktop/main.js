@@ -53,6 +53,7 @@ app.whenReady().then(() => {
   }));
   ipcMain.handle('files:read', guarded((_event, name) => files.read(name)));
   ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
+  ipcMain.handle('files:remove', guarded((_event, name) => files.remove(name)));
   ipcMain.handle('files:open', guarded(async event => {
     const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs and images', extensions: ['noteful', 'nfedit', 'pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
     if (chosen.canceled) return null;
@@ -79,7 +80,7 @@ app.whenReady().then(() => {
     return true;
   }));
   ipcMain.on('drive:cancel', event => { if (trusted(event)) pendingAuth.get(event.sender.id)?.abort(); });
-  ipcMain.handle('drive:sign-in', async event => {
+  ipcMain.handle('drive:sign-in', async (event, options = {}) => {
     if (!trusted(event)) throw Error('Unexpected authentication origin.');
     if (pendingAuth.has(event.sender.id)) throw Error('Finish the current Google sign-in first.');
     const abort = new AbortController(), sender = event.sender;
@@ -99,7 +100,7 @@ app.whenReady().then(() => {
         config = desktopCredentials(value);
         await writeFile(saved, JSON.stringify({ installed: { client_id: config.clientId, client_secret: config.clientSecret } }), { mode: 0o600 });
       }
-      return await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url) });
+      return await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true });
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   createWindow();

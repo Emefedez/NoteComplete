@@ -1160,6 +1160,43 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .quiz-check textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font: inherit; font-size: 12px; resize: vertical; }
 .quiz-check-options { display: grid; gap: 2px; font-size: 12px; }
 #quizDispute[data-armed="1"] { color: #b83228; border-color: #b83228; }
+.zoom-input { width: 56px; padding: 3px 4px; border: 1px solid transparent; border-radius: 5px; background: transparent; text-align: center; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+.zoom-input:hover, .zoom-input:focus { border-color: var(--line); background: var(--surface); }
+.drive-progress { display: block; width: min(420px, 100%); height: 6px; margin: -4px 0 10px; accent-color: var(--accent); }
+.note-grid li { position: relative; }
+.note-remove { position: absolute; top: 6px; right: 6px; width: 26px; min-height: 26px; padding: 0; border-radius: 50%; background: var(--menu); border: 1px solid var(--line); color: var(--muted); opacity: 0; }
+.note-grid li:hover .note-remove, .note-remove:focus-visible { opacity: 1; }
+.danger-zone { margin-top: 14px; padding: 8px 12px; border: 1px solid #e3a59f; border-radius: 8px; background: #fff5f4; }
+.danger-zone summary { color: #b83228; font-weight: 600; padding-left: 0; }
+.danger-zone p { font-size: 13px; }
+.danger-zone input { width: 100%; padding: 6px 8px; margin-bottom: 8px; border: 1px solid #e3a59f; border-radius: 6px; background: #fff; font-family: ui-monospace, monospace; }
+button.danger { background: #c9302c; color: #fff; }
+button.danger:disabled { background: #e8b4b0; }
+@media (prefers-color-scheme: dark) { .danger-zone { background: #3a1f1d; border-color: #7a3a35; } .danger-zone input { background: #2a1b1a; color: inherit; } }
+/* Audio side panel: overlays the pages on the right so they never move. */
+.audio-panel { position: absolute; top: 10px; right: 22px; bottom: 12px; z-index: 26; width: min(330px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--menu); box-shadow: 0 10px 34px #0003; }
+.audio-panel:not([hidden]) ~ .chat-panel { right: calc(min(330px, 100% - 24px) + 32px); }
+.audio-head { display: flex; align-items: center; gap: 8px; }
+.audio-head h2 { flex: 1; margin: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-head button { width: 28px; min-height: 26px; padding: 0; }
+.audio-panel select { width: 100%; padding: 5px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 12px; }
+.audio-transport { display: flex; justify-content: center; align-items: center; gap: 14px; }
+.audio-transport button { width: 38px; min-height: 38px; padding: 0; border-radius: 50%; }
+.audio-transport svg { width: 20px; height: 20px; fill: currentColor; }
+.audio-transport .play { width: 52px; min-height: 52px; background: var(--accent); color: #fff; }
+.audio-transport .play svg { width: 24px; height: 24px; }
+.play[data-state="paused"] .icon-pause, .play[data-state="playing"] .icon-play { display: none; }
+.audio-panel #audioSeek { width: 100%; min-width: 0; flex: none; accent-color: var(--accent); }
+#audioTime { align-self: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#audioState:empty { display: none; }
+.audio-options { display: grid; gap: 6px; font-size: 12px; }
+.audio-options button { justify-content: flex-start; border: 1px solid var(--line); min-height: 28px; }
+.audio-download { font-size: 12px; }
+.audio-panel .transcript-panel { border-top: 1px solid var(--line); padding-top: 6px; max-height: none !important; overflow: visible; }
+.audio-panel #transcriptWords { max-height: none; min-height: 60px; }
+.audio-panel .transcript-controls select { flex: 1; width: auto; }
+.transcript-word-edit { font: inherit; font-size: 14px; padding: 0 3px; border: 1px solid var(--accent); border-radius: 3px; }
+#transcriptEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Study dialogs */
 .study-row { display: flex; gap: 12px; } .study-row > label { flex: 1; }
 .ocr-dialog input[type="text"] { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome); }

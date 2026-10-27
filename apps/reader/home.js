@@ -3,7 +3,7 @@
 import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 
-export function homeScreen({ library, drive, open, status }) {
+export function homeScreen({ library, drive, open, status, current = () => ({}) }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -32,6 +32,10 @@ export function homeScreen({ library, drive, open, status }) {
       detail.textContent = `${entry.source === 'drive' ? 'Drive' : 'This device'} · opened ${ago(entry.openedAt)}`;
       meta.append(name, detail);
       button.append(cover, meta);
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'note-remove'; remove.textContent = '×';
+      remove.title = 'Remove from this device'; remove.setAttribute('aria-label', `Remove ${entry.name} from this device`);
+      remove.onclick = event => { event.stopPropagation(); confirmRemove(entry); };
       library.cover(coverKey(entry)).then(url => { if (url) cover.src = url; else cover.classList.add('missing'); });
       button.onclick = async () => {
         try {
@@ -45,10 +49,47 @@ export function homeScreen({ library, drive, open, status }) {
           await open(file, entry);
         } catch (error) { status(error.message, true); }
       };
-      item.append(button);
+      item.append(button, remove);
       fragment.append(item);
     }
     $('recentList').replaceChildren(fragment);
+  }
+  // Remove a note from this device; for Drive notes, optionally upload the open
+  // document's changes first, or (typed confirmation) move the Drive file to trash.
+  function confirmRemove(entry) {
+    const isDrive = entry.source === 'drive', now = current();
+    const changed = isDrive && now.entryKey === entry.key && now.dirty;
+    $('forgetTitle').textContent = `Remove “${entry.name.replace(/\.noteful$/i, '')}”`;
+    $('forgetText').textContent = isDrive
+      ? 'Deletes the copy kept on this device and its cover. The file in Google Drive stays as it is.'
+      : 'Removes it from Recent. The file on your computer is not deleted.';
+    $('forgetUpload').hidden = !changed;
+    $('forgetDanger').hidden = !isDrive;
+    $('forgetDanger').open = false;
+    $('forgetConfirm').value = '';
+    $('forgetDriveDelete').disabled = true;
+    $('forgetStatus').textContent = changed ? 'This note is open with unsaved changes.' : '';
+    const done = async (text) => { await library.forget(entry.key, { deleteFile: isDrive }); $('forgetDialog').close(); status(text); renderRecent(); };
+    $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : 'Removed from Recent.');
+    $('forgetUpload').onclick = async () => {
+      try {
+        $('forgetStatus').textContent = 'Exporting the note…';
+        const blob = await now.exportBlob();
+        await drive.update(entry, blob, text => { $('forgetStatus').textContent = text; });
+        await done('Changes uploaded to Drive, then removed from this device.');
+      } catch (error) { $('forgetStatus').textContent = error.message; }
+    };
+    $('forgetConfirm').oninput = () => { $('forgetDriveDelete').disabled = $('forgetConfirm').value.trim() !== 'DELETE'; };
+    $('forgetDriveDelete').onclick = async () => {
+      if ($('forgetConfirm').value.trim() !== 'DELETE') return;
+      try {
+        $('forgetStatus').textContent = 'Moving the file to Google Drive’s trash…';
+        await drive.trash(entry);
+        await done('Moved to Google Drive’s trash (restorable there for 30 days) and removed from this device.');
+      } catch (error) { $('forgetStatus').textContent = error.message; }
+    };
+    $('forgetCancel').onclick = () => $('forgetDialog').close();
+    $('forgetDialog').showModal();
   }
   async function renderFolder() {
     try { $('libraryFolder').textContent = (await library.location()).label; }

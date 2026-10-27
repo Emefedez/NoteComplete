@@ -226,7 +226,8 @@ impl Editor {
                 .any(|l| l.id == line.layer && l.visible && !l.locked)
             || !points_valid(&line.points)
             || !line.width.is_finite()
-            || !(0.1..=100.).contains(&line.width)
+            // Tape strips can cover a whole block of text; ink stays thin.
+            || !(0.1..=if line.tool == 2 { 2000. } else { 100. }).contains(&line.width)
             || line
                 .rgba
                 .iter()

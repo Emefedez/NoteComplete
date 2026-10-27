@@ -1,4 +1,4 @@
-import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile } from './drive-client.js';
+import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile, DRIVE_WRITE_SCOPE } from './drive-client.js';
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 
@@ -150,7 +150,17 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       let local = await library?.cached(file).catch(() => null);
       if (!local) {
         message(`Downloading ${file.name}${file.size ? ` (${megabytes(file.size)})` : ''}…`);
-        local = await client.download(file, signal);
+        const bar = $('driveProgress');
+        if (bar) { bar.hidden = false; bar.value = 0; }
+        let shown = 0;
+        try {
+          local = await client.download(file, signal, (received, total) => {
+            if (Date.now() - shown < 150) return;
+            shown = Date.now();
+            if (bar && total) bar.value = received / total;
+            message(`Downloading ${file.name}: ${total ? `${Math.round((received / total) * 100)} % · ` : ''}${megabytes(received)}${total ? ` of ${megabytes(total)}` : ''}`);
+          });
+        } finally { if (bar) bar.hidden = true; }
         if (!valid()) return;
         try { await library?.keep(file, local); }
         catch (error) { message(`Opening without keeping a copy: ${error.message}`); }
@@ -201,6 +211,9 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     config.connected = false; saveConfig();
     message('Disconnected on this device. No files were changed in Drive. Notes kept on this device stay available under Recent.'); controls();
   };
+  $('driveSearch').onkeydown = event => {
+    if (event.key === 'Enter') { event.preventDefault(); if (!$('driveFind').disabled) $('driveFind').click(); }
+  };
   $('driveFind').onclick = () => {
     const value = $('driveSearch').value.trim();
     // Inside a folder the same box filters its children; at the top it searches names, or lists the top level when cleared.
@@ -219,5 +232,38 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveRefresh').onclick = () => run((signal, valid) => fetchList(signal, valid));
   $('driveMore').onclick = () => run((signal, valid) => fetchList(signal, valid, true));
   controls();
-  return { show, hide, get busy() { return importing; } };
+  // Upload an exported note over its Drive file, asking for write access first.
+  async function writeAccess() {
+    if (client.canWrite) return;
+    identity ||= await identityLoader();
+    if (window.ReactNativeWebView) throw Error('Changing Drive files is available in the desktop and web apps.');
+    await new Promise((resolve, reject) => {
+      try {
+        authorize(identity, $('driveClientId').value.trim(), response => {
+          try { client.authorizeWrite(response); resolve(); } catch (error) { reject(error); }
+        }, reject, DRIVE_WRITE_SCOPE);
+      } catch (error) { reject(error); }
+    });
+  }
+  async function trash(entry) {
+    await writeAccess();
+    await client.trash({ id: entry.driveId, resourceKey: entry.resourceKey });
+    resetList();
+  }
+  async function update(entry, blob, report = () => {}) {
+    if (!client.canWrite) {
+      identity ||= await identityLoader();
+      if (window.ReactNativeWebView) throw Error('Updating Drive files is available in the desktop and web apps.');
+      await new Promise((resolve, reject) => {
+        try {
+          authorize(identity, $('driveClientId').value.trim(), response => {
+            try { client.authorizeWrite(response); resolve(); } catch (error) { reject(error); }
+          }, reject, DRIVE_WRITE_SCOPE);
+        } catch (error) { reject(error); }
+      });
+    }
+    report('Uploading to Drive…');
+    return client.upload({ id: entry.driveId, resourceKey: entry.resourceKey }, blob);
+  }
+  return { show, hide, update, trash, get busy() { return importing; } };
 }

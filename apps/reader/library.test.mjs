@@ -67,3 +67,14 @@ test('folder names drop separators and control characters only', () => {
   assert.equal(safeName('../a/b:c.noteful'), '__a_b_c.noteful');
   assert.equal(safeName(''), 'Note');
 });
+test('forgetting a Drive note can delete its kept copy and cover; local originals stay', async () => {
+  const dir = fakeDirectory();
+  dir.removeEntry = async name => dir.files.delete(name);
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir } });
+  const entry = await library.keep(drive(), new Blob(['x']));
+  await library.saveCover(library.coverKey(drive()), 'data:cover');
+  await library.forget(entry.key, { deleteFile: true });
+  assert.equal(dir.files.size, 0);
+  assert.equal(await library.cover(library.coverKey(drive())), undefined);
+  assert.deepEqual(await library.recent(), []);
+});

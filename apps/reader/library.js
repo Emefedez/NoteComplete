@@ -60,6 +60,10 @@ function directoryFolder(handle, kind, label) {
       if (!(await permitted(true))) return null;
       try { return await (await handle.getFileHandle(name)).getFile(); } catch { return null; }
     },
+    async remove(name) {
+      if (!(await permitted(true))) return;
+      await handle.removeEntry(name).catch(() => {});
+    },
     async write(name, blob) {
       if (!(await permitted(true))) throw Error('NoteComplete no longer has access to the downloads folder. Choose it again.');
       const writable = await (await handle.getFileHandle(name, { create: true })).createWritable();
@@ -77,6 +81,7 @@ function bridgeFolder(bridge, label) {
       return bytes ? new Blob([bytes]) : null;
     },
     async write(name, blob) { await bridge.write(name, new Uint8Array(await blob.arrayBuffer())); },
+    remove: name => bridge.remove(name),
   };
 }
 
@@ -147,7 +152,14 @@ export class Library {
     const entry = await this.store.get('entries', key);
     if (entry) await this.store.set('entries', key, { ...entry, openedAt: this.now() });
   }
-  async forget(key) { await this.store.delete('entries', key); await this.store.delete('covers', key); }
+  // Remove from Recent; with `deleteFile`, also delete the kept copy (never a local original).
+  async forget(key, { deleteFile = false } = {}) {
+    const entry = await this.store.get('entries', key);
+    if (deleteFile && entry?.source === 'drive' && entry.filename) await (await this.location()).remove?.(entry.filename);
+    await this.store.delete('entries', key);
+    await this.store.delete('covers', key);
+    if (entry?.source === 'drive') await this.store.delete('covers', this.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }));
+  }
   async recent(limit = 24) {
     return (await this.store.values('entries')).sort((a, b) => b.openedAt - a.openedAt).slice(0, limit);
   }

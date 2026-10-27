@@ -226,12 +226,19 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             _ => return Err(Error::new(0, "Unsupported image")),
         };
         format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"data:{mime};base64,{}\"/>",STANDARD.encode(package.resource(id).ok_or_else(||Error::new(0,"Missing image bytes"))?))
-    } else if kind == 2 {
+    } else if kind == 2 || kind == 19 {
+        // Kind 19 (owner notes: "7- ELECTRÓNICA DIGITAL") is a tag such as "#SD I":
+        // the same rich text in tag 4, its names in tag 14, drawn as a pill.
         let parsed = crate::decode_rich_text(&p["4"]);
         let sx = if sw.abs() > 1e-9 { w / sw } else { 1. };
         let sy = if sh.abs() > 1e-9 { h / sh } else { 1. };
+        let pill = if kind == 19 {
+            format!("<rect width=\"{sw}\" height=\"{sh}\" rx=\"{}\" fill=\"#e8eefb\" stroke=\"#9fb3df\" stroke-width=\"0.8\"/>", sh / 2.)
+        } else {
+            String::new()
+        };
         let svg = format!(
-            "<g transform=\"scale({sx} {sy})\">{}</g>",
+            "<g transform=\"scale({sx} {sy})\">{pill}{}</g>",
             crate::text_svg(&parsed, sw)
         );
         rich_text = Some(parsed);

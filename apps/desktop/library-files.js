@@ -1,7 +1,7 @@
 // Main-process side of the reader's downloads folder and Recent list.
 // The renderer may only read/write plain file names inside the chosen folder,
 // and reopen paths the user picked through the main-process open dialog.
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const NOTE = /\.(noteful|nfedit|pdf|png|jpe?g|webp)$/i;
@@ -47,6 +47,9 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
       const partial = path.join(folder, `.${path.basename(file)}.${process.pid}.partial`);
       await writeFile(partial, bytes);
       await rename(partial, file);
+    },
+    async remove(name) {
+      await rm(path.join((await load()).folder, plainName(name)), { force: true });
     },
     // Paths chosen in the open dialog become reopenable from Recent.
     async remember(file) {

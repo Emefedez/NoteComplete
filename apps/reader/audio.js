@@ -34,11 +34,11 @@ export class AudioController {
   await this.select(index);
   return true;
  }
- reset(){this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;$('audioBar').hidden=true;}
+ reset(){this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;$('audioBar').hidden=true;$('audioToggle').hidden=true;$('audioToggle').setAttribute('aria-expanded','false');}
  open(assets,recordings){
   this.reset();this.entries=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id)}));
   for(const asset of assets)if(!recordings.some(r=>r.asset_id===asset.id))this.entries.push({asset});
-  $('audioBar').hidden=!this.entries.length;$('recording').replaceChildren();
+  $('audioToggle').hidden=!this.entries.length;if(!this.entries.length)$('audioBar').hidden=true;$('recording').replaceChildren();
   for(const [i,e] of this.entries.entries()){const o=document.createElement('option');o.value=i;o.textContent=recordingName(e.recording,i);$('recording').append(o);}
   if(this.entries.length)this.select(0);
  }
@@ -59,6 +59,6 @@ export class AudioController {
  }
  update(){
   $('audioSeek').value=this.time;$('audioTime').textContent=`${clock(this.time)} / ${clock(this.audio.duration||0)}`;
-  $('playAudio').textContent=this.audio.paused?'Play':'Pause';this.changed();this.transcript?.update();
+  $('playAudio').dataset.state=this.audio.paused?'paused':'playing';$('playAudio').setAttribute('aria-label',this.audio.paused?'Play':'Pause');this.changed();this.transcript?.update();
  }
 }

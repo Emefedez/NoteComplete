@@ -1230,6 +1230,19 @@ $("pageNumber").onchange = () => jump(Number($("pageNumber").value) - 1);
 $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
 $("zoomIn").onclick = () => stepZoom(1);
+// Type a percentage (or "fit") in the zoom box.
+$("zoomValue").onkeydown = (e) => {
+  if (e.key === "Escape") { e.preventDefault(); $("zoomValue").blur(); updateZoom(); }
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const text = $("zoomValue").value.trim().toLowerCase(), n = parseFloat(text.replace(",", "."));
+  if (/^(fit|ajustar)/.test(text)) setZoom("fit");
+  else if (Number.isFinite(n) && n > 0) setZoom(Math.max(0.1, Math.min(4, n / 100)));
+  $("zoomValue").blur();
+  updateZoom();
+};
+$("zoomValue").onfocus = () => $("zoomValue").select();
+$("zoomValue").onblur = () => updateZoom();
 new ResizeObserver(resize).observe($("viewport"));
 // Trackpad pinch (and Ctrl+wheel) zooms towards the pointer. During the gesture
 // only a CSS transform scales the pages; the real zoom, with one re-raster of
@@ -1247,10 +1260,12 @@ $("viewport").addEventListener("wheel", (e) => {
     $("pages").style.transformOrigin = `${pinch.cx}px ${pinch.cy}px`;
     $("pages").style.willChange = "transform";
   }
-  const step = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0075));
+  // Trackpads send small deltas; a wheel notch is ~100 px, so each event is capped to about ×1.2.
+  const delta = Math.max(-20, Math.min(20, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY));
+  const step = Math.exp(-delta * 0.009);
   pinch.scale = Math.max(0.1 / pinch.base, Math.min(4 / pinch.base, pinch.scale * step));
   $("pages").style.transform = `scale(${pinch.scale})`;
-  $("zoomValue").textContent = Math.round(pinch.base * pinch.scale * 100) + "%";
+  $("zoomValue").value = Math.round(pinch.base * pinch.scale * 100) + "%";
   clearTimeout(pinch.timer);
   pinch.timer = setTimeout(() => {
     const { base, scale, cx, cy, x, y } = pinch;
@@ -1272,7 +1287,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"],
-  ["/", "Find in note"], ["L", "Layers"], ["A", "Audio and transcript"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "This list"],
+  ["/", "Find in note"], ["Shift L", "Layers"], ["A", "Audio and transcript"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "This list"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -1284,8 +1299,13 @@ function shortcut(e) {
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
-  if (k.toLowerCase() === "l" && !e.shiftKey) return $("layersToggle").click(), true;
+  if (k === "L") return $("layersToggle").click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
+  if (!$("audioToggle").hidden && ["j", "k", "l"].includes(k)) {
+    if (k === "k") $("playAudio").click();
+    else (k === "j" ? $("backAudio") : $("forwardAudio")).click();
+    return true;
+  }
   if (k === "q") return resumeQuiz(), true;
   if (k === "Q") return study.quiz(), true;
   if (k === "C") return study.cards(), true;
@@ -1371,7 +1391,7 @@ document.addEventListener("keydown", (e) => {
 $("open").onclick = $("emptyOpen").onclick = () => openLocal();
 $("file").onchange = (e) => {
   if (e.target.files[0] && !busy() && canReplace()) {
-    notePath = "";
+    notePath = noteEntryKey = "";
     load(e.target.files[0]).catch(() => {});
   }
   e.target.value = "";
@@ -1550,7 +1570,7 @@ function currentZoom() {
 }
 function updateZoom() {
   const value = currentZoom();
-  $("zoomValue").textContent = zoom === "fit" ? "Fit" : Math.round(value * 100) + "%";
+  if (document.activeElement !== $("zoomValue")) $("zoomValue").value = zoom === "fit" ? "Fit" : Math.round(value * 100) + "%";
   $("zoomFit").setAttribute("aria-pressed", String(zoom === "fit"));
   $("zoomOut").disabled = value <= 0.1;
   $("zoomIn").disabled = value >= 4;
@@ -1567,15 +1587,15 @@ function stepZoom(direction) {
 
 receiveNativeFiles({ open: load, canReplace, isBusy: busy, status });
 
-$("audioDetails").onclick = () => {
- const expanded=$("audioBar").classList.toggle("expanded");
- $("audioDetails").setAttribute("aria-expanded",String(expanded));
-};
-// Desktop opens with the recording controls visible; the toggle still shrinks them at any time.
-if (matchMedia("(min-width: 701px)").matches) {
- $("audioBar").classList.add("expanded");
- $("audioDetails").setAttribute("aria-expanded", "true");
+// Audio and transcript live in a side panel opened from the toolbar (A).
+function toggleAudio(open = $("audioBar").hidden) {
+  if ($("audioToggle").hidden) return;
+  $("audioBar").hidden = !open;
+  $("audioToggle").setAttribute("aria-expanded", String(open));
 }
+$("audioToggle").onclick = () => toggleAudio();
+$("audioClose").onclick = () => toggleAudio(false);
+$("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
 async function openChosen(file) {
@@ -1585,8 +1605,9 @@ async function openChosen(file) {
   return true;
 }
 const library = new Library();
-// The open note's file on disk (desktop), so AI tools can read other pages via MCP.
-let notePath = "";
+// The open note's file on disk (desktop), so AI tools can read other pages via MCP,
+// and its Recent entry, so removing it can first upload unsaved changes to Drive.
+let notePath = "", noteEntryKey = "";
 const drive = driveBrowser({
   library,
   open: async (file, driveFile) => {
@@ -1594,6 +1615,7 @@ const drive = driveBrowser({
     if (opened) {
       home.rememberCover(library.coverKey(driveFile), file);
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
+      noteEntryKey = library.key(driveFile);
     }
     return opened;
   },
@@ -1603,10 +1625,15 @@ var home = homeScreen({
   drive,
   open: async (file, entry) => {
     const opened = await openChosen(file);
-    if (opened) notePath = await library.pathOf(entry).catch(() => "");
+    if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; }
     return opened;
   },
   status,
+  current: () => ({
+    entryKey: noteEntryKey,
+    dirty,
+    exportBlob: async () => new Blob([await call("export")], { type: "application/octet-stream" }),
+  }),
 });
 // The desktop bridge opens files itself so Recent can reopen them by path.
 async function openLocal() {
@@ -1619,6 +1646,7 @@ async function openLocal() {
     if (busy() || !canReplace()) return;
     await load(file);
     notePath = chosen.path;
+    noteEntryKey = "";
     const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
     home.rememberCover(entry.key, file);
   } catch (error) {

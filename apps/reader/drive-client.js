@@ -1,5 +1,7 @@
 // Read-only Google Drive transport. Tokens stay in memory; note bytes are never uploaded.
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+// Requested only when the user uploads changes back to Drive.
+export const DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
 export const supportedDriveFile = file => /\.(noteful|nfedit|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
 const fields = 'id,name,mimeType,modifiedTime,size,resourceKey,thumbnailLink,capabilities(canDownload)';
@@ -22,7 +24,33 @@ export class DriveClient {
     this.token = response.access_token;
     this.expires = Date.now() + seconds * 1000;
   }
-  clear() { this.token = ''; this.expires = 0; }
+  clear() { this.token = ''; this.expires = 0; this.writeToken = ''; this.writeExpires = 0; }
+  authorizeWrite(response) {
+    if (!response.access_token || !String(response.scope || '').split(/\s+/).includes(DRIVE_WRITE_SCOPE)) throw Error('Permission to update Drive files was not granted.');
+    this.writeToken = response.access_token;
+    this.writeExpires = Date.now() + Number(response.expires_in || 0) * 1000;
+  }
+  get canWrite() { return !!this.writeToken && this.writeExpires > Date.now() + 10000; }
+  // Move a Drive file to Drive's trash (restorable there for 30 days); only on an explicit, typed confirmation.
+  async trash(file, signal) {
+    if (!this.canWrite) throw Error('Allow NoteComplete to update Drive files first.');
+    const url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(file.id) + '?supportsAllDrives=true';
+    const headers = { Authorization: `Bearer ${this.writeToken}`, 'Content-Type': 'application/json' };
+    if (file.resourceKey) headers['X-Goog-Drive-Resource-Keys'] = `${file.id}/${file.resourceKey}`;
+    const response = await this.fetcher(url, { method: 'PATCH', headers, body: JSON.stringify({ trashed: true }), signal, credentials: 'omit', redirect: 'error' });
+    if (!response.ok) throw Error(response.status === 403 ? 'Google refused: you may not be allowed to delete this file.' : `Moving the file to Drive's trash failed (${response.status}).`);
+  }
+  // Replace a Drive file's content (the only write NoteComplete makes, on request).
+  async upload(file, blob, signal) {
+    if (!this.canWrite) throw Error('Allow NoteComplete to update Drive files first.');
+    const url = new URL('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(file.id));
+    url.search = new URLSearchParams({ uploadType: 'media', supportsAllDrives: 'true', fields: 'id,modifiedTime,size' }).toString();
+    const headers = { Authorization: `Bearer ${this.writeToken}`, 'Content-Type': 'application/octet-stream' };
+    if (file.resourceKey) headers['X-Goog-Drive-Resource-Keys'] = `${file.id}/${file.resourceKey}`;
+    const response = await this.fetcher(url.href, { method: 'PATCH', headers, body: blob, signal, credentials: 'omit', redirect: 'error' });
+    if (!response.ok) throw Error(response.status === 403 ? 'Google refused the update. Check that you can edit this file.' : `Google Drive update failed (${response.status}).`);
+    return response.json();
+  }
   get connected() { return !!this.token && this.expires > Date.now() + 10000; }
   // Without sign-in, an API key can read folders shared as "Anyone with the link".
   get publicAccess() { return !this.connected && !!this.apiKey; }
@@ -68,10 +96,22 @@ export class DriveClient {
     if (file.mimeType !== FOLDER_MIME) throw Error('That link does not point to a folder.');
     return { ...file, resourceKey: file.resourceKey || reference.resourceKey };
   }
-  async download(file, signal) {
+  // `progress(received, total)` follows the download; total is 0 when unknown.
+  async download(file, signal, progress = () => {}) {
     if (!supportedDriveFile(file) || file.capabilities?.canDownload === false) throw Error('This file cannot be downloaded into NoteComplete.');
     const response = await this.request('files/' + encodeURIComponent(file.id), { alt: 'media', supportsAllDrives: 'true' }, signal, file);
-    return new File([await response.blob()], file.name, { type: file.mimeType });
+    const total = Number(response.headers?.get?.('Content-Length')) || Number(file.size) || 0;
+    if (!response.body?.getReader) return new File([await response.blob()], file.name, { type: file.mimeType });
+    const reader = response.body.getReader(), chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      progress(received, total);
+    }
+    return new File(chunks, file.name, { type: file.mimeType });
   }
   // Bytes [start, end) of a file. Drive's alt=media honours Range, so note covers
   // are read without downloading the note; a server ignoring it is cut off.

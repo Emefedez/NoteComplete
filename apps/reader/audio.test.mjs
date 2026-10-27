@@ -1,7 +1,7 @@
 // Isolated controller tests; real codec playback is covered separately in browser QA.
 import {strict as assert} from 'node:assert';
 const elements=new Map();
-function element(){return {value:'',checked:true,hidden:false,disabled:false,textContent:'',options:[],append(v){this.options.push(v);},replaceChildren(){this.options=[];},removeAttribute(){},pause(){this.paused=true;},load(){this.currentTime=0;},currentTime:0,duration:13.467574,paused:true,readyState:4};}
+function element(){return {value:'',checked:true,hidden:false,disabled:false,textContent:'',options:[],append(v){this.options.push(v);},replaceChildren(){this.options=[];},removeAttribute(){},setAttribute(){},dataset:{},pause(){this.paused=true;},load(){this.currentTime=0;},currentTime:0,duration:13.467574,paused:true,readyState:4};}
 globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element};
 globalThis.cancelAnimationFrame=()=>{};globalThis.requestAnimationFrame=()=>1;
 const {AudioController}=await import('./audio.js');
