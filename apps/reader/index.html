@@ -372,17 +372,6 @@
                 <option value="free">Freehand</option>
               </select>
             </div>
-            <div id="textOptions" class="option-group" hidden>
-              <div class="choice-row" data-for="textSize" role="radiogroup" aria-label="Text size"></div>
-              <select id="textSize" data-native hidden aria-label="Text size">
-                <option value="12">Small</option>
-                <option value="16" selected>Normal</option>
-                <option value="22">Large</option>
-                <option value="32">Heading</option>
-                <option value="48">Title</option>
-              </select>
-              <button id="textBold" type="button" class="text-bold" aria-pressed="false" title="Bold">B</button>
-            </div>
             <div class="choice-row swatches" data-for="color" role="radiogroup" aria-label="Color"></div>
             <label class="color-label" title="Custom color"
               ><input
@@ -620,6 +609,20 @@
   <p id="insertStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="insertCancel" type="button">Cancel</button><button id="insertConfirm" type="button" class="primary">Insert</button></div>
 </dialog>
+
+<div id="textFormat" class="text-format" role="toolbar" aria-label="Text format" hidden>
+  <select id="textFont" data-native aria-label="Font" title="Font">
+    <option value="Helvetica">Sans</option>
+    <option value="Times New Roman">Serif</option>
+    <option value="Courier New">Mono</option>
+    <option value="Noteworthy">Handwriting</option>
+  </select>
+  <select id="textSize" data-native aria-label="Size" title="Size"></select>
+  <button id="textBold" type="button" class="fmt-bold" aria-pressed="false" title="Bold">B</button>
+  <button id="textItalic" type="button" class="fmt-italic" aria-pressed="false" title="Italic">I</button>
+  <span id="textSwatches" class="text-swatches" role="radiogroup" aria-label="Color"></span>
+  <label class="color-label" title="Custom color"><input type="color" id="textColor" value="#1f2328" aria-label="Custom color" /></label>
+</div>
 
 <dialog id="resizeDialog" class="ocr-dialog" aria-labelledby="resizeTitle">
   <h2 id="resizeTitle">Page size</h2>

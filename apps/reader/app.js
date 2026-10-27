@@ -32,6 +32,8 @@ import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
+// Colour choices shared by the pen, shapes and text.
+const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
 enhanceSelects();
 decorateIcons();
 // Command bar menus close on outside clicks and after choosing an item.
@@ -306,7 +308,7 @@ function buildPages(sizes) {
     placeholder(p);
     fragment.append(el);
     el.onpointerdown = (e) => {
-      if (e.target.closest(".text-editor, .page-resize-frame")) return;
+      if (e.target.closest(".text-editor, .text-format, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
       pointerDown(e, p);
     };
@@ -317,6 +319,15 @@ function buildPages(sizes) {
     };
     el.onpointerup = pointerUp;
     el.onpointercancel = () => { p.audioTap = null; cancelGesture(); };
+    // Double-clicking a typed text box with Select types into it.
+    el.ondblclick = (event) => {
+      const item = selection.item;
+      if (tool !== "select" || item?.kind !== "text" || item.page !== p.index) return;
+      const existing = (p.view?.texts || []).find((t) => t.id === item.id);
+      if (!existing) return;
+      document.querySelector('#toolbar [data-tool="text"]').click();
+      openTextEditor(p, point(event, p), existing);
+    };
     el.oncontextmenu = async (event) => {
       // Right-click removes the element under the pointer; Ctrl+Z brings it back.
       event.preventDefault();
@@ -432,22 +443,116 @@ function buildPageList() {
 // Text tool: a text box typed in place. Its layout matches the core's text
 // rendering (first baseline 8 + size, line advance size + max(8, size/5 + 8),
 // 5 units of left padding), so the box does not jump when it is committed.
-$("textBold").onclick = () => $("textBold").setAttribute("aria-pressed", String($("textBold").getAttribute("aria-pressed") !== "true"));
+// A format bar sits on the box while typing, and on a selected text box with
+// Select: font, size, bold, italic and colour apply at once. The last style
+// used is the one new boxes start with.
+const FONT_STACKS = {
+  Helvetica: "Helvetica, Arial, sans-serif",
+  "Times New Roman": "'Times New Roman', Times, serif",
+  "Courier New": "'Courier New', monospace",
+  Noteworthy: "Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive",
+};
+const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
-function textBoxSize(text, size, bold) {
+const cssFont = (style, size = style.size) => `${style.italic ? "italic " : ""}${style.bold ? 700 : 400} ${size}px ${FONT_STACKS[style.font] || FONT_STACKS.Helvetica}`;
+function textBoxSize(text, style) {
   const context = document.createElement("canvas").getContext("2d");
-  context.font = `${bold ? 700 : 400} ${size}px Helvetica, Arial, sans-serif`;
+  context.font = cssFont(style);
   const lines = text.split("\n");
-  return [Math.ceil(Math.max(...lines.map((l) => context.measureText(l).width)) + 12), Math.ceil(8 + lines.length * textAdvance(size))];
+  return [Math.ceil(Math.max(...lines.map((l) => context.measureText(l).width)) + 12), Math.ceil(8 + lines.length * textAdvance(style.size))];
+}
+const hexColor = (rgba) => "#" + rgba.slice(0, 3).map((c) => Math.round(c * 255).toString(16).padStart(2, "0")).join("");
+const rgbaOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).concat(1);
+let textDefaults = { font: "Helvetica", size: 16, bold: false, italic: false, rgba: [0.12, 0.14, 0.16, 1] };
+try { textDefaults = { ...textDefaults, ...JSON.parse(localStorage.getItem("notecomplete-text-style") || "{}") }; } catch { /* Optional. */ }
+const styleOf = (run) => run ? { font: run.font_family || "Helvetica", size: run.font_size, bold: run.bold, italic: run.italic, rgba: run.rgba } : { ...textDefaults };
+const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font });
+const boxText = (existing) => existing.runs.map((r) => r.text).join("").replaceAll("​", "");
+for (const size of TEXT_SIZES) $("textSize").add(new Option(String(size), String(size)));
+for (const color of SWATCHES) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "swatch";
+  b.dataset.color = color;
+  b.style.setProperty("--swatch", color);
+  b.title = color;
+  b.setAttribute("role", "radio");
+  $("textSwatches").append(b);
+}
+const textFormatBar = $("textFormat");
+// Which box the bar formats: the one being typed, or a selected one.
+let textFormatTarget = null;
+function showTextFormat(p, bounds, style, apply) {
+  const bar = textFormatBar;
+  textFormatTarget = { p, style, apply };
+  syncTextFormatControls(style);
+  bar.style.left = `${(bounds[0] / p.size[0]) * 100}%`;
+  bar.style.top = `${(bounds[1] / p.size[1]) * 100}%`;
+  // Above the box, or below it when the box is at the top of the page.
+  bar.classList.toggle("below", bounds[1] / p.size[1] < 0.06);
+  if (bar.classList.contains("below")) bar.style.top = `${((bounds[1] + bounds[3]) / p.size[1]) * 100}%`;
+  if (bar.parentElement !== p.el) p.el.append(bar);
+  bar.hidden = false;
+}
+function syncTextFormatControls(style) {
+  $("textFont").value = FONT_STACKS[style.font] ? style.font : "Helvetica";
+  if (![...$("textSize").options].some((o) => Number(o.value) === style.size)) $("textSize").add(new Option(String(style.size), String(style.size)));
+  $("textSize").value = String(style.size);
+  $("textBold").setAttribute("aria-pressed", String(!!style.bold));
+  $("textItalic").setAttribute("aria-pressed", String(!!style.italic));
+  const hex = hexColor(style.rgba);
+  $("textColor").value = hex;
+  for (const b of $("textSwatches").children) b.setAttribute("aria-checked", String(b.dataset.color.toLowerCase() === hex));
+}
+function hideTextFormat() {
+  textFormatTarget = null;
+  textFormatBar.hidden = true;
+  document.body.append(textFormatBar);
+}
+function changeTextStyle(change) {
+  const t = textFormatTarget;
+  if (!t) return;
+  Object.assign(t.style, change);
+  textDefaults = { ...t.style };
+  try { localStorage.setItem("notecomplete-text-style", JSON.stringify(textDefaults)); } catch { /* Optional. */ }
+  syncTextFormatControls(t.style);
+  t.apply(t.style);
+}
+// Buttons keep the typing focus; the dropdowns hand it back after a choice.
+// A press anywhere on the bar keeps the box open while focus moves to it.
+let textFormatPressed = 0;
+textFormatBar.addEventListener("pointerdown", () => { textFormatPressed = Date.now(); }, true);
+for (const el of textFormatBar.querySelectorAll("button")) el.addEventListener("pointerdown", (e) => e.preventDefault());
+$("textBold").onclick = () => changeTextStyle({ bold: !textFormatTarget?.style.bold });
+$("textItalic").onclick = () => changeTextStyle({ italic: !textFormatTarget?.style.italic });
+$("textFont").onchange = () => changeTextStyle({ font: $("textFont").value });
+$("textSize").onchange = () => changeTextStyle({ size: Number($("textSize").value) });
+$("textColor").oninput = () => changeTextStyle({ rgba: rgbaOf($("textColor").value) });
+$("textSwatches").onclick = (e) => { const c = e.target.closest("[data-color]")?.dataset.color; if (c) changeTextStyle({ rgba: rgbaOf(c) }); };
+textFormatBar.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Escape" && textEditor) { e.preventDefault(); textEditor.area.focus(); }
+});
+// With Select: the bar follows a selected typed text box and restyles it at once.
+function syncTextFormat() {
+  if (textEditor) return;
+  const item = selection.item, p = item && panels[item.page];
+  const existing = tool === "select" && item?.kind === "text" && (p?.view?.texts || []).find((t) => t.id === item.id);
+  if (!existing) return hideTextFormat();
+  const style = styleOf(existing.runs[0]);
+  showTextFormat(p, existing.bounds, style, (next) => {
+    const value = boxText(existing), [w, h] = textBoxSize(value, next);
+    action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next), width: w, height: h });
+  });
 }
 let textEditor = null;
-async function openTextEditor(p, [x, y]) {
+async function openTextEditor(p, [x, y], known = null) {
   if (textEditor) return commitText();
   if (!doc || editing || busy() || !p.view) return;
   const layer = doc.layers.find((l) => l.id === activeLayer);
   // A click on a typed text box edits it; elsewhere it starts a new one.
-  let existing = null;
-  try {
+  let existing = known;
+  if (!existing) try {
     const item = await call("pick", { page: p.index, x, y, tolerance: 2 });
     if (item?.kind === "text") {
       existing = (p.view.texts || []).find((t) => t.id === item.id);
@@ -455,25 +560,22 @@ async function openTextEditor(p, [x, y]) {
     }
   } catch { /* Nothing under the pointer. */ }
   if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
-  const run = existing?.runs?.[0];
-  const size = run?.font_size || Number($("textSize").value), bold = run ? run.bold : $("textBold").getAttribute("aria-pressed") === "true";
-  const rgba = run?.rgba || [1, 3, 5].map((i) => parseInt($("color").value.slice(i, i + 2), 16) / 255).concat(1);
-  const [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - size * 0.8];
+  const style = styleOf(existing?.runs?.[0]);
+  const [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - style.size * 0.8];
   const area = document.createElement("textarea");
   area.className = "text-editor";
   area.wrap = "off";
   area.spellcheck = true;
-  area.value = run ? existing.runs.map((r) => r.text).join("").replaceAll("\u200b", "") : "";
+  area.value = existing ? boxText(existing) : "";
   area.setAttribute("aria-label", "Text box");
-  const scale = () => p.el.clientWidth / p.size[0];
   const fit = () => {
-    const s = scale(), [w, h] = textBoxSize(area.value || " ", size, bold);
+    const s = p.el.clientWidth / p.size[0], [w, h] = textBoxSize(area.value || " ", style);
     Object.assign(area.style, {
       left: `${(bx / p.size[0]) * 100}%`, top: `${(by / p.size[1]) * 100}%`,
       width: `${Math.max(w, 40) * s}px`, height: `${h * s}px`,
-      font: `${bold ? 700 : 400} ${size * s}px/${textAdvance(size) * s}px Helvetica, Arial, sans-serif`,
-      padding: `${Math.max(0, 8 + 0.2 * size - (textAdvance(size) - size) / 2) * s}px 0 0 ${5 * s}px`,
-      color: `rgba(${rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${rgba[3]})`,
+      font: `${cssFont(style, style.size * s).replace(/px /, `px/${textAdvance(style.size) * s}px `)}`,
+      padding: `${Math.max(0, 8 + 0.2 * style.size - (textAdvance(style.size) - style.size) / 2) * s}px 0 0 ${5 * s}px`,
+      color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
     });
   };
   fit();
@@ -481,7 +583,9 @@ async function openTextEditor(p, [x, y]) {
   const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
   hidden?.setAttribute("visibility", "hidden");
   p.el.append(area);
-  textEditor = { p, area, existing, size, bold, rgba, bx, by, hidden, layer: activeLayer };
+  selection.clear();
+  textEditor = { p, area, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
+  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); area.focus(); });
   area.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeText(); }
     else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitText(); }
@@ -489,7 +593,11 @@ async function openTextEditor(p, [x, y]) {
     // Typing stays in the box: no tool or study shortcuts while editing.
     e.stopPropagation();
   });
-  area.addEventListener("blur", () => setTimeout(() => textEditor?.area === area && commitText(), 0));
+  // Leaving the box finishes it, unless the focus went to its format bar.
+  area.addEventListener("blur", () => setTimeout(() => {
+    if (textEditor?.area !== area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
+    commitText();
+  }, 0));
   requestAnimationFrame(() => area.focus());
   status(existing ? "Editing text. Ctrl+Enter or a click outside finishes; Esc cancels." : "Type your text. Ctrl+Enter or a click outside finishes; Esc cancels.");
 }
@@ -498,17 +606,18 @@ function closeText() {
   textEditor.hidden?.removeAttribute("visibility");
   textEditor.area.remove();
   textEditor = null;
+  hideTextFormat();
 }
 async function commitText() {
   const t = textEditor;
   if (!t) return;
   const value = t.area.value.replace(/\s+$/, "");
   closeText();
-  const text = { text: value, font_size: t.size, rgba: t.rgba, bold: t.bold };
-  const [w, h] = textBoxSize(value || " ", t.size, t.bold);
+  const text = textPayload(value, t.style);
+  const [w, h] = textBoxSize(value || " ", t.style);
   if (t.existing) {
-    const before = t.existing.runs.map((r) => r.text).join("").replaceAll("\u200b", "");
-    if (value === before) return;
+    const same = value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
+    if (same) return;
     if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id });
     return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
   }
@@ -735,6 +844,7 @@ async function renderPage(p, provided) {
     p.overlay = overlay;
     p.el.replaceChildren(render, overlay, lockMarks(result));
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
+    if (textFormatTarget?.p === p) p.el.append(textFormatBar);
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -879,8 +989,6 @@ function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
   $("tapeOptions").hidden = tool !== "tape";
-  $("textOptions").hidden = tool !== "text";
-  $("drawingOptions").classList.toggle("texting", tool === "text");
   $("drawingOptions").hidden = tool === "select";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
@@ -888,7 +996,7 @@ function toolOptions() {
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   $("toolOptions").hidden =
     chromeState.compact || !optionsOpen ||
-    (!["draw", "highlight", "shape", "tape", "erase", "text"].includes(tool) &&
+    (!["draw", "highlight", "shape", "tape", "erase"].includes(tool) &&
       !(tool === "select" && selection.item));
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   syncChoices();
@@ -899,6 +1007,7 @@ function toolOptions() {
       $("toolOptions").style.left = `${Math.max(8, Math.min(left, bar.width - $("toolOptions").offsetWidth - 8))}px`;
     }
   }
+  syncTextFormat();
   const settingsLabel = $("toolOptions").hidden ? "Show tool settings" : "Hide tool settings";
   $("toolbarToggle").setAttribute("aria-label", settingsLabel);
   $("toolbarToggle").title = settingsLabel;
@@ -1357,10 +1466,8 @@ $("shape").onchange = () =>
   document.querySelector('[data-tool="shape"]').click();
 // Tool settings are rows of visual choices, like the shapes; hidden selects and
 // the color input stay the data source the drawing code reads.
-const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
 const CHOICE_ICONS = {
   highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>' },
-  textSize: Object.fromEntries([12, 16, 22, 32, 48].map((v, i) => [v, `<text x="12" y="${15 + i}" text-anchor="middle" font-size="${9 + i * 3.5}" font-family="sans-serif" fill="currentColor" stroke="none">A</text>`])),
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
 };
 function buildChoices() {

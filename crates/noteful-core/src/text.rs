@@ -227,8 +227,25 @@ pub fn text_svg(text: &RichText, width: f64) -> String {
                 (false, true) => "line-through",
                 _ => "none",
             };
+            // iPad fonts may be missing here: fall back to the same kind of face.
+            let lower = run.font_family.to_lowercase();
+            let generic = if lower.contains("courier") || lower.contains("mono") {
+                "'Courier New', monospace"
+            } else if lower.contains("times")
+                || lower.contains("georgia")
+                || lower.contains("serif")
+            {
+                "'Times New Roman', serif"
+            } else if lower.contains("noteworthy")
+                || lower.contains("marker")
+                || lower.contains("chalk")
+            {
+                "'Comic Neue', 'Comic Sans MS', cursive"
+            } else {
+                "Arial, sans-serif"
+            };
             let fonts = format!(
-                "'{}', '{}', Arial, sans-serif",
+                "'{}', '{}', {generic}",
                 family(&run.font_family),
                 family(&run.font_name)
             );

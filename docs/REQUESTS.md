@@ -104,6 +104,9 @@ The owner's requests from the latest review, in one place, with how each was che
 
 - ✅ **Resize pages by dragging their borders**: Pages → Resize by dragging the borders (or "Drag the borders instead" in the Page size dialog) puts handles on the current page's right edge, bottom edge and corner. A dashed frame and the size in mm follow the pointer; releasing resizes the page (one undo step), and the handles stay for further changes until Done or Esc. Only the right and bottom borders move, because writing is anchored to the top-left corner. *Browser test: right edge 210 → 268 mm wide, corner shrink, Esc.*
 
+## Seventh round
+- ✅ **Formatting text is now done on the text itself.** While you type, and whenever a typed text box is selected with Select, a format bar sits right above it: font (Sans, Serif, Mono, Handwriting), size, **B**, *I* and colour (swatches or any colour). Changes apply at once: live while typing, as one undoable change on a selected box. The last style you used is the one new boxes start with. Double-click a text box with Select to type in it. The Text tool no longer has a settings popup. Fonts and italic are exported to Noteful (the iPad fonts of the same names). *Core test (font, italic through export); browser test: bold and serif while typing without losing the cursor, recolour and resize a selected box, double-click to edit.*
+
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
 - ✅ Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.

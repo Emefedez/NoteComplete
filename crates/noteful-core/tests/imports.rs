@@ -102,6 +102,8 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         font_size: 20.,
         rgba: [0.8, 0., 0., 1.],
         bold: true,
+        italic: true,
+        font: "Times New Roman".into(),
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
@@ -156,6 +158,14 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         (Some("Adiós"), Some(20.), Some(true))
     );
     assert_eq!(run["rgba"], serde_json::json!([0.8, 0., 0., 1.]));
+    assert_eq!(
+        (run["italic"].as_bool(), run["font_family"].as_str()),
+        (Some(true), Some("Times New Roman"))
+    );
+    assert!(v["svg"]
+        .as_str()
+        .unwrap()
+        .contains("&apos;Times New Roman&apos;, serif"));
     assert_eq!(
         v["texts"][0]["bounds"],
         serde_json::json!([150., 100., 120., 40.])

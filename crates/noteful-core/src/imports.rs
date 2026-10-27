@@ -29,10 +29,24 @@ pub struct TextBox {
     pub rgba: [f64; 4],
     #[serde(default)]
     pub bold: bool,
+    #[serde(default)]
+    pub italic: bool,
+    /// Font family, as Noteful names it ("Helvetica", "Times New Roman", …).
+    #[serde(default = "default_font")]
+    pub font: String,
+}
+fn default_font() -> String {
+    "Helvetica".into()
 }
 impl TextBox {
     fn valid(&self) -> bool {
         !self.text.trim().is_empty()
+            && !self.font.is_empty()
+            && self.font.len() <= 64
+            && self
+                .font
+                .chars()
+                .all(|c| c.is_alphanumeric() || " -_.".contains(c))
             && self.text.len() <= 20_000
             && self.font_size.is_finite()
             && (2.0..=400.).contains(&self.font_size)
@@ -44,7 +58,7 @@ impl TextBox {
     /// Noteful's attributed text (object payload tag 4) for one styled run.
     /// Layout follows texto.noteful: the run, then a zero-width space that
     /// carries the typing attributes; keys 13 family, 10 size, 6 color, 2 bold,
-    /// 9 paragraph, with their values in pools 5, 10, 7, 6 and 9.
+    /// 3 italic, 9 paragraph, with their values in pools 5, 10, 7, 6 and 9.
     fn rich_text(&self, clock: u64) -> Vec<crate::Field> {
         let floats = |v: &[f64]| V::Array(v.iter().map(|n| V::Float(*n)).collect());
         vec![
@@ -54,14 +68,21 @@ impl TextBox {
                 0x405,
                 V::Array(vec![V::Text(self.text.clone()), V::Text("\u{200b}".into())]),
             ),
-            f(3, 0x402, V::Array(vec![V::UInt(5), V::UInt(1)])),
+            f(3, 0x402, V::Array(vec![V::UInt(6), V::UInt(1)])),
             f(
                 4,
                 0x414,
-                V::Array([13, 10, 6, 2, 9, 10].map(V::UInt).to_vec()),
+                V::Array([13, 10, 6, 2, 3, 9, 10].map(V::UInt).to_vec()),
             ),
-            f(5, 0x405, V::Array(vec![V::Text("Helvetica".into())])),
-            f(6, 0x401, V::Array(vec![V::UInt(u64::from(self.bold))])),
+            f(5, 0x405, V::Array(vec![V::Text(self.font.clone())])),
+            f(
+                6,
+                0x401,
+                V::Array(vec![
+                    V::UInt(u64::from(self.bold)),
+                    V::UInt(u64::from(self.italic)),
+                ]),
+            ),
             f(
                 7,
                 0x407,
