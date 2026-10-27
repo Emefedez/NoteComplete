@@ -572,7 +572,6 @@ async function openTextEditor(p, [x, y], known = null) {
   const area = document.createElement("textarea");
   area.className = "text-editor";
   area.wrap = "off";
-  area.spellcheck = true;
   area.value = existing ? boxText(existing) : "";
   area.setAttribute("aria-label", "Text box");
   const fit = () => {

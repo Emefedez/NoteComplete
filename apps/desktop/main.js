@@ -19,7 +19,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 // readers draw the tab strip in their own top bar from the list sent here.
 const tabs = tabStore();
 const views = new Map(), windows = new Map();
-const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
+// No spell checker: notes are written in many languages and the red underlines get in the way.
+const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
 // The reader's own chrome colour, painted before a tab has drawn anything so
 // new tabs and windows never flash white.
