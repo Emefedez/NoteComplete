@@ -44,8 +44,16 @@
 2. Headless browser (CDP or Playwright) on the web UI with fake bridges injected before load; `Emulation.setFocusEmulationEnabled` so keys work; drive real flows (file input, drag, keys); assert DOM and request payloads.
 3. Shell main process against a stub host module that throws like the real one (destroyed windows).
 4. Packaged artefact: unpack and check the changed files are inside.
-5. Screenshots of every state, light + dark, before and after (`scripts/cdp-gallery.mjs`); look at them.
+5. Screenshots of every state in the app's default theme, before and after (`scripts/cdp-gallery.mjs`); look at them.
 6. Real app on real data (long files, many channels, 4K video); report what was not exercised.
+
+## Test harness pitfalls
+
+- Pick a free port for the test server and the browser (random, or check `ss -ltn`): another app on the port silently serves its own page.
+- Each run gets its own browser profile and debugging port; a browser left over from a previous run keeps its storage and answers on the old port.
+- `Runtime.evaluate` runs in the page's global scope: `const x` twice fails the second call; wrap snippets in `(() => { … })()`.
+- Wait for the condition (a request arriving, a button showing), not a fixed sleep.
+- `Page.addScriptToEvaluateOnNewDocument` needs `Page.enable` first; key events need `Emulation.setFocusEmulationEnabled`.
 
 ## Focus pitfalls
 

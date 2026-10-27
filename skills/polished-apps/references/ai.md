@@ -26,6 +26,14 @@ CLI calls (prompt on stdin unless noted):
 - Expose the project through an MCP server built on the core, so agents query real data instead of screenshots only.
 - Every request has a tag; cancel kills it; one owner per window/tab.
 
+## What to send
+
+- The minimum by default: the item's own source (its page/region image and text). Larger material is opt-in, as toggles in the request UI: the source document (e.g. the page's original PDF), the user's own notes, the whole project through MCP. Agents given the whole project explore it before answering, which turns seconds into minutes.
+- Don't tell the model that emphasised parts (highlights, taped answers) matter more; ask it to cover the material evenly. Show covered parts (tape lifted) only so they're readable.
+- Let the user pick the tool and model next to the request, remembered.
+- While waiting: elapsed seconds and Stop; stream when the tool can.
+- Store the last answer with the item (an explanation on a flashcard, a correction on a question), editable and marked "edited by you", and reuse it instead of asking again; "Ask again" replaces it.
+
 ## Prompts
 
 - One line of role, the material and how it was captured, units and conventions, the language rule, then the exact output: `Reply with ONLY this JSON: {...}`.

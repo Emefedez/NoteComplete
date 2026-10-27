@@ -21,6 +21,7 @@ Target: lightweight, feature-rich, wide and calm, fast to render. One set of dec
 | Workspace skeleton with ARIA | `templates/layout.html` |
 | Command palette | `templates/command-palette.js` |
 | Drag to reorder / drag out | `templates/reorder.js` |
+| Floating windows (drag, resize, _ □ ×, tray) | `templates/floating.js` |
 | Electron shell (windows, tabs, guarded IPC, no flash) | `templates/electron/` |
 | Screenshots of every state, light + dark | `scripts/cdp-gallery.mjs` |
 
@@ -41,7 +42,7 @@ Target: lightweight, feature-rich, wide and calm, fast to render. One set of dec
 - Surfaces: canvas (behind the work), chrome (bars, docks), surface (dialogs, fields), menu (popovers). Borders 1px `--line`, two shadows only.
 - **One UI accent** (any hue) with soft + hover tints: selection, chosen tool, focus, main action. Buttons are transparent on bars, lightly filled in panels and dialogs, pale-accent when chosen or primary. Solid accent only for small indicators (progress, playhead, markers).
 - **Data colours are separate** from UI colours: a fixed categorical series palette (6–8, colour-blind safe) for channels/tracks/series, a sequential ramp for intensity (spectrograms, heatmaps). The UI stays neutral so data stands out.
-- Semantic colours (danger, ok, warning) only for meaning, always paired with text or an icon.
+- Semantic colours (danger, ok, warning) only for meaning, always paired with text or an icon. Use their **soft** tints for buttons and states: "fix it" actions (double check, report, dispute) are soft red (`.fix`), a correct answer soft green, a wrong one soft red; solid red only for text or a tiny mark. Destructive confirmation = soft red + an explicit label ("Press again to discard").
 - Wide and low: controls in rows, labels left of fields, dialogs wider than tall.
 - Rounded pills only for secondary status items (tags, filters, background jobs, toasts).
 - Numbers: tabular figures, monospace for timecodes/addresses, units always shown.
@@ -60,6 +61,22 @@ Top bar (menubar · title/tabs · jobs · assistant · command search) → toolb
 - **Tooltips**: native `title` with the shortcut ("Undo (Ctrl Z)"); no custom tooltip widgets.
 - **Icons**: one stroke set (24×24, `stroke: currentColor`, 1.65 width, round caps), 16px in bars; icon + short label where space allows. The sparkle (✦) marks every AI action, starting with the "Ask AI" button in the top bar.
 - **Close / minimize**: × closes, – minimizes, both top-right of panels; floating panels drag by their head and remember their place.
+
+## Floating windows
+
+Tool windows that sit over the work (assistant, audio, quiz, practice, inspectors that float) use `templates/floating.js`:
+- drag by the head; resize from every edge and corner (a small mark on the bottom-right corner);
+- always clamped inside the work area, so the head and × stay reachable after any drag, resize or window resize; a narrow head squeezes its selects and titles, never its buttons;
+- head buttons `_ □ ×`: `_` puts the window in the **tray** (a pill with a caret at the bottom left listing put-away windows; choosing one brings it back in place), `□` toggles small (head only) / large, `×` closes; closing also removes it from the tray;
+- place and size remembered per window; modal dialogs stay modal and fixed.
+
+Optional focus mode: a sun toggle in a study/focus window's head dims everything behind it (remembered; lifted when the window is small, put away or closed).
+
+## Zoom, export, previews
+
+- **Two zooms**: Ctrl + / − / 0 zoom the document; Ctrl Shift + / − / 0 scale the whole interface (all tabs and windows, remembered). Shells without built-in zoom (Electron `BaseWindow`) need it implemented with `setZoomFactor`. Match keys by `key` *and* `code`: Shift changes the key on every layout (US Shift+0 = `)`, Spanish Shift+0 = `=`, Spanish Shift++ = `*`).
+- **Export row** in File: `Pages as SVG · PDF · IMG▾` (small filled buttons in one row; IMG opens the formats JPEG · WebP · PNG with a one-word hint each). Multi-page exports run as background jobs with Stop; binding (PDF) happens in the core.
+- **Previews open large**: any thumbnail, crop or hint image opens fitted to the window on click/Enter; Esc or a click closes.
 
 ## Interaction
 
@@ -96,4 +113,5 @@ Rearrangeable docks and toolbars (drag), saved workspace layouts, remembered siz
 2. New feature: reuse an existing pattern (dock panel, inspector section, dialog, job); add tokens only if a value truly differs.
 3. Existing inconsistent app: measure the best-looking part, turn its values into tokens, replace values where they're defined (not override blocks at the end).
 4. Before/after screenshots of every state, light and dark (`scripts/cdp-gallery.mjs`), and look at them.
-5. Test pure logic, then flows headless with fake bridges, then the shell against a stub, then the real app; report what wasn't exercised.
+5. Test pure logic, then flows headless with fake bridges, then the shell against a stub, then the real app; report what wasn't exercised. Verify in the app's default theme only, unless a change is theme-specific.
+6. Keep a requests log (`docs/REQUESTS.md`) with bracket states that are easy to edit by hand: `[D]` done, `[!]` done but not verified in the real app or service, `[ ]` to do, each with how it was checked. Keep the README's known issues in step with it.

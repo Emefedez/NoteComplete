@@ -15,7 +15,11 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Command palette | `apps/reader/command-palette.js`, palette built from menu items in `app.js` |
 | Background jobs | `apps/reader/jobs.js` (job chip with phase, seconds, creeping progress, Stop) |
 | Drag to reorder / drag out | `apps/reader/reorder.js` (tools and tabs), `tabs:detach` in `main.js` |
-| Floating panels | quiz panel (`quiz.js`), flashcard practice (non-modal `dialog.floating`, draggable head, `study.js`), Ask AI side panel (`chat.js`) |
+| Floating windows | `apps/reader/floating.js` (drag, resize from every edge/corner, clamp, _ □ ×, tray) for Ask AI, audio, quiz and flashcard practice (a non-modal `dialog.floating`) |
+| Export row | File → Pages as SVG · PDF · IMG (`page-export.js`; PDF bound in Rust by `crates/noteful-core/src/page_pdf.rs` with pdf-writer) |
+| Two zooms | document zoom in `app.js` (Ctrl + / − / 0); interface size in `apps/desktop/main.js` (`uiZoomStep`, Ctrl Shift + / − / 0, `setZoomFactor`, remembered) |
+| Focus dim | sun toggle in quiz and practice heads (`body.focus-dim`) |
+| Saved AI explanations | `card.explanation` in `study.js` (folded under the answer, editable, reused) |
 | AI review actions | quiz: Clarify C, Dispute X, Double check V; flashcards: Ask AI C (saved explanation, editable), Double check V, Edit E, Discard X |
 | Requests log | `docs/REQUESTS.md` (✅/⚠️/⏳ + how each was checked) |
 
@@ -43,5 +47,9 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Closing a window threw "Object has been destroyed" | read `win.id` once at creation; never touch a destroyed window |
 | Practice keys stopped after "Show answer" | hiding the focused button moves focus to `<body>`; route keys from the app's document handler |
 | Ask AI "stuck" for minutes | don't attach the whole document by default; show elapsed seconds and Stop |
+| A narrow Ask AI window hid its × | window heads squeeze selects and titles, never buttons; windows are clamped inside the area |
+| Flashcard prompt biased questions towards taped and highlighted parts | ask for all material evenly; lift tape only for readability |
+| Ctrl − could not shrink the interface | `BaseWindow` has no built-in zoom: implement interface size separately from document zoom |
+| A rewrite dropped the "next card" handlers unnoticed | diff the handler wiring before/after a rewrite; tests must walk a whole flow, not one step |
 | Power measured as low while the window was on another workspace | hidden windows aren't drawn; measure on screen |
 | Tabs captured their first window in a closure | look up a tab's window at event time |
