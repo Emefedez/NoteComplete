@@ -51,5 +51,7 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Flashcard prompt biased questions towards taped and highlighted parts | ask for all material evenly; lift tape only for readability |
 | Ctrl − could not shrink the interface | `BaseWindow` has no built-in zoom: implement interface size separately from document zoom |
 | A rewrite dropped the "next card" handlers unnoticed | diff the handler wiring before/after a rewrite; tests must walk a whole flow, not one step |
+| Identical notes downloaded again and listed twice | Noteful re-uploads files with new ids: match kept copies by content checksum |
+| Recent opened an old copy silently | check the source for a newer version first and let the user choose or compare |
 | Power measured as low while the window was on another workspace | hidden windows aren't drawn; measure on screen |
 | Tabs captured their first window in a closure | look up a tab's window at event time |

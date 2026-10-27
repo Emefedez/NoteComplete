@@ -64,6 +64,13 @@ docs/          user guide, REQUESTS.md (each request: state + how it was checked
 - Preferences: local storage behind try/catch (may be empty). Per-project data in SQLite or IndexedDB keyed by content hash.
 - Save user work immediately; destructive actions undoable.
 
+## Files from cloud sources (Drive, repositories)
+
+- Identify downloads by **content** (the service's checksum, e.g. Drive `md5Checksum`), not by file id or date: many apps re-upload unchanged files as new ones. Reuse the kept copy when the content matches; never download twice.
+- Before opening a kept copy, ask the source for the newest file with that name in that folder; if it differs, let the user choose: newer version · my copy · keep both · compare (side by side, aligned like a diff).
+- Data keyed by a file version (study material, annotations, caches) must be offered for carry-over when the user takes a new version; copy, never move.
+- If the source can't be reached, open the local copy and say it wasn't checked; never silently open a stale copy as if current.
+
 ## Windows and tabs
 
 Single instance; relaunch opens a window; tabs are views that can move between windows without reloading; window backdrop = `--chrome`; see `templates/electron/main.js` (Tauri: `WebviewWindow` per window, same rules).
