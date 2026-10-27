@@ -36,11 +36,15 @@ export function matchWord(query, word, fuzzy) {
   return 0;
 }
 
+// A word may carry other readings of the same spot (`alts`, from a second OCR pass).
+const wordScore = (term, word, fuzzy) => Math.max(matchWord(term, word.norm, fuzzy), ...(word.altNorms || []).map(a => matchWord(term, a, fuzzy)));
+const clean = text => normalize(text).replace(/[^\p{L}\p{N}]+/gu, '');
+
 export class SearchIndex {
   constructor() { this.units = []; }
   // unit: { page, source, words: [{ text, box?, time? }], label?, recordingId? }
   add(unit) {
-    const prepared = { ...unit, words: unit.words.map(w => ({ ...w, norm: normalize(w.text).replace(/[^\p{L}\p{N}]+/gu, '') })).filter(w => w.norm) };
+    const prepared = { ...unit, words: unit.words.map(w => ({ ...w, norm: clean(w.text), ...(w.alts?.length ? { altNorms: w.alts.map(clean).filter(Boolean) } : {}) })).filter(w => w.norm) };
     if (prepared.words.length) this.units.push(prepared);
   }
   remove(predicate) { this.units = this.units.filter(u => !predicate(u)); }
@@ -56,14 +60,14 @@ export class SearchIndex {
       const window = Math.max(terms.length * 4, 6);
       const used = new Set();
       for (let i = 0; i < list.length; i++) {
-        const first = matchWord(terms[0], list[i].norm, fuzzy);
+        const first = wordScore(terms[0], list[i], fuzzy);
         if (!first || used.has(i)) continue;
         const matched = [i];
         let score = first, at = i;
         for (const term of terms.slice(1)) {
           let found = -1, best = 0;
           for (let j = at + 1; j < Math.min(list.length, i + window); j++) {
-            const m = matchWord(term, list[j].norm, fuzzy);
+            const m = wordScore(term, list[j], fuzzy);
             if (m > best) { best = m; found = j; if (m === 3) break; }
           }
           if (found < 0) { score = 0; break; }

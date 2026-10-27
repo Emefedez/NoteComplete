@@ -63,10 +63,22 @@ The owner's requests from the latest review, in one place, with how each was che
 - ✅ Your lost 50-card ACII deck was recovered from the app's storage log and saved as `~/Downloads/ACII-mazo-recuperado.json`; bring it back with the new **Import deck…** button in the same dialog (with the ACII note open). *Import tested: 50 cards.*
 - ✅ **?** outside a text box toggles key badges on the buttons: tools, Ask AI, Layers, dark pages, audio transport, the new audio buttons (Shift A: go to the recording's page; I: dim ink), quiz minimize, practice. Labelled buttons show the key after the label, icon buttons a corner badge; Ctrl shortcuts stay in the menus. Help → Keyboard shortcuts still lists everything.
 
-## Open issues (reported, not yet fixed)
-- ⚠️ Drive: after searching (or filtering a folder), Back showed more folders than at first. Cause: Back always went up one folder, so from a reopened folder it fell to a Drive-wide name search. Back now returns to the view before the last search, filter or folder change. *Unit-tested; not yet checked against your real Drive.*
-- ⏳ Recent notes not appearing on Home (desktop app). Not reproduced: your installed app's storage still holds two Recent entries (ACII and AL-lite), and Recent shows in the browser test. A card that fails to render is now skipped instead of emptying the list. Needs: does the "Recent" heading show at all, and does it happen only after a Drive search?
-- ⏳ Some notes (for example *Discover Chinese*) never load their thumbnail. To investigate: how the cover is found in that file (byte-range read of the head and tail).
+## Fourth round
+- ✅ Recent empty with several windows open. Cause: launching NoteComplete again started a second process on the same profile, which cannot open its storage (Recent, decks, settings came up empty). The app is now single-instance: a second launch opens a new window in the running app. *Needs a restart of the installed app to take effect.*
+- ✅ Thumbnails that never load (Discover Chinese, Memoria 1). The byte-range cover reader works on both (tested on the real files: 2 small reads each). Cause: covers still loading when you left Home were cancelled and the card was marked "no cover" for good; going back did not ask again. Cancelled or failed covers are now retried each time Home is shown, and a note whose Google thumbnail fails falls back to its own cover. *Unit-tested.*
+- ⚠️ Drive Back after a search returns to the view before it. *Unit-tested; not yet checked against your real Drive.*
+- ✅ Saved transcripts load when a recording is selected (with the panel open), so **Export** (text, SRT, WebVTT, JSON) is there without transcribing again.
+- ✅ **Revise with AI**: after a fast local pass (Voxtype or Whisper), your AI tool corrects misheard words, terms and punctuation in parts of about 120 words; every corrected word keeps the time of the word it replaces. Replies that look like summaries are ignored. **Undo revision** brings back the automatic text. *Browser test with a fake AI.*
+- ✅ Voxtype "Invalid UTF-8 detected in a string from Whisper": the selected language is now passed to Voxtype (`--language es`), a failing 30 s piece is cut in two and retried, and a part that still fails is left out (the status says how many) instead of stopping the whole transcription. *Tested with a fake Voxtype that fails like this one.*
+- ✅ "Audio for transcription" is a small button with a chevron beside the dim-ink button; gain, voice filter and normalize open below the transport row.
+- ✅ Everything that expands shows a small chevron that turns when open (transcript, connection setup, public link, fonts, Drive delete…). The File/Edit/View menubar keeps the native look.
+- ✅ Handwriting is recognized on PDF pages: OCR now has a separate pass over the ink alone (PDF, images, typed text and highlighter removed, ink drawn black) at two sizes, merged with the page pass; other readings of the same word stay searchable. *Memoria 1 p. 130: "Sector" is found (read as "Sector" and "Sectov").*
+- ✅ Night view (D) now really inverts the pages: white paper turns black and dark ink light, keeping hues (red ink stays red), including strokes while you draw. Cause of "nothing happens": the display-adjustment filter was "none", which made the dark filter invalid CSS.
+- ✅ Ctrl+F closes the find bar when it is open, also from inside the box.
+- ✅ Eraser sizes: small, medium, large, extra large, remembered; the cursor shows the size.
+- ✅ Pages can sit on the left, in the middle or on the right when narrower than the window (three buttons in the page bar, remembered). The page bar is shorter (33 px).
+- ✅ View → "Tool settings" was a vague toggle that collapsed the toolbar. It is now two checkable items: **Auto-open tool settings** (on by default; when off, press the selected tool again to see its settings) and **Compact toolbar**. Pressing the selected tool always shows or hides its settings. Open menus now sit above the tool settings popup.
+- ⏳ Resize a PDF page (or any page). Not started: needs a page-size change in the engine and in native export.
 
 ## Home filters
 - ✅ Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.

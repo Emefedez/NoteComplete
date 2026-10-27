@@ -1,6 +1,8 @@
 import { timedWords, wordAt } from './transcript-timing.js';
 import { download } from './download.js';
 import { prepareSpeech, speechSettings } from './audio-processing.js';
+import { reviseWords } from './transcript-revise.js';
+import { jsonFrom } from './ai-context.js';
 const $ = id => document.getElementById(id);
 
 async function storedTranscript(key, value) {
@@ -58,6 +60,8 @@ export class TranscriptController {
     $('transcriptFollow').onchange = () => this.update();
     $('transcribeAudio').onclick = () => this.start();
     $('cancelTranscript').onclick = () => this.cancel();
+    $('transcriptRevise').onclick = () => this.revise();
+    $('transcriptRestore').onclick = () => this.restore();
     $('downloadTranscript').onclick = async () => {
       const format = $('transcriptFormat').value || 'txt';
       try { await download(new Blob([transcriptExport(this.words, format)], { type: MIME[format] }), `transcript.${format}`, MIME[format]); }
@@ -122,6 +126,66 @@ export class TranscriptController {
     this.controls();
     this.loadBackends();
     if (!this.job) this.describe();
+    this.lookup();
+  }
+  // A transcript saved earlier for this recording and engine appears without
+  // transcribing again (also making Export available). Only while the panel shows.
+  lookup() {
+    const asset = this.asset;
+    if (!asset || this.results.has(asset.id) || this.job?.asset.id === asset.id || $('audioBar')?.hidden) return;
+    this.cached(asset).then(words => {
+      if (!words?.length || this.asset?.id !== asset.id || this.job?.asset.id === asset.id) return;
+      this.onwords?.(asset, words);
+      this.render(words);
+      this.status('Saved transcript loaded. Click a word to seek.');
+    }, () => {});
+  }
+  // The transcript as it was before an AI revision, kept so the revision can be undone.
+  async originalOf(asset) {
+    const key = asset && this.keys.get(asset.id);
+    return key ? storedTranscript(`${key}:original`).catch(() => null) : null;
+  }
+  async restore() {
+    const asset = this.asset, original = await this.originalOf(asset);
+    if (!original) return;
+    this.words = original;
+    this.saveEdits();
+    this.render(original);
+    this.status('Revision undone: the automatic transcript is back.');
+  }
+  // Clean up the transcript with the user's AI tool; timings are kept per word.
+  async revise() {
+    const ai = globalThis.notecompleteAI, asset = this.asset, words = this.words;
+    if (!ai || !asset || !words.length || this.revising) return;
+    let provider = '';
+    try { provider = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
+    if (!provider) provider = (await ai.providers()).find(p => p.available)?.id || '';
+    if (!provider) { this.status('Revision needs Claude Code, Antigravity or Codex installed and signed in.'); return; }
+    let stopped = false;
+    this.revising = true;
+    $('transcriptRevise').disabled = true;
+    const chip = this.jobs?.start('Revise transcript', { kind: 'revise', cancel: () => { stopped = true; ai.cancel(); } });
+    chip?.set(0.02, 'sending the text');
+    try {
+      const language = $('transcriptLanguage').selectedOptions?.[0]?.textContent || '';
+      const result = await reviseWords(words, {
+        ask: async prompt => (await ai.run({ provider, prompt, images: [] })).text,
+        parse: jsonFrom, title: this.context?.().title, language, perCall: 25, cancelled: () => stopped,
+        onProgress: (done, total) => chip?.set(done / total, `${done} of ${total} parts`),
+      });
+      const key = this.keys.get(asset.id);
+      if (key && !(await this.originalOf(asset))) await storedTranscript(`${key}:original`, words).catch(() => {});
+      if (this.asset?.id === asset.id) { this.words = result.words; this.saveEdits(); this.render(result.words); }
+      else { this.results.set(asset.id, result.words); this.onwords?.(asset, result.words); if (key) storedTranscript(key, result.words).catch(() => {}); }
+      chip?.finish(`Transcript revised: ${result.changed} of ${result.segments} parts changed.`);
+      if (this.asset?.id === asset.id) this.status(`Revised by AI: ${result.changed} of ${result.segments} parts changed. Undo revision brings back the automatic text.`);
+    } catch (error) {
+      chip?.fail(stopped ? 'Revision stopped.' : `Could not revise: ${error.message}`);
+      if (this.asset?.id === asset.id) this.status(stopped ? 'Revision stopped; the transcript is unchanged.' : `Could not revise: ${error.message}`);
+    } finally {
+      this.revising = false;
+      $('transcriptRevise').disabled = false;
+    }
   }
   render(words, provisional = false) {
     this.words = words;
@@ -130,6 +194,9 @@ export class TranscriptController {
     this.renderWindow();
     $('downloadTranscript').hidden = $('transcriptFormat').hidden = !words.length || provisional;
     $('transcriptEdit').hidden = !words.length || provisional;
+    $('transcriptRevise').hidden = !words.length || provisional || !globalThis.notecompleteAI;
+    $('transcriptRestore').hidden = true;
+    if (words.length && !provisional) this.originalOf(this.asset).then(original => { if (original && this.words === words) $('transcriptRestore').hidden = false; });
     this.update();
   }
   browse(direction) {
@@ -240,8 +307,9 @@ export class TranscriptController {
       } else {
         job.external = true;
         this.progress(0.03, backend === 'antigravity' ? 'Sending audio to Gemini' : 'Splitting audio for Voxtype');
-        const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: new Uint8Array(buffer), language }, ({ done, total, segments }) => {
+        const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: new Uint8Array(buffer), language }, ({ done, total, segments, skipped }) => {
           if (!alive()) return;
+          job.skipped = skipped || 0;
           this.progress(0.03 + 0.97 * done / total, `Piece ${done} of ${total}`);
           partial(segmentWords(segments));
         });
@@ -300,7 +368,8 @@ export class TranscriptController {
     job?.chip?.finish(words.length ? `Transcript ready: ${words.length} words.` : 'No speech detected.');
     if (this.asset?.id === asset.id) {
       this.render(words);
-      this.status(words.length ? 'Transcript ready. Click a word to seek. Automatic words and timings may need correction.' : 'No timed speech detected.');
+      const gaps = job?.skipped ? ` ${job.skipped} short ${job.skipped === 1 ? 'part' : 'parts'} could not be transcribed by Voxtype and ${job.skipped === 1 ? 'is' : 'are'} missing.` : '';
+      this.status((words.length ? 'Transcript ready. Click a word to seek. Automatic words and timings may need correction.' : 'No timed speech detected.') + gaps);
     }
     this.controls();
   }

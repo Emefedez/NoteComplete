@@ -66,3 +66,16 @@ test('OCR words come back in page units without low-confidence noise', () => {
   assert.deepEqual(ocrWords(data, 2), [{ text: 'Memoria', box: [100, 50, 100, 20], confidence: 91 }]);
   assert.deepEqual(ocrWords(null, 1), []);
 });
+
+import { mergeWords } from './ocr.js';
+test('two OCR readings of one handwritten word are one hit, found by either', () => {
+  const words = mergeWords(
+    [{ text: 'Sectov', box: [10, 10, 60, 20], confidence: 70 }, { text: '600B', box: [80, 10, 40, 20], confidence: 60 }],
+    [{ text: 'Sector', box: [11, 11, 58, 19], confidence: 55 }],
+  );
+  assert.deepEqual(words.map(w => [w.text, w.alts || []]), [['Sectov', ['Sector']], ['600B', []]]);
+  const index = new SearchIndex();
+  index.add({ page: 129, source: 'ocr', words });
+  assert.equal(index.search('sector').length, 1);
+  assert.equal(index.search('sector')[0].page, 129);
+});

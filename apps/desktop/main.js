@@ -22,7 +22,13 @@ function createWindow() {
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(home)) event.preventDefault(); });
   win.loadURL(home).catch(error => dialog.showErrorBox('Could not open NoteComplete', error.message));
 }
+// One process per profile: a second launch would find IndexedDB and Local Storage
+// locked (Recent, decks and settings would come up empty), so it opens a window here.
+const primary = app.requestSingleInstanceLock();
+if (!primary) app.quit();
+app.on('second-instance', () => { if (app.isReady()) createWindow(); });
 app.whenReady().then(() => {
+  if (!primary) return;
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   protocol.handle('notecomplete', async request => {
@@ -72,8 +78,8 @@ app.whenReady().then(() => {
   // Other transcription backends; pieces stream back to the reader as they finish.
   const asr = transcriber({ tools: () => ai.tools() });
   ipcMain.handle('asr:backends', guarded(() => asr.backends()));
-  ipcMain.handle('asr:run', guarded((event, request) => asr.run(event.sender.id, request, (done, total, segments) => {
-    if (!event.sender.isDestroyed()) event.sender.send('asr:progress', { done, total, segments });
+  ipcMain.handle('asr:run', guarded((event, request) => asr.run(event.sender.id, request, (done, total, segments, skipped) => {
+    if (!event.sender.isDestroyed()) event.sender.send('asr:progress', { done, total, segments, skipped });
   })));
   ipcMain.on('asr:cancel', event => { if (trusted(event)) asr.cancel(event.sender.id); });
   // Several documents: each window is an independent reader; the command palette lists them.

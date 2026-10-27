@@ -57,8 +57,9 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
     const kept = key && await library.cover(key);
     if (kept) return kept;
     let url = '';
-    if (typeof client.thumbnail === 'function' && file.thumbnailLink) url = await client.thumbnail(file, signal);
-    else if (isNote(file)) {
+    if (typeof client.thumbnail === 'function' && file.thumbnailLink) url = await client.thumbnail(file, signal).catch(error => { if (error.name === 'AbortError') throw error; return ''; });
+    // A note's own cover also stands in when Google has no usable thumbnail for it.
+    if (!url && isNote(file)) {
       const cover = await noteCover(readerFor(file, signal), Number(file.size));
       if (cover) url = await resize(new Blob([cover.bytes], { type: cover.mime }));
     }
@@ -67,15 +68,16 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
     return url;
   }
   return {
-    // Resolves to a preview URL for a listed file, or '' when there is none.
+    // Resolves to a preview URL for a listed file, '' when it has none, or null when
+    // it was cancelled or failed (network, quota), so the caller can ask again later.
     get(file) {
       if (file?.mimeType === FOLDER_MIME || !supportedDriveFile(file) || file.capabilities?.canDownload === false) return Promise.resolve('');
       const token = generation, signal = controller.signal;
       return new Promise(resolve => {
         queue.push(async () => {
-          if (token !== generation) return resolve('');
-          try { const url = await produce(file, signal); resolve(token === generation ? url : ''); }
-          catch { resolve(''); }
+          if (token !== generation) return resolve(null);
+          try { const url = await produce(file, signal); resolve(token === generation ? url : null); }
+          catch { resolve(null); }
         });
         pump();
       });

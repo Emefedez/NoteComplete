@@ -34,3 +34,20 @@ export async function recognizePage(worker, canvas, scale) {
   const { data } = await worker.recognize(canvas, {}, { text: false, blocks: true });
   return ocrWords(data, scale);
 }
+
+// Words from several passes over one page (the whole page, and the ink alone at
+// two sizes). Readings of the same spot become one word: the most confident
+// reading is its text and the others stay searchable as `alts`.
+const overlap = (a, b) => {
+  const w = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), h = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+  return w > 0 && h > 0 ? (w * h) / Math.min(a[2] * a[3], b[2] * b[3]) : 0;
+};
+export function mergeWords(...passes) {
+  const kept = [];
+  for (const word of passes.flat().sort((a, b) => b.confidence - a.confidence)) {
+    const same = kept.find(k => overlap(k.box, word.box) > 0.5);
+    if (!same) kept.push({ ...word });
+    else if (word.text.toLowerCase() !== same.text.toLowerCase() && !(same.alts ||= []).includes(word.text)) same.alts.push(word.text);
+  }
+  return kept.sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0]);
+}

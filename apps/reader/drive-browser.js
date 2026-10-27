@@ -65,7 +65,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     catch (error) { if (version === generation && error.name !== 'AbortError') message(error.message); }
     finally { if (version === generation) { loading = false; controls(); } }
   }
-  function resetList() { nextPage = ''; cards.clear(); $('driveList').replaceChildren(); }
+  function resetList() { nextPage = ''; cards.clear(); pending.clear(); $('driveList').replaceChildren(); }
   const megabytes = size => `${(Number(size) / 1048576).toFixed(1)} MB`;
   // Cards whose note has a current copy in the library say so.
   const cards = new Map();
@@ -77,6 +77,27 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       label.textContent = 'On this device';
       entry.append(label);
     }, () => {});
+  }
+  // Covers and facts still to load. One that was cancelled (leaving Home) or failed
+  // stays here and is asked for again the next time Home is shown.
+  const pending = new Map();
+  function load(preview) {
+    const job = pending.get(preview);
+    if (!job || job.busy) return;
+    job.busy = 2;
+    const settle = () => { if (--job.busy) return; if (job.cover && job.facts) pending.delete(preview); };
+    if (job.cover) settle();
+    else previews.get(job.file).then(url => {
+      job.cover = url !== null;
+      if (url) { preview.src = url; preview.classList?.remove('missing'); } else preview.classList?.add('missing');
+      settle();
+    });
+    if (job.facts) settle();
+    else (previews.facts?.(job.file) || Promise.resolve(null)).then(facts => {
+      job.facts = !!facts || !/\.noteful$/i.test(job.file.name || '');
+      if (facts) { job.button.note.facts = facts; onCards(); }
+      settle();
+    });
   }
   function addFiles(files) {
     const fragment = document.createDocumentFragment();
@@ -102,10 +123,10 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         preview.alt = '';
         preview.loading = 'lazy';
         button.append(preview, entry);
-        previews.get(file).then(url => { if (url) preview.src = url; else preview.classList?.add('missing'); });
         // What the home filters look at; facts arrive after the cover.
         button.note = { name: file.name, modified: Date.parse(file.modifiedTime) || 0, size: Number(file.size) || 0, facts: null };
-        previews.facts?.(file).then(facts => { if (facts) { button.note.facts = facts; onCards(); } });
+        pending.set(preview, { file, button, cover: false, facts: false, busy: 0 });
+        load(preview);
         cards.set(entry, file);
         badge(entry, file);
       }
@@ -186,6 +207,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     visible = true; controls();
     if (!window.isSecureContext && !window.ReactNativeWebView && !window.notecompleteDrive) { message('Open NoteComplete over HTTPS or localhost to connect Google Drive.'); return; }
     for (const [entry, file] of cards) badge(entry, file);
+    for (const preview of [...pending.keys()]) load(preview);
     if (client.connected) { if (!$('driveList').children.length) run(resume); return; }
     if (client.publicAccess) $('driveLinkSetup').open = true;
     message(client.publicAccess ? 'Paste a folder shared as "Anyone with the link" to browse it without signing in, or connect Google Drive.' : '');

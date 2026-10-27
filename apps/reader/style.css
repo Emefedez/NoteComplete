@@ -363,7 +363,7 @@ input[type="color"]::-webkit-color-swatch {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 14px;
+  padding: 2px 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   font-size: 12px;
@@ -376,8 +376,8 @@ input[type="color"]::-webkit-color-swatch {
 }
 .navigation input {
   width: 4em;
-  padding: 4px;
-  min-height: 32px;
+  padding: 2px 4px;
+  min-height: 26px;
   text-align: center;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -984,9 +984,9 @@ header #saveState { font-size: 11px; white-space: nowrap; }
 .bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 16px; }
 .bar-menu .menu-content button kbd { margin-left: auto; border: 0; background: none; padding: 0; }
 .bar-menu .menu-content hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
-.bar-menu [role="menuitemradio"] { justify-content: flex-start; }
-.bar-menu [role="menuitemradio"]::before { content: ""; width: 12px; flex: none; text-align: center; }
-.bar-menu [role="menuitemradio"][aria-checked="true"]::before { content: "✓"; }
+.bar-menu [role="menuitemradio"], .bar-menu [role="menuitemcheckbox"] { justify-content: flex-start; }
+.bar-menu [role="menuitemradio"]::before, .bar-menu [role="menuitemcheckbox"]::before { content: ""; width: 12px; flex: none; text-align: center; }
+.bar-menu [role="menuitemradio"][aria-checked="true"]::before, .bar-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: "✓"; }
 .palette-trigger { flex: 0 1 auto; min-width: 0; min-height: 28px; gap: 8px; color: var(--muted); border: 1px solid var(--line); background: var(--chrome); padding: 2px 6px 2px 9px; }
 .palette-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 kbd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); white-space: nowrap; }
@@ -1233,7 +1233,10 @@ button.danger:disabled { background: #e8b4b0; }
 #transcriptWords.provisional { color: var(--muted); }
 #transcriptWords.provisional button { cursor: default; }
 /* Dark pages: invert lightness but keep hues, for the pages and their previews. */
-body.pages-dark .sheet > .render, body.pages-dark .page-thumb img, body.pages-dark .page-thumb svg { filter: var(--page-filter, none) invert(0.9) hue-rotate(180deg); }
+/* Night view: the page and its ink are inverted (white paper turns black, dark ink light);
+   hue-rotate brings colours back to their own hue, so red ink stays red. Live strokes in the
+   overlay are inverted the same way while drawing. */
+body.pages-dark .sheet > .render, body.pages-dark .sheet > .overlay, body.pages-dark .page-thumb img, body.pages-dark .page-thumb svg { filter: var(--page-filter, contrast(100%)) invert(0.92) hue-rotate(180deg); }
 body.pages-dark .sheet { background: #1a1a1a; }
 body.pages-dark #viewport, body.pages-dark #pages { background: #0f1012; }
 .pages-dark-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
@@ -1320,8 +1323,8 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 #audioSeek { min-width: 30px; width: 0; flex: 1; }
 .transcript-panel[open] { max-height: min(340px, 38dvh); overflow: auto; }
 .transcript-panel > summary { position: sticky; top: 0; background: var(--surface); z-index: 1; }
-.transcript-settings { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-.transcript-settings > summary { font-size: 12px; }
+.speech-settings { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); font-size: 12px; }
+.speech-settings p { margin: 4px 0 0; font-size: 11px; }
 .transcript-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
 .transcript-controls input[type="range"] { width: 100px; }
 #hideTranscript { float: right; min-height: 28px; font-size: 11px; }
@@ -1405,3 +1408,24 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 .quality-sample span { color: #888; }
 
 
+
+/* Anything that expands shows a small chevron that turns when open (the menubar excepted, as in native menus). */
+details > summary::after, .has-caret .caret { content: ""; flex: none; width: 5px; height: 5px; margin: 0 2px 2px 4px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; opacity: 0.6; transform: rotate(45deg); transition: transform 0.15s; }
+.has-caret .caret { display: inline-block; margin: 0 0 3px 1px; }
+details[open] > summary::after, .has-caret[aria-expanded="true"] .caret { transform: translateY(3px) rotate(-135deg); }
+.bar-menu > summary::after { content: none; }
+.icon-button.has-caret { width: auto; padding-inline: 5px; gap: 2px; }
+
+/* Shorter page bar: its buttons are smaller than the toolbar's. */
+.navigation > button, .navigation .zoom-controls > button { min-height: 28px; padding-block: 2px; }
+.page-align { display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--line); border-radius: 7px; }
+.page-align button { min-height: 24px; width: 26px; padding: 0; border-radius: 5px; color: var(--muted); }
+.page-align button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.page-align button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Where pages sit when they are narrower than the window. */
+#pages[data-align="left"] { align-items: flex-start; }
+#pages[data-align="right"] { align-items: flex-end; }
+@media (max-width: 700px) { .page-align { display: none; } }
+#drawingOptions.erasing > :not(#eraseOptions) { display: none !important; }
+/* Open menus sit above the tool settings popup of the toolbar below. */
+header.chrome.command-bar { position: relative; z-index: 40; }

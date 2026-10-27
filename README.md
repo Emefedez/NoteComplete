@@ -38,7 +38,7 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 
 ## Known issues
 
-- Some notes (for example *Discover Chinese*) **never** load their thumbnail on Home.
+- Some notes (for example *Discover Chinese*) never loaded their thumbnail on Home until reloaded; fixed in the latest build (covers are now retried).
 - More open items are tracked in [docs/REQUESTS.md](docs/REQUESTS.md).
 
 ## Build from source

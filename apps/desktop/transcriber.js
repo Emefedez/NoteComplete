@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const PIECE = { voxtype: 30, antigravity: 600 };
+// The reader's language names as Whisper codes (Voxtype's --language).
+const CODES = { spanish: 'es', galician: 'gl', english: 'en', catalan: 'ca', french: 'fr', german: 'de', italian: 'it', portuguese: 'pt' };
 const PARALLEL = { voxtype: 1, antigravity: 3 };
 
 function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill } = {}) {
@@ -55,7 +57,8 @@ export function transcriber({ tools }) {
       ];
     },
     cancel(owner) { for (const child of running.get(owner) || []) child.kill('SIGTERM'); },
-    // Returns segments [{start, end, text}]; `progress(done, total, segments)` streams pieces as they finish.
+    // Returns segments [{start, end, text}]; `progress(done, total, segments, skipped)` streams pieces
+    // as they finish (skipped: parts Voxtype could not transcribe even when cut smaller).
     async run(owner, { backend, bytes, language = '' }, progress = () => {}) {
       if (!PIECE[backend]) throw Error('Unknown transcription backend.');
       if (!(bytes instanceof Uint8Array) || !bytes.length) throw Error('No audio to transcribe.');
@@ -66,6 +69,28 @@ export function transcriber({ tools }) {
       const dir = await mkdtemp(path.join(tmpdir(), 'notecomplete-asr-'));
       const children = new Set();
       running.set(owner, children);
+      const kill = c => children.add(c);
+      const voxArgs = file => ['-q', ...(CODES[language] ? ['--language', CODES[language]] : []), 'transcribe', file];
+      let skipped = 0;
+      // whisper.cpp can split a multi-byte character between tokens, and Voxtype then
+      // rejects the piece ("Invalid UTF-8"). Cut the piece in two (other token
+      // boundaries) and retry; a part that still fails is left out, not the recording.
+      const voxPiece = async (file, offset, length, depth = 0) => {
+        try {
+          const text = voxtypeText(await run(binary, voxArgs(file), { cwd: dir, kill }));
+          return text ? [{ start: offset, end: offset + length, text }] : [];
+        } catch (error) {
+          if (!/Invalid UTF-8/i.test(error.message) || length < 4) { if (/stopped/.test(error.message)) throw error; skipped++; return []; }
+          if (depth >= 2) { skipped++; return []; }
+          const half = length / 2, parts = [];
+          for (const [k, start] of [[0, 0], [1, half]]) {
+            const part = file.replace(/\.wav$/, `-${depth}${k}.wav`);
+            await run(found.ffmpeg, ['-loglevel', 'error', '-y', '-ss', String(start), '-t', String(half), '-i', file, '-c:a', 'pcm_s16le', part], { cwd: dir, kill });
+            parts.push(...await voxPiece(part, offset + start, half, depth + 1));
+          }
+          return parts;
+        }
+      };
       try {
         await writeFile(path.join(dir, 'recording'), bytes);
         const ext = backend === 'voxtype' ? 'wav' : 'ogg';
@@ -78,15 +103,14 @@ export function transcriber({ tools }) {
           while (next < pieces.length) {
             const i = next++, file = path.join(dir, pieces[i]), offset = i * PIECE[backend];
             if (backend === 'voxtype') {
-              const text = voxtypeText(await run(binary, ['-q', 'transcribe', file], { cwd: dir, kill: c => children.add(c) }));
-              results[i] = text ? [{ start: offset, end: offset + PIECE.voxtype, text }] : [];
+              results[i] = await voxPiece(file, offset, PIECE.voxtype);
             } else {
               const prompt = `Transcribe the audio file ${file} exactly, in its spoken language${language ? ` (${language})` : ''}. Times are seconds from the start of this file. Reply with ONLY JSON: {"segments":[{"start":0.0,"end":0.0,"text":"…"}]}`;
               const out = await run(binary, ['-p', prompt, '--output-format', 'json', '--add-dir', dir, '--print-timeout', '900s'], { cwd: dir, kill: c => children.add(c) });
               results[i] = geminiSegments(JSON.parse(out).response, offset);
             }
             done++;
-            progress(done, pieces.length, results.flat().filter(Boolean));
+            progress(done, pieces.length, results.flat().filter(Boolean), skipped);
           }
         };
         await Promise.all(Array.from({ length: Math.min(PARALLEL[backend], pieces.length) }, worker));

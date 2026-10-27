@@ -58,7 +58,8 @@
         <div class="menu-content" role="menu">
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
-          <button data-proxy="toolbarToggle">Tool settings</button>
+          <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
+          <button data-proxy="toolbarToggle" role="menuitemcheckbox" aria-checked="false">Compact toolbar</button>
           <hr />
           <button data-proxy="zoomIn">Zoom in<kbd>Ctrl +</kbd></button>
           <button data-proxy="zoomOut">Zoom out<kbd>Ctrl −</kbd></button>
@@ -340,6 +341,15 @@
                 Insert
               </button>
             </div>
+            <div id="eraseOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="eraserSize" role="radiogroup" aria-label="Eraser size"></div>
+              <select id="eraserSize" data-native hidden aria-label="Eraser size">
+                <option value="4">Small</option>
+                <option value="10" selected>Medium</option>
+                <option value="20">Large</option>
+                <option value="40">Extra large</option>
+              </select>
+            </div>
             <div id="tapeOptions" class="option-group" hidden>
               <div class="choice-row" data-for="tapeMode" role="radiogroup" aria-label="Tape shape"></div>
               <select id="tapeMode" data-native hidden aria-label="Tape shape">
@@ -403,6 +413,11 @@
             value="1" /></label
         ><span id="pageLabel"></span><span id="counts" class="muted"></span
         ><span class="spacer"></span>
+        <div id="pageAlign" class="page-align" role="radiogroup" aria-label="Page position when narrower than the window">
+          <button type="button" role="radio" data-align="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button
+          ><button type="button" role="radio" data-align="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button
+          ><button type="button" role="radio" data-align="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
+        </div>
         <div class="zoom-controls" role="group" aria-label="Page zoom">
           <button id="zoomFit" aria-label="Fit page width" aria-pressed="true">
             Fit</button
@@ -424,6 +439,15 @@
             <span class="spacer"></span>
             <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
             <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" checked /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
+            <button id="speechSettingsToggle" type="button" class="icon-button has-caret" aria-expanded="false" aria-controls="speechSettings" title="Audio for transcription: gain, voice filter, normalize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="caret" aria-hidden="true"></span><span class="sr-only">Audio for transcription</span></button>
+          </div>
+          <div id="speechSettings" class="speech-settings" hidden>
+            <div class="transcript-controls">
+              <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
+              <label><input id="speechVoice" type="checkbox" /> Voice filter</label>
+              <label><input id="speechNormalize" type="checkbox" checked /> Normalize</label>
+            </div>
+            <p class="muted">Used when transcribing. Gain and voice filter also apply to playback.</p>
           </div>
           <div class="audio-seek"><input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled /><output id="audioTime">0:00 / 0:00</output></div>
           <p id="audioState" role="status"></p>
@@ -450,19 +474,12 @@
                 <option value="small">Small · more accurate</option>
               </select>
             </div>
-            <details class="transcript-settings">
-              <summary>Audio for transcription</summary>
-              <div class="transcript-controls">
-                <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
-                <label><input id="speechVoice" type="checkbox" /> Voice filter</label>
-                <label><input id="speechNormalize" type="checkbox" checked /> Normalize</label>
-              </div>
-              <p class="muted">Gain and voice filter also apply to playback. Larger models need more memory and time; each downloads on first use.</p>
-            </details>
             <div class="transcript-controls">
               <button id="transcribeAudio" type="button" class="primary">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
               <button id="transcriptEdit" type="button" aria-pressed="false" hidden title="Click a word to correct it">Edit</button>
+              <button id="transcriptRevise" type="button" hidden title="Let your AI tool correct misheard words and punctuation; every word keeps its time">Revise with AI</button>
+              <button id="transcriptRestore" type="button" hidden title="Bring back the automatic transcript from before the AI revision">Undo revision</button>
               <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">Text</option><option value="srt">SRT subtitles</option><option value="vtt">WebVTT</option><option value="json">JSON (word times)</option></select>
               <button id="downloadTranscript" type="button" hidden>Export</button>
               <button id="hideTranscript" type="button" hidden>Hide</button>
@@ -650,7 +667,7 @@
     <label><input type="radio" name="ocrScope" value="all" /> Whole note <span class="muted">(slow on long notes)</span></label>
   </fieldset>
   <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
-  <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip pages with PDF text</label>
+  <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
   <progress id="ocrProgress" max="1" hidden></progress>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="ocrCancel" type="button" hidden>Stop</button><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>

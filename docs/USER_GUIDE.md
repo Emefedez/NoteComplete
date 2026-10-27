@@ -6,7 +6,7 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
-Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) shows the pages dark: it inverts their lightness and keeps the hues, also in the page previews. It only changes the display.
+Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) is a night view: white paper turns black and dark ink light, colours keep their hue (red ink stays red), also in the page previews and while drawing. It only changes the display. The three buttons beside the zoom place the pages on the left, in the middle or on the right when they are narrower than the window. **Ctrl+F** opens Find and closes it again. Choosing a tool opens its settings under it; press the tool again to hide or show them. **View → Auto-open tool settings** turns the automatic opening off, and **View → Compact toolbar** collapses the bars.
 
 ## Study with your AI tool
 
@@ -33,6 +33,8 @@ The headphones button next to Layers (**A**) opens the recordings in a side pane
 - **Voxtype** (desktop app, when `voxtype` and `ffmpeg` are installed): local whisper.cpp, in 30-second pieces.
 - **Gemini via Antigravity** (desktop app, when Antigravity is installed and signed in): ten-minute pieces, three at a time. The audio is sent to Google.
 
+A transcript made earlier for the selected recording and engine appears on its own, with **Export**. **Revise with AI** (desktop app) lets your AI tool correct misheard words, terms and punctuation; every word keeps its time, and **Undo revision** brings back the automatic text. A quick local Voxtype pass followed by a revision is a good combination. The sliders button beside the dim-ink button holds gain, voice filter and normalize for transcription.
+
 Text appears while it is transcribed, greyed until the timings are final. Transcription runs in the background with a chip in the bar: switching recordings or closing the panel does not stop it, only **Cancel** or the chip's Stop does. Export the transcript as text, SRT, WebVTT or JSON with word times.
 
 ## Sort and filter notes
@@ -49,7 +51,7 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 **Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. The source chips under the box limit the search to any combination of Text, PDF, OCR and Audio, with a count for each; the choice is remembered. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
 
-**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
+**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. Handwriting is read in a separate pass over the ink alone, so it is found on PDF pages too, even when their printed text is skipped. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
 
 ## Open from Google Drive
 
@@ -73,7 +75,7 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 | Select | Select existing ink, supported shapes, images or text placement; drag to move, use four corners to resize, or the upper handle to rotate. The inspector changes dimensions/angle and ink/shape stroke color and width. |
 | Pen | Fixed-width freehand ink; no pressure input required. |
 | Highlight | Straight segment by default; choose Freehand for sampled ink. Multiply at 50% preserves the appearance over images. |
-| Erase | Remove whole strokes and supported line objects. Other selected objects can be deleted with Select. |
+| Erase | Remove whole strokes and supported line objects the eraser touches; choose its size (small to extra large) in the tool settings. Other selected objects can be deleted with Select. |
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |
 | Shapes | Draw a bounding box or use Insert for a line, rectangle, ellipse, triangle or arrow. New shapes are editable outlines. |
 

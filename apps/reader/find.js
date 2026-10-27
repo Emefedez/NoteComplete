@@ -2,7 +2,7 @@
 // transcripts. The index is built on first use and kept per note fingerprint;
 // OCR runs only when the user starts it from the Recognize text dialog.
 import { SearchIndex } from './search-index.js';
-import { ocrWorker, recognizePage, OCR_LANGUAGES } from './ocr.js';
+import { ocrWorker, recognizePage, mergeWords, OCR_LANGUAGES } from './ocr.js';
 
 const $ = id => document.getElementById(id);
 const ns = 'http://www.w3.org/2000/svg';
@@ -242,10 +242,16 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); } catch { /* Optional. */ }
     await build();
     const skipPdf = $('ocrSkipPdf').checked;
-    const slots = new Map();
-    for (const p of selectedPages()) slots.set(p, (await call('view', { page: p })).slot ?? p);
-    const pages = selectedPages().filter(p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20));
-    if (!pages.length) { $('ocrStatus').textContent = 'Those pages already have PDF text. Untick “Skip pages with PDF text” to recognize them anyway.'; return; }
+    const slots = new Map(), inked = new Set();
+    for (const p of selectedPages()) {
+      const view = await call('view', { page: p });
+      slots.set(p, view.slot ?? p);
+      if (/data-item="stroke:/.test(view.svg)) inked.add(p);
+    }
+    // Pages with PDF text skip the whole-page pass, but their handwriting is still read.
+    const whole = p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20);
+    const pages = selectedPages().filter(p => whole(p) || inked.has(p));
+    if (!pages.length) { $('ocrStatus').textContent = 'Those pages already have PDF text and no handwriting. Untick “Skip the printed text of PDF pages” to recognize them anyway.'; return; }
     const token = generation;
     let cancelled = false, worker = null;
     ocrRun = { cancel() { cancelled = true; worker?.terminate(); } };
@@ -260,9 +266,22 @@ export function findController({ call, library, backgrounds, panels, jump, audio
         if (cancelled || token !== generation) break;
         $('ocrStatus').textContent = `Recognizing page ${page + 1} (${n + 1} of ${pages.length})…`;
         $('ocrProgress').value = n / pages.length;
-        const { canvas, scale } = await pageCanvas(page);
-        const words = await recognizePage(worker, canvas, scale);
-        canvas.width = canvas.height = 0;
+        // Up to three passes: the whole page, then the ink alone at two sizes
+        // (handwriting reads differently at each); readings of one spot merge.
+        const passes = [];
+        if (whole(page)) {
+          const { canvas, scale } = await pageCanvas(page);
+          passes.push(await recognizePage(worker, canvas, scale));
+          canvas.width = canvas.height = 0;
+        }
+        if (inked.has(page)) for (const width of [1200, 3000]) {
+          if (cancelled || token !== generation) break;
+          const ink = await pageCanvas(page, width, { inkOnly: true });
+          if (!ink) break;
+          passes.push(await recognizePage(worker, ink.canvas, ink.scale));
+          ink.canvas.width = ink.canvas.height = 0;
+        }
+        const words = mergeWords(...passes);
         if (cancelled || token !== generation) break;
         stored.ocr[slots.get(page)] = words;
         index.remove(u => u.source === 'ocr' && u.page === page);

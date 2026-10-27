@@ -78,7 +78,8 @@ let panels = [],
 let displayQuality;
 qualitySettings((value, rasterChanged) => {
   displayQuality = value;
-  document.documentElement.style.setProperty("--page-filter", value.contrast === 100 && value.brightness === 100 ? "none" : `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
+  // Always a filter list (never "none"): dark pages append invert() to it, and "none invert()" is invalid CSS.
+  document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
   if (!rasterChanged) return;
   backgrounds?.images.clear();
   for (const panel of panels) {
@@ -725,15 +726,29 @@ $("viewport").onscroll = () => {
     setPage(low);
   });
 };
+// Tool settings open when a tool is chosen (View menu can turn that off), and
+// pressing the selected tool again toggles them.
+let toolSettingsAuto = true, optionsOpen = true;
+try { toolSettingsAuto = localStorage.getItem("notecomplete-tool-settings-auto") !== "0"; } catch { /* Optional. */ }
+$("toolSettingsAuto").setAttribute("aria-checked", String(toolSettingsAuto));
+$("toolSettingsAuto").onclick = () => {
+  toolSettingsAuto = !toolSettingsAuto;
+  $("toolSettingsAuto").setAttribute("aria-checked", String(toolSettingsAuto));
+  try { localStorage.setItem("notecomplete-tool-settings-auto", toolSettingsAuto ? "1" : "0"); } catch { /* Optional. */ }
+  status(toolSettingsAuto ? "Tool settings open when you choose a tool." : "Press the selected tool again to see its settings.");
+};
 function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
   $("tapeOptions").hidden = tool !== "tape";
   $("drawingOptions").hidden = tool === "select";
+  // The eraser shows only its size; color and width do not apply to it.
+  $("drawingOptions").classList.toggle("erasing", tool === "erase");
+  $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   $("toolOptions").hidden =
-    chromeState.compact ||
-    (!["draw", "highlight", "shape", "tape"].includes(tool) &&
+    chromeState.compact || !optionsOpen ||
+    (!["draw", "highlight", "shape", "tape", "erase"].includes(tool) &&
       !(tool === "select" && selection.item));
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   syncChoices();
@@ -972,7 +987,7 @@ function pointerDown(e, p) {
   }
   e.preventDefault();
   const start = point(e, p),
-    width = tool === "erase" ? 20 : Number($("width").value),
+    width = tool === "erase" ? eraserRadius() * 2 : Number($("width").value),
     color = $("color").value;
   const el = document.createElementNS(ns, "polyline"),
     dot = document.createElementNS(ns, "circle");
@@ -1089,7 +1104,7 @@ function pointerUp(e) {
     }
   }
   if (g.tool === "erase")
-    action("erase", { page: g.panel.index, points: g.points, radius: 10 });
+    action("erase", { page: g.panel.index, points: g.points, radius: eraserRadius() });
   else {
     const rgba = [1, 3, 5].map(
       (i) => parseInt(g.color.slice(i, i + 2), 16) / 255,
@@ -1118,11 +1133,14 @@ function pointerUp(e) {
 for (const button of document.querySelectorAll("[data-tool]"))
   button.onclick = () => {
     cancelGesture();
+    // Pressing the selected tool again shows or hides its settings.
     if (tool === button.dataset.tool) {
-      setCompact(!chromeState.compact);
+      optionsOpen = chromeState.compact || !optionsOpen;
+      setCompact(false);
       return;
     }
     tool = button.dataset.tool;
+    optionsOpen = toolSettingsAuto;
     if (tool !== "select") selection.clear();
     if (tool !== "grab") clearGrab();
     chromeState.reset($("viewport").scrollTop);
@@ -1195,7 +1213,8 @@ function buildChoices() {
         const label = source.querySelector(`option[value="${value}"]`).textContent;
         b.title = label;
         b.setAttribute("aria-label", label);
-        const line = id === "width" ? `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(1, Number(value) / 3))}"/>` : CHOICE_ICONS[id][value];
+        const line = id === "width" ? `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(1, Number(value) / 3))}"/>`
+          : id === "eraserSize" ? `<circle cx="12" cy="12" r="${Math.min(10, 2 + Math.sqrt(Number(value)) * 1.25).toFixed(1)}"/>` : CHOICE_ICONS[id][value];
         b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${line}</svg>`;
       }
       b.onclick = () => {
@@ -1213,6 +1232,10 @@ function syncChoices() {
     for (const b of row.children) b.setAttribute("aria-checked", String(b.dataset.value.toLowerCase() === value));
   }
 }
+// Eraser size (page units around the pointer); remembered on this device.
+const eraserRadius = () => Number($("eraserSize").value) || 10;
+try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved && $("eraserSize").querySelector(`option[value="${saved}"]`)) $("eraserSize").value = saved; } catch { /* Optional. */ }
+$("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
 $("color").addEventListener("input", syncChoices);
 // The visible shape row drives the (hidden) select that the drawing code reads.
@@ -1400,7 +1423,9 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f" && doc && $("editor").hidden === false) {
     e.preventDefault();
-    find.open();
+    // Ctrl+F toggles: a second press closes the find bar, from the box or anywhere else.
+    if (!$("findBar").hidden) $("findClose").click();
+    else find.open();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -1633,6 +1658,7 @@ function toggleAudio(open = $("audioBar").hidden) {
   if ($("audioToggle").hidden) return;
   $("audioBar").hidden = !open;
   $("audioToggle").setAttribute("aria-expanded", String(open));
+  if (open) audio.transcript.lookup();
 }
 // Dark pages: inverts the document and its page previews (presentation only, never exported).
 function setDarkPages(on) {
@@ -1641,6 +1667,20 @@ function setDarkPages(on) {
   try { localStorage.setItem("notecomplete-dark-pages", on ? "1" : ""); } catch { /* Optional. */ }
 }
 $("pagesDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
+// Page position (left, middle, right) when pages are narrower than the window; remembered.
+function setPageAlign(align) {
+  $("pages").dataset.align = align;
+  for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === align));
+  try { localStorage.setItem("notecomplete-page-align", align); } catch { /* Optional. */ }
+}
+for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick = () => setPageAlign(b.dataset.align);
+try { setPageAlign(["left", "right"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
+// Audio for transcription: a small popover under the transport row.
+$("speechSettingsToggle").onclick = () => {
+  const open = $("speechSettings").hidden;
+  $("speechSettings").hidden = !open;
+  $("speechSettingsToggle").setAttribute("aria-expanded", String(open));
+};
 try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
 resizable($("audioBar"), "notecomplete-audio-panel");
@@ -1741,6 +1781,7 @@ function syncMenus() {
     const inEditor = target?.closest("#editor");
     item.disabled = !target || target.disabled || target.hidden || (!!inEditor && (!doc || $("editor").hidden));
     if (item.dataset.proxyTool) item.setAttribute("aria-checked", String(target?.getAttribute("aria-pressed") === "true"));
+    if (item.dataset.proxy === "toolbarToggle") item.setAttribute("aria-checked", String(chromeState.compact));
   }
 }
 for (const item of proxies) item.onclick = () => proxyTarget(item)?.click();
@@ -1916,13 +1957,23 @@ $("insertConfirm").onclick = async () => {
   await action("insertPages", { at, pages, pdf, focus: at });
 };
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
-async function pageCanvas(index, width = 2200, { liftTape = false } = {}) {
+// `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
+// typed text or highlighter, so recognition sees the ink alone (null when there is none).
+async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false } = {}) {
   const view = await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
   if (liftTape) for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", "0.18");
+  if (inkOnly) {
+    for (const item of holder.querySelectorAll("[data-item]"))
+      if (!item.dataset.item.startsWith("stroke:") || item.querySelector('[style*="multiply"]')) item.remove();
+    for (const image of holder.querySelectorAll("image")) image.remove();
+    if (!holder.querySelector("[data-item]")) return null;
+    for (const mark of holder.querySelectorAll("[data-item] [stroke]")) if (mark.getAttribute("stroke") !== "none") mark.setAttribute("stroke", "#000");
+    for (const mark of holder.querySelectorAll("[data-item] [fill]")) if (mark.getAttribute("fill") !== "none") mark.setAttribute("fill", "#000");
+  }
   const svg = holder.querySelector("svg"), [w, h] = view.size, scale = width / w;
-  if (view.pdf_background) {
+  if (view.pdf_background && !inkOnly) {
     const place = backgroundPlacement(view.pdf_background, view.size);
     // rasterTarget renders at twice the requested CSS width.
     const href = await backgrounds.image(view.pdf_background, view.size, (width * place.share) / 2);
@@ -1972,6 +2023,7 @@ const studyDeps = {
 const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers() });
 const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
+audio.transcript.context = () => ({ title: doc?.title || "" });
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {
   const p = panels[index];

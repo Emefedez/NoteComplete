@@ -171,3 +171,18 @@ test('Back after filtering a reopened folder returns to that folder, not a Drive
   assert.deepEqual([ui.calls.at(-1), filters.at(-1), ui.node('driveSearch').value], ['children', '', '']);
   assert.ok(!ui.calls.includes('search'));
 });
+test('a cover cancelled by leaving Home is asked for again when Home returns', async t => {
+  const answers = [null, 'data:cover'], asked = [];
+  const thumbs = { get: f => { asked.push(f.id); return Promise.resolve(answers.length ? answers.shift() : ''); }, facts: async () => ({ audio: { count: 0 }, tags: [] }), cancel() {} };
+  const ui = setup(t, { thumbs });
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick(); await tick();
+  const card = ui.node('driveList').children[0].children[0], img = card.children[0];
+  assert.deepEqual(asked, ['file']);
+  assert.ok(!img.src);
+  ui.drive.hide(); await ui.drive.show(); await tick();
+  assert.deepEqual(asked, ['file', 'file']);
+  assert.equal(img.src, 'data:cover');
+  ui.drive.hide(); await ui.drive.show(); await tick();
+  assert.equal(asked.length, 2);
+});
