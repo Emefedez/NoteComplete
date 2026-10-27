@@ -61,7 +61,7 @@ Set repository variable `GOOGLE_WEB_CLIENT_ID` when using a Web client with the 
 
 For an iOS development build, set `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` before prebuild/build and configure `ios.bundleIdentifier` for that client. `app.config.js` adds the Google URL-scheme plugin from the client ID. A full native rebuild is required after adding these settings. **Expo Go cannot include this native module**; use the installed APK/development build or the browser version for Google Drive. Other Expo Go reader features remain available.
 
-Deploy the updated web reader to Android's configured `READER_URL`; an older hosted reader will not know about the new native bridge.
+Installed APKs bundle the reader, so the bridge always matches. If you override it with `READER_URL`, deploy the updated web reader there; an older hosted reader will not know about the new native bridge.
 
 References: [Google native OAuth guidance](https://developers.google.com/identity/protocols/oauth2/native-app), [native Google Sign-In Expo setup](https://react-native-google-signin.github.io/docs/setting-up/expo).
 

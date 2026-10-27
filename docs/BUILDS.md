@@ -17,7 +17,7 @@ The reader/WASM is built and tested once on Linux. Separate runners package the 
 
 The desktop shell uses a private, stable `notecomplete://reader/` origin so local settings and transcript caches survive restarts. Renderer Node integration is disabled, context isolation and sandboxing are enabled, navigation is restricted to the packaged reader, and new windows/permission requests are denied. Open files through the reader's picker or drop zone; OS file associations are not registered.
 
-These are **unsigned preview distributions**, without Developer ID/notarization or Windows Authenticode certificates. OS trust prompts may apply. Production signing requires configuring the appropriate certificates and changing the current unsigned build settings; credentials are never committed. macOS ARM64 may receive an ad-hoc signature from the packager, which is not a verified publisher signature.
+These are **preview distributions without publisher certificates**, without Developer ID/notarization or Windows Authenticode certificates. OS trust prompts may apply. Production signing requires configuring the appropriate certificates and changing the current unsigned build settings; credentials are never committed. Both macOS architectures are explicitly ad-hoc signed with hardened runtime disabled. CI extracts the ZIP and verifies all bundle signatures before uploading artifacts. Ad-hoc signing fixes bundle integrity; it does not provide Developer ID trust or notarization. Downloaded apps may still need approval in System Settings → Privacy & Security. For a trusted preview that macOS refuses to approve, remove quarantine from that app only with `xattr -dr com.apple.quarantine /Applications/NoteComplete.app`.
 
 Local build (Rust/WASM build prerequisites are described in README):
 
@@ -39,19 +39,18 @@ See [Google Drive](GOOGLE_DRIVE.md#native-build-configuration) for creating the 
 
 - `GOOGLE_DESKTOP_CLIENT_ID` (variable) and `GOOGLE_DESKTOP_CLIENT_SECRET` (secret): Desktop OAuth client bundled into all three desktop platforms. Without these, the app offers a Desktop-client JSON picker on first connection.
 - `GOOGLE_WEB_CLIENT_ID` (variable): passed to the Android Google SDK when configured. Register the Android package and signer SHA-1 in the same Cloud project.
-- `READER_URL` (variable): required for Android, pointing to the updated reader with native Drive bridge support.
+- `READER_URL` (variable): optional Android override pointing to a hosted reader with native Drive bridge support. Leave unset to use the bundled reader.
 
 Secrets are passed to reusable workflows only for builds; release publishing has a separate job with `contents: write`. Ordinary build jobs keep read-only repository permissions. OAuth tokens are never build inputs.
 
 ## Android APK
 
-The current Expo wrapper loads the web reader from a configured HTTPS URL. It does **not** embed the reader assets. Deploy `apps/reader/` after running the web build to a static HTTPS host first. A placeholder URL will build but cannot open the reader on a device.
+Android APKs bundle the reader, WASM, PDF renderer and speech runtime. A native module serves these assets on loopback only (`127.0.0.1:8768`), with correct JavaScript/WASM MIME types. No hosted website, Expo account or Metro server is required. Speech model weights and Google Drive still require internet access.
 
-1. Set repository variable **READER_URL** under **Settings → Secrets and variables → Actions → Variables** to that reachable HTTPS URL.
-2. Run **Android APK** (`.github/workflows/android.yml`). The optional `reader_url` input overrides the repository variable for this run. Tag builds use the variable.
-3. Download **NoteComplete-android-preview** from the run's **Artifacts**, unzip it, and install the APK on a compatible Android device.
+1. Run **Android APK** (`.github/workflows/android.yml`). Leave `reader_url` and repository variable `READER_URL` unset for the bundled reader. An explicit URL overrides it for development/testing.
+2. Download **NoteComplete-android-preview** from the run's **Artifacts**, unzip it, and install the APK on a compatible Android device.
 
-The workflow checks configuration, installs the locked Expo dependencies, generates Android with Expo prebuild, and runs Gradle `:app:assembleRelease`. It includes ARM64 and x86-64 native libraries. Java 17 and the Android SDK are configured by Actions. No Expo account, EAS subscription, Metro server or APK signing secret is needed for this preview build. The configured reader must remain available; its offline cache is opportunistic and is not a substitute for embedding assets.
+The workflow builds and tests the web reader, stages its allowlisted assets, installs locked Expo dependencies, generates Android with Expo prebuild, and runs Gradle `:app:assembleRelease`. It includes ARM64 and x86-64 native libraries. Java 17 and the Android SDK are configured by Actions.
 
 The APK uses the Expo template's **debug signing key**, despite being compiled in release mode. This is for sideload testing, not Play Store distribution. Use a private, stable production keystore before distributing production updates; switching signing keys requires uninstalling the previous app or using a different application ID. Package version and Android application ID remain defined in `apps/mobile/app.json`.
 
@@ -61,12 +60,13 @@ Install Android Studio's SDK and Java 17, then run from `apps/mobile`:
 
 ```sh
 npm ci
-EXPO_PUBLIC_READER_URL=https://your-reader-host.example/ npx expo prebuild --platform android --no-install
+# From the repository root first: python3 tools/build_web.py && node apps/desktop/stage.mjs
+npx expo prebuild --platform android --no-install
 cd android
-EXPO_PUBLIC_READER_URL=https://your-reader-host.example/ ./gradlew :app:assembleRelease
+./gradlew :app:assembleRelease
 ```
 
-Replace the example URL with your deployed reader. On Windows use `gradlew.bat`. The APK is written under `app/build/outputs/apk/release/`; the same preview signing limitation applies. For a connected device/emulator, `EXPO_PUBLIC_READER_URL=https://your-reader-host.example/ npm run android` from `apps/mobile` builds and installs the development app. Generated native directories and signing keys are ignored.
+On Windows use `gradlew.bat`. The APK is written under `app/build/outputs/apk/release/`; the same preview signing limitation applies. For a connected device/emulator, `EXPO_PUBLIC_READER_URL=https://your-reader-host.example/ npm run android` from `apps/mobile` builds and installs the development app. Generated native directories and signing keys are ignored.
 
 ## Validation and limitations
 
@@ -74,4 +74,4 @@ Replace the example URL with your deployed reader. On Windows use `gradlew.bat`.
 
 References: [Electron custom protocols](https://www.electronjs.org/docs/latest/api/protocol), [electron-builder targets](https://www.electron.build/v26/docs/cli/), [Expo local release builds](https://docs.expo.dev/guides/local-app-production/).
 
-Local validation for this change: 27 Node tests and `actionlint` passed; Expo generated the Android project and its release signing configuration was inspected. Desktop dependencies audited with no reported vulnerabilities. A local macOS package attempt was stopped during the slow Electron binary download, so no successful native installer build or installed-app execution is claimed. The Android SDK is absent on this host. The first Actions runs must confirm native builds on all target runners.
+Validation: workflow lint, Node tests, Expo prebuild/bundling and macOS signature verification run locally; GitHub Actions validates native Android compilation and all desktop package targets. Installed-device testing remains necessary.

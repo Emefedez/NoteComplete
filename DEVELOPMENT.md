@@ -45,7 +45,7 @@ Build output (`pkg`, `vendor`, `precache.json`), dependencies and scratch report
 
 ## Mobile and desktop integration
 
-Expo uses the same reader through a WebView. Android ACTION_VIEW filters are generated from `apps/mobile/app.json`; `IncomingFiles` queues cold/warm file intents until the reader is ready, deduplicates delivery and respects unsaved edits. Expo Go cannot register project-specific file handlers. A standalone APK currently needs a reachable configured reader URL; embedded offline reader assets are not implemented. See the [user guide](docs/USER_GUIDE.md#android-installed-build).
+Expo uses the same reader through a WebView. Android ACTION_VIEW filters are generated from `apps/mobile/app.json`; `IncomingFiles` queues cold/warm file intents until the reader is ready, deduplicates delivery and respects unsaved edits. Expo Go cannot register project-specific file handlers. Installed APKs bundle the staged reader assets and serve them from a loopback-only native module (`apps/mobile/modules/reader-server`, `127.0.0.1:8768`); `EXPO_PUBLIC_READER_URL` optionally overrides this with a hosted reader. See the [user guide](docs/USER_GUIDE.md#android-installed-build).
 
 The desktop stage copies only assets listed in the web precache manifest. The desktop workflow shares one tested web build across AppImage, macOS ARM64/x64 DMG/ZIP and Windows NSIS jobs. The Android workflow generates the Expo project and builds a release-mode preview using its debug signing key. See [packaging instructions and validation limits](docs/BUILDS.md).
 

@@ -87,7 +87,7 @@ The Expo wrapper uses SDK 57 and the same browser/WASM engine. Install dependenc
 
 Use an Expo Go client compatible with the SDK 57 dependencies pinned in this repository. See [mobile setup](../README.md#expo-go).
 
-For an existing hosted reader, set `EXPO_PUBLIC_READER_URL` before starting or building the wrapper. A standalone build needs that reachable HTTP(S) URL; the development LAN host is not available when Metro is absent. The browser reader can also be installed to the home screen over HTTPS. Its application cache supports offline use after assets have been cached; opened notes are never stored in that cache.
+Installed Android builds include the reader and serve it on the device's loopback address, so no hosted website or computer is needed. To use a hosted reader instead, set `EXPO_PUBLIC_READER_URL` before starting or building the wrapper. The browser reader can also be installed to the home screen over HTTPS. Its application cache supports offline use after assets have been cached; opened notes are never stored in that cache.
 
 Exports in the wrapper open the OS share sheet. Select Save to Files or another destination. Dismissing a share sheet does not prove a file was saved, so unsaved-change protection remains active. Large exports temporarily require base64 copies in memory; there is no fixed MB ceiling.
 
@@ -97,7 +97,7 @@ Android default-file handling requires an installed NoteComplete build. Expo Go 
 
 The Android app ID is `com.notecomplete.viewer`. Its manifest registers ACTION_VIEW for `.noteful` file/content URIs, the `application/x-noteful` MIME type, and generic `application/octet-stream` content-provider files. The generic fallback is needed for providers that hide the filename; it can also offer NoteComplete for other binary files, which the decoder will reject if unsupported. Some file managers use other MIME types or do not offer persistent defaults.
 
-For local builds or GitHub Actions APK artifacts, follow [Installable builds](BUILDS.md#android-apk). That guide covers the hosted-reader URL, preview signing and build prerequisites.
+For local builds or GitHub Actions APK artifacts, follow [Installable builds](BUILDS.md#android-apk). That guide covers the bundled reader, the optional hosted-reader override, preview signing and build prerequisites.
 
 In Android Files, choose a `.noteful` file, select **Open with → NoteComplete**, then **Always** if offered. Android controls that choice; the application cannot silently make itself the default. A running app receives new file intents too. The file is read using the provider's URI grant, queued until the reader is ready, and passed to the normal local decoder. Existing unsaved edits still require confirmation before replacement. This is file opening, not an ACTION_SEND share target.
 

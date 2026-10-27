@@ -39,7 +39,8 @@
         "zip"
       ],
       "category": "public.app-category.productivity",
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
