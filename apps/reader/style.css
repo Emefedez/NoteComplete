@@ -1311,6 +1311,15 @@ body.bar-compact .job-chip button, body.bar-compact .job-ready { min-height: 20p
 /* The hidden answer keeps its space so revealing it moves nothing. */
 .practice-back[hidden] { display: block !important; visibility: hidden; }
 .practice-actions { flex-wrap: wrap; }
+.deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) .practice-card { height: min(24dvh, 200px); }
+.practice-ask { margin: -6px 0 14px; display: grid; gap: 6px; text-align: left; }
+.practice-ask-thread { max-height: min(30dvh, 300px); overflow: auto; display: grid; gap: 6px; }
+.practice-ask-answer { padding: 8px 11px; border-radius: var(--radius-box); background: var(--chrome); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.practice-ask-answer p { margin: 0 0 6px; } .practice-ask-answer p:last-child { margin: 0; }
+.practice-ask-question { justify-self: end; max-width: 85%; margin: 0; padding: 6px 11px; border-radius: var(--radius-box); background: var(--accent-soft); font-size: 13px; }
+.practice-ask-form { display: flex; gap: 6px; }
+.practice-ask-form input { flex: 1; min-width: 0; }
+.practice-ask-form button { background: var(--fill); }
 .practice-fix { margin: -6px 0 14px; text-align: left; }
 .practice-fix p { margin: 0; font-size: 12px; }
 .practice-fix textarea { resize: none; overflow: hidden; font-size: 14px; line-height: 1.45; }

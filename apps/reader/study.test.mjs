@@ -61,3 +61,16 @@ test('A double-checked card keeps what the AI leaves out and splits list answers
   assert.deepEqual(cardVerdict(null, card), { correct: false, front: card.front, back: card.back, reason: '' });
   assert.equal(cardVerdict({ correct: true, front: '  ', back: '' }, card).back, card.back);
 });
+
+test('Asking AI about a card carries the card, the thread and the follow-up', async () => {
+  const { cardAskPrompt } = await import('./study.js');
+  const card = { front: '¿Qué es la DRAM?', back: 'Memoria con condensadores', page: 3 };
+  const first = cardAskPrompt(card, true);
+  assert.match(first, /Question: ¿Qué es la DRAM\?\nAnswer: Memoria con condensadores/);
+  assert.match(first, /attached image/);
+  assert.doesNotMatch(first, /Student:/);
+  const next = cardAskPrompt(card, false, [{ role: 'user', content: 'Explain this card.' }, { role: 'assistant', content: 'Guarda carga.' }], '¿Y el refresco?');
+  assert.match(next, /Conversation so far:\nStudent: Explain this card\.\n\nYou: Guarda carga\./);
+  assert.match(next, /Student: ¿Y el refresco\?$/);
+  assert.doesNotMatch(next, /attached image/);
+});
