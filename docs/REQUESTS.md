@@ -283,4 +283,12 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] .txt, .md and .markdown open as documents: Markdown with tables, task lists, code and LaTeX (KaTeX), rendered as in the Notes panel; plain text as written; the Markdown button switches either way. Recent shows their first lines as the cover, Type filter "Text", Drive lists them.
 - [D] Groups: File → Open folder… opens the notes, PDFs, HTML, text and images in a folder as a group; File → Add documents… (or + in the list) adds files to the open document's group, so text or Markdown files can sit beside a note or HTML page. The group is listed above the pages in the page panel, and at the left of HTML and text documents; click to jump. Files stay where they are; only chosen files and folders can be opened. Added documents have × to take them out (the file is not deleted).
 - [ ] Groups: subfolders, renaming a group, relative links between Markdown files in a group, drag to reorder.
-- [ ] Boot time: the AppImage's gzip filesystem costs ~0.8 s per launch (1.35 s to first paint vs 0.52 s unpacked or uncompressed). Owner to choose: uncompressed AppImage (353 MB), zstd with AppImage's type2 runtime (~128 MB, needs that runtime in the build), or an unpacked local install.
+- [D] Boot time: the AppImage is recompressed with zstd behind AppImage's type2 runtime (tools/repack_appimage.py, pinned and checksum-checked; local installs and CI both). Reading Electron's start-up files through the mount went from 1015 ms (gzip) to 275 ms; the file is 129 MB instead of 142 MB.
+- [D] HTML and text bars: sidebar button and moon at the left, as in notes; the sidebar button hides or shows the file list (remembered).
+- [D] Files without an extension (examen-1's ciudades, municipios…) open as text when their content is text, and folders list them; CSV, logs, JSON, code and config files open as text too; open dialogs have "All files".
+- [D] Edit text and Markdown files (Edit; TinyMDE for Markdown, a plain editor otherwise) and Save / Ctrl S back to the file; downloads a copy when the file is not on this device.
+- [D] Zoom for text files and HTML pages: −, 100% and + in the bar, Ctrl +/−/0, Ctrl+wheel on text.
+- [D] Switching documents no longer flashes Home; an untouched PDF or image no longer asks about unsaved changes when switching or closing.
+- [D] Web links (File → Open link…): Notion and other pages open like documents in a sandboxed webview with its own sign-ins; in Recent and groups; Back, Reload, Open in browser, zoom, Dark pages.
+- [D] Ctrl + zooms again on the Spanish layout: the native menu no longer has Electron's Zoom In on Ctrl+Plus (app-menu.js, so every build keeps it).
+- [D] Open folder… beside Open file… on Home.

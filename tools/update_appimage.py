@@ -5,7 +5,8 @@ python3 tools/update_appimage.py [--target PATH] [--no-install] [--force]
 
 Builds the web reader and WASM core, the noteful CLI bundled for AI tools and
 MCP, stages the reader into the Electron app and packages an AppImage for
-this machine's architecture. The previous AppImage is kept beside the new one
+this machine's architecture, recompressed with zstd (tools/repack_appimage.py)
+so it starts faster. The previous AppImage is kept beside the new one
 as NoteComplete.AppImage.previous. It refuses to replace a running app unless
 --force is given.
 """
@@ -42,6 +43,7 @@ def main():
     run('node', 'stage.mjs', cwd=DESKTOP)
     run('npx', 'electron-builder', '--linux', 'AppImage', f'--{arch}', '--publish', 'never', cwd=DESKTOP)
     built = max((DESKTOP / 'dist').glob(f'NoteComplete-*-linux-{arch}.AppImage'), key=lambda p: p.stat().st_mtime)
+    run(sys.executable, 'tools/repack_appimage.py', built)
     digest = hashlib.sha256(built.read_bytes()).hexdigest()
     print(f'Built {built} ({built.stat().st_size / 1e6:.1f} MB, sha256 {digest[:16]}…)')
     if args.no_install: return
