@@ -1912,3 +1912,10 @@ body.bar-compact .tab { height: 22px; }
 .scratch-head .scratch-delete[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
 .scratch-body { font-size: 13px; }
 .chat-actions .scratch-keep { width: auto; padding: 0 8px; font-size: 11px; }
+/* Dictation: the mic beside Ask lights up in the accent while listening. */
+.icon-button.dictate { flex: none; width: var(--control); min-height: var(--control); padding: 0; position: relative; }
+.icon-button.dictate svg { width: 16px; height: 16px; }
+.icon-button.dictate.recording { color: var(--accent); background: var(--accent-soft); }
+.icon-button.dictate.recording::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: rec-pulse 1.4s ease-in-out infinite; }
+.icon-button.dictate.busy { opacity: .55; cursor: progress; }
+@media (prefers-reduced-motion: reduce) { .icon-button.dictate.recording::after { animation: none; } }

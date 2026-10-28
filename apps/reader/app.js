@@ -13,6 +13,7 @@ import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
 import { updateNotice } from "./updates.js";
 import { scratchpad } from "./scratchpad.js";
+import { dictation } from "./dictate.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -2855,6 +2856,11 @@ const quizIndex = allQuizzes({
   exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
 });
 updateNotice({ status });
+// Mic buttons in the Ask AI fields: speak the question, edit it, send it.
+const dictate = dictation({ status });
+dictate.attach($("chatInput"), $("chatSend"));
+dictate.attach($("practiceAskInput"), $("practiceAskForm").querySelector('button[type="submit"]'));
+{ const box = $("quizExplainBox").querySelector(".practice-ask-form"); if (box) dictate.attach(box.querySelector("input"), box.querySelector('button[type="submit"]')); }
 $("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
