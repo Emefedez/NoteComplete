@@ -498,13 +498,14 @@
         <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
         <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
           <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
-          <select id="recording" aria-label="Recording"></select>
-          <!-- Add audio to the note: record with the microphone or import a file (recorder.js). -->
-          <div id="audioSources" class="audio-sources">
-            <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)">Record</button>
-            <button id="importAudio" type="button" data-icon="upload" title="Add an audio file to this note">Import…</button>
-            <span class="spacer"></span>
-            <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
+          <!-- The recording list, with Record and Import beside it (recorder.js). -->
+          <div class="audio-pick">
+            <select id="recording" aria-label="Recording"></select>
+            <div id="audioSources" class="audio-sources">
+              <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)" aria-label="Record"><span class="label">Record</span></button>
+              <button id="importAudio" type="button" data-icon="upload" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
+              <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
+            </div>
           </div>
           <div id="recordingRow" class="recording-row" hidden>
             <span class="rec-dot" aria-hidden="true"></span><output id="recordingClock" aria-live="off">0:00</output><span id="recordingNote" class="muted">Recording</span>

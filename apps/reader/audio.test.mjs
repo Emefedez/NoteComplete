@@ -1,7 +1,7 @@
 // Isolated controller tests; real codec playback is covered separately in browser QA.
 import {strict as assert} from 'node:assert';
 const elements=new Map();
-function element(){return {value:'',checked:true,hidden:false,disabled:false,textContent:'',options:[],append(v){this.options.push(v);},replaceChildren(){this.options=[];},removeAttribute(){},setAttribute(){},dataset:{},classList:{toggle(){}},pause(){this.paused=true;},load(){this.currentTime=0;},currentTime:0,duration:13.467574,paused:true,readyState:4};}
+function element(){return {value:'',checked:true,hidden:false,disabled:false,textContent:'',options:[],append(v){this.options.push(v);},replaceChildren(){this.options=[];},removeAttribute(){},setAttribute(){},dataset:{},classList:{names:new Set(),toggle(c,on){on?this.names.add(c):this.names.delete(c);},contains(c){return this.names.has(c);}},pause(){this.paused=true;},load(){this.currentTime=0;},currentTime:0,duration:13.467574,paused:true,readyState:4};}
 globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element};
 globalThis.cancelAnimationFrame=()=>{};globalThis.requestAnimationFrame=()=>1;
 const {AudioController}=await import('./audio.js');
@@ -29,5 +29,5 @@ controller.setAdded([take]);await new Promise(r=>setTimeout(r,0));
 assert.equal(elements.get('recordingTitle').textContent,'My take');assert.equal(controller.selected.added,take);
 assert.deepEqual([...await controller.read('added:t1')],[9,9]);assert.deepEqual(reads,['a','b']);
 controller.setAdded([]);assert.equal(controller.selected.recording.id,'r1');
-controller.open([],[],[]);assert.equal(controller.entries.length,0);assert.equal(elements.get('audioToggle').hidden,false);assert.ok(elements.get('recording').hidden);
+controller.open([],[],[]);assert.equal(controller.entries.length,0);assert.equal(elements.get('audioToggle').hidden,false);assert.ok(elements.get('audioBar').classList.contains('no-audio'));
 controller.reset();assert.ok(elements.get('audioBar').hidden);console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking and disabled sync passed.');

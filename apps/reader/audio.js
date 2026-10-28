@@ -62,7 +62,7 @@ export class AudioController {
  }
  empty(){
   const none=!this.entries.length;
-  $('recording').hidden=none;$('audioBar').classList.toggle('no-audio',none);
+  $('audioBar').classList.toggle('no-audio',none);
   if(none){$('recordingTitle').textContent='Audio';$('playAudio').disabled=true;$('audioSeek').disabled=true;$('audioPage').disabled=true;$('audioDownload').hidden=true;$('audioState').textContent='No audio in this note yet. Record or import one.';}
  }
  get selected(){return this.entries[this.index];}

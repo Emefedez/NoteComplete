@@ -1899,8 +1899,16 @@ body.bar-compact .tab { height: 22px; }
 .deck-dialog.floating #deckPractice:not([hidden]) { padding: 0 4px; margin: 0 -4px; }
 /* The audio window's head keeps its icon inside the frame (the body pads itself). */
 .audio-panel.has-body .audio-head { padding: 8px 10px 0 12px; }
-/* A note without audio has no recording list to choose from. */
-.audio-panel.no-audio .select-trigger[data-select="recording"] { display: none; }
+/* The headset in the audio window's head never shrinks (heads squeeze titles, not icons). */
+.audio-head .audio-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; overflow: visible; }
+/* The recording list with Record and Import beside it as icons; a note without audio
+   has no list, so the two show with their labels. */
+.audio-pick { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.audio-pick > select, .audio-pick > .select-trigger { flex: 1 1 auto; min-width: 0; width: auto !important; }
+.audio-pick .audio-sources { flex: none; }
+.audio-panel:not(.no-audio) .audio-sources .label { display: none; }
+.audio-panel:not(.no-audio) .audio-sources button:not(#removeAudio) { width: var(--control); padding: 0; justify-content: center; }
+.audio-panel.no-audio .audio-pick > select, .audio-panel.no-audio .audio-pick > .select-trigger { display: none !important; }
 /* Scratchpad: kept AI conversations, newest first. */
 .scratch-dialog { width: min(760px, calc(100vw - 24px)); }
 .scratch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 60dvh; overflow: auto; }
