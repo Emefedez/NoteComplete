@@ -1,9 +1,15 @@
+import { isTextName, hasExtension } from './text-types.js';
 // Read-only Google Drive transport. Tokens stay in memory; note bytes are never uploaded.
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 // Requested only when the user uploads changes back to Drive.
 export const DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
-export const supportedDriveFile = file => /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|txt|md|markdown|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['text/html', 'text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
+// Google's own Docs, Sheets and folders are never files; a name without an extension is
+// text only when Drive says so.
+export const supportedDriveFile = file => !String(file.mimeType || '').startsWith('application/vnd.google-apps.')
+  && (/\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp)$/i.test(file.name || '')
+    || (hasExtension(file.name) ? isTextName(file.name) : String(file.mimeType || '').startsWith('text/'))
+    || ['text/html', 'text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType));
 const fields = 'id,name,mimeType,modifiedTime,size,md5Checksum,parents,resourceKey,thumbnailLink,capabilities(canDownload)';
 const quote = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export function folderReference(value) {

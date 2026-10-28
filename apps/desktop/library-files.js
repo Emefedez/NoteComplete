@@ -1,10 +1,19 @@
 // Main-process side of the reader's downloads folder and Recent list.
 // The renderer may only read/write plain file names inside the chosen folder,
 // and reopen paths the user picked through the main-process open dialog.
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const NOTE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|txt|md|markdown|pdf|png|jpe?g|webp)$/i;
+// Notes, PDFs, HTML, images, text formats (as in the reader's text-types.js), and names
+// without an extension, which open as text when their content is.
+const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch';
+const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp|${TEXT})$)|^[^.]+$`, 'i');
+// A file without an extension is listed only when its start has no NUL bytes (text).
+async function textStart(file) {
+  const handle = await openFile(file, 'r');
+  try { const { buffer, bytesRead } = await handle.read(Buffer.alloc(4096), 0, 4096, 0); return !buffer.subarray(0, bytesRead).includes(0); }
+  finally { await handle.close(); }
+}
 const RECENT = 50, FOLDERS = 50;
 
 export function plainName(name) {
@@ -72,13 +81,16 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
       const names = (await readdir(folder, { withFileTypes: true })).filter(d => d.isFile() && !d.name.startsWith('.') && NOTE.test(d.name)).map(d => d.name);
       const files = [];
       for (const name of names) {
-        try { const info = await stat(path.join(folder, name)); files.push({ path: path.join(folder, name), name, size: info.size, modified: info.mtimeMs }); } catch { /* Gone meanwhile. */ }
+        try {
+          if (!name.includes('.') && !await textStart(path.join(folder, name))) continue;
+          const info = await stat(path.join(folder, name)); files.push({ path: path.join(folder, name), name, size: info.size, modified: info.mtimeMs });
+        } catch { /* Gone meanwhile. */ }
       }
       return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     },
     async readRecent(file) {
       const s = await load();
-      const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(file) && s.folders.includes(path.dirname(file));
+      const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(path.basename(file)) && s.folders.includes(path.dirname(file));
       if (typeof file !== 'string' || !(s.recent.includes(file) || inFolder)) throw Error('That file was not opened from this device.');
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },

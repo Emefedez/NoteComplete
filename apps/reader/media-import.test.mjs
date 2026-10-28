@@ -26,3 +26,15 @@ test('text and Markdown files open as text documents', async () => {
   assert.equal(doc.title, 'Tema 1');
   assert.equal(doc.text, '# Tema 1\n$E=mc^2$');
 });
+
+test('files without an extension open as text when their content is text', async () => {
+  const { fileKind, prepareDocument } = await import('./media-import.js');
+  const enc = (s) => new TextEncoder().encode(s);
+  assert.equal(fileKind('ciudades', enc('Madrid 3300000\nBarcelona 1600000\n')), 'text');
+  assert.equal(fileKind('Makefile', enc('all:\n\tcc main.c')), 'text');
+  assert.equal(fileKind('script.py', enc('{"not": "a project"}')), 'text');
+  assert.throws(() => fileKind('programa', new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0, 1, 2])));
+  const latin = await prepareDocument(new File([new Uint8Array([0x41, 0xf1, 0x6f])], 'notas'));
+  assert.equal(latin.text, 'Año');
+  assert.equal(latin.title, 'notas');
+});

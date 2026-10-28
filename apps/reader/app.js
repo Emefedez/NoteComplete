@@ -71,6 +71,8 @@ let request = 0,
   revision = 0,
   ready = false,
   dirty = false,
+  // Changed since it was opened: a fresh PDF or image is unsaved (dirty) but has nothing to lose.
+  changed = false,
   editing = false,
   doc = null,
   sideFp = "",
@@ -84,7 +86,7 @@ const busy = () => editing || mutationPending > 0;
 // A floppy disk beside the title: a dot while there are unsaved changes,
 // and a click saves like Ctrl S.
 function savedState() {
-  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: !!doc && dirty });
+  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: !!doc && dirty && changed });
   const label = dirty ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
   $("saveState").hidden = !doc;
   $("saveState").classList.toggle("dirty", dirty);
@@ -181,11 +183,12 @@ worker.onerror = (e) => {
 };
 function canReplace() {
   return (
-    !dirty ||
+    !(dirty && changed) ||
     confirm("You have unsaved changes. Open another document and discard them?")
   );
 }
-function reset() {
+// While a document opens (`opening`), Home stays hidden so switching never flashes it.
+function reset({ opening = false } = {}) {
   resizeMode = null;
   if (notes?.visible) {
     notes.close();
@@ -216,7 +219,7 @@ function reset() {
   tabBar.update({ title: "Home", dirty: false });
   dirty = false;
   documentControls();
-  home?.show(false);
+  if (!opening) home?.show(false);
 }
 // The format Save writes for a document made with New document; null saves a project.
 let saveAs = null;
@@ -234,7 +237,7 @@ async function load(file, preparedDocument = null) {
     const prepared = preparedDocument || await prepareDocument(file);
     // HTML pages and text/Markdown files have their own views instead of the page editor.
     if (prepared.kind === "html" || prepared.kind === "text") {
-      reset();
+      reset({ opening: true });
       sideFp = await fingerprint;
       const sideTitle = prepared.title || file.name || "Document";
       $("title").textContent = sideTitle;
@@ -255,7 +258,7 @@ async function load(file, preparedDocument = null) {
       page: 0,
     });
     // Both worker and UI retain the previous document until the replacement validates.
-    reset();
+    reset({ opening: true });
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);
@@ -269,6 +272,7 @@ async function load(file, preparedDocument = null) {
       result.layers[0]?.id ??
       0;
     dirty = ["pdf", "image", "blank"].includes(prepared.kind);
+    changed = false;
     saveAs = prepared.saveAs || null;
     saveLabel();
     savedState();
@@ -278,7 +282,7 @@ async function load(file, preparedDocument = null) {
     });
     $("title").textContent = result.title || "Untitled note";
     document.title = `${$("title").textContent} — NoteComplete`;
-    tabBar.update({ title: $("title").textContent, dirty });
+    tabBar.update({ title: $("title").textContent, dirty: dirty && changed });
     showDocument();
     $("pageNumber").max = result.pages;
     documentControls();
@@ -322,7 +326,7 @@ async function importImages(files) {
       };
       const result = await call("image", { page: targetPage, image });
       if (note !== epoch) return;
-      dirty = true;
+      dirty = changed = true;
       revision++;
       doc = result;
       updateTools(result);
@@ -1129,7 +1133,7 @@ async function action(op, args = {}) {
   try {
     const result = await call(op, args);
     if (token !== epoch) return;
-    dirty = true;
+    dirty = changed = true;
     revision++;
     doc = result;
     savedState();
@@ -2024,7 +2028,7 @@ $("svg").onclick = async () => {
   }
 };
 window.addEventListener("beforeunload", (e) => {
-  if (dirty) {
+  if (dirty && changed) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -2044,7 +2048,7 @@ async function patchItem(item, adjustment, crop = null) {
       ? await call("crop", { page: item.page, itemId: item.id, rect: crop })
       : await call("adjust", { page: item.page, itemId: item.id, adjustment });
     if (token !== epoch) return null;
-    dirty = true;
+    dirty = changed = true;
     savedState();
     Object.assign(doc, {
       can_undo: result.can_undo,

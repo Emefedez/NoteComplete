@@ -6,6 +6,7 @@ import { openPdf } from './pdf-background.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
 import { entryTitle, plainTitle } from './library.js';
+import { isTextName } from './text-types.js';
 export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}), exportStudy = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
@@ -301,7 +302,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
         return;
       }
       // Text and Markdown: the first lines, drawn like a page.
-      if (/\.(txt|md|markdown)$/i.test(file.name)) {
+      if (isTextName(file.name)) {
         const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
         const lines = (await file.slice(0, 4000).text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 14);
         const rows = lines.map((l, i) => `<text x="22" y="${34 + i * 15}" font-size="${i === 0 ? 13 : 10}" font-weight="${i === 0 ? 700 : 400}" fill="${i === 0 ? '#1d2433' : '#5b6478'}">${esc(l.replace(/^#+\s*/, '').slice(0, 44))}</text>`).join('');

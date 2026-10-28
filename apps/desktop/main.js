@@ -21,6 +21,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 const tabs = tabStore();
 const views = new Map(), windows = new Map();
 // No spell checker: notes are written in many languages and the red underlines get in the way.
+// The open dialogs' filter; "All files" also offers names without an extension.
+const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v'];
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
 // The reader's own chrome colour, painted before a tab has drawn anything so
@@ -221,7 +223,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
   ipcMain.handle('files:remove', guarded((_event, name) => files.remove(name)));
   ipcMain.handle('files:open', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'txt', 'md', 'markdown', 'pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return null;
     const file = chosen.filePaths[0];
     await files.remember(file);
@@ -229,7 +231,6 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
   // Groups: a whole folder, or several files added to the open document.
-  const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'txt', 'md', 'markdown', 'pdf', 'png', 'jpg', 'jpeg', 'webp'];
   ipcMain.handle('files:open-folder', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a folder of notes', properties: ['openDirectory'] });
     if (chosen.canceled) return null;
@@ -239,7 +240,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
   ipcMain.handle('files:pick', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];
     for (const file of [...chosen.filePaths].reverse()) await files.remember(file);
     return chosen.filePaths.map(file => ({ path: file, name: path.basename(file) }));

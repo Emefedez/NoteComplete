@@ -1,4 +1,6 @@
 import { openPdf } from "./pdf-background.js";
+import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText } from "./text-types.js";
+const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
 export function fileKind(name, bytes) {
   if (
@@ -25,7 +27,7 @@ export function fileKind(name, bytes) {
     return "image";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
-  if (/\.(txt|md|markdown)$/i.test(name)) return "text";
+  if (TEXT_EXT.test(name)) return "text";
   const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
   if (!/\.[a-z0-9]+$/i.test(name) && (head.startsWith("<!doctype html") || head.startsWith("<html")))
     return "html";
@@ -36,6 +38,8 @@ export function fileKind(name, bytes) {
     new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().startsWith("{")
   )
     return "project";
+  // No extension (data files, README, Makefile…): text when the content is.
+  if (!hasExtension(name) && looksLikeText(bytes)) return "text";
   throw Error(
     "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, PNG, JPEG or WebP image.",
   );
@@ -81,7 +85,7 @@ export function imageBounds(size, pageSize) {
 export async function prepareDocument(file) {
   const bytes = await file.arrayBuffer();
   const kind = fileKind(file.name, new Uint8Array(bytes));
-  const title = file.name.replace(/\.[^.]+$/, "") || "Untitled";
+  const title = (hasExtension(file.name) ? file.name.replace(/\.[^.]+$/, "") : file.name) || "Untitled";
   if (kind === "pdf") {
     // PDF.js transfers its copy to its worker. Keep original bytes for the project.
     const pdf = await openPdf(new Uint8Array(bytes.slice(0)));
@@ -116,7 +120,7 @@ export async function prepareDocument(file) {
     };
   }
   if (kind === "html" || kind === "text") {
-    const text = new TextDecoder().decode(bytes);
+    const text = kind === "text" ? decodeText(new Uint8Array(bytes)) : new TextDecoder().decode(bytes);
     return { kind, title, text, bytes };
   }
   return { kind, title, bytes };

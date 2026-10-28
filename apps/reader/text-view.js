@@ -2,8 +2,7 @@
 // KaTeX, as in the Notes panel; plain text is shown as written. The file is never changed.
 import { renderMarkdown } from './rich-text.js';
 
-export const isTextName = (name) => /\.(txt|md|markdown)$/i.test(name || '');
-export const isMarkdownName = (name) => /\.(md|markdown)$/i.test(name || '');
+export { isTextName, isMarkdownName } from './text-types.js';
 
 export function textViewer({ root, body, title, format, toHtml }) {
   let text = '', name = '', markdown = false, renders = 0;
