@@ -22,8 +22,6 @@ NoteComplete is an independent desktop and web companion for people who take not
 - **Desktop app**: tabs and windows, floating panels, command search (<kbd>Ctrl</kbd>+<kbd>K</kbd>), automatic updates.
 - **Export**: the note (`.noteful`, with Markdown, or `.notecomp`), pages as SVG, PDF or images, study material as Anki decks.
 
-<p align="center"><img src="docs/images/reader.png" alt="A notebook open in NoteComplete" width="100%"></p>
-
 ### Study with AI
 
 - **Quizzes** and **flashcards** are made in the background from your pages and saved with the note.
