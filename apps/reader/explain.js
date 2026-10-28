@@ -109,14 +109,18 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     }
     return false;
   }
-  async function ask(current, question = '', { fresh = false } = {}) {
+  // Clarify opens the box and waits for the student's question; nothing is sent until
+  // they press Enter (Enter with nothing typed asks for an explanation).
+  const hint = () => { input.placeholder = asking?.history.length ? (handoff ? 'Ask a follow-up (it continues in Ask AI; the answer is kept here too)' : `Ask something else about this ${label}`) : `What isn't clear about this ${label}? Enter alone explains it`; };
+  async function ask(current, question = '', { fresh = false, send = false } = {}) {
     if (!ai) return unavailable?.();
     if (!current) return;
     if (asking?.item !== current || fresh) {
-      const reused = openBox(current);
+      openBox(current);
       if (fresh) { asking.history = []; thread.replaceChildren(); }
-      else if (reused && !question) { input.focus(); return; }
     }
+    hint();
+    if (!question && !fresh && !send) { input.focus(); return; }
     const run = asking;
     if (run.busy) return;
     run.busy = true; input.value = ''; stop.hidden = false;
@@ -142,24 +146,35 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       run.history.push({ role: 'user', content: question || 'Explain this.' }, { role: 'assistant', content: answer });
       await render(reply, answer);
       const before = saved(current)?.text;
-      await save(current, { ...ctx.savedFlags, text: question && before ? `${before}\n\n**${question}**\n\n${answer}` : answer, provider: name, at: Date.now() });
+      // Follow-ups are added under what is kept; the first answer keeps its question.
+      const entry = question ? `**${question}**\n\n${answer}` : answer;
+      await save(current, { ...ctx.savedFlags, text: before && !fresh ? `${before}\n\n${entry}` : entry, provider: name, at: Date.now() });
     } catch (error) {
       if (asking === run) { reply.textContent = error.message; reply.classList.add('chat-error'); }
     } finally {
       run.busy = false; clearInterval(run.clock);
-      if (asking === run) { stop.hidden = true; input.focus(); }
+      if (asking === run) { stop.hidden = true; hint(); input.focus(); }
     }
   }
   // A follow-up moves the conversation to Ask AI with its thread and context.
   form.onsubmit = event => {
     event.preventDefault();
     const q = input.value.trim(), current = asking?.item || item;
-    if (!q || !current) return;
+    if (!current) return;
+    // The first question is answered here; follow-ups move to Ask AI.
+    if (!asking?.history.length) return ask(current, q, { send: true });
+    if (!q) return;
     if (!handoff) return ask(current, q);
-    const history = asking?.history?.length ? asking.history : (saved(current)?.text ? [{ role: 'user', content: 'Explain this.' }, { role: 'assistant', content: saved(current).text }] : []);
+    const history = asking.history;
     input.value = '';
     closeBox();
-    handoff({ item: current, history, question: q });
+    // The answer in Ask AI is still kept with the item, after what was saved before.
+    Promise.resolve(handoff({ item: current, history, question: q })).then(async answer => {
+      if (!answer) return;
+      const before = saved(current);
+      await save(current, { ...before, text: before?.text ? `${before.text}\n\n**${q}**\n\n${answer}` : `**${q}**\n\n${answer}`, provider: before?.provider || 'Ask AI', at: Date.now() });
+      showSaved(current);
+    }).catch(() => {});
   };
   again.onclick = () => ask(asking?.item || item, '', { fresh: true });
   stop.onclick = () => ai?.cancel(tag);

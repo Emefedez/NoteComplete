@@ -1855,3 +1855,10 @@ body.bar-compact .tab { height: 22px; }
 .migrate-row .muted { font-size: 12px; }
 .migrate-kinds { display: grid; gap: 4px; margin: 6px 0 10px; }
 #migrateFinish[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
+/* Ask AI: three dots pulse while the answer is on its way. */
+.typing-dots { display: inline-flex; gap: 4px; align-items: center; height: 1em; margin-right: 8px; vertical-align: middle; }
+.typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .25; animation: typing-dot 1.2s ease-in-out infinite; }
+.typing-dots i:nth-child(2) { animation-delay: .15s; }
+.typing-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes typing-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: .9; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; opacity: .6; } }

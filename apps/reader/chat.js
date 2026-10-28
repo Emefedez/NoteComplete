@@ -125,7 +125,12 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     busy = true;
     $('chatSend').hidden = true; $('chatStop').hidden = false;
     add('user', question);
-    const waiting = add('assistant', '…', 'Thinking');
+    // Three dots pulse until the first words arrive.
+    const waiting = add('assistant', '', 'Thinking');
+    const dots = document.createElement('span');
+    dots.className = 'typing-dots'; dots.setAttribute('aria-hidden', 'true');
+    dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+    waiting.prepend(dots);
     try {
       const page = currentPage(), { title } = documentInfo();
       const images = [], context = [];
@@ -162,7 +167,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       let streamed = '', timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
       const { text } = await ai.run({ provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' }, delta => {
-        if (!streamed) waiting.querySelector('small')?.remove();
+        if (!streamed) { waiting.querySelector('small')?.remove(); dots.remove(); }
         streamed += delta;
         timer ||= setTimeout(show, 120);
       });
@@ -170,8 +175,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       await rendering;
       history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });
       waiting.querySelector('small')?.remove();
+      dots.remove();
       await answer(waiting, text);
       actions(waiting, text.trim());
+      return text.trim();
     } catch (error) {
       waiting.replaceChildren(error.message);
       waiting.classList.add('chat-error');

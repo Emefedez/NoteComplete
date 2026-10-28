@@ -512,15 +512,19 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     }
     return false;
   }
-  async function ask(question = '', { again = false } = {}) {
+  // Ask AI opens the box and waits for the student's question; Enter with nothing typed
+  // asks for an explanation.
+  const askHint = () => { $('practiceAskInput').placeholder = asking?.history.length ? (continueInChat ? 'Ask a follow-up (it continues in Ask AI; the answer is kept here too)' : 'Ask something else about this card') : "What isn't clear about this card? Enter alone explains it"; };
+  async function ask(question = '', { again = false, send = false } = {}) {
     if (!ai) return unavailable();
     const card = practice?.queue[0];
     if (!card) return;
     if (asking?.card !== card || again) {
-      const reused = openAsk(card);
+      openAsk(card);
       if (again) { asking.history = []; $('practiceAskThread').replaceChildren(); }
-      else if (reused && !question) { $('practiceAskInput').focus(); return; }
     }
+    askHint();
+    if (!question && !again && !send) { $('practiceAskInput').focus(); return; }
     const thread = asking;
     if (thread.busy) return;
     thread.busy = true;
@@ -549,14 +553,16 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const answer = text.trim();
       thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: answer });
       await renderInto(reply, answer);
-      card.explanation = { text: question ? `${card.explanation?.text ? `${card.explanation.text}\n\n` : ''}**${question}**\n\n${answer}` : answer, provider: label, at: Date.now() };
+      // Follow-ups are added under what is kept; the first answer keeps its question.
+      const entry = question ? `**${question}**\n\n${answer}` : answer;
+      card.explanation = { text: card.explanation?.text && !again ? `${card.explanation.text}\n\n${entry}` : entry, provider: label, at: Date.now() };
       await saveDeck();
     } catch (error) {
       if (asking === thread) { reply.textContent = error.message; reply.classList.add('chat-error'); }
     } finally {
       thread.busy = false;
       clearInterval(thread.clock);
-      if (asking === thread) { $('practiceAskStop').hidden = true; $('practiceAskInput').focus(); }
+      if (asking === thread) { $('practiceAskStop').hidden = true; askHint(); $('practiceAskInput').focus(); }
     }
   }
   $('practiceAsk').onclick = () => ask();
@@ -564,9 +570,12 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   $('practiceAskForm').onsubmit = async event => {
     event.preventDefault();
     const q = $('practiceAskInput').value.trim(), card = practice?.queue[0];
-    if (!q || !card) return;
+    if (!card) return;
+    // The first question is answered here; follow-ups move to Ask AI.
+    if (!(asking?.card === card && asking.history.length)) return ask(q, { send: true });
+    if (!q) return;
     if (!continueInChat) return ask(q);
-    const history = asking?.card === card && asking.history.length ? asking.history : (card.explanation?.text ? [{ role: 'user', content: 'Explain this card.' }, { role: 'assistant', content: card.explanation.text }] : []);
+    const history = asking.history;
     $('practiceAskInput').value = '';
     closeAsk();
     let image = null;
@@ -574,7 +583,13 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const { canvas } = await pageCanvas(card.page - 1, 1400, { liftTape: true }).catch(() => ({}));
       if (canvas) { image = canvas.toDataURL('image/jpeg', 0.85); canvas.width = canvas.height = 0; }
     }
-    continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q });
+    const answer = await continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q });
+    // The answer in Ask AI is still kept with the card.
+    if (answer) {
+      card.explanation = { ...card.explanation, text: card.explanation?.text ? `${card.explanation.text}\n\n**${q}**\n\n${answer}` : `**${q}**\n\n${answer}`, provider: card.explanation?.provider || 'Ask AI', at: Date.now() };
+      await saveDeck();
+      showExplained();
+    }
   };
   $('practiceAskAgain').onclick = () => ask('', { again: true });
   $('practiceAskStop').onclick = () => ai?.cancel('card-ask');
