@@ -1845,3 +1845,13 @@ body.bar-compact .tab { height: 22px; }
 .new-format legend { margin-bottom: 4px; padding: 0; font-size: 13px; }
 .new-format label { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
 .new-format .muted { font-size: 12px; }
+/* Migrate content to file…: a filterable list of notes, then checkboxes. */
+.migrate-dialog { width: min(560px, calc(100vw - 24px)); }
+.migrate-dialog input[type="search"] { width: 100%; min-height: var(--control); margin: 6px 0; padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: inherit; }
+.migrate-list { display: grid; gap: 2px; max-height: 40dvh; overflow: auto; margin-bottom: 8px; }
+.migrate-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius); font-size: 13px; cursor: pointer; }
+.migrate-row:hover, .migrate-row:has(input:checked) { background: var(--accent-soft); }
+.migrate-row > span:nth-of-type(1) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.migrate-row .muted { font-size: 12px; }
+.migrate-kinds { display: grid; gap: 4px; margin: 6px 0 10px; }
+#migrateFinish[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }

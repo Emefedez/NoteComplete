@@ -222,7 +222,7 @@
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" hidden>Change folder…</button>
-        <span class="supported-formats">Noteful · PDF · PNG · JPEG · WebP · Your documents stay on this device.</span>
+        <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · PNG · JPEG · WebP · Your documents stay on this device.</span>
       </footer>
     </section>
     <section id="editor" hidden>
@@ -848,6 +848,7 @@
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
   <p id="forgetText" class="muted"></p>
+  <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
   <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
   <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
   <details id="forgetDanger" class="danger-zone" hidden>
@@ -859,6 +860,33 @@
   <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
+
+<dialog id="migrateDialog" class="ocr-dialog migrate-dialog" aria-labelledby="migrateTitle">
+  <h2 id="migrateTitle">Migrate content</h2>
+  <div id="migratePick">
+    <p class="muted">The note that should receive the flashcards, quizzes, Markdown notes and recordings.</p>
+    <input id="migrateFilter" type="search" placeholder="Filter notes" aria-label="Filter notes" spellcheck="false" />
+    <div id="migrateList" class="migrate-list" role="radiogroup" aria-label="Destination note"></div>
+    <div class="ocr-actions"><button id="migrateCancel" type="button">Cancel</button><button id="migrateNext" type="button" class="primary" disabled>Next</button></div>
+  </div>
+  <div id="migrateWhat" hidden>
+    <p id="migrateWhatTitle"></p>
+    <div id="migrateKinds" class="migrate-kinds"></div>
+    <label class="check"><input id="migrateRemove" type="checkbox" /> Also remove them from the old note</label>
+    <div class="ocr-actions"><button id="migrateBack" type="button">Back</button><button id="migrateGo" type="button" class="primary">Migrate</button></div>
+  </div>
+  <div id="migrateAfter" hidden>
+    <p id="migrateDone"></p>
+    <div class="migrate-kinds" role="radiogroup" aria-label="The old file">
+      <label class="check"><input type="radio" name="migrateOld" value="keep" checked /> Leave it as it is</label>
+      <label class="check"><input type="radio" name="migrateOld" value="local" /> <span id="migrateLocalLabel">Remove the copy kept on this device</span></label>
+      <label class="check" id="migrateDriveRow"><input type="radio" name="migrateOld" value="drive" /> Move it to Google Drive’s trash</label>
+      <label class="check" id="migrateBothRow"><input type="radio" name="migrateOld" value="both" /> Both: Drive’s trash and this device</label>
+    </div>
+    <div class="ocr-actions"><button id="migrateFinish" type="button" class="primary">Done</button></div>
+  </div>
+  <p id="migrateStatus" class="muted" role="status" aria-live="polite"></p>
+</dialog>
 
 <dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">
   <h2 id="shortcutsTitle">Keyboard shortcuts</h2>

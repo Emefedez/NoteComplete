@@ -195,6 +195,7 @@ Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .noteco
 - [D] View → Pages position buttons are icons now; the text labels ran out of the menu. *Browser check: row ends inside the menu.*
 - [D] **Export to Anki inside the quiz window** (beside Next), besides Study → Export quiz to Anki… and the saved list. *Browser test: 5 cards exported.*
 - [D] The quiz progress bar moved into the window head beside _ □ ×, as one continuous, muted fill (no segments). *Browser check (dark).*
+- [!] **Migrate content to file…** in a Recent note's ⋯ menu, for two files the automatic match did not pair: pick the destination note (filterable list), choose what to bring (flashcard decks, quizzes, Markdown notes, recordings, with counts), optionally tick "Also remove them from the old note" (off by default), then decide about the old file: leave it (default), remove it from this device, move it to Google Drive's trash, or both; Drive asks for a second press. *Browser test of the whole dialog with a stand-in library (copy, old copy kept, keep default, two-press Drive trash). Not yet tried with real Drive files.*
 - [D] **Skill**: export rows, the single download path and focus dimming in full (`references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js`), plus recording into a document.
 
 ## Future: file formats and repositories (agreed, not started)

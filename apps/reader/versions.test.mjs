@@ -36,3 +36,15 @@ test('study material is copied to a new version without losing what is there', a
   assert.deepEqual(await studyCounts(store, 'new'), { decks: 2, quizzes: 0, notes: 1, recordings: 1 });
   assert.deepEqual(await studyCounts(store, 'old'), { decks: 2, quizzes: 1, notes: 1, recordings: 1 }, 'the old version keeps its own');
 });
+
+test('migrating content can leave or empty the old note', async () => {
+  const { clearStudy } = await import('./migrate.js').catch(() => ({}));
+  if (!clearStudy) return; // migrate.js touches the DOM only when used.
+  const store = memoryStore();
+  await store.set('settings', 'decks:old', [{ id: 'd1' }]);
+  await store.set('settings', 'notes:old', 'Resumen');
+  await carryStudy(store, 'old', 'new', ['decks', 'notes']);
+  await clearStudy(store, 'old', ['decks']);
+  assert.deepEqual(await studyCounts(store, 'old'), { decks: 0, quizzes: 0, notes: 1, recordings: 0 });
+  assert.deepEqual(await studyCounts(store, 'new'), { decks: 1, quizzes: 0, notes: 1, recordings: 0 });
+});

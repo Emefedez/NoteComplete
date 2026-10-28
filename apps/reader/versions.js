@@ -46,7 +46,7 @@ export function pageHash(view) {
 }
 
 // Study material stored per version (fingerprint): what there is, and copying it over.
-const STUDY = [['decks', 'Flashcard decks'], ['quizzes', 'Quizzes'], ['notes', 'Markdown notes'], ['recordings', 'Recordings added here']];
+export const STUDY = [['decks', 'Flashcard decks'], ['quizzes', 'Quizzes'], ['notes', 'Markdown notes'], ['recordings', 'Recordings added here']];
 export async function studyCounts(store, fingerprint) {
   const out = {};
   for (const [kind] of STUDY) {

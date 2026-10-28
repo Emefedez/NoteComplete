@@ -3,7 +3,7 @@
 import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
-
+import { migrator } from './migrate.js';
 export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}) }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
@@ -78,6 +78,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   }
   // Remove a note from this device; for Drive notes, optionally upload the open
   // document's changes first, or (typed confirmation) move the Drive file to trash.
+  const migration = migrator({ library, drive, status, refresh: () => renderRecent() });
   function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', now = current();
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
@@ -113,6 +114,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       } catch (error) { $('forgetStatus').textContent = error.message; }
     };
     $('forgetCancel').onclick = close;
+    $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
     // Drop down under the ⋯ button, or up when there is no room below.
     const menu = $('forgetDialog');
     menu.hidden = false;
