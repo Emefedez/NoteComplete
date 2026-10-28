@@ -6,7 +6,7 @@ const DARK = /\(prefers-color-scheme:\s*dark\)/;
 
 export const effectiveTheme = (choice, systemDark) => (choice === 'dark' || choice === 'light' ? choice : systemDark ? 'dark' : 'light');
 
-export function themeController({ toggle, system, status = () => {}, onChange = () => {} }) {
+export function themeController({ toggle, system, status = () => {} }) {
   const query = window.matchMedia?.('(prefers-color-scheme: dark)');
   const rules = [];
   for (const sheet of document.styleSheets) {
@@ -27,12 +27,11 @@ export function themeController({ toggle, system, status = () => {}, onChange = 
     choice = next;
     try { next === 'system' ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, next); } catch { /* Optional. */ }
     apply();
-    onChange(document.documentElement.dataset.theme);
     status(next === 'system' ? 'Theme follows the system.' : `${next === 'dark' ? 'Dark' : 'Light'} theme.`);
   }
   toggle.onclick = () => set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   system.onclick = () => set('system');
-  query?.addEventListener?.('change', () => { apply(); onChange(document.documentElement.dataset.theme); });
+  query?.addEventListener?.('change', apply);
   apply();
   return { set, get theme() { return document.documentElement.dataset.theme; } };
 }

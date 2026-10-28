@@ -97,7 +97,7 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status, onChange: () => htmlDarkApply() });
+const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
 let chromeSettling = false;
 let panels = [],
@@ -1712,7 +1712,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -1729,7 +1729,7 @@ function toggleKeyHints() {
 }
 function shortcut(e) {
   const k = e.key;
-  if (!doc) return false;
+  if (!doc) return htmlView.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
@@ -2147,10 +2147,12 @@ function toggleAudio(open = $("audioBar").hidden) {
   if (open) audio.transcript.lookup();
 }
 // Dark pages: inverts the document and its page previews (presentation only, never exported).
+// HTML documents follow the same switch (Dark Reader inside the page, see htmlDarkApply).
 function setDarkPages(on) {
   document.body.classList.toggle("pages-dark", on);
   $("pagesDark").setAttribute("aria-pressed", String(on));
   try { localStorage.setItem("notecomplete-dark-pages", on ? "1" : ""); } catch { /* Optional. */ }
+  if (htmlViewReady) htmlDarkApply();
 }
 $("pagesDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 // Page position (left, middle, right) when pages are narrower than the window; remembered.
@@ -2300,10 +2302,8 @@ async function exportStudyOf(entry) {
 }
 // Recent asks Drive for newer versions before opening a Drive note (versions.js).
 const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
-// Dark HTML pages: in the dark theme, light-only pages are darkened (View → Dark HTML pages).
-const HTML_DARK = "notecomplete-html-dark";
-let htmlDarkOn = true, darkReader = null;
-try { htmlDarkOn = localStorage.getItem(HTML_DARK) !== "off"; } catch { /* Optional. */ }
+// Dark pages (moon, D) darken HTML documents too; pages already dark are left alone.
+let darkReader = null;
 const htmlView = htmlViewer({
   root: $("htmlView"),
   frame: $("htmlFrame"),
@@ -2315,28 +2315,19 @@ const htmlView = htmlViewer({
     if (!r.ok) throw Error("Dark Reader is missing from this build.");
     return r.text();
   }).catch((error) => { darkReader = null; status(error.message, true); throw error; })),
-  darkColors: () => {
-    const css = getComputedStyle(document.documentElement);
-    return { mode: 1, brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: css.getPropertyValue("--canvas").trim() || "#15171b", darkSchemeTextColor: css.getPropertyValue("--ink").trim() || "#e5e8ed" };
-  },
+  // The dark theme's --canvas and --ink, also when the app itself is light.
+  darkColors: () => ({ mode: 1, brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: "#15171b", darkSchemeTextColor: "#e5e8ed" }),
   onOwnDark: (own) => {
-    $("htmlDark").disabled = own === true;
-    $("htmlDark").title = own ? "This page has its own dark design" : "Darken this page's light design (View → Dark HTML pages)";
+    $("htmlDark").title = own ? "Dark pages (D): this page already has a dark design, so it is left as it is" : "Dark pages: darken this page (D)";
   },
 });
 function htmlDarkApply() {
-  const dark = theme?.theme === "dark";
-  $("htmlDarkToggle").setAttribute("aria-checked", String(htmlDarkOn));
-  $("htmlDark").setAttribute("aria-pressed", String(htmlDarkOn));
-  $("htmlDark").hidden = !dark;
-  htmlView.setDark(dark && htmlDarkOn);
+  const on = document.body.classList.contains("pages-dark");
+  $("htmlDark").setAttribute("aria-pressed", String(on));
+  htmlView.setDark(on);
 }
-$("htmlDarkToggle").onclick = $("htmlDark").onclick = () => {
-  htmlDarkOn = !htmlDarkOn;
-  try { localStorage.setItem(HTML_DARK, htmlDarkOn ? "on" : "off"); } catch { /* Optional. */ }
-  htmlDarkApply();
-  status(htmlDarkOn ? "HTML pages are darkened in the dark theme." : "HTML pages keep their own colours.");
-};
+$("htmlDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
+var htmlViewReady = true;
 htmlDarkApply();
 var home = homeScreen({
   library,

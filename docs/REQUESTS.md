@@ -273,7 +273,7 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 
 ## HTML documents
 - [D] HTML pages (exercises, summaries, tests such as the Gemini FAT32 tutors or "Resumen · Ingeniería del Software I") open in the desktop app instead of a blank white page: each render gets a new sandboxed frame, since Electron never painted the one created with the page. Reload, Home and back keep working.
-- [D] Dark HTML pages: in the dark theme, HTML pages with only a light design are darkened inside the page by Dark Reader (the extension's engine, vendored, loaded on first use), in the app's own dark colours. Pages that are already dark, or follow the theme themselves, are left alone. View → Dark HTML pages turns it off; the HTML bar's Dark page button switches it on the spot without reloading the page.
+- [D] Dark HTML pages: the Dark pages switch (moon, **D**) also darkens HTML documents, from the same moon on the HTML bar. Inside the page it is Dark Reader (the extension's engine, vendored, loaded on first use) in the app's dark colours, switched on the spot without reloading the page. Pages that are already dark are left alone.
 
 ## Recent
 - [D] Rename (⋯ → Rename…): changes only the name shown in Recent (stored as the entry's `title`); the file keeps its own name for Drive, the downloads folder and the file type, and the rename survives re-downloads and reopening. "Use the file name" undoes it. Sorting A–Z uses the shown name.

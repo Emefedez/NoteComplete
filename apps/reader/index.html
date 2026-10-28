@@ -87,7 +87,6 @@
           </div>
           <button id="themeToggle" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
           <button id="themeSystem" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
-          <button id="htmlDarkToggle" role="menuitemcheckbox" aria-checked="true" data-palette="Toggle dark HTML pages" title="In the dark theme, darken HTML pages that only have a light design, as the Dark Reader extension does">Dark HTML pages</button>
           <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
           <hr />
@@ -243,7 +242,7 @@
       </footer>
     </section>
     <section id="htmlView" hidden>
-      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlDark" type="button" aria-pressed="true" hidden>Dark page</button><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
+      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
       <iframe id="htmlFrame" title="HTML document"></iframe>
     </section>
     <section id="editor" hidden>
