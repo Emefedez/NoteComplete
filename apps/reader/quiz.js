@@ -53,6 +53,17 @@ export function quizCards(quiz) {
     return { front: [q.question, '', ...q.options.map((o, i) => `${letter(i)}. ${o}`)].join('\n'), back: back.join('\n\n'), page: q.source?.page };
   });
 }
+// One state per question for the progress bar: right (2 points), hinted (right with
+// the hint, 1 point), wrong, disputed, or '' while unanswered.
+export function barStates(quiz) {
+  return quiz.questions.map((q, i) => {
+    const a = quiz.answers?.[i];
+    if (q.disputed) return 'disputed';
+    if (!a) return '';
+    if (a.choice !== correctOf(q)) return 'wrong';
+    return a.hinted ? 'hinted' : 'right';
+  });
+}
 // Disputed questions do not count; the rest score 2, or 1 with the hint.
 export function score(quiz) {
   let points = 0, answered = 0, counted = 0;
@@ -124,6 +135,11 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const { points, answered, max } = score(quiz);
     $('quizPanelProgress').textContent = `${Math.min(quiz.at + 1, quiz.questions.length)} / ${quiz.questions.length} · ${points} of ${max} points`;
     $('quizMini').textContent = `Quiz ${answered}/${quiz.questions.length} · ${points} pts`;
+    const states = barStates(quiz), bar = $('quizBar');
+    if (bar.children.length !== states.length) bar.replaceChildren(...states.map(() => document.createElement('span')));
+    states.forEach((state, i) => { bar.children[i].dataset.state = state; bar.children[i].classList.toggle('current', i === quiz.at); });
+    const count = s => states.filter(x => x === s).length;
+    bar.setAttribute('aria-label', `${answered} of ${states.length} answered: ${count('right')} right, ${count('hinted')} right with the hint, ${count('wrong')} wrong`);
   }
   function show() {
     hint = null;

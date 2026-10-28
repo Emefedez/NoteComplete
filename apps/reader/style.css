@@ -1825,3 +1825,14 @@ body.bar-compact .tab { height: 22px; }
 .crop-overlay .crop-handle { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
 .crop-menu { white-space: nowrap; }
 .crop-menu .primary { background: var(--accent-soft); color: var(--accent); }
+
+/* Quiz progress: one segment per question, filling as you answer. Pastel green right,
+   the accent with the hint, pastel red wrong; the current question is outlined. */
+.quiz-bar { display: flex; gap: 2px; padding: 6px 12px 0; }
+.quiz-bar span { flex: 1; height: 6px; border-radius: 3px; background: var(--fill); transition: background-color .2s; }
+.quiz-bar span[data-state="right"] { background: #8fd4a8; }
+.quiz-bar span[data-state="hinted"] { background: var(--accent); }
+.quiz-bar span[data-state="wrong"] { background: #ee9a92; }
+.quiz-bar span[data-state="disputed"] { background: var(--line); }
+.quiz-bar span.current { box-shadow: 0 0 0 1px var(--accent); }
+.quiz-panel.minimized .quiz-bar { display: none; }

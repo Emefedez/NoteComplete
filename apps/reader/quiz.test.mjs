@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards } from './quiz.js';
+import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards, barStates } from './quiz.js';
 import { progressAt } from './jobs.js';
 
 const reply = { questions: [
@@ -67,4 +67,10 @@ test('a quiz exports as flashcards: options on the front, accepted answer and no
     { front: 'Q1\n\nA. a\nB. b\nC. c', back: 'B. b\n\nBecause.', page: 3 },
     { front: 'Q2\n\nA. x\nB. y', back: 'B. y\n\nCorrection: The slide says y.', page: undefined },
   ]);
+});
+
+test('the progress bar shows right, right with the hint, wrong and disputed', () => {
+  const quiz = { questions: [{ answer: 0 }, { answer: 1 }, { answer: 0 }, { answer: 0, disputed: true }, { answer: 1, correction: { answer: 0 } }, { answer: 0 }],
+    answers: { 0: { choice: 0 }, 1: { choice: 1, hinted: true }, 2: { choice: 1 }, 3: { choice: 0 }, 4: { choice: 0 } } };
+  assert.deepEqual(barStates(quiz), ['right', 'hinted', 'wrong', 'disputed', 'right', '']);
 });
