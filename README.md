@@ -49,11 +49,18 @@ Flashcards and quizzes are generated in the background by the AI tool you alread
 - **Flashcards** are practised in a window that floats beside your pages, with formulas (LaTeX) and lists rendered, and export to Anki. While practising, **Ask AI** (<kbd>C</kbd>) answers your question about a card using its page, the page's source PDF, your notes or the whole note, with the tool and model you pick; what it says is kept with the card (**Explanation ▾**) and you can edit it. Follow-up questions, from cards or quizzes, continue in the Ask AI panel with the whole conversation, and every answer there is still saved with the card or question. **Edit** (<kbd>E</kbd>), **Double check** (<kbd>V</kbd>) and **Discard** (<kbd>X</kbd>) fix a card on the spot.
 - **Study material** (Study → All quizzes and decks…): every quiz and deck on this device in two lists under their documents, opened from there (the note first if needed) or exported to Anki; opened from a note it starts with that note's material.
 - A sun in the quiz and flashcard windows **dims everything behind them** while you study.
+- **Restart** a quiz with the circular arrow in its head (press twice: it clears your answers).
+- The quiz and flashcard windows **grow to fit** the Ask box and the answer as it streams in, up to the screen's edges.
+- **Paste images** (<kbd>Ctrl</kbd>+<kbd>V</kbd>) into any AI question (Ask AI, Clarify, flashcard Ask AI); they go with the question and into Ask AI if you continue there. In the Ask box, **↵** asks, the spark asks again and **×** closes.
+- Links in AI answers work: a page link jumps to that page, an attached image opens large, a web link opens in your browser.
 - **Ask AI** (<kbd>Ctrl</kbd>+<kbd>J</kbd>) answers questions about a page, a region you grab or your notes. Every question field has a **mic**: speak, and the words are typed in for you to edit before sending (transcribed on this device by default). The bundled MCP server lets agents read your notebooks directly ([AI agents](docs/MCP.md)).
+
+<p align="center"><img src="docs/images/quiz-clarify.png" alt="Quiz window grown to fit a streamed Clarify answer, with the restart arrow in its head" width="49%"> <img src="docs/images/card-ask.png" alt="Flashcard window grown to fit an Ask AI answer" width="49%"></p>
 
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
 
 ### Feels like a desktop app
+- **Light or dark**: View → Dark theme switches at once (or Ctrl+K → "theme"); by default it follows the system.
 - **Tabs and windows**: several notes in one window (<kbd>Ctrl</kbd>+<kbd>T</kbd>, drag to reorder); drag a tab out to give it a window of its own; opening the app again opens a new window.
 - **Floating windows**: Ask AI, audio, quizzes and flashcards can be dragged anywhere below the top bar (over the toolbar and page list too) and resized from any edge or corner; **_** puts one away in a tray at the bottom left, **□** makes it small or large, **×** closes it.
 - **Narrow windows and phones**: two bars at the bottom (page row with undo and the panels; one row of tools), and tools turn into icons before the toolbar would wrap.

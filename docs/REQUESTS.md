@@ -269,3 +269,4 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] Scratchpad: `\(…\)`, `\[…\]` and multi-line formulas render; no forced sideways scrollbars.
 - [D] Ask / Ask again / Close in the Ask boxes are icons (enter, spark, ×).
 - [D] Links in AI answers are clickable: page links jump to the page, attached images open large, web links open in the browser.
+- [D] Light/dark theme toggle in View (and Ctrl+K: "Toggle light/dark theme", "Theme: follow the system"); the choice is remembered, the default follows the system.

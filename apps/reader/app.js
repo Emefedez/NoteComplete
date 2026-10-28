@@ -15,6 +15,7 @@ import { updateNotice } from "./updates.js";
 import { scratchpad } from "./scratchpad.js";
 import { dictation } from "./dictate.js";
 import { chatController } from "./chat.js";
+import { themeController } from "./theme.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -94,6 +95,7 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
+const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
 let chromeSettling = false;
 let panels = [],
