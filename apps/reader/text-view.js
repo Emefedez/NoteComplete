@@ -33,7 +33,7 @@ export function zoomControl({ key = ZOOM_KEY, out, into, value, apply }) {
 }
 
 export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {} }) {
-  let text = '', name = '', markdown = false, isMarkdown = false, renders = 0, editing = false, mde = null;
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0;
   const zoomer = zoomControl({ ...zoom, apply: (z) => root.style.setProperty('--text-zoom', String(z)) });
   body.addEventListener('wheel', (event) => {
     if (!event.ctrlKey) return;
@@ -50,16 +50,24 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     if (token === renders) body.replaceChildren(...scratch.childNodes);
   }
   function changed(next) { text = next; onChange(text); }
+  // The editor follows MD: with it, TinyMDE (formatting toolbar) for any text file; without, plain.
+  function unmount() {
+    mount++;
+    mde?.bar?.destroy?.();
+    mde?.editor?.destroy?.();
+    mde = null;
+    editorHost.replaceChildren();
+  }
   async function startEditing() {
     editing = true;
     edit.setAttribute('aria-pressed', 'true');
-    format.hidden = true;
     body.hidden = true;
     editorHost.hidden = false;
-    editorHost.replaceChildren();
-    if (isMarkdown && loadEditor) {
+    unmount();
+    const mine = mount;
+    if (markdown && loadEditor) {
       const TinyMDE = await loadEditor();
-      if (!editing) return;
+      if (!editing || mine !== mount) return;
       const commands = document.createElement('div'), area = document.createElement('div');
       // The Notes panel's classes, so TinyMDE follows the app theme the same way.
       commands.className = 'notes-commands';
@@ -82,23 +90,26 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
   function stopEditing() {
     if (!editing) return;
     editing = false;
-    mde?.bar?.destroy?.();
-    mde?.editor?.destroy?.();
-    mde = null;
-    editorHost.replaceChildren();
+    unmount();
     editorHost.hidden = true;
     body.hidden = false;
-    format.hidden = false;
     edit.setAttribute('aria-pressed', 'false');
     render();
   }
-  format.onclick = () => { markdown = !markdown; render(); };
+  // MD on or off is remembered per file on this device.
+  const remembered = (k, fallback) => { try { const v = localStorage.getItem(`notecomplete-text-md:${k}`); return v === null ? fallback : v === '1'; } catch { return fallback; } };
+  format.onclick = () => {
+    markdown = !markdown;
+    try { if (key) localStorage.setItem(`notecomplete-text-md:${key}`, markdown ? '1' : '0'); } catch { /* Optional. */ }
+    format.setAttribute('aria-pressed', String(markdown));
+    if (editing) startEditing(); else render();
+  };
   edit.onclick = () => (editing ? stopEditing() : startEditing());
   return {
-    // Markdown files start formatted, other text as written; Markdown switches either way.
-    open({ text: content, name: shown, markdown: formatted }) {
+    // Markdown files start formatted, other text as written, until MD is switched for that file.
+    open({ text: content, name: shown, markdown: formatted, key: id = shown }) {
       stopEditing();
-      text = content; name = shown; markdown = isMarkdown = formatted;
+      text = content; name = shown; key = id; markdown = remembered(id, formatted);
       if (title) title.textContent = shown;
       root.hidden = false;
       body.scrollTop = 0;

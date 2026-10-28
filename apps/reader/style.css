@@ -344,7 +344,14 @@ main {
 .doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
 .doc-editor-plain:focus, .doc-editor-plain:focus-visible { outline: none; }
 #textEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.html-bar .zoom-controls { display: inline-flex; align-items: center; margin-left: 6px; }
+.html-bar .zoom-controls { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
+/* Document bar actions are filled chips, like the File menu's export buttons (MD, PDF…);
+   the sidebar and moon toggles stay plain, as in the notes bar. */
+.html-bar > button:not(.side-toggle, .pages-dark-toggle), .html-bar .zoom-controls > button { flex: none; min-width: 32px; min-height: 26px; padding: 0 8px; justify-content: center; gap: 5px; border: 0; border-radius: var(--radius); background: var(--fill); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.html-bar > button:not(.side-toggle, .pages-dark-toggle):hover:not(:disabled), .html-bar .zoom-controls > button:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.html-bar > button:not(.side-toggle, .pages-dark-toggle)[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.html-bar > button svg { width: 15px; height: 15px; }
+#textSave { color: var(--accent); background: var(--accent-soft); }
 .html-bar .zoom-reset { min-width: 52px; font-variant-numeric: tabular-nums; }
 .side-body { flex: 1; min-height: 0; display: flex; }
 .side-body > iframe, .side-body > article { flex: 1; min-width: 0; }

@@ -248,7 +248,7 @@ async function load(file, preparedDocument = null) {
       document.title = `${sideTitle} — NoteComplete`;
       tabBar.update({ title: sideTitle, dirty: false });
       if (prepared.kind === "html") htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle });
-      else await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name) });
+      else await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name), key: file.name });
       showDocument();
       rememberDocument();
       documentControls();

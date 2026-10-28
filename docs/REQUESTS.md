@@ -292,3 +292,5 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] Web links (File → Open link…): Notion and other pages open like documents in a sandboxed webview with its own sign-ins; in Recent and groups; Back, Reload, Open in browser, zoom, Dark pages.
 - [D] Ctrl + zooms again on the Spanish layout: the native menu no longer has Electron's Zoom In on Ctrl+Plus (app-menu.js, so every build keeps it).
 - [D] Open folder… beside Open file… on Home.
+- [D] Every text file edits like GUIA_COMANDOS.md: the editor follows MD (on: TinyMDE with its toolbar; off: plain), and MD on/off is remembered per file.
+- [D] Home buttons are File and Folder (icons kept); document bar actions are filled chips like the export MD button: MD, a pen for Edit, a floppy for Save, a circular arrow for Reload, Clear, Browser.
