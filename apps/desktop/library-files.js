@@ -1,7 +1,7 @@
 // Main-process side of the reader's downloads folder and Recent list.
 // The renderer may only read/write plain file names inside the chosen folder,
 // and reopen paths the user picked through the main-process open dialog.
-import { mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 // Notes, PDFs, HTML, images, text formats (as in the reader's text-types.js), and names
@@ -38,7 +38,23 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
     await mkdir(path.dirname(settingsFile), { recursive: true });
     await writeFile(settingsFile, JSON.stringify(settings), { mode: 0o600 });
   };
+  // A file the user chose in the open dialog, or one directly in a chosen folder.
+  const opened = async (file) => {
+    const s = await load();
+    const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(path.basename(file)) && s.folders.includes(path.dirname(file));
+    if (typeof file !== 'string' || !(s.recent.includes(file) || inFolder)) throw Error('That file was not opened from this device.');
+  };
   return {
+    // Saves an edited text document over its file: written beside it, then renamed, keeping its mode.
+    async writeOpened(file, bytes) {
+      await opened(file);
+      if (!(bytes instanceof Uint8Array)) throw Error('Expected file bytes.');
+      const mode = (await stat(file)).mode & 0o7777;
+      const partial = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.partial`);
+      await writeFile(partial, bytes, { mode });
+      await chmod(partial, mode);
+      await rename(partial, file);
+    },
     async folder() { return (await load()).folder; },
     async setFolder(folder) {
       if (!path.isAbsolute(folder)) throw Error('Choose an absolute folder.');
@@ -89,9 +105,7 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
       return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     },
     async readRecent(file) {
-      const s = await load();
-      const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(path.basename(file)) && s.folders.includes(path.dirname(file));
-      if (typeof file !== 'string' || !(s.recent.includes(file) || inFolder)) throw Error('That file was not opened from this device.');
+      await opened(file);
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },
   };

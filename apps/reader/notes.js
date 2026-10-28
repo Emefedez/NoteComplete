@@ -8,7 +8,7 @@ import { renderMarkdown } from './rich-text.js';
 
 const $ = id => document.getElementById(id);
 let library = null;
-function loadEditor() {
+export function loadEditor() {
   return library ||= new Promise((resolve, reject) => {
     const css = document.createElement('link');
     css.rel = 'stylesheet';

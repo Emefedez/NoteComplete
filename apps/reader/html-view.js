@@ -11,8 +11,10 @@ const STORE = 'notecomplete-html-state:';
 const CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none';";
 
 // Runs first inside the page. Storage is seeded from the parent and reported back.
-function shim(seed) {
-  return `<script>(function(){var seed=${JSON.stringify(seed).replace(/</g, '\\u003c')};
+function shim(seed, zoom = 1) {
+  return `<script>(function(){var seed=${JSON.stringify(seed).replace(/</g, '\\u003c')},zoom=${Number(zoom) || 1};
+function z(){document.documentElement.style.zoom=zoom}z();
+addEventListener('message',function(e){if(e.source===parent&&e.data&&typeof e.data.noteCompleteZoom==='number'){zoom=e.data.noteCompleteZoom;z()}});
 function make(init,report){var d=Object.assign({},init);var s={getItem:function(k){return Object.prototype.hasOwnProperty.call(d,k)?d[k]:null},
 setItem:function(k,v){d[String(k)]=String(v);report(d)},removeItem:function(k){delete d[k];report(d)},clear:function(){d={};report(d)},
 key:function(i){return Object.keys(d)[i]||null}};Object.defineProperty(s,'length',{get:function(){return Object.keys(d).length}});return s}
@@ -37,8 +39,8 @@ addEventListener('message',function(e){if(e.source===parent&&e.data&&typeof e.da
 }
 
 // Put the shim before the page's own scripts without altering its content.
-export function prepareHtml(source, seed = {}, dark = null) {
-  const tag = shim(seed) + (dark?.script ? darkener(dark) : '');
+export function prepareHtml(source, seed = {}, dark = null, zoom = 1) {
+  const tag = shim(seed, zoom) + (dark?.script ? darkener(dark) : '');
   const head = /<head[^>]*>/i.exec(source);
   if (head) return source.slice(0, head.index + head[0].length) + tag + source.slice(head.index + head[0].length);
   const html = /<html[^>]*>/i.exec(source);
@@ -47,7 +49,7 @@ export function prepareHtml(source, seed = {}, dark = null) {
 }
 
 export function htmlViewer({ root, frame, title, reload, clear, status, darkScript = null, darkColors = () => ({}), onOwnDark = () => {} }) {
-  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0;
+  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0, zoom = 1;
   const read = () => {
     try {
       return (typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(STORE + key))) || {};
@@ -70,7 +72,7 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
   const paint = (script) => {
     frame = fresh();
     darkInFrame = Boolean(script);
-    frame.srcdoc = prepareHtml(source, read(), script ? { script, on: dark, colors: darkColors() } : null);
+    frame.srcdoc = prepareHtml(source, read(), script ? { script, on: dark, colors: darkColors() } : null, zoom);
   };
   const render = () => {
     const token = ++renders;
@@ -114,6 +116,11 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
       if (!source) return;
       if (darkInFrame) frame.contentWindow?.postMessage({ noteCompleteDark: dark }, '*');
       else if (dark) render();
+    },
+    // Page zoom inside the frame, so the frame itself keeps its size.
+    setZoom(value) {
+      zoom = value;
+      if (source) frame.contentWindow?.postMessage({ noteCompleteZoom: zoom }, '*');
     },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },

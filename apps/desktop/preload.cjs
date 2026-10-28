@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
   listFolder: folder => ipcRenderer.invoke('files:list-folder', folder),
   pickFiles: () => ipcRenderer.invoke('files:pick'),
+  writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
 });
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),

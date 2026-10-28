@@ -5,7 +5,7 @@ import {
   fileKind,
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
-import { textViewer, isMarkdownName } from "./text-view.js";
+import { textViewer, isMarkdownName, zoomControl } from "./text-view.js";
 import { groupStore, groupPanel, localMember } from "./groups.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
@@ -217,7 +217,8 @@ function reset({ opening = false } = {}) {
   $("title").textContent = "Home";
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
-  dirty = false;
+  dirty = changed = false;
+  $("textSave").hidden = true;
   documentControls();
   if (!opening) home?.show(false);
 }
@@ -1828,6 +1829,18 @@ document.addEventListener("keydown", (e) => {
     else find.open();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && textView.hasDocument) {
+    e.preventDefault();
+    saveText();
+    return;
+  }
+  // Ctrl +/−/0 on a text document or HTML page: its own zoom (notes zoom their pages below).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && sideView()?.visible && ["+", "=", "-", "_", "0"].includes(e.key)) {
+    e.preventDefault();
+    const dir = e.key === "0" ? 0 : e.key === "-" || e.key === "_" ? -1 : 1;
+    if (textView.visible) textView.zoom(dir); else htmlZoom.step(dir);
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     if (saveAs) save(saveAs === "noteful", saveAs);
@@ -1911,7 +1924,7 @@ async function save(native, as = native ? "noteful" : "project") {
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
     if (as === saveAs && !delivery.shared) {
-      dirty = false;
+      dirty = changed = false;
       savedState();
       status(`Saved as ${filename()}${SAVE_EXT[as]}.`);
       return;
@@ -1922,7 +1935,7 @@ async function save(native, as = native ? "noteful" : "project") {
       return;
     }
     if (!native && !delivery.shared) {
-      dirty = false;
+      dirty = changed = false;
       savedState();
     }
     status(
@@ -2342,7 +2355,37 @@ function htmlDarkApply() {
 }
 $("htmlDark").onclick = $("textDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 var htmlViewReady = true;
-const textView = textViewer({ root: $("textView"), body: $("textBody"), title: $("textTitle"), format: $("textMarkdown"), toHtml: (value) => call("markdownHtml", { text: value }) });
+const textView = textViewer({
+  root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
+  zoom: { out: $("textZoomOut"), into: $("textZoomIn"), value: $("textZoomValue") },
+  toHtml: (value) => call("markdownHtml", { text: value }),
+  // The Notes panel's TinyMDE, for Markdown files.
+  loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
+  onChange: () => {
+    dirty = changed = true;
+    $("textSave").hidden = false;
+    tabBar.update({ title: textView.name, dirty: true });
+  },
+});
+const htmlZoom = zoomControl({ key: "notecomplete-html-zoom", out: $("htmlZoomOut"), into: $("htmlZoomIn"), value: $("htmlZoomValue"), apply: (z) => htmlView.setZoom(z) });
+// Save (Ctrl S) for an edited text document: back to its file on this device, else a download.
+async function saveText() {
+  if (!textView.hasDocument || !changed) return;
+  const name = docMember?.name || `${textView.name}.txt`;
+  try {
+    if (docMember?.source === "local" && window.notecompleteFiles?.writeOpened) {
+      await window.notecompleteFiles.writeOpened(docMember.path, new TextEncoder().encode(textView.text));
+      status(`Saved ${name}.`);
+    } else {
+      await download(textView.text, name, "text/plain");
+      status(`This file isn't on this device, so ${name} was downloaded with the changes.`);
+    }
+    dirty = changed = false;
+    $("textSave").hidden = true;
+    tabBar.update({ title: textView.name, dirty: false });
+  } catch (error) { status(error.message, true); }
+}
+$("textSave").onclick = () => saveText();
 // The open HTML or text document, when one is open instead of a note.
 function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : null; }
 htmlDarkApply();

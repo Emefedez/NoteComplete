@@ -56,3 +56,23 @@ test('a chosen folder lists its notes and opens them; other folders stay closed'
   assert.equal(new TextDecoder().decode(await files.readRecent(path.join(folder, 'ciudades'))), 'x');
   await assert.rejects(files.readRecent(path.join(folder, 'tool.exe')), /not opened/);
 });
+
+test('an edited text file is saved only over a file that was opened, keeping its mode', async () => {
+  const { mkdtemp, writeFile: put, mkdir: dir, stat: info, chmod: mode, readFile: get, readdir: list } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-save-'));
+  const folder = path.join(root, 'examen-1');
+  await dir(folder);
+  await put(path.join(folder, 'ciudades'), 'old');
+  await mode(path.join(folder, 'ciudades'), 0o640);
+  await put(path.join(root, 'other.md'), 'keep');
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  await assert.rejects(files.writeOpened(path.join(folder, 'ciudades'), new Uint8Array([1])), /not opened/);
+  await files.rememberFolder(folder);
+  await files.writeOpened(path.join(folder, 'ciudades'), new TextEncoder().encode('Madrid\n'));
+  assert.equal(await get(path.join(folder, 'ciudades'), 'utf8'), 'Madrid\n');
+  assert.equal((await info(path.join(folder, 'ciudades'))).mode & 0o777, 0o640);
+  assert.deepEqual(await list(folder), ['ciudades'], 'no partial file left');
+  await assert.rejects(files.writeOpened(path.join(root, 'other.md'), new Uint8Array([1])), /not opened/);
+  assert.equal(await get(path.join(root, 'other.md'), 'utf8'), 'keep');
+});

@@ -35,7 +35,8 @@ test('prepareDocument prepares html document with text content', async () => {
 test('prepareHtml injects localStorage shim into head or html without breaking markup', () => {
   const src = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Exam</title></head><body><h1>ACII</h1></body></html>';
   const prepared = prepareHtml(src, { acii_chuleta_theme: 'dark' });
-  assert.match(prepared, /<script>\(function\(\)\{var seed=\{"acii_chuleta_theme":"dark"\};/);
+  assert.match(prepared, /<script>\(function\(\)\{var seed=\{"acii_chuleta_theme":"dark"\},zoom=1;/);
+  assert.match(prepareHtml(src, {}, null, 1.5), /zoom=1\.5;/);
   assert.match(prepared, /Object\.defineProperty\(window,'localStorage'/);
   assert.ok(prepared.includes('<h1>ACII</h1>'));
   assert.ok(prepared.indexOf('seed=') > prepared.indexOf('<head>'));
@@ -152,4 +153,16 @@ test('htmlViewer loads Dark Reader for dark pages and switches it in place', asy
   viewer.setDark(true);
   assert.deepEqual(sent.at(-1), { noteCompleteDark: true });
   assert.equal(loads, 1);
+});
+
+test('htmlViewer sends page zoom to the open frame', () => {
+  const sent = [];
+  const frame = { attributes: {}, setAttribute(k, v) { this.attributes[k] = v; }, srcdoc: '', contentWindow: { postMessage: (m) => sent.push(m) } };
+  const viewer = htmlViewer({ root: { hidden: true }, frame });
+  viewer.setZoom(1.25);
+  assert.deepEqual(sent, [], 'nothing open yet');
+  viewer.open({ text: '<html><head></head><body>x</body></html>', fingerprint: 'z', name: 'Z' });
+  assert.match(frame.srcdoc, /zoom=1\.25;/);
+  viewer.setZoom(2);
+  assert.deepEqual(sent, [{ noteCompleteZoom: 2 }]);
 });
