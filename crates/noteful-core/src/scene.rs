@@ -249,7 +249,43 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
         }
         cursor += n;
     }
-    Ok(Some(Crop { left: -x0 * sx, top: -y0 * sy, width: sw * sx, height: sh * sy, outline }))
+    Ok(Some(Crop {
+        left: -x0 * sx,
+        top: -y0 * sy,
+        width: sw * sx,
+        height: sh * sy,
+        outline,
+    }))
+}
+/// An image object drawn from its data URL with its crop, in its placement (for edits).
+pub(crate) fn cropped_image(o: &Value, href: &str) -> Result<String> {
+    let [x, y, w, h, a] = floats::<5>(&o["2"]["1"])?;
+    let [sw, sh] = floats::<2>(&o["6"]["2"])?;
+    let el = match image_crop(&o["6"], w, h, sw, sh)? {
+        Some(Crop {
+            left,
+            top,
+            width,
+            height,
+            outline,
+        }) => {
+            let clip = format!("nc-crop-{}-edit", text(&o["1"]));
+            format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\" href=\"{href}\"/>")
+        }
+        None => format!(
+            "<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{href}\"/>"
+        ),
+    };
+    composite(
+        format!(
+            "<g transform=\"translate({x} {y}) rotate({}) translate({} {})\">{el}</g>",
+            a.to_degrees(),
+            -w / 2.,
+            -h / 2.
+        ),
+        num(&o["8"], 1.),
+        o["9"].as_u64().unwrap_or(0),
+    )
 }
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
@@ -272,7 +308,14 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             "png" => "image/png",
             _ => return Err(Error::new(0, "Unsupported image")),
         };
-        let href = format!("data:{mime};base64,{}", STANDARD.encode(package.resource(id).ok_or_else(|| Error::new(0, "Missing image bytes"))?));
+        let href = format!(
+            "data:{mime};base64,{}",
+            STANDARD.encode(
+                package
+                    .resource(id)
+                    .ok_or_else(|| Error::new(0, "Missing image bytes"))?
+            )
+        );
         match image_crop(p, w, h, sw, sh)? {
             // Cropped (Noteful's cutout): the placement box is the crop's bounding box, so the
             // whole image is drawn larger and offset, and clipped to the crop outline.
@@ -634,10 +677,19 @@ mod tests {
     fn image_crops_fill_the_placement_and_clip_to_the_outline() {
         // Exercise 13 in the ACII exam: a 546 × 632 image cropped to rows 183–391.
         let p = serde_json::json!({"12":{"1":[0.0,183.0,546.0,183.0,546.0,391.0,0.0,391.0],"2":[0,1,1,1,4]}});
-        let c = super::image_crop(&p, 1092.0, 416.0, 546.0, 632.0).unwrap().unwrap();
-        assert_eq!((c.left, c.top, c.width, c.height), (0.0, -366.0, 1092.0, 1264.0));
+        let c = super::image_crop(&p, 1092.0, 416.0, 546.0, 632.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (c.left, c.top, c.width, c.height),
+            (0.0, -366.0, 1092.0, 1264.0)
+        );
         assert_eq!(c.outline, "M0 0 L1092 0 L1092 416 L0 416 Z");
-        assert!(super::image_crop(&serde_json::json!({}), 10.0, 10.0, 10.0, 10.0).unwrap().is_none());
+        assert!(
+            super::image_crop(&serde_json::json!({}), 10.0, 10.0, 10.0, 10.0)
+                .unwrap()
+                .is_none()
+        );
     }
     use super::object;
     use serde_json::json;

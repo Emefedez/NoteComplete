@@ -228,6 +228,7 @@ impl Image {
                     ]
                     .into_iter()
                     .chain(a.locked.filter(|l| *l).map(|_| f(21, 0x801, V::UInt(1))))
+                    .chain(a.crop.map(|c| f(12, 7, crate::export::crop_outline(c))))
                     .collect(),
                 ),
             ),

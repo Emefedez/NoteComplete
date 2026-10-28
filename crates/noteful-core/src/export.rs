@@ -32,6 +32,16 @@ fn set(fs: &mut Vec<Field>, tag: u16, ty: u16, value: V, clock: u64) {
         fs.push(item);
     }
 }
+pub(crate) fn crop_outline([x0, y0, x1, y1]: [f64; 4]) -> V {
+    V::Fields(vec![
+        f(
+            1,
+            0x420,
+            V::Array([x0, y0, x1, y0, x1, y1, x0, y1].map(V::Float).to_vec()),
+        ),
+        f(2, 0x414, V::Array([0, 1, 1, 1, 4].map(V::UInt).to_vec())),
+    ])
+}
 fn nested(fs: &mut [Field], tag: u16) -> Result<&mut Vec<Field>> {
     match fs.iter_mut().find(|f| f.tag == tag).map(|f| &mut f.value) {
         Some(V::Fields(v)) => Ok(v),
@@ -215,6 +225,16 @@ fn edit_object(
         if lockable {
             set(payload, 21, 0x801, V::UInt(u64::from(locked)), time);
         }
+    }
+    // A crop is Noteful's outline (payload tag 12) in the image's native size.
+    if let Some([x0, y0, x1, y1]) = a.crop {
+        set(
+            nested(fs, 6)?,
+            12,
+            0x807,
+            crop_outline([x0, y0, x1, y1]),
+            time,
+        );
     }
     if crate::manipulation::item_geometry(item).styled {
         let st = nested(nested(fs, 6)?, 7)?;

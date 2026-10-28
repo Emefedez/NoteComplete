@@ -1946,16 +1946,14 @@ if ("serviceWorker" in navigator)
 function shapeHandles(p) {
   selection.render(p);
 }
-async function patchItem(item, adjustment) {
+async function patchItem(item, adjustment, crop = null) {
   if (busy() || !doc) return null;
   editing = true;
   const token = epoch;
   try {
-    const result = await call("adjust", {
-      page: item.page,
-      itemId: item.id,
-      adjustment,
-    });
+    const result = crop
+      ? await call("crop", { page: item.page, itemId: item.id, rect: crop })
+      : await call("adjust", { page: item.page, itemId: item.id, adjustment });
     if (token !== epoch) return null;
     dirty = true;
     savedState();

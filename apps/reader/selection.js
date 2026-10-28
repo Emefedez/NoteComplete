@@ -1,4 +1,5 @@
 import {matrix,point,inverse,multiply,corners,resizeAdjustment} from './selection-geometry.js';
+import {cropMode} from './crop.js';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
 const svg=(tag,attrs)=>{const el=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);return el;};
 const clone=value=>structuredClone(value);
@@ -8,9 +9,9 @@ export class SelectionController {
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
-  $('clearSelection').onclick=()=>this.clear();$('deleteSelection').onclick=async()=>{if(this.item&&this.editable()){const item=this.item;this.clear();await this.remove(item);}};
+  $('clearSelection').onclick=()=>this.clear();$('cropSelection').onclick=()=>this.startCrop();$('deleteSelection').onclick=async()=>{if(this.item&&this.editable()){const item=this.item;this.clear();await this.remove(item);}};
  }
- clear(){this.token++;this.cancel();this.item=null;this.overlay?.remove();this.overlay=null;$('selectionOptions').hidden=true;this.changed();}
+ clear(){this.token++;this.cropping?.cancel();this.cancel();this.item=null;this.overlay?.remove();this.overlay=null;$('selectionOptions').hidden=true;this.changed();}
  async selectId(page,id){
   const token=++this.token;
   try{const item=await this.call('selection',{page,itemId:id});if(token===this.token){this.item=item;this.inspect();this.render(this.panel(page));this.changed();}}catch{if(token===this.token)this.clear();}
@@ -18,7 +19,7 @@ export class SelectionController {
  inspect(){
   const item=this.item;if(!item)return;const a=item.adjustment;
   $('selectionOptions').hidden=false;$('selectionKind').textContent={shape:'Shape',ink:'Stroke',image:'Image',text:'Text'}[item.kind];
-  $('selectedStyle').hidden=!item.styled;
+  $('selectedStyle').hidden=!item.styled;$('cropSelection').hidden=item.kind!=='image'||!item.crop;
   const rgba=a.rgba||item.base_rgba;
   $('selectedColor').value='#'+rgba.slice(0,3).map(n=>Math.round(n*255).toString(16).padStart(2,'0')).join('');
   $('selectedWidth').value=+(a.width??item.base_width).toFixed(2);
@@ -45,7 +46,16 @@ export class SelectionController {
   try{const result=await this.patch(item,adjustment);if(result&&this.item?.id===item.id&&this.item?.page===item.page){this.item=result.selection;this.inspect();}}
   finally{this.previewElement?.removeAttribute('transform');this.previewElement=null;$('selectionFields').disabled=false;if(this.item){this.inspect();this.render(this.panel(this.item.page));}}
  }
+ // Crop (images): the frame replaces the selection box until Done or Cancel.
+ startCrop(){
+  const item=this.item;if(!item||item.kind!=='image'||!this.editable()||this.cropping)return;
+  const p=this.panel(item.page);if(!p?.view)return;
+  this.overlay?.remove();this.overlay=null;
+  this.cropping=cropMode({p,item,coords:(e,q)=>this.coords(e,q),apply:async rect=>{this.cropping=null;$('selectionFields').disabled=true;try{const result=await this.patch(item,null,rect);if(result&&this.item?.id===item.id)this.item=result.selection;}finally{$('selectionFields').disabled=false;if(this.item){this.inspect();this.render(this.panel(this.item.page));}}},done:()=>{this.cropping=null;if(this.item)this.render(p);}});
+  if(!this.cropping)this.status('This image cannot be cropped here.',true);
+ }
  render(p){
+  if(this.cropping)return;
   if(this.item?.page!==p?.index||!p?.view)return;
   this.overlay?.remove();this.overlay=null;
   const el=p.render?.querySelector(`[data-item="${this.item.id}"]`);if(!el){this.clear();return;}
@@ -65,6 +75,10 @@ export class SelectionController {
  }
  coords(event,p){const r=p.el.getBoundingClientRect();return [(event.clientX-r.left)/r.width*p.size[0],(event.clientY-r.top)/r.height*p.size[1]];}
  down(event,p,tool){
+  if(this.cropping)return true;
+  // Double-click a selected image to crop it.
+  const last=this.lastDown;this.lastDown={time:event.timeStamp,x:event.clientX,y:event.clientY};
+  if(last&&event.timeStamp-last.time<450&&Math.hypot(event.clientX-last.x,event.clientY-last.y)<8&&tool==='select'&&this.item?.kind==='image'&&this.item.page===p.index&&!event.target.closest('[data-selection-handle]')){event.preventDefault();this.lastDown=null;this.startCrop();return true;}
   const handle=event.target.closest('[data-selection-handle]');
   if(!handle&&tool!=='select')return false;
   if(!this.editable()||!p.view||event.button!==0)return true;

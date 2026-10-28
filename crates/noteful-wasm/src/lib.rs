@@ -190,6 +190,14 @@ impl EditorSession {
             .map_err(js_error)?;
         Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
     }
+    /// Show only `[x0, y0, x1, y1]` (JSON, in the image's native size) of an image.
+    pub fn crop_item(&mut self, page: usize, id: &str, rect: &str) -> Result<String, JsValue> {
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let rect: [f64; 4] = serde_json::from_str(rect).map_err(js_error)?;
+        self.inner.crop_item(page, id, rect).map_err(js_error)?;
+        Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
+    }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.remove_item(page, id).map_err(js_error)

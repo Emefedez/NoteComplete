@@ -1818,3 +1818,10 @@ body.bar-compact .tab { height: 22px; }
   .toolbar .segmented button { flex: 1 0 52px; min-width: 52px; min-height: 48px; font-size: 11px; }
   .toolbar.tools-icons .segmented button { flex-basis: 34px; min-width: 34px; min-height: 40px; }
 }
+
+/* Crop (Select → Crop on an image): the kept part inside an accent frame with square
+   handles; the rest of the image shows faintly; Done / Whole image / Cancel above it. */
+.crop-overlay .crop-frame { fill: transparent; stroke: var(--accent); stroke-width: 1.5; }
+.crop-overlay .crop-handle { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
+.crop-menu { white-space: nowrap; }
+.crop-menu .primary { background: var(--accent-soft); color: var(--accent); }

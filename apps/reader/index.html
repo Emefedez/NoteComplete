@@ -52,6 +52,7 @@
           <button data-proxy="redo">Redo<kbd>Ctrl Shift Z</kbd></button>
           <hr />
           <button id="findOpen" disabled>Find…<kbd>Ctrl F</kbd></button>
+          <button data-proxy="cropSelection" title="Select an image first; or double-click it with Select">Crop image</button>
           <hr />
           <button data-proxy-tool="pan" role="menuitemradio">Pan<kbd>V</kbd></button>
           <button data-proxy-tool="select" role="menuitemradio">Select<kbd>S</kbd></button>
@@ -345,6 +346,13 @@
                   step="1"
                   aria-label="Item angle"
                 />°</label
+              ><button
+                id="cropSelection"
+                type="button"
+                title="Show only part of the image"
+                hidden
+              >
+                Crop</button
               ><button
                 id="deleteSelection"
                 type="button"

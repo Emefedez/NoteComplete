@@ -82,6 +82,10 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       });
       return;
     }
+    if (op === "crop") {
+      postMessage({ id, result: JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))) });
+      return;
+    }
     if (op === "adjust") {
       postMessage({
         id,
