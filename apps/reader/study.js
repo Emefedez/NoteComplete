@@ -18,6 +18,10 @@ export function ankiText(deck, cards) {
     ...cards.map(c => `${cell(c.front)}\t${cell(c.back)}\t${c.page ? `p${c.page}` : ''}`)].join('\n') + '\n';
 }
 
+// Cards keep their line breaks (lists split by listLines) when shown as Markdown.
+export function cardMarkdown(text) {
+  return String(text ?? '').replace(/([^\n])\n(?!\n)/g, '$1  \n');
+}
 // Several decks in one Anki file: the deck goes in a column ("Note::Deck").
 export function ankiDecks(groups) {
   const cell = s => String(s).replace(/\t/g, '    ').replace(/\r?\n/g, '<br>');
@@ -329,8 +333,8 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       $('practicePage').hidden = true;
       return;
     }
-    $('practiceFront').textContent = card.front;
-    $('practiceBack').textContent = card.back;
+    cardText($('practiceFront'), card.front);
+    cardText($('practiceBack'), card.back);
     $('practiceBack').hidden = true;
     $('practiceReveal').hidden = false; $('practiceKnow').hidden = $('practiceAgain').hidden = true;
     $('practiceProgress').textContent = `${practice.seen + 1} · ${practice.known} known`;
@@ -459,7 +463,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     if (!card || !front || !back) return;
     card.front = front; card.back = back;
     closeFix();
-    $('practiceFront').textContent = card.front; $('practiceBack').textContent = card.back;
+    cardText($('practiceFront'), card.front); cardText($('practiceBack'), card.back);
     await saveDeck();
     status('Card corrected and saved with this note.');
   };
@@ -467,6 +471,8 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
 
   // The card's last explanation is kept with the deck: shown folded under the
   // answer (the arrow opens it), editable, and reused instead of asking again.
+  // Card text: Markdown and formulas like the chat; a single line break stays a line break.
+  const cardText = (element, text) => renderInto(element, cardMarkdown(text));
   const renderInto = (element, text) => markdown ? renderMarkdown(element, text, markdown).catch(() => element.replaceChildren(renderAnswer(text))) : Promise.resolve(element.replaceChildren(renderAnswer(text)));
   function showExplained() {
     const card = practice?.queue[0], saved = card?.explanation;

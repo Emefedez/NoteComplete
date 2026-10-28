@@ -82,3 +82,9 @@ test('Markdown notes go to AI requests as one capped block', () => {
   const long = notesBlock('x'.repeat(25), 10);
   assert.match(long, /^[\s\S]*\nx{10}\n\[… 15 more characters not included\]$/);
 });
+
+test('card text keeps single line breaks when rendered as Markdown', async () => {
+  const { cardMarkdown } = await import('./study.js');
+  assert.equal(cardMarkdown('1) a\n2) b\n\nFin'), '1) a  \n2) b\n\nFin');
+  assert.equal(cardMarkdown('$x^2$'), '$x^2$');
+});

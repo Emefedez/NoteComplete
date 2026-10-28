@@ -1374,7 +1374,13 @@ body.bar-compact .job-ready { min-height: 22px; padding: 0 8px; font-size: 11px;
 .practice-card { height: min(46dvh, 360px); margin: 8px 0 14px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--chrome); overflow: auto; display: flex; }
 /* The text block sits in the middle of the card; its lines start at a shared left edge. */
 .practice-text { margin: auto; width: fit-content; max-width: min(100%, 62ch); text-align: left; display: grid; gap: 14px; }
-.practice-front { font-size: 20px; font-weight: 600; margin: 0; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.practice-front { font-size: 20px; font-weight: 600; margin: 0; line-height: 1.4; overflow-wrap: anywhere; }
+/* Card text is Markdown with formulas (KaTeX), like Ask AI answers. */
+.practice-front > :first-child, .practice-back > :first-child { margin-top: 0; }
+.practice-front > :last-child, .practice-back > :last-child { margin-bottom: 0; }
+.practice-front p, .practice-back p { margin: 0 0 6px; }
+.practice-front ul, .practice-front ol, .practice-back ul, .practice-back ol { margin: 4px 0; padding-left: 20px; }
+.practice-text .math-display { display: block; margin: 6px 0; overflow-x: auto; }
 /* The hidden answer keeps its space so revealing it moves nothing. */
 .practice-back[hidden] { display: block !important; visibility: hidden; }
 .practice-actions { flex-wrap: wrap; }
@@ -1427,7 +1433,7 @@ body.focus-dim { --window-z: 60; }
 .practice-fix p { margin: 0; font-size: 12px; }
 .practice-fix textarea { resize: none; overflow: hidden; font-size: 14px; line-height: 1.45; }
 .practice-fix textarea:first-of-type { font-weight: 600; }
-.practice-back { font-size: 16px; margin: 0; padding-top: 14px; border-top: 1px dashed var(--line); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.practice-back { font-size: 16px; margin: 0; padding-top: 14px; border-top: 1px dashed var(--line); line-height: 1.5; overflow-wrap: anywhere; }
 /* "?" shows each button's key: inline after a label, as a corner badge on icon buttons. */
 body.show-keys [data-key]::after { content: attr(data-key); margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--muted); font: 600 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; pointer-events: none; }
 body.show-keys [data-key][data-key-icon] { position: relative; overflow: visible; }
