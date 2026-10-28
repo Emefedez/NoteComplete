@@ -610,13 +610,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const { canvas } = await pageCanvas(card.page - 1, 1400, { liftTape: true }).catch(() => ({}));
       if (canvas) { image = canvas.toDataURL('image/jpeg', 0.85); canvas.width = canvas.height = 0; }
     }
-    const answer = await continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q });
-    // The answer in Ask AI is still kept with the card.
-    if (answer) {
-      card.explanation = { ...card.explanation, text: card.explanation?.text ? `${card.explanation.text}\n\n**${q}**\n\n${answer}` : `**${q}**\n\n${answer}`, provider: card.explanation?.provider || 'Ask AI', at: Date.now() };
+    // Every answer in that Ask AI conversation is still kept with the card.
+    const onAnswer = async (question, answer) => {
+      if (!answer) return;
+      card.explanation = { ...card.explanation, text: card.explanation?.text ? `${card.explanation.text}\n\n**${question}**\n\n${answer}` : `**${question}**\n\n${answer}`, provider: card.explanation?.provider || 'Ask AI', at: Date.now() };
       await saveDeck();
-      showExplained();
-    }
+      if (practice?.queue[0] === card) showExplained();
+    };
+    await continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q, onAnswer });
   };
   $('practiceAskAgain').onclick = () => ask('', { again: true });
   $('practiceAskStop').onclick = () => ai?.cancel('card-ask');

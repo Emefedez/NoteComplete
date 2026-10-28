@@ -171,13 +171,14 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     const history = asking.history;
     input.value = '';
     closeBox();
-    // The answer in Ask AI is still kept with the item, after what was saved before.
-    Promise.resolve(handoff({ item: current, history, question: q })).then(async answer => {
+    // Every answer in that Ask AI conversation is still kept with the item, after what was saved.
+    const onAnswer = async (question, answer) => {
       if (!answer) return;
       const before = saved(current);
-      await save(current, { ...before, text: before?.text ? `${before.text}\n\n**${q}**\n\n${answer}` : `**${q}**\n\n${answer}`, provider: before?.provider || 'Ask AI', at: Date.now() });
-      showSaved(current);
-    }).catch(() => {});
+      await save(current, { ...before, text: before?.text ? `${before.text}\n\n**${question}**\n\n${answer}` : `**${question}**\n\n${answer}`, provider: before?.provider || 'Ask AI', at: Date.now() });
+      if (item === current && box.hidden) showSaved(current);
+    };
+    Promise.resolve(handoff({ item: current, history, question: q, onAnswer })).catch(() => {});
   };
   again.onclick = () => ask(asking?.item || item, '', { fresh: true });
   stop.onclick = () => ai?.cancel(tag);

@@ -29,7 +29,9 @@ export function renderAnswer(text) {
 }
 
 export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null }) {
-  let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '';
+  // `follow`: a conversation continued from a quiz question or flashcard keeps adding
+  // each answer to that item's saved explanation, until New.
+  let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
@@ -181,6 +183,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       dots.remove();
       await answer(waiting, text);
       actions(waiting, text.trim());
+      follow?.(question, text.trim());
       return text.trim();
     } catch (error) {
       waiting.replaceChildren(error.message);
@@ -195,7 +198,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; $('chatMessages').replaceChildren(); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
@@ -205,11 +208,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     attach,
     // A conversation started in a quiz or flashcard window carries on here: its topic goes
     // with every request until New, its turns join the history, then the new question is asked.
-    async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', question }) {
+    async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', question, onAnswer = null }) {
       await open();
       history = messages.slice(-10);
       topic = about;
-      conversation = newId(); chatTitle = title;
+      conversation = newId(); chatTitle = title; follow = onAnswer;
       $('chatMessages').replaceChildren();
       const from = add('user', title);
       from.classList.add('chat-from');
@@ -221,6 +224,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     },
     async askAbout({ question, image, label = 'a region of the notes' }) {
       await open();
+      follow = null;
       if (image) attach(image, label);
       $('chatSelection').checked = false;
       return ask(question);
