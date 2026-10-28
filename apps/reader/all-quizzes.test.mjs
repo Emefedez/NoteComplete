@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupQuizzes } from './all-quizzes.js';
+import { groupQuizzes, describe } from './all-quizzes.js';
 import { ankiDecks, studyGroups } from './study.js';
 
 test('quizzes are grouped by document, newest first, unknown ones last', () => {
@@ -16,4 +16,11 @@ test('a note exports its decks and quizzes as Anki decks named Note::Deck', () =
   assert.equal(text[3], '#deck column:4');
   assert.equal(text[4], 'F\tB\tp2\tACII::Tema 1');
   assert.equal(text[5], 'Q<br><br>A. a<br>B. b\tB. b\t\tACII::Quiz');
+});
+
+test('decks group under their documents too, and damaged quizzes are described, not thrown', () => {
+  const stored = [['decks:a', [{ id: 'd', title: 'Tema 1', cards: [{}, {}] }]], ['quizzes:a', [{ id: 'q' }]]];
+  assert.deepEqual(groupQuizzes(stored, new Map([['a', { title: 'Memoria 1' }]]), 'decks:').map(g => g.items.length), [1]);
+  assert.equal(describe('decks', stored[0][1][0]), '2 cards');
+  assert.equal(describe('quizzes', { id: 'q' }), 'cannot be read');
 });

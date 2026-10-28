@@ -126,7 +126,7 @@
           <button id="studyRetake" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
           <button id="studyOpenDeck" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
           <button id="studyExportQuiz" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
-          <button id="studyAllQuizzes" title="Every quiz on this device, with its document">All quizzes…</button>
+          <button id="studyAllQuizzes" title="Every quiz and flashcard deck on this device, with its document">All quizzes and decks…</button>
           <hr />
           <button id="chatOpen" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
         </div>
@@ -867,11 +867,13 @@
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
 
-<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog" aria-labelledby="allQuizzesTitle">
-  <h2 id="allQuizzesTitle">All quizzes</h2>
-  <input id="allQuizzesFilter" type="search" placeholder="Filter by quiz or document" aria-label="Filter quizzes" spellcheck="false" />
-  <ul id="allQuizzesList" class="deck-picker all-quizzes"></ul>
-  <p id="allQuizzesEmpty" class="muted" hidden>No quizzes yet. Make one with Study → Quiz me….</p>
+<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study" aria-labelledby="allQuizzesTitle">
+  <h2 id="allQuizzesTitle">Study material</h2>
+  <input id="allQuizzesFilter" type="search" placeholder="Filter by name or document" aria-label="Filter quizzes and decks" spellcheck="false" />
+  <div class="all-study-columns">
+    <section aria-labelledby="allQuizzesHead"><h3 id="allQuizzesHead">Quizzes</h3><ul id="all-quizzes" class="deck-picker all-quizzes"></ul><p id="all-quizzes-empty" class="muted" hidden>None yet: Study → Quiz me….</p></section>
+    <section aria-labelledby="allDecksHead"><h3 id="allDecksHead">Flashcard decks</h3><ul id="all-decks" class="deck-picker all-quizzes"></ul><p id="all-decks-empty" class="muted" hidden>None yet: Study → Generate flashcards….</p></section>
+  </div>
   <p id="allQuizzesStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><span class="spacer"></span><button id="allQuizzesClose" type="button">Close</button></div>
 </dialog>

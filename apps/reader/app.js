@@ -2833,13 +2833,14 @@ const quizIndex = allQuizzes({
     if (!file) { status("That note is no longer kept on this device. Open it again from Drive or your files.", true); return false; }
     return openFromLibrary(file, entry);
   },
-  openQuiz: async (id) => {
+  openItem: async (kind, id) => {
+    showDocument();
+    if (kind === "decks") return study.openDeck(id);
     const quiz = (await quizzes.list()).find((q) => q.id === id);
     if (!quiz) return status("That quiz is no longer saved with the note.", true);
-    showDocument();
     quizzes.open(quiz);
   },
-  exportQuiz: (quiz) => study.exportQuiz(quiz),
+  exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
 });
 $("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
 $("shortcutsOpen").onclick = () => {

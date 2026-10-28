@@ -719,5 +719,16 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     await download(ankiDecks(groups), `${fileName(title)} · study.txt`, 'text/plain');
     status(`Exported ${groups.length} deck${groups.length === 1 ? '' : 's'} to Anki (${groups.reduce((n, g) => n + g.cards.length, 0)} cards). In Anki: File → Import.`);
   }
-  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, exportAll, fillProviders, key: onKey };
+  // From Study → All quizzes and decks: a deck of the open note, and any deck to Anki.
+  async function openDeck(id) {
+    const d = (await savedDecks()).find(x => x.id === id);
+    if (!d) return status('That deck is no longer saved with the note.', true);
+    showDeck(d);
+  }
+  async function exportDeck(d) {
+    const name = fileName(d.title || 'Flashcards');
+    await download(ankiText(name, (d.cards || []).filter(c => c.front?.trim() && c.back?.trim())), `${name}.txt`, 'text/plain');
+    status('Anki deck exported. In Anki: File → Import, then choose the file.');
+  }
+  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, exportAll, openDeck, exportDeck, fillProviders, key: onKey };
 }

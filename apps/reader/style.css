@@ -1393,8 +1393,12 @@ body.focus-dim { --window-z: 60; }
 .deck-dialog.floating .deck-float-only { display: inline-flex; }
 .deck-dialog.floating .deck-head { margin-bottom: 4px; cursor: move; user-select: none; }
 .deck-dialog.floating .deck-head input { font-size: 13px !important; pointer-events: none; }
-.deck-dialog.floating .practice-card { height: min(22dvh, 190px); margin: 4px 0 10px; }
-.deck-dialog.floating .deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) .practice-card { height: min(14dvh, 120px); }
+/* Floating practice: the card takes the height the window has left (scrolling only its own
+   long text), so a resized window never forces the whole window to scroll. */
+.deck-dialog.floating #deckPractice:not([hidden]) { display: flex; flex-direction: column; }
+.deck-dialog.floating #deckPractice > * { flex: none; }
+.deck-dialog.floating #deckPractice > .practice-card { flex: 1 1 170px; height: auto; min-height: 96px; margin: 4px 0 10px; }
+.deck-dialog.floating .deck-practice:has(.practice-ask:not([hidden]), .practice-fix:not([hidden])) > .practice-card { flex-basis: 110px; min-height: 72px; }
 .deck-dialog.floating .practice-front { font-size: 17px; }
 .deck-dialog.floating .practice-back { font-size: 15px; }
 .deck-dialog.floating.minimized #deckPractice { display: none; }
@@ -1873,3 +1877,9 @@ body.bar-compact .tab { height: 22px; }
 .all-quizzes .all-quizzes-doc { display: block; margin: 10px 0 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .all-quizzes .all-quizzes-doc:first-child { margin-top: 2px; }
 .all-quizzes .saved-open:disabled { opacity: .55; cursor: default; }
+/* Study material: quizzes and decks side by side; stacked on narrow windows. */
+.all-study { width: min(980px, calc(100vw - 24px)); }
+.all-study-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.all-study-columns h3 { margin-top: 6px; }
+@media (max-width: 760px) { .all-study-columns { grid-template-columns: 1fr; } }
+.all-quizzes:empty::before { content: none; }
