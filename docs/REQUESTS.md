@@ -270,3 +270,6 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] Ask / Ask again / Close in the Ask boxes are icons (enter, spark, ×).
 - [D] Links in AI answers are clickable: page links jump to the page, attached images open large, web links open in the browser.
 - [D] Light/dark theme toggle in View (and Ctrl+K: "Toggle light/dark theme", "Theme: follow the system"); the choice is remembered, the default follows the system.
+
+## HTML documents
+- [D] HTML pages (exercises, summaries, tests such as the Gemini FAT32 tutors or "Resumen · Ingeniería del Software I") open in the desktop app instead of a blank white page: each render gets a new sandboxed frame, since Electron never painted the one created with the page. Reload, Home and back keep working.

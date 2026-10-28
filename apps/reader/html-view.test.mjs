@@ -95,3 +95,34 @@ test('htmlViewer configures sandbox and manages document lifecycle', () => {
   assert.equal(viewer.hasDocument, false);
   assert.equal(frame.srcdoc, '');
 });
+
+test('htmlViewer renders each document into a new iframe', () => {
+  const made = [];
+  const element = () => {
+    const el = {
+      attrs: {}, srcdoc: '', contentWindow: {}, replacedBy: null,
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
+      replaceWith(next) { this.replacedBy = next; },
+    };
+    el.ownerDocument = { createElement: () => { const next = element(); made.push(next); return next; } };
+    return el;
+  };
+  const first = element();
+  first.setAttribute('id', 'htmlFrame');
+  first.setAttribute('title', 'HTML document');
+  const viewer = htmlViewer({ root: { hidden: true }, frame: first });
+  viewer.open({ text: '<html><head></head><body>One</body></html>', fingerprint: 'a', name: 'One' });
+  assert.equal(made.length, 1);
+  assert.equal(first.replacedBy, made[0]);
+  assert.equal(first.srcdoc, '');
+  assert.equal(made[0].attrs.id, 'htmlFrame');
+  assert.equal(made[0].attrs.sandbox, 'allow-scripts allow-modals allow-forms');
+  assert.ok(made[0].attrs.csp.includes("default-src 'none'"));
+  assert.ok(made[0].srcdoc.includes('One'));
+  viewer.open({ text: '<html><head></head><body>Two</body></html>', fingerprint: 'b', name: 'Two' });
+  assert.equal(made[0].replacedBy, made[1]);
+  assert.ok(made[1].srcdoc.includes('Two'));
+  viewer.close();
+  assert.equal(made[2].srcdoc, '');
+});

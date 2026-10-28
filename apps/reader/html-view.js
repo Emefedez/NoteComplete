@@ -41,7 +41,19 @@ export function htmlViewer({ root, frame, title, reload, clear, status }) {
       return {};
     }
   };
-  const render = () => { frame.srcdoc = prepareHtml(source, read()); };
+  // Each render gets a new iframe. In Electron an iframe that existed before its sandboxed
+  // page moved it to another process stays blank, so the element is never reused.
+  const fresh = () => {
+    if (!frame.replaceWith || !frame.ownerDocument) return frame;
+    const next = frame.ownerDocument.createElement('iframe');
+    for (const name of ['id', 'class', 'title', 'sandbox', 'csp']) {
+      const value = frame.getAttribute(name);
+      if (value !== null) next.setAttribute(name, value);
+    }
+    frame.replaceWith(next);
+    return next;
+  };
+  const render = () => { frame = fresh(); frame.srcdoc = prepareHtml(source, read()); };
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('message', (event) => {
       if (root.hidden || event.source !== frame.contentWindow || !key) return;
@@ -72,7 +84,7 @@ export function htmlViewer({ root, frame, title, reload, clear, status }) {
     },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
-    close() { root.hidden = true; frame.srcdoc = ''; source = ''; key = ''; currentTitle = ''; },
+    close() { root.hidden = true; frame = fresh(); frame.srcdoc = ''; source = ''; key = ''; currentTitle = ''; },
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(source); },
     get name() { return currentTitle || title?.textContent || ''; },
