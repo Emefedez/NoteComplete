@@ -23,6 +23,8 @@
         <div class="menu-content" role="menu">
           <button data-proxy="homeButton">Home</button>
           <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
+          <button id="openFolder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
+          <button id="addDocuments" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
           <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
           <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
@@ -243,11 +245,11 @@
     </section>
     <section id="htmlView" hidden>
       <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button></div>
-      <iframe id="htmlFrame" title="HTML document"></iframe>
+      <div class="side-body"><div id="htmlGroupSlot" class="group-slot"></div><iframe id="htmlFrame" title="HTML document"></iframe></div>
     </section>
     <section id="textView" hidden>
       <div class="html-bar chrome"><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textMarkdown" type="button" aria-pressed="false" title="Show the file formatted as Markdown, with LaTeX formulas">Markdown</button></div>
-      <article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article>
+      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article></div>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">
@@ -635,6 +637,12 @@
           <div class="panel-heading">
             <h2>Pages</h2>
             <button id="closePages" aria-label="Close pages">×</button>
+          </div>
+          <div id="pagesGroupSlot" class="group-slot">
+            <aside id="groupPanel" class="group-panel" aria-label="Documents in this group" hidden>
+              <div class="panel-heading"><h2 id="groupName">Documents</h2><button id="groupAdd" type="button" title="Add documents to this group…" aria-label="Add documents to this group">+</button></div>
+              <ol id="groupList" class="group-list"></ol>
+            </aside>
           </div>
           <nav id="pageList" aria-label="Document pages"></nav>
         </aside>

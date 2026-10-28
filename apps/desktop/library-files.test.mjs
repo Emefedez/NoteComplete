@@ -35,3 +35,22 @@ test('Recent reopens only paths picked in the open dialog', async () => {
   await assert.rejects(files.readRecent('/etc/shadow'), /not opened/);
   assert.equal(plainName('Temas1+2.noteful'), 'Temas1+2.noteful');
 });
+
+test('a chosen folder lists its notes and opens them; other folders stay closed', async () => {
+  const { mkdtemp, writeFile: put, mkdir: dir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-folder-'));
+  const folder = path.join(root, 'Tema 1');
+  await dir(folder);
+  for (const name of ['b.md', 'a 10.pdf', 'a 2.txt', '.hidden.md', 'script.sh']) await put(path.join(folder, name), 'x');
+  await dir(path.join(folder, 'sub.md'));
+  await put(path.join(root, 'outside.md'), 'secret');
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  await assert.rejects(files.listFolder(folder), /not opened/);
+  await files.rememberFolder(folder);
+  assert.deepEqual((await files.listFolder(folder)).map(f => f.name), ['a 2.txt', 'a 10.pdf', 'b.md']);
+  assert.equal(new TextDecoder().decode(await files.readRecent(path.join(folder, 'b.md'))), 'x');
+  await assert.rejects(files.readRecent(path.join(root, 'outside.md')), /not opened/);
+  await assert.rejects(files.readRecent(path.join(folder, '..', 'outside.md')), /not opened/);
+  await assert.rejects(files.readRecent(path.join(folder, 'script.sh')), /not opened/);
+});

@@ -277,3 +277,10 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 
 ## Recent
 - [D] Rename (⋯ → Rename…): changes only the name shown in Recent (stored as the entry's `title`); the file keeps its own name for Drive, the downloads folder and the file type, and the rename survives re-downloads and reopening. "Use the file name" undoes it. Sorting A–Z uses the shown name.
+
+## Text, Markdown and groups
+- [D] HTML bar: the moon (Dark pages, D) sits at the right end.
+- [D] .txt, .md and .markdown open as documents: Markdown with tables, task lists, code and LaTeX (KaTeX), rendered as in the Notes panel; plain text as written; the Markdown button switches either way. Recent shows their first lines as the cover, Type filter "Text", Drive lists them.
+- [D] Groups: File → Open folder… opens the notes, PDFs, HTML, text and images in a folder as a group; File → Add documents… (or + in the list) adds files to the open document's group, so text or Markdown files can sit beside a note or HTML page. The group is listed above the pages in the page panel, and at the left of HTML and text documents; click to jump. Files stay where they are; only chosen files and folders can be opened. Added documents have × to take them out (the file is not deleted).
+- [ ] Groups: subfolders, renaming a group, relative links between Markdown files in a group, drag to reorder.
+- [ ] Boot time: the AppImage's gzip filesystem costs ~0.8 s per launch (1.35 s to first paint vs 0.52 s unpacked or uncompressed). Owner to choose: uncompressed AppImage (353 MB), zstd with AppImage's type2 runtime (~128 MB, needs that runtime in the build), or an unpacked local install.

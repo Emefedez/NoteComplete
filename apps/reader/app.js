@@ -6,6 +6,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName } from "./text-view.js";
+import { groupStore, groupPanel, localMember } from "./groups.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
@@ -1854,7 +1855,7 @@ $("open").onclick = $("emptyOpen").onclick = () => openLocal();
 $("file").onchange = (e) => {
   if (e.target.files[0] && !busy() && canReplace()) {
     notePath = noteEntryKey = "";
-    load(e.target.files[0]).catch(() => {});
+    load(e.target.files[0]).then(() => setDocMember(null)).catch(() => {});
   }
   e.target.value = "";
 };
@@ -1874,7 +1875,7 @@ for (const event of ["dragover", "drop"])
       const bytes = new Uint8Array(await files[0].slice(0, 64).arrayBuffer());
       if (doc && fileKind(files[0].name, bytes) === "image")
         await importImages(files);
-      else if (canReplace()) await load(files[0]);
+      else if (canReplace()) { await load(files[0]); setDocMember(null); }
     } catch (error) {
       status(error.message, true);
     }
@@ -2275,6 +2276,7 @@ const drive = driveBrowser({
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
       noteEntryKey = library.key(driveFile);
       rememberDocument(noteEntryKey);
+      setDocMember({ key: noteEntryKey, name: driveFile.name, source: "drive" });
     }
     return opened;
   },
@@ -2283,7 +2285,10 @@ const drive = driveBrowser({
 library.md5 = (bytes) => call("md5", { bytes: bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer });
 async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);
-  if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey); }
+  if (opened) {
+    notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
+    setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: "drive" } : null);
+  }
   return opened;
 }
 // Which file a fingerprint belongs to, for All quizzes (`doc:<fingerprint>`).
@@ -2359,15 +2364,57 @@ async function openLocal() {
     const file = new File([chosen.bytes], chosen.name);
     if (busy() || !canReplace()) return;
     await load(file);
-    notePath = chosen.path;
-    noteEntryKey = "";
-    const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
-    rememberDocument(entry.key);
-    home.rememberCover(entry.key, file);
-    home.rememberFacts(entry.key, file);
+    await openedLocal(chosen.path, chosen.name, file);
   } catch (error) {
     status(error.message, true);
   }
+}
+async function openedLocal(path, name, file) {
+  notePath = path;
+  noteEntryKey = "";
+  const entry = await library.rememberLocal(path, name, file.size);
+  rememberDocument(entry.key);
+  home.rememberCover(entry.key, file);
+  home.rememberFacts(entry.key, file);
+  setDocMember(localMember(path, name));
+}
+// Groups (groups.js): the open document's group is listed beside it, in the pages panel or
+// at the left of HTML and text documents. Only documents reopenable by key can be grouped.
+const groups = groupStore({ store: library.store });
+const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status });
+let docMember = null;
+function setDocMember(member) {
+  docMember = member;
+  groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : $("pagesGroupSlot"));
+  $("addDocuments").disabled = !member;
+  return groupList.set(member);
+}
+async function openMember(member) {
+  if (busy() || !canReplace()) return;
+  if (member.source === "local") {
+    const bytes = await window.notecompleteFiles?.readRecent(member.path);
+    if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
+    const file = new File([bytes], member.name);
+    await load(file);
+    return openedLocal(member.path, member.name, file);
+  }
+  const entry = await library.store.get("entries", member.key).catch(() => null);
+  const file = entry && await library.open(entry);
+  if (!file) throw Error(`${member.name} is not kept on this device any more. Open it again from Drive.`);
+  await openFromLibrary(file, entry);
+}
+if (window.notecompleteFiles?.openFolder) {
+  $("openFolder").hidden = $("addDocuments").hidden = false;
+  $("openFolder").onclick = async () => {
+    try {
+      const chosen = await window.notecompleteFiles.openFolder();
+      if (!chosen) return;
+      await groups.openFolder(chosen);
+      if (!chosen.files.length) return status(`${chosen.name} has no notes, PDFs, HTML, text or images.`, true);
+      await openMember(localMember(chosen.files[0].path, chosen.files[0].name));
+    } catch (error) { status(error.message, true); }
+  };
+  $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
 }
 function showDocument() {
   home.hide();

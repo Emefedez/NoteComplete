@@ -329,6 +329,22 @@ main {
 .notes-render.text-doc { flex: 1; min-height: 0; overflow: auto; padding: 28px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: 15px; line-height: 1.65; background: var(--surface); }
 .text-doc:focus { outline: none; }
 .notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.6 ui-monospace, "JetBrains Mono", monospace; }
+.side-body { flex: 1; min-height: 0; display: flex; }
+.side-body > iframe, .side-body > article { flex: 1; min-width: 0; }
+.group-slot { display: contents; }
+.side-body .group-panel { width: 220px; flex: none; overflow: auto; padding: 12px; background: var(--chrome); border-right: 1px solid var(--line); }
+#pagesPanel .group-panel { margin-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.group-panel h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-panel .panel-heading button { min-height: 24px; padding: 0 8px; }
+.group-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.group-list li { min-width: 0; display: flex; align-items: center; gap: 2px; }
+.group-item { flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 3px 6px; font-size: 13px; }
+.group-item[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.group-kind { flex: none; min-width: 34px; padding: 0 4px; border-radius: 4px; background: var(--fill); color: var(--muted); font-size: 10px; font-weight: 600; text-align: center; }
+.group-item[aria-current] .group-kind { background: transparent; color: inherit; }
+.group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-remove { flex: none; min-height: 22px; padding: 0 6px; opacity: 0; color: var(--muted); }
+.group-list li:hover .group-remove, .group-remove:focus-visible { opacity: 1; }
 #htmlFrame { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
 #editor:not([hidden]) {
   flex: 1;

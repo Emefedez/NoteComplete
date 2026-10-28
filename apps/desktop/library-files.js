@@ -1,11 +1,11 @@
 // Main-process side of the reader's downloads folder and Recent list.
 // The renderer may only read/write plain file names inside the chosen folder,
 // and reopen paths the user picked through the main-process open dialog.
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const NOTE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|txt|md|markdown|pdf|png|jpe?g|webp)$/i;
-const RECENT = 50;
+const RECENT = 50, FOLDERS = 50;
 
 export function plainName(name) {
   if (typeof name !== 'string' || !name || name.length > 200 || name !== path.basename(name) || name.startsWith('.') || /[\\/\x00-\x1f]/.test(name) || !NOTE.test(name))
@@ -21,6 +21,8 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
     if (typeof settings.folder !== 'string' || !path.isAbsolute(settings.folder)) settings.folder = defaultFolder;
     if (!Array.isArray(settings.recent)) settings.recent = [];
     settings.recent = settings.recent.filter(p => typeof p === 'string' && path.isAbsolute(p));
+    if (!Array.isArray(settings.folders)) settings.folders = [];
+    settings.folders = settings.folders.filter(p => typeof p === 'string' && path.isAbsolute(p));
     return settings;
   };
   const save = async () => {
@@ -57,9 +59,27 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
       s.recent = [file, ...s.recent.filter(p => p !== file)].slice(0, RECENT);
       await save();
     },
+    // Folders chosen in the open-folder dialog: their notes can be listed and opened (groups).
+    async rememberFolder(folder) {
+      if (typeof folder !== 'string' || !path.isAbsolute(folder)) throw Error('Choose an absolute folder.');
+      const s = await load();
+      s.folders = [folder, ...s.folders.filter(p => p !== folder)].slice(0, FOLDERS);
+      await save();
+    },
+    async listFolder(folder) {
+      const s = await load();
+      if (typeof folder !== 'string' || !s.folders.includes(folder)) throw Error('That folder was not opened from this device.');
+      const names = (await readdir(folder, { withFileTypes: true })).filter(d => d.isFile() && !d.name.startsWith('.') && NOTE.test(d.name)).map(d => d.name);
+      const files = [];
+      for (const name of names) {
+        try { const info = await stat(path.join(folder, name)); files.push({ path: path.join(folder, name), name, size: info.size, modified: info.mtimeMs }); } catch { /* Gone meanwhile. */ }
+      }
+      return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    },
     async readRecent(file) {
       const s = await load();
-      if (typeof file !== 'string' || !s.recent.includes(file)) throw Error('That file was not opened from this device.');
+      const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(file) && s.folders.includes(path.dirname(file));
+      if (typeof file !== 'string' || !(s.recent.includes(file) || inFolder)) throw Error('That file was not opened from this device.');
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },
   };

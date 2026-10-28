@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   remove: name => ipcRenderer.invoke('files:remove', name),
   openFile: () => ipcRenderer.invoke('files:open'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
+  openFolder: () => ipcRenderer.invoke('files:open-folder'),
+  listFolder: folder => ipcRenderer.invoke('files:list-folder', folder),
+  pickFiles: () => ipcRenderer.invoke('files:pick'),
 });
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),

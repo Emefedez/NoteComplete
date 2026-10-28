@@ -228,6 +228,22 @@ app.whenReady().then(async () => {
     return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
+  // Groups: a whole folder, or several files added to the open document.
+  const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'txt', 'md', 'markdown', 'pdf', 'png', 'jpg', 'jpeg', 'webp'];
+  ipcMain.handle('files:open-folder', guarded(async event => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a folder of notes', properties: ['openDirectory'] });
+    if (chosen.canceled) return null;
+    const folder = chosen.filePaths[0];
+    await files.rememberFolder(folder);
+    return { folder, name: path.basename(folder), files: await files.listFolder(folder) };
+  }));
+  ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
+  ipcMain.handle('files:pick', guarded(async event => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }] });
+    if (chosen.canceled) return [];
+    for (const file of [...chosen.filePaths].reverse()) await files.remember(file);
+    return chosen.filePaths.map(file => ({ path: file, name: path.basename(file) }));
+  }));
   // Flashcards, quizzes and chat through the user's own AI CLIs; see ai-runner.js.
   const bundled = app.isPackaged ? path.join(process.resourcesPath, 'noteful') : fileURLToPath(new URL('../../target/release/noteful', import.meta.url));
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
