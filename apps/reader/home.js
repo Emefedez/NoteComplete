@@ -4,7 +4,7 @@ import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
-export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}) }) {
+export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}), exportStudy = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -114,6 +114,8 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       } catch (error) { $('forgetStatus').textContent = error.message; }
     };
     $('forgetCancel').onclick = close;
+    $('forgetExport').hidden = !exportStudy;
+    $('forgetExport').onclick = () => { close(); exportStudy?.(entry).catch(error => status(error.message, true)); };
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
     // Drop down under the ⋯ button, or up when there is no room below.
     const menu = $('forgetDialog');

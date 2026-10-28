@@ -18,6 +18,20 @@ export function ankiText(deck, cards) {
     ...cards.map(c => `${cell(c.front)}\t${cell(c.back)}\t${c.page ? `p${c.page}` : ''}`)].join('\n') + '\n';
 }
 
+// Several decks in one Anki file: the deck goes in a column ("Note::Deck").
+export function ankiDecks(groups) {
+  const cell = s => String(s).replace(/\t/g, '    ').replace(/\r?\n/g, '<br>');
+  return ['#separator:tab', '#html:true', '#tags column:3', '#deck column:4',
+    ...groups.flatMap(({ deck, cards }) => cards.filter(c => String(c.front).trim() && String(c.back).trim())
+      .map(c => `${cell(c.front)}\t${cell(c.back)}\t${c.page ? `p${c.page}` : ''}\t${cell(deck).replace(/<br>/g, ' ')}`))].join('\n') + '\n';
+}
+// A note's flashcard decks and quizzes as Anki decks named "Note::Deck".
+export function studyGroups(note, decks = [], quizzes = []) {
+  const name = String(note || 'NoteComplete').replace(/::/g, ':');
+  return [...decks.map(d => ({ deck: `${name}::${d.title || 'Flashcards'}`, cards: d.cards || [] })),
+    ...quizzes.map(q => ({ deck: `${name}::${q.title || 'Quiz'}`, cards: quizCards(q) }))].filter(g => g.cards.length);
+}
+
 // Models often write an enumeration inline ("… 1) a. 2) b. 3) c."); put each
 // numbered item on its own line. Only a run that counts up from 1 or a) is split,
 // so "(8,4)" or a lone "2)" stay where they are.
@@ -698,5 +712,12 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     } catch (error) { status(`Could not import: ${error.message}`, true); }
   };
   $('deckPickerClose').onclick = () => $('deckPickerDialog').close();
-  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, fillProviders, key: onKey };
+  // File → Study as Anki: every deck and quiz of this note in one Anki file.
+  async function exportAll() {
+    const title = documentInfo().title || 'NoteComplete', groups = studyGroups(title, await savedDecks(), await quizzes.list());
+    if (!groups.length) return status('This note has no flashcards or quizzes yet.', true);
+    await download(ankiDecks(groups), `${fileName(title)} · study.txt`, 'text/plain');
+    status(`Exported ${groups.length} deck${groups.length === 1 ? '' : 's'} to Anki (${groups.reduce((n, g) => n + g.cards.length, 0)} cards). In Anki: File → Import.`);
+  }
+  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, exportAll, fillProviders, key: onKey };
 }

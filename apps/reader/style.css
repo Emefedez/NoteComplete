@@ -1830,9 +1830,12 @@ body.bar-compact .tab { height: 22px; }
    green right, the accent with the hint, red wrong, grey disputed. */
 .quiz-bar { flex: 1 1 80px; max-width: 180px; min-width: 40px; height: 4px; display: flex; overflow: hidden; border-radius: 2px; background: var(--fill); }
 .quiz-bar span { flex: none; height: 100%; transition: width .2s; }
-.quiz-bar span[data-state="right"] { background: color-mix(in srgb, #8fd4a8 60%, var(--fill)); }
-.quiz-bar span[data-state="hinted"] { background: color-mix(in srgb, var(--accent) 60%, var(--fill)); }
-.quiz-bar span[data-state="wrong"] { background: color-mix(in srgb, #ee9a92 60%, var(--fill)); }
+/* The answer colours already in use (right answer, accent, Double check), soft and pastel. */
+.quiz-bar { --right: #145c38; --right-soft: #e3f6ec; }
+@media (prefers-color-scheme: dark) { .quiz-bar { --right: #9be3bd; --right-soft: #173a2a; } }
+.quiz-bar span[data-state="right"] { background: color-mix(in srgb, var(--right) 40%, var(--right-soft)); }
+.quiz-bar span[data-state="hinted"] { background: color-mix(in srgb, var(--accent) 40%, var(--accent-soft)); }
+.quiz-bar span[data-state="wrong"] { background: color-mix(in srgb, var(--danger) 40%, var(--danger-soft)); }
 .quiz-bar span[data-state="disputed"] { background: var(--line); }
 .quiz-panel.minimized .quiz-bar { display: none; }
 .quiz-panel-head #quizPanelProgress { margin-right: 0; }
@@ -1864,3 +1867,9 @@ body.bar-compact .tab { height: 22px; }
 @media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; opacity: .6; } }
 /* Floating windows, once shown, are placed on the screen (floating.js). */
 .screen-window { position: fixed !important; }
+/* Study → All quizzes…: quizzes under their document's name. */
+#allQuizzesDialog input[type="search"] { width: 100%; min-height: var(--control); margin: 6px 0; padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: inherit; }
+.all-quizzes { max-height: 55dvh; }
+.all-quizzes .all-quizzes-doc { display: block; margin: 10px 0 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.all-quizzes .all-quizzes-doc:first-child { margin-top: 2px; }
+.all-quizzes .saved-open:disabled { opacity: .55; cursor: default; }

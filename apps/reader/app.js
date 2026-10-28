@@ -9,7 +9,8 @@ import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
-import { studyController } from "./study.js";
+import { studyController, ankiDecks, studyGroups } from "./study.js";
+import { allQuizzes } from "./all-quizzes.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -256,6 +257,7 @@ async function load(file, preparedDocument = null) {
     // Recordings that came inside a .notecomp join the ones kept for this note.
     const incoming = (result.added_audio || []).map((a) => ({ id: a.id, name: a.name, mime: a.mime, created: a.created, blob: new Blob([a.bytes], { type: a.mime }) }));
     audio.open(result.audio || [], result.recordings || [], await addedStore.load(find.fingerprint, incoming));
+    rememberDocument();
     await renderPage(panels[0], result);
     status("Document opened.");
   } catch (e) {
@@ -2240,6 +2242,7 @@ const drive = driveBrowser({
       home.rememberFacts(library.coverKey(driveFile), file);
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
       noteEntryKey = library.key(driveFile);
+      rememberDocument(noteEntryKey);
     }
     return opened;
   },
@@ -2248,8 +2251,26 @@ const drive = driveBrowser({
 library.md5 = (bytes) => call("md5", { bytes: bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer });
 async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);
-  if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; }
+  if (opened) { notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey); }
   return opened;
+}
+// Which file a fingerprint belongs to, for All quizzes (`doc:<fingerprint>`).
+async function rememberDocument(entryKey = "") {
+  const fp = doc && find.fingerprint;
+  if (!fp) return;
+  const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
+  await library.store.set("settings", `doc:${fp}`, { title: doc.title || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
+}
+// ⋯ on a Recent note: its decks and quizzes to Anki, without opening it.
+async function exportStudyOf(entry) {
+  const file = await library.open(entry);
+  if (!file) throw Error(`${entry.name} is no longer kept on this device.`);
+  const fp = await noteFingerprint(file), title = entry.name.replace(/\.[^.]+$/, "");
+  const [decks, quizList] = await Promise.all(["decks", "quizzes"].map((kind) => library.store.get("settings", `${kind}:${fp}`).catch(() => null)));
+  const groups = studyGroups(title, decks || [], quizList || []);
+  if (!groups.length) return status(`${title} has no flashcards or quizzes yet.`, true);
+  await download(ankiDecks(groups), `${title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")} · study.txt`, "text/plain");
+  status(`Exported ${groups.length} deck${groups.length === 1 ? "" : "s"} to Anki. In Anki: File → Import.`);
 }
 // Recent asks Drive for newer versions before opening a Drive note (versions.js).
 const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
@@ -2259,6 +2280,7 @@ var home = homeScreen({
   versions,
   open: openFromLibrary,
   status,
+  exportStudy: exportStudyOf,
   current: () => ({
     entryKey: noteEntryKey,
     dirty,
@@ -2278,6 +2300,7 @@ async function openLocal() {
     notePath = chosen.path;
     noteEntryKey = "";
     const entry = await library.rememberLocal(chosen.path, chosen.name, file.size);
+    rememberDocument(entry.key);
     home.rememberCover(entry.key, file);
     home.rememberFacts(entry.key, file);
   } catch (error) {
@@ -2301,7 +2324,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2799,6 +2822,26 @@ $("studyResume").onclick = resumeQuiz;
 $("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
 $("studyExportQuiz").onclick = () => study.exportQuiz();
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
+$("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
+// Study → All quizzes…: every quiz with its document; another document is opened first.
+const quizIndex = allQuizzes({
+  library, status,
+  currentFingerprint: () => (doc ? find.fingerprint : ""),
+  openEntry: async (key) => {
+    const entry = await library.store.get("entries", key).catch(() => null);
+    const file = entry && await library.open(entry).catch(() => null);
+    if (!file) { status("That note is no longer kept on this device. Open it again from Drive or your files.", true); return false; }
+    return openFromLibrary(file, entry);
+  },
+  openQuiz: async (id) => {
+    const quiz = (await quizzes.list()).find((q) => q.id === id);
+    if (!quiz) return status("That quiz is no longer saved with the note.", true);
+    showDocument();
+    quizzes.open(quiz);
+  },
+  exportQuiz: (quiz) => study.exportQuiz(quiz),
+});
+$("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
     const row = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");

@@ -29,6 +29,7 @@ export function idbStore(name = 'notecomplete-library') {
     set: (store, key, value) => run(store, 'readwrite', s => s.put(value, key)),
     delete: (store, key) => run(store, 'readwrite', s => s.delete(key)),
     values: store => run(store, 'readonly', s => s.getAll()),
+    keys: store => run(store, 'readonly', s => s.getAllKeys()),
   };
 }
 
@@ -39,6 +40,7 @@ export function memoryStore() {
     set: async (store, key, value) => { stores[store].set(key, value); },
     delete: async (store, key) => { stores[store].delete(key); },
     values: async store => [...stores[store].values()],
+    keys: async store => [...stores[store].keys()],
   };
 }
 

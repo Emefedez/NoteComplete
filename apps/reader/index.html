@@ -42,6 +42,10 @@
             <button id="exportImage" disabled class="has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format">IMG<span class="caret"></span></button>
           </div>
           <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+          <div class="menu-export" role="group" aria-label="Export study material as">
+            <span>Study as</span>
+            <button id="exportStudy" disabled data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Anki</button>
+          </div>
           <hr />
           <button data-proxy="libraryChoose">Downloads folder…</button>
         </div>
@@ -122,6 +126,7 @@
           <button id="studyRetake" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
           <button id="studyOpenDeck" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
           <button id="studyExportQuiz" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
+          <button id="studyAllQuizzes" title="Every quiz on this device, with its document">All quizzes…</button>
           <hr />
           <button id="chatOpen" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
         </div>
@@ -848,6 +853,7 @@
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
   <p id="forgetText" class="muted"></p>
+  <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
   <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
   <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
@@ -860,6 +866,15 @@
   <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
+
+<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog" aria-labelledby="allQuizzesTitle">
+  <h2 id="allQuizzesTitle">All quizzes</h2>
+  <input id="allQuizzesFilter" type="search" placeholder="Filter by quiz or document" aria-label="Filter quizzes" spellcheck="false" />
+  <ul id="allQuizzesList" class="deck-picker all-quizzes"></ul>
+  <p id="allQuizzesEmpty" class="muted" hidden>No quizzes yet. Make one with Study → Quiz me….</p>
+  <p id="allQuizzesStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><span class="spacer"></span><button id="allQuizzesClose" type="button">Close</button></div>
+</dialog>
 
 <dialog id="migrateDialog" class="ocr-dialog migrate-dialog" aria-labelledby="migrateTitle">
   <h2 id="migrateTitle">Migrate content</h2>
