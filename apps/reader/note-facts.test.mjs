@@ -51,5 +51,7 @@ test('file types filter in any combination; .notecomplete counts as NoteComp', (
   assert.equal(matches(note('A.notecomplete'), { types: ['notecomp'] }), true);
   assert.equal(matches(note('A.noteful'), { types: ['pdf', 'notepart'] }), false);
   assert.equal(matches(note('A.NOTEPART'), { types: ['pdf', 'notepart'] }), true);
+  assert.equal(matches(note('Exam.html'), { types: ['html'] }), true);
+  assert.equal(matches(note('Diagram.jpg'), { types: ['image'] }), true);
   assert.equal(matches(note('A.png'), { types: [] }), true);
 });

@@ -2,6 +2,7 @@
 // downloads-folder footer. The open document stays loaded while home is shown.
 import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
+import { openPdf } from './pdf-background.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
 export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}), exportStudy = null }) {
@@ -47,6 +48,13 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       name.title = entry.name;
       detail.textContent = `${entry.source === 'drive' ? 'Drive' : 'This device'} · opened ${ago(entry.openedAt)}`;
       meta.append(name, detail);
+      const hit = Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''));
+      if (hit) {
+        const badge = document.createElement('span');
+        badge.className = 'note-badge';
+        badge.textContent = hit[1][0];
+        meta.append(badge);
+      }
       button.append(cover, meta);
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
@@ -55,7 +63,21 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
       button.note = { name: entry.name, modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
       if (!quick) {
-        library.cover(coverKey(entry)).then(url => { if (url) cover.src = url; else cover.classList.add('missing'); });
+        library.cover(coverKey(entry)).then(async url => {
+          if (url) {
+            cover.src = url;
+          } else {
+            try {
+              const file = await library.open(entry);
+              if (file) {
+                await rememberCover(coverKey(entry), file);
+                const next = await library.cover(coverKey(entry));
+                if (next) { cover.src = next; return; }
+              }
+            } catch (e) {}
+            cover.classList.add('missing');
+          }
+        });
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
       button.onclick = async () => {
@@ -211,11 +233,44 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   }
   // Keep a cover for files opened from disk so Recent can show them.
   async function rememberCover(key, file) {
-    if (!/\.noteful$/i.test(file.name)) return;
     try {
       if (await library.cover(key)) return;
-      const cover = await noteCover(blobReader(file), file.size);
-      if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
+      if (/\.(jpe?g|png|webp)$/i.test(file.name) || file.type?.startsWith('image/')) {
+        const url = await shrink(file);
+        if (url) await library.saveCover(key, url);
+        return;
+      }
+      if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pdf = await openPdf(bytes);
+        try {
+          const page = await pdf.getPage(1);
+          const vp = page.getViewport({ scale: 1 });
+          const scale = Math.min(1, 320 / Math.max(1, vp.width));
+          const scaled = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(scaled.width));
+          canvas.height = Math.max(1, Math.round(scaled.height));
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: scaled }).promise;
+          const url = canvas.toDataURL('image/jpeg', 0.8);
+          canvas.width = canvas.height = 0;
+          page.cleanup();
+          if (url) await library.saveCover(key, url);
+        } finally {
+          await pdf.loadingTask.destroy();
+        }
+        return;
+      }
+      if (/\.html?$/i.test(file.name) || file.type === 'text/html') {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="40" y="30" width="240" height="180" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/><text x="160" y="115" font-family="system-ui, sans-serif" font-size="32" font-weight="bold" fill="#0284c7" text-anchor="middle">&lt;HTML/&gt;</text><text x="160" y="150" font-family="system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Interactive Exercise</text></svg>`;
+        const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        await library.saveCover(key, url);
+        return;
+      }
+      if (/\.noteful$/i.test(file.name)) {
+        const cover = await noteCover(blobReader(file), file.size);
+        if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
+      }
     } catch { /* A missing cover only affects the Recent card. */ }
   }
   // Cards with covers, or a quick list that reads nothing from the files (remembered).

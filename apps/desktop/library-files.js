@@ -4,7 +4,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const NOTE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|pdf|png|jpe?g|webp)$/i;
+const NOTE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp)$/i;
 const RECENT = 50;
 
 export function plainName(name) {

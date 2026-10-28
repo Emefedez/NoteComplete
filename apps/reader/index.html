@@ -161,7 +161,7 @@
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.notepart,.notecomplete,.notecomp,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.notepart,.notecomplete,.notecomp,.html,.htm,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -237,8 +237,12 @@
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" hidden>Change folder…</button>
-        <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · PNG · JPEG · WebP · Your documents stay on this device.</span>
+        <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · PNG · JPEG · WebP · Your documents stay on this device.</span>
       </footer>
+    </section>
+    <section id="htmlView" hidden>
+      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
+      <iframe id="htmlFrame" title="HTML document"></iframe>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">

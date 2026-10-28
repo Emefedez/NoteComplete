@@ -4,6 +4,7 @@ import {
   imageBounds,
   fileKind,
 } from "./media-import.js";
+import { htmlViewer } from "./html-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
@@ -70,6 +71,7 @@ let request = 0,
   dirty = false,
   editing = false,
   doc = null,
+  currentHtmlFp = "",
   page = 0,
   tool = "pan",
   activeLayer = 0,
@@ -200,8 +202,11 @@ function reset() {
   audio.reset();
   panels = [];
   doc = null;
+  currentHtmlFp = "";
+  htmlView?.close();
   $("pages").replaceChildren();
   $("editor").hidden = true;
+  $("htmlView").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
@@ -223,6 +228,21 @@ async function load(file, preparedDocument = null) {
   try {
     const fingerprint = noteFingerprint(file).catch(() => "");
     const prepared = preparedDocument || await prepareDocument(file);
+    if (prepared.kind === "html") {
+      reset();
+      const fp = await fingerprint;
+      currentHtmlFp = fp;
+      const htmlTitle = prepared.title || file.name || "HTML document";
+      $("title").textContent = htmlTitle;
+      document.title = `${htmlTitle} — NoteComplete`;
+      tabBar.update({ title: htmlTitle, dirty: false });
+      htmlView.open({ text: prepared.text, fingerprint: fp, name: htmlTitle });
+      showDocument();
+      rememberDocument();
+      documentControls();
+      status("HTML document opened.");
+      return;
+    }
     const result = await call("open", {
       ...prepared,
       project: prepared.kind === "project",
@@ -2262,10 +2282,10 @@ async function openFromLibrary(file, entry) {
 }
 // Which file a fingerprint belongs to, for All quizzes (`doc:<fingerprint>`).
 async function rememberDocument(entryKey = "") {
-  const fp = doc && find.fingerprint;
+  const fp = (doc && find.fingerprint) || (htmlView?.visible && currentHtmlFp);
   if (!fp) return;
   const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
-  await library.store.set("settings", `doc:${fp}`, { title: doc.title || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
+  await library.store.set("settings", `doc:${fp}`, { title: doc?.title || htmlView?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
 }
 // ⋯ on a Recent note: its decks and quizzes to Anki, without opening it.
 async function exportStudyOf(entry) {
@@ -2280,6 +2300,14 @@ async function exportStudyOf(entry) {
 }
 // Recent asks Drive for newer versions before opening a Drive note (versions.js).
 const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
+const htmlView = htmlViewer({
+  root: $("htmlView"),
+  frame: $("htmlFrame"),
+  title: $("htmlTitle"),
+  reload: $("htmlReload"),
+  clear: $("htmlClear"),
+  status,
+});
 var home = homeScreen({
   library,
   drive,
@@ -2315,15 +2343,22 @@ async function openLocal() {
 }
 function showDocument() {
   home.hide();
-  $("editor").hidden = false;
-  if (panels[page]) resize();
+  if (htmlView?.hasDocument) {
+    $("editor").hidden = true;
+    htmlView.show();
+  } else {
+    $("htmlView").hidden = true;
+    $("editor").hidden = false;
+    if (panels[page]) resize();
+  }
 }
 function showHome() {
   if (!$("editor").hidden && doc) $("editor").hidden = true;
-  home.show(!!doc);
+  if (htmlView?.visible) htmlView.hide();
+  home.show(Boolean(doc || htmlView?.hasDocument));
 }
 $("homeButton").onclick = showHome;
-$("homeBack").onclick = () => doc && showDocument();
+$("homeBack").onclick = () => (doc || htmlView?.hasDocument) && showDocument();
 $("driveOpen").onclick = () => {
   showHome();
   $("driveSection").scrollIntoView({ behavior: "smooth", block: "start" });

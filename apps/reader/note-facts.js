@@ -57,7 +57,14 @@ export async function noteFacts(read, size) {
 // Stackable filters: every active kind must match; selected tags must all be present.
 // File types, any combination: .notecomp and .notecomplete are one format; NotePart is the
 // note with its Markdown (today's tar), NoteComp the full NoteComplete file.
-export const TYPES = { pdf: ['PDF', /\.pdf$/i], noteful: ['Noteful', /\.noteful$/i], notepart: ['NotePart', /\.notepart$/i], notecomp: ['NoteComp', /\.notecomp(lete)?$/i] };
+export const TYPES = {
+  pdf: ['PDF', /\.pdf$/i],
+  html: ['HTML', /\.html?$/i],
+  image: ['Image', /\.(png|jpe?g|webp)$/i],
+  noteful: ['Noteful', /\.noteful$/i],
+  notepart: ['NotePart', /\.notepart$/i],
+  notecomp: ['NoteComp', /\.notecomp(lete)?$/i],
+};
 export const typeOf = name => Object.keys(TYPES).find(k => TYPES[k][1].test(name || '')) || '';
 export function matches(note, filters) {
   const { since = 0, tags = [], audio = false, sizes = [], types = [] } = filters;
