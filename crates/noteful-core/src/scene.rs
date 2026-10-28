@@ -207,6 +207,50 @@ pub(crate) const TAPE_DEFS: &str = "<defs><pattern id=\"ncTape\" width=\"14\" he
 pub(crate) fn tape_with_pattern(el: &str) -> String {
     format!("{el}<g class=\"nc-tape-pattern\">{el}</g>")
 }
+struct Crop {
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+    outline: String,
+}
+/// An image's crop (payload tag 12: an outline in the image's native size, with path commands
+/// as in shapes), mapped into the placement box [0, w] × [0, h], which holds the crop's bounds.
+fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop>> {
+    let coords: Vec<f64> = arr(&p["12"]["1"]).iter().map(|v| num(v, 0.)).collect();
+    let cmds = arr(&p["12"]["2"]);
+    if coords.len() < 4 || cmds.is_empty() {
+        return Ok(None);
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for pt in coords.chunks_exact(2) {
+        (x0, y0, x1, y1) = (x0.min(pt[0]), y0.min(pt[1]), x1.max(pt[0]), y1.max(pt[1]));
+    }
+    if x1 - x0 < 1e-9 || y1 - y0 < 1e-9 {
+        return Ok(None);
+    }
+    let (sx, sy) = (w / (x1 - x0), h / (y1 - y0));
+    let mut outline = String::new();
+    let mut cursor = 0;
+    for cmd in cmds {
+        let (letter, n) = match cmd.as_u64() {
+            Some(0) => ("M", 2),
+            Some(1) => ("L", 2),
+            Some(3) => ("C", 6),
+            Some(4) => ("Z", 0),
+            _ => return Err(Error::new(0, "Unsupported crop command")),
+        };
+        if cursor + n > coords.len() {
+            return Err(Error::new(0, "Truncated crop"));
+        }
+        outline.push_str(letter);
+        for pt in coords[cursor..cursor + n].chunks_exact(2) {
+            outline.push_str(&format!("{} {} ", (pt[0] - x0) * sx, (pt[1] - y0) * sy));
+        }
+        cursor += n;
+    }
+    Ok(Some(Crop { left: -x0 * sx, top: -y0 * sy, width: sw * sx, height: sh * sy, outline }))
+}
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
     let kind = p["1"].as_u64().unwrap_or(0);
@@ -228,7 +272,16 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             "png" => "image/png",
             _ => return Err(Error::new(0, "Unsupported image")),
         };
-        format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"data:{mime};base64,{}\"/>",STANDARD.encode(package.resource(id).ok_or_else(||Error::new(0,"Missing image bytes"))?))
+        let href = format!("data:{mime};base64,{}", STANDARD.encode(package.resource(id).ok_or_else(|| Error::new(0, "Missing image bytes"))?));
+        match image_crop(p, w, h, sw, sh)? {
+            // Cropped (Noteful's cutout): the placement box is the crop's bounding box, so the
+            // whole image is drawn larger and offset, and clipped to the crop outline.
+            Some(Crop { left, top, width, height, outline }) => {
+                let clip = format!("nc-crop-{}", text(&o["1"]));
+                format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\" href=\"{href}\"/>")
+            }
+            None => format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{href}\"/>"),
+        }
     } else if kind == 2 || kind == 19 {
         // Kind 19 (owner notes: "7- ELECTRÓNICA DIGITAL") is a tag such as "#SD I":
         // the same rich text in tag 4, its names in tag 14, drawn as a pill.
@@ -577,6 +630,15 @@ impl Scene {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn image_crops_fill_the_placement_and_clip_to_the_outline() {
+        // Exercise 13 in the ACII exam: a 546 × 632 image cropped to rows 183–391.
+        let p = serde_json::json!({"12":{"1":[0.0,183.0,546.0,183.0,546.0,391.0,0.0,391.0],"2":[0,1,1,1,4]}});
+        let c = super::image_crop(&p, 1092.0, 416.0, 546.0, 632.0).unwrap().unwrap();
+        assert_eq!((c.left, c.top, c.width, c.height), (0.0, -366.0, 1092.0, 1264.0));
+        assert_eq!(c.outline, "M0 0 L1092 0 L1092 416 L0 416 Z");
+        assert!(super::image_crop(&serde_json::json!({}), 10.0, 10.0, 10.0, 10.0).unwrap().is_none());
+    }
     use super::object;
     use serde_json::json;
     // Shapes of the owner's ACII training exam: tape (kind 3, tool 2) and a locked image.
