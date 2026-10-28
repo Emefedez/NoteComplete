@@ -45,3 +45,11 @@ test('sorting is natural A–Z by default, or by date and size', () => {
   assert.deepEqual([...notes].sort(compareNotes('newest')).map(n => n.modified), [3, 2, 1]);
   assert.deepEqual([...notes].sort(compareNotes('largest')).map(n => n.size), [50, 5, 1]);
 });
+
+test('file types filter in any combination; .notecomplete counts as NoteComp', () => {
+  const note = name => ({ name, modified: 1, size: 1 });
+  assert.equal(matches(note('A.notecomplete'), { types: ['notecomp'] }), true);
+  assert.equal(matches(note('A.noteful'), { types: ['pdf', 'notepart'] }), false);
+  assert.equal(matches(note('A.NOTEPART'), { types: ['pdf', 'notepart'] }), true);
+  assert.equal(matches(note('A.png'), { types: [] }), true);
+});

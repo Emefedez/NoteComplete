@@ -2,7 +2,7 @@
 // downloads-folder footer. The open document stays loaded while home is shown.
 import { noteCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
-import { noteFacts, matches, SIZES, PERIODS, SORTS, compareNotes } from './note-facts.js';
+import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 
 export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}) }) {
   const $ = id => document.getElementById(id);
@@ -136,8 +136,9 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
     } catch (error) { if (error.name !== 'AbortError') status(error.message, true); }
   };
   // Stackable filters over Recent and Drive cards; remembered on this device.
-  let filters = { since: 0, period: '', tags: [], audio: false, sizes: [], sort: 'name' };
+  let filters = { since: 0, period: '', tags: [], audio: false, sizes: [], types: [], sort: 'name' };
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
+  if (!Array.isArray(filters.types)) filters.types = [];
   const chip = (label, pressed, onclick) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = label;
@@ -155,13 +156,14 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   function renderFilters() {
     const label = n => n.querySelector('.filter-label');
     group('period').replaceChildren(label(group('period')), ...Object.entries(PERIODS).map(([k, [name]]) => chip(name, filters.period === k, () => { filters.period = filters.period === k ? '' : k; changed(); })));
+    group('types').replaceChildren(label(group('types')), ...Object.entries(TYPES).map(([k, [name]]) => chip(name, filters.types.includes(k), () => { filters.types = filters.types.includes(k) ? filters.types.filter(x => x !== k) : [...filters.types, k]; changed(); })));
     group('sizes').replaceChildren(label(group('sizes')), ...Object.entries(SIZES).map(([k, [name]]) => chip(name, filters.sizes.includes(k), () => { filters.sizes = filters.sizes.includes(k) ? filters.sizes.filter(x => x !== k) : [...filters.sizes, k]; changed(); })));
     const known = new Set(filters.tags);
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
     group('tags').hidden = !known.size;
     group('tags').replaceChildren(label(group('tags')), ...[...known].sort().map(t => chip(`#${t.replace(/^#/, '')}`, filters.tags.includes(t), () => { filters.tags = filters.tags.includes(t) ? filters.tags.filter(x => x !== t) : [...filters.tags, t]; changed(); })));
     document.querySelector('#homeFilters [data-filter="audio"]').setAttribute('aria-pressed', String(filters.audio));
-    $('filtersClear').hidden = !(filters.period || filters.audio || filters.tags.length || filters.sizes.length);
+    $('filtersClear').hidden = !(filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length);
   }
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
@@ -177,7 +179,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   }
   function applyFilters() {
     sortCards();
-    const active = filters.period || filters.audio || filters.tags.length || filters.sizes.length;
+    const active = filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0;
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) {
       const show = !active || !card.note || matches(card.note, filters);
@@ -192,7 +194,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   // New tags can appear as facts arrive; refresh the chips at most once per frame.
   const renderFiltersSoon = () => { cancelAnimationFrame(filterFrame); filterFrame = requestAnimationFrame(renderFilters); };
   document.querySelector('#homeFilters [data-filter="audio"]').onclick = () => { filters.audio = !filters.audio; changed(); };
-  $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, sizes: [] }; changed(); };
+  $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, sizes: [], types: [] }; changed(); };
   for (const [value, label] of Object.entries(SORTS)) $('homeSort').add(new Option(label, value));
   $('homeSort').value = SORTS[filters.sort] ? filters.sort : 'name';
   $('homeSort').onchange = () => { filters.sort = $('homeSort').value; changed(); };

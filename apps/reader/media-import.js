@@ -24,7 +24,7 @@ export function fileKind(name, bytes) {
   )
     return "image";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
-  if (/\.notecomp(lete)?$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
+  if (/\.(notecomp(lete)?|notepart)$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
     return "notecomplete";
   if (
     /\.nfedit$/i.test(name) ||
