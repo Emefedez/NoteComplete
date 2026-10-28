@@ -202,7 +202,11 @@ function reset() {
   documentControls();
   home?.show(false);
 }
-async function load(file) {
+// The format Save writes for a document made with New document; null saves a project.
+let saveAs = null;
+const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
+function saveLabel() { $("save").firstChild.textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
+async function load(file, preparedDocument = null) {
   if (!ready || busy()) {
     status("Wait for the current operation to finish.", true);
     return;
@@ -211,7 +215,7 @@ async function load(file) {
   status("Opening document…");
   try {
     const fingerprint = noteFingerprint(file).catch(() => "");
-    const prepared = await prepareDocument(file);
+    const prepared = preparedDocument || await prepareDocument(file);
     const result = await call("open", {
       ...prepared,
       project: prepared.kind === "project",
@@ -232,7 +236,9 @@ async function load(file) {
       result.layers.find((l) => l.visible && !l.locked)?.id ??
       result.layers[0]?.id ??
       0;
-    dirty = ["pdf", "image"].includes(prepared.kind);
+    dirty = ["pdf", "image", "blank"].includes(prepared.kind);
+    saveAs = prepared.saveAs || null;
+    saveLabel();
     savedState();
     backgrounds = new PdfBackgrounds((resource) => {
       if (token !== epoch) throw Error("Document closed");
@@ -1631,7 +1637,7 @@ $("redo").onclick = () => {
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -1747,6 +1753,11 @@ document.addEventListener("keydown", (e) => {
     openLocal();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
+    e.preventDefault();
+    $("newDocument").click();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n") {
     e.preventDefault();
     $("newWindow").click();
@@ -1767,7 +1778,8 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    save(false);
+    if (saveAs) save(saveAs === "noteful", saveAs);
+    else save(false);
     return;
   }
   if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
@@ -1833,18 +1845,24 @@ async function save(native, as = native ? "noteful" : "project") {
   const token = epoch;
   try {
     await notes?.flush();
-    const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete" }[as];
-    const data = await call(op, as === "notecomplete" ? await addedStore.packed() : {});
+    const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
+    const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
     if (token !== epoch) return;
     const delivery = await download(
       data,
-      filename() + { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp" }[as],
+      filename() + SAVE_EXT[as],
       as === "project" ? "application/json" : "application/octet-stream",
     );
     if (token !== epoch) return;
     if (as === "markdown") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
+    }
+    if (as === saveAs && !delivery.shared) {
+      dirty = false;
+      savedState();
+      status(`Saved as ${filename()}${SAVE_EXT[as]}.`);
+      return;
     }
     if (as === "notecomplete" || as === "markdown") {
       const takes = addedStore.list.length;
@@ -1868,7 +1886,30 @@ async function save(native, as = native ? "noteful" : "project") {
     if (token === epoch) editing = false;
   }
 }
-$("save").onclick = () => save(false);
+$("save").onclick = () => (saveAs ? save(saveAs === "noteful", saveAs) : save(false));
+// New document: blank pages of a chosen size, saved in the chosen format.
+for (const [value, { label }] of Object.entries(PRESETS)) if (value !== "current") $("newPreset").add(new Option(label, value));
+$("newPreset").onchange = () => { $("newCustom").hidden = $("newPreset").value !== "custom"; };
+$("newDocument").onclick = () => {
+  for (const m of document.querySelectorAll("details.menu")) m.open = false;
+  try { const f = localStorage.getItem("notecomplete-new-format"); const box = document.querySelector(`[name="newFormat"][value="${f}"]`); if (box) box.checked = true; } catch { /* Optional. */ }
+  $("newDialog").showModal();
+  $("newName").select();
+};
+$("newCancel").onclick = () => $("newDialog").close();
+$("newCreate").onclick = async () => {
+  if (!canReplace()) return;
+  const preset = $("newPreset").value, count = Math.max(1, Math.min(200, Math.round(Number($("newCount").value) || 1)));
+  const size = preset === "custom" ? [Number($("newWidth").value), Number($("newHeight").value)].map(mmToUnits) : PRESETS[preset].mm.map(mmToUnits);
+  if (!size.every((n) => Number.isFinite(n) && n > 0)) return status("Choose a page size.", true);
+  const format = document.querySelector('[name="newFormat"]:checked')?.value || "notecomplete";
+  try { localStorage.setItem("notecomplete-new-format", format); } catch { /* Optional. */ }
+  const title = $("newName").value.trim() || "Untitled";
+  $("newDialog").close();
+  // A unique stand-in file, so this document's notes and study material get their own key.
+  const seed = crypto.getRandomValues(new Uint8Array(16));
+  await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format });
+};
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");
@@ -2740,6 +2781,7 @@ async function resumeQuiz() {
 $("studyResume").onclick = resumeQuiz;
 $("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
 $("studyExportQuiz").onclick = () => study.exportQuiz();
+$("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
     const row = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");

@@ -1826,13 +1826,22 @@ body.bar-compact .tab { height: 22px; }
 .crop-menu { white-space: nowrap; }
 .crop-menu .primary { background: var(--accent-soft); color: var(--accent); }
 
-/* Quiz progress: one segment per question, filling as you answer. Pastel green right,
-   the accent with the hint, pastel red wrong; the current question is outlined. */
-.quiz-bar { display: flex; gap: 2px; padding: 6px 12px 0; }
-.quiz-bar span { flex: 1; height: 6px; border-radius: 3px; background: var(--fill); transition: background-color .2s; }
-.quiz-bar span[data-state="right"] { background: #8fd4a8; }
-.quiz-bar span[data-state="hinted"] { background: var(--accent); }
-.quiz-bar span[data-state="wrong"] { background: #ee9a92; }
+/* Quiz progress in the window head: one continuous, muted fill that grows as you answer:
+   green right, the accent with the hint, red wrong, grey disputed. */
+.quiz-bar { flex: 1 1 80px; max-width: 180px; min-width: 40px; height: 4px; display: flex; overflow: hidden; border-radius: 2px; background: var(--fill); }
+.quiz-bar span { flex: none; height: 100%; transition: width .2s; }
+.quiz-bar span[data-state="right"] { background: color-mix(in srgb, #8fd4a8 60%, var(--fill)); }
+.quiz-bar span[data-state="hinted"] { background: color-mix(in srgb, var(--accent) 60%, var(--fill)); }
+.quiz-bar span[data-state="wrong"] { background: color-mix(in srgb, #ee9a92 60%, var(--fill)); }
 .quiz-bar span[data-state="disputed"] { background: var(--line); }
-.quiz-bar span.current { box-shadow: 0 0 0 1px var(--accent); }
 .quiz-panel.minimized .quiz-bar { display: none; }
+.quiz-panel-head #quizPanelProgress { margin-right: 0; }
+.quiz-panel-head .quiz-bar { margin-right: auto; }
+/* View → Pages: four icon buttons, so the row fits the menu. */
+.menu-content .menu-export .menu-icon { min-width: 30px; width: 30px; padding: 0; }
+.menu-content .menu-export .menu-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+/* New document: the formats as a list of choices with a one-line hint each. */
+.new-format { display: grid; gap: 6px; margin: 10px 0 4px; padding: 0; border: 0; }
+.new-format legend { margin-bottom: 4px; padding: 0; font-size: 13px; }
+.new-format label { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.new-format .muted { font-size: 12px; }

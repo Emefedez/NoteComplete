@@ -24,6 +24,7 @@
           <button data-proxy="homeButton">Home</button>
           <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
+          <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
           <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
           <button id="driveOpen">Google Drive</button>
           <hr />
@@ -74,10 +75,10 @@
           <button data-proxy="notesToggle">Notes<kbd>N</kbd></button>
           <div class="menu-export" role="group" aria-label="Page position">
             <span>Pages</span>
-            <button type="button" data-align-menu="left" title="Pages on the left">Left</button>
-            <button type="button" data-align-menu="center" title="Pages in the middle">Middle</button>
-            <button type="button" data-align-menu="right" title="Pages on the right">Right</button>
-            <button type="button" data-align-menu="free" title="Free position: pages stay where you scroll them, with no centring">Free</button>
+            <button type="button" class="menu-icon" data-align-menu="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="free" title="Free position: pages stay where you scroll them, with no centring" aria-label="Free position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
           </div>
           <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
@@ -564,8 +565,7 @@
           <audio id="audio" preload="metadata"></audio>
         </section>
         <aside id="quizPanel" class="quiz-panel" aria-label="Quiz" hidden>
-          <div class="quiz-panel-head"><button id="quizMini" type="button" class="quiz-mini" title="Expand quiz (M)"></button><span id="quizPanelProgress" class="muted"></span><button id="quizDim" type="button" class="dim-toggle" data-icon="sun" aria-pressed="false" aria-label="Dim the background" title="Dim everything behind the quiz"></button><button id="quizMinimize" type="button" title="Minimize (M)" aria-label="Minimize">–</button><button id="quizPanelClose" type="button" title="Close; progress is saved" aria-label="Close">×</button></div>
-          <div id="quizBar" class="quiz-bar" role="img"></div>
+          <div class="quiz-panel-head"><button id="quizMini" type="button" class="quiz-mini" title="Expand quiz (M)"></button><span id="quizPanelProgress" class="muted"></span><div id="quizBar" class="quiz-bar" role="img"></div><button id="quizDim" type="button" class="dim-toggle" data-icon="sun" aria-pressed="false" aria-label="Dim the background" title="Dim everything behind the quiz"></button><button id="quizMinimize" type="button" title="Minimize (M)" aria-label="Minimize">–</button><button id="quizPanelClose" type="button" title="Close; progress is saved" aria-label="Close">×</button></div>
           <div class="quiz-panel-body">
             <div id="quizPanelQuestion" class="quiz-question"></div>
             <div id="quizPanelOptions" class="quiz-options"></div>
@@ -578,7 +578,7 @@
               <div class="quiz-actions"><span class="spacer"></span><button id="quizCheckCancel" type="button">Cancel</button><button id="quizCheckSave" type="button" class="primary">Save as correct answer</button></div>
             </div>
             <div id="quizExplainBox"></div>
-            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
+            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizAnki" type="button" title="Export this quiz to Anki: each question becomes a card">Export to Anki</button><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
           </div>
         </aside>
         <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
@@ -663,6 +663,21 @@
     <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
+</dialog>
+
+<dialog id="newDialog" class="ocr-dialog" aria-labelledby="newTitle">
+  <h2 id="newTitle">New document</h2>
+  <label class="ocr-languages">Name<input id="newName" type="text" value="Untitled" spellcheck="false" /></label>
+  <label class="ocr-languages">Page size<select id="newPreset" data-native></select></label>
+  <div id="newCustom" class="insert-custom" hidden><label>Width <input id="newWidth" type="number" min="20" max="5000" step="1" value="210" /> mm</label><label>Height <input id="newHeight" type="number" min="20" max="5000" step="1" value="297" /> mm</label></div>
+  <label class="ocr-languages">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
+  <fieldset class="new-format">
+    <legend>Save as</legend>
+    <label><input type="radio" name="newFormat" value="notecomplete" checked /> <strong>NoteComplete</strong> <span class="muted">.notecomp · the note, Markdown notes and recordings in one file</span></label>
+    <label><input type="radio" name="newFormat" value="notepart" /> <strong>NotePart</strong> <span class="muted">.notepart · the note and its Markdown notes</span></label>
+    <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful; notes and recordings stay in NoteComplete</span></label>
+  </fieldset>
+  <div class="ocr-actions"><button id="newCancel" type="button">Cancel</button><button id="newCreate" type="button" class="primary">Create</button></div>
 </dialog>
 
 <dialog id="insertDialog" class="ocr-dialog" aria-labelledby="insertTitle">

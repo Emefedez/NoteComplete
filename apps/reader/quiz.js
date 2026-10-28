@@ -135,9 +135,9 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const { points, answered, max } = score(quiz);
     $('quizPanelProgress').textContent = `${Math.min(quiz.at + 1, quiz.questions.length)} / ${quiz.questions.length} · ${points} of ${max} points`;
     $('quizMini').textContent = `Quiz ${answered}/${quiz.questions.length} · ${points} pts`;
-    const states = barStates(quiz), bar = $('quizBar');
-    if (bar.children.length !== states.length) bar.replaceChildren(...states.map(() => document.createElement('span')));
-    states.forEach((state, i) => { bar.children[i].dataset.state = state; bar.children[i].classList.toggle('current', i === quiz.at); });
+    // One continuous fill: answered questions in order, each 1/N of the track.
+    const states = barStates(quiz), bar = $('quizBar'), filled = states.filter(Boolean);
+    bar.replaceChildren(...filled.map(state => { const s = document.createElement('span'); s.dataset.state = state; s.style.width = `${100 / states.length}%`; return s; }));
     const count = s => states.filter(x => x === s).length;
     bar.setAttribute('aria-label', `${answered} of ${states.length} answered: ${count('right')} right, ${count('hinted')} right with the hint, ${count('wrong')} wrong`);
   }
