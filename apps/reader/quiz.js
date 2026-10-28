@@ -108,7 +108,7 @@ export function clarifyPrompt(q, { answered = null, history = [], question = '',
   ].filter(Boolean).join('\n\n');
 }
 
-export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null }) {
+export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null }) {
   let quiz = null, hint = null;
   const store = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
   async function save() {
@@ -231,7 +231,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
   const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
   const explain = explainBox({
-    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question',
+    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`,
     mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
     handoff: continueInChat && (async ({ item: q, history, question }) => {
       const answered = answerOf(q);

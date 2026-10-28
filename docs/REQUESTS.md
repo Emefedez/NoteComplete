@@ -209,6 +209,7 @@ Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .noteco
 - [D] The audio window's headphones icon sat on the window's edge; it is inside the head now. A note without audio no longer shows an empty recording list. *Browser screenshots.*
 - [D] The focus ring around the flashcard Ask AI field was clipped at the window's left edge. *CSS; not re-captured.*
 - [D] **Formulas on flashcards**: card fronts and backs render Markdown and LaTeX (KaTeX) like Ask AI answers; single line breaks stay line breaks, so numbered steps stay a list. *Browser test (dark): $\\int_0^1 x^2\\,dx$ inline and a display formula rendered by KaTeX.*
+- [D] **Scratchpad per note**: a Scratchpad button under every AI answer (Ask AI, quiz Clarify, flashcard Ask AI) keeps that conversation up to the answer; pressing it again in the same conversation rewrites the entry. View → Scratchpad… shows them newest first with formulas, and Add to notes (appends to the Markdown notes), Copy and Delete (press twice). *Unit tests; browser test (dark): two presses in one conversation give one rewritten entry, a new conversation a second, Add to notes saved.*
 - [D] **Skill**: export rows, the single download path and focus dimming in full (`references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js`), plus recording into a document.
 
 ## Future: file formats and repositories (agreed, not started)

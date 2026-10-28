@@ -129,6 +129,13 @@ export function notesController({ call, jump, currentPage, store, status }) {
     },
     pageChanged: follow,
     flush: () => (saveTimer ? flush() : Promise.resolve()),
+    // Add Markdown at the end (Scratchpad → Add to notes), in the editor too when it is open.
+    async append(markdown) {
+      text = text.trim() ? `${text.replace(/\s+$/, '')}\n\n${markdown}\n` : `${markdown}\n`;
+      if (editor) editor.setContent(text);
+      else if (previewing && !panel.hidden) render();
+      await flush();
+    },
     get visible() { return !panel.hidden; },
     get text() { return text; },
   };

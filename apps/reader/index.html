@@ -77,6 +77,7 @@
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
           <button data-proxy="notesToggle">Notes<kbd>N</kbd></button>
+          <button id="scratchOpen" disabled title="AI conversations kept with this note">Scratchpad…</button>
           <div class="menu-export" role="group" aria-label="Page position">
             <span>Pages</span>
             <button type="button" class="menu-icon" data-align-menu="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button>
@@ -873,6 +874,14 @@
   <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
+
+<dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog" aria-labelledby="scratchTitle">
+  <h2 id="scratchTitle">Scratchpad</h2>
+  <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
+  <ul id="scratchList" class="scratch-list"></ul>
+  <p id="scratchEmpty" class="muted" hidden>Nothing kept yet.</p>
+  <div class="ocr-actions"><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
+</dialog>
 
 <dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study" aria-labelledby="allQuizzesTitle">
   <h2 id="allQuizzesTitle">Study material</h2>

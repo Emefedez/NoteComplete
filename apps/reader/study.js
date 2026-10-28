@@ -5,6 +5,7 @@
 import { pagesContext, jsonFrom, notesBlock } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
+import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 
@@ -90,7 +91,7 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -517,7 +518,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   }
   function openAsk(card) {
     closeFix(); closeAsk();
-    asking = { card, history: [] };
+    asking = { card, history: [], id: newId() };
     $('practiceAskThread').replaceChildren();
     $('practiceAskBox').hidden = false;
     $('practiceExplained').hidden = true;
@@ -573,6 +574,12 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const answer = text.trim();
       thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: answer });
       await renderInto(reply, answer);
+      if (keep) {
+        const upto = thread.history.slice(), row = document.createElement('div');
+        row.className = 'chat-actions';
+        row.append(scratchButton(keep, () => ({ id: thread.id, title: `From a flashcard: ${card.front}`, messages: upto })));
+        reply.append(row);
+      }
       // Follow-ups are added under what is kept; the first answer keeps its question.
       const entry = question ? `**${question}**\n\n${answer}` : answer;
       card.explanation = { text: card.explanation?.text && !again ? `${card.explanation.text}\n\n${entry}` : entry, provider: label, at: Date.now() };

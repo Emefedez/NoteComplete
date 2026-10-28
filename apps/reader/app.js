@@ -12,6 +12,7 @@ import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
 import { updateNotice } from "./updates.js";
+import { scratchpad } from "./scratchpad.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -2325,7 +2326,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2692,7 +2693,17 @@ const find = findController({
   jobs: () => jobs,
 });
 const ai = window.notecompleteAI || null;
+// Scratchpad: AI conversations kept per note (View → Scratchpad…).
+const scratch = scratchpad({
+  store: library.store,
+  key: () => (doc ? `scratch:${find.fingerprint || doc.title || "note"}` : ""),
+  markdown: (text) => call("markdownHtml", { text }),
+  status,
+  notes: async (text) => (await notesApi()).append(text),
+});
+$("scratchOpen").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; scratch.open(); };
 const studyDeps = {
+  keep: (entry) => scratch.keep(entry),
   ai,
   pageCanvas,
   pageText: (p) => find.pageText(p),

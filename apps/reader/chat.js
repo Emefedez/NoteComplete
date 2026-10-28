@@ -2,6 +2,7 @@
 // Each question carries the current page (image with tape lifted + its text),
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
+import { scratchButton, newId } from './scratchpad.js';
 import { canvasImage, textBlock, notesBlock } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
 import { renderMarkdown, plainText } from './rich-text.js';
@@ -27,8 +28,8 @@ export function renderAnswer(text) {
   return fragment;
 }
 
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '' }) {
-  let history = [], busy = false, attachments = [], topic = '';
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null }) {
+  let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '';
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
@@ -50,7 +51,9 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     copy.textContent = '⧉';
     copy.title = 'Copy this answer';
     copy.onclick = () => navigator.clipboard.writeText(plainText(content)).then(() => status('Answer copied.'), () => status('The clipboard is not available here.', true));
-    row.append(box, copy);
+    // Scratchpad: this conversation up to this answer, kept with the note.
+    const upto = history.slice(), id = conversation, title = chatTitle || history.find(m => m.role === 'user')?.content || 'Ask AI';
+    row.append(box, copy, scratchButton(keep, () => ({ id, title, messages: upto })));
     item.append(row);
   }
   function add(role, content, note = '') {
@@ -192,7 +195,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; $('chatMessages').replaceChildren(); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; $('chatMessages').replaceChildren(); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
@@ -206,6 +209,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       await open();
       history = messages.slice(-10);
       topic = about;
+      conversation = newId(); chatTitle = title;
       $('chatMessages').replaceChildren();
       const from = add('user', title);
       from.classList.add('chat-from');

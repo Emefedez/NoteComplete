@@ -2,6 +2,7 @@
 // under it with the tool, model and material chosen in the box, follow-ups keep the
 // thread, and the last answer is kept with the item: folded under it behind an arrow,
 // editable, and reused instead of asking again. Flashcards have the same box in study.js.
+import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 import { modelPicker } from './model-picker.js';
@@ -9,7 +10,7 @@ import { modelPicker } from './model-picker.js';
 const el = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
 const chip = (label, title, on) => { const b = el('button', { type: 'button', className: 'chip', title, textContent: label }); b.setAttribute('aria-pressed', String(on)); return b; };
 
-export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null }) {
+export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null, keep = null, titleOf = () => '' }) {
   const grow = area => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight + 2}px`; };
   const render = (node, text) => markdown ? renderMarkdown(node, text, markdown).catch(() => node.replaceChildren(renderAnswer(text))) : Promise.resolve(node.replaceChildren(renderAnswer(text)));
 
@@ -96,7 +97,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   function openBox(current) {
     closeBox();
     item = current;
-    asking = { item: current, history: [] };
+    asking = { item: current, history: [], id: newId() };
     thread.replaceChildren();
     box.hidden = false; folded.hidden = true;
     loadProviders().catch(error => status(error.message, true));
@@ -145,6 +146,8 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       const answer = text.trim();
       run.history.push({ role: 'user', content: question || 'Explain this.' }, { role: 'assistant', content: answer });
       await render(reply, answer);
+      const upto = run.history.slice(), title = titleOf(current) || `Clarify: ${label}`;
+      if (keep) { const row = el('div', { className: 'chat-actions' }); row.append(scratchButton(keep, () => ({ id: run.id, title, messages: upto }))); reply.append(row); }
       const before = saved(current)?.text;
       // Follow-ups are added under what is kept; the first answer keeps its question.
       const entry = question ? `**${question}**\n\n${answer}` : answer;
