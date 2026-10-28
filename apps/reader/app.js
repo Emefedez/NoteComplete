@@ -778,6 +778,31 @@ matchMedia("(max-width:700px)").addEventListener("change", () => {
   $("pagesPanel").hidden = false;
   syncPagePanel();
 });
+// Narrow windows: undo, redo and the panel toggles join the page row, so phones get two
+// bars (pages, tools) instead of three. Wider windows drop the tool labels before the
+// toolbar would wrap or push tools out of sight.
+const phoneLayout = matchMedia("(max-width:700px)");
+function placeToolbarActions() {
+  const actions = document.querySelector(".toolbar-actions");
+  if (phoneLayout.matches) document.querySelector(".navigation .spacer").after(actions);
+  else $("toolbar").querySelector(".segmented").after(actions);
+  fitTools();
+}
+let fitFrame = 0;
+function fitTools() {
+  cancelAnimationFrame(fitFrame);
+  fitFrame = requestAnimationFrame(() => {
+    const bar = $("toolbar"), tools = bar.querySelector(".segmented"), actions = document.querySelector(".toolbar-actions");
+    bar.classList.remove("tools-icons");
+    const overflowing = phoneLayout.matches
+      ? tools.scrollWidth > tools.clientWidth + 1
+      : bar.scrollWidth > bar.clientWidth + 1 || tools.getBoundingClientRect().right > bar.getBoundingClientRect().right || actions.offsetTop > tools.offsetTop + 4;
+    bar.classList.toggle("tools-icons", overflowing);
+  });
+}
+phoneLayout.addEventListener("change", placeToolbarActions);
+addEventListener("resize", fitTools);
+placeToolbarActions();
 syncPagePanel();
 function placeholder(p) {
   p.render = null;
@@ -2054,10 +2079,12 @@ function setPageAlign(align) {
   if (sheet && before !== undefined) $("viewport").scrollLeft += sheet.getBoundingClientRect().left - before;
   for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === align));
   $("pageAlignFree").setAttribute("aria-pressed", String(align === "free"));
+  for (const b of document.querySelectorAll("[data-align-menu]")) b.setAttribute("aria-pressed", String(b.dataset.alignMenu === align));
   try { localStorage.setItem("notecomplete-page-align", align); } catch { /* Optional. */ }
 }
 for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick = () => setPageAlign(b.dataset.align);
 $("pageAlignFree").onclick = () => setPageAlign($("pages").dataset.align === "free" ? "center" : "free");
+for (const b of document.querySelectorAll("[data-align-menu]")) b.onclick = () => { setPageAlign(b.dataset.alignMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
 try { setPageAlign(["left", "right", "free"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
 // Audio for transcription: a small popover under the transport row.
 $("speechSettingsToggle").onclick = () => {

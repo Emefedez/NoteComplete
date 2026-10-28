@@ -1799,3 +1799,22 @@ body.bar-compact .tab { height: 22px; }
 /* A note without audio shows only the way to add some. */
 .audio-panel.no-audio :is(.audio-transport, .audio-seek, .transcript-panel, #speechSettings) { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .rec-dot, #audioToggle.recording::after { animation: none; } }
+.menu-content .menu-export button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+
+/* Tools drop their labels (icons with tooltips) when the labels would not fit. */
+.toolbar.tools-icons .segmented .tool-name { display: none; }
+.toolbar.tools-icons .segmented button { padding-inline: 7px; }
+@media (min-width: 701px) { .toolbar { flex-wrap: wrap; } .toolbar .segmented { flex-wrap: nowrap; min-width: 0; } }
+/* Phones: two bars. The page row holds undo, redo and the panel toggles (moved there by
+   app.js); zoom and dark pages live in View. Tools are one row of equal buttons that
+   scrolls sideways rather than squeezing. */
+@media (max-width: 700px) {
+  .navigation { min-height: 44px; }
+  .navigation .zoom-controls, .navigation .pages-dark-toggle { display: none; }
+  .navigation .toolbar-actions { order: 0; width: auto; margin: 0; padding: 0 0 0 4px; border: 0; border-left: 1px solid var(--line); display: flex; gap: 0; justify-content: flex-end; }
+  .navigation .toolbar-actions button { width: 36px; min-height: 40px; padding: 8px; }
+  .toolbar { padding: 3px 4px 4px; }
+  .toolbar .segmented { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .toolbar .segmented button { flex: 1 0 52px; min-width: 52px; min-height: 48px; font-size: 11px; }
+  .toolbar.tools-icons .segmented button { flex-basis: 34px; min-width: 34px; min-height: 40px; }
+}
