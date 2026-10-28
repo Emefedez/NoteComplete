@@ -6,11 +6,13 @@ import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 import { modelPicker } from './model-picker.js';
+import { icon } from './icons.js';
+import { hasClipboardImage, clipboardImages } from './ai-context.js';
 
 const el = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
 const chip = (label, title, on) => { const b = el('button', { type: 'button', className: 'chip', title, textContent: label }); b.setAttribute('aria-pressed', String(on)); return b; };
 
-export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null, keep = null, titleOf = () => '', toggle = null }) {
+export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null, keep = null, titleOf = () => '', toggle = null, growWindow = () => {} }) {
   const grow = area => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight + 2}px`; };
   const render = (node, text) => markdown ? renderMarkdown(node, text, markdown).catch(() => node.replaceChildren(renderAnswer(text))) : Promise.resolve(node.replaceChildren(renderAnswer(text)));
 
@@ -26,7 +28,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   savedMount.append(folded);
   // The saved answer opens from its own button beside Clarify, not by asking again.
   const syncToggle = () => { if (!toggle) return; toggle.hidden = folded.hidden; toggle.setAttribute('aria-expanded', String(!folded.hidden && folded.open)); };
-  if (toggle) toggle.onclick = () => { folded.open = !folded.open; syncToggle(); if (folded.open) folded.scrollIntoView({ block: 'nearest' }); };
+  if (toggle) toggle.onclick = () => { folded.open = !folded.open; syncToggle(); if (folded.open) { growWindow(); folded.scrollIntoView({ block: 'nearest' }); } };
   folded.addEventListener('toggle', syncToggle);
 
   // The ask box.
@@ -45,11 +47,21 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   for (const b of Object.values(chips)) b.onclick = () => { b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); try { localStorage.setItem(materialKey, JSON.stringify(material())); } catch { /* Optional. */ } };
   const thread = el('div', { className: 'practice-ask-thread' }); thread.setAttribute('role', 'log'); thread.setAttribute('aria-live', 'polite');
   const input = el('input', { type: 'text', autocomplete: 'off', placeholder: handoff ? `Ask a follow-up (it continues in Ask AI)` : `Ask something else about this ${label}` }); input.setAttribute('aria-label', 'Follow-up question');
-  const stop = el('button', { type: 'button', textContent: 'Stop', hidden: true }), again = el('button', { type: 'button', textContent: 'Ask again', title: 'Ask for a new explanation; it replaces the saved one' }), close = el('button', { type: 'button', textContent: 'Close' });
-  const form = el('form', { className: 'practice-ask-form' }, input, el('button', { type: 'submit', textContent: 'Ask' }), stop, again, close);
+  const iconButton = (name, label, title, props = {}) => { const b = el('button', { type: 'button', className: 'icon-button', title, ...props }); b.setAttribute('aria-label', label); if (name) b.append(icon(name)); else b.textContent = '×'; return b; };
+  const stop = el('button', { type: 'button', textContent: 'Stop', hidden: true }), again = iconButton('spark', 'Ask again', 'Ask again: a new explanation that replaces the saved one'), close = iconButton(null, 'Close', 'Close');
+  const send = iconButton('enter', 'Ask', 'Ask (Enter)', { type: 'submit' });
+  const form = el('form', { className: 'practice-ask-form' }, input, send, stop, again, close);
+  // Images pasted into the question go with it.
+  const pasted = [], tray = el('div', { className: 'chat-attachments', hidden: true });
+  const drawTray = () => { tray.hidden = !pasted.length; tray.replaceChildren(...pasted.map((a, i) => { const f = el('figure'), im = el('img', { src: a.url, alt: a.label }), x = el('button', { type: 'button', textContent: '×', title: 'Remove' }); x.onclick = () => { pasted.splice(i, 1); drawTray(); growWindow(); }; f.append(im, x); return f; })); };
+  form.addEventListener('paste', async event => {
+    if (!hasClipboardImage(event.clipboardData)) return;
+    event.preventDefault();
+    pasted.push(...await clipboardImages(event.clipboardData).catch(() => [])); drawTray(); growWindow();
+  });
   const box = el('div', { className: 'practice-ask', hidden: true },
     el('div', { className: 'practice-ask-bar' }, provider, model, other, el('span', { className: 'practice-ask-material', role: 'group' }, ...Object.values(chips))),
-    thread, form);
+    thread, tray, form);
   mount.append(box);
 
   const picker = ai ? modelPicker(model, other, ai) : null;
@@ -106,11 +118,12 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     asking = { item: current, history: [], id: newId() };
     thread.replaceChildren();
     box.hidden = false; folded.hidden = true;
-    loadProviders().catch(error => status(error.message, true));
+    growWindow();
+    loadProviders().then(growWindow, error => status(error.message, true));
     const value = saved(current);
     if (value?.text) {
       const reply = el('div', { className: 'practice-ask-answer chat-body' });
-      thread.append(reply); render(reply, value.text);
+      thread.append(reply); render(reply, value.text).then(growWindow);
       asking.history.push({ role: 'user', content: 'Explain this.' }, { role: 'assistant', content: value.text });
       return true;
     }
@@ -145,13 +158,15 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       if (asking !== run) return;
       const text0 = [prompt(current, { history: run.history, question, withImage: !!ctx.images.length }), ...(ctx.notes || []), ctx.text].filter(Boolean).join('\n\n');
       let timer = 0, rendering = Promise.resolve();
-      const show = () => { timer = 0; rendering = rendering.then(() => asking === run && render(reply, streamed)); };
-      const { text } = await ai.run({ provider: tool, model: picker?.value || '', notePath: want.note ? notePath() : '', images: ctx.images, tag, prompt: text0 }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
+      const show = () => { timer = 0; rendering = rendering.then(() => asking === run && render(reply, streamed)).then(growWindow); };
+      const mine = await Promise.all(pasted.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawTray();
+      const { text } = await ai.run({ provider: tool, model: picker?.value || '', notePath: want.note ? notePath() : '', images: [...ctx.images, ...mine], tag, prompt: text0 }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
       clearTimeout(timer); await rendering;
       if (asking !== run) return;
       const answer = text.trim();
       run.history.push({ role: 'user', content: question || 'Explain this.' }, { role: 'assistant', content: answer });
       await render(reply, answer);
+      growWindow();
       const upto = run.history.slice(), title = titleOf(current) || `Clarify: ${label}`;
       if (keep) { const row = el('div', { className: 'chat-actions' }); row.append(scratchButton(keep, () => ({ id: run.id, title, messages: upto }))); reply.append(row); }
       const before = saved(current)?.text;
@@ -174,7 +189,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     if (!asking?.history.length) return ask(current, q, { send: true });
     if (!q) return;
     if (!handoff) return ask(current, q);
-    const history = asking.history;
+    const history = asking.history, extraImages = pasted.splice(0); drawTray();
     input.value = '';
     closeBox();
     // Every answer in that Ask AI conversation is still kept with the item, after what was saved.
@@ -184,7 +199,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       await save(current, { ...before, text: before?.text ? `${before.text}\n\n**${question}**\n\n${answer}` : `**${question}**\n\n${answer}`, provider: before?.provider || 'Ask AI', at: Date.now() });
       if (item === current && box.hidden) showSaved(current);
     };
-    Promise.resolve(handoff({ item: current, history, question: q, onAnswer })).catch(() => {});
+    Promise.resolve(handoff({ item: current, history, question: q, onAnswer, extraImages, useNote: material().note })).catch(() => {});
   };
   again.onclick = () => ask(asking?.item || item, '', { fresh: true });
   stop.onclick = () => ai?.cancel(tag);

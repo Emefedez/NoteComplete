@@ -108,7 +108,7 @@ export function clarifyPrompt(q, { answered = null, history = [], question = '',
   ].filter(Boolean).join('\n\n');
 }
 
-export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null }) {
+export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null, grow = () => {} }) {
   let quiz = null, hint = null;
   const store = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
   async function save() {
@@ -231,13 +231,13 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
   const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
   const explain = explainBox({
-    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`, toggle: $('quizExplainedToggle'),
+    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`, toggle: $('quizExplainedToggle'), growWindow: grow,
     mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
-    handoff: continueInChat && (async ({ item: q, history, question, onAnswer }) => {
+    handoff: continueInChat && (async ({ item: q, history, question, onAnswer, extraImages, useNote }) => {
       const answered = answerOf(q);
       const about = `The conversation is about this quiz question from the student's notes${q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
       const image = q.source ? hint || await capture(q.source).catch(() => null) : null;
-      return continueInChat({ title: `From the quiz: ${q.question}`, about, messages: history, image, label: 'the part of the notes that answers the quiz question', question, onAnswer });
+      return continueInChat({ title: `From the quiz: ${q.question}`, about, messages: history, image, label: 'the part of the notes that answers the quiz question', question, onAnswer, extraImages, useNote });
     }),
     unavailable: () => status('Clarify uses an AI tool installed on your computer and is available in the desktop app.', true),
     // An explanation made after answering names the correct option: kept hidden until this question is answered.
@@ -313,7 +313,21 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   $('quizMinimize').onclick = () => $('quizPanel').classList.toggle('minimized');
   $('quizMini').onclick = () => $('quizPanel').classList.remove('minimized');
   $('quizPanelClose').onclick = () => { save(); $('quizPanel').hidden = true; };
-  $('quizRestart').onclick = () => { quiz.answers = {}; quiz.hinted = {}; quiz.at = 0; quiz.done = false; save(); show(); };
+  const restart = () => { quiz.answers = {}; quiz.hinted = {}; quiz.at = 0; quiz.done = false; save(); show(); };
+  $('quizRestart').onclick = restart;
+  // The circling arrow in the head: clearing the answers asks for a second press.
+  let disarm = 0;
+  $('quizRestartIcon').onclick = () => {
+    const b = $('quizRestartIcon');
+    clearTimeout(disarm);
+    if (b.dataset.armed !== '1') {
+      b.dataset.armed = '1'; b.title = 'Press again to clear the answers and start over';
+      disarm = setTimeout(() => { delete b.dataset.armed; b.title = 'Restart this quiz: clear the answers (press twice)'; }, 3000);
+      return status('Press the arrow again to clear the answers and start this quiz over.');
+    }
+    delete b.dataset.armed; b.title = 'Restart this quiz: clear the answers (press twice)';
+    if (quiz) { restart(); status('Quiz restarted.'); }
+  };
   // Keys while the quiz panel is open and expanded: 1-4 answer, H hint, C clarify, Enter next, M minimize.
   function onKey(event) {
     // Esc closes the Clarify box even while typing a follow-up in it.

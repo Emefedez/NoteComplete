@@ -3,9 +3,9 @@
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
 import { scratchButton, newId } from './scratchpad.js';
-import { canvasImage, textBlock, notesBlock } from './ai-context.js';
+import { canvasImage, textBlock, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
-import { renderMarkdown, plainText } from './rich-text.js';
+import { renderMarkdown, plainText, rememberAiFile } from './rich-text.js';
 
 const $ = id => document.getElementById(id);
 
@@ -80,9 +80,13 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         option.disabled = !p.available;
         select.add(option);
       }
-      try { select.value = localStorage.getItem('notecomplete-ai-provider') || select.querySelector('option:not([disabled])')?.value; } catch { /* Optional. */ }
-      model.load(select.value);
     }
+    try {
+      const saved = localStorage.getItem('notecomplete-ai-provider');
+      if (saved && select.querySelector(`option[value="${saved}"]:not([disabled])`)) select.value = saved;
+      else if (!select.value) select.value = select.querySelector('option:not([disabled])')?.value || '';
+    } catch { /* Optional. */ }
+    await model.load(select.value);
     $('chatNoteLabel').hidden = !notePath();
     // My notes is on when the note has Markdown notes.
     notesText().then(text => { if (!$('chatNotes').dataset.touched) $('chatNotes').checked = !!String(text || '').trim(); }).catch(() => {});
@@ -122,6 +126,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     }));
   }
   async function dataUrlImage(url, label) {
+    rememberAiFile(label, { url, label });
     const blob = await (await fetch(url)).blob();
     return { bytes: new Uint8Array(await blob.arrayBuffer()), type: blob.type === 'image/png' ? 'image/png' : 'image/jpeg', label };
   }
@@ -193,8 +198,18 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       $('chatSend').hidden = false; $('chatStop').hidden = true;
     }
   }
-  $('chatForm').onsubmit = event => { event.preventDefault(); const q = $('chatInput').value; $('chatInput').value = ''; ask(q); };
+  $('chatForm').onsubmit = event => {
+    event.preventDefault();
+    const q = $('chatInput').value.trim() || (attachments.length ? 'Explain this image.' : '');
+    $('chatInput').value = '';
+    ask(q);
+  };
   $('chatInput').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } };
+  $('chatPanel').addEventListener('paste', async event => {
+    if (!hasClipboardImage(event.clipboardData)) return;
+    event.preventDefault();
+    for (const img of await clipboardImages(event.clipboardData).catch(() => [])) attach(img.url, img.label);
+  });
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
@@ -208,7 +223,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     attach,
     // A conversation started in a quiz or flashcard window carries on here: its topic goes
     // with every request until New, its turns join the history, then the new question is asked.
-    async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', question, onAnswer = null }) {
+    async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', extraImages = [], useNote = false, question, onAnswer = null }) {
       await open();
       history = messages.slice(-10);
       topic = about;
@@ -218,8 +233,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       from.classList.add('chat-from');
       for (const m of history) add(m.role, m.content);
       if (image) attach(image, label);
+      for (const a of extraImages) if (a?.url) attach(a.url, a.label || 'a pasted image from the clipboard');
       $('chatSelection').checked = false;
       $('chatPage').checked = false;
+      $('chatNote').checked = !!useNote;
       return ask(question);
     },
     async askAbout({ question, image, label = 'a region of the notes' }) {

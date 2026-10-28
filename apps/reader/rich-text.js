@@ -1,6 +1,59 @@
 // Markdown from AI answers and notes: HTML from the Rust core (raw HTML shown
 // as text), formulas typeset by KaTeX, which loads only when there is math.
 let katex = null;
+const aiFiles = new Map();
+
+export function rememberAiFile(name, info) {
+  if (name && info) aiFiles.set(String(name).toLowerCase(), info);
+}
+export function getAiFile(name) {
+  return aiFiles.get(String(name || '').toLowerCase()) || null;
+}
+
+// Links to pages, attached images or external web pages in AI answers.
+export function resolveAiLink(label = '', url = '') {
+  const raw = String(url || '').trim(), text = String(label || '').trim();
+  if (/^(https?:|mailto:)/i.test(raw)) return { href: raw, external: true };
+  if (/^data:image\//i.test(raw)) return { href: '#ai-image', image: raw };
+  const combined = `${raw} ${text}`;
+  const fileMatch = combined.match(/(?:^|[/\\:#]|\b)(?:\d+-)?(notes-region|region-\d+|selection|source)(?:\.(?:jpe?g|png|webp|pdf))?(?:$|[\s)#?])/i);
+  if (fileMatch) return { href: `#ai-file:${fileMatch[1].toLowerCase()}`, aiFile: fileMatch[1].toLowerCase() };
+  const pageFromUrl = raw.match(/(?:^|[/\\:#?=&]|\b)(?:\d+-)?(?:page|p[aá]gina|p[aá]g|p)[-_=\s:/]*(\d+)\b/i)
+    || raw.match(/#L(\d+)$/i);
+  if (pageFromUrl && Number(pageFromUrl[1]) > 0) return { href: `#page-${Number(pageFromUrl[1])}`, page: Number(pageFromUrl[1]) };
+  const pageFromText = text.match(/(?:^|[/\\]|\b)(?:\d+-)?(?:page|p[aá]gina|p[aá]g\.?|p\.)[-_\s]*(\d+)\b/i)
+    || (/^(?:#|file:|page:|$)/i.test(raw) && text.match(/^(?:p\s*)?(\d+)$/i));
+  if (pageFromText && Number(pageFromText[1]) > 0) return { href: `#page-${Number(pageFromText[1])}`, page: Number(pageFromText[1]) };
+  return null;
+}
+
+// Normalises LaTeX delimiters (\[…\], \(…\), multi-line $$…$$, spaced $ … $)
+// and local/page/image links outside code blocks before CommonMark parsing.
+export function normalizeMarkdown(markdown) {
+  const rewriteSegment = segment => segment
+    .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (whole, bang, label, url) => {
+      const resolved = resolveAiLink(label, url);
+      if (!resolved) return whole;
+      if (bang === '!') {
+        const key = resolved.aiFile || (resolved.page ? `page-${resolved.page}` : '');
+        const found = key && getAiFile(key);
+        return found?.url ? `![${label}](${found.url})` : whole;
+      }
+      return !resolved.external && !resolved.image ? `[${label}](${resolved.href})` : whole;
+    })
+    .replace(/\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$|\$(?!\$)\s*([^$\n]+?)\s*\$(?![$\d])/g, (whole, displayBracket, inlineParen, displayDollar, inlineDollar) => {
+      if (displayBracket != null) return `$$\n${displayBracket.trim().replace(/\n\s*\n/g, '\n')}\n$$`;
+      if (inlineParen != null) return `$${inlineParen.trim()}$`;
+      if (displayDollar != null) return `$$${displayDollar.replace(/\n\s*\n/g, '\n')}$$`;
+      if (inlineDollar != null && !/^\d+\s+[A-Za-z]{2,}/.test(inlineDollar.trim())) return `$${inlineDollar.trim()}$`;
+      return whole;
+    });
+  return String(markdown ?? '')
+    .split(/(```[\s\S]*?```|`[^`\n]+`)/g)
+    .map((part, i) => (i % 2 === 1 ? part : rewriteSegment(part)))
+    .join('');
+}
+
 function loadKatex() {
   return katex ||= import('./vendor/katex/katex.mjs').then(module => {
     const css = document.createElement('link');
@@ -12,8 +65,27 @@ function loadKatex() {
 }
 
 export async function renderMarkdown(element, text, toHtml) {
-  const html = await toHtml(text);
+  const html = await toHtml(normalizeMarkdown(text));
   element.innerHTML = html;
+  for (const a of element.querySelectorAll('a')) {
+    const resolved = resolveAiLink(a.textContent, a.getAttribute('href') || '');
+    if (resolved?.external) {
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+    } else if (resolved?.page) {
+      a.setAttribute('href', resolved.href);
+      a.dataset.page = String(resolved.page);
+      a.title ||= `Go to page ${resolved.page}`;
+    } else if (resolved?.aiFile) {
+      a.setAttribute('href', resolved.href);
+      a.dataset.aiFile = resolved.aiFile;
+      a.title ||= 'Show attached image';
+    } else if (resolved?.image) {
+      a.setAttribute('href', '#ai-image');
+      a.dataset.aiImage = resolved.image;
+      a.title ||= 'Show image';
+    }
+  }
   const maths = element.querySelectorAll('.math');
   if (!maths.length) return;
   const tex = await loadKatex().catch(() => null);
@@ -47,7 +119,7 @@ export function texToText(tex) {
 // Markdown as plain text for a text box: list bullets kept, emphasis marks,
 // headings and code fences dropped, math turned into characters.
 export function plainText(markdown) {
-  return markdown
+  return normalizeMarkdown(markdown)
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => texToText(tex))
     .replace(/\$([^$\n]+?)\$/g, (_, tex) => texToText(tex))
     .split('\n')

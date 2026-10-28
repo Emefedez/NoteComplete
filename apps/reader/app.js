@@ -15,6 +15,7 @@ import { updateNotice } from "./updates.js";
 import { scratchpad } from "./scratchpad.js";
 import { dictation } from "./dictate.js";
 import { chatController } from "./chat.js";
+import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
@@ -2767,8 +2768,11 @@ async function pagePdfOf(index) {
   return { bytes: data, type: "application/pdf", label: "source", page: view.pdf_background.page_index + 1 };
 }
 const continueInChat = (thread) => { showDocument(); return chat.continueThread(thread); };
+// The quiz and flashcard windows grow to fit an answer being written (floating.js fit).
+let quizWindow = null, practiceWindow = null;
 const quizzes = quizController({
   ...studyDeps,
+  grow: () => quizWindow?.fit(),
   continueInChat,
   markdown: (text) => call("markdownHtml", { text }),
   pagePdf: (index) => pagePdfOf(index),
@@ -2793,6 +2797,7 @@ const quizzes = quizController({
 });
 const study = studyController({
   ...studyDeps,
+  growWindow: () => practiceWindow?.fit(),
   continueInChat,
   library,
   fingerprint: () => find.fingerprint,
@@ -2804,8 +2809,8 @@ const study = studyController({
   pagePdf: (index) => pagePdfOf(index),
 });
 // The quiz and the flashcard practice are floating windows too.
-floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
-floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });
+quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
+practiceWindow = floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });
 // Focus: the sun in the quiz and flashcard windows dims everything behind them
 // while one of them is open (the pages can still be scrolled underneath).
 let focusDim = false;
@@ -2943,3 +2948,27 @@ if (windows?.zoom) {
   $("uiLarger").onclick = () => size(1);
   $("uiReset").onclick = () => size(0);
 }
+
+// Links in AI answers: page links jump to the page, attached images open large;
+// web links open through the desktop app's window handler (target=_blank).
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.(".chat-body a");
+  if (!a) return;
+  if (a.dataset.page) {
+    e.preventDefault();
+    if (!doc) return;
+    for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
+    showDocument();
+    jump(Math.min(doc.pages, Number(a.dataset.page)) - 1);
+    return;
+  }
+  const url = a.dataset.aiImage || (a.dataset.aiFile && getAiFile(a.dataset.aiFile)?.url);
+  if (a.dataset.aiFile || a.dataset.aiImage) {
+    e.preventDefault();
+    if (!url) return status("That image is no longer available.", true);
+    const viewer = $("imageViewer");
+    $("imageViewerImage").src = url; $("imageViewerImage").alt = a.textContent;
+    viewer.onclick = () => viewer.close();
+    viewer.showModal();
+  }
+});

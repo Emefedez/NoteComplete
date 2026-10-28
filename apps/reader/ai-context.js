@@ -1,5 +1,6 @@
 // What the AI sees of a page: an image (tape lifted, since covered answers are
 // study material) and the page's text from Find: typed, PDF, OCR and audio.
+import { rememberAiFile } from './rich-text.js';
 export const SOURCE_NAMES = { text: 'Typed text', pdf: 'PDF text', ocr: 'Recognized handwriting/scan text', audio: 'Lecture transcript' };
 
 export function jsonFrom(text) {
@@ -14,9 +15,35 @@ export async function canvasImage(canvas, label, width = 1400) {
   out.width = Math.round(canvas.width * scale);
   out.height = Math.round(canvas.height * scale);
   out.getContext('2d').drawImage(canvas, 0, 0, out.width, out.height);
+  try {
+    const page = /^page-(\d+)$/i.test(String(label || '')) ? Number(String(label).slice(5)) : undefined;
+    rememberAiFile(label, { url: out.toDataURL('image/jpeg', 0.86), label, page });
+  } catch { /* Canvas may be mocked in unit tests. */ }
   const blob = await new Promise(resolve => out.toBlob(resolve, 'image/jpeg', 0.86));
   out.width = out.height = 0;
   return { bytes: new Uint8Array(await blob.arrayBuffer()), type: 'image/jpeg', label };
+}
+
+export function hasClipboardImage(clipboardData) {
+  return [...(clipboardData?.items || [])].some(item => item.kind === 'file' && /^image\/(png|jpe?g|webp|gif)$/i.test(item.type));
+}
+
+export async function clipboardImages(clipboardData, readBlob = blob => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result || ''));
+  reader.onerror = () => reject(reader.error || Error('Could not read pasted image.'));
+  reader.readAsDataURL(blob);
+})) {
+  const files = [...(clipboardData?.items || [])]
+    .filter(item => item.kind === 'file' && /^image\/(png|jpe?g|webp|gif)$/i.test(item.type))
+    .map(item => item.getAsFile?.())
+    .filter(Boolean);
+  const out = [];
+  for (const file of files) {
+    const url = await readBlob(file);
+    if (url) out.push({ url, label: 'a pasted image from the clipboard' });
+  }
+  return out;
 }
 
 export function textBlock(page, parts, limit = 6000) {

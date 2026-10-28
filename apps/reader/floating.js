@@ -220,6 +220,20 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     wasShown = shown; wasCompact = small;
   }).observe(el, { attributes: true, attributeFilter: ['hidden', 'open', 'class'] });
   addEventListener('resize', () => { if (visible() && el.style.left) apply(current()); });
+  // Grow to show what would scroll inside (an AI answer being written), up to the area,
+  // moving up when it would pass the bottom. Not remembered: the saved size stays.
+  let fitting = 0;
+  function fit() {
+    cancelAnimationFrame(fitting);
+    fitting = requestAnimationFrame(() => {
+      if (!visible() || isCompact()) return;
+      const scroll = [...el.querySelectorAll('*')].filter(n => n.clientHeight && /auto|scroll/.test(getComputedStyle(n).overflowY) && n.scrollHeight > n.clientHeight + 1);
+      const extra = scroll.filter(n => !scroll.some(m => m !== n && n.contains(m))).reduce((s, n) => s + n.scrollHeight - n.clientHeight, 0);
+      const r = current(), a = area();
+      if (extra) apply({ ...r, height: r.height + extra });
+      else if (r.top + r.height > a.height + 1) apply(r);
+    });
+  }
   place();
-  return { place, putAway };
+  return { place, putAway, fit };
 }

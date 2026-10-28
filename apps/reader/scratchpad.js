@@ -17,7 +17,7 @@ const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 export { newId };
 // A conversation as Markdown: each question in bold, then its answer.
 export function conversationMarkdown(messages) {
-  return messages.map(m => (m.role === 'user' ? `**${String(m.content).trim().replace(/\n+/g, ' ')}**` : String(m.content).trim())).filter(Boolean).join('\n\n');
+  return messages.map(m => (m.role === 'user' ? `**${String(m.content).trim().replace(/\*\*/g, '').replace(/\n+/g, ' ')}**` : String(m.content).trim())).filter(Boolean).join('\n\n');
 }
 // Same conversation: replace its entry (now up to the answer picked last); else add it on top.
 export function keepEntry(list, entry) {
@@ -40,6 +40,7 @@ export function scratchpad({ store, key, markdown, status, notes }) {
       const item = document.createElement('li'), head = document.createElement('div'), title = document.createElement('strong'), when = document.createElement('span');
       head.className = 'scratch-head'; when.className = 'muted';
       title.textContent = entry.title; when.textContent = new Date(entry.at).toLocaleString();
+      if (markdown) renderMarkdown(title, String(entry.title || '').replace(/\n+/g, ' '), markdown).catch(() => { title.textContent = entry.title; });
       const button = (text, onclick, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = cls; b.onclick = onclick; return b; };
       const remove = button('Delete', async () => {
         if (remove.dataset.armed !== '1') { remove.dataset.armed = '1'; remove.textContent = 'Press again to delete'; return; }

@@ -259,3 +259,13 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] Compact tool row; Ctrl +/−/0 on any keyboard layout.
 - [D] Pages stay put when the bars change height.
 - [D] Shapes as an icon row; File → New window and window switching from Ctrl+K.
+
+## Quiz, flashcards and AI chat polish
+- [D] Restart quiz: circular-arrow button left of the dim button; clears answers on a second press.
+- [D] Quiz and flashcard windows grow to fit the Ask box and the streaming answer, up to the screen's edges.
+- [D] Paste images from the clipboard into any AI question (Ask AI, quiz Clarify, flashcard Ask AI); thumbnails with × and they follow the thread into Ask AI.
+- [D] Flashcard/quiz action rows wrap without odd gaps when the window is resized.
+- [D] Antigravity no longer stalls on the second question: Ask AI no longer turns on "Whole note" (MCP) by itself, and the chosen model is loaded before asking.
+- [D] Scratchpad: `\(…\)`, `\[…\]` and multi-line formulas render; no forced sideways scrollbars.
+- [D] Ask / Ask again / Close in the Ask boxes are icons (enter, spark, ×).
+- [D] Links in AI answers are clickable: page links jump to the page, attached images open large, web links open in the browser.

@@ -2,7 +2,7 @@
 // note's pages (images with tape lifted, plus typed/PDF/OCR/audio text).
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
-import { pagesContext, jsonFrom, notesBlock } from './ai-context.js';
+import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { scratchButton, newId } from './scratchpad.js';
@@ -91,7 +91,7 @@ export function prompts(kind, { amount, language, title }) {
   return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {} }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -484,7 +484,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   $('practiceExplainedToggle').onclick = () => {
     $('practiceExplained').open = !$('practiceExplained').open;
     syncExplainedToggle();
-    if ($('practiceExplained').open) $('practiceExplained').scrollIntoView({ block: 'nearest' });
+    if ($('practiceExplained').open) { growWindow(); $('practiceExplained').scrollIntoView({ block: 'nearest' }); }
   };
   $('practiceExplained').addEventListener('toggle', syncExplainedToggle);
   function showExplained() {
@@ -535,13 +535,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     asking = { card, history: [], id: newId() };
     $('practiceAskThread').replaceChildren();
     $('practiceAskBox').hidden = false;
+    growWindow();
     $('practiceExplained').hidden = true;
-    loadProviders().catch(error => status(error.message, true));
+    loadProviders().then(growWindow, error => status(error.message, true));
     // A saved explanation opens as the thread's first answer: no new request.
     if (card.explanation?.text) {
       const reply = Object.assign(document.createElement('div'), { className: 'practice-ask-answer chat-body' });
       $('practiceAskThread').append(reply);
-      renderInto(reply, card.explanation.text);
+      renderInto(reply, card.explanation.text).then(growWindow);
       asking.history.push({ role: 'user', content: 'Explain this card.' }, { role: 'assistant', content: card.explanation.text });
       return true;
     }
@@ -580,14 +581,16 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const prompt = [cardAskPrompt(card, want.page && !!card.page, thread.history, question), ...context.notes.map(n => n || 'This page has no source PDF.'), context.text].filter(Boolean).join('\n\n');
       // Re-rendered at most every 120 ms while it streams, like the chat.
       let timer = 0, rendering = Promise.resolve();
-      const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)); };
-      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
+      const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)).then(growWindow); };
+      const mine = await Promise.all(pastedCards.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawCardTray();
+      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: [...context.images, ...mine], tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
       clearTimeout(timer);
       await rendering;
       if (asking !== thread) return;
       const answer = text.trim();
       thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: answer });
       await renderInto(reply, answer);
+      growWindow();
       if (keep) {
         const upto = thread.history.slice(), row = document.createElement('div');
         row.className = 'chat-actions';
@@ -616,7 +619,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     if (!(asking?.card === card && asking.history.length)) return ask(q, { send: true });
     if (!q) return;
     if (!continueInChat) return ask(q);
-    const history = asking.history;
+    const history = asking.history, extraImages = pastedCards.splice(0), useNote = material().note; drawCardTray();
     $('practiceAskInput').value = '';
     closeAsk();
     let image = null;
@@ -631,8 +634,20 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       await saveDeck();
       if (practice?.queue[0] === card) showExplained();
     };
-    await continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q, onAnswer });
+    await continueInChat({ title: `From a flashcard: ${card.front}`, about: `The conversation is about this flashcard from the student's notes${card.page ? ` (page ${card.page})` : ''}:\nQuestion: ${card.front}\nAnswer: ${card.back}`, messages: history, image, label: `page ${card.page || ''} of the notes`.trim(), question: q, onAnswer, extraImages, useNote });
   };
+  const pastedCards = [];
+  const drawCardTray = () => {
+    let tray = $('practiceAskTray');
+    if (!tray) { tray = Object.assign(document.createElement('div'), { id: 'practiceAskTray', className: 'chat-attachments' }); $('practiceAskForm').before(tray); }
+    tray.hidden = !pastedCards.length;
+    tray.replaceChildren(...pastedCards.map((a, i) => { const f = document.createElement('figure'), im = Object.assign(document.createElement('img'), { src: a.url, alt: a.label }), x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Remove' }); x.onclick = () => { pastedCards.splice(i, 1); drawCardTray(); growWindow(); }; f.append(im, x); return f; }));
+  };
+  $('practiceAskForm').addEventListener('paste', async event => {
+    if (!hasClipboardImage(event.clipboardData)) return;
+    event.preventDefault();
+    pastedCards.push(...await clipboardImages(event.clipboardData).catch(() => [])); drawCardTray(); growWindow();
+  });
   $('practiceAskAgain').onclick = () => ask('', { again: true });
   $('practiceAskStop').onclick = () => ai?.cancel('card-ask');
   $('practiceAskClose').onclick = closeAsk;

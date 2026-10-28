@@ -72,8 +72,15 @@ function openTab(win) {
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
   tabs.add(win.id, id);
-  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  contents.on('will-navigate', (event, url) => { if (!url.startsWith(home)) event.preventDefault(); });
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (url.startsWith(home)) return;
+    event.preventDefault();
+    if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
+  });
   // Tab keys work in every tab; Ctrl+W must close the tab, not the window.
   // The tab's window is looked up each time: a tab can move to another window.
   contents.on('did-finish-load', () => contents.setZoomFactor(uiZoom));
