@@ -61,6 +61,9 @@ Flashcards and quizzes are generated in the background by the AI tool you alread
 
 ### Feels like a desktop app
 - **Light or dark**: View → Dark theme switches at once (or Ctrl+K → "theme"); by default it follows the system.
+
+<p align="center"><img src="docs/images/quiz-clarify-light.png" alt="The light theme with a quiz window open" width="80%"></p>
+
 - **Tabs and windows**: several notes in one window (<kbd>Ctrl</kbd>+<kbd>T</kbd>, drag to reorder); drag a tab out to give it a window of its own; opening the app again opens a new window.
 - **Floating windows**: Ask AI, audio, quizzes and flashcards can be dragged anywhere below the top bar (over the toolbar and page list too) and resized from any edge or corner; **_** puts one away in a tray at the bottom left, **□** makes it small or large, **×** closes it.
 - **Narrow windows and phones**: two bars at the bottom (page row with undo and the panels; one row of tools), and tools turn into icons before the toolbar would wrap.
