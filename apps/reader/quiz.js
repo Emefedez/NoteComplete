@@ -231,7 +231,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
   const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
   const explain = explainBox({
-    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`,
+    ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`, toggle: $('quizExplainedToggle'),
     mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
     handoff: continueInChat && (async ({ item: q, history, question, onAnswer }) => {
       const answered = answerOf(q);

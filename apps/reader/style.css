@@ -1936,3 +1936,5 @@ body.bar-compact .tab { height: 22px; }
 .all-study-head h2 { margin-right: auto; }
 .all-study-head .segmented button { min-height: 26px; padding: 0 10px; font-size: 12px; }
 .all-study-head .segmented button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Saved explanations open from their Explanation ▾ button; closed, they take no room. */
+.practice-explained:not([open]) { display: none; }

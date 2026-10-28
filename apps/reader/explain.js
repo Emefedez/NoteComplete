@@ -10,7 +10,7 @@ import { modelPicker } from './model-picker.js';
 const el = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
 const chip = (label, title, on) => { const b = el('button', { type: 'button', className: 'chip', title, textContent: label }); b.setAttribute('aria-pressed', String(on)); return b; };
 
-export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null, keep = null, titleOf = () => '' }) {
+export function explainBox({ ai, markdown, notePath, status, tag, label, mount, savedMount, prompt, context, save, saved, unavailable, handoff = null, keep = null, titleOf = () => '', toggle = null }) {
   const grow = area => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight + 2}px`; };
   const render = (node, text) => markdown ? renderMarkdown(node, text, markdown).catch(() => node.replaceChildren(renderAnswer(text))) : Promise.resolve(node.replaceChildren(renderAnswer(text)));
 
@@ -24,6 +24,10 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   const tools = el('div', { className: 'quiz-actions' }, change, more);
   const folded = el('details', { className: 'practice-explained', hidden: true }, el('summary', {}, 'Explanation ', meta), savedText, tools, edit);
   savedMount.append(folded);
+  // The saved answer opens from its own button beside Clarify, not by asking again.
+  const syncToggle = () => { if (!toggle) return; toggle.hidden = folded.hidden; toggle.setAttribute('aria-expanded', String(!folded.hidden && folded.open)); };
+  if (toggle) toggle.onclick = () => { folded.open = !folded.open; syncToggle(); if (folded.open) folded.scrollIntoView({ block: 'nearest' }); };
+  folded.addEventListener('toggle', syncToggle);
 
   // The ask box.
   const provider = el('select'), model = el('select'), other = el('input', { type: 'text', className: 'model-other', placeholder: 'Model name', hidden: true });
@@ -62,9 +66,11 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
 
   let item = null, asking = null;
   function showSaved(current) {
+    if (current !== item) folded.open = false;
     item = current;
     const value = current && saved(current);
     folded.hidden = !value?.text || !box.hidden;
+    syncToggle();
     if (folded.hidden) return;
     edit.hidden = true; savedText.hidden = tools.hidden = false;
     meta.textContent = value.edited ? 'edited by you' : value.provider ? `from ${value.provider}` : '';

@@ -474,10 +474,24 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   // answer (the arrow opens it), editable, and reused instead of asking again.
   // Card text: Markdown and formulas like the chat; a single line break stays a line break.
   const cardText = (element, text) => renderInto(element, cardMarkdown(text));
+  let shownExplanation = null;
   const renderInto = (element, text) => markdown ? renderMarkdown(element, text, markdown).catch(() => element.replaceChildren(renderAnswer(text))) : Promise.resolve(element.replaceChildren(renderAnswer(text)));
+  // The saved explanation opens from its own button beside Ask AI, not by asking again.
+  const syncExplainedToggle = () => {
+    $('practiceExplainedToggle').hidden = $('practiceExplained').hidden;
+    $('practiceExplainedToggle').setAttribute('aria-expanded', String(!$('practiceExplained').hidden && $('practiceExplained').open));
+  };
+  $('practiceExplainedToggle').onclick = () => {
+    $('practiceExplained').open = !$('practiceExplained').open;
+    syncExplainedToggle();
+    if ($('practiceExplained').open) $('practiceExplained').scrollIntoView({ block: 'nearest' });
+  };
+  $('practiceExplained').addEventListener('toggle', syncExplainedToggle);
   function showExplained() {
     const card = practice?.queue[0], saved = card?.explanation;
+    if (saved !== shownExplanation) { $('practiceExplained').open = false; shownExplanation = saved; }
     $('practiceExplained').hidden = !saved?.text || !revealed() || !$('practiceAskBox').hidden;
+    syncExplainedToggle();
     if ($('practiceExplained').hidden) return;
     $('practiceExplainedEdit').hidden = true; $('practiceExplainedText').hidden = false; $('practiceExplainedTools').hidden = false;
     $('practiceExplainedMeta').textContent = saved.edited ? 'edited by you' : saved.provider ? `from ${saved.provider}` : '';
