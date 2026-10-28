@@ -1088,6 +1088,21 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 #empty .home-actions button { padding-inline: 12px; }
 .home-section { max-width: 1240px; margin: 22px auto 0; }
 .home-section h3 { font-size: 15px; margin: 0; }
+.recent-heading { display: flex; align-items: center; gap: 10px; }
+.folder-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.folder-list li { position: relative; min-width: 0; }
+.folder-list li:hover .note-more, .folder-list .note-more[aria-expanded="true"] { opacity: 1; color: var(--ink); }
+.folder-card { width: 100%; justify-content: flex-start; gap: 10px; padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); text-align: left; }
+.folder-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.folder-card > svg { flex: none; width: 22px; height: 22px; color: var(--accent); fill: none; stroke: currentColor; stroke-width: 1.6; }
+.folder-meta { min-width: 0; display: grid; gap: 2px; }
+.folder-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.folder-meta span { color: var(--muted); font-size: 12px; }
+.folders-empty { margin: 8px 0 0; font-size: 12px; }
+.folder-new { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+.folder-new input { min-height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; }
+.note-move { display: grid; gap: 2px; padding: 0 0 4px 12px; }
+.note-move > button { justify-content: flex-start; font-size: 13px; }
 #recentTitle { margin-bottom: 12px; }
 .note-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 14px; }
 .note-grid li { min-width: 0; }
@@ -2030,3 +2045,4 @@ body.bar-compact .tab { height: 22px; }
 .practice-ask-form .icon-button { flex: none; width: var(--control); min-height: var(--control); padding: 0; justify-content: center; }
 .practice-ask-form .icon-button svg { width: 16px; height: 16px; }
 .practice-ask .chat-attachments { margin: 4px 0; }
+.folder-list .note-more { top: 50%; bottom: auto; transform: translateY(-50%); }

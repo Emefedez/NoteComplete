@@ -7,7 +7,12 @@ import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from '
 import { migrator } from './migrate.js';
 import { entryTitle, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null }) {
+import { localMember, webMember } from './groups.js';
+import { icon } from './icons.js';
+// The group member a Recent entry stands for (groups.js).
+export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
+  : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, groups = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -20,16 +25,128 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
   // Identical copies kept before checksums existed are merged once per session.
   let merging = null;
+  // Folders (groups.js): the folder open on Home shows its documents in place of Recent.
+  let shownFolder = null;
+  async function folderEntries(group) {
+    const members = await groups.members(group);
+    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { key: m.key, source: m.source, path: m.path, url: m.url, name: m.name, openedAt: 0, listed: true }), inFolder: m.inFolder })));
+  }
+  async function renderFolders() {
+    if (!groups) return;
+    const list = shownFolder ? [] : await groups.folders().catch(() => []);
+    $('foldersSection').hidden = Boolean(shownFolder);
+    $('foldersEmpty').hidden = list.length > 0;
+    $('folderList').replaceChildren(...list.map(folderCard));
+  }
+  function folderCard(group) {
+    const li = document.createElement('li'), button = document.createElement('button'), meta = document.createElement('span'), name = document.createElement('strong'), detail = document.createElement('span');
+    button.type = 'button';
+    button.className = 'folder-card';
+    name.textContent = group.name;
+    name.title = group.folder || group.name;
+    detail.textContent = group.folder ? 'Folder on disk' : 'In NoteComplete';
+    groups.members(group).then(m => { detail.textContent = `${m.length} document${m.length === 1 ? '' : 's'} · ${group.folder ? 'on disk' : 'in NoteComplete'}`; }).catch(() => {});
+    meta.className = 'folder-meta';
+    meta.append(name, detail);
+    button.append(icon('folder'), meta);
+    button.onclick = () => showFolder(group);
+    const more = document.createElement('button');
+    more.type = 'button'; more.className = 'note-more'; more.textContent = '⋯'; more.title = 'More';
+    more.setAttribute('aria-label', `More actions for ${group.name}`); more.setAttribute('aria-haspopup', 'menu');
+    more.onclick = event => { event.stopPropagation(); folderMenu(group, more); };
+    button.oncontextmenu = event => { event.preventDefault(); folderMenu(group, more); };
+    li.append(button, more);
+    return li;
+  }
+  function showFolder(group) {
+    shownFolder = group;
+    groups.touch(group).catch(() => {});
+    renderRecent();
+  }
+  $('folderBack').onclick = () => { shownFolder = null; renderRecent(); };
+  function inlineName(row, input, value, done) {
+    row.hidden = false;
+    input.value = value;
+    input.focus(); input.select();
+    input.onkeydown = event => {
+      if (event.key === 'Enter') { event.preventDefault(); const v = input.value.trim(); if (v) done(v); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); row.hidden = true; }
+    };
+  }
+  $('folderNew').onclick = () => inlineName($('folderNewRow'), $('folderNewName'), 'New folder', create);
+  $('folderNewCreate').onclick = () => { const v = $('folderNewName').value.trim(); if (v) create(v); };
+  $('folderNewCancel').onclick = () => { $('folderNewRow').hidden = true; };
+  async function create(name) {
+    $('folderNewRow').hidden = true;
+    await groups.create(name);
+    status(`Folder ${name} made. Put notes in it with ⋯ → Move to folder.`);
+    renderFolders();
+  }
+  function placeMenu(menu, anchor) {
+    menu.hidden = false;
+    anchor.setAttribute('aria-expanded', 'true');
+    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
+    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+  }
+  function folderMenu(group, anchor) {
+    const menu = $('folderMenu');
+    $('folderMenuTitle').textContent = group.name;
+    $('folderMenuText').textContent = group.folder ? `On disk: ${group.folder}. Removing it here leaves the folder and its files as they are.` : 'Removing the folder keeps its documents in Recent; no file is deleted.';
+    $('folderRenameRow').hidden = true;
+    $('folderRemove').textContent = 'Remove folder'; delete $('folderRemove').dataset.armed;
+    const close = () => { menu.hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
+    const outside = event => { if (!menu.contains(event.target) && event.target !== anchor) close(); };
+    $('folderRename').onclick = () => inlineName($('folderRenameRow'), $('folderRenameName'), group.name, async name => { await groups.rename(group, name); close(); renderFolders(); });
+    $('folderRenameSave').onclick = async () => { const v = $('folderRenameName').value.trim(); if (v) { await groups.rename(group, v); close(); renderFolders(); } };
+    $('folderRemove').onclick = async () => {
+      if ($('folderRemove').dataset.armed !== '1') { $('folderRemove').dataset.armed = '1'; $('folderRemove').textContent = 'Press again to remove'; return; }
+      await groups.delete(group); close(); status(`${group.name} removed from Folders.`); renderFolders();
+    };
+    placeMenu(menu, anchor);
+    setTimeout(() => document.addEventListener('pointerdown', outside, true));
+  }
+  // ⋯ → Move to folder…: the folders made here, or a new one.
+  async function moveRow(entry, close) {
+    const row = $('moveRow');
+    const folders = (await groups.folders()).filter(g => g.kind === 'folder');
+    const current = await groups.of(memberOf(entry)).catch(() => null);
+    const buttons = folders.map(g => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem');
+      b.textContent = g.name;
+      if (current?.id === g.id) { b.disabled = true; b.title = 'Already in this folder'; }
+      b.onclick = async () => { await groups.move(memberOf(entry), g); close(); status(`${entryTitle(entry)} moved to ${g.name}.`); renderRecent(); };
+      return b;
+    });
+    const fresh = document.createElement('button');
+    fresh.type = 'button'; fresh.setAttribute('role', 'menuitem'); fresh.textContent = 'New folder…';
+    fresh.onclick = () => inlineName($('moveNewRow'), $('moveNewName'), 'New folder', async name => { const g = await groups.create(name); await groups.move(memberOf(entry), g); close(); status(`${entryTitle(entry)} moved to ${name}.`); renderRecent(); });
+    row.replaceChildren(...buttons, fresh);
+    if (shownFolder && !entry.inFolder && shownFolder.members?.some(m => m.key === entry.key)) {
+      const out = document.createElement('button');
+      out.type = 'button'; out.setAttribute('role', 'menuitem'); out.textContent = `Take out of ${shownFolder.name}`;
+      out.onclick = async () => { await groups.remove(shownFolder, entry.key); close(); status(`${entryTitle(entry)} taken out of ${shownFolder.name}.`); renderRecent(); };
+      row.append(out);
+    }
+  }
   async function renderRecent() {
     merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch(() => {});
+    renderFolders();
     let entries = [];
-    try { entries = await Promise.race([library.recent(), new Promise((_, reject) => setTimeout(() => reject(Error('the note storage did not answer')), 6000))]); }
+    try {
+      const read = shownFolder ? folderEntries(shownFolder) : library.recent();
+      entries = await Promise.race([read, new Promise((_, reject) => setTimeout(() => reject(Error('the note storage did not answer')), 6000))]);
+    }
     catch (error) {
       // Say why instead of silently hiding Recent (seen with several windows open).
       console.warn('Recent could not be read', error);
       status(`Recent notes could not be read: ${error?.message || error}. Reopen the window to retry.`, true);
     }
-    $('recentSection').hidden = !entries.length;
+    $('recentTitle').textContent = shownFolder ? shownFolder.name : 'Recent';
+    $('folderBack').hidden = !shownFolder;
+    $('folderEmpty').hidden = !shownFolder || entries.length > 0;
+    $('recentSection').hidden = !shownFolder && !entries.length;
     const fragment = document.createDocumentFragment();
     for (const entry of entries) fragment.append(...recentCard(entry));
     $('recentList').replaceChildren(fragment);
@@ -48,7 +165,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       meta.className = 'note-meta';
       name.textContent = entryTitle(entry);
       name.title = entry.title ? `${entry.title}\nFile: ${entry.name}` : entry.name;
-      detail.textContent = `${entry.source === 'drive' ? 'Drive' : entry.source === 'web' ? 'Web link' : 'This device'} · opened ${ago(entry.openedAt)}`;
+      detail.textContent = `${entry.source === 'drive' ? 'Drive' : entry.source === 'web' ? 'Web link' : 'This device'} · ${entry.openedAt ? `opened ${ago(entry.openedAt)}` : 'not opened yet'}`;
       meta.append(name, detail);
       const hit = entry.source === 'web' ? 'Web' : Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''))?.[1][0];
       if (hit) {
@@ -86,6 +203,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         try {
           if (entry.source === 'web') { await library.touch(entry.key); return openLink?.(entry); }
           const file = await library.open(entry);
+          // A file listed in a folder but never opened joins Recent now.
+          if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
           if (!file) {
             status(`${entry.name} is no longer in the downloads folder. Open it again from Drive.`, true);
             await library.forget(entry.key);
@@ -141,6 +260,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       } catch (error) { $('forgetStatus').textContent = error.message; }
     };
     $('forgetCancel').onclick = close;
+    $('moveRow').hidden = true; $('moveNewRow').hidden = true;
+    $('moveOpen').hidden = !groups;
+    $('moveOpen').onclick = async () => { const row = $('moveRow'); if (row.hidden) await moveRow(entry, close); row.hidden = !row.hidden; };
     $('forgetExport').hidden = !exportStudy;
     $('forgetExport').onclick = () => { close(); exportStudy?.(entry).catch(error => status(error.message, true)); };
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
@@ -329,6 +451,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   try { setView(localStorage.getItem('notecomplete-home-view') === 'list' ? 'list' : 'cards'); } catch { setView('cards'); }
   let shown = false;
   return {
+    showFolder,
     show(hasDocument) {
       $('empty').hidden = false;
       $('homeBack').hidden = !hasDocument;

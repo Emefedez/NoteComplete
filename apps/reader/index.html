@@ -201,8 +201,15 @@
         <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
         <span id="filterSummary" class="muted"></span>
       </div>
+      <section id="foldersSection" class="home-section" aria-labelledby="foldersTitle">
+        <div class="drive-heading"><h3 id="foldersTitle">Folders</h3><div class="drive-actions"><button id="folderNew" type="button" title="Make a folder in NoteComplete to keep notes together; files stay where they are">New folder</button></div></div>
+        <div id="folderNewRow" class="folder-new" hidden><label for="folderNewName">Name</label><input id="folderNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderNewCreate" type="button" class="primary">Create</button><button id="folderNewCancel" type="button">Cancel</button></div>
+        <ul id="folderList" class="folder-list"></ul>
+        <p id="foldersEmpty" class="muted folders-empty" hidden>Folders you open (File → Open folder…) or make here appear here.</p>
+      </section>
       <section id="recentSection" class="home-section" aria-labelledby="recentTitle" hidden>
-        <h3 id="recentTitle">Recent</h3>
+        <div class="recent-heading"><button id="folderBack" type="button" hidden>← All notes</button><h3 id="recentTitle">Recent</h3></div>
+        <p id="folderEmpty" class="muted" hidden>This folder is empty. Use ⋯ → Move to folder on a note in Recent.</p>
         <ul id="recentList" class="note-grid"></ul>
       </section>
       <section id="driveSection" class="home-section" aria-labelledby="driveTitle">
@@ -892,6 +899,14 @@
   <div class="ocr-actions"><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
 </dialog>
 
+<div id="folderMenu" class="note-menu" role="menu" aria-labelledby="folderMenuTitle" hidden>
+  <p id="folderMenuTitle" class="note-menu-title"></p>
+  <button id="folderRename" type="button" role="menuitem">Rename…</button>
+  <div id="folderRenameRow" class="note-rename" hidden><div class="note-rename-field"><label for="folderRenameName">Name</label><input id="folderRenameName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderRenameSave" type="button">Rename</button></div></div>
+  <p id="folderMenuText" class="muted"></p>
+  <button id="folderRemove" type="button" role="menuitem">Remove folder</button>
+</div>
+
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
   <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>
@@ -900,6 +915,9 @@
     <p id="renameOriginal" class="muted"></p>
     <button id="renameRestore" type="button" hidden>Use the file name</button>
   </div>
+  <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
+  <div id="moveRow" class="note-move" role="group" aria-label="Folders" hidden></div>
+  <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
   <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
   <p id="forgetText" class="muted"></p>

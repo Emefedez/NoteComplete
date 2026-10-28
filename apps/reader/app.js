@@ -2218,6 +2218,8 @@ async function openChosen(file) {
   return true;
 }
 const library = new Library();
+// Groups and folders (groups.js), shared by Home's Folders and the document side list.
+const groups = groupStore({ store: library.store });
 // Audio added here: Record (Shift R) and Import in the audio panel, kept per note (recorder.js).
 addedStore = addedAudio({ store: library.store });
 let addedList = addedStore.list, clockTimer = 0;
@@ -2456,6 +2458,7 @@ var home = homeScreen({
   versions,
   open: openFromLibrary,
   openLink: (entry) => openWeb(webMember(entry.url, entry.name)),
+  groups,
   status,
   exportStudy: exportStudyOf,
   current: () => ({
@@ -2490,7 +2493,6 @@ async function openedLocal(path, name, file) {
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
-const groups = groupStore({ store: library.store });
 const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons() });
 // The sidebar button of HTML and text documents shows or hides the group list, like Pages in notes.
 let sideListOpen = true;
@@ -2514,7 +2516,8 @@ function setDocMember(member) {
   docMember = member;
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
-  return groupList.set(member);
+  // Opening a document of a folder brings that folder to the front of Home's Folders.
+  return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch(() => {});
 }
 async function openMember(member) {
   if (member.source === "web") return openWeb(member);

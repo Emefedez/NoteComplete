@@ -1,6 +1,6 @@
 // Groups: documents read together, listed in the side panel so you can jump between them.
-// A group is a folder (File → Open folder…) or files added to an open document (Add
-// documents…). Saved in the library as settings `group:<id>`; the files stay where they are.
+// A group is a folder on disk (File → Open folder…), a folder made in NoteComplete (Home →
+// New folder, kind 'folder'), or files added to an open document (Add documents…). Saved in the library as settings `group:<id>`; the files stay where they are.
 // A member is { key, name, source: 'local', path } or a Drive note from Recent { key, name, source: 'drive' }.
 import { TYPES, typeOf } from './note-facts.js';
 
@@ -58,12 +58,31 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
       await save(group);
       return group;
     },
-    // A group left with one document by hand (and no folder) is dissolved.
+    // A group left with one document by hand is dissolved; folders (on disk or made here) stay.
     async remove(group, key) {
       group.members = group.members.filter((m) => m.key !== key);
-      if (!group.folder && group.members.length < 2) await store.delete('settings', PREFIX + group.id);
+      if (!group.folder && group.kind !== 'folder' && group.members.length < 2) await store.delete('settings', PREFIX + group.id);
       else await save(group);
     },
+    async create(name) {
+      const group = { id: `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name, kind: 'folder', members: [], openedAt: Date.now() };
+      await save(group);
+      return group;
+    },
+    async rename(group, name) { group.name = name; await save(group); },
+    // Forgets the folder in NoteComplete; no file is touched.
+    delete: (group) => store.delete('settings', PREFIX + group.id),
+    async touch(group) { group.openedAt = Date.now(); await save(group); },
+    // A document sits in one folder made here at a time: moving takes it out of the others.
+    async move(member, target) {
+      for (const g of await all()) if (g.id !== target.id && !g.folder && g.members?.some((m) => m.key === member.key)) await this.remove(g, member.key);
+      const fresh = (await store.get('settings', PREFIX + target.id).catch(() => null)) || target;
+      if (!fresh.members.some((m) => m.key === member.key)) fresh.members.push(member);
+      await save(fresh);
+      return fresh;
+    },
+    // Folders for Home, most recently opened first.
+    async folders() { return (await all()).sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0)); },
   };
 }
 

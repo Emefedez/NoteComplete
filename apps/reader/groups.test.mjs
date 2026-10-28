@@ -33,3 +33,21 @@ test('a file in an opened folder belongs to that folder group', async () => {
   assert.equal(await groups.of(localMember('/u/other/z.txt', 'z.txt')), null);
   assert.deepEqual((await groups.members(g)).map((m) => m.name), ['a.md']);
 });
+
+test('folders made in NoteComplete keep documents, move them between folders, and never dissolve', async () => {
+  const groups = groupStore({ store: memoryStore(), bridge: null });
+  const so = await groups.create('SO'), aci = await groups.create('ACII');
+  const tema = localMember('/u/Tema 1.md', 'Tema 1.md');
+  await groups.move(tema, so);
+  assert.equal((await groups.of(tema)).id, so.id);
+  await groups.move(tema, aci);
+  assert.equal((await groups.of(tema)).id, aci.id);
+  assert.deepEqual((await groups.all()).find((g) => g.id === so.id).members, [], 'taken out of SO');
+  await groups.remove(await groups.of(tema), tema.key);
+  assert.equal((await groups.all()).length, 2, 'empty folders stay');
+  await groups.rename(so, 'Sistemas Operativos');
+  await groups.touch(so);
+  assert.deepEqual((await groups.folders()).map((g) => g.name)[0], 'Sistemas Operativos');
+  await groups.delete(aci);
+  assert.deepEqual((await groups.all()).map((g) => g.name), ['Sistemas Operativos']);
+});

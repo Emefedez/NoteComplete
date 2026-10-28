@@ -294,3 +294,4 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [D] Open folder… beside Open file… on Home.
 - [D] Every text file edits like GUIA_COMANDOS.md: the editor follows MD (on: TinyMDE with its toolbar; off: plain), and MD on/off is remembered per file.
 - [D] Home buttons are File and Folder (icons kept); document bar actions are filled chips like the export MD button: MD, a pen for Edit, a floppy for Save, a circular arrow for Reload, Clear, Browser.
+- [D] Folders on Home: recently opened folders (on disk) and folders made in NoteComplete (New folder), most recent first; a folder card shows its documents in place of Recent (← All notes back). ⋯ on a note → Move to folder… (or New folder…; Take out of the folder when viewing one); ⋯ on a folder → Rename, Remove folder (no file is deleted). The folder's documents are also the side list beside an open document.
