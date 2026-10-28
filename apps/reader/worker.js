@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -26,6 +26,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
             : new EditorSession(bytes);
         if (args.image) candidate.add_image(0, JSON.stringify(args.image));
         const result = JSON.parse(candidate.view(0));
+        // Recordings added in NoteComplete travel inside .notecomp files.
+        if (args.notecomplete)
+          result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
         session?.free();
         session = candidate;
         candidate = undefined;
@@ -64,7 +67,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       return;
     }
     if (op === "exportNotecomplete") {
-      const bytes = session.export_notecomplete();
+      const bytes = session.export_notecomplete(new Uint8Array(args.audioData || []), args.audioLayout || "");
       postMessage({ id, result: bytes }, [bytes.buffer]);
       return;
     }

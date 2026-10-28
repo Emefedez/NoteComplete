@@ -17,6 +17,8 @@ const paths = {
  plus:'M12 5v14M5 12h14',
  note:'M6 3h10l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm9 0v5h5M8 12h8M8 16h6',
  headphones:'M4 14v-3a8 8 0 0 1 16 0v3M4 12H2v8h5v-8H4Zm16 0h2v8h-5v-8h3',
+ mic:'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8',
+ upload:'M12 16V4M7 9l5-5 5 5M5 20h14',
  home:'M3 11 12 3l9 8M5 9v12h5v-6h4v6h5V9',
  search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4',
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',

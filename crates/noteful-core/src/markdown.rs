@@ -123,19 +123,145 @@ fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<(
         .map_err(|e| Error::new(0, e.to_string()))
 }
 
+/// Audio added in NoteComplete (recorded or imported), kept beside the note: `id`, `name`, `mime`
+/// and `created` (ms since 1970) are listed in the manifest, the bytes go in `audio/`.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AddedAudio {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub mime: String,
+    #[serde(default)]
+    pub created: f64,
+}
+
+/// Where one added recording's bytes are inside a `.notecomp` file.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub struct AddedAudioEntry {
+    #[serde(flatten)]
+    pub audio: AddedAudio,
+    pub offset: usize,
+    pub length: usize,
+}
+
+const AUDIO_LIMIT: usize = 64;
+
+// The file extension: sniffed from the bytes, else from a known MIME type.
+fn audio_extension(data: &[u8], mime: &str) -> &'static str {
+    crate::audio_kind(data).unwrap_or(match mime.split(';').next().unwrap_or("").trim() {
+        "audio/mp4" | "audio/x-m4a" | "audio/aac" => "m4a",
+        "audio/mpeg" => "mp3",
+        "audio/webm" => "webm",
+        "audio/ogg" => "ogg",
+        "audio/wav" | "audio/x-wav" => "wav",
+        _ => "bin",
+    })
+}
+
+fn clean(text: &str, limit: usize) -> String {
+    text.chars()
+        .filter(|c| !c.is_control())
+        .take(limit)
+        .collect()
+}
+
 /// A `.notecomp` file (also read as `.notecomplete`): a tar with `manifest.json`, `note.noteful` (the
-/// native note, as exported) and `notes.md` (the notes, page markers kept).
+/// native note, as exported), `notes.md` (the notes, page markers kept) and `audio/` (recordings
+/// added in NoteComplete, listed in the manifest).
 pub fn pack_notecomplete(note: &[u8], markdown: &str, title: &str) -> Result<Vec<u8>> {
-    let manifest = serde_json::json!({
+    pack_notecomplete_with(note, markdown, title, &[])
+}
+
+pub fn pack_notecomplete_with(
+    note: &[u8],
+    markdown: &str,
+    title: &str,
+    audio: &[(AddedAudio, &[u8])],
+) -> Result<Vec<u8>> {
+    if audio.len() > AUDIO_LIMIT {
+        return Err(Error::new(0, "Too many recordings"));
+    }
+    let mut files = Vec::with_capacity(audio.len());
+    let mut listed = Vec::with_capacity(audio.len());
+    for (i, (meta, data)) in audio.iter().enumerate() {
+        let file = format!("audio/{}.{}", i + 1, audio_extension(data, &meta.mime));
+        listed.push(serde_json::json!({
+            "file": file, "id": clean(&meta.id, 80), "name": clean(&meta.name, 200),
+            "mime": clean(&meta.mime, 80), "created": meta.created,
+        }));
+        files.push((file, *data));
+    }
+    let mut manifest = serde_json::json!({
         "format": "notecomplete", "version": 1, "title": title, "note": NOTE, "notes": NOTES,
     });
+    if !listed.is_empty() {
+        manifest["audio"] = serde_json::Value::Array(listed);
+    }
     let mut builder = tar::Builder::new(Vec::new());
     add(&mut builder, MANIFEST, manifest.to_string().as_bytes())?;
     add(&mut builder, NOTE, note)?;
     add(&mut builder, NOTES, markdown.as_bytes())?;
+    for (file, data) in files {
+        add(&mut builder, &file, data)?;
+    }
     builder
         .into_inner()
         .map_err(|e| Error::new(0, e.to_string()))
+}
+
+/// The recordings added in NoteComplete inside a `.notecomp` file, as byte ranges of `data`
+/// (tar keeps each file's bytes in one piece). Files without them give an empty list.
+pub fn notecomplete_audio(data: &[u8]) -> Result<Vec<AddedAudioEntry>> {
+    let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
+    let mut archive = tar::Archive::new(data);
+    let mut manifest = None;
+    let mut ranges = std::collections::HashMap::new();
+    for entry in archive.entries().map_err(invalid)? {
+        let mut entry = entry.map_err(invalid)?;
+        let name = entry
+            .path()
+            .map_err(invalid)?
+            .to_string_lossy()
+            .into_owned();
+        let size = entry.header().size().map_err(invalid)? as usize;
+        let offset = entry.raw_file_position() as usize;
+        if offset.checked_add(size).is_none_or(|end| end > data.len()) {
+            return Err(Error::new(0, "Truncated NoteComplete file"));
+        }
+        if name == MANIFEST {
+            let mut bytes = Vec::with_capacity(size);
+            (&mut entry)
+                .take(size as u64)
+                .read_to_end(&mut bytes)
+                .map_err(invalid)?;
+            manifest = serde_json::from_slice::<serde_json::Value>(&bytes).ok();
+        } else if name.starts_with("audio/") {
+            ranges.insert(name, (offset, size));
+        }
+    }
+    let Some(manifest) = manifest.filter(|m| m["format"].as_str() == Some("notecomplete")) else {
+        return Err(Error::new(0, "Not a NoteComplete file"));
+    };
+    let listed = manifest["audio"].as_array().cloned().unwrap_or_default();
+    Ok(listed
+        .iter()
+        .take(AUDIO_LIMIT)
+        .filter_map(|item| {
+            let &(offset, length) = ranges.get(item["file"].as_str()?)?;
+            let audio = AddedAudio {
+                id: clean(item["id"].as_str()?, 80),
+                name: clean(item["name"].as_str().unwrap_or(""), 200),
+                mime: clean(item["mime"].as_str().unwrap_or(""), 80),
+                created: item["created"].as_f64().unwrap_or(0.0),
+            };
+            Some(AddedAudioEntry {
+                audio,
+                offset,
+                length,
+            })
+        })
+        .collect())
 }
 
 /// Whether bytes look like a tar archive (ustar magic).
@@ -203,7 +329,16 @@ impl Editor {
         Ok(editor)
     }
     pub fn export_notecomplete(&self) -> Result<Vec<u8>> {
-        pack_notecomplete(&self.export_noteful()?, &self.markdown, &self.scene.title)
+        self.export_notecomplete_with(&[])
+    }
+    /// With recordings added in NoteComplete, which the reader keeps per note.
+    pub fn export_notecomplete_with(&self, audio: &[(AddedAudio, &[u8])]) -> Result<Vec<u8>> {
+        pack_notecomplete_with(
+            &self.export_noteful()?,
+            &self.markdown,
+            &self.scene.title,
+            audio,
+        )
     }
 }
 
@@ -242,8 +377,60 @@ mod tests {
             (b"NOTE".to_vec(), "# Notas\n<!-- page 1 -->\n".to_owned())
         );
         assert!(unpack_notecomplete(b"not a tar").is_err());
+        assert_eq!(notecomplete_audio(&packed).unwrap(), vec![]);
         let mut other = tar::Builder::new(Vec::new());
         add(&mut other, NOTE, b"x").unwrap();
         assert!(unpack_notecomplete(&other.into_inner().unwrap()).is_err());
+    }
+    #[test]
+    fn added_audio_travels_in_the_archive() {
+        let webm = [0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3];
+        let meta = |id: &str, mime: &str| AddedAudio {
+            id: id.into(),
+            name: format!("Take {id}\n"),
+            mime: mime.into(),
+            created: 1.5e12,
+        };
+        let packed = pack_notecomplete_with(
+            b"NOTE",
+            "",
+            "T",
+            &[
+                (meta("a", "audio/webm;codecs=opus"), &webm),
+                (meta("b", "audio/mp4"), b"MP4DATA"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(unpack_notecomplete(&packed).unwrap().0, b"NOTE".to_vec());
+        let found = notecomplete_audio(&packed).unwrap();
+        assert_eq!(found.len(), 2);
+        assert_eq!(
+            &packed[found[0].offset..found[0].offset + found[0].length],
+            &webm
+        );
+        assert_eq!(
+            &packed[found[1].offset..found[1].offset + found[1].length],
+            b"MP4DATA"
+        );
+        assert_eq!(
+            (found[0].audio.name.as_str(), found[0].audio.created),
+            ("Take a", 1.5e12)
+        );
+        assert_eq!(found[1].audio.mime, "audio/mp4");
+        let names: Vec<String> = tar::Archive::new(&packed[..])
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "manifest.json",
+                "note.noteful",
+                "notes.md",
+                "audio/1.webm",
+                "audio/2.m4a"
+            ]
+        );
     }
 }

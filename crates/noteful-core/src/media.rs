@@ -15,6 +15,8 @@ pub fn audio_kind(data: &[u8]) -> Option<&'static str> {
         Some("flac")
     } else if data.starts_with(b"OggS") {
         Some("ogg")
+    } else if data.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) {
+        Some("webm")
     } else {
         None
     }
@@ -27,6 +29,7 @@ pub fn audio_mime(kind: &str) -> Option<&'static str> {
         "mp3" => Some("audio/mpeg"),
         "flac" => Some("audio/flac"),
         "ogg" => Some("audio/ogg"),
+        "webm" => Some("audio/webm"),
         _ => None,
     }
 }

@@ -30,8 +30,9 @@ test('study material is copied to a new version without losing what is there', a
   await store.set('settings', 'decks:old', [{ id: 'd1' }, { id: 'd2' }]);
   await store.set('settings', 'quizzes:old', [{ id: 'q1' }]);
   await store.set('settings', 'notes:old', 'Resumen');
-  assert.deepEqual(await studyCounts(store, 'old'), { decks: 2, quizzes: 1, notes: 1 });
-  await carryStudy(store, 'old', 'new', ['decks', 'notes']);
-  assert.deepEqual(await studyCounts(store, 'new'), { decks: 2, quizzes: 0, notes: 1 });
-  assert.deepEqual(await studyCounts(store, 'old'), { decks: 2, quizzes: 1, notes: 1 }, 'the old version keeps its own');
+  await store.set('settings', 'recordings:old', [{ id: 'r1' }]);
+  assert.deepEqual(await studyCounts(store, 'old'), { decks: 2, quizzes: 1, notes: 1, recordings: 1 });
+  await carryStudy(store, 'old', 'new', ['decks', 'notes', 'recordings']);
+  assert.deepEqual(await studyCounts(store, 'new'), { decks: 2, quizzes: 0, notes: 1, recordings: 1 });
+  assert.deepEqual(await studyCounts(store, 'old'), { decks: 2, quizzes: 1, notes: 1, recordings: 1 }, 'the old version keeps its own');
 });

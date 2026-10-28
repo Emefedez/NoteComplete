@@ -176,10 +176,12 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   if (!primary) return;
   try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
-  // Only one web permission: writing text to the clipboard (Grab → Copy text), from the reader itself.
-  const allowed = (permission, url = '') => permission === 'clipboard-sanitized-write' && String(url).startsWith(home);
-  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.())));
-  session.defaultSession.setPermissionCheckHandler((_contents, permission, origin) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`));
+  // Two web permissions, for the reader itself only: writing text to the clipboard (Grab → Copy text)
+  // and the microphone (Record in the audio panel); never the camera.
+  const allowed = (permission, url = '', media = []) => String(url).startsWith(home)
+    && (permission === 'clipboard-sanitized-write' || (permission === 'media' && media.length > 0 && media.every(type => type === 'audio')));
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.(), details?.mediaTypes || [])));
+  session.defaultSession.setPermissionCheckHandler((_contents, permission, origin, details) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`, details?.mediaType ? [details.mediaType] : []));
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
     try {

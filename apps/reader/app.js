@@ -27,6 +27,7 @@ import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
 import { AudioController } from "./audio.js";
+import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
@@ -114,6 +115,7 @@ const audio = new AudioController(
 );
 audio.transcript = new TranscriptController(audio);
 audio.processing = new AudioProcessing(audio.audio);
+let addedStore = null; // recordings added in NoteComplete, set up with the library below
 const selection = new SelectionController({
   call,
   patch: patchItem,
@@ -187,6 +189,7 @@ function reset() {
   observer?.disconnect();
   thumbnailObserver?.disconnect();
   backgrounds?.close();
+  stopRecording();
   audio.reset();
   panels = [];
   doc = null;
@@ -244,7 +247,9 @@ async function load(file) {
     buildPages(result.page_sizes);
     updateTools(result);
     layerPanel(result.layers);
-    audio.open(result.audio || [], result.recordings || []);
+    // Recordings that came inside a .notecomp join the ones kept for this note.
+    const incoming = (result.added_audio || []).map((a) => ({ id: a.id, name: a.name, mime: a.mime, created: a.created, blob: new Blob([a.bytes], { type: a.mime }) }));
+    audio.open(result.audio || [], result.recordings || [], await addedStore.load(find.fingerprint, incoming));
     await renderPage(panels[0], result);
     status("Document opened.");
   } catch (e) {
@@ -1600,7 +1605,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl O", "Open"], ["Ctrl S", "Save project"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -1633,7 +1638,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -1658,6 +1663,7 @@ function shortcut(e) {
   if (k === "n") return $("notesToggle").click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
   if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
+  if (k === "R" && !$("audioToggle").hidden) return (addedStore.recording ? stopRecording() : (toggleAudio(true), startRecording())), true;
   if (k === "i" && !$("audioToggle").hidden) return $("syncEnabled").click(), true;
   if (!$("audioToggle").hidden && ["j", "k", "l"].includes(k)) {
     if (k === "k") $("playAudio").click();
@@ -1803,7 +1809,7 @@ async function save(native, as = native ? "noteful" : "project") {
   try {
     await notes?.flush();
     const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete" }[as];
-    const data = await call(op);
+    const data = await call(op, as === "notecomplete" ? await addedStore.packed() : {});
     if (token !== epoch) return;
     const delivery = await download(
       data,
@@ -1816,7 +1822,8 @@ async function save(native, as = native ? "noteful" : "project") {
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
     if (as === "notecomplete" || as === "markdown") {
-      status(as === "markdown" ? ".noteful and .md files exported." : ".notecomp file exported: the note and its notes.");
+      const takes = addedStore.list.length;
+      status(as === "markdown" ? ".noteful and .md files exported." : `.notecomp file exported: the note, its notes${takes ? ` and ${takes} added recording${takes === 1 ? "" : "s"}` : ""}.`);
       return;
     }
     if (!native && !delivery.shared) {
@@ -2073,6 +2080,70 @@ async function openChosen(file) {
   return true;
 }
 const library = new Library();
+// Audio added here: Record (Shift R) and Import in the audio panel, kept per note (recorder.js).
+addedStore = addedAudio({ store: library.store });
+let addedList = addedStore.list, clockTimer = 0;
+addedStore.onchange = (list) => {
+  if (list !== addedList) { addedList = list; audio.setAdded(list); }
+  recordingState();
+};
+function recordingState() {
+  const r = addedStore.recording;
+  $("recordingRow").hidden = !r;
+  $("audioSources").hidden = !!r;
+  for (const el of [$("audioToggle"), $("recordingRow")]) { el.classList.toggle("recording", !!r); el.classList.toggle("paused", !!r?.paused); }
+  $("audioToggle").title = r ? `Recording ${clock(r.seconds)}: audio and transcript (A)` : "Audio and transcript (A)";
+  if (r) {
+    $("recordingClock").textContent = clock(r.seconds);
+    $("recordingNote").textContent = r.paused ? "Paused" : "Recording";
+    $("pauseRecording").textContent = r.paused ? "Resume" : "Pause";
+  }
+  clearTimeout(clockTimer);
+  if (r && !r.paused) clockTimer = setTimeout(recordingState, 500);
+  $("removeAudio").hidden = !audio.selected?.added;
+}
+async function startRecording() {
+  if (addedStore.recording) return;
+  try {
+    await addedStore.start();
+    audio.audio.pause();
+    status("Recording. Stop keeps it in this note.");
+  } catch (e) {
+    status(e.name === "NotAllowedError" ? "Microphone access was refused." : e.name === "NotFoundError" ? "No microphone found." : e.message, true);
+  }
+  recordingState();
+}
+async function stopRecording() {
+  if (!addedStore?.recording) return;
+  try {
+    const take = await addedStore.stop();
+    if (take) status(`${take.name} kept in this note (${Math.round(take.blob.size / 1024)} KB).`);
+  } catch (e) { status(e.message, true); }
+  recordingState();
+}
+function disarmRemove() { delete $("removeAudio").dataset.armed; $("removeAudio").textContent = "Remove"; }
+audio.onselect = () => { disarmRemove(); recordingState(); };
+$("recordAudio").onclick = startRecording;
+$("stopRecording").onclick = stopRecording;
+$("pauseRecording").onclick = () => { addedStore.pause(); recordingState(); };
+$("importAudio").onclick = () => $("audioFile").click();
+$("audioFile").accept = AUDIO_TYPES;
+$("audioFile").onchange = async () => {
+  const file = $("audioFile").files[0];
+  $("audioFile").value = "";
+  if (!file) return;
+  try { const added = await addedStore.import(file); status(`${added.name} added to this note.`); }
+  catch (e) { status(e.message, true); }
+};
+$("removeAudio").onclick = async () => {
+  const entry = audio.selected, button = $("removeAudio");
+  if (!entry?.added) return;
+  if (button.dataset.armed !== "1") { button.dataset.armed = "1"; button.textContent = "Press again to remove"; return; }
+  disarmRemove();
+  await addedStore.remove(entry.added.id).catch((e) => status(e.message, true));
+  status(`${entry.added.name} removed from this note.`);
+};
+window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.preventDefault(); e.returnValue = ""; } });
 // The open note's file on disk (desktop), so AI tools can read other pages via MCP,
 // and its Recent entry, so removing it can first upload unsaved changes to Drive.
 let notePath = "", noteEntryKey = "";

@@ -130,8 +130,39 @@ impl EditorSession {
     pub fn set_markdown(&mut self, markdown: &str) -> Result<(), JsValue> {
         self.inner.set_markdown(markdown).map_err(js_error)
     }
-    pub fn export_notecomplete(&self) -> Result<Vec<u8>, JsValue> {
-        self.inner.export_notecomplete().map_err(js_error)
+    /// `audio_data` holds the recordings added in NoteComplete one after another; `audio_layout`
+    /// lists them in order (`id`, `name`, `mime`, `created`, `length`).
+    pub fn export_notecomplete(
+        &self,
+        audio_data: &[u8],
+        audio_layout: &str,
+    ) -> Result<Vec<u8>, JsValue> {
+        let layout: Vec<serde_json::Value> = if audio_layout.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(audio_layout).map_err(js_error)?
+        };
+        let mut audio = Vec::with_capacity(layout.len());
+        let mut at = 0usize;
+        for item in layout {
+            let length = item["length"].as_u64().unwrap_or(0) as usize;
+            let end = at
+                .checked_add(length)
+                .filter(|end| *end <= audio_data.len())
+                .ok_or_else(|| JsValue::from_str("Recording data is shorter than its layout"))?;
+            let text = |key: &str| item[key].as_str().unwrap_or("").to_owned();
+            let meta = noteful_core::AddedAudio {
+                id: text("id"),
+                name: text("name"),
+                mime: text("mime"),
+                created: item["created"].as_f64().unwrap_or(0.0),
+            };
+            audio.push((meta, &audio_data[at..end]));
+            at = end;
+        }
+        self.inner
+            .export_notecomplete_with(&audio)
+            .map_err(js_error)
     }
     pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
@@ -283,6 +314,12 @@ pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>,
 #[wasm_bindgen]
 pub fn md5_hex(data: &[u8]) -> String {
     noteful_core::md5_hex(data)
+}
+/// Recordings added in NoteComplete inside a `.notecomp` file: JSON list with byte ranges of `data`.
+#[wasm_bindgen]
+pub fn notecomplete_audio(data: &[u8]) -> Result<String, JsValue> {
+    let found = noteful_core::notecomplete_audio(data).map_err(js_error)?;
+    serde_json::to_string(&found).map_err(js_error)
 }
 #[wasm_bindgen]
 pub fn is_notecomplete(data: &[u8]) -> bool {

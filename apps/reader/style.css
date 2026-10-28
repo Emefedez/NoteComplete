@@ -1776,3 +1776,24 @@ body.bar-compact .tab { height: 22px; }
 .chat-actions button { min-width: 28px; min-height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; }
 .chat-actions .chat-to-text { font-family: Georgia, serif; font-weight: 700; }
 .chat-actions button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* Adding audio: Record and Import under the recording list; while recording, a row with the time, Pause and Stop. */
+.audio-sources, .recording-row { display: flex; align-items: center; gap: 4px; }
+.audio-sources[hidden], .recording-row[hidden] { display: none; }
+.audio-sources button, .recording-row button { width: auto; min-height: var(--control); padding: 0 10px; gap: 6px; border-radius: var(--radius); background: var(--fill); font-size: 12px; }
+.audio-sources button svg { width: 15px; height: 15px; }
+#removeAudio[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
+.recording-row { padding: 3px 4px 3px 10px; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.recording-row output { font-variant-numeric: tabular-nums; font-weight: 600; }
+.recording-row .muted { color: inherit; opacity: .75; }
+.recording-row .primary { background: var(--accent); color: var(--surface); }
+.rec-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: rec-pulse 1.4s ease-in-out infinite; }
+.recording-row.paused .rec-dot { animation: none; opacity: .4; }
+@keyframes rec-pulse { 50% { opacity: .25; } }
+/* The audio button lights up in the accent while recording, also with the panel closed or put away. */
+#audioToggle.recording { position: relative; color: var(--accent); background: var(--accent-soft); }
+#audioToggle.recording::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: rec-pulse 1.4s ease-in-out infinite; }
+#audioToggle.recording.paused::after { animation: none; opacity: .4; }
+/* A note without audio shows only the way to add some. */
+.audio-panel.no-audio :is(.audio-transport, .audio-seek, .transcript-panel, #speechSettings) { display: none !important; }
+@media (prefers-reduced-motion: reduce) { .rec-dot, #audioToggle.recording::after { animation: none; } }

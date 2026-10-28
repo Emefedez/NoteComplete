@@ -468,6 +468,20 @@
         <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
           <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
           <select id="recording" aria-label="Recording"></select>
+          <!-- Add audio to the note: record with the microphone or import a file (recorder.js). -->
+          <div id="audioSources" class="audio-sources">
+            <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)">Record</button>
+            <button id="importAudio" type="button" data-icon="upload" title="Add an audio file to this note">Import…</button>
+            <span class="spacer"></span>
+            <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
+          </div>
+          <div id="recordingRow" class="recording-row" hidden>
+            <span class="rec-dot" aria-hidden="true"></span><output id="recordingClock" aria-live="off">0:00</output><span id="recordingNote" class="muted">Recording</span>
+            <span class="spacer"></span>
+            <button id="pauseRecording" type="button">Pause</button>
+            <button id="stopRecording" type="button" class="primary" title="Stop and keep the recording (Shift R)">Stop</button>
+          </div>
+          <input id="audioFile" type="file" hidden />
           <div class="audio-transport">
             <button id="backAudio" type="button" aria-label="Back 10 seconds" title="Back 10 s (J)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7 5 12l6 5V7Zm8 0-6 5 6 5V7Z"/></svg></button>
             <button id="playAudio" type="button" class="play" data-state="paused" aria-label="Play" title="Play / pause (K)" disabled><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
