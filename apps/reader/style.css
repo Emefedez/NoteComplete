@@ -1075,6 +1075,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .home-foot { max-width: 1240px; margin: 30px auto 0; padding-top: 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .home-foot strong { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .home-foot .supported-formats { margin: 0 0 0 auto !important; }
+.home-foot .home-version { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--chrome); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
 
 /* Find bar: floats over the pages instead of taking a row. */
 .workspace { position: relative; }
