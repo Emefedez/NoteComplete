@@ -40,6 +40,19 @@ export function prepareQuestions(value, pages, random = Math.random) {
 
 // A question's accepted answer: the student's correction wins over the AI's.
 export const correctOf = q => q.correction?.answer ?? q.answer;
+// A quiz as flashcards (Anki, like decks): the question with lettered options on
+// the front; the accepted answer, the student's correction note and a saved
+// explanation on the back. Disputed questions are left out.
+export function quizCards(quiz) {
+  const letter = i => String.fromCharCode(65 + i);
+  return quiz.questions.filter(q => !q.disputed).map(q => {
+    const right = correctOf(q);
+    const back = [`${letter(right)}. ${q.options[right]}`];
+    if (q.correction?.note) back.push(`Correction: ${q.correction.note}`);
+    if (q.explanation?.text) back.push(q.explanation.text);
+    return { front: [q.question, '', ...q.options.map((o, i) => `${letter(i)}. ${o}`)].join('\n'), back: back.join('\n\n'), page: q.source?.page };
+  });
+}
 // Disputed questions do not count; the rest score 2, or 1 with the hint.
 export function score(quiz) {
   let points = 0, answered = 0, counted = 0;

@@ -1447,6 +1447,8 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 /* Delete is a small separate button that asks first; it never shares the row's click area. */
 .deck-picker .saved-delete { flex: none; width: var(--control); padding: 0; background: var(--fill); color: var(--muted); }
 .deck-picker .saved-delete:hover { background: var(--danger-soft); color: var(--danger); }
+.deck-picker .saved-export { flex: none; padding: 0 8px; background: var(--fill); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.deck-picker .saved-export:hover { color: var(--accent); background: var(--accent-soft); }
 .deck-picker .saved-confirm { flex: 1; display: flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border-radius: var(--radius); background: var(--danger-soft); font-size: 13px; }
 @media (prefers-color-scheme: dark) {
   .quiz-options button[data-result="right"] { background: #173a2a; color: #9be3bd; }

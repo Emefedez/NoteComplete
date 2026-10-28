@@ -2218,7 +2218,7 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open;
   if (!open) $("svg").disabled = true;
 }
@@ -2714,6 +2714,7 @@ async function resumeQuiz() {
 }
 $("studyResume").onclick = resumeQuiz;
 $("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
+$("studyExportQuiz").onclick = () => study.exportQuiz();
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
     const row = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");

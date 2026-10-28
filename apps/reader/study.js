@@ -3,7 +3,7 @@
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
 import { pagesContext, jsonFrom, notesBlock } from './ai-context.js';
-import { quizPrompt, prepareQuestions, DEFAULT_QUIZ_PROMPT } from './quiz.js';
+import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
@@ -264,11 +264,20 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('deckSaved').textContent = 'Saved with this note';
     renderCards();
   };
+  const fileName = title => (title.trim() || 'NoteComplete').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
   $('deckExport').onclick = async () => {
-    const name = ($('deckTitle').value.trim() || 'NoteComplete').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    const name = fileName($('deckTitle').value);
     await download(ankiText(name, deck.cards.filter(c => c.front.trim() && c.back.trim())), `${name}.txt`, 'text/plain');
     status('Anki deck exported. In Anki: File → Import, then choose the file.');
   };
+  // Quizzes export the same way: the open one from Study, any one from the saved list.
+  async function exportQuiz(quiz) {
+    quiz ||= quizzes.current || (await quizzes.list())[0];
+    if (!quiz) return status('No quiz for this note yet.', true);
+    const name = fileName(quiz.title || 'Quiz'), cards = quizCards(quiz);
+    await download(ankiText(name, cards), `${name}.txt`, 'text/plain');
+    status(`Quiz exported to Anki: ${cards.length} card${cards.length === 1 ? '' : 's'}. In Anki: File → Import, then choose the file.`);
+  }
   $('deckClose').onclick = () => $('deckDialog').close();
   $('deckDialog').addEventListener('close', () => { closeFix(); closeAsk(); });
   // Flip-card practice: unknown cards come back once more at the end. It runs in a
@@ -604,7 +613,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
   // can be undone until the dialog closes.
   async function openSaved() {
     const decks = await savedDecks(), saved = await quizzes.list();
-    const row = ({ title, detail, kind, run, remove, restore }) => {
+    const row = ({ title, detail, kind, run, remove, restore, exportTo = null }) => {
       const item = document.createElement('li');
       const show = () => {
         const open = document.createElement('button'), name = document.createElement('strong'), meta = document.createElement('span');
@@ -616,7 +625,15 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
         del.type = 'button'; del.className = 'saved-delete'; del.textContent = '✕';
         del.title = `Delete this ${kind}…`; del.setAttribute('aria-label', `Delete ${kind} ${title}`);
         del.onclick = confirm;
-        item.replaceChildren(open, del);
+        const extra = [];
+        if (exportTo) {
+          const anki = document.createElement('button');
+          anki.type = 'button'; anki.className = 'saved-export'; anki.textContent = 'Anki';
+          anki.title = `Export this ${kind} to Anki`; anki.setAttribute('aria-label', `Export ${kind} ${title} to Anki`);
+          anki.onclick = exportTo;
+          extra.push(anki);
+        }
+        item.replaceChildren(open, ...extra, del);
       };
       const bar = (text, ...buttons) => {
         const box = document.createElement('div');
@@ -635,7 +652,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       return item;
     };
     $('deckPicker').replaceChildren(...decks.map((d, i) => row({
-      kind: 'deck', title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
+      kind: 'deck', exportTo: () => download(ankiText(fileName(d.title), d.cards.filter(c => c.front.trim() && c.back.trim())), `${fileName(d.title)}.txt`, 'text/plain').then(() => status('Anki deck exported. In Anki: File → Import, then choose the file.')), title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
       run: () => showDeck(d),
       remove: async () => library.store.set('settings', key(), (await savedDecks()).filter(x => x.id !== d.id)),
       restore: async () => { const now = (await savedDecks()).filter(x => x.id !== d.id); now.splice(Math.min(i, now.length), 0, d); await library.store.set('settings', key(), now); },
@@ -643,7 +660,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('quizPicker').replaceChildren(...saved.map(q => {
       const answered = Object.keys(q.answers || {}).length;
       const points = Object.entries(q.answers || {}).reduce((n, [i, a]) => n + (a.choice === q.questions[i]?.answer ? (a.hinted ? 1 : 2) : 0), 0);
-      return row({ kind: 'quiz', title: q.title, detail: `${answered}/${q.questions.length} answered · ${points} points`, run: () => quizzes.open(q), remove: () => quizzes.remove(q.id), restore: () => quizzes.restore(q) });
+      return row({ kind: 'quiz', title: q.title, detail: `${answered}/${q.questions.length} answered · ${points} points`, run: () => quizzes.open(q), exportTo: () => exportQuiz(q), remove: () => quizzes.remove(q.id), restore: () => quizzes.restore(q) });
     }));
     if (!$('deckPickerDialog').open) $('deckPickerDialog').showModal();
   }
@@ -666,5 +683,5 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     } catch (error) { status(`Could not import: ${error.message}`, true); }
   };
   $('deckPickerClose').onclick = () => $('deckPickerDialog').close();
-  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, fillProviders, key: onKey };
+  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, fillProviders, key: onKey };
 }

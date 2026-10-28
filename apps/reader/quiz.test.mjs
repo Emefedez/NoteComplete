@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf } from './quiz.js';
+import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards } from './quiz.js';
 import { progressAt } from './jobs.js';
 
 const reply = { questions: [
@@ -55,4 +55,16 @@ test('job progress grows while preparation and answers interleave', () => {
   // 36 pages in 6 batches, 3 in flight: the bar must not wait for all pages.
   const p = progressAt({ pages: 36, prepared: 18, batches: 6, done: 2, inflight: [0, 0, 0] }, 20000);
   assert.ok(p > 0.35 && p < 0.8, String(p));
+});
+
+test('a quiz exports as flashcards: options on the front, accepted answer and notes on the back', () => {
+  const quiz = { questions: [
+    { question: 'Q1', options: ['a', 'b', 'c'], answer: 1, source: { page: 3 }, explanation: { text: 'Because.' } },
+    { question: 'Q2', options: ['x', 'y'], answer: 0, correction: { answer: 1, note: 'The slide says y.' } },
+    { question: 'Q3', options: ['m', 'n'], answer: 0, disputed: true },
+  ] };
+  assert.deepEqual(quizCards(quiz), [
+    { front: 'Q1\n\nA. a\nB. b\nC. c', back: 'B. b\n\nBecause.', page: 3 },
+    { front: 'Q2\n\nA. x\nB. y', back: 'B. y\n\nCorrection: The slide says y.', page: undefined },
+  ]);
 });
