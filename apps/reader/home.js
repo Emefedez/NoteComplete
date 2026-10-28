@@ -5,6 +5,7 @@ import { shrink } from './drive-thumbs.js';
 import { openPdf } from './pdf-background.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
+import { entryTitle, plainTitle } from './library.js';
 export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}), exportStudy = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
@@ -44,8 +45,8 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       cover.alt = '';
       const meta = document.createElement('div'), name = document.createElement('strong'), detail = document.createElement('span');
       meta.className = 'note-meta';
-      name.textContent = entry.name.replace(/\.noteful$/i, '');
-      name.title = entry.name;
+      name.textContent = entryTitle(entry);
+      name.title = entry.title ? `${entry.title}\nFile: ${entry.name}` : entry.name;
       detail.textContent = `${entry.source === 'drive' ? 'Drive' : 'This device'} · opened ${ago(entry.openedAt)}`;
       meta.append(name, detail);
       const hit = Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''));
@@ -58,10 +59,10 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       button.append(cover, meta);
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
-      remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entry.name}`); remove.setAttribute('aria-haspopup', 'menu');
+      remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
-      button.note = { name: entry.name, modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
+      button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
       if (!quick) {
         library.cover(coverKey(entry)).then(async url => {
           if (url) {
@@ -104,7 +105,9 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
   function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', now = current();
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
-    $('forgetTitle').textContent = `Remove “${entry.name.replace(/\.noteful$/i, '')}”`;
+    $('forgetTitle').textContent = entryTitle(entry);
+    $('forgetTitle').title = entry.name;
+    rename(entry);
     $('forgetText').textContent = isDrive
       ? 'Deletes the copy kept on this device and its cover. The file in Google Drive stays as it is.'
       : 'Removes it from Recent. The file on your computer is not deleted.';
@@ -114,7 +117,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
     $('forgetConfirm').value = '';
     $('forgetDriveDelete').disabled = true;
     $('forgetStatus').textContent = changed ? 'This note is open with unsaved changes.' : '';
-    const close = () => { $('forgetDialog').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
+    const close = () => { $('forgetDialog').hidden = true; $('renameRow').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
     const outside = event => { if (!$('forgetDialog').contains(event.target) && event.target !== anchor) close(); };
     const done = async (text) => { await library.forget(entry.key, { deleteFile: isDrive }); close(); status(text); renderRecent(); };
     $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : 'Removed from Recent.');
@@ -148,6 +151,36 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
     menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
     setTimeout(() => document.addEventListener('pointerdown', outside, true));
     $('forgetDanger').ontoggle = () => { if (menu.getBoundingClientRect().bottom > innerHeight - 8) menu.style.top = `${Math.max(8, innerHeight - menu.offsetHeight - 8)}px`; };
+  }
+  // ⋯ → Rename…: only the title Recent shows changes; the file keeps its name.
+  function rename(entry) {
+    const row = $('renameRow'), input = $('renameInput');
+    row.hidden = true;
+    $('renameOpen').setAttribute('aria-expanded', 'false');
+    const save = async (title) => {
+      try {
+        const renamed = await library.rename(entry.key, title);
+        if (!renamed) return;
+        $('forgetDialog').hidden = true; row.hidden = true;
+        status(renamed.title ? `Shown as “${renamed.title}” in Recent. The file is still ${entry.name}.` : `Shown by its file name, ${plainTitle(entry.name)}.`);
+        renderRecent();
+      } catch (error) { status(error.message, true); }
+    };
+    $('renameOpen').onclick = () => {
+      row.hidden = !row.hidden;
+      $('renameOpen').setAttribute('aria-expanded', String(!row.hidden));
+      if (row.hidden) return;
+      input.value = entryTitle(entry);
+      $('renameOriginal').textContent = `File name: ${entry.name}`;
+      $('renameRestore').hidden = !entry.title;
+      input.focus(); input.select();
+    };
+    $('renameSave').onclick = () => save(input.value);
+    $('renameRestore').onclick = () => save('');
+    input.onkeydown = (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); save(input.value); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); row.hidden = true; $('renameOpen').focus(); }
+    };
   }
   async function renderFolder() {
     try { $('libraryFolder').textContent = (await library.location()).label; }

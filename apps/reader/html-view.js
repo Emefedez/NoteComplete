@@ -2,7 +2,8 @@
 // The page runs in a sandboxed iframe with an opaque origin and no network access,
 // so it cannot reach NoteComplete's storage, files or bridges. Pages that keep
 // progress in localStorage/sessionStorage get an in-frame stand-in that this
-// module persists per document on this device.
+// module persists per document on this device. In the dark theme, pages with only a
+// light design are darkened by Dark Reader (vendored, loaded on first use) inside the frame.
 
 export const isHtmlName = (name) => /\.html?$/i.test(name || '');
 const STORE = 'notecomplete-html-state:';
@@ -22,9 +23,22 @@ try{Object.defineProperty(window,'sessionStorage',{configurable:true,enumerable:
 })()</script>`;
 }
 
+// Dark Reader plus a switch the parent flips by message. Pages that are already dark
+// (their own design, or prefers-color-scheme following the app) are left as they are.
+function darkener({ script, on, colors }) {
+  return `<script>${script.replace(/<\/script/gi, '<\\/script')}</script><script>(function(){var want=${Boolean(on)},colors=${JSON.stringify(colors || {}).replace(/</g, '\\u003c')},own=null;
+function bg(e){var m=e&&getComputedStyle(e).backgroundColor.match(/[\\d.]+/g);return m&&(m.length<4||+m[3]>0.5)?m:null}
+function apply(){var D=window.DarkReader;if(!D||document.readyState==='loading')return;
+if(own===null){var c=bg(document.body)||bg(document.documentElement);own=!!c&&(0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255<0.4;try{parent.postMessage({noteCompleteOwnDark:own},'*')}catch(e){}}
+if(want&&!own)D.enable(colors);else if(D.isEnabled())D.disable()}
+document.addEventListener('DOMContentLoaded',apply);
+addEventListener('message',function(e){if(e.source===parent&&e.data&&typeof e.data.noteCompleteDark==='boolean'){want=e.data.noteCompleteDark;apply()}});
+})()</script>`;
+}
+
 // Put the shim before the page's own scripts without altering its content.
-export function prepareHtml(source, seed = {}) {
-  const tag = shim(seed);
+export function prepareHtml(source, seed = {}, dark = null) {
+  const tag = shim(seed) + (dark?.script ? darkener(dark) : '');
   const head = /<head[^>]*>/i.exec(source);
   if (head) return source.slice(0, head.index + head[0].length) + tag + source.slice(head.index + head[0].length);
   const html = /<html[^>]*>/i.exec(source);
@@ -32,8 +46,8 @@ export function prepareHtml(source, seed = {}) {
   return tag + source;
 }
 
-export function htmlViewer({ root, frame, title, reload, clear, status }) {
-  let key = '', source = '', currentTitle = '';
+export function htmlViewer({ root, frame, title, reload, clear, status, darkScript = null, darkColors = () => ({}), onOwnDark = () => {} }) {
+  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0;
   const read = () => {
     try {
       return (typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(STORE + key))) || {};
@@ -53,10 +67,21 @@ export function htmlViewer({ root, frame, title, reload, clear, status }) {
     frame.replaceWith(next);
     return next;
   };
-  const render = () => { frame = fresh(); frame.srcdoc = prepareHtml(source, read()); };
+  const paint = (script) => {
+    frame = fresh();
+    darkInFrame = Boolean(script);
+    frame.srcdoc = prepareHtml(source, read(), script ? { script, on: dark, colors: darkColors() } : null);
+  };
+  const render = () => {
+    const token = ++renders;
+    onOwnDark(null);
+    if (!dark || !darkScript) return paint('');
+    darkScript().then((script) => token === renders && paint(script), () => token === renders && paint(''));
+  };
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('message', (event) => {
       if (root.hidden || event.source !== frame.contentWindow || !key) return;
+      if (typeof event.data?.noteCompleteOwnDark === 'boolean') return onOwnDark(event.data.noteCompleteOwnDark);
       const state = event.data?.noteCompleteHtmlState;
       if (!state || typeof state !== 'object') return;
       try {
@@ -82,9 +107,17 @@ export function htmlViewer({ root, frame, title, reload, clear, status }) {
       root.hidden = false;
       render();
     },
+    // Pages rendered with Dark Reader switch in place; others render again with it.
+    setDark(on) {
+      if (dark === Boolean(on)) return;
+      dark = Boolean(on);
+      if (!source) return;
+      if (darkInFrame) frame.contentWindow?.postMessage({ noteCompleteDark: dark }, '*');
+      else if (dark) render();
+    },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
-    close() { root.hidden = true; frame = fresh(); frame.srcdoc = ''; source = ''; key = ''; currentTitle = ''; },
+    close() { renders++; root.hidden = true; frame = fresh(); frame.srcdoc = ''; darkInFrame = false; source = ''; key = ''; currentTitle = ''; },
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(source); },
     get name() { return currentTitle || title?.textContent || ''; },

@@ -126,3 +126,30 @@ test('htmlViewer renders each document into a new iframe', () => {
   viewer.close();
   assert.equal(made[2].srcdoc, '');
 });
+
+test('prepareHtml adds Dark Reader and its switch only when asked', () => {
+  const src = '<html><head></head><body>Page</body></html>';
+  assert.ok(!prepareHtml(src, {}).includes('noteCompleteDark'));
+  const dark = prepareHtml(src, {}, { script: 'window.DarkReader={x:"</script>"}', on: true, colors: { darkSchemeBackgroundColor: '#15171b' } });
+  assert.ok(dark.includes('window.DarkReader={x:"<\\/script>"}'));
+  assert.match(dark, /var want=true,colors=\{"darkSchemeBackgroundColor":"#15171b"\}/);
+  assert.ok(dark.indexOf('DarkReader') < dark.indexOf('<body>'));
+});
+
+test('htmlViewer loads Dark Reader for dark pages and switches it in place', async () => {
+  const sent = [];
+  const frame = { attributes: {}, setAttribute(k, v) { this.attributes[k] = v; }, srcdoc: '', contentWindow: { postMessage: (m) => sent.push(m) } };
+  let loads = 0;
+  const viewer = htmlViewer({ root: { hidden: true }, frame, darkScript: async () => { loads++; return 'window.DarkReader={}'; } });
+  viewer.open({ text: '<html><head></head><body>Light</body></html>', fingerprint: 'l', name: 'Light' });
+  assert.ok(!frame.srcdoc.includes('DarkReader'));
+  viewer.setDark(true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(loads, 1);
+  assert.ok(frame.srcdoc.includes('var want=true'));
+  viewer.setDark(false);
+  assert.deepEqual(sent, [{ noteCompleteDark: false }]);
+  viewer.setDark(true);
+  assert.deepEqual(sent.at(-1), { noteCompleteDark: true });
+  assert.equal(loads, 1);
+});

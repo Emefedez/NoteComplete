@@ -97,7 +97,7 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status });
+const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status, onChange: () => htmlDarkApply() });
 const chromeState = new ChromeState();
 let chromeSettling = false;
 let panels = [],
@@ -2300,6 +2300,10 @@ async function exportStudyOf(entry) {
 }
 // Recent asks Drive for newer versions before opening a Drive note (versions.js).
 const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
+// Dark HTML pages: in the dark theme, light-only pages are darkened (View → Dark HTML pages).
+const HTML_DARK = "notecomplete-html-dark";
+let htmlDarkOn = true, darkReader = null;
+try { htmlDarkOn = localStorage.getItem(HTML_DARK) !== "off"; } catch { /* Optional. */ }
 const htmlView = htmlViewer({
   root: $("htmlView"),
   frame: $("htmlFrame"),
@@ -2307,7 +2311,33 @@ const htmlView = htmlViewer({
   reload: $("htmlReload"),
   clear: $("htmlClear"),
   status,
+  darkScript: () => (darkReader ||= fetch("vendor/darkreader/darkreader.js").then((r) => {
+    if (!r.ok) throw Error("Dark Reader is missing from this build.");
+    return r.text();
+  }).catch((error) => { darkReader = null; status(error.message, true); throw error; })),
+  darkColors: () => {
+    const css = getComputedStyle(document.documentElement);
+    return { mode: 1, brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: css.getPropertyValue("--canvas").trim() || "#15171b", darkSchemeTextColor: css.getPropertyValue("--ink").trim() || "#e5e8ed" };
+  },
+  onOwnDark: (own) => {
+    $("htmlDark").disabled = own === true;
+    $("htmlDark").title = own ? "This page has its own dark design" : "Darken this page's light design (View → Dark HTML pages)";
+  },
 });
+function htmlDarkApply() {
+  const dark = theme?.theme === "dark";
+  $("htmlDarkToggle").setAttribute("aria-checked", String(htmlDarkOn));
+  $("htmlDark").setAttribute("aria-pressed", String(htmlDarkOn));
+  $("htmlDark").hidden = !dark;
+  htmlView.setDark(dark && htmlDarkOn);
+}
+$("htmlDarkToggle").onclick = $("htmlDark").onclick = () => {
+  htmlDarkOn = !htmlDarkOn;
+  try { localStorage.setItem(HTML_DARK, htmlDarkOn ? "on" : "off"); } catch { /* Optional. */ }
+  htmlDarkApply();
+  status(htmlDarkOn ? "HTML pages are darkened in the dark theme." : "HTML pages keep their own colours.");
+};
+htmlDarkApply();
 var home = homeScreen({
   library,
   drive,

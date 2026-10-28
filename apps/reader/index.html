@@ -87,6 +87,7 @@
           </div>
           <button id="themeToggle" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
           <button id="themeSystem" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
+          <button id="htmlDarkToggle" role="menuitemcheckbox" aria-checked="true" data-palette="Toggle dark HTML pages" title="In the dark theme, darken HTML pages that only have a light design, as the Dark Reader extension does">Dark HTML pages</button>
           <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
           <hr />
@@ -242,7 +243,7 @@
       </footer>
     </section>
     <section id="htmlView" hidden>
-      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
+      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlDark" type="button" aria-pressed="true" hidden>Dark page</button><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
       <iframe id="htmlFrame" title="HTML document"></iframe>
     </section>
     <section id="editor" hidden>
@@ -868,9 +869,15 @@
 
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
-  <p id="forgetText" class="muted"></p>
+  <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>
+  <div id="renameRow" class="note-rename" hidden>
+    <div class="note-rename-field"><label for="renameInput">Name</label><input id="renameInput" type="text" autocomplete="off" spellcheck="false" maxlength="200" /><button id="renameSave" type="button">Rename</button></div>
+    <p id="renameOriginal" class="muted"></p>
+    <button id="renameRestore" type="button" hidden>Use the file name</button>
+  </div>
   <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
+  <p id="forgetText" class="muted"></p>
   <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
   <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
   <details id="forgetDanger" class="danger-zone" hidden>

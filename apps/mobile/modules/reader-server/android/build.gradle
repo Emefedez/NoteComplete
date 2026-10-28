@@ -3,9 +3,9 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 group = 'com.notecomplete'
-version = '1.0.2'
+version = '1.0.3'
 android {
   namespace 'expo.modules.readerserver'
-  defaultConfig { versionCode 3; versionName '1.0.2' }
+  defaultConfig { versionCode 4; versionName '1.0.3' }
 }
 dependencies { implementation 'org.nanohttpd:nanohttpd:2.3.1' }

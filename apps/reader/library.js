@@ -98,6 +98,9 @@ function bridgeFolder(bridge, label) {
   };
 }
 
+// What Recent shows for an entry: the user's title, else the file name without extension.
+export const plainTitle = (name) => String(name || '').replace(/\.(noteful|notepart|notecomp|notecomplete|nfedit)$/i, '');
+export const entryTitle = (entry) => entry?.title || plainTitle(entry?.name);
 export class Library {
   constructor({ store = idbStore(), bridge = globalThis.notecompleteFiles, storage = globalThis.navigator?.storage, picker = globalThis.showDirectoryPicker, md5 = null } = {}) {
     Object.assign(this, { store, bridge, storage, picker, md5 });
@@ -180,15 +183,27 @@ export class Library {
     const taken = (await this.store.values('entries')).some(e => e.filename === filename && e.key !== this.key(file));
     if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${String(file.id).slice(0, 6)})$1`);
     await folder.write(filename, downloaded);
-    const entry = { key: this.key(file), source: 'drive', driveId: file.id, resourceKey: file.resourceKey, name: file.name, mimeType: file.mimeType, modifiedTime: file.modifiedTime, size: String(downloaded.size), md5: file.md5Checksum || null, parent: file.parents?.[0] || null, filename, openedAt: this.now() };
+    const entry = { key: this.key(file), source: 'drive', driveId: file.id, resourceKey: file.resourceKey, name: file.name, mimeType: file.mimeType, modifiedTime: file.modifiedTime, size: String(downloaded.size), md5: file.md5Checksum || null, parent: file.parents?.[0] || null, filename, openedAt: this.now(), ...(previous?.title ? { title: previous.title } : {}) };
     await this.store.set('entries', entry.key, entry);
     return entry;
   }
   // Locally opened files the desktop bridge can reopen by path.
   async rememberLocal(path, name, size) {
-    const entry = { key: 'local:' + path, source: 'local', path, name, size: String(size), openedAt: this.now() };
+    const previous = await this.store.get('entries', 'local:' + path);
+    const entry = { key: 'local:' + path, source: 'local', path, name, size: String(size), openedAt: this.now(), ...(previous?.title ? { title: previous.title } : {}) };
     await this.store.set('entries', entry.key, entry);
     return entry;
+  }
+  // Recent shows `title` when the user renamed the entry; `name` stays the file's own name
+  // (Drive matching, file type, the kept copy). An empty or original title clears it.
+  async rename(key, title) {
+    const entry = await this.store.get('entries', key);
+    if (!entry) return null;
+    const next = String(title || '').trim().slice(0, 200);
+    const { title: _old, ...rest } = entry;
+    const renamed = next && next !== plainTitle(entry.name) ? { ...rest, title: next } : rest;
+    await this.store.set('entries', key, renamed);
+    return renamed;
   }
   async touch(key) {
     const entry = await this.store.get('entries', key);

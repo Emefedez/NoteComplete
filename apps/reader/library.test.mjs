@@ -119,3 +119,23 @@ test('identical duplicates already in Recent are merged into the newest', async 
   assert.deepEqual((await library.recent()).map(e => e.key).sort(), ['drive:bbb222', 'drive:ccc333']);
   assert.equal(dir.files.size, 2);
 });
+
+test('rename changes only the title Recent shows and survives re-downloads and reopening', async () => {
+  const { entryTitle } = await import('./library.js');
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir } });
+  const kept = await library.keep(drive(), new Blob(['a']));
+  assert.equal(entryTitle(kept), 'Memoria 1');
+  const renamed = await library.rename(kept.key, '  Memoria · tema 1  ');
+  assert.equal(renamed.title, 'Memoria · tema 1');
+  assert.equal(renamed.name, 'Memoria 1.noteful');
+  const again = await library.keep(drive({ modifiedTime: 'later' }), new Blob(['b']));
+  assert.equal(again.title, 'Memoria · tema 1');
+  assert.equal(again.name, 'Memoria 1.noteful');
+  assert.ok(dir.files.has('Memoria 1.noteful'));
+  assert.equal((await library.rename(kept.key, 'Memoria 1')).title, undefined);
+  const local = await library.rememberLocal('/tmp/Test.html', 'Test.html', 10);
+  await library.rename(local.key, 'Test PO1');
+  assert.equal((await library.rememberLocal('/tmp/Test.html', 'Test.html', 10)).title, 'Test PO1');
+  assert.equal(entryTitle(await library.rename(local.key, '')), 'Test.html');
+});

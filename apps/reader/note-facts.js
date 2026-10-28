@@ -86,7 +86,7 @@ export function compareNotes(sort = 'name') {
     if (sort === 'oldest') return (a.modified || 0) - (b.modified || 0);
     if (sort === 'largest') return (b.size || 0) - (a.size || 0);
     if (sort === 'smallest') return (a.size || 0) - (b.size || 0);
-    return collator.compare(a.name || '', b.name || '');
+    return collator.compare(a.title || a.name || '', b.title || b.name || '');
   };
 }
 export const PERIODS = { day: ['Today', 864e5], week: ['This week', 7 * 864e5], month: ['This month', 31 * 864e5], year: ['This year', 366 * 864e5] };

@@ -79,6 +79,12 @@ def main():
     for name in ['katex.mjs','katex.min.css']: shutil.copy2(katex/'dist'/name,tex/name)
     shutil.copytree(katex/'dist/fonts',tex/'fonts',ignore=shutil.ignore_patterns('*.ttf','*.woff'))
     shutil.copy2(katex/'LICENSE',tex/'LICENSE')
+    # Dark Reader, inlined into HTML documents in the dark theme, fetched on first use.
+    dr=ROOT/'apps/reader/vendor/darkreader'
+    if dr.exists(): shutil.rmtree(dr)
+    dr.mkdir(parents=True,exist_ok=True)
+    darkreader=ROOT/'apps/reader/node_modules/darkreader'
+    for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
