@@ -53,10 +53,17 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
       await library.store.set('settings', `doc:${fp}`, doc).catch(() => {});
     }
   }
-  let data = null;
+  // Opened from a note: that note's material first, All notes on request; from Home: all.
+  let data = null, scope = 'all';
+  function setScope(next) {
+    scope = next;
+    for (const b of $('allScope').querySelectorAll('[data-scope]')) { const on = b.dataset.scope === scope; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); }
+  }
+  for (const b of $('allScope').querySelectorAll('[data-scope]')) b.onclick = () => { setScope(b.dataset.scope); draw(); };
   function list(kind, groups, filter, current) {
     const nodes = [];
     for (const g of groups) {
+      if (scope === 'note' && g.fp !== current) continue;
       const title = g.doc?.title || 'Unknown document';
       const shown = g.items.filter(item => !filter || title.toLowerCase().includes(filter) || String(item?.title || '').toLowerCase().includes(filter));
       if (!shown.length) continue;
@@ -72,6 +79,7 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
         open.append(name, meta);
         open.disabled = meta.textContent === 'cannot be read' || (g.fp !== current && !g.doc?.entryKey);
         if (g.fp !== current && !g.doc?.entryKey) meta.textContent += ' · open the note once to open it from here';
+        open.title = `${name.textContent}\n${meta.textContent}`;
         open.onclick = async () => {
           try {
             if (g.fp !== current && !(await openEntry(g.doc.entryKey))) return;
@@ -96,6 +104,7 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
       const nodes = list(kind, groupQuizzes(data.stored, data.docs, `${kind}:`), filter, current);
       $(`all-${kind}`).replaceChildren(...nodes);
       $(`all-${kind}-empty`).hidden = nodes.length > 0;
+      $(`all-${kind}-empty`).textContent = scope === 'note' ? 'None for this note.' : kind === 'decks' ? 'None yet: Study → Generate flashcards….' : 'None yet: Study → Quiz me….';
     }
   }
   async function render() {
@@ -114,6 +123,9 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
   return {
     async open() {
       $('allQuizzesFilter').value = '';
+      const inNote = !!currentFingerprint();
+      $('allScope').hidden = !inNote;
+      setScope(inNote ? 'note' : 'all');
       for (const kind of KINDS) $(`all-${kind}`).replaceChildren();
       if (!$('allQuizzesDialog').open) $('allQuizzesDialog').showModal();
       await render().catch(error => { console.warn('Study material could not be listed', error); $('allQuizzesStatus').textContent = `Could not list everything: ${error.message}`; });

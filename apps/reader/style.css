@@ -1919,3 +1919,20 @@ body.bar-compact .tab { height: 22px; }
 .icon-button.dictate.recording::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: rec-pulse 1.4s ease-in-out infinite; }
 .icon-button.dictate.busy { opacity: .55; cursor: progress; }
 @media (prefers-reduced-motion: reduce) { .icon-button.dictate.recording::after { animation: none; } }
+/* Study material rows: columns may shrink; name on one line, details under it, Anki beside. */
+.all-study-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.all-study-columns > section { min-width: 0; }
+.all-study .all-quizzes { overflow-x: hidden; }
+.all-study .all-quizzes li:not(.all-quizzes-doc) { min-width: 0; }
+.all-study .saved-open { flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding-block: 5px; }
+.all-study .saved-open strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.all-study .saved-open span { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.all-study .saved-export { flex: none; align-self: stretch; }
+@media (max-width: 760px) {
+  .all-study-columns { grid-template-columns: minmax(0, 1fr); }
+  .all-study .all-quizzes { max-height: none; overflow: visible; }
+}
+.all-study-head { display: flex; align-items: center; gap: 12px; }
+.all-study-head h2 { margin-right: auto; }
+.all-study-head .segmented button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+.all-study-head .segmented button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }

@@ -2839,7 +2839,8 @@ $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("de
 // Study → All quizzes…: every quiz with its document; another document is opened first.
 const quizIndex = allQuizzes({
   library, status,
-  currentFingerprint: () => (doc ? find.fingerprint : ""),
+  // The note on screen (not one left loaded behind Home).
+  currentFingerprint: () => (doc && !$("editor").hidden ? find.fingerprint : ""),
   openEntry: async (key) => {
     const entry = await library.store.get("entries", key).catch(() => null);
     const file = entry && await library.open(entry).catch(() => null);

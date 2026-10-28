@@ -884,7 +884,7 @@
 </dialog>
 
 <dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study" aria-labelledby="allQuizzesTitle">
-  <h2 id="allQuizzesTitle">Study material</h2>
+  <div class="all-study-head"><h2 id="allQuizzesTitle">Study material</h2><div id="allScope" class="segmented" role="radiogroup" aria-label="Show material from"><button type="button" role="radio" data-scope="note" aria-pressed="true">This note</button><button type="button" role="radio" data-scope="all" aria-pressed="false">All notes</button></div></div>
   <input id="allQuizzesFilter" type="search" placeholder="Filter by name or document" aria-label="Filter quizzes and decks" spellcheck="false" />
   <div class="all-study-columns">
     <section aria-labelledby="allQuizzesHead"><h3 id="allQuizzesHead">Quizzes</h3><ul id="all-quizzes" class="deck-picker all-quizzes"></ul><p id="all-quizzes-empty" class="muted" hidden>None yet: Study → Quiz me….</p></section>
