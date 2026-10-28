@@ -12,7 +12,7 @@ test('only plain note names inside the chosen folder can be read or written', as
   await files.write('Memoria 1.noteful', new Uint8Array([170, 187, 204, 222]));
   assert.deepEqual([...await files.read('Memoria 1.noteful')], [170, 187, 204, 222]);
   assert.deepEqual(await readdir(path.join(root, 'NoteComplete')), ['Memoria 1.noteful'], 'no partial files left');
-  for (const bad of ['../x.noteful', '/etc/passwd', 'a/b.noteful', '.hidden.noteful', 'notes.txt', '', 'x\u0000.pdf'])
+  for (const bad of ['../x.noteful', '/etc/passwd', 'a/b.noteful', '.hidden.noteful', 'notes.exe', '', 'x\u0000.pdf'])
     await assert.rejects(files.write(bad, new Uint8Array([1])), /Invalid file name/, bad);
   await assert.rejects(files.write('a.noteful', 'text'), /Expected file bytes/);
   const elsewhere = path.join(root, 'Apuntes');

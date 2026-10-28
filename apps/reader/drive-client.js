@@ -3,7 +3,7 @@ export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 // Requested only when the user uploads changes back to Drive.
 export const DRIVE_WRITE_SCOPE = 'https://www.googleapis.com/auth/drive';
 export const FOLDER_MIME = 'application/vnd.google-apps.folder';
-export const supportedDriveFile = file => /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['text/html', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
+export const supportedDriveFile = file => /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|txt|md|markdown|pdf|png|jpe?g|webp)$/i.test(file.name || '') || ['text/html', 'text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.mimeType);
 const fields = 'id,name,mimeType,modifiedTime,size,md5Checksum,parents,resourceKey,thumbnailLink,capabilities(canDownload)';
 const quote = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export function folderReference(value) {

@@ -5,6 +5,7 @@ import {
   fileKind,
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
+import { textViewer, isMarkdownName } from "./text-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
@@ -71,7 +72,7 @@ let request = 0,
   dirty = false,
   editing = false,
   doc = null,
-  currentHtmlFp = "",
+  sideFp = "",
   page = 0,
   tool = "pan",
   activeLayer = 0,
@@ -202,11 +203,13 @@ function reset() {
   audio.reset();
   panels = [];
   doc = null;
-  currentHtmlFp = "";
+  sideFp = "";
   htmlView?.close();
+  textView?.close();
   $("pages").replaceChildren();
   $("editor").hidden = true;
   $("htmlView").hidden = true;
+  $("textView").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
@@ -228,19 +231,20 @@ async function load(file, preparedDocument = null) {
   try {
     const fingerprint = noteFingerprint(file).catch(() => "");
     const prepared = preparedDocument || await prepareDocument(file);
-    if (prepared.kind === "html") {
+    // HTML pages and text/Markdown files have their own views instead of the page editor.
+    if (prepared.kind === "html" || prepared.kind === "text") {
       reset();
-      const fp = await fingerprint;
-      currentHtmlFp = fp;
-      const htmlTitle = prepared.title || file.name || "HTML document";
-      $("title").textContent = htmlTitle;
-      document.title = `${htmlTitle} — NoteComplete`;
-      tabBar.update({ title: htmlTitle, dirty: false });
-      htmlView.open({ text: prepared.text, fingerprint: fp, name: htmlTitle });
+      sideFp = await fingerprint;
+      const sideTitle = prepared.title || file.name || "Document";
+      $("title").textContent = sideTitle;
+      document.title = `${sideTitle} — NoteComplete`;
+      tabBar.update({ title: sideTitle, dirty: false });
+      if (prepared.kind === "html") htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle });
+      else await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name) });
       showDocument();
       rememberDocument();
       documentControls();
-      status("HTML document opened.");
+      status(prepared.kind === "html" ? "HTML document opened." : "Text document opened.");
       return;
     }
     const result = await call("open", {
@@ -2284,10 +2288,10 @@ async function openFromLibrary(file, entry) {
 }
 // Which file a fingerprint belongs to, for All quizzes (`doc:<fingerprint>`).
 async function rememberDocument(entryKey = "") {
-  const fp = (doc && find.fingerprint) || (htmlView?.visible && currentHtmlFp);
+  const fp = (doc && find.fingerprint) || (sideView() && sideFp);
   if (!fp) return;
   const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
-  await library.store.set("settings", `doc:${fp}`, { title: doc?.title || htmlView?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
+  await library.store.set("settings", `doc:${fp}`, { title: doc?.title || sideView()?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
 }
 // ⋯ on a Recent note: its decks and quizzes to Anki, without opening it.
 async function exportStudyOf(entry) {
@@ -2328,6 +2332,9 @@ function htmlDarkApply() {
 }
 $("htmlDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 var htmlViewReady = true;
+const textView = textViewer({ root: $("textView"), body: $("textBody"), title: $("textTitle"), format: $("textMarkdown"), toHtml: (value) => call("markdownHtml", { text: value }) });
+// The open HTML or text document, when one is open instead of a note.
+function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : null; }
 htmlDarkApply();
 var home = homeScreen({
   library,
@@ -2364,22 +2371,24 @@ async function openLocal() {
 }
 function showDocument() {
   home.hide();
-  if (htmlView?.hasDocument) {
+  const side = sideView();
+  if (side) {
     $("editor").hidden = true;
-    htmlView.show();
+    side.show();
   } else {
     $("htmlView").hidden = true;
+    $("textView").hidden = true;
     $("editor").hidden = false;
     if (panels[page]) resize();
   }
 }
 function showHome() {
   if (!$("editor").hidden && doc) $("editor").hidden = true;
-  if (htmlView?.visible) htmlView.hide();
-  home.show(Boolean(doc || htmlView?.hasDocument));
+  sideView()?.hide();
+  home.show(Boolean(doc || sideView()));
 }
 $("homeButton").onclick = showHome;
-$("homeBack").onclick = () => (doc || htmlView?.hasDocument) && showDocument();
+$("homeBack").onclick = () => (doc || sideView()) && showDocument();
 $("driveOpen").onclick = () => {
   showHome();
   $("driveSection").scrollIntoView({ behavior: "smooth", block: "start" });

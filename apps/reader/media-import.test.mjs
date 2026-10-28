@@ -14,3 +14,15 @@ test('imported images preserve aspect ratio, fit the page and never upscale',()=
  assert.deepEqual(imageBounds([1200,600],[600,800]),[60,280,480,240]);
  assert.deepEqual(imageBounds([100,50],[600,800]),[250,375,100,50]);
 });
+
+test('text and Markdown files open as text documents', async () => {
+  const { fileKind, prepareDocument } = await import('./media-import.js');
+  const enc = (s) => new TextEncoder().encode(s);
+  assert.equal(fileKind('notes.txt', enc('hello')), 'text');
+  assert.equal(fileKind('tema.md', enc('# Tema')), 'text');
+  assert.equal(fileKind('tema.MARKDOWN', enc('{"looks":"like json"}')), 'text');
+  const doc = await prepareDocument(new File(['# Tema 1\n$E=mc^2$'], 'Tema 1.md'));
+  assert.equal(doc.kind, 'text');
+  assert.equal(doc.title, 'Tema 1');
+  assert.equal(doc.text, '# Tema 1\n$E=mc^2$');
+});

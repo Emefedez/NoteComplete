@@ -60,6 +60,7 @@ export async function noteFacts(read, size) {
 export const TYPES = {
   pdf: ['PDF', /\.pdf$/i],
   html: ['HTML', /\.html?$/i],
+  text: ['Text', /\.(txt|md|markdown)$/i],
   image: ['Image', /\.(png|jpe?g|webp)$/i],
   noteful: ['Noteful', /\.noteful$/i],
   notepart: ['NotePart', /\.notepart$/i],

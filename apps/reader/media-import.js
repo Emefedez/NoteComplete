@@ -25,6 +25,7 @@ export function fileKind(name, bytes) {
     return "image";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
+  if (/\.(txt|md|markdown)$/i.test(name)) return "text";
   const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
   if (!/\.[a-z0-9]+$/i.test(name) && (head.startsWith("<!doctype html") || head.startsWith("<html")))
     return "html";
@@ -36,7 +37,7 @@ export function fileKind(name, bytes) {
   )
     return "project";
   throw Error(
-    "Choose a Noteful note, NoteComplete project, PDF, HTML page, PNG, JPEG or WebP image.",
+    "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, PNG, JPEG or WebP image.",
   );
 }
 
@@ -114,7 +115,7 @@ export async function prepareDocument(file) {
       },
     };
   }
-  if (kind === "html") {
+  if (kind === "html" || kind === "text") {
     const text = new TextDecoder().decode(bytes);
     return { kind, title, text, bytes };
   }

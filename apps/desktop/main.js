@@ -221,7 +221,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
   ipcMain.handle('files:remove', guarded((_event, name) => files.remove(name)));
   ipcMain.handle('files:open', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, HTML pages, PDFs and images', extensions: ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'txt', 'md', 'markdown', 'pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
     if (chosen.canceled) return null;
     const file = chosen.filePaths[0];
     await files.remember(file);

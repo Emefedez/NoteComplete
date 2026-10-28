@@ -300,6 +300,15 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
         await library.saveCover(key, url);
         return;
       }
+      // Text and Markdown: the first lines, drawn like a page.
+      if (/\.(txt|md|markdown)$/i.test(file.name)) {
+        const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+        const lines = (await file.slice(0, 4000).text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 14);
+        const rows = lines.map((l, i) => `<text x="22" y="${34 + i * 15}" font-size="${i === 0 ? 13 : 10}" font-weight="${i === 0 ? 700 : 400}" fill="${i === 0 ? '#1d2433' : '#5b6478'}">${esc(l.replace(/^#+\s*/, '').slice(0, 44))}</text>`).join('');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320"><rect width="240" height="320" fill="#ffffff"/><g font-family="system-ui, sans-serif">${rows}</g></svg>`;
+        await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+        return;
+      }
       if (/\.noteful$/i.test(file.name)) {
         const cover = await noteCover(blobReader(file), file.size);
         if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
