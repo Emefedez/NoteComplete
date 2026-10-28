@@ -68,7 +68,9 @@ Tool windows that sit over the work (assistant, audio, quiz, practice, inspector
 - drag by the head; resize from every edge and corner (a small mark on the bottom-right corner);
 - always clamped inside the work area, so the head and × stay reachable after any drag, resize or window resize; a narrow head squeezes its selects and titles, never its buttons;
 - head buttons `_ □ ×`: `_` puts the window in the **tray** (a pill with a caret at the bottom left listing put-away windows; choosing one brings it back in place), `□` toggles small (head only) / large, `×` closes; closing also removes it from the tray;
-- place and size remembered per window; modal dialogs stay modal and fixed.
+- place and size remembered per window; modal dialogs stay modal and fixed;
+- `□` collapses under the head: same width, head stays put (place windows by left/top, not bottom); expanding restores the exact size;
+- stacking like a desktop: the window pressed last is in front, a window that opens comes in front; a focus mode that dims the background lifts the whole stack above its veil without reordering it.
 
 Optional focus mode: a sun toggle in a study/focus window's head dims everything behind it (remembered; lifted when the window is small, put away or closed).
 

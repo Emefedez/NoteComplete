@@ -1157,9 +1157,8 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .quiz-panel-head #quizPanelProgress { margin-right: auto; font-size: 12px; }
 .quiz-panel-head button { width: 28px; padding: 0; }
 .quiz-mini { display: none; }
-.quiz-panel.minimized { width: auto; }
 .quiz-panel.minimized .quiz-panel-body, .quiz-panel.minimized #quizPanelProgress { display: none; }
-.quiz-panel.minimized .quiz-mini { display: inline-flex; width: auto; padding: 2px 10px; font-size: 12px; }
+.quiz-panel.minimized .quiz-mini { display: inline-flex; width: auto; margin-right: auto; padding: 2px 10px; font-size: 12px; }
 .quiz-panel.minimized .quiz-panel-head { border: 0; }
 .quiz-panel-body { padding: 12px 14px; overflow: auto; }
 .quiz-question { font-size: 15px; font-weight: 600; line-height: 1.45; margin-bottom: 10px; }
@@ -1295,7 +1294,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .window-away svg, .window-size svg { width: 14px; height: 14px; }
 .chat-panel.compact, .audio-panel.compact { height: auto !important; }
 .chat-panel.compact > :not(.chat-head, .panel-grip), .audio-panel.compact > .panel-body { display: none !important; }
-.quiz-panel.minimized { height: auto !important; width: auto !important; }
+.quiz-panel.minimized { height: auto !important; }
 .deck-dialog.floating.minimized { height: auto !important; }
 /* The floating practice scrolls inside, so its edge grips never add scrollbars. */
 .deck-dialog.floating[open] { display: flex; flex-direction: column; overflow: visible; }
@@ -1384,7 +1383,7 @@ body.bar-compact .job-ready { min-height: 22px; padding: 0 8px; font-size: 11px;
 .deck-float-only { display: none; }
 /* Focus dimming behind the quiz and flashcard windows (the sun in their heads). */
 body.focus-dim::after { content: ""; position: fixed; inset: 0; z-index: 50; background: #0b0d11b3; pointer-events: none; animation: dim-in .2s ease; }
-body.focus-dim .quiz-panel, body.focus-dim .deck-dialog.floating, body.focus-dim .chat-panel { z-index: 60; }
+body.focus-dim { --window-z: 60; }
 .chat-messages .chat-from { align-self: stretch; max-width: none; background: var(--fill); color: var(--muted); font-size: 12px; }
 @keyframes dim-in { from { opacity: 0; } }
 .dim-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }

@@ -43,6 +43,17 @@ export function resizeRect(start, dx, dy, edges, min, area) {
   return { left, top, width, height };
 }
 
+// Stacking: the window used last is in front. Layers start at --window-z, which the
+// focus dimming raises above its veil, so the order is the same with or without it.
+const stack = [];
+function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(var(--window-z, 26) + ${i})`; }); }
+function raise(el) {
+  if (stack.at(-1) === el) return;
+  stack.splice(stack.indexOf(el), 1);
+  stack.push(el);
+  restack();
+}
+
 // The tray: one button with a caret listing the windows put away; choosing one brings it back.
 let trayEl = null;
 const trayed = new Map(); // element -> { label, restore }
@@ -99,11 +110,20 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   const saved = () => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
   const visible = () => enabled() && !el.hidden && (el.tagName !== 'DIALOG' || el.open) && !el.classList.contains('in-tray');
   // Put back where it was left, inside the current area.
+  // Placed by left/top from the start (not bottom), so □ collapses it under its head
+  // instead of moving the head; width never changes with □.
   function place() {
     if (!visible()) return;
     const s = saved();
     if (s) apply(s);
-    else if (el.style.left) apply(current());
+    else if (!isCompact()) {
+      // Position and width; the height too for windows stretched between two edges
+      // (Ask AI, audio). Others keep following their content until resized by hand.
+      const style = getComputedStyle(el), stretched = style.top !== 'auto' && style.bottom !== 'auto';
+      const c = clampRect(current(), area(), min);
+      Object.assign(el.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
+      if (stretched) el.style.height = `${c.height}px`;
+    }
   }
 
   // Content that scrolls goes in an inner body, so the grips stay on the frame.
@@ -145,6 +165,10 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     renderTray();
   }
 
+  stack.push(el);
+  restack();
+  el.addEventListener('pointerdown', () => raise(el), true);
+
   // Drag by the head (not its controls).
   head.addEventListener('pointerdown', down => {
     if (!enabled() || down.button !== 0 || down.target.closest('button, input, select, textarea, a, [contenteditable="true"]')) return;
@@ -178,11 +202,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   let wasShown = visible(), wasCompact = isCompact();
   new MutationObserver(() => {
     const closed = el.hidden || (el.tagName === 'DIALOG' && !el.open) || !enabled();
-    if (closed) {
-      if (trayed.delete(el)) renderTray();
-      if (el.classList.contains('in-tray')) el.classList.remove('in-tray');
-    }
+    if (closed && el.classList.contains('in-tray')) el.classList.remove('in-tray');
+    // Closed, or brought back by the app itself: off the tray.
+    if ((closed || !el.classList.contains('in-tray')) && trayed.delete(el)) renderTray();
     const shown = visible(), small = isCompact();
+    if (shown && !wasShown) raise(el);
     if (shown && (!wasShown || (wasCompact && !small))) place();
     if (small !== wasCompact) sizeIcon();
     wasShown = shown; wasCompact = small;
