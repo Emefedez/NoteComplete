@@ -1,7 +1,8 @@
 // The tab strip in the top bar (desktop app): one tab per open note in this
 // window, + for a new tab, × to close, drag to reorder, the wheel scrolls it
 // sideways, and a tab dragged out of the strip opens in a window of its own.
-// With a single tab the bar shows the note title as before.
+// A single tab is shown as a tab too: the bar never switches to a centred title.
+// (Without the desktop bridge there are no tabs and #title stays.)
 import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
@@ -12,9 +13,9 @@ export function tabStrip(bridge, { dirty }) {
   let tabs = [];
   function render(list) {
     tabs = list;
-    document.body.classList.toggle('has-tabs', tabs.length > 1);
+    document.body.classList.toggle('has-tabs', tabs.length > 0);
     strip.hidden = false;
-    const items = tabs.length > 1 ? tabs.map(tab => {
+    const items = tabs.length > 0 ? tabs.map(tab => {
       const el = document.createElement('div');
       el.className = 'tab' + (tab.current ? ' current' : '') + (tab.dirty ? ' dirty' : '');
       el.setAttribute('role', 'tab');

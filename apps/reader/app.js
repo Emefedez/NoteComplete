@@ -880,8 +880,11 @@ function resize() {
   const fit = zoom === "fit",
     pages = $("pages"),
     styles = getComputedStyle(pages);
-  const gutter =
-    parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+  // Free position pads the sides by half a window so pages can move anywhere; Fit uses the
+  // normal margin (the top padding) instead, or the pages would fit into almost nothing.
+  const gutter = pages.dataset.align === "free"
+    ? 2 * parseFloat(styles.paddingTop)
+    : parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
   const space = Math.max(1, $("viewport").clientWidth - gutter);
   const reraster = [];
   for (const p of panels) {
@@ -2215,6 +2218,7 @@ function setPageAlign(align) {
   // Keep the current page where it is on screen while the layout changes.
   const sheet = panels[page]?.el, before = sheet?.getBoundingClientRect().left;
   $("pages").dataset.align = align;
+  if (zoom === "fit") resize();
   if (sheet && before !== undefined) $("viewport").scrollLeft += sheet.getBoundingClientRect().left - before;
   for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === align));
   $("pageAlignFree").setAttribute("aria-pressed", String(align === "free"));

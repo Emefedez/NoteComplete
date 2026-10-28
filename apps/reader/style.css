@@ -1738,8 +1738,8 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .page-resize-label { position: absolute; right: 16px; top: 8px; display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 10px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: auto; box-shadow: 0 2px 8px #0003; }
 .page-resize-label button { min-height: 22px; padding: 0 10px; border: 0; border-radius: 6px; background: #fff; color: var(--accent); font-weight: 600; }
 
-/* Tabs (desktop): with several notes open the title area becomes a tab strip
-   that scrolls sideways; with one, a + beside the title opens another. */
+/* Tabs (desktop): the title area is a tab strip that scrolls sideways, also with a
+   single tab; the centred #title is only for the web reader, which has no tabs. */
 .tab-strip { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
 .tab-strip::-webkit-scrollbar { display: none; }
 .tab-strip[hidden] { display: none; }
@@ -1757,9 +1757,7 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 body.has-tabs #title { display: none; }
 body.bar-compact .tab { height: 22px; }
 @media (min-width: 901px) {
-  /* One tab: the + hangs after the disk so the title stays centred. */
-  body:not(.has-tabs) header.command-bar .brand .tab-strip { position: absolute; left: calc(100% + 28px); top: 50%; transform: translateY(-50%); }
-  /* Several: the strip takes the room between the menus and the buttons. */
+  /* The strip takes the room between the menus and the buttons. */
   body.has-tabs header.command-bar .brand { position: static; transform: none; flex: 1 1 auto; max-width: none; min-width: 0; margin: 0 8px; justify-content: flex-start; gap: 4px; pointer-events: auto; }
   body.has-tabs header.command-bar .brand .save-state { position: static; transform: none; order: 2; }
   body.has-tabs header.command-bar #jobArea { margin-left: 0; }
