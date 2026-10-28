@@ -214,6 +214,7 @@ dialog.sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
 .window-head > :is(button, a) { flex: none; cursor: pointer; }
 .window-head > :is(select, input, h2, strong, span) { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .in-tray { display: none !important; }
+.screen-window { position: fixed !important; } /* free on the screen below the top bar */
 .compact { height: auto !important; }
 .compact > :not(.panel-head, .window-head, .panel-grip) { display: none !important; }
 /* The tray: put-away windows behind one pill with a caret, opening upwards. */

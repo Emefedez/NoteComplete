@@ -76,10 +76,13 @@ function renderTray() {
   if (!trayed.size) el.show(false);
 }
 
-export function floatingWindow(el, { key, head, close, label, compact = null, enabled = () => true, minWidth = 280, minHeight = 200, scroll = false, buttonClass = '' }) {
+// Windows are free on the whole screen below the top bar (`screen`), over the toolbars
+// and side panels. They start where their CSS places them in the work area.
+export function floatingWindow(el, { key, head, close, label, compact = null, enabled = () => true, minWidth = 280, minHeight = 200, scroll = false, buttonClass = '', screen = null }) {
+  key = `${key}:screen`;
   const fixed = () => getComputedStyle(el).position === 'fixed';
   const area = () => {
-    if (fixed()) return { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    if (fixed()) return screen?.() || { left: 0, top: 0, width: innerWidth, height: innerHeight };
     const r = (el.offsetParent || document.body).getBoundingClientRect();
     return { left: r.left, top: r.top, width: r.width, height: r.height };
   };
@@ -92,7 +95,9 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   }
   function apply(rect, save = false) {
     const a = area(), c = clampRect(rect, a, isCompact() ? { width: min.width, height: 0 } : min);
-    Object.assign(el.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
+    // Fixed windows are placed on the screen; the area may start below the top bar.
+    const off = fixed() ? a : { left: 0, top: 0 };
+    Object.assign(el.style, { left: `${off.left + c.left}px`, top: `${off.top + c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
     if (!isCompact()) el.style.height = `${c.height}px`;
     if (save) {
       const keep = { left: c.left, top: c.top, width: c.width, height: isCompact() ? saved()?.height ?? c.height : c.height };
@@ -107,6 +112,17 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   function place() {
     if (!visible()) return;
     const s = saved();
+    // First shown: placed by its CSS in the work area, then free on the whole screen.
+    if (!el.classList.contains('screen-window')) {
+      const r = el.getBoundingClientRect(), stretched = getComputedStyle(el).bottom !== 'auto' && getComputedStyle(el).top !== 'auto';
+      el.classList.add('screen-window');
+      if (!s) {
+        const a = area();
+        apply({ left: r.left - a.left, top: r.top - a.top, width: r.width, height: r.height });
+        if (!stretched && !isCompact()) el.style.height = '';
+        return;
+      }
+    }
     if (s) apply(s);
     else if (!isCompact()) {
       // Position and width; the height too for windows stretched between two edges

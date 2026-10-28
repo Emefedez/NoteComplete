@@ -67,7 +67,7 @@ Top bar (menubar · title/tabs · jobs · assistant · command search) → toolb
 
 Tool windows that sit over the work (assistant, audio, quiz, practice, inspectors that float) use `templates/floating.js`:
 - drag by the head; resize from every edge and corner (a small mark on the bottom-right corner);
-- always clamped inside the work area, so the head and × stay reachable after any drag, resize or window resize; a narrow head squeezes its selects and titles, never its buttons;
+- free on the whole screen below the top bar (over toolbars, docks and side panels), starting where their CSS puts them; always clamped there, so the head and × stay reachable after any drag, resize or window resize, and the top bar's menus stay above them; a narrow head squeezes its selects and titles, never its buttons;
 - head buttons `_ □ ×`: `_` puts the window in the **tray** (a pill with a caret at the bottom left listing put-away windows; choosing one brings it back in place), `□` toggles small (head only) / large, `×` closes; closing also removes it from the tray;
 - place and size remembered per window; modal dialogs stay modal and fixed;
 - `□` collapses under the head: same width, head stays put (place windows by left/top, not bottom); expanding restores the exact size;
