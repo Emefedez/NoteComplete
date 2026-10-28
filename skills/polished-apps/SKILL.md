@@ -22,7 +22,7 @@ Target: lightweight, feature-rich, wide and calm, fast to render. One set of dec
 | Command palette | `templates/command-palette.js` |
 | Drag to reorder / drag out | `templates/reorder.js` |
 | Floating windows (drag, resize, _ □ ×, tray) | `templates/floating.js` |
-| Export rows, one download path, focus dimming | `references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js` |
+| Export rows, one download path, recording/importing media, focus dimming | `references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js` |
 | Electron shell (windows, tabs, guarded IPC, no flash) | `templates/electron/` |
 | Screenshots of every state, light + dark | `scripts/cdp-gallery.mjs` |
 
@@ -80,6 +80,7 @@ Optional focus mode (`templates/focus-dim.js`, details in `references/export-and
 - **Two zooms**: Ctrl + / − / 0 zoom the document; Ctrl Shift + / − / 0 scale the whole interface (all tabs and windows, remembered). Shells without built-in zoom (Electron `BaseWindow`) need it implemented with `setZoomFactor`. Match keys by `key` *and* `code`: Shift changes the key on every layout (US Shift+0 = `)`, Spanish Shift+0 = `=`, Spanish Shift++ = `*`).
 - **Export rows** in File (`templates/export-row.js`, details in `references/export-and-focus.md`): one row per *what* (`Export`, `Pages as`, `Selection as`), a label left and 2–4 small filled buttons right with short format names (`SVG · PDF · IMG▾`); full names in `title` and the command palette. A family of formats gets a caret button that opens an indented list under the row with a one-word hint each (JPEG small · WebP smallest · PNG lossless). Disabled together until there's a document. Single items download at once with name and size reported; multi-page exports ask which pages (current, range, list, all) and run as background jobs with Stop; assembly (PDF binding, archives) happens in the core.
 - **One download path**: every exporter calls `download(data, name, type)`: browser download, desktop write into a remembered **Downloads folder…** (File) through a guarded IPC, or the share sheet on mobile.
+- **Media comes in where it plays** (details in `references/export-and-focus.md`): the audio/video panel's button is always there with a document open; an empty panel shows only **Record** and **Import…**. While recording, a row with dot, time, Pause and Stop replaces them, and the panel's toolbar button turns accent with a pulsing dot, even with the panel closed. Takes are kept with the document and packed into its file by the core.
 - **Previews open large**: any thumbnail, crop or hint image opens fitted to the window on click/Enter; Esc or a click closes.
 
 ## Interaction

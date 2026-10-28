@@ -13,8 +13,9 @@ To try in the real app or service (`[!]`):
 - Desktop: Copy text from Grab, Recent with several windows open.
 - Interface size (Ctrl+Shift+− / + / 0), floating windows (drag, resize, _ □ ×, tray).
 - Recent's newer-version check, the side-by-side comparison and carrying study material to a new version (fake Drive only).
+- Recording in the desktop app (microphone permission) and with a real microphone; the Type filter on a real Drive.
 
-Planned, not started (`[ ]`): three file formats (.noteful / .ntpartial / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
+Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
 ## Study: quizzes and flashcards
 - [D] Generated in the background with real progress: a bar chip shows the phase, elapsed time and continuous progress, with Stop. *Browser test with a fake AI bridge.*
@@ -180,13 +181,20 @@ Planned, not started (`[ ]`): three file formats (.noteful / .ntpartial / .notec
 - [D] **README updated**: export, Drive versions and comparison, study windows (Ask AI on cards, saved explanations, dimming), floating windows, interface size, and a Roadmap section with the planned formats, repositories and infinite canvas.
 - [!] **Taking a new version offers to bring the study material**: flashcard decks (with saved explanations), quizzes and Markdown notes are stored per version, so the app asks which to copy to the new one (the old version keeps its own). *Browser test: the deck arrived on the new version.*
 
+## Thirteenth round
+- [!] **Record or import audio into any note** from the audio panel. The headphones button is always there with a note open; a note without audio shows only **Record** and **Import…**. Record (Shift R) uses the microphone, with Pause/Resume and Stop; while recording, the headphones button lights up in the accent with a pulsing dot, also with the panel closed or put away. Stop keeps the recording in the note and selects it; Import adds an audio file (up to 500 MB). Added recordings are kept per note on this device, can be transcribed like the note's own, are removed with **Remove** (press twice), and are offered with the study material when taking a newer version. Opening another note stops and keeps a recording in progress. *Browser test with a fake microphone (dark): empty panel, record, button lit with the panel closed, pause holds the clock, stop keeps it (WebM, 44 KB) and it plays with a duration and seek bar, import of a WAV, remove needs two presses, still there after reloading. Not yet tried in the desktop app with a real microphone.*
+- [D] **.notecomp files carry added recordings**: the core writes them to `audio/` with their names in the manifest, and opening the file brings them back into the note. *Core test; browser test: exported with two recordings (audio/1.webm, audio/2.wav), opened in a fresh profile with both, playing.*
+- [D] Browser recordings (WebM) have no duration: the player now finds it before playing, so the seek bar works and the time no longer reads "Infinity:NaN".
+- [!] **Type filter on Home**: PDF · Noteful · NotePart · NoteComp, in any combination, over Recent and Drive; folders are never hidden. `.notecomp` and `.notecomplete` count as NoteComp. Drive now lists and opens `.notepart`, `.notecomp` and `.notecomplete`, and the file pickers and the desktop downloads folder accept them; `.notepart` opens like today's archives. *Unit test only, as agreed.*
+- [D] **Skill**: export rows, the single download path and focus dimming in full (`references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js`), plus recording into a document.
+
 ## Future: file formats and repositories (agreed, not started)
 
 Owner's idea (2026-10-28), with corrections and additions agreed in review.
 
 - [ ] **Three formats, chosen when saving.** The first Save or Export asks which one and remembers it (NoteComplete by default); Save as… switches. Not asked on every new file.
   - **Noteful (.noteful)**: maximum compatibility with the official app. Markdown and study material stay outside (or are lost), and the app says so.
-  - **NotePartial (.ntpartial)**: today's archive renamed: the original .noteful plus the Markdown notes. The bridge for people who still open the notebook in Noteful.
+  - **NotePartial (.notepart)**: today's archive renamed: the original .noteful plus the Markdown notes. The bridge for people who still open the notebook in Noteful.
   - **NoteComplete (.notecomp, also opens .notecomplete), recommended**: a clean open format, easy to extract and to read with other tools. `.notecomp` is the default extension when saving; `.notecomplete` is accepted everywhere as the same format.
 - [ ] **Keep opening what exists.** Today's .notecomp and .notecomplete archives (tar: the note plus its Markdown) keep opening forever. Since the new format reuses those extensions, files are recognized by content, not extension: a tar archive is read as NotePartial, a ZIP package as NoteComplete. Nothing a user saved stops opening.
 - [ ] **NoteComplete as an open, documented package.** A ZIP (not tar: every system opens ZIP and single files can be read without unpacking the rest, like .docx/.epub) holding:
@@ -205,7 +213,7 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
   - downloaded files cached and reused like Drive copies.
 - [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
 - [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
-- [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way.
+- [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way. Every source lists .pdf, .noteful, .notepart, .notecomp and .notecomplete, with the same filters (Type included) and folders kept browsable.
 
 ## Home filters
 - [D] Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.

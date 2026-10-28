@@ -1,6 +1,6 @@
-# Export rows, downloads and focus dimming
+# Export rows, downloads, recording and focus dimming
 
-Two small patterns that make an app feel finished: getting things out (export rows in a menu, a single download path) and staying on one thing (a window that can dim everything behind it). Code: `templates/export-row.js`, `templates/focus-dim.js`; styles in `templates/components.css` (`.menu-row`, `.menu-sub`, `body.focus-dim`).
+Small patterns that make an app feel finished: getting things out (export rows in a menu, a single download path), bringing media in (record or import from the panel that plays it) and staying on one thing (a window that can dim everything behind it). Code: `templates/export-row.js`, `templates/focus-dim.js`; styles in `templates/components.css` (`.menu-row`, `.menu-sub`, `body.focus-dim`).
 
 ## Export rows
 
@@ -42,6 +42,18 @@ All exports call one `download(data, name, type)`, which picks the right way out
 | Mobile WebView | hand the bytes to the native side (base64 message with an id, answered when done), which opens the system share sheet |
 
 Downloaded sources the app keeps (synced files, imports) go to the same folder and are matched by content checksum, so nothing is downloaded or listed twice.
+
+## Recording and importing media
+
+The panel that plays a kind of media is also where it comes in: the audio panel records and imports audio, a video panel would capture and import clips. No separate "Import audio" dialog buried in File.
+
+- **The panel's button is always there** while a document is open, even when it has no media yet. Opening it on an empty document shows only the ways in (**Record**, **Import…**) and one line saying there's nothing yet; transport, seek bar and transcript appear once there is something to play.
+- **Record** (with a shortcut) turns the source row into a recording row: pulsing dot, elapsed time in tabular figures, **Pause/Resume**, **Stop** (primary). Stop keeps the take, names it by date ("Recording · 28 Oct 2026, 14:03"), adds it to the list and selects it. Nothing to confirm; removing is the step that asks (soft red "Press again to remove").
+- **Show that it's recording everywhere**: the panel's toolbar button turns accent with a small pulsing dot while recording, also when the panel is closed or put away, and its tooltip carries the time. Closing the panel never stops a take; switching documents stops it and keeps it in the document it started in.
+- **Import** takes the formats the engine can play (`accept` with MIME types and extensions), with a size limit stated in the error.
+- **Added media lives with the document**: kept per document locally, travelling with the study material to newer versions, and packed into the app's own file format by the core (bytes in a folder of the package, names in the manifest), so a shared file brings its recordings. Treat added items like the document's own everywhere else (playback, transcription, search).
+- **Engine details**: record with `MediaRecorder` in the first supported type (`audio/webm;codecs=opus`, then `audio/mp4`); turn off echo cancellation and noise suppression for lectures. WebM from `MediaRecorder` has no duration (`Infinity`): seek to a huge time once on `loadedmetadata` and wait for `durationchange` before enabling the seek bar. Desktop shells must allow the microphone explicitly and only that (Electron: `media` permission with `mediaTypes` all `audio`, from the app's own origin).
+- **Test with a fake device**: Chromium `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream` records a tone headless; check record → lit button with the panel closed → pause holds the clock → stop adds a playable take with a duration → import → remove twice → still there after reload.
 
 ## Focus dimming
 

@@ -19,6 +19,7 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Export row | File → Pages as SVG · PDF · IMG (`page-export.js`; PDF bound in Rust by `crates/noteful-core/src/page_pdf.rs` with pdf-writer) |
 | Two zooms | document zoom in `app.js` (Ctrl + / − / 0); interface size in `apps/desktop/main.js` (`uiZoomStep`, Ctrl Shift + / − / 0, `setZoomFactor`, remembered) |
 | Focus dim | sun toggle in quiz and practice heads (`body.focus-dim`, `syncDim` in `app.js` watching both windows) |
+| Record / import audio | `apps/reader/recorder.js` (MediaRecorder, kept per note as `recordings:<fingerprint>`), `audio.js` `setAdded`, `.notecomp` `audio/` in `crates/noteful-core/src/markdown.rs` |
 | Downloads | `apps/reader/download.js` (browser / Expo share sheet), desktop folder in `apps/desktop/library-files.js` + File → Downloads folder… |
 | Saved AI explanations | `card.explanation` in `study.js` (folded under the answer, editable, reused) |
 | AI review actions | quiz: Clarify C, Dispute X, Double check V; flashcards: Ask AI C (saved explanation, editable), Double check V, Edit E, Discard X |
@@ -56,5 +57,6 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Recent opened an old copy silently | check the source for a newer version first and let the user choose or compare |
 | Power measured as low while the window was on another workspace | hidden windows aren't drawn; measure on screen |
 | Tabs captured their first window in a closure | look up a tab's window at event time |
+| A recorded take showed "Infinity:NaN" and no seek bar | MediaRecorder WebM has no duration: seek far once and wait for `durationchange` |
 | The 70% dim looked like 20% in screenshots | shrunk screenshots look lighter: sample a pixel instead of judging by eye |
 | Ask AI opened from the quiz went under the veil, then over the quiz | windows stack from one `--window-z`; dimming raises the variable, not single windows |

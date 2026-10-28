@@ -27,7 +27,7 @@ A **Notes** panel (<kbd>N</kbd>) sits beside the pages: Markdown that is formatt
 
 ### Your library
 - **Google Drive on Home**: connect read-only, open your Noteful backup folder once and it reopens next time. Notes appear as cards with their real covers, read with a few small requests instead of downloading each notebook, or as a quick list that reads nothing at all.
-- **Filters and sorting**: by date, size, recordings and Noteful tags; natural A–Z order.
+- **Filters and sorting**: by type (PDF, Noteful, NotePart, NoteComp, any mix), date, size, recordings and Noteful tags; natural A–Z order. Folders always stay visible.
 - **Kept on this device**: opened notes are saved to a folder you choose. A note is never downloaded twice: Noteful backups upload unchanged notes again as new files, and NoteComplete recognises them by content.
 - **Newer versions**: opening a Drive note from Recent checks Drive first. If the iPad saved a newer version, choose it, keep your copy, keep both, or **compare** them page by page side by side. Taking the new version offers to bring its flashcards, quizzes and Markdown notes along.
 
@@ -39,7 +39,7 @@ One search (<kbd>Ctrl</kbd>+<kbd>F</kbd>) over typed text, PDF text, transcripts
 <p align="center"><img src="docs/images/find.png" alt="Find with source chips: Text, PDF, OCR and Audio" width="100%"></p>
 
 ### Listen along
-Play recordings with the handwriting appearing as it was written, tap ink to seek, and transcribe with Whisper on the device, Voxtype (local whisper.cpp) or Gemini through Antigravity. Text appears while it is transcribed; your AI tool can then revise it while every word keeps its time. Export as text, SRT, WebVTT or JSON.
+Play recordings with the handwriting appearing as it was written, tap ink to seek, record new ones from the microphone or import audio files into any note (kept with the note and inside `.notecomp` files), and transcribe with Whisper on the device, Voxtype (local whisper.cpp) or Gemini through Antigravity. Text appears while it is transcribed; your AI tool can then revise it while every word keeps its time. Export as text, SRT, WebVTT or JSON.
 
 ### Study with your AI subscription
 Flashcards and quizzes are generated in the background by the AI tool you already use (Claude Code, Antigravity or Codex), from page images (tape lifted, so covered answers are readable) and the page text, covering each page evenly.
@@ -88,7 +88,7 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Roadmap
 
 Planned, not started (details in [docs/REQUESTS.md](docs/REQUESTS.md)):
-- **Three file formats**, chosen on first save: Noteful (`.noteful`, maximum compatibility), NotePartial (`.ntpartial`, today's archive: the note plus its Markdown) and NoteComplete (`.notecomp` by default, `.notecomplete` also accepted; recommended: an open, documented ZIP package with pages, resources, notes and study material). Files saved today keep opening: they are recognised by content.
+- **Three file formats**, chosen on first save: Noteful (`.noteful`, maximum compatibility), NotePartial (`.notepart`, today's archive: the note plus its Markdown) and NoteComplete (`.notecomp` by default, `.notecomplete` also accepted; recommended: an open, documented ZIP package with pages, resources, notes and study material). Files saved today keep opening: they are recognised by content.
 - **Choose which pages to export**: this page, a range, a list or every page, for SVG, PDF and images.
 - **Repositories** as a library source next to Google Drive: GitHub repositories with notes, files and solved exams, browsed from Home.
 - **Infinite canvas** in `.notecomplete`, split into sheets of up to Noteful's maximum page size when saved as `.noteful`.
