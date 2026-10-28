@@ -37,10 +37,11 @@ export async function shrink(blob, width = 320) {
 
 export function driveThumbnails(client, { library = null, resize = shrink, parallel = 4 } = {}) {
   let generation = 0, controller = new AbortController(), active = 0;
-  const queue = [], urls = [];
+  // Covers go first; recordings and tags (for filters) only when no cover is waiting.
+  const queue = [], later = [], urls = [];
   function pump() {
-    while (active < parallel && queue.length) {
-      const job = queue.shift();
+    while (active < parallel && (queue.length || later.length)) {
+      const job = queue.shift() || later.shift();
       active++;
       job().finally(() => { active--; pump(); });
     }
@@ -72,22 +73,23 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
     // it was cancelled or failed (network, quota), so the caller can ask again later.
     get(file) {
       if (file?.mimeType === FOLDER_MIME || !supportedDriveFile(file) || file.capabilities?.canDownload === false) return Promise.resolve('');
-      const token = generation, signal = controller.signal;
-      return new Promise(resolve => {
+      const token = generation, signal = controller.signal, key = library?.coverKey(file);
+      // A cover kept from before shows at once, without waiting behind network reads.
+      return Promise.resolve(key ? library.cover(key) : null).catch(() => null).then(kept => kept || new Promise(resolve => {
         queue.push(async () => {
           if (token !== generation) return resolve(null);
           try { const url = await produce(file, signal); resolve(token === generation ? url : null); }
           catch { resolve(null); }
         });
         pump();
-      });
+      }));
     },
     // Recordings and tags for filtering, cached per file version.
     facts(file) {
       if (!isNote(file) || file.capabilities?.canDownload === false) return Promise.resolve(null);
       const token = generation, signal = controller.signal, key = library?.coverKey(file);
       return new Promise(resolve => {
-        queue.push(async () => {
+        later.push(async () => {
           if (token !== generation) return resolve(null);
           try {
             const kept = key && await library.facts(key);
@@ -104,7 +106,7 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
       generation++;
       controller.abort();
       controller = new AbortController();
-      for (const job of queue.splice(0)) job();
+      for (const job of [...queue.splice(0), ...later.splice(0)]) job();
       for (const url of urls.splice(0)) URL.revokeObjectURL(url);
     },
   };

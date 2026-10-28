@@ -446,12 +446,14 @@ function buildPageList() {
   }
   $("pageList").replaceChildren(fragment);
   thumbnailObserver?.disconnect();
+  thumbQueue.clear();
   thumbnailObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
         const panel = panels.find((candidate) => candidate.pageButton === entry.target);
-        if (panel && !panel.thumbnailReady) renderThumbnail(panel);
+        if (!panel) continue;
+        if (!entry.isIntersecting) thumbQueue.delete(panel);
+        else if (!panel.thumbnailReady) queueThumbnail(panel);
       }
     },
     { root: $("pagesPanel"), rootMargin: "240px 0px" },
@@ -693,6 +695,19 @@ function setTapeMode(mode) {
   tapeTaps.clear();
   for (const p of panels) applyTapes(p);
   status(mode === "revealed" ? "All tape lifted." : mode === "covered" ? "All tape covering." : "Tape as saved in the note.");
+}
+// Thumbnails render one at a time, top first, so each shows as soon as it is ready
+// instead of all of them starting together and finishing together.
+const thumbQueue = new Set();
+let thumbBusy = false;
+function queueThumbnail(panel) { thumbQueue.add(panel); pumpThumbnails(); }
+async function pumpThumbnails() {
+  if (thumbBusy) return;
+  const next = [...thumbQueue].sort((a, b) => a.index - b.index)[0];
+  if (!next) return;
+  thumbQueue.delete(next);
+  thumbBusy = true;
+  try { await renderThumbnail(next); } finally { thumbBusy = false; pumpThumbnails(); }
 }
 async function renderThumbnail(panel) {
   if (panel.thumbnailLoading || panel.thumbnailReady || !doc) return;
