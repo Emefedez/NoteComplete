@@ -13,6 +13,7 @@
   <symbol id="i-search" viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 5 3 11l6 6M3 11h11a6 6 0 0 1 6 6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 5 6 6-6 6m6-6H10a6 6 0 0 0-6 6"/></symbol>
 </svg>
 
@@ -25,7 +26,21 @@
         <button role="menuitem">Open…<kbd>Ctrl O</kbd></button>
         <button role="menuitem">New window<kbd>Ctrl Shift N</kbd></button>
         <hr />
-        <button role="menuitem">Export…<kbd>Ctrl E</kbd></button>
+        <!-- Export rows: label = what, buttons = format (references/export-and-focus.md, templates/export-row.js) -->
+        <div class="menu-row" role="group" aria-label="Export project">
+          <span>Export</span>
+          <button id="exportWav" disabled data-palette="Export as WAV" title="WAV, 32-bit float">WAV</button>
+          <button id="exportCsv" disabled data-palette="Export as CSV" title="CSV: one column per channel">CSV</button>
+        </div>
+        <div class="menu-row" role="group" aria-label="Export view as">
+          <span>View as</span>
+          <button id="exportSvg" disabled data-palette="Export view as SVG" title="The view as SVG (vector)">SVG</button>
+          <button id="exportPdf" disabled data-palette="Export view as PDF" title="The view as PDF (runs in the background)">PDF</button>
+          <button id="exportImage" disabled class="has-caret" aria-haspopup="menu" aria-expanded="false" title="The view as an image: choose the format">IMG<span class="caret"></span></button>
+        </div>
+        <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+        <hr />
+        <button role="menuitem">Downloads folder…</button>
       </div>
     </details>
     <details class="menu"><summary role="menuitem">Edit</summary><div class="menu-content" role="menu"></div></details>

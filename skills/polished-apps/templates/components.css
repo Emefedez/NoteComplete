@@ -225,8 +225,12 @@ dialog.sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
 .window-tray [aria-expanded="true"] .caret { transform: rotate(45deg); }
 
 /* Optional focus dimming behind a study/focus window (a sun toggle in its head). */
-body.focus-dim::after { content: ""; position: fixed; inset: 0; z-index: 50; background: #0b0d11b3; pointer-events: none; }
-body.focus-dim .focus-window { z-index: 60; }
+/* The veil lets clicks through (the work still scrolls); every floating window stacks
+   from --window-z, raised above the veil so the order stays the same (templates/focus-dim.js). */
+body.focus-dim::after { content: ""; position: fixed; inset: 0; z-index: var(--z-veil); background: #0b0d11b3; pointer-events: none; animation: dim-in .2s ease; }
+body.focus-dim { --window-z: var(--z-focus); }
+@keyframes dim-in { from { opacity: 0; } }
+.dim-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
 /* Previews open large: fitted to the window over a dark backdrop; a click or Esc closes. */
 .image-viewer { max-width: none; max-height: none; width: 100vw; height: 100dvh; margin: 0; padding: 24px; border: 0; background: transparent; display: none; place-items: center; cursor: zoom-out; }
@@ -237,6 +241,8 @@ body.focus-dim .focus-window { z-index: 60; }
 /* Menu rows of small format buttons (Export: NF · MD · …; Pages as SVG · PDF · IMG▾). */
 .menu-row { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 12px; }
 .menu-row > span { flex: 1; font-size: 13px; }
-.menu-row button { min-width: 44px; min-height: 26px; padding: 0 8px; background: var(--fill); font-size: 12px; }
+.menu-row button { flex: none; width: auto; min-width: 44px; min-height: 26px; padding: 0 8px; justify-content: center; border: 0; border-radius: var(--radius); background: var(--fill); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.menu-row button:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.menu-row .has-caret { gap: 2px; }
 .menu-sub { display: grid; margin: 0 6px 4px 18px; padding-left: 6px; border-left: 1px solid var(--line); }
 .menu-sub[hidden] { display: none; }

@@ -49,6 +49,8 @@
   --z-popover: 28;     /* selection menus */
   --z-bar: 40;
   --z-drawer: 45;      /* side menus slide over the top bar */
+  --z-veil: 50;        /* focus dimming behind study/review windows */
+  --z-focus: 60;       /* floating windows while dimmed (--window-z) */
   --z-toast: 70;
   --z-context: 80;
   --z-select: 1000;
