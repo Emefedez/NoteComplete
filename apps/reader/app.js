@@ -6,7 +6,8 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, zoomControl } from "./text-view.js";
-import { groupStore, groupPanel, localMember } from "./groups.js";
+import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
+import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
@@ -210,10 +211,12 @@ function reset({ opening = false } = {}) {
   sideFp = "";
   htmlView?.close();
   textView?.close();
+  webView?.close();
   $("pages").replaceChildren();
   $("editor").hidden = true;
   $("htmlView").hidden = true;
   $("textView").hidden = true;
+  $("webView").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
@@ -1722,7 +1725,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -1838,7 +1841,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && sideView()?.visible && ["+", "=", "-", "_", "0"].includes(e.key)) {
     e.preventDefault();
     const dir = e.key === "0" ? 0 : e.key === "-" || e.key === "_" ? -1 : 1;
-    if (textView.visible) textView.zoom(dir); else htmlZoom.step(dir);
+    if (textView.visible) textView.zoom(dir); else if (webView.visible) webZoom.step(dir); else htmlZoom.step(dir);
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -2330,6 +2333,11 @@ async function exportStudyOf(entry) {
 const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
 // Dark pages (moon, D) darken HTML documents too; pages already dark are left alone.
 let darkReader = null;
+// Dark Reader's script, fetched once (vendor/darkreader), for HTML pages and web links.
+const loadDarkReader = () => (darkReader ||= fetch("vendor/darkreader/darkreader.js").then((r) => {
+  if (!r.ok) throw Error("Dark Reader is missing from this build.");
+  return r.text();
+}).catch((error) => { darkReader = null; status(error.message, true); throw error; }));
 const htmlView = htmlViewer({
   root: $("htmlView"),
   frame: $("htmlFrame"),
@@ -2337,23 +2345,32 @@ const htmlView = htmlViewer({
   reload: $("htmlReload"),
   clear: $("htmlClear"),
   status,
-  darkScript: () => (darkReader ||= fetch("vendor/darkreader/darkreader.js").then((r) => {
-    if (!r.ok) throw Error("Dark Reader is missing from this build.");
-    return r.text();
-  }).catch((error) => { darkReader = null; status(error.message, true); throw error; })),
+  darkScript: loadDarkReader,
   // The dark theme's --canvas and --ink, also when the app itself is light.
   darkColors: () => ({ mode: 1, brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: "#15171b", darkSchemeTextColor: "#e5e8ed" }),
   onOwnDark: (own) => {
     $("htmlDark").title = own ? "Dark pages (D): this page already has a dark design, so it is left as it is" : "Dark pages: darken this page (D)";
   },
 });
+// Web links (web-view.js): a page in a sandboxed <webview> on the desktop, the browser elsewhere.
+const webView = webViewer({
+  root: $("webView"), host: $("webHost"), title: $("webTitle"), address: $("webAddress"), back: $("webBack"), reload: $("webReload"),
+  external: $("webExternal"), fallback: $("webFallback"), status,
+  onTitle: (name, url) => {
+    $("title").textContent = name;
+    document.title = `${name} — NoteComplete`;
+    tabBar.update({ title: name, dirty: false });
+    if (url === docMember?.url) library.rememberWeb(docMember.url, name).catch(() => {});
+  },
+});
+$("webFallbackOpen").onclick = () => $("webExternal").click();
 function htmlDarkApply() {
   const on = document.body.classList.contains("pages-dark");
-  $("htmlDark").setAttribute("aria-pressed", String(on));
-  $("textDark").setAttribute("aria-pressed", String(on));
+  for (const id of ["htmlDark", "textDark", "webDark"]) $(id).setAttribute("aria-pressed", String(on));
   htmlView.setDark(on);
+  webView.setDark(on);
 }
-$("htmlDark").onclick = $("textDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
+$("htmlDark").onclick = $("textDark").onclick = $("webDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 var htmlViewReady = true;
 const textView = textViewer({
   root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
@@ -2387,13 +2404,58 @@ async function saveText() {
 }
 $("textSave").onclick = () => saveText();
 // The open HTML or text document, when one is open instead of a note.
-function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : null; }
+function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : webView.hasDocument ? webView : null; }
+const webZoom = zoomControl({ key: "notecomplete-web-zoom", out: $("webZoomOut"), into: $("webZoomIn"), value: $("webZoomValue"), apply: (z) => webView.setZoom(z) });
+// Opens a link as a document: Recent keeps it, its group (if any) is listed beside it.
+async function openWeb(member) {
+  if (busy() || !canReplace()) return;
+  reset({ opening: true });
+  notePath = noteEntryKey = "";
+  $("title").textContent = member.name;
+  document.title = `${member.name} — NoteComplete`;
+  tabBar.update({ title: member.name, dirty: false });
+  webView.open({ url: member.url, name: member.name, darkReader: loadDarkReader });
+  showDocument();
+  documentControls();
+  const entry = await library.rememberWeb(member.url, member.name);
+  const host = linkTitle(member.url).split("/")[0], esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  if (!(await library.cover(entry.key))) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320"><rect width="240" height="320" fill="#ffffff"/><g font-family="system-ui, sans-serif"><text x="22" y="150" font-size="13" font-weight="700" fill="#1d2433">${esc(member.name.slice(0, 30))}</text><text x="22" y="172" font-size="11" fill="#5b6478">${esc(host)}</text></g></svg>`;
+    await library.saveCover(entry.key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`).catch(() => {});
+  }
+  setDocMember(member);
+  status(window.notecompleteFiles ? `Opened ${host}.` : "Web pages open inside the desktop app; here, use Open in browser.");
+}
+$("openLink").onclick = () => {
+  $("linkUrl").value = "";
+  $("linkError").hidden = true;
+  $("linkAdd").disabled = !docMember;
+  $("linkDialog").showModal();
+  $("linkUrl").focus();
+};
+function chosenLink() {
+  const url = normalizeLink($("linkUrl").value);
+  $("linkError").hidden = Boolean(url);
+  return url ? webMember(url, linkTitle(url)) : null;
+}
+$("linkCancel").onclick = () => $("linkDialog").close();
+$("linkOpen").onclick = () => { const m = chosenLink(); if (!m) return; $("linkDialog").close(); openWeb(m).catch((e) => status(e.message, true)); };
+$("linkUrl").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("linkOpen").click(); } };
+$("linkAdd").onclick = async () => {
+  const m = chosenLink();
+  if (!m || !docMember) return;
+  $("linkDialog").close();
+  const g = await groups.add(docMember, [m], docMember.name.replace(/\.[^.]+$/, ""));
+  await groupList.set(docMember);
+  status(`${m.name} added to ${g.name}.`);
+};
 htmlDarkApply();
 var home = homeScreen({
   library,
   drive,
   versions,
   open: openFromLibrary,
+  openLink: (entry) => openWeb(webMember(entry.url, entry.name)),
   status,
   exportStudy: exportStudyOf,
   current: () => ({
@@ -2432,24 +2494,30 @@ const groups = groupStore({ store: library.store });
 const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons() });
 // The sidebar button of HTML and text documents shows or hides the group list, like Pages in notes.
 let sideListOpen = true;
+try { sideListOpen = localStorage.getItem("notecomplete-group-list") !== "hidden"; } catch { /* Optional. */ }
 function syncSideButtons() {
   const grouped = Boolean(groupList.group);
-  for (const id of ["htmlSide", "textSide"]) {
+  for (const id of ["htmlSide", "textSide", "webSide"]) {
     $(id).disabled = !grouped;
     $(id).setAttribute("aria-expanded", String(grouped && sideListOpen));
     $(id).title = !grouped ? "Documents: File → Add documents… groups files to jump between" : sideListOpen ? "Hide the documents in this group" : "Show the documents in this group";
   }
   for (const body of document.querySelectorAll(".side-body")) body.classList.toggle("group-off", !sideListOpen);
 }
-$("htmlSide").onclick = $("textSide").onclick = () => { sideListOpen = !sideListOpen; syncSideButtons(); };
+$("htmlSide").onclick = $("textSide").onclick = $("webSide").onclick = () => {
+  sideListOpen = !sideListOpen;
+  try { localStorage.setItem("notecomplete-group-list", sideListOpen ? "" : "hidden"); } catch { /* Optional. */ }
+  syncSideButtons();
+};
 let docMember = null;
 function setDocMember(member) {
   docMember = member;
-  groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : $("pagesGroupSlot"));
+  groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
   return groupList.set(member);
 }
 async function openMember(member) {
+  if (member.source === "web") return openWeb(member);
   if (busy() || !canReplace()) return;
   if (member.source === "local") {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
@@ -2464,7 +2532,8 @@ async function openMember(member) {
   await openFromLibrary(file, entry);
 }
 if (window.notecompleteFiles?.openFolder) {
-  $("openFolder").hidden = $("addDocuments").hidden = false;
+  $("openFolder").hidden = $("addDocuments").hidden = $("emptyOpenFolder").hidden = false;
+  $("emptyOpenFolder").onclick = () => $("openFolder").click();
   $("openFolder").onclick = async () => {
     try {
       const chosen = await window.notecompleteFiles.openFolder();
@@ -2485,6 +2554,7 @@ function showDocument() {
   } else {
     $("htmlView").hidden = true;
     $("textView").hidden = true;
+    $("webView").hidden = true;
     $("editor").hidden = false;
     if (panels[page]) resize();
   }

@@ -322,7 +322,15 @@ main {
 #htmlView:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #htmlView .html-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
 #htmlView .html-bar .muted { flex: 1; font-size: 12px; }
-#textView:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#textView:not([hidden]), #webView:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#webView .html-bar { display: flex; align-items: center; padding: 4px 10px; }
+#webView .html-bar .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.web-host { flex: 1; min-width: 0; display: flex; background: #fff; }
+.web-host:empty { display: none; }
+.web-frame { flex: 1; width: 100%; height: 100%; border: 0; }
+.web-fallback { flex: 1; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); }
+.web-fallback[hidden] { display: none; }
+.link-error { color: var(--danger); }
 #textView .html-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
 #textView .html-bar .spacer { flex: 1; }
 #textMarkdown[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
@@ -342,8 +350,8 @@ main {
 .side-body > iframe, .side-body > article { flex: 1; min-width: 0; }
 .group-slot { display: contents; }
 .side-body.group-off .group-panel { display: none; }
-#htmlView .html-bar, #textView .html-bar { gap: 6px; }
-#htmlView .html-bar strong, #textView .html-bar strong { margin-left: 4px; }
+#htmlView .html-bar, #textView .html-bar, #webView .html-bar { gap: 6px; }
+#htmlView .html-bar strong, #textView .html-bar strong, #webView .html-bar strong { margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .side-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Dark pages on a text document: the dark theme's colours, also in the light theme. */
 body.pages-dark #textBody { --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff; --line: #3b4048; --surface: #24272c; --chrome: #202328; --fill: #30343b; color: var(--ink); }

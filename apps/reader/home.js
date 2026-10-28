@@ -7,7 +7,7 @@ import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from '
 import { migrator } from './migrate.js';
 import { entryTitle, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
-export function homeScreen({ library, drive, open, status, versions = null, current = () => ({}), exportStudy = null }) {
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -48,13 +48,13 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       meta.className = 'note-meta';
       name.textContent = entryTitle(entry);
       name.title = entry.title ? `${entry.title}\nFile: ${entry.name}` : entry.name;
-      detail.textContent = `${entry.source === 'drive' ? 'Drive' : 'This device'} · opened ${ago(entry.openedAt)}`;
+      detail.textContent = `${entry.source === 'drive' ? 'Drive' : entry.source === 'web' ? 'Web link' : 'This device'} · opened ${ago(entry.openedAt)}`;
       meta.append(name, detail);
-      const hit = Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''));
+      const hit = entry.source === 'web' ? 'Web' : Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''))?.[1][0];
       if (hit) {
         const badge = document.createElement('span');
         badge.className = 'note-badge';
-        badge.textContent = hit[1][0];
+        badge.textContent = hit;
         meta.append(badge);
       }
       button.append(cover, meta);
@@ -84,6 +84,7 @@ export function homeScreen({ library, drive, open, status, versions = null, curr
       }
       button.onclick = async () => {
         try {
+          if (entry.source === 'web') { await library.touch(entry.key); return openLink?.(entry); }
           const file = await library.open(entry);
           if (!file) {
             status(`${entry.name} is no longer in the downloads folder. Open it again from Drive.`, true);

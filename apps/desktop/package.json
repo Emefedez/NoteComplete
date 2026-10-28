@@ -32,6 +32,7 @@
       "transcriber.js",
       "tabs.js",
       "updater.js",
+      "app-menu.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

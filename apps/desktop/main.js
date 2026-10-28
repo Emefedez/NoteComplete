@@ -1,4 +1,4 @@
-import { app, BaseWindow, WebContentsView, dialog, nativeTheme, net, protocol, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
+import { menuTemplate } from './app-menu.js';
 
 const home = 'notecomplete://reader/';
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
@@ -23,7 +24,11 @@ const views = new Map(), windows = new Map();
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
 const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v'];
-const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
+const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
+// Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
+// in their own session so sign-ins stay apart from the reader's storage.
+const WEB_SESSION = 'persist:notecomplete-web';
+const isWeb = url => /^https?:\/\//i.test(String(url || ''));
 const windowOf = contents => windows.get(tabs.windowOf(contents.id)) ?? null;
 // The reader's own chrome colour, painted before a tab has drawn anything so
 // new tabs and windows never flash white.
@@ -77,6 +82,12 @@ function openTab(win) {
   contents.setWindowOpenHandler(({ url }) => {
     if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
+  });
+  contents.on('will-attach-webview', (event, prefs, params) => {
+    if (!isWeb(params.src)) return event.preventDefault();
+    delete prefs.preload;
+    Object.assign(prefs, { nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true, webSecurity: true });
+    params.partition = WEB_SESSION;
   });
   contents.on('will-navigate', (event, url) => {
     if (url.startsWith(home)) return;
@@ -192,6 +203,18 @@ app.whenReady().then(async () => {
     && (permission === 'clipboard-sanitized-write' || (permission === 'media' && media.length > 0 && media.every(type => type === 'audio')));
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.(), details?.mediaTypes || [])));
   session.defaultSession.setPermissionCheckHandler((_contents, permission, origin, details) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`, details?.mediaType ? [details.mediaType] : []));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate()));
+  // Web pages may sign in (pop-ups in their own sandboxed windows) and copy text; nothing else.
+  const web = session.fromPartition(WEB_SESSION);
+  web.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'));
+  web.setPermissionCheckHandler((_contents, permission) => permission === 'clipboard-sanitized-write' || permission === 'fullscreen');
+  app.on('web-contents-created', (_event, guest) => {
+    if (guest.session !== web) return;
+    guest.setWindowOpenHandler(({ url }) => isWeb(url)
+      ? { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: backdrop(), webPreferences: { partition: WEB_SESSION, sandbox: true, contextIsolation: true, nodeIntegration: false } } }
+      : { action: 'deny' });
+    guest.on('will-navigate', (event, url) => { if (!isWeb(url)) event.preventDefault(); });
+  });
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
     try {

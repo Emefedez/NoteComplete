@@ -139,3 +139,12 @@ test('rename changes only the title Recent shows and survives re-downloads and r
   assert.equal((await library.rememberLocal('/tmp/Test.html', 'Test.html', 10)).title, 'Test PO1');
   assert.equal(entryTitle(await library.rename(local.key, '')), 'Test.html');
 });
+
+test('web links are kept in Recent without a file, and keep a rename', async () => {
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => fakeDirectory() } });
+  const entry = await library.rememberWeb('https://curso.notion.site/Temario', 'Temario');
+  assert.equal(entry.key, 'web:https://curso.notion.site/Temario');
+  assert.equal(await library.open(entry), null);
+  await library.rename(entry.key, 'Temario SO');
+  assert.equal((await library.rememberWeb('https://curso.notion.site/Temario', 'Temario · Notion')).title, 'Temario SO');
+});

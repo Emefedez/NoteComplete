@@ -24,6 +24,7 @@
           <button data-proxy="homeButton">Home</button>
           <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <button id="openFolder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
+          <button id="openLink" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
           <button id="addDocuments" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
           <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
@@ -186,6 +187,7 @@
         <div class="home-actions">
           <button id="homeBack" hidden>Back to document</button>
           <button id="emptyOpen" class="primary" data-icon="open" disabled>Open file…</button>
+          <button id="emptyOpenFolder" data-icon="folder" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
         </div>
       </div>
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
@@ -246,6 +248,10 @@
     <section id="htmlView" hidden>
       <div class="html-bar chrome"><button id="htmlSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="htmlZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="htmlZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="htmlZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
       <div class="side-body"><div id="htmlGroupSlot" class="group-slot"></div><iframe id="htmlFrame" title="HTML document"></iframe></div>
+    </section>
+    <section id="webView" hidden>
+      <div class="html-bar chrome"><button id="webSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="webDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="webTitle"></strong><span id="webAddress" class="muted"></span><button id="webBack" type="button" aria-label="Back" title="Back" disabled>←</button><button id="webReload" type="button">Reload</button><button id="webExternal" type="button" title="Open this page in your web browser">Open in browser</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="webZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="webZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="webZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
     </section>
     <section id="textView" hidden>
       <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textSave" type="button" title="Save the changes to the file (Ctrl S)" hidden>Save</button><button id="textEdit" type="button" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file">Edit</button><button id="textMarkdown" type="button" aria-pressed="false" title="Show the file formatted as Markdown, with LaTeX formulas">Markdown</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
@@ -696,6 +702,14 @@
     <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
+</dialog>
+
+<dialog id="linkDialog" class="ocr-dialog" aria-labelledby="linkDialogTitle">
+  <h2 id="linkDialogTitle">Open a link</h2>
+  <p class="muted">A web page, such as a course's Notion page, opens here like a document and stays in Recent. Sign-ins made in these pages are kept apart from NoteComplete.</p>
+  <label class="ocr-languages">Link<input id="linkUrl" type="url" placeholder="https://…notion.site/…" spellcheck="false" autocomplete="off" /></label>
+  <p id="linkError" class="muted link-error" hidden>Type a web address (https://…).</p>
+  <div class="ocr-actions"><button id="linkCancel" type="button">Cancel</button><button id="linkAdd" type="button" title="List the link with the open document, to jump between them" disabled>Add to this group</button><button id="linkOpen" type="button" class="primary">Open</button></div>
 </dialog>
 
 <dialog id="newDialog" class="ocr-dialog" aria-labelledby="newTitle">

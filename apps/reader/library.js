@@ -205,6 +205,13 @@ export class Library {
     await this.store.set('entries', key, renamed);
     return renamed;
   }
+  // Web links in Recent: nothing is downloaded; `name` is the page title (Rename still applies).
+  async rememberWeb(url, name) {
+    const key = 'web:' + url, previous = await this.store.get('entries', key);
+    const entry = { key, source: 'web', url, name: name || previous?.name || url, openedAt: this.now(), ...(previous?.title ? { title: previous.title } : {}) };
+    await this.store.set('entries', key, entry);
+    return entry;
+  }
   async touch(key) {
     const entry = await this.store.get('entries', key);
     if (entry) await this.store.set('entries', key, { ...entry, openedAt: this.now() });
@@ -261,6 +268,7 @@ export class Library {
     return folder.kind === 'folder' ? `${folder.label.replace(/\/$/, '')}/${entry.filename}` : '';
   }
   async open(entry) {
+    if (entry.source === 'web') return null;
     if (entry.source === 'local') {
       const bytes = await this.bridge?.readRecent(entry.path);
       return bytes ? new File([bytes], entry.name) : null;

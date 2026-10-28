@@ -10,6 +10,9 @@ const dirname = (p) => String(p || '').replace(/\/[^/]*$/, '');
 export function localMember(path, name) {
   return { key: 'local:' + path, name, source: 'local', path };
 }
+export function webMember(url, name) {
+  return { key: 'web:' + url, name, source: 'web', url };
+}
 
 // Folder groups list the folder's files as they are now, then the documents added by hand.
 export function mergeMembers(listed = [], added = []) {
@@ -82,10 +85,10 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
       button.type = 'button';
       button.className = 'group-item';
       kind.className = 'group-kind';
-      kind.textContent = TYPES[typeOf(m.name)]?.[0] || 'File';
+      kind.textContent = m.source === 'web' ? 'Web' : TYPES[typeOf(m.name)]?.[0] || 'File';
       label.className = 'group-name';
-      label.textContent = m.name.replace(/\.[^.]+$/, '');
-      button.title = m.name;
+      label.textContent = m.source === 'web' ? m.name : m.name.replace(/\.[^.]+$/, '');
+      button.title = m.source === 'web' ? m.url : m.name;
       button.append(kind, label);
       if (m.key === current.key) button.setAttribute('aria-current', 'page');
       button.onclick = () => m.key !== current.key && open(m).catch((error) => status(error.message, true));
