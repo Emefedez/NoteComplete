@@ -17,7 +17,8 @@ pub struct PackedPage {
 
 /// One PDF from JPEG pages packed one after another in `data`, laid out by `layout` (JSON list of PackedPage).
 pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>, String> {
-    let pages: Vec<PackedPage> = serde_json::from_str(layout).map_err(|e| format!("Bad page layout: {e}"))?;
+    let pages: Vec<PackedPage> =
+        serde_json::from_str(layout).map_err(|e| format!("Bad page layout: {e}"))?;
     if pages.is_empty() {
         return Err("No pages to export.".into());
     }
@@ -31,12 +32,17 @@ pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>,
         if !jpeg.starts_with(&[0xFF, 0xD8]) {
             return Err(format!("Page {} is not a JPEG image.", i + 1));
         }
-        let sizes_ok = page.width_px > 0 && page.height_px > 0 && [page.width_pt, page.height_pt].iter().all(|v| v.is_finite() && *v > 0.0 && *v < 14_400.0);
+        let sizes_ok = page.width_px > 0
+            && page.height_px > 0
+            && [page.width_pt, page.height_pt]
+                .iter()
+                .all(|v| v.is_finite() && *v > 0.0 && *v < 14_400.0);
         if !sizes_ok {
             return Err(format!("Page {} has no usable size.", i + 1));
         }
         let base = 4 + i as i32 * 3;
-        let (page_id, image_id, content_id) = (Ref::new(base), Ref::new(base + 1), Ref::new(base + 2));
+        let (page_id, image_id, content_id) =
+            (Ref::new(base), Ref::new(base + 1), Ref::new(base + 2));
         kids.push(page_id);
         let mut p = pdf.page(page_id);
         p.media_box(Rect::new(0.0, 0.0, page.width_pt, page.height_pt));
@@ -59,8 +65,12 @@ pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>,
         pdf.stream(content_id, &content.finish());
     }
     pdf.catalog(catalog).pages(tree);
-    pdf.pages(tree).kids(kids.iter().copied()).count(pages.len() as i32);
-    pdf.document_info(info).title(TextStr(title)).producer(TextStr("NoteComplete"));
+    pdf.pages(tree)
+        .kids(kids.iter().copied())
+        .count(pages.len() as i32);
+    pdf.document_info(info)
+        .title(TextStr(title))
+        .producer(TextStr("NoteComplete"));
     Ok(pdf.finish())
 }
 
@@ -69,7 +79,10 @@ mod tests {
     use super::*;
 
     // Smallest valid baseline JPEG header start is enough: the PDF only embeds the bytes.
-    const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xFF, 0xD9];
+    const JPEG: &[u8] = &[
+        0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+        0xFF, 0xD9,
+    ];
 
     #[test]
     fn binds_pages_with_their_own_sizes() {
@@ -91,10 +104,24 @@ mod tests {
 
     #[test]
     fn refuses_bad_input() {
-        let layout = |len: usize| format!(r#"[{{"offset":0,"length":{len},"widthPx":10,"heightPx":10,"widthPt":10.0,"heightPt":10.0}}]"#);
-        assert!(jpeg_pages_pdf(JPEG, "[]", "x").unwrap_err().contains("No pages"));
-        assert!(jpeg_pages_pdf(JPEG, &layout(JPEG.len() + 5), "x").unwrap_err().contains("outside"));
-        assert!(jpeg_pages_pdf(b"\x89PNG....", &layout(8), "x").unwrap_err().contains("not a JPEG"));
-        assert!(jpeg_pages_pdf(JPEG, &layout(JPEG.len()).replace("10.0", "0.0"), "x").unwrap_err().contains("no usable size"));
+        let layout = |len: usize| {
+            format!(
+                r#"[{{"offset":0,"length":{len},"widthPx":10,"heightPx":10,"widthPt":10.0,"heightPt":10.0}}]"#
+            )
+        };
+        assert!(jpeg_pages_pdf(JPEG, "[]", "x")
+            .unwrap_err()
+            .contains("No pages"));
+        assert!(jpeg_pages_pdf(JPEG, &layout(JPEG.len() + 5), "x")
+            .unwrap_err()
+            .contains("outside"));
+        assert!(jpeg_pages_pdf(b"\x89PNG....", &layout(8), "x")
+            .unwrap_err()
+            .contains("not a JPEG"));
+        assert!(
+            jpeg_pages_pdf(JPEG, &layout(JPEG.len()).replace("10.0", "0.0"), "x")
+                .unwrap_err()
+                .contains("no usable size")
+        );
     }
 }

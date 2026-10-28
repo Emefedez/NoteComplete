@@ -53,7 +53,7 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Links in answers** work: pages jump to the page, images open large, web links open in the browser.
 - **Study material** (Study → All quizzes and decks…): everything on this device in two lists, exportable to Anki.
 - The sun in the study windows **dims everything behind them**.
-- The bundled MCP server lets agents read your notebooks ([AI agents](docs/MCP.md)).
+- The bundled MCP server lets agents read your notebooks and write Markdown notes into them ([AI agents](docs/MCP.md)).
 
 <p align="center"><img src="docs/images/quiz-clarify.png" alt="A quiz window grown to fit a streamed answer" width="49%"> <img src="docs/images/card-ask.png" alt="A flashcard window grown to fit an answer" width="49%"></p>
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>

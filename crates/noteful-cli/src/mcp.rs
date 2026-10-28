@@ -1,11 +1,15 @@
 //! `noteful mcp`: a stdio Model Context Protocol server over the core, so AI
 //! agents (Claude Code, Antigravity, Codex) can read notes and make study
-//! material with the user's own subscription. Notes are never modified; files
-//! are written only by `extract_resource` and `write_anki_deck`, to paths the
-//! agent names. Page images and PDF text use poppler (`pdftoppm`, `pdftotext`)
+//! material with the user's own subscription. Pages, ink and recordings are never
+//! modified; files are written only by `extract_resource`, `write_anki_deck` and
+//! `write_notes` (the Markdown notes kept in `.notecomp`/`.notepart`/`.nfedit`
+//! files), to paths the agent names. Page images and PDF text use poppler (`pdftoppm`, `pdftotext`)
 //! and librsvg (`rsvg-convert`) when installed.
 use base64::{engine::general_purpose::STANDARD, Engine};
-use noteful_core::Editor;
+use noteful_core::{
+    is_notecomplete, markdown_pages, notecomplete_audio, pack_notecomplete_with,
+    unpack_notecomplete, AddedAudio, Editor,
+};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -79,6 +83,8 @@ fn tools() -> Value {
         tool("page_image", "PNG of one page as the reader draws it: PDF background, handwriting, highlights, images and typed text. Use it to read handwritten notes.", json!({"path":path,"page":page,"width":{"type":"integer","minimum":200,"maximum":2400,"description":"Pixel width (default 1100)"}}), &["path","page"]),
         tool("search_note", "Find words in a note's typed text and PDF text (accent- and case-insensitive). Returns pages and snippets.", json!({"path":path,"query":{"type":"string"}}), &["path","query"]),
         tool("extract_resource", "Write a note's embedded PDFs, recordings or cover image to a folder. Without `index` it lists them.", json!({"path":path,"kind":{"type":"string","enum":["pdf","audio","cover"]},"index":{"type":"integer","minimum":0},"out_dir":{"type":"string"}}), &["path","kind"]),
+        tool("read_notes", "The Markdown notes kept with a note (.notecomp, .notepart or .nfedit), with the pages their <!-- page N --> markers tie sections to.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"}}), &["path"]),
+        tool("write_notes", "Add to or replace the Markdown notes kept with a note (.notecomp, .notepart or .nfedit). Pages, ink and recordings are untouched; the previous file is kept as <name>.bak. With `page`, appended text goes under a <!-- page N --> marker so it follows that page in NoteComplete.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"},"text":{"type":"string","description":"Markdown to write"},"mode":{"type":"string","enum":["append","replace"],"description":"append (default) adds after the existing notes; replace overwrites them"},"page":page}), &["path","text"]),
         tool("write_anki_deck", "Write flashcards as an Anki-importable text file (File → Import in Anki). Refuses to overwrite unless overwrite is true.", json!({"path":{"type":"string","description":"Output .txt or .tsv path"},"deck":{"type":"string"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string"},"back":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}}},"required":["front","back"]}},"overwrite":{"type":"boolean"}}), &["path","deck","cards"]),
     ])
 }
@@ -97,7 +103,7 @@ impl Server {
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads Noteful notes (.noteful/.nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, and write_anki_deck to save flashcards.", library().display())}),
+                    "instructions":format!("Reads Noteful notes (.noteful/.nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
@@ -168,6 +174,8 @@ impl Server {
             }
             "search_note" => text(self.search(args)?),
             "extract_resource" => text(self.extract(args)?),
+            "read_notes" => text(read_notes(args)?),
+            "write_notes" => text(write_notes(args)?),
             "write_anki_deck" => text(write_deck(args)?),
             other => Err(format!("Unknown tool {other}").into()),
         }
@@ -191,6 +199,8 @@ impl Server {
                 .is_some_and(|e| e.eq_ignore_ascii_case("nfedit"))
             {
                 Editor::open_project(std::str::from_utf8(&data)?)?
+            } else if is_notecomplete(&data) {
+                Editor::open_notecomplete(&data)?
             } else {
                 Editor::open(&data)?
             };
@@ -657,6 +667,93 @@ fn write_deck(args: &Value) -> Res<Value> {
     )
 }
 
+/// The Markdown notes of a `.notecomp`/`.notepart` archive or an `.nfedit` project.
+fn notes_of(path: &Path, data: &[u8]) -> Res<String> {
+    if is_nfedit(path) {
+        Ok(Editor::open_project(std::str::from_utf8(data)?)?
+            .markdown()
+            .to_owned())
+    } else if is_notecomplete(data) {
+        Ok(unpack_notecomplete(data)?.1)
+    } else {
+        Err("Notes are kept in .notecomp, .notepart or .nfedit files; a plain .noteful file has none. Save it from NoteComplete as one of those first.".into())
+    }
+}
+fn is_nfedit(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("nfedit"))
+}
+fn read_notes(args: &Value) -> Res<Value> {
+    let path = note_path(args)?;
+    let markdown = notes_of(&path, &std::fs::read(&path)?)?;
+    let pages: Vec<usize> = markdown_pages(&markdown).iter().map(|(p, _)| *p).collect();
+    Ok(json!({"markdown":markdown,"pages_with_notes":pages}))
+}
+/// The new notes text: appended (under a page marker when `page` is given) or replaced.
+fn merged_notes(old: &str, text: &str, mode: &str, page: Option<usize>) -> Res<String> {
+    let text = text.trim_end();
+    if text.trim().is_empty() {
+        return Err("text is empty".into());
+    }
+    let block = match page {
+        Some(p) => format!("<!-- page {p} -->\n{text}"),
+        None => text.to_owned(),
+    };
+    let merged = match mode {
+        "replace" => format!("{block}\n"),
+        "append" if old.trim().is_empty() => format!("{block}\n"),
+        "append" => format!("{}\n\n{block}\n", old.trim_end()),
+        other => return Err(format!("mode must be append or replace, not {other}").into()),
+    };
+    if merged.len() > 8 << 20 {
+        return Err("Notes would be too large (limit 8 MB)".into());
+    }
+    Ok(merged)
+}
+fn write_notes(args: &Value) -> Res<Value> {
+    let path = note_path(args)?;
+    let data = std::fs::read(&path)?;
+    let mode = args["mode"].as_str().unwrap_or("append");
+    let page = match args["page"].as_u64() {
+        Some(p) if p > 0 => Some(p as usize),
+        Some(_) => return Err("page starts at 1".into()),
+        None => None,
+    };
+    let merged = merged_notes(
+        &notes_of(&path, &data)?,
+        args["text"].as_str().ok_or("text is required")?,
+        mode,
+        page,
+    )?;
+    let out = if is_nfedit(&path) {
+        let mut editor = Editor::open_project(std::str::from_utf8(&data)?)?;
+        editor.set_markdown(&merged)?;
+        editor.save_project()?.into_bytes()
+    } else {
+        // Repack the same note and recordings with the new notes.
+        let (note, _) = unpack_notecomplete(&data)?;
+        let title = Editor::open(&note)?.view(0)?["title"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let entries = notecomplete_audio(&data)?;
+        let audio: Vec<(AddedAudio, &[u8])> = entries
+            .iter()
+            .map(|e| (e.audio.clone(), &data[e.offset..e.offset + e.length]))
+            .collect();
+        pack_notecomplete_with(&note, &merged, &title, &audio)?
+    };
+    let backup = PathBuf::from(format!("{}.bak", path.display()));
+    std::fs::copy(&path, &backup)?;
+    let temp = PathBuf::from(format!("{}.tmp", path.display()));
+    std::fs::write(&temp, out)?;
+    std::fs::rename(&temp, &path)?;
+    Ok(
+        json!({"written":path,"backup":backup,"mode":mode,"notes_characters":merged.chars().count(),
+        "reopen":"Reopen the note in NoteComplete to see the change."}),
+    )
+}
+
 fn flashcards_prompt(args: &Value) -> Value {
     let path = args["path"].as_str().unwrap_or("<note path>");
     let pages = args["pages"].as_str().unwrap_or("all pages");
@@ -688,7 +785,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 7);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 9);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
@@ -720,6 +817,53 @@ mod tests {
             &json!({"path":dir.join("x.csv"),"deck":"d","cards":[{"front":"a","back":"b"}]})
         )
         .is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn notes_are_appended_under_page_markers_and_kept_with_the_note() {
+        assert_eq!(
+            merged_notes("", "hi", "append", Some(2)).unwrap(),
+            "<!-- page 2 -->\nhi\n"
+        );
+        assert_eq!(
+            merged_notes("a\n", "b", "append", None).unwrap(),
+            "a\n\nb\n"
+        );
+        assert_eq!(merged_notes("a", "b", "replace", None).unwrap(), "b\n");
+        assert!(merged_notes("a", " ", "append", None).is_err());
+        assert!(merged_notes("a", "b", "x", None).is_err());
+        // A real archive: notes change, the note and a recording survive.
+        let dir = std::env::temp_dir().join(format!("nc-notes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let note = std::fs::read(EXAM).unwrap();
+        let webm = [0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3];
+        let meta = AddedAudio {
+            id: "a".into(),
+            name: "Take".into(),
+            mime: "audio/webm".into(),
+            created: 1.0,
+        };
+        let path = dir.join("n.notecomp");
+        std::fs::write(
+            &path,
+            pack_notecomplete_with(&note, "old", "T", &[(meta, &webm)]).unwrap(),
+        )
+        .unwrap();
+        let args = json!({"path":path,"text":"new","page":1});
+        write_notes(&args).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        let (kept, md) = unpack_notecomplete(&data).unwrap();
+        assert_eq!(md, "old\n\n<!-- page 1 -->\nnew\n");
+        assert_eq!(kept, note);
+        let e = &notecomplete_audio(&data).unwrap()[0];
+        assert_eq!(&data[e.offset..e.offset + e.length], &webm);
+        assert!(dir.join("n.notecomp.bak").exists());
+        assert_eq!(
+            read_notes(&json!({"path":path})).unwrap()["pages_with_notes"],
+            json!([1])
+        );
+        assert!(write_notes(&json!({"path":EXAM,"text":"x"})).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
