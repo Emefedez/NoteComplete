@@ -50,6 +50,19 @@ contextBridge.exposeInMainWorld('notecompleteAI', {
   },
   cancel: tag => ipcRenderer.send('ai:cancel', typeof tag === 'string' ? tag : ''),
 });
+contextBridge.exposeInMainWorld('notecompleteUpdates', {
+  check: (manual = false) => ipcRenderer.invoke('update:check', manual === true),
+  install: onProgress => {
+    const listener = (_event, value) => onProgress?.(value);
+    ipcRenderer.on('update:progress', listener);
+    return ipcRenderer.invoke('update:install').finally(() => ipcRenderer.removeListener('update:progress', listener));
+  },
+  skip: version => ipcRenderer.invoke('update:skip', version),
+  settings: () => ipcRenderer.invoke('update:settings'),
+  setCheckOnOpen: on => ipcRenderer.invoke('update:check-on-open', on === true),
+  openPage: url => ipcRenderer.invoke('update:page', url),
+  restart: () => ipcRenderer.invoke('update:restart'),
+});
 contextBridge.exposeInMainWorld('notecompleteDrive', {
   signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),
   cancel: () => ipcRenderer.send('drive:cancel'),

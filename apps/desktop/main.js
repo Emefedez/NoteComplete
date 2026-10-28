@@ -9,6 +9,7 @@ import { aiRunner } from './ai-runner.js';
 import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
+import { updater } from './updater.js';
 
 const home = 'notecomplete://reader/';
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
@@ -241,6 +242,21 @@ app.whenReady().then(async () => {
   ipcMain.on('asr:cancel', event => { if (trusted(event)) asr.cancel(event.sender.id); });
   // Several documents: tabs in a window, and windows; the command palette lists every tab.
   ipcMain.handle('windows:new', guarded(() => { createWindow(); }));
+  // Version checks (updater.js): once per session on open, or from Help; installing always
+  // waits for the user's go-ahead in the reader.
+  const updates = updater({ app, stateFile: path.join(app.getPath('userData'), 'updates.json') });
+  let opening = null;
+  ipcMain.handle('update:check', guarded((_event, manual) => {
+    if (manual) return updates.check({ manual: true });
+    return (opening ||= updates.check().catch(error => ({ current: app.getVersion(), error: error.message })));
+  }));
+  ipcMain.handle('update:install', guarded(event => updates.install(p => { if (!event.sender.isDestroyed()) event.sender.send('update:progress', p); })));
+  ipcMain.handle('update:skip', guarded((_event, version) => updates.skip(String(version))));
+  ipcMain.handle('update:settings', guarded(() => updates.settings()));
+  ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));
+  // Only this project's release pages open (releases here are pre-releases, which /latest skips).
+  ipcMain.handle('update:page', guarded((_event, url) => shell.openExternal(/^https:\/\/github\.com\/Emefedez\/NoteComplete\/releases\/[\w./-]+$/.test(String(url)) ? String(url) : 'https://github.com/Emefedez/NoteComplete/releases')));
+  ipcMain.handle('update:restart', guarded(() => updates.restart()));
   ipcMain.handle('windows:list', guarded(event => tabs.all().map(t => ({ id: t.id, title: t.title, current: t.id === event.sender.id }))));
   ipcMain.handle('windows:focus', guarded((_event, id) => {
     const win = windows.get(tabs.windowOf(id));

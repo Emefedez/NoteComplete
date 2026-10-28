@@ -31,6 +31,7 @@
       "ai-runner.js",
       "transcriber.js",
       "tabs.js",
+      "updater.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

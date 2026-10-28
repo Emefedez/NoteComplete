@@ -136,6 +136,12 @@
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
           <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
+          <div id="updateItems" class="menu-group" hidden>
+            <hr />
+            <button id="updateCheck">Check for updates…</button>
+            <button id="updateOnOpen" role="menuitemcheckbox" aria-checked="true" title="Look for a new version when NoteComplete opens (at most every 6 hours); it always asks before installing">Check for updates on open</button>
+            <p id="updateVersion" class="menu-note muted"></p>
+          </div>
         </div>
       </details>
     </nav>
@@ -145,6 +151,7 @@
       <div id="tabStrip" class="tab-strip" role="tablist" aria-label="Open notes" hidden></div>
     </div>
     <div id="jobArea" class="job-area"></div>
+    <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
     <div hidden>

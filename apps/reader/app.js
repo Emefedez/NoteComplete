@@ -11,6 +11,7 @@ import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
+import { updateNotice } from "./updates.js";
 import { chatController } from "./chat.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -2842,6 +2843,7 @@ const quizIndex = allQuizzes({
   },
   exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
 });
+updateNotice({ status });
 $("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {

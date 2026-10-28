@@ -1883,3 +1883,15 @@ body.bar-compact .tab { height: 22px; }
 .all-study-columns h3 { margin-top: 6px; }
 @media (max-width: 760px) { .all-study-columns { grid-template-columns: 1fr; } }
 .all-quizzes:empty::before { content: none; }
+/* A new version: a pill in the top bar that asks; Help shows the version. */
+.update-chip { color: var(--ink); flex: none; max-width: none; gap: 4px; }
+.update-chip > span:first-child { overflow: visible; }
+.update-chip button { min-height: 22px; padding: 0 10px; border-radius: 99px; background: var(--fill); font-size: 12px; }
+.update-chip #updateGo { background: var(--accent-soft); color: var(--accent); }
+.menu-note { margin: 2px 12px 4px; font-size: 11px; }
+/* Floating practice scrolls inside: room for focus rings and tints at its edges. */
+.deck-dialog.floating #deckPractice:not([hidden]) { padding: 0 4px; margin: 0 -4px; }
+/* The audio window's head keeps its icon inside the frame (the body pads itself). */
+.audio-panel.has-body .audio-head { padding: 8px 10px 0 12px; }
+/* A note without audio has no recording list to choose from. */
+.audio-panel.no-audio .select-trigger[data-select="recording"] { display: none; }

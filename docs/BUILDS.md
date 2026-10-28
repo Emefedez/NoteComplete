@@ -9,6 +9,7 @@ Run **Desktop packages** (`.github/workflows/desktop.yml`). A hosted reader is n
 | Platform | Architecture | Artifact |
 |---|---|---|
 | Linux | x86-64 | AppImage |
+| Linux | ARM64 | AppImage |
 | macOS | Apple Silicon / ARM64 | DMG and ZIP containing NoteComplete.app |
 | macOS | Intel / x86-64 | DMG and ZIP containing NoteComplete.app |
 | Windows | x86-64 | NSIS .exe installer |
@@ -75,3 +76,13 @@ On Windows use `gradlew.bat`. The APK is written under `app/build/outputs/apk/re
 References: [Electron custom protocols](https://www.electronjs.org/docs/latest/api/protocol), [electron-builder targets](https://www.electron.build/v26/docs/cli/), [Expo local release builds](https://docs.expo.dev/guides/local-app-production/).
 
 Validation: workflow lint, Node tests, Expo prebuild/bundling and macOS signature verification run locally; GitHub Actions validates native Android compilation and all desktop package targets. Installed-device testing remains necessary.
+
+## Updates
+
+The desktop app checks GitHub Releases for a newer version when it opens (at most every 6 hours; Help → Check for updates on open turns it off) and from Help → Check for updates…. It never installs on its own: a pill in the top bar says which version is available, with Update, Later and Skip.
+
+- **Linux AppImage**: Update downloads the AppImage for this machine (x86-64 or ARM64), checks it against the release's `SHA256SUMS.txt`, keeps the running copy beside it as `NoteComplete.AppImage.previous`, puts the new one in its place and offers Restart now. A download that does not match its checksum is not installed.
+- **macOS, Windows, and copies not started as an AppImage**: Download opens that release's page.
+
+To ship an update, raise `version` in `apps/desktop/package.json` (for example 1.0.1), commit, then tag and push the same version (`git tag v1.0.1 && git push origin v1.0.1`). The release workflow builds every installer, writes the checksums and publishes the pre-release the app finds. Local builds from `tools/update_appimage.py` carry the version in `package.json`, so they are offered only releases newer than that.
+
