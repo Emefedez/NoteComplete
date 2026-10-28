@@ -2046,3 +2046,4 @@ body.bar-compact .tab { height: 22px; }
 .practice-ask-form .icon-button svg { width: 16px; height: 16px; }
 .practice-ask .chat-attachments { margin: 4px 0; }
 .folder-list .note-more { top: 50%; bottom: auto; transform: translateY(-50%); }
+.middle-panning, .middle-panning * { cursor: grabbing !important; user-select: none; }

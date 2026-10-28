@@ -1433,6 +1433,36 @@ function appendPoint(e) {
   }
   preview();
 }
+// Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
+// documents scroll the same way. It never auto-scrolls or pastes the primary selection.
+function middlePan(el) {
+  let drag = null;
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 1 || e.pointerType !== "mouse") return;
+    e.preventDefault();
+    e.stopPropagation();
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("middle-panning");
+  }, true);
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.scrollLeft = drag.left + drag.x - e.clientX;
+    el.scrollTop = drag.top + drag.y - e.clientY;
+  }, true);
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+    el.classList.remove("middle-panning");
+  };
+  el.addEventListener("pointerup", end, true);
+  el.addEventListener("pointercancel", end, true);
+  for (const type of ["mousedown", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) e.preventDefault(); }, true);
+}
+middlePan($("viewport"));
+middlePan($("textBody"));
 function pointerMove(e) {
   if (selection.move(e)) return;
   if (!gesture || gesture.id !== e.pointerId) return;
