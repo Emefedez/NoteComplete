@@ -13,7 +13,7 @@ NoteComplete is an independent desktop and web companion for people who take not
 ## What it does
 
 - **Read and annotate**: PDF and paper backgrounds, handwriting, highlighter, shapes, images, typed text, tape, locked items, tags and recordings. Pen, highlighter, eraser, shapes, tape, text boxes, crop, layers and undo/redo. The original file is never changed. Blank pages of any size, or pages from another PDF.
-- **Night view** (<kbd>D</kbd>) and a **light/dark theme** (View → Dark theme; follows the system by default).
+- **Night view** (<kbd>D</kbd>) inverts the page colours; a **light/dark theme** switch is in View.
 - **Notes in Markdown** beside the pages (<kbd>N</kbd>), tied to pages, plus a **Scratchpad** for AI conversations worth keeping.
 - **Library**: Google Drive on Home (read-only) with covers, filters and sorting; a copy of each opened note is kept on your device; newer iPad versions can be compared page by page.
 - **Find** (<kbd>Ctrl</kbd>+<kbd>F</kbd>) over typed text, PDF text, transcripts and recognized handwriting.
