@@ -65,7 +65,7 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
 }
 
 // The list in the side panel. `mount(slot)` moves it next to the open view's content.
-export function groupPanel({ root, name, list, add, groups, open, status = () => {} }) {
+export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {} }) {
   let current = null, group = null, token = 0;
   async function render() {
     const mine = ++token;
@@ -73,6 +73,7 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
     const members = group ? await groups.members(group) : [];
     if (mine !== token) return;
     root.hidden = !group;
+    onChange(group);
     if (!group) return;
     name.textContent = group.name;
     name.title = group.folder ? `Folder: ${group.folder}` : group.name;

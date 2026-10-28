@@ -1717,7 +1717,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -1734,7 +1734,7 @@ function toggleKeyHints() {
 }
 function shortcut(e) {
   const k = e.key;
-  if (!doc) return htmlView.visible && k === "d" ? ($("htmlDark").click(), true) : false;
+  if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
@@ -2333,9 +2333,10 @@ const htmlView = htmlViewer({
 function htmlDarkApply() {
   const on = document.body.classList.contains("pages-dark");
   $("htmlDark").setAttribute("aria-pressed", String(on));
+  $("textDark").setAttribute("aria-pressed", String(on));
   htmlView.setDark(on);
 }
-$("htmlDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
+$("htmlDark").onclick = $("textDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 var htmlViewReady = true;
 const textView = textViewer({ root: $("textView"), body: $("textBody"), title: $("textTitle"), format: $("textMarkdown"), toHtml: (value) => call("markdownHtml", { text: value }) });
 // The open HTML or text document, when one is open instead of a note.
@@ -2381,7 +2382,19 @@ async function openedLocal(path, name, file) {
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
 const groups = groupStore({ store: library.store });
-const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status });
+const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons() });
+// The sidebar button of HTML and text documents shows or hides the group list, like Pages in notes.
+let sideListOpen = true;
+function syncSideButtons() {
+  const grouped = Boolean(groupList.group);
+  for (const id of ["htmlSide", "textSide"]) {
+    $(id).disabled = !grouped;
+    $(id).setAttribute("aria-expanded", String(grouped && sideListOpen));
+    $(id).title = !grouped ? "Documents: File → Add documents… groups files to jump between" : sideListOpen ? "Hide the documents in this group" : "Show the documents in this group";
+  }
+  for (const body of document.querySelectorAll(".side-body")) body.classList.toggle("group-off", !sideListOpen);
+}
+$("htmlSide").onclick = $("textSide").onclick = () => { sideListOpen = !sideListOpen; syncSideButtons(); };
 let docMember = null;
 function setDocMember(member) {
   docMember = member;

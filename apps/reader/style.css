@@ -332,6 +332,12 @@ main {
 .side-body { flex: 1; min-height: 0; display: flex; }
 .side-body > iframe, .side-body > article { flex: 1; min-width: 0; }
 .group-slot { display: contents; }
+.side-body.group-off .group-panel { display: none; }
+#htmlView .html-bar, #textView .html-bar { gap: 6px; }
+#htmlView .html-bar strong, #textView .html-bar strong { margin-left: 4px; }
+.side-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Dark pages on a text document: the dark theme's colours, also in the light theme. */
+body.pages-dark #textBody { --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff; --line: #3b4048; --surface: #24272c; --chrome: #202328; --fill: #30343b; color: var(--ink); }
 .side-body .group-panel { width: 220px; flex: none; overflow: auto; padding: 12px; background: var(--chrome); border-right: 1px solid var(--line); }
 #pagesPanel .group-panel { margin-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .group-panel h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -244,11 +244,11 @@
       </footer>
     </section>
     <section id="htmlView" hidden>
-      <div class="html-bar chrome"><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button></div>
+      <div class="html-bar chrome"><button id="htmlSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlReload" type="button">Reload</button><button id="htmlClear" type="button" title="Forget the answers this page saved on this device">Clear saved state</button></div>
       <div class="side-body"><div id="htmlGroupSlot" class="group-slot"></div><iframe id="htmlFrame" title="HTML document"></iframe></div>
     </section>
     <section id="textView" hidden>
-      <div class="html-bar chrome"><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textMarkdown" type="button" aria-pressed="false" title="Show the file formatted as Markdown, with LaTeX formulas">Markdown</button></div>
+      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textMarkdown" type="button" aria-pressed="false" title="Show the file formatted as Markdown, with LaTeX formulas">Markdown</button></div>
       <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article></div>
     </section>
     <section id="editor" hidden>
