@@ -113,7 +113,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   // carries a tag so Stop cancels only its own.
   const running = new Map();
   const children = owner => running.get(owner) || running.set(owner, new Set()).get(owner);
-  const models = new Map();
+  const models = new Map(), asking = new Set();
   return {
     tools: async () => (found ||= await tools()),
     async providers() {
@@ -121,11 +121,18 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
       return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));
     },
     // The models a tool offers; an empty list when it is missing or says nothing.
-    async models(provider) {
+    // `fresh` asks the tool again (the reader shows its kept list meanwhile); several
+    // pickers opening at once share one request per tool.
+    async models(provider, { fresh = false } = {}) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       found ||= await tools();
       if (!found[provider]) return [];
-      if (!models.has(provider)) models.set(provider, listModels(provider, found[provider]));
+      if (!models.has(provider) || (fresh && !asking.has(provider))) {
+        const request = listModels(provider, found[provider]);
+        models.set(provider, request);
+        asking.add(provider);
+        request.finally(() => asking.delete(provider));
+      }
       const list = await models.get(provider);
       if (!list.length) models.delete(provider);
       return list;

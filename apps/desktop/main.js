@@ -275,7 +275,7 @@ app.whenReady().then(async () => {
   const bundled = app.isPackaged ? path.join(process.resourcesPath, 'noteful') : fileURLToPath(new URL('../../target/release/noteful', import.meta.url));
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
-  ipcMain.handle('ai:models', guarded((_event, provider) => ai.models(String(provider))));
+  ipcMain.handle('ai:models', guarded((_event, provider, options) => ai.models(String(provider), { fresh: options?.fresh === true })));
   // A request with a stream id gets its answer's pieces as 'ai:delta' messages.
   ipcMain.handle('ai:run', guarded((event, request) => {
     const id = typeof request?.stream === 'string' && /^[\w-]{1,40}$/.test(request.stream) ? request.stream : null;

@@ -17,7 +17,7 @@ To try in the real app or service (`[!]`):
 
 Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
-To do (`[ ]`): Ask AI about HTML pages, and Ask AI opening slowly (a minute) on a Markdown file. See *Ask AI on HTML and text files* below.
+To do (`[ ]`): Ask AI about HTML pages. See *Ask AI on HTML and text files* below (Ask AI opening slowly is fixed in 1.0.15, to try with Antigravity).
 
 Planned, not started (`[ ]`): reordering pages in any note. See *Future: pages* below.
 
@@ -262,22 +262,12 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
   - **Optional image**: a capture of the visible part of the page (the desktop app's `capturePage`), since many HTML pages are exercises with layout or drawings.
   - **Also**: My notes (the page's Markdown notes from 1.0.14) and the scratchpad.
   - **Same for study**: flashcards and quizzes from HTML pages, by sections, once the text extraction exists.
-- [ ] **Ask AI took about a minute to come up on a Markdown file.** To measure first, then fix. Where the time goes:
-  - opening the panel;
-  - from Send to the first words;
-  - inside that, the AI tool's start.
+- [!] **Ask AI took about a minute to come up on a Markdown file.** Cause: the panel waited for the model list. For Antigravity that means `agy models`, inside muvm, with a 30-second timeout, and an empty answer was not cached, so it could wait again. Once loaded it was much faster (owner). Fixed as the owner described (1.0.15):
+  - every model dropdown (Ask AI, Generate flashcards / Quiz me, the card and quiz Ask boxes) opens at once with the list kept on this device;
+  - the tool is asked again in the background, and its answer replaces the list, keeping the chosen model if it is still offered (a typed *Other…* name is kept; a listed model that is gone falls back to Tool default);
+  - several dropdowns opening together share one request per tool.
 
-  Leads found in the code:
-  - **The panel only appears after the model list loads** (`chat.js` `open()` awaits `model.load()`).
-    - For Antigravity that runs `agy models`, with a 30-second timeout (and Antigravity runs inside muvm on this machine).
-    - An empty list is not cached (`ai-runner.js` `models()` deletes it), so every opening can wait again.
-    - Fix ideas:
-      - show the panel at once and fill the model list in the background;
-      - cache the list, also when empty, for the session;
-      - load models only when the dropdown is opened.
-  - **The first request starts the AI tool cold.** It could be started (or its binary found) when the panel opens, not on Send.
-
-  Done when: the Ask AI panel appears immediately on text, Markdown and HTML files, and the time to the first words matches the same question on a note.
+  *Checked in a headless browser with a fake tool whose list takes 3 s: the panel opened in 4 ms with the kept list and the choice survived the refresh. Not yet tried with the real Antigravity.* The tool lookup (`bash -lic`) takes about 30 ms here, so it was not the cause.
 
 ## Future: pages (agreed, not started)
 

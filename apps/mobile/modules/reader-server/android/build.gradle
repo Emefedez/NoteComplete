@@ -6,6 +6,6 @@ group = 'com.notecomplete'
 version = '1.0.10'
 android {
   namespace 'expo.modules.readerserver'
-  defaultConfig { versionCode 15; versionName '1.0.14' }
+  defaultConfig { versionCode 16; versionName '1.0.15' }
 }
 dependencies { implementation 'org.nanohttpd:nanohttpd:2.3.1' }

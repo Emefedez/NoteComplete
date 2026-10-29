@@ -97,3 +97,18 @@ test('Antigravity gets the note server as a plugin in its own workspace', () => 
   assert.deepEqual(JSON.parse(config[1]).mcpServers.notecomplete, { command: '/app/noteful', args: ['mcp'] });
   assert.deepEqual(invocation('antigravity', { prompt: 'Q', images: [], dir: '/t', model: '' }).files, []);
 });
+
+test('models are kept, asked again when fresh, and opening several pickers asks once', async () => {
+  // A fake "agy" that counts how often it was asked and lists a model with that count.
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-agy-'));
+  const fake = path.join(bin, 'agy'), count = path.join(bin, 'count');
+  await writeFile(count, '0');
+  await writeFile(fake, `#!/bin/sh\nn=$(($(cat ${count}) + 1)); echo $n > ${count}; sleep 0.2\nprintf 'gemini-%s\\tGemini %s\\n' $n $n\n`);
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: null, antigravity: fake, codex: null }) });
+  assert.deepEqual(await runner.models('antigravity'), [{ id: 'gemini-1', label: 'Gemini 1' }]);
+  assert.deepEqual(await runner.models('antigravity'), [{ id: 'gemini-1', label: 'Gemini 1' }], 'kept without fresh');
+  const [a, b, c] = await Promise.all([1, 2, 3].map(() => runner.models('antigravity', { fresh: true })));
+  assert.deepEqual([a[0].id, b[0].id, c[0].id], ['gemini-2', 'gemini-2', 'gemini-2'], 'one request for pickers opening together');
+  assert.equal((await runner.models('antigravity', { fresh: true }))[0].id, 'gemini-3');
+});

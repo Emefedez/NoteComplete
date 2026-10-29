@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld('notecompleteTranscribe', {
 });
 contextBridge.exposeInMainWorld('notecompleteAI', {
   providers: () => ipcRenderer.invoke('ai:providers'),
-  models: provider => ipcRenderer.invoke('ai:models', provider),
+  models: (provider, options) => ipcRenderer.invoke('ai:models', provider, { fresh: options?.fresh === true }),
   // onDelta(text) receives the answer while it is written, when the tool streams.
   run: (request, onDelta) => {
     if (typeof onDelta !== 'function') return ipcRenderer.invoke('ai:run', request);
