@@ -7,6 +7,7 @@ import {
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, zoomControl } from "./text-view.js";
 import { textStudy } from "./text-study.js";
+import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
@@ -212,6 +213,7 @@ function reset({ opening = false } = {}) {
   sideFp = "";
   htmlView?.close();
   textView?.close();
+  textFinder?.close();
   webView?.close();
   $("pages").replaceChildren();
   $("editor").hidden = true;
@@ -1777,7 +1779,7 @@ function toggleKeyHints() {
 function shortcut(e) {
   const k = e.key;
   // Text documents have the study keys too (flashcards, quizzes, saved decks).
-  const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), D: () => study.saved(), W: () => quizzes.retakeWrong() }[k];
+  const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), D: () => study.saved(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
   if (studyKey) return studyKey(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
@@ -1860,6 +1862,12 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     showDocument();
     chat.toggle();
+    return;
+  }
+  // Text documents have their own find bar (text-find.js).
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f" && !doc && textView.visible) {
+    e.preventDefault();
+    textFinder.toggle();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f" && doc && $("editor").hidden === false) {
@@ -2427,11 +2435,19 @@ const textView = textViewer({
     openMember(localMember(target, name)).catch(() => status(`Could not open ${name}. To follow links between files, open their folder (Home → Folder).`, true));
   },
   onChange: () => {
+    textFinder.refresh();
     dirty = changed = true;
     $("textSave").hidden = false;
     tabBar.update({ title: textView.name, dirty: true });
   },
 });
+// Ctrl F in a text document: the formatted text, the Markdown editor or the plain editor.
+const textFinder = textFind({
+  bar: $("textFindBar"), input: $("textFindInput"), count: $("textFindCount"), prev: $("textFindPrev"), next: $("textFindNext"), close: $("textFindClose"),
+  root: () => (textView.editing ? $("textEditor") : $("textBody")),
+  plainEditor: () => (textView.editing ? $("textEditor").querySelector("textarea.doc-editor-plain") : null),
+});
+for (const id of ["textEdit", "textMarkdown"]) $(id).addEventListener("click", () => textFinder.refresh());
 const htmlZoom = zoomControl({ key: "notecomplete-html-zoom", out: $("htmlZoomOut"), into: $("htmlZoomIn"), value: $("htmlZoomValue"), apply: (z) => htmlView.setZoom(z) });
 // Save (Ctrl S) for an edited text document: back to its file on this device, else a download.
 async function saveText() {
@@ -2641,7 +2657,8 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  $("findOpen").disabled = !open && !textView.hasDocument;
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
@@ -2736,7 +2753,7 @@ $("grabCancel").onclick = clearGrab;
 $("tapeReveal").onclick = () => setTapeMode("revealed");
 $("tapeCover").onclick = () => setTapeMode("covered");
 $("tapeNote").onclick = () => setTapeMode("note");
-$("findOpen").onclick = () => { showDocument(); find.open(); };
+$("findOpen").onclick = () => { showDocument(); if (!doc && textView.hasDocument) textFinder.open(); else find.open(); };
 $("ocrOpen").onclick = () => find.openOcr(page);
 // Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.
 function restructure(result, focus, message) {

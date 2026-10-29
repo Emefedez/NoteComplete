@@ -81,3 +81,11 @@ test('flashcard prompts speak of sections for text documents', () => {
   assert.match(cardCheckPrompt({ front: 'a', back: 'b' }, 'section'), /section of the document/);
   assert.match(cardCheckPrompt({ front: 'a', back: 'b' }, true), /attached image/);
 });
+
+test('find in a text document ignores case and accents and spans text nodes', async () => {
+  const { findAll } = await import('./text-find.js');
+  const hits = findAll(['La Memoria', ' virtual; la memória ', 'VIRTUAL'], 'memoria virtual');
+  assert.deepEqual(hits, [{ from: [0, 3], to: [1, 8] }, { from: [1, 13], to: [2, 7] }]);
+  assert.deepEqual(findAll(['abc'], '   '), []);
+  assert.equal(findAll(['aaaa'], 'aa').length, 2, 'matches do not overlap');
+});
