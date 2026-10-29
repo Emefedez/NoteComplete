@@ -17,6 +17,8 @@ To try in the real app or service (`[!]`):
 
 Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
+Planned, not started (`[ ]`): reordering pages in any note. See *Future: pages* below.
+
 Planned, not started (`[ ]`): collaborative Markdown notes with linked documents (one computer hosts, others join from an invite link). Plan and progress in [COLLABORATION.md](COLLABORATION.md).
 
 ## Study: quizzes and flashcards
@@ -246,6 +248,26 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
 - [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way. Every source lists .pdf, .noteful, .notepart, .notecomp and .notecomplete, with the same filters (Type included) and folders kept browsable.
+
+## Future: pages (agreed, not started)
+
+Owner's decision (2026-10-29), from the collaboration plan: a merge never asks where pages go; any order is fixed with this general feature.
+
+- [ ] **Reorder pages in any note.**
+  - **Ways to move pages**:
+    - drag page thumbnails in the Pages panel (the page lifts and follows the pointer while the others slide aside, like the tool row);
+    - Pages → *Move page up* / *Move page down* / *Move page to…* (a position);
+    - several pages at once: Shift- or Ctrl-click thumbnails, then drag or *Move to…*.
+  - **Undo**: every move is one undoable edit (Ctrl+Z).
+  - **Core**: the core already keeps a display order of page slots and exports pages in that order (inserted pages use it), so moving pages is an edit of that order. It is saved in projects and `.notecomp`, and the native `.noteful` export writes the new order.
+  - **References follow the pages**: after a move, everything that names a page by number is renumbered, so nothing points at the wrong page:
+    - flashcard `page`;
+    - quiz `source.page` and its hint region;
+    - `<!-- page N -->` markers in the Markdown notes;
+    - audio page sync and transcript sections;
+    - Find results and OCR text kept per page (unless they are already stored by slot, which does not move; to check when implementing).
+  - **Tests**: Rust (the order edit, undo, export order, a `.noteful` round trip that `verify_document` accepts) and a headless run (drag in the Pages panel, references renumbered).
+- [ ] **Merged copies** (collaboration plan, *Keep both*) use the same feature: mine first, then rearranged here.
 
 ## Future: collaborative notes (planned, not started)
 

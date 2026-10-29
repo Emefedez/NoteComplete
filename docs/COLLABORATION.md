@@ -128,7 +128,7 @@ A bound copy can drift from the shared version in two ways. Checks are cheap: si
 | Shared version (`v`) | Your copy (vs. hash at binding) | What clicking the chip does |
 | --- | --- | --- |
 | same | same | Opens your copy. |
-| same | **changed** | Opens your copy; the chip says *Your copy changed*. The host can share it as the new version; a guest can *Propose my version* (Phase 7). |
+| same | **changed** | Opens your copy; the chip says *Your copy changed*. The host can share it as the new version; a guest can *Propose my version* when the host allows it (Phase 7). |
 | **newer** | same | Offers *Get the new version* (download, rebind; the old copy is kept as a previous version) or *Compare first*. |
 | **newer** | **changed** | Opens the comparison: both changed. |
 
@@ -142,7 +142,7 @@ A bound copy can drift from the shared version in two ways. Checks are cheap: si
 - both sides added, in different places: "You added 2 pages and the shared version added 3, nothing removed or changed. Keep both?".
 
 The answers:
-- **Keep both** (default): the combined copy holds every page in base order, each addition where its side put it. Two additions at the same spot go mine first, then shared.
+- **Keep both** (default): the combined copy holds every page in base order, each addition where its side put it. Two additions at the same spot go mine first, then shared; any other order is fixed afterwards with *Reorder pages* (a general reader feature, see below).
 - **Compare first**: the full per-page window.
 - **Keep mine only**.
 
@@ -151,7 +151,7 @@ The answers:
 - labels become *Your copy* / *Shared version*.
 
 It grows from whole-file choices into **per-page choices**. Pages only one side touched come preselected with that side's change; only pages both sides changed (conflicts) start without a choice:
-- **Changed** page (a pair): *Keep mine* / *Take shared* / *Keep both* (both pages, mine first).
+- **Changed** page (a pair): *Keep mine* / *Take shared* / *Keep both* (both pages, mine first; reorder them afterwards if needed).
 - **Only in mine**: *Keep* / *Drop*.
 - **Only in shared**: *Add* / *Skip*.
 - *Keep all mine* / *Take all shared* buttons for the whole list. The unchanged pages are not listed.
@@ -166,6 +166,8 @@ The binding records which shared version the merge started from. The chip then s
 - **Anything else** (images, unknown files): whole-file choices only (*Keep mine* / *Take shared* / *Keep both*), as today.
 
 Study material, notes and recordings tied to the old copy's fingerprint are carried to the merged copy (`carryStudy`), as when saving an edited file.
+
+**Page order after a merge.** The merge never asks where each page should go. *Keep both* puts mine first, and anything else is fixed in the reader with **Reorder pages**, a general feature for every note, not only merged ones (owner's decision, 2026-10-29; see `REQUESTS.md`, *Future: pages*). Reordering also renumbers the page references held by study material and notes, so a merged copy can be rearranged freely.
 
 ### "Link document…" button
 
@@ -197,7 +199,8 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
   - The host picks:
     - **Can edit** or **Can view** (view-only guests get read-only updates and presence; edits are rejected by the host, not only hidden);
     - which linked files guests may download (all by default);
-    - an optional *Include the note itself* (adds the open document as a linked file, so page markers become usable for guests).
+    - an optional *Include the note itself* (adds the open document as a linked file, so page markers become usable for guests);
+    - *Guests may propose versions* (Phase 7; off by default; the owner is fine either way).
   - The host gets an invite link and a QR code.
 - **Invite link**: `http://<host LAN address>:<port>/join#<session id>.<token>`.
   - The token: 128 random bits, one per session (or per guest when *Invite each person separately* is on).
@@ -211,7 +214,7 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
 - **Limits**:
   - a maximum number of guests (default 10);
   - message size and update-rate limits;
-  - downloads with HTTP range requests, at most a few at a time per guest;
+  - downloads with HTTP range requests, at most a few at a time per guest. There is no file size limit (owner's decision): big notes download in resumable parts, and an interrupted download continues where it stopped;
   - a guest flooding the host is disconnected.
 - **What guests can never do**: read any file that was not linked, reach the host's Drive, MCP or AI tools, or change anything but the notes text. A guest's proposed version (Phase 7) is only an upload the host may look at; it never replaces anything without the host choosing pages in the comparison.
 
@@ -315,6 +318,7 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 ### Phase 6: per-page merge
 
+- [ ] Needs *Reorder pages* (`REQUESTS.md`, *Future: pages*) to be done first or alongside: it is how merged pages are put in order.
 - [ ] Core: a document from chosen pages of two `.noteful` documents, resources brought along; Rust tests round-trip it through the native export.
 - [ ] Core: PDF page copying (`lopdf`); text line hunks (`similar`).
 - [ ] Keep the base version on binding (previous version in the library, or page hashes); three-way page and hunk diff (base → mine, base → shared) with conflicts only where both sides changed the same base page.
@@ -329,9 +333,9 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 ### Phase 7: proposing a version back
 
-- [ ] A guest with *Can edit* sends their changed copy to the host (upload by hash, size-limited by the host's session setting).
+- [ ] When the host turned on *Guests may propose versions*, a guest with *Can edit* sends their changed copy to the host (upload by hash, resumable, no size limit).
 - [ ] The host sees "Version proposed by Ana" on the chip and decides in the per-page comparison which pages become the next shared version.
-- [ ] Security tests: uploads only from edit guests, size limits, never applied without the host's choice.
+- [ ] Security tests: uploads refused unless the host allows proposals and the guest can edit; never applied without the host's choice.
 
 ### Phase 8: polish and later
 
@@ -341,11 +345,14 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 - [ ] Optional: a `noteful serve` CLI host using `yrs`, for an always-on machine without the desktop app.
 - [ ] Later, if wanted: collaborative study material (shared decks and quizzes). Out of scope until notes collaboration is proven.
 
+## Answered (owner, 2026-10-29)
+
+- **Proposing versions back (Phase 7)**: either way is fine. It is a session option the host turns on (*Guests may propose versions*, off by default); otherwise only the host changes the shared version.
+- **Linked file sizes**: no limit. Downloads (and proposed uploads) are resumable instead.
+- **Keep both**: mine first. Any other order is set afterwards with *Reorder pages*, a general reader feature (`REQUESTS.md`, *Future: pages*).
+
 ## Open questions for the owner
 
-- **Linked file sizes**: should guests be able to download very large files, or should the host set a size limit per session?
-- **Keep both**: in the per-page merge, should *Keep both* put the shared page after mine (as planned) or let the user order them?
-- **Proposing versions back (Phase 7)**: is it wanted at all, or should only the host ever change the shared version?
 - **Guests without a name**: is "Guest 1, Guest 2…" enough, or must each person type a name before joining?
 - **"Can view" guests**: should they see other people's cursors, or only the text?
 - **Ending the session**: should it end only when the host stops it, or also when the host's app closes? The plan says both. Resuming with the same link is in Phase 8.
