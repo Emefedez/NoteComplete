@@ -3,6 +3,7 @@
 // New folder, kind 'folder'), or files added to an open document (Add documents…). Saved in the library as settings `group:<id>`; the files stay where they are.
 // A member is { key, name, source: 'local', path } or a Drive note from Recent { key, name, source: 'drive' }.
 import { TYPES, typeOf } from './note-facts.js';
+import { icon } from './icons.js';
 
 const PREFIX = 'group:';
 const dirname = (p) => String(p || '').replace(/\/[^/]*$/, '');
@@ -47,6 +48,15 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
       if (on) fresh.starred.push(key);
       group.starred = fresh.starred;
       await save(fresh);
+    },
+    // A document deleted on disk leaves every group and star.
+    async forget(key) {
+      for (const g of await all()) {
+        if (!g.members?.some((m) => m.key === key) && !g.starred?.includes(key)) continue;
+        g.members = (g.members || []).filter((m) => m.key !== key);
+        g.starred = (g.starred || []).filter((k) => k !== key);
+        await save(g);
+      }
     },
     // A document renamed on disk keeps its place: in the members, the stars and its folder.
     async renamed(oldKey, member) {
@@ -126,8 +136,55 @@ export function starButton(on, label, toggle) {
   return b;
 }
 
-// contextMenu(member, anchor, event): right click on a document of the list (Rename… for files on disk).
-export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {}, contextMenu = null }) {
+// rename(member, name): renames the document's file (files on disk, canRename); a pen shown
+// on hover, or a right click, turns its name into a field (Enter renames, Esc cancels).
+// trash(member): × asks first, in the row, then moves the file to the system trash.
+export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {}, rename = null, canRename = () => false, trash = null }) {
+  const clean = (error) => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  // The confirmation takes the row's place: Move to the trash, (Remove from the group), Cancel.
+  function confirmTrash(li, m) {
+    const row = li.cloneNode(false), text = document.createElement('span');
+    row.className = 'group-confirm';
+    text.className = 'group-confirm-text';
+    text.textContent = `Move ${m.name} to the trash?`;
+    const action = (label, cls, run) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = label; b.onclick = run; return b; };
+    const cancel = action('Cancel', '', () => { row.replaceWith(li); });
+    const yes = action('Move to trash', 'danger', async () => {
+      yes.disabled = true;
+      try { await trash(m); } catch (error) { yes.disabled = false; status(clean(error), true); }
+    });
+    const buttons = [yes];
+    if (!m.inFolder && group && !group.folder) buttons.push(action('Only remove from list', '', async () => { await groups.remove(group, m.key); status(`${m.name} removed from ${group.name}; the file is kept.`); render(); }));
+    row.onkeydown = (event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); row.replaceWith(li); } };
+    row.append(text, ...buttons, cancel);
+    li.replaceWith(row);
+    cancel.focus();
+  }
+  // The name in place, the name without its extension selected, as in file managers.
+  function renameInPlace(li, button, m) {
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'group-rename-field'; input.value = m.name; input.spellcheck = false;
+    input.setAttribute('aria-label', `New name for ${m.name}`);
+    button.replaceWith(input);
+    li.classList.add('renaming');
+    input.focus();
+    const dot = m.name.lastIndexOf('.');
+    input.setSelectionRange(0, dot > 0 ? dot : m.name.length);
+    let busy = false;
+    const cancel = () => { if (!input.isConnected) return; input.replaceWith(button); li.classList.remove('renaming'); };
+    input.onkeydown = async (event) => {
+      event.stopPropagation();
+      if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      if (event.key !== 'Enter' || busy) return;
+      event.preventDefault();
+      const next = input.value.trim();
+      if (!next || next === m.name) return cancel();
+      busy = true;
+      try { await rename(m, next); }
+      catch (error) { busy = false; status(clean(error), true); input.focus(); }
+    };
+    input.onblur = () => { if (!busy) cancel(); };
+  }
   let current = null, group = null, token = 0;
   async function render() {
     const mine = ++token;
@@ -151,9 +208,28 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
       button.append(kind, label);
       if (m.key === current.key) button.setAttribute('aria-current', 'page');
       button.onclick = () => m.key !== current.key && open(m).catch((error) => status(error.message, true));
-      if (contextMenu) button.oncontextmenu = (event) => { event.preventDefault(); contextMenu(m, button, event); };
       li.append(starButton(!!m.starred, m.name, async (on) => { await groups.star(group, m.key, on); render(); }), button);
-      if (!m.inFolder) {
+      if (rename && canRename(m)) {
+        const pen = document.createElement('button');
+        pen.type = 'button';
+        pen.className = 'group-rename';
+        pen.title = `Rename ${m.name}`;
+        pen.setAttribute('aria-label', pen.title);
+        pen.append(icon('draw'));
+        pen.onclick = () => renameInPlace(li, button, m);
+        button.oncontextmenu = (event) => { event.preventDefault(); renameInPlace(li, button, m); };
+        li.append(pen);
+      }
+      if (trash && canRename(m)) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'group-remove';
+        remove.textContent = '×';
+        remove.title = `Delete ${m.name} (moves it to the trash; asks first)`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.onclick = () => confirmTrash(li, m);
+        li.append(remove);
+      } else if (!m.inFolder) {
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'group-remove';

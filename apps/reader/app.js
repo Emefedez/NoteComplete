@@ -224,7 +224,7 @@ function reset({ opening = false } = {}) {
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
   dirty = changed = false;
-  $("textSave").hidden = true;
+  $("textSave").hidden = $("htmlSave").hidden = true;
   documentControls();
   if (!opening) home?.show(false);
 }
@@ -1877,7 +1877,7 @@ document.addEventListener("keydown", (e) => {
     else find.open();
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && textView.hasDocument) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && (textView.hasDocument || htmlView.hasDocument)) {
     e.preventDefault();
     saveText();
     return;
@@ -2393,6 +2393,13 @@ const htmlView = htmlViewer({
   reload: $("htmlReload"),
   clear: $("htmlClear"),
   status,
+  // Edit: the HTML source in the plain editor; Save / Ctrl S writes it like a text file.
+  editorHost: $("htmlEditor"), edit: $("htmlEdit"),
+  onChange: () => {
+    dirty = changed = true;
+    $("htmlSave").hidden = false;
+    tabBar.update({ title: htmlView.name, dirty: true });
+  },
   darkScript: loadDarkReader,
   // The dark theme's --canvas and --ink, also when the app itself is light.
   darkColors: () => ({ mode: 1, brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: "#15171b", darkSchemeTextColor: "#e5e8ed" }),
@@ -2450,23 +2457,25 @@ const textFinder = textFind({
 for (const id of ["textEdit", "textMarkdown"]) $(id).addEventListener("click", () => textFinder.refresh());
 const htmlZoom = zoomControl({ key: "notecomplete-html-zoom", out: $("htmlZoomOut"), into: $("htmlZoomIn"), value: $("htmlZoomValue"), apply: (z) => htmlView.setZoom(z) });
 // Save (Ctrl S) for an edited text document: back to its file on this device, else a download.
+// Saves the edited text or HTML document over its file (a download when it has none here).
 async function saveText() {
-  if (!textView.hasDocument || !changed) return;
-  const name = docMember?.name || `${textView.name}.txt`;
+  const view = textView.hasDocument ? textView : htmlView.hasDocument ? htmlView : null;
+  if (!view || !changed) return;
+  const html = view === htmlView, name = docMember?.name || `${view.name}${html ? ".html" : ".txt"}`;
   try {
     if (docMember?.source === "local" && window.notecompleteFiles?.writeOpened) {
-      await window.notecompleteFiles.writeOpened(docMember.path, new TextEncoder().encode(textView.text));
+      await window.notecompleteFiles.writeOpened(docMember.path, new TextEncoder().encode(view.text));
       status(`Saved ${name}.`);
     } else {
-      await download(textView.text, name, "text/plain");
+      await download(view.text, name, html ? "text/html" : "text/plain");
       status(`This file isn't on this device, so ${name} was downloaded with the changes.`);
     }
     dirty = changed = false;
-    $("textSave").hidden = true;
-    tabBar.update({ title: textView.name, dirty: false });
+    $(html ? "htmlSave" : "textSave").hidden = true;
+    tabBar.update({ title: view.name, dirty: false });
   } catch (error) { status(error.message, true); }
 }
-$("textSave").onclick = () => saveText();
+$("textSave").onclick = $("htmlSave").onclick = () => saveText();
 // A text document open instead of a note: studied by sections.
 function studyText() { return !doc && textView.hasDocument; }
 // The open HTML or text document, when one is open instead of a note.
@@ -2557,43 +2566,25 @@ async function openedLocal(path, name, file) {
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
-const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons(), contextMenu: (member, anchor, event) => docMenu(member, event) });
-// Right click on a document in the side list: star it, or rename its file on disk.
-function docMenu(member, event) {
-  const menu = $("docMenu"), group = groupList.group;
-  const canRename = member.source === "local" && !!window.notecompleteFiles?.renameOpened;
-  $("docMenuTitle").textContent = member.name;
-  $("docStar").textContent = member.starred ? "Unstar" : "Star";
-  $("docRename").hidden = !canRename;
-  $("docRenameRow").hidden = true;
-  $("docMenuText").hidden = canRename;
-  $("docMenuText").textContent = "Only files on this computer can be renamed here.";
-  const close = () => { menu.hidden = true; document.removeEventListener("pointerdown", outside, true); };
-  const outside = (e) => { if (!menu.contains(e.target)) close(); };
-  const commit = async () => {
-    const name = $("docRenameName").value.trim();
-    if (!name || name === member.name) return close();
-    try { await renameLocal(member, name); close(); }
-    catch (error) { $("docMenuText").hidden = false; $("docMenuText").textContent = error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""); }
-  };
-  $("docStar").onclick = async () => { close(); if (group) { await groups.star(group, member.key, !member.starred); groupList.render(); } };
-  // The name without its extension is selected, as in file managers.
-  $("docRename").onclick = () => {
-    $("docRenameRow").hidden = false;
-    const input = $("docRenameName"), dot = member.name.lastIndexOf(".");
-    input.value = member.name;
-    input.focus();
-    input.setSelectionRange(0, dot > 0 ? dot : member.name.length);
-  };
-  $("docRenameName").onkeydown = (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commit(); }
-    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
-  };
-  $("docRenameSave").onclick = commit;
-  menu.hidden = false;
-  menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, event.clientX))}px`;
-  menu.style.top = `${Math.max(8, Math.min(innerHeight - menu.offsetHeight - 8, event.clientY))}px`;
-  setTimeout(() => document.addEventListener("pointerdown", outside, true));
+const groupList = groupPanel({
+  root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons(),
+  // The pen on a file of this computer renames it on disk.
+  rename: (member, name) => renameLocal(member, name),
+  canRename: (member) => member.source === "local" && !!window.notecompleteFiles?.renameOpened,
+  // × (after the row asks): the file goes to the system trash.
+  trash: (member) => trashLocal(member),
+});
+// The file goes to the trash; it leaves Recent, its groups and stars. The open one closes.
+async function trashLocal(member) {
+  await window.notecompleteFiles.trashOpened(member.path);
+  await library.forget(member.key);
+  await groups.forget(member.key);
+  if (docMember?.key === member.key) {
+    dirty = changed = false;
+    docMember = null;
+    reset();
+  } else await groupList.render();
+  status(`${member.name} moved to the trash.`);
 }
 // Renames the file on disk; Recent, its folder, its star and the open document follow.
 async function renameLocal(member, name) {

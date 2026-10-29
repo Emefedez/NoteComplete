@@ -232,7 +232,7 @@ app.whenReady().then(async () => {
   const pendingAuth = new Map();
   const trusted = event => event.senderFrame === event.sender.mainFrame && event.senderFrame.url.startsWith(home);
   // Downloads folder and Recent for the reader; see library-files.js for the limits.
-  const files = libraryFiles({ settingsFile: path.join(app.getPath('userData'), 'library.json'), defaultFolder: path.join(app.getPath('documents'), 'NoteComplete') });
+  const files = libraryFiles({ settingsFile: path.join(app.getPath('userData'), 'library.json'), defaultFolder: path.join(app.getPath('documents'), 'NoteComplete'), trash: (file) => shell.trashItem(file) });
   const guarded = handler => async (event, ...args) => {
     if (!trusted(event)) throw Error('Unexpected reader origin.');
     return handler(event, ...args);
@@ -264,6 +264,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
+  ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   ipcMain.handle('files:pick', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];

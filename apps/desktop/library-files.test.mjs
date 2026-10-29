@@ -99,3 +99,17 @@ test('an opened file can be renamed in its folder, never over another file or ou
   assert.equal(new TextDecoder().decode(await files.readRecent(moved)), 'p');
   await assert.rejects(files.readRecent(other), /not opened/);
 });
+
+test('only an opened file can be moved to the trash, and Recent forgets it', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-trash-'));
+  const file = path.join(root, 'a.md'), trashed = [];
+  await writeFile(file, 'a');
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: root, trash: async (p) => { trashed.push(p); } });
+  await assert.rejects(files.trashOpened(file), /not opened/);
+  await assert.rejects(files.trashOpened('/etc/hosts'), /not opened/);
+  assert.deepEqual(trashed, []);
+  await files.remember(file);
+  await files.trashOpened(file);
+  assert.deepEqual(trashed, [file]);
+  await assert.rejects(files.readRecent(file), /not opened/);
+});

@@ -22,7 +22,8 @@ export function plainName(name) {
   return name;
 }
 
-export function libraryFiles({ settingsFile, defaultFolder }) {
+// trash(path): moves a file to the system trash (Electron's shell.trashItem).
+export function libraryFiles({ settingsFile, defaultFolder, trash = async () => { throw Error('The trash is not available here.'); } }) {
   let settings;
   const load = async () => {
     if (settings) return settings;
@@ -70,6 +71,14 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
         return next;
       }
       throw Error(`${name} already exists in that folder.`);
+    },
+    // Deletes an opened document (× in the documents list): to the trash, so it can be restored.
+    async trashOpened(file) {
+      await opened(file);
+      await trash(file);
+      const s = await load();
+      s.recent = s.recent.filter(p => p !== file);
+      await save();
     },
     async folder() { return (await load()).folder; },
     async setFolder(folder) {

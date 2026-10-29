@@ -343,7 +343,7 @@ main {
 .doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
 .doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
 .doc-editor-plain:focus, .doc-editor-plain:focus-visible { outline: none; }
-#textEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .html-bar .zoom-controls { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
 /* Document bar actions are filled chips, like the File menu's export buttons (MD, PDF…);
    the sidebar and moon toggles stay plain, as in the notes bar. */
@@ -2065,3 +2065,14 @@ body.study-text [data-material="pdf"], body.study-text [data-material="note"], b
 .note-grid .star-toggle[aria-pressed="false"] { opacity: 0.85; }
 body.home-list .note-grid .star-toggle { top: 50%; right: 34px; transform: translateY(-50%); width: 24px; min-height: 22px; height: 22px; border: 0; background: transparent; box-shadow: none; }
 body.home-list #recentList li:has(.star-toggle) .note-meta { padding-right: 64px; }
+/* Side list: a pen and × at the right of a file's row on hover (groups.js): the pen renames
+   the file in place, × asks in the row before moving it to the trash. */
+.group-rename { flex: none; display: inline-grid; place-items: center; width: 24px; min-height: 22px; padding: 0; opacity: 0; color: var(--muted); }
+.group-rename svg { width: 14px; height: 14px; }
+.group-list li:hover .group-rename, .group-rename:focus-visible { opacity: 1; }
+.group-rename:hover, .group-remove:hover { color: var(--ink); }
+.group-rename-field { flex: 1; min-width: 0; min-height: 26px; padding: 2px 6px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 13px; }
+.group-list li.renaming .group-rename, .group-list li.renaming .group-remove { display: none; }
+.group-list li.group-confirm { flex-wrap: wrap; gap: 4px; padding: 6px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--fill); }
+.group-confirm-text { flex: 1 0 100%; font-size: 12px; overflow-wrap: anywhere; }
+.group-confirm button { min-height: 24px; padding: 0 8px; font-size: 12px; }

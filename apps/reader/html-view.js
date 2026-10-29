@@ -4,6 +4,9 @@
 // progress in localStorage/sessionStorage get an in-frame stand-in that this
 // module persists per document on this device. In the dark theme, pages with only a
 // light design are darkened by Dark Reader (vendored, loaded on first use) inside the frame.
+// Edit shows the page's HTML source in the plain editor (text-view.js's, not TinyMDE,
+// whose toolbar writes Markdown); leaving Edit renders the page again, and the app
+// saves the source (onChange reports every edit).
 
 export const isHtmlName = (name) => /\.html?$/i.test(name || '');
 const STORE = 'notecomplete-html-state:';
@@ -48,8 +51,8 @@ export function prepareHtml(source, seed = {}, dark = null, zoom = 1) {
   return tag + source;
 }
 
-export function htmlViewer({ root, frame, title, reload, clear, status, darkScript = null, darkColors = () => ({}), onOwnDark = () => {} }) {
-  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0, zoom = 1;
+export function htmlViewer({ root, frame, title, reload, clear, status, darkScript = null, darkColors = () => ({}), onOwnDark = () => {}, editorHost = null, edit = null, onChange = () => {} }) {
+  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0, zoom = 1, editing = false;
   const read = () => {
     try {
       return (typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(STORE + key))) || {};
@@ -66,6 +69,7 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
       const value = frame.getAttribute(name);
       if (value !== null) next.setAttribute(name, value);
     }
+    next.hidden = frame.hidden;
     frame.replaceWith(next);
     return next;
   };
@@ -91,9 +95,33 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
       } catch { /* Progress is optional. */ }
     });
   }
+  function startEditing() {
+    if (!editorHost || !source) return;
+    editing = true;
+    edit?.setAttribute('aria-pressed', 'true');
+    frame.hidden = true;
+    const area = editorHost.ownerDocument.createElement('textarea');
+    area.className = 'doc-editor-plain';
+    area.spellcheck = false;
+    area.value = source;
+    area.oninput = () => { source = area.value; onChange(source); };
+    editorHost.replaceChildren(area);
+    editorHost.hidden = false;
+    area.focus();
+  }
+  function stopEditing() {
+    if (!editing) return;
+    editing = false;
+    edit?.setAttribute('aria-pressed', 'false');
+    editorHost.replaceChildren();
+    editorHost.hidden = true;
+    frame.hidden = false;
+    if (source) render();
+  }
+  if (edit) edit.onclick = () => (editing ? stopEditing() : startEditing());
   frame.setAttribute?.('sandbox', 'allow-scripts allow-modals allow-forms');
   frame.setAttribute?.('csp', CSP);
-  if (reload) reload.onclick = render;
+  if (reload) reload.onclick = () => (editing ? stopEditing() : render());
   if (clear) clear.onclick = () => {
     if (typeof confirm === 'function' && !confirm('Clear the answers and settings this page saved on this device?')) return;
     try {
@@ -104,6 +132,7 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
   };
   return {
     open({ text, fingerprint, name }) {
+      stopEditing();
       key = fingerprint || name; source = text; currentTitle = name;
       if (title) title.textContent = name;
       root.hidden = false;
@@ -124,9 +153,11 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
     },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
-    close() { renders++; root.hidden = true; frame = fresh(); frame.srcdoc = ''; darkInFrame = false; source = ''; key = ''; currentTitle = ''; },
+    close() { stopEditing(); renders++; root.hidden = true; frame = fresh(); frame.srcdoc = ''; darkInFrame = false; source = ''; key = ''; currentTitle = ''; },
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(source); },
+    get editing() { return editing; },
+    get text() { return source; },
     get name() { return currentTitle || title?.textContent || ''; },
   };
 }
