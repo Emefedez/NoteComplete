@@ -227,12 +227,32 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
 - **In NoteComplete**:
   - File → Join shared notes… (paste the link) opens the session in a tab;
   - downloaded files go to the library like Drive copies.
+- **Your name**:
+  - joining shows a name prompt in the middle of the screen: a text field already filled with *Guest N* (the next free number) and selected, so typing replaces it;
+  - Enter or the **OK** button (kept, not only Enter) confirms;
+  - the name is remembered for the next session and can be changed later from the people list.
 - **Presence** (Yjs awareness):
-  - each person has a name (asked once, remembered) and a colour;
-  - other people's cursors and selections show in the editor;
-  - a row of avatars sits in the panel head.
+  - each person has a colour;
+  - other people's cursors and selections show in the editor, for *Can view* guests too (the owner wants it if it is not hard; it is the same awareness channel, so it costs little);
+  - everyone's names sit in the top bar, beside the file name (coloured chips; a few, then "+3");
+  - clicking a name scrolls the notes to that person's cursor (and opens the notes panel if it is closed).
 - **Leaving**: a guest can keep a copy of the notes (*Save a copy*: a `.md` file, or a note in their library). The host's copy stays the shared one.
+- **When the host closes the app**: see *Ending a session*.
 - **Disconnects**: edits made while offline merge when the guest reconnects (CRDT). After a long absence the guest is told the session ended, and keeps their unsent text as a copy.
+
+## Ending a session
+
+- **Closing the host's app (or its window or tab) with a session open** asks first:
+  - "Notes are shared with 3 people. Closing ends the session for everyone."
+  - **Minimize** (default: the session keeps running, the window goes to the taskbar);
+  - **End session and close**;
+  - **Cancel**.
+- **Ending the session** (from that prompt or from *Stop sharing*):
+  1. the host sends a *session ending* message to everyone;
+  2. each guest saves at once: their editor's text is flushed to the host one last time and also kept as a local copy (*Save a copy*, without asking);
+  3. the host waits briefly for those last updates (a couple of seconds at most), writes the final text where notes live, then closes the connections and stops the server.
+- **Guests** see "The host ended the session; your copy of the notes was saved" with *Open my copy*.
+- A host that disappears without warning (crash, power loss) ends the session too. Guests keep their text as a copy when the connection does not come back.
 
 ## Persistence on the host
 
@@ -290,12 +310,14 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
   - local changes become minimal diffs into `Y.Text`;
   - remote updates are applied to the editor keeping the caret and selection;
   - undo stays per person (`Y.UndoManager`).
-- [ ] Presence: names, colours, remote cursors, avatars in the panel head.
+- [ ] Presence: the name prompt (*Guest N* filled in, Enter or OK), colours, remote cursors (view-only guests too), names in the top bar beside the file name, click a name to scroll to that person's cursor.
+- [ ] Ending: the close prompt (Minimize / End session and close / Cancel), the *session ending* message, guests' last flush and local copy, the host's final save.
 - [ ] Persistence to `setMarkdown` / `notes:<fp>` (debounced, and when the session ends); `collab:<fp>` update log for resuming.
 - [ ] Tests:
   - two headless guests and the host type at the same place at once, and all three end with the same text;
   - a guest offline for a while reconnects and their edits merge;
-  - closing the host saves the final text.
+  - closing the host (End session and close) saves the final text on the host and a copy on every guest;
+  - Minimize keeps the session running.
 - Done when: three people edit the same notes at once without losing text, and the host's saved notes match.
 
 ### Phase 4: downloading linked documents
@@ -350,9 +372,8 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 - **Proposing versions back (Phase 7)**: either way is fine. It is a session option the host turns on (*Guests may propose versions*, off by default); otherwise only the host changes the shared version.
 - **Linked file sizes**: no limit. Downloads (and proposed uploads) are resumable instead.
 - **Keep both**: mine first. Any other order is set afterwards with *Reorder pages*, a general reader feature (`REQUESTS.md`, *Future: pages*).
+- **Guest names**: *Guest N* is filled in; joining shows a name field in the middle of the screen that can be typed over and confirmed with Enter or **OK** (the button stays). See *Guest experience*.
+- **Cursors for view-only guests**: yes, if it is not hard (it is not: same awareness channel). Names appear in the top bar beside the file name; clicking one scrolls to that person's cursor.
+- **Ending the session**: closing the host's app asks *Minimize* / *End session and close* / *Cancel*. Ending tells everyone to save first. See *Ending a session*.
 
-## Open questions for the owner
-
-- **Guests without a name**: is "Guest 1, Guest 2…" enough, or must each person type a name before joining?
-- **"Can view" guests**: should they see other people's cursors, or only the text?
-- **Ending the session**: should it end only when the host stops it, or also when the host's app closes? The plan says both. Resuming with the same link is in Phase 8.
+No open questions left.

@@ -17,6 +17,8 @@ To try in the real app or service (`[!]`):
 
 Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
+To do (`[ ]`): Ask AI about HTML pages, and Ask AI opening slowly (a minute) on a Markdown file. See *Ask AI on HTML and text files* below.
+
 Planned, not started (`[ ]`): reordering pages in any note. See *Future: pages* below.
 
 Planned, not started (`[ ]`): collaborative Markdown notes with linked documents (one computer hosts, others join from an invite link). Plan and progress in [COLLABORATION.md](COLLABORATION.md).
@@ -248,6 +250,34 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
 - [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way. Every source lists .pdf, .noteful, .notepart, .notecomp and .notecomplete, with the same filters (Type included) and folders kept browsable.
+
+## Ask AI on HTML and text files (owner, 2026-10-29)
+
+- [ ] **Ask AI about this note on HTML pages.** Text and Markdown files already have it (since 1.0.11: the part being read plus the selected text). HTML pages have none: the Study menu items and the Ask AI button are disabled there. Plan:
+  - **What the AI gets**:
+    - the page's visible text, asked from the sandboxed frame through its shim (a `noteCompleteText` message answered with `document.body.innerText` and the current selection), so text that the page's own scripts write is included;
+    - the page source as a fallback when the frame does not answer;
+    - long pages split into sections, as for text files.
+  - **Selection**: text selected inside the page counts as *Selection*.
+  - **Optional image**: a capture of the visible part of the page (the desktop app's `capturePage`), since many HTML pages are exercises with layout or drawings.
+  - **Also**: My notes (the page's Markdown notes from 1.0.14) and the scratchpad.
+  - **Same for study**: flashcards and quizzes from HTML pages, by sections, once the text extraction exists.
+- [ ] **Ask AI took about a minute to come up on a Markdown file.** To measure first, then fix. Where the time goes:
+  - opening the panel;
+  - from Send to the first words;
+  - inside that, the AI tool's start.
+
+  Leads found in the code:
+  - **The panel only appears after the model list loads** (`chat.js` `open()` awaits `model.load()`).
+    - For Antigravity that runs `agy models`, with a 30-second timeout (and Antigravity runs inside muvm on this machine).
+    - An empty list is not cached (`ai-runner.js` `models()` deletes it), so every opening can wait again.
+    - Fix ideas:
+      - show the panel at once and fill the model list in the background;
+      - cache the list, also when empty, for the session;
+      - load models only when the dropdown is opened.
+  - **The first request starts the AI tool cold.** It could be started (or its binary found) when the panel opens, not on Send.
+
+  Done when: the Ask AI panel appears immediately on text, Markdown and HTML files, and the time to the first words matches the same question on a note.
 
 ## Future: pages (agreed, not started)
 
