@@ -55,6 +55,22 @@ export function libraryFiles({ settingsFile, defaultFolder }) {
       await chmod(partial, mode);
       await rename(partial, file);
     },
+    // Renames an opened document in its own folder (Rename… in the documents list), never
+    // over another file; Recent follows it. Returns the new path.
+    async renameOpened(file, name) {
+      await opened(file);
+      const next = path.join(path.dirname(file), plainName(name));
+      if (next === file) return file;
+      try { await stat(next); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        await rename(file, next);
+        const s = await load();
+        s.recent = s.recent.map(p => (p === file ? next : p));
+        await save();
+        return next;
+      }
+      throw Error(`${name} already exists in that folder.`);
+    },
     async folder() { return (await load()).folder; },
     async setFolder(folder) {
       if (!path.isAbsolute(folder)) throw Error('Choose an absolute folder.');

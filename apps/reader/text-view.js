@@ -152,6 +152,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       body.scrollTop = 0;
       return render();
     },
+    // The file was renamed on disk: new title and the key MD on/off is remembered under.
+    rename(shown, id = shown) { name = shown; key = id; if (title) title.textContent = shown; },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
     close() { stopEditing(); renders++; root.hidden = true; body.replaceChildren(); text = ''; name = ''; },

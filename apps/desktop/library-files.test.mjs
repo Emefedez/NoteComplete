@@ -76,3 +76,26 @@ test('an edited text file is saved only over a file that was opened, keeping its
   await assert.rejects(files.writeOpened(path.join(root, 'other.md'), new Uint8Array([1])), /not opened/);
   assert.equal(await get(path.join(root, 'other.md'), 'utf8'), 'keep');
 });
+
+test('an opened file can be renamed in its folder, never over another file or out of it', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-rename-'));
+  const folder = path.join(root, 'Tema 1'), other = path.join(root, 'picked.md');
+  const { mkdir: dir } = await import('node:fs/promises');
+  await dir(folder);
+  for (const name of ['a.md', 'b.md']) await writeFile(path.join(folder, name), name);
+  await writeFile(other, 'p');
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: root });
+  await assert.rejects(files.renameOpened(path.join(folder, 'a.md'), 'c.md'), /not opened/);
+  await files.rememberFolder(folder);
+  assert.equal(await files.renameOpened(path.join(folder, 'a.md'), 'Apuntes 1.md'), path.join(folder, 'Apuntes 1.md'));
+  assert.deepEqual((await readdir(folder)).sort(), ['Apuntes 1.md', 'b.md']);
+  await assert.rejects(files.renameOpened(path.join(folder, 'b.md'), 'Apuntes 1.md'), /already exists/);
+  assert.equal(await readFile(path.join(folder, 'Apuntes 1.md'), 'utf8'), 'a.md', 'the other file is untouched');
+  for (const bad of ['../x.md', 'sub/x.md', '.x.md', 'x.exe', ''])
+    await assert.rejects(files.renameOpened(path.join(folder, 'b.md'), bad), /Invalid file name/, bad);
+  // A file picked in the open dialog: Recent follows the new name.
+  await files.remember(other);
+  const moved = await files.renameOpened(other, 'renamed.md');
+  assert.equal(new TextDecoder().decode(await files.readRecent(moved)), 'p');
+  await assert.rejects(files.readRecent(other), /not opened/);
+});

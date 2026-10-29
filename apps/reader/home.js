@@ -7,7 +7,7 @@ import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from '
 import { migrator } from './migrate.js';
 import { entryTitle, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
-import { localMember, webMember } from './groups.js';
+import { localMember, webMember, starButton } from './groups.js';
 import { icon } from './icons.js';
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
@@ -29,7 +29,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   let shownFolder = null;
   async function folderEntries(group) {
     const members = await groups.members(group);
-    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { key: m.key, source: m.source, path: m.path, url: m.url, name: m.name, openedAt: 0, listed: true }), inFolder: m.inFolder })));
+    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { key: m.key, source: m.source, path: m.path, url: m.url, name: m.name, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred })));
   }
   async function renderFolders() {
     if (!groups) return;
@@ -180,7 +180,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
-      button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null };
+      button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
       if (!quick) {
         library.cover(coverKey(entry)).then(async url => {
           if (url) {
@@ -217,6 +217,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         } catch (error) { status(error.message, true); }
       };
       item.append(button, remove);
+      // In a folder: a star keeps the document at the top of it.
+      const folder = shownFolder;
+      if (folder) item.append(starButton(!!entry.starred, entryTitle(entry), async on => { await groups.star(folder, entry.key, on); renderRecent(); }));
       return [item];
     } catch (error) { console.warn('Recent entry skipped', entry?.key, error); return []; }
   }
@@ -354,7 +357,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     for (const list of [$('recentList'), $('driveList')]) {
       const items = [...list.children], notes = items.filter(li => li.querySelector('.note-card')?.note);
       if (notes.length < 2) continue;
-      const sorted = [...notes].sort((a, b) => compare(a.querySelector('.note-card').note, b.querySelector('.note-card').note));
+      // Starred documents of a folder stay first, whatever the sort.
+      const sorted = [...notes].sort((a, b) => { const x = a.querySelector('.note-card').note, y = b.querySelector('.note-card').note; return (y.starred ? 1 : 0) - (x.starred ? 1 : 0) || compare(x, y); });
       if (sorted.every((li, i) => li === notes[i])) continue;
       const others = items.filter(li => !notes.includes(li));
       list.append(...others, ...sorted);

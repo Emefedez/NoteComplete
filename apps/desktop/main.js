@@ -263,6 +263,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
+  ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:pick', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];

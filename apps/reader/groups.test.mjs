@@ -51,3 +51,19 @@ test('folders made in NoteComplete keep documents, move them between folders, an
   await groups.delete(aci);
   assert.deepEqual((await groups.all()).map((g) => g.name), ['Sistemas Operativos']);
 });
+
+test('starred documents come first in their folder and follow a rename', async () => {
+  const { starredFirst } = await import('./groups.js');
+  const members = ['a', 'b', 'c', 'd'].map((n) => localMember(`/f/${n}.md`, `${n}.md`));
+  assert.deepEqual(starredFirst(members, ['local:/f/d.md', 'local:/f/b.md']).map((m) => [m.name, !!m.starred]), [['b.md', true], ['d.md', true], ['a.md', false], ['c.md', false]]);
+  const groups = groupStore({ store: memoryStore(), bridge: null });
+  const g = await groups.create('Tema 1');
+  await groups.move(members[0], g); await groups.move(members[1], g);
+  await groups.star(g, 'local:/f/b.md', true);
+  assert.deepEqual((await groups.members((await groups.folders())[0])).map((m) => m.name), ['b.md', 'a.md']);
+  await groups.renamed('local:/f/b.md', localMember('/f/B 2.md', 'B 2.md'));
+  const fresh = (await groups.folders())[0];
+  assert.deepEqual((await groups.members(fresh)).map((m) => [m.name, !!m.starred]), [['B 2.md', true], ['a.md', false]]);
+  await groups.star(fresh, 'local:/f/B 2.md', false);
+  assert.deepEqual((await groups.members((await groups.folders())[0])).map((m) => m.name), ['a.md', 'B 2.md']);
+});

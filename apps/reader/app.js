@@ -2557,7 +2557,65 @@ async function openedLocal(path, name, file) {
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
-const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons() });
+const groupList = groupPanel({ root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons(), contextMenu: (member, anchor, event) => docMenu(member, event) });
+// Right click on a document in the side list: star it, or rename its file on disk.
+function docMenu(member, event) {
+  const menu = $("docMenu"), group = groupList.group;
+  const canRename = member.source === "local" && !!window.notecompleteFiles?.renameOpened;
+  $("docMenuTitle").textContent = member.name;
+  $("docStar").textContent = member.starred ? "Unstar" : "Star";
+  $("docRename").hidden = !canRename;
+  $("docRenameRow").hidden = true;
+  $("docMenuText").hidden = canRename;
+  $("docMenuText").textContent = "Only files on this computer can be renamed here.";
+  const close = () => { menu.hidden = true; document.removeEventListener("pointerdown", outside, true); };
+  const outside = (e) => { if (!menu.contains(e.target)) close(); };
+  const commit = async () => {
+    const name = $("docRenameName").value.trim();
+    if (!name || name === member.name) return close();
+    try { await renameLocal(member, name); close(); }
+    catch (error) { $("docMenuText").hidden = false; $("docMenuText").textContent = error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""); }
+  };
+  $("docStar").onclick = async () => { close(); if (group) { await groups.star(group, member.key, !member.starred); groupList.render(); } };
+  // The name without its extension is selected, as in file managers.
+  $("docRename").onclick = () => {
+    $("docRenameRow").hidden = false;
+    const input = $("docRenameName"), dot = member.name.lastIndexOf(".");
+    input.value = member.name;
+    input.focus();
+    input.setSelectionRange(0, dot > 0 ? dot : member.name.length);
+  };
+  $("docRenameName").onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+  };
+  $("docRenameSave").onclick = commit;
+  menu.hidden = false;
+  menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, event.clientX))}px`;
+  menu.style.top = `${Math.max(8, Math.min(innerHeight - menu.offsetHeight - 8, event.clientY))}px`;
+  setTimeout(() => document.addEventListener("pointerdown", outside, true));
+}
+// Renames the file on disk; Recent, its folder, its star and the open document follow.
+async function renameLocal(member, name) {
+  const path = await window.notecompleteFiles.renameOpened(member.path, name);
+  const newName = path.split(/[\\/]/).pop(), moved = localMember(path, newName);
+  await library.moveLocal(member.path, path, newName);
+  await groups.renamed(member.key, moved);
+  // MD on/off is remembered per file name.
+  try { const md = localStorage.getItem(`notecomplete-text-md:${member.name}`); if (md !== null) localStorage.setItem(`notecomplete-text-md:${newName}`, md); } catch { /* Optional. */ }
+  if (docMember?.key === member.key) {
+    if (notePath === member.path) notePath = path;
+    if (textView.hasDocument) {
+      const title = newName.replace(/\.[^.]+$/, "") || newName;
+      textView.rename(title, newName);
+      $("title").textContent = title;
+      document.title = `${title} — NoteComplete`;
+      tabBar.update({ title, dirty: dirty && changed });
+    }
+    await setDocMember(moved);
+  } else await groupList.render();
+  status(`Renamed to ${newName}.`);
+}
 // The sidebar button of HTML and text documents shows or hides the group list, like Pages in notes.
 let sideListOpen = true;
 try { sideListOpen = localStorage.getItem("notecomplete-group-list") !== "hidden"; } catch { /* Optional. */ }

@@ -907,6 +907,14 @@
   <button id="folderRemove" type="button" role="menuitem">Remove folder</button>
 </div>
 
+<div id="docMenu" class="note-menu" role="menu" aria-labelledby="docMenuTitle" hidden>
+  <p id="docMenuTitle" class="note-menu-title"></p>
+  <button id="docStar" type="button" role="menuitem">Star</button>
+  <button id="docRename" type="button" role="menuitem">Rename…</button>
+  <div id="docRenameRow" class="note-rename" hidden><div class="note-rename-field"><label for="docRenameName">Name</label><input id="docRenameName" type="text" maxlength="200" spellcheck="false" autocomplete="off" /><button id="docRenameSave" type="button">Rename</button></div></div>
+  <p id="docMenuText" class="muted" hidden></p>
+</div>
+
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
   <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>

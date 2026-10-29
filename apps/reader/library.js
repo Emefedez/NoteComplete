@@ -194,6 +194,18 @@ export class Library {
     await this.store.set('entries', entry.key, entry);
     return entry;
   }
+  // A local file renamed on disk: its Recent entry and cover move to the new path.
+  async moveLocal(oldPath, newPath, name) {
+    const oldKey = 'local:' + oldPath, entry = await this.store.get('entries', oldKey);
+    if (!entry) return null;
+    const moved = { ...entry, key: 'local:' + newPath, path: newPath, name };
+    await this.store.set('entries', moved.key, moved);
+    const cover = await this.cover(oldKey);
+    if (cover) await this.saveCover(moved.key, cover);
+    await this.store.delete('entries', oldKey);
+    await this.store.delete('covers', oldKey);
+    return moved;
+  }
   // Recent shows `title` when the user renamed the entry; `name` stays the file's own name
   // (Drive matching, file type, the kept copy). An empty or original title clears it.
   async rename(key, title) {

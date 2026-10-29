@@ -22,6 +22,11 @@ export function mergeMembers(listed = [], added = []) {
   return out;
 }
 
+export function starredFirst(members, starred = []) {
+  const on = new Set(starred);
+  return [...members.filter((m) => on.has(m.key)).map((m) => ({ ...m, starred: true })), ...members.filter((m) => !on.has(m.key))];
+}
+
 export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
   const all = async () => {
     const keys = (await store.keys('settings').catch(() => [])).filter((k) => String(k).startsWith(PREFIX));
@@ -31,9 +36,27 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
   return {
     all,
     save,
+    // Starred documents (group.starred, keys) come first, each part in its own order.
     async members(group) {
       const listed = group.folder && bridge?.listFolder ? await bridge.listFolder(group.folder).catch(() => []) : [];
-      return mergeMembers(listed, group.members);
+      return starredFirst(mergeMembers(listed, group.members), group.starred);
+    },
+    async star(group, key, on) {
+      const fresh = (await store.get('settings', PREFIX + group.id).catch(() => null)) || group;
+      fresh.starred = (fresh.starred || []).filter((k) => k !== key);
+      if (on) fresh.starred.push(key);
+      group.starred = fresh.starred;
+      await save(fresh);
+    },
+    // A document renamed on disk keeps its place: in the members, the stars and its folder.
+    async renamed(oldKey, member) {
+      for (const g of await all()) {
+        const listed = g.members?.some((m) => m.key === oldKey), starred = g.starred?.includes(oldKey);
+        if (!listed && !starred) continue;
+        if (listed) g.members = g.members.map((m) => (m.key === oldKey ? member : m));
+        if (starred) g.starred = g.starred.map((k) => (k === oldKey ? member.key : k));
+        await save(g);
+      }
     },
     // The group a document belongs to: listed in it, or a file directly in its folder.
     async of(member) {
@@ -87,7 +110,24 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
 }
 
 // The list in the side panel. `mount(slot)` moves it next to the open view's content.
-export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {} }) {
+// A star button (empty, filled when on) that keeps a document at the top of its folder.
+export function starButton(on, label, toggle) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'star-toggle';
+  b.setAttribute('aria-pressed', String(on));
+  b.setAttribute('aria-label', `${on ? 'Unstar' : 'Star'} ${label}`);
+  b.title = on ? 'Starred: listed first in the folder (click to unstar)' : 'Star: list it first in the folder';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), path = document.createElementNS(svg.namespaceURI, 'path');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+  path.setAttribute('d', 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z');
+  svg.append(path); b.append(svg);
+  b.onclick = (event) => { event.stopPropagation(); toggle(!on); };
+  return b;
+}
+
+// contextMenu(member, anchor, event): right click on a document of the list (Rename… for files on disk).
+export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {}, contextMenu = null }) {
   let current = null, group = null, token = 0;
   async function render() {
     const mine = ++token;
@@ -111,7 +151,8 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
       button.append(kind, label);
       if (m.key === current.key) button.setAttribute('aria-current', 'page');
       button.onclick = () => m.key !== current.key && open(m).catch((error) => status(error.message, true));
-      li.append(button);
+      if (contextMenu) button.oncontextmenu = (event) => { event.preventDefault(); contextMenu(m, button, event); };
+      li.append(starButton(!!m.starred, m.name, async (on) => { await groups.star(group, m.key, on); render(); }), button);
       if (!m.inFolder) {
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -140,5 +181,6 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
     mount(slot) { if (slot && root.parentElement !== slot) slot.append(root); },
     pick,
     get group() { return group; },
+    render,
   };
 }

@@ -148,3 +148,15 @@ test('web links are kept in Recent without a file, and keep a rename', async () 
   await library.rename(entry.key, 'Temario SO');
   assert.equal((await library.rememberWeb('https://curso.notion.site/Temario', 'Temario · Notion')).title, 'Temario SO');
 });
+
+test('a local file renamed on disk keeps its Recent entry, title and cover', async () => {
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => null } });
+  await library.rememberLocal('/d/tema1.md', 'tema1.md', 10);
+  await library.rename('local:/d/tema1.md', 'Tema uno');
+  await library.saveCover('local:/d/tema1.md', 'data:image/png;base64,AA');
+  const moved = await library.moveLocal('/d/tema1.md', '/d/Tema 1.md', 'Tema 1.md');
+  assert.deepEqual([moved.key, moved.path, moved.name, moved.title], ['local:/d/Tema 1.md', '/d/Tema 1.md', 'Tema 1.md', 'Tema uno']);
+  assert.equal(await library.store.get('entries', 'local:/d/tema1.md'), undefined);
+  assert.equal(await library.cover('local:/d/Tema 1.md'), 'data:image/png;base64,AA');
+  assert.equal(await library.moveLocal('/d/none.md', '/d/x.md', 'x.md'), null);
+});

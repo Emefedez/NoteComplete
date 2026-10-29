@@ -2055,3 +2055,13 @@ body.study-text [data-material="pdf"], body.study-text [data-material="note"], b
 /* Find in a text document (text-find.js): same colours as the matches on note pages. */
 ::highlight(text-find) { background-color: #ffd33d59; }
 ::highlight(text-find-current) { background-color: #ff8a0099; }
+/* Stars in a folder (groups.js starButton): empty until clicked, then filled; starred documents are listed first. */
+.star-toggle { flex: none; display: inline-grid; place-items: center; width: 24px; min-height: 22px; padding: 0; border: 0; background: transparent; color: var(--muted); }
+.star-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linejoin: round; }
+.star-toggle:hover { color: var(--ink); background: transparent; }
+.star-toggle[aria-pressed="true"] { color: #e8a800; }
+.star-toggle[aria-pressed="true"] svg { fill: currentColor; }
+.note-grid .star-toggle { position: absolute; top: 6px; right: 6px; width: 26px; min-height: 26px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 3px #0002; }
+.note-grid .star-toggle[aria-pressed="false"] { opacity: 0.85; }
+body.home-list .note-grid .star-toggle { top: 50%; right: 34px; transform: translateY(-50%); width: 24px; min-height: 22px; height: 22px; border: 0; background: transparent; box-shadow: none; }
+body.home-list #recentList li:has(.star-toggle) .note-meta { padding-right: 64px; }
