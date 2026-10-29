@@ -67,8 +67,8 @@ document.addEventListener("pointerdown", (event) => {
   if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden)
     setCompact(true);
 });
-const worker = new Worker("./worker.js", { type: "module" }),
-  pending = new Map();
+const pending = new Map();
+let worker;
 let request = 0,
   epoch = 0,
   revision = 0,
@@ -159,31 +159,55 @@ function call(op, args = {}) {
     );
   });
 }
-worker.onmessage = ({ data }) => {
-  if (data.ready) {
-    ready = true;
-    $("open").disabled = $("emptyOpen").disabled = false;
-    status("Ready. Everything is processed on your device.");
-    window.ReactNativeWebView?.postMessage(
-      JSON.stringify({ type: "noteful-ready" }),
-    );
-    return;
-  }
-  if (data.fatal) {
-    status(data.fatal, true);
-    return;
-  }
-  const p = pending.get(data.id);
-  if (!p) return;
-  pending.delete(data.id);
-  data.error ? p.reject(Error(data.error)) : p.resolve(data.result);
-};
-worker.onerror = (e) => {
-  for (const p of pending.values()) p.reject(Error(e.message));
+// The engine runs in its own worker. A big note leaves its WebAssembly memory
+// grown for good (it can never shrink), so closing one replaces the worker.
+function spawnWorker() {
+  const mine = (worker = new Worker("./worker.js", { type: "module" }));
+  worker.onmessage = ({ data }) => {
+    if (mine !== worker) return;
+    if (data.ready) {
+      if (ready) return;
+      ready = true;
+      $("open").disabled = $("emptyOpen").disabled = false;
+      status("Ready. Everything is processed on your device.");
+      window.ReactNativeWebView?.postMessage(
+        JSON.stringify({ type: "noteful-ready" }),
+      );
+      return;
+    }
+    if (data.fatal) {
+      status(data.fatal, true);
+      return;
+    }
+    const p = pending.get(data.id);
+    if (!p) return;
+    pending.delete(data.id);
+    data.error ? p.reject(Error(data.error)) : p.resolve(data.result);
+  };
+  worker.onerror = (e) => {
+    if (mine !== worker) return;
+    for (const p of pending.values()) p.reject(Error(e.message));
+    pending.clear();
+    ready = false;
+    status("Engine error: " + e.message, true);
+  };
+}
+spawnWorker();
+// Notes at least this large make the worker be replaced when they close.
+const RECYCLE_BYTES = 32 * 1024 * 1024;
+let sessionBytes = 0;
+// The note was closed (Home, or a text/HTML/web document opened): free its session in the
+// engine, and for a big one start a fresh worker so the memory goes back to the system.
+function releaseSession() {
+  const big = sessionBytes >= RECYCLE_BYTES;
+  sessionBytes = 0;
+  if (!big) return void call("close").catch(() => {});
+  const old = worker;
+  spawnWorker();
+  old.terminate();
+  for (const p of pending.values()) p.reject(Error("Document closed"));
   pending.clear();
-  ready = false;
-  status("Engine error: " + e.message, true);
-};
+}
 function canReplace() {
   return (
     !(dirty && changed) ||
@@ -191,7 +215,7 @@ function canReplace() {
   );
 }
 // While a document opens (`opening`), Home stays hidden so switching never flashes it.
-function reset({ opening = false } = {}) {
+function reset({ opening = false, keepSession = false } = {}) {
   resizeMode = null;
   if (notes?.visible) {
     notes.close();
@@ -206,6 +230,7 @@ function reset({ opening = false } = {}) {
   setCompact(false);
   observer?.disconnect();
   thumbnailObserver?.disconnect();
+  thumbQueue.clear();
   backgrounds?.close();
   stopRecording();
   audio.reset();
@@ -217,6 +242,8 @@ function reset({ opening = false } = {}) {
   textFinder?.close();
   webView?.close();
   $("pages").replaceChildren();
+  $("pageList").replaceChildren();
+  if (!keepSession) releaseSession();
   $("editor").hidden = true;
   $("htmlView").hidden = true;
   $("textView").hidden = true;
@@ -259,6 +286,8 @@ async function load(file, preparedDocument = null) {
       status(prepared.kind === "html" ? "HTML document opened." : "Text document opened.");
       return;
     }
+    // The bytes are transferred to the worker, so their size is read first.
+    const openedBytes = prepared.bytes?.byteLength || 0;
     const result = await call("open", {
       ...prepared,
       project: prepared.kind === "project",
@@ -266,7 +295,8 @@ async function load(file, preparedDocument = null) {
       page: 0,
     });
     // Both worker and UI retain the previous document until the replacement validates.
-    reset({ opening: true });
+    reset({ opening: true, keepSession: true });
+    sessionBytes = openedBytes;
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);

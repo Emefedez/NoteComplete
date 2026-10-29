@@ -207,6 +207,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
         return { text };
       } finally {
         children(owner).delete(entry);
+        if (!children(owner).size) running.delete(owner);
         if (dir) await rm(dir, { recursive: true, force: true });
       }
     },

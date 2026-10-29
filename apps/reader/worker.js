@@ -40,6 +40,12 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     } else if (op === "markdownHtml") {
       postMessage({ id, result: markdown_html(args.text) });
       return;
+    } else if (op === "close") {
+      // The document was closed in the reader: release its archive and scene now.
+      session?.free();
+      session = undefined;
+      postMessage({ id, result: true });
+      return;
     } else if (op === "md5") {
       postMessage({ id, result: md5_hex(new Uint8Array(args.bytes)) });
       return;

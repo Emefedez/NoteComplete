@@ -15,6 +15,19 @@ This document details the memory footprint, scaling characteristics, and identif
 
 ---
 
+## Status
+
+| # | Concern | Status |
+| :--- | :--- | :--- |
+| 1 | Worker session retained on reset | **Fixed**: new `close` op in `worker.js`, called from `reset()` |
+| 2 | WASM linear memory high-water mark | **Mitigated**: the worker is replaced when a note of 32 MB or more closes |
+| 3 | `pageList` / `thumbQueue` retention | **Fixed** in `reset()` |
+| 4 | Orphaned child processes, `running` Map | **Fixed**: tab destruction cancels AI and transcription work; empty owners are dropped |
+| 5 | "Unbounded undo history" | **Not a bug, no change** (see below) |
+| 6 | Buffer duplication on open | Open (needs a streaming or transferable open path) |
+
+Peak memory while a *new* large note opens (old and new session coexist until the new one validates) is unchanged.
+
 ## 2. Live Runtime Telemetry
 
 Telemetry collected on Linux (Wayland / Hyprland) with NoteComplete running an active document (`GUIA_COMANDOS.md`):
@@ -72,10 +85,10 @@ Tests conducted using the production WASM build with representative user noteboo
 - **Cause:** `ai-runner` and `transcriber` index running child processes by `owner` (`event.sender.id`). When a tab or window is closed, `ai.cancel(id)` and `asr.cancel(id)` are not called, nor are the keys deleted from the `running` Maps.
 - **Consequence:** If a tab is closed while generating quizzes/flashcards or transcribing audio, the spawned child processes (`claude`, `agy`, `codex`, `ffmpeg`, `voxtype`) keep running in the background for up to 10–15 minutes, leaking CPU and memory.
 
-### 5. Unbounded Undo History in Rust Core (Medium Severity)
-- **Location:** `crates/noteful-core/src/editor.rs:208-210`.
-- **Cause:** `self.history.truncate(self.cursor); self.history.push(edit); self.cursor += 1;` has no capacity ceiling.
-- **Consequence:** Long editing sessions with hundreds of pen strokes, moves, or image/PDF insertions (`Edit::InsertPages` contains cloned PDF byte vectors) accumulate in memory without eviction.
+### 5. Edit History Growth (Not a bug; do not cap)
+- **Location:** `crates/noteful-core/src/editor.rs` (`commit`).
+- **Finding:** `Editor.history` is not only an undo stack. The archive is immutable and the document *is* the original plus the applied edits replayed over it (`.nfedit` saves the history and cursor; native export flattens `history[..cursor]`). Dropping old entries would silently revert those edits, so capping it would corrupt documents.
+- **Consequence:** Memory grows with the amount of editing, which is inherent. Reducing it would need checkpointing (flattening old edits into a new base), a larger change that is not attempted here.
 
 ### 6. Multi-Copy Buffer Duplication over IPC (Low/Medium Severity)
 - **Location:** `apps/desktop/main.js:253` (`files:open`), `apps/desktop/library-files.js:93`, `apps/reader/media-import.js:86-91`, and `crates/noteful-core/src/editor.rs:86`.
@@ -97,19 +110,10 @@ The codebase already employs several sound memory patterns that should be preser
 
 ---
 
-## 6. Recommended Remediation Plan
+## 6. Remediation
 
-1. **Explicit Session Close in Worker:**
-   Add an `op === "close"` handler in `apps/reader/worker.js` calling `session?.free(); session = null;`, and invoke `call("close")` inside `reset()` in `apps/reader/app.js`.
-2. **Worker Recycling on Document Switch:**
-   In `apps/reader/app.js`, terminate and recreate `worker` when navigating to Home or opening a document if the previous session loaded large archives (>50 MB).
-3. **DOM Teardown in `reset()`:**
-   Update `apps/reader/app.js:reset()` to execute:
-   ```javascript
-   thumbQueue.clear();
-   $("pageList").replaceChildren();
-   ```
-4. **Desktop Process Teardown:**
-   In `apps/desktop/main.js`, add `ai.cancel(id)` and `asr.cancel(id)` to `closeTab(id)` and `win.on('closed')`. Listen to `contents.once('destroyed')` to delete owner keys from `running` Maps.
-5. **Bounded Undo Stack:**
-   In `crates/noteful-core/src/editor.rs`, introduce an upper limit (e.g. 100 entries) on `self.history`, dropping the oldest non-essential edit when exceeded.
+1. **Session close (done):** `worker.js` handles `op === "close"`; `reset()` in `app.js` calls `releaseSession()` unless a note is being opened.
+2. **Worker recycling (done):** `releaseSession()` terminates and respawns the worker when the closed note was at least `RECYCLE_BYTES` (32 MB), returning its WebAssembly memory to the system.
+3. **DOM teardown (done):** `reset()` clears `thumbQueue` and `#pageList`.
+4. **Process teardown (done):** `main.js` calls `ai.cancel(id)` and `asr.cancel(id)` when a tab's page is destroyed (closing a tab or window); `ai-runner.js` removes an owner's entry when its last request ends.
+5. **Remaining:** IPC and WASM copy count when opening large notes (item 6); history checkpointing (item 5) if long sessions prove a problem.

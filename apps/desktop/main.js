@@ -21,6 +21,8 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 // readers draw the tab strip in their own top bar from the list sent here.
 const tabs = tabStore();
 const views = new Map(), windows = new Map();
+// Called when a tab's page is gone, so work started for it stops (set once the AI runners exist).
+let tabGone = () => {};
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
 const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v'];
@@ -110,7 +112,7 @@ function openTab(win) {
     else return;
     event.preventDefault();
   });
-  contents.on('destroyed', () => views.delete(id));
+  contents.on('destroyed', () => { views.delete(id); tabGone(id); });
   // The new tab is shown once it has drawn its page (or after a moment), so
   // switching never shows an empty frame; the old tab stays up until then.
   view.setVisible(false);
@@ -285,6 +287,9 @@ app.whenReady().then(async () => {
   ipcMain.on('ai:cancel', (event, tag) => { if (trusted(event)) ai.cancel(event.sender.id, typeof tag === 'string' ? tag : ''); });
   // Other transcription backends; pieces stream back to the reader as they finish.
   const asr = transcriber({ tools: () => ai.tools() });
+  // Closing a tab or window stops its AI requests and transcriptions: no child process
+  // (claude, agy, codex, ffmpeg, voxtype) keeps running for a reader that is gone.
+  tabGone = id => { ai.cancel(id); asr.cancel(id); };
   ipcMain.handle('asr:backends', guarded(() => asr.backends()));
   ipcMain.handle('asr:run', guarded((event, request) => asr.run(event.sender.id, request, (done, total, segments, skipped) => {
     if (!event.sender.isDestroyed()) event.sender.send('asr:progress', { done, total, segments, skipped });
