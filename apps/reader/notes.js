@@ -31,7 +31,9 @@ export function markerLine(text, page) {
 }
 
 export function notesController({ call, jump, currentPage, store, status }) {
-  let text = '', key = '', editor = null, bar = null, saveTimer = 0, previewing = false;
+  // `core`: notes of a note live in its session (saved with projects and .notecomplete);
+  // an HTML page has no session or pages, so its notes are only kept on this device.
+  let text = '', key = '', editor = null, bar = null, saveTimer = 0, previewing = false, core = true;
   const panel = $('notesPanel');
   const save = () => {
     clearTimeout(saveTimer);
@@ -40,7 +42,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
   async function flush() {
     clearTimeout(saveTimer);
     saveTimer = 0;
-    await call('setMarkdown', { text }).catch(error => status(error.message, true));
+    if (core) await call('setMarkdown', { text }).catch(error => status(error.message, true));
     if (key) await store.set('settings', key, text).catch(() => {});
   }
   // Marker lines are HTML blocks to the editor: tag them so they show as
@@ -55,7 +57,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
   async function mount() {
     const TinyMDE = await loadEditor();
     if (editor || panel.hidden) return;
-    editor = new TinyMDE.Editor({ element: $('notesEditor'), content: text, placeholder: 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.', });
+    editor = new TinyMDE.Editor({ element: $('notesEditor'), content: text, placeholder: core ? 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.' : 'Notes for this page. Markdown: # heading, **bold**, - list…', });
     bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor });
     editor.addEventListener('change', event => { text = event.content; save(); requestAnimationFrame(markLines); });
     markLines();
@@ -74,7 +76,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
   }
   // Scroll the notes (not the caret) to the section of page `index` (0-based).
   function follow(index) {
-    if (panel.hidden || !$('notesFollow').checked) return;
+    if (!core || panel.hidden || !$('notesFollow').checked) return;
     const target = previewing
       ? $('notesRender').querySelector(`.md-page[data-page="${index + 1}"]`)
       : (() => { const line = markerLine(text, index + 1); return line == null ? null : $('notesEditor').querySelector('.TinyMDE')?.children[line]; })();
@@ -98,7 +100,8 @@ export function notesController({ call, jump, currentPage, store, status }) {
   $('notesPreview').onclick = () => {
     previewing = !previewing;
     $('notesPreview').setAttribute('aria-pressed', String(previewing));
-    $('notesEditor').hidden = $('notesCommands').hidden = $('notesMarker').hidden = previewing;
+    $('notesEditor').hidden = $('notesCommands').hidden = previewing;
+    $('notesMarker').hidden = previewing || !core;
     $('notesRender').hidden = !previewing;
     if (previewing) render();
     else mount().catch(error => status(error.message, true));
@@ -106,15 +109,22 @@ export function notesController({ call, jump, currentPage, store, status }) {
   return {
     // A note was opened: its notes come from the file (project or .notecomplete),
     // else from what was typed for it on this device.
-    async load(fingerprint) {
+    // { core: false }: an HTML page (no session, no pages: no + Page or Follow).
+    async load(fingerprint, { core: inCore = true } = {}) {
       if (saveTimer) await flush();
+      const placeholderChanged = core !== inCore;
+      core = inCore;
       key = fingerprint ? `notes:${fingerprint}` : '';
-      const inFile = await call('getMarkdown').catch(() => '');
+      $('notesMarker').hidden = previewing || !core;
+      panel.querySelector('.notes-follow').hidden = !core;
+      const inFile = core ? await call('getMarkdown').catch(() => '') : '';
       const kept = key ? await store.get('settings', key).catch(() => '') : '';
       text = inFile || kept || '';
-      if (text && !inFile) await call('setMarkdown', { text }).catch(() => {});
+      if (core && text && !inFile) await call('setMarkdown', { text }).catch(() => {});
       if (text && inFile && key && kept !== inFile) store.set('settings', key, text).catch(() => {});
-      if (editor) { editor.setContent(text); requestAnimationFrame(markLines); }
+      // The placeholder differs between notes and pages: the editor is made again for it.
+      if (editor && placeholderChanged) { unmount(); if (!panel.hidden && !previewing) await mount().catch(error => status(error.message, true)); }
+      else if (editor) { editor.setContent(text); requestAnimationFrame(markLines); }
       if (previewing && !panel.hidden) render();
     },
     async open() {

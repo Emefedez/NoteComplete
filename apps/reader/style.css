@@ -343,7 +343,7 @@ main {
 .doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
 .doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
 .doc-editor-plain:focus, .doc-editor-plain:focus-visible { outline: none; }
-#textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"], #htmlNotes[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .html-bar .zoom-controls { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
 /* Document bar actions are filled chips, like the File menu's export buttons (MD, PDF…);
    the sidebar and moon toggles stay plain, as in the notes bar. */

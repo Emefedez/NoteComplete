@@ -28,7 +28,7 @@ import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter, IMAGE_TYPES } from "./page-export.js";
-import { versionChooser } from "./versions.js";
+import { versionChooser, carryStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
@@ -196,6 +196,7 @@ function reset({ opening = false } = {}) {
   if (notes?.visible) {
     notes.close();
     $("notesToggle").setAttribute("aria-expanded", "false");
+    $("htmlNotes").setAttribute("aria-expanded", "false");
   }
   selection.clear();
   cancelGesture();
@@ -250,7 +251,7 @@ async function load(file, preparedDocument = null) {
       $("title").textContent = sideTitle;
       document.title = `${sideTitle} — NoteComplete`;
       tabBar.update({ title: sideTitle, dirty: false });
-      if (prepared.kind === "html") htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle });
+      if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
       else { await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name), key: file.name }); textSource.forget(); }
       showDocument();
       rememberDocument();
@@ -1781,6 +1782,7 @@ function shortcut(e) {
   // Text documents have the study keys too (flashcards, quizzes, saved decks).
   const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), D: () => study.saved(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
   if (studyKey) return studyKey(), true;
+  if (!doc && htmlView.visible && k === "n") return $("htmlNotes").click(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
@@ -2054,6 +2056,7 @@ function notesApi() {
   return notesLoading ||= import("./notes.js").then(({ notesController }) => {
     notes = notesController({ call, jump, currentPage: () => page, store: library.store, status });
     if (doc) return notes.load(find.fingerprint).then(() => notes);
+    if (htmlView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
     return notes;
   });
 }
@@ -2064,7 +2067,14 @@ $("notesToggle").onclick = async () => {
   $("notesToggle").setAttribute("aria-expanded", String(api.visible));
   resize();
 };
-$("closeNotes").onclick = () => $("notesToggle").click();
+// HTML pages have the same Notes, from their bar (N); kept on this device per page.
+$("htmlNotes").onclick = async () => {
+  const api = await notesApi();
+  if (api.visible) await api.close();
+  else await api.open();
+  for (const id of ["htmlNotes", "notesToggle"]) $(id).setAttribute("aria-expanded", String(api.visible));
+};
+$("closeNotes").onclick = () => (!doc && htmlView.visible ? $("htmlNotes") : $("notesToggle")).click();
 // The panel's left edge resizes it; the width is remembered.
 try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
 $("notesResize").onpointerdown = (down) => {
@@ -2473,6 +2483,15 @@ async function saveText() {
     dirty = changed = false;
     $(html ? "htmlSave" : "textSave").hidden = true;
     tabBar.update({ title: view.name, dirty: false });
+    // Study material and notes are kept per content fingerprint: they follow the saved text.
+    const before = sideFp, after = await noteFingerprint(new File([view.text], name)).catch(() => "");
+    if (before && after && after !== before) {
+      await notes?.flush();
+      await carryStudy(library.store, before, after, ["decks", "quizzes", "notes", "recordings", "scratch"]);
+      sideFp = after;
+      rememberDocument();
+      if (html) await notes?.load(sideFp, { core: false });
+    }
   } catch (error) { status(error.message, true); }
 }
 $("textSave").onclick = $("htmlSave").onclick = () => saveText();
@@ -2678,10 +2697,17 @@ function studyPanelsTo(text) {
   $("practiceAskPage").title = text ? "The card's section of the document, as text" : "The card's page as an image, with its text";
   for (const chip of document.querySelectorAll('.practice-ask-material [data-material="page"]:not(#practiceAskPage)')) chip.textContent = text ? "Section" : "Region";
 }
+// The Notes panel sits beside the pages, or beside an HTML page while one is shown.
+function notesPanelTo(html) {
+  const panel = $("notesPanel"), host = html ? $("htmlView").querySelector(".side-body") : $("layersPanel").parentElement;
+  if (panel.parentElement === host) return;
+  if (html) host.append(panel); else $("layersPanel").before(panel);
+}
 function showDocument() {
   home.hide();
   const side = sideView();
   studyPanelsTo(side === textView);
+  notesPanelTo(side === htmlView);
   if (side) {
     $("editor").hidden = true;
     side.show();
@@ -3081,7 +3107,7 @@ const ai = window.notecompleteAI || null;
 const scratch = scratchpad({
   store: library.store,
   key: () => (doc ? `scratch:${find.fingerprint || doc.title || "note"}` : studyText() && sideFp ? `scratch:${sideFp}` : ""),
-  canNote: () => !!doc,
+  canNote: () => !!doc || htmlView.hasDocument,
   markdown: (text) => call("markdownHtml", { text }),
   status,
   notes: async (text) => (await notesApi()).append(text),
