@@ -65,14 +65,16 @@ export function cleanQuestions(value) {
 
 // Double check of one flashcard while practising: the AI re-reads the card's
 // page and keeps or fixes the answer (and the question only if it must).
+// withPage: true for a note page (image and text), 'section' for a text document's section.
+const fromWords = withPage => (withPage === 'section' ? ' (the attached text is the section of the document it comes from)' : withPage ? ' (the attached image and text are the page it comes from)' : '');
 export function cardCheckPrompt(card, withPage) {
-  return `A student practising a flashcard made from their notes thinks it may be wrong${withPage ? ' (the attached image and text are the page it comes from)' : ''}. Using the notes, check the answer and fix it if it is wrong, incomplete or misleading: keep it short and put each item of a list on its own line (\\n). Change the question only if it is ambiguous or does not match the answer. Write in the card's language.\nQuestion: ${card.front}\nAnswer: ${card.back}\nReply with ONLY JSON: {"correct": true or false, "front": "the question", "back": "the answer", "reason": "two or three sentences that cite the notes"}`;
+  return `A student practising a flashcard made from their notes thinks it may be wrong${fromWords(withPage)}. Using the notes, check the answer and fix it if it is wrong, incomplete or misleading: keep it short and put each item of a list on its own line (\\n). Change the question only if it is ambiguous or does not match the answer. Write in the card's language.\nQuestion: ${card.front}\nAnswer: ${card.back}\nReply with ONLY JSON: {"correct": true or false, "front": "the question", "back": "the answer", "reason": "two or three sentences that cite the notes"}`;
 }
 // Ask AI about a card while practising: a short tutor explanation, then follow-ups.
 export function cardAskPrompt(card, withPage, history = [], question = '') {
   const talk = history.map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
   return [
-    `A student practising a flashcard made from their notes does not fully understand it${withPage ? ' (the attached image and text are the page it comes from)' : ''}. Explain the idea behind it using the notes, clearly and briefly, in the card's language; a short example or steps help. Say so if the notes do not cover it.`,
+    `A student practising a flashcard made from their notes does not fully understand it${fromWords(withPage)}. Explain the idea behind it using the notes, clearly and briefly, in the card's language; a short example or steps help. Say so if the notes do not cover it.`,
     `Question: ${card.front}\nAnswer: ${card.back}`,
     talk && `Conversation so far:\n${talk}`,
     question && `Student: ${question}`,
@@ -83,8 +85,15 @@ export function cardVerdict(value, card) {
   return { correct: value?.correct === true, front: text(value?.front, card.front), back: text(value?.back, card.back), reason: typeof value?.reason === 'string' ? value.reason.trim() : '' };
 }
 
-export function prompts(kind, { amount, language, title }) {
+export function prompts(kind, { amount, language, title, unit = 'page' }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
+  // Text documents come as numbered sections of text, without images.
+  if (unit === 'section') {
+    const intro = `You are helping a student study their own text document, "${title}". You get its text split into numbered sections. Cover all the material in each section evenly.`;
+    if (kind === 'cards')
+      return `${intro}\nMake about ${amount} flashcards per section: one fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":<section number>}]}`;
+    return `${intro}\nWrite about ${amount} multiple-choice questions per section that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<section number>}]}`;
+  }
   const intro = `You are helping a student study their own notes, "${title}". You get page images and the text extracted from those pages. The images show any tape lifted, so covered parts are readable. Cover all the material on each page evenly (printed text, slides, typed notes and handwriting alike); being highlighted or under tape does not make something more important. Ignore slide decoration and page furniture.`;
   if (kind === 'cards')
     return `${intro}\nMake about ${amount} flashcards per page: one fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":<page number>}]}`;
@@ -116,12 +125,16 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     if (!ai) return unavailable();
     mode = kind;
     await fillProviders();
-    const { pages } = documentInfo();
+    const { pages, unit } = documentInfo(), text = unit === 'section';
     $('studyTitle').textContent = kind === 'cards' ? 'Generate flashcards' : 'Quiz me';
-    $('studyAmountLabel').firstChild.textContent = kind === 'cards' ? 'Cards per page ' : 'Questions per page ';
+    $('studyAmountLabel').firstChild.textContent = `${kind === 'cards' ? 'Cards' : 'Questions'} per ${text ? 'section' : 'page'} `;
+    // A text document is split into sections; the one being read is the current one.
+    $('studyScopePage').textContent = text ? 'Section being read' : 'Current page';
+    $('studyScopeRange').textContent = text ? `Sections (${pages})` : 'Pages';
+    $('studyScopeAll').textContent = text ? 'Whole document' : 'Whole note';
     $('studyFrom').max = $('studyTo').max = pages;
     $('studyFrom').value = $('studyTo').value = currentPage() + 1;
-    $('studyStatus').textContent = jobs.busy('ai') ? 'Another generation is still running; it can be stopped from the bar.' : 'Runs in the background: keep reading while your AI tool works. Pages are sent as images with tape lifted, plus their text.';
+    $('studyStatus').textContent = jobs.busy('ai') ? 'Another generation is still running; it can be stopped from the bar.' : `Runs in the background: keep reading while your AI tool works. ${text ? 'The sections are sent as text.' : 'Pages are sent as images with tape lifted, plus their text.'}`;
     $('studyGo').disabled = jobs.busy('ai');
     $('studyPromptEdit').hidden = kind !== 'quiz';
     $('studyDialog').showModal();
@@ -139,7 +152,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     const provider = $('studyProvider').value, chosen = model.value;
     const providerName = $('studyProvider').selectedOptions[0].textContent;
     try { localStorage.setItem('notecomplete-ai-provider', provider); localStorage.setItem('notecomplete-ai-model:' + provider, chosen); } catch { /* Optional. */ }
-    const pages = chosenPages(), title = documentInfo().title, kind = mode;
+    const pages = chosenPages(), { title, unit } = documentInfo(), kind = mode;
     const amount = $('studyAmount').value, language = $('studyLanguage').value;
     const batches = [];
     for (let i = 0; i < pages.length; i += BATCH) batches.push(pages.slice(i, i + BATCH));
@@ -155,7 +168,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
         while (!cancelled && !failure && next < batches.length) {
           const b = next++, batch = batches[b];
           try {
-            const context = await pagesContext(batch, { pageCanvas, pageText, onProgress: () => job.prepared(++prepared) });
+            const context = await pagesContext(batch, { pageCanvas, pageText, unit, onProgress: () => job.prepared(++prepared) });
             if (cancelled) return;
             job.asking(b, providerName);
             const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}`, tag: 'study' });
@@ -173,14 +186,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       };
       try {
         const avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
-        prompt = (kind === 'cards' ? prompts('cards', { amount, language, title }) : quizPrompt(instructions(), { amount, language, title }))
+        prompt = (kind === 'cards' ? prompts('cards', { amount, language, title, unit }) : quizPrompt(instructions(), { amount, language, title, unit }))
           + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
         await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
         const results = answers.flatMap(a => a || []);
         if (failure && !results.length) throw failure;
         if (!results.length) return job.fail(cancelled ? 'Generation stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
         const stopped = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
-        const name = `${title} · p. ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
+        const name = `${title} · ${unit === 'section' ? '§' : 'p.'} ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
         if (kind === 'cards') {
           const value = { id: String(Date.now()), title: name, created: Date.now(), cards: results };
           const decks = await savedDecks();
@@ -400,14 +413,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     // The user's Markdown notes go as text, whatever the page.
     const own = want.notes ? notesBlock(await notesText().catch(() => '')) : '';
     if (!card.page) { out.text = own; return out; }
-    const page = card.page - 1;
+    const page = card.page - 1, { unit } = documentInfo();
     if (want.page) {
-      const k = `page:${page}`;
-      if (!contexts.has(k)) contexts.set(k, pagesContext([page], { pageCanvas, pageText, width: 1400 }).catch(error => { contexts.delete(k); throw error; }));
+      const k = `${fingerprint()}:${unit}:${page}`;
+      if (!contexts.has(k)) contexts.set(k, pagesContext([page], { pageCanvas, pageText, unit, width: 1400 }).catch(error => { contexts.delete(k); throw error; }));
       const context = await contexts.get(k);
       out.images.push(...context.images); out.text = context.text;
     }
-    if (want.pdf && pagePdf) {
+    if (want.pdf && pagePdf && unit !== 'section') {
       const k = `pdf:${page}`;
       if (!contexts.has(k)) contexts.set(k, pagePdf(page).catch(() => null));
       const pdf = await contexts.get(k);
@@ -447,7 +460,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const { provider, model } = await aiChoice(), want = material();
       const context = await cardContext(card, { ...want, page: true });
       if (fixing !== fix) return;
-      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-check', prompt: [cardCheckPrompt(card, !!card.page), ...context.notes.filter(Boolean), context.text].filter(Boolean).join('\n\n') });
+      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-check', prompt: [cardCheckPrompt(card, card.page ? (documentInfo().unit === 'section' ? 'section' : true) : false), ...context.notes.filter(Boolean), context.text].filter(Boolean).join('\n\n') });
       fix.asking = false;
       if (fixing !== fix) return;
       const verdict = cardVerdict(jsonFrom(text), card);
@@ -578,7 +591,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       thread.clock = setInterval(waiting, 1000);
       const context = await cardContext(card, want);
       if (asking !== thread) return;
-      const prompt = [cardAskPrompt(card, want.page && !!card.page, thread.history, question), ...context.notes.map(n => n || 'This page has no source PDF.'), context.text].filter(Boolean).join('\n\n');
+      const prompt = [cardAskPrompt(card, want.page && card.page ? (documentInfo().unit === 'section' ? 'section' : true) : false, thread.history, question), ...context.notes.map(n => n || 'This page has no source PDF.'), context.text].filter(Boolean).join('\n\n');
       // Re-rendered at most every 120 ms while it streams, like the chat.
       let timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)).then(growWindow); };

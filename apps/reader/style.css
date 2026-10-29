@@ -2045,3 +2045,10 @@ body.bar-compact .tab { height: 22px; }
 .practice-ask .chat-attachments { margin: 4px 0; }
 .folder-list .note-more { top: 50%; bottom: auto; transform: translateY(-50%); }
 .middle-panning, .middle-panning * { cursor: grabbing !important; user-select: none; }
+/* Text documents studied by sections (text-study.js): the quiz and Ask AI windows move
+   into the text view; what a text file lacks (source PDF, the note over MCP, Markdown
+   notes) is not offered; a quiz's quote is marked in the text for a moment. */
+#textView .side-body { position: relative; }
+body.study-text [data-material="pdf"], body.study-text [data-material="note"], body.study-text [data-material="notes"], body.study-text #chatNoteLabel { display: none; }
+.quiz-hint blockquote { margin: 0; padding: 6px 10px; border-left: 3px solid #ff8a00; font-size: 13px; color: var(--ink); }
+::highlight(study-source) { background-color: #ff8a0040; }

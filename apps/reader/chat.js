@@ -28,7 +28,10 @@ export function renderAnswer(text) {
   return fragment;
 }
 
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null }) {
+// Text documents (documentInfo().unit 'section') send the section being read and
+// the selected text instead of page images; their answers have no page to go on.
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '' }) {
+  const sectioned = () => documentInfo().unit === 'section';
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
   let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
@@ -48,6 +51,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     box.textContent = 'T';
     box.title = 'Put this answer in a text box on the current page';
     box.onclick = () => toTextBox?.(plainText(content));
+    box.hidden = sectioned();
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.textContent = '⧉';
@@ -91,16 +95,23 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     // My notes is on when the note has Markdown notes.
     notesText().then(text => { if (!$('chatNotes').dataset.touched) $('chatNotes').checked = !!String(text || '').trim(); }).catch(() => {});
     $('chatPanel').hidden = false;
+    $('chatPageLabel').textContent = sectioned() ? 'This part' : 'This page';
+    $('chatPage').parentElement.title = sectioned() ? 'The part of the document you are reading' : '';
+    $('chatInput').placeholder = sectioned() ? 'Ask about what you are reading, or select a passage first' : 'Ask about this page, or select something first with Select';
     if (!history.length && !$('chatMessages').children.length)
-      add('assistant', 'Ask about this page or select something with **Select** first: a formula, a diagram, a sentence. I can see the page, its text and recognized handwriting, and lift the tape.');
+      add('assistant', sectioned()
+        ? 'Ask about what you are reading, or select a passage first: a definition, a formula, a sentence. I get the part of the document in view and the text you select.'
+        : 'Ask about this page or select something with **Select** first: a formula, a diagram, a sentence. I can see the page, its text and recognized handwriting, and lift the tape.');
     $('chatInput').focus();
   }
   function close() { $('chatPanel').hidden = true; }
   // A crop of the selected item from the page raster, with some margin.
   async function selectionImage(page) {
     const item = selection.item;
-    if (!item || item.page !== page) return null;
-    const { canvas, scale } = await pageCanvas(page, 2200, { liftTape: true });
+    if (sectioned() || !item || item.page !== page) return null;
+    const drawn = await pageCanvas(page, 2200, { liftTape: true });
+    if (!drawn) return null;
+    const { canvas, scale } = drawn;
     const [x, y, w, h] = item.bounds, m = 40;
     const sx = Math.max(0, (x - m) * scale), sy = Math.max(0, (y - m) * scale);
     const crop = document.createElement('canvas');
@@ -142,14 +153,16 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
     waiting.prepend(dots);
     try {
-      const page = currentPage(), { title } = documentInfo();
+      const page = currentPage(), { title, unit } = documentInfo(), sections = unit === 'section';
       const images = [], context = [];
       if (topic) context.push(topic);
       if ($('chatPage').checked) {
-        const { canvas } = await pageCanvas(page, 2200, { liftTape: true });
-        images.push(await canvasImage(canvas, `page-${page + 1}`));
-        canvas.width = canvas.height = 0;
-        context.push(textBlock(page, await pageText(page)));
+        const drawn = await pageCanvas(page, 2200, { liftTape: true });
+        if (drawn) {
+          images.push(await canvasImage(drawn.canvas, `page-${page + 1}`));
+          drawn.canvas.width = drawn.canvas.height = 0;
+        }
+        context.push(textBlock(page, await pageText(page), sections ? 12000 : 6000, unit));
       }
       if ($('chatNotes').checked) {
         const block = notesBlock(await notesText().catch(() => ''));
@@ -160,13 +173,17 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         context.push(`The student attached ${a.label} as the image "region-${i + 1}". Focus on it.`);
       }
       renderAttachments();
+      const passage = $('chatSelection').checked && sections ? selectedText() : '';
+      if (passage) context.push(`The student selected this passage; focus on it:\n"""\n${passage}\n"""`);
       if ($('chatSelection').checked) {
         const picked = await selectionImage(page);
         if (picked) { images.push(picked.image); context.push(`The student selected a ${picked.kind} on page ${page + 1}; its crop is the image labelled "selection". Focus on it.`); }
       }
       const transcript = history.slice(-10).map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
       const prompt = [
-        `You are a patient tutor helping a student understand their own notes, "${title}" (currently on page ${page + 1} of ${documentInfo().pages}). Handwriting, highlights and text under tape are the student's own. Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not on the page.`,
+        sections
+          ? `You are a patient tutor helping a student understand their own text document, "${title}" (split into ${documentInfo().pages} sections; they are reading section ${page + 1}). Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not in the text.`
+          : `You are a patient tutor helping a student understand their own notes, "${title}" (currently on page ${page + 1} of ${documentInfo().pages}). Handwriting, highlights and text under tape are the student's own. Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not on the page.`,
         context.join('\n\n'),
         transcript && `Conversation so far:\n${transcript}`,
         `Student: ${question}`,

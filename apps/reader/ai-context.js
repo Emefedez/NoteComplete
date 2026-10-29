@@ -1,7 +1,7 @@
 // What the AI sees of a page: an image (tape lifted, since covered answers are
 // study material) and the page's text from Find: typed, PDF, OCR and audio.
 import { rememberAiFile } from './rich-text.js';
-export const SOURCE_NAMES = { text: 'Typed text', pdf: 'PDF text', ocr: 'Recognized handwriting/scan text', audio: 'Lecture transcript' };
+export const SOURCE_NAMES = { text: 'Typed text', pdf: 'PDF text', ocr: 'Recognized handwriting/scan text', audio: 'Lecture transcript', document: 'Text' };
 
 export function jsonFrom(text) {
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
@@ -46,12 +46,12 @@ export async function clipboardImages(clipboardData, readBlob = blob => new Prom
   return out;
 }
 
-export function textBlock(page, parts, limit = 6000) {
+// Text documents have sections instead of pages (text-study.js): `unit` names them.
+export function textBlock(page, parts, limit = 6000, unit = 'page') {
   const lines = Object.entries(parts).filter(([, v]) => v?.trim()).map(([k, v]) => `${SOURCE_NAMES[k] || k}:\n${v.trim().slice(0, limit)}`);
-  return `--- Page ${page + 1} ---\n${lines.join('\n') || '(no extracted text; read the image)'}`;
+  return `--- ${unit === 'section' ? 'Section' : 'Page'} ${page + 1} ---\n${lines.join('\n') || (unit === 'section' ? '(empty)' : '(no extracted text; read the image)')}`;
 }
 
-// Page images plus text for a list of display pages.
 // The user's own Markdown notes for the document, capped, as a prompt block.
 export function notesBlock(text, limit = 20000) {
   const notes = String(text || '').trim();
@@ -59,14 +59,18 @@ export function notesBlock(text, limit = 20000) {
   const cut = notes.length > limit ? `${notes.slice(0, limit)}\n[… ${notes.length - limit} more characters not included]` : notes;
   return `The student's own Markdown notes for this document (lines like "[p. 3]" tie a section to a page):\n${cut}`;
 }
-export async function pagesContext(pages, { pageCanvas, pageText, onProgress = () => {}, width = 2200 }) {
+// Page images plus text for a list of display pages; text documents have no
+// image (pageCanvas gives null), only their sections' text.
+export async function pagesContext(pages, { pageCanvas, pageText, onProgress = () => {}, width = 2200, unit = 'page' }) {
   const images = [], texts = [];
   for (const [n, page] of pages.entries()) {
     onProgress(n, pages.length, page);
-    const { canvas } = await pageCanvas(page, width, { liftTape: true });
-    images.push(await canvasImage(canvas, `page-${page + 1}`));
-    canvas.width = canvas.height = 0;
-    texts.push(textBlock(page, await pageText(page)));
+    const drawn = await pageCanvas(page, width, { liftTape: true });
+    if (drawn?.canvas) {
+      images.push(await canvasImage(drawn.canvas, `page-${page + 1}`));
+      drawn.canvas.width = drawn.canvas.height = 0;
+    }
+    texts.push(textBlock(page, await pageText(page), unit === 'section' ? 12000 : 6000, unit));
   }
   return { images, text: texts.join('\n\n') };
 }

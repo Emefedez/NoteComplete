@@ -6,6 +6,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, zoomControl } from "./text-view.js";
+import { textStudy } from "./text-study.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
@@ -248,7 +249,7 @@ async function load(file, preparedDocument = null) {
       document.title = `${sideTitle} — NoteComplete`;
       tabBar.update({ title: sideTitle, dirty: false });
       if (prepared.kind === "html") htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle });
-      else await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name), key: file.name });
+      else { await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name), key: file.name }); textSource.forget(); }
       showDocument();
       rememberDocument();
       documentControls();
@@ -1775,6 +1776,9 @@ function toggleKeyHints() {
 }
 function shortcut(e) {
   const k = e.key;
+  // Text documents have the study keys too (flashcards, quizzes, saved decks).
+  const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), D: () => study.saved(), W: () => quizzes.retakeWrong() }[k];
+  if (studyKey) return studyKey(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
@@ -2414,6 +2418,14 @@ const textView = textViewer({
   toHtml: (value) => call("markdownHtml", { text: value }),
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
+  // A relative link to another file opens it here, from this file's folder.
+  openLink: (href) => {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return status(`NoteComplete cannot open ${href.split(":")[0]}: links.`, true);
+    if (docMember?.source !== "local") return status("Links to other files work in documents opened from this computer.", true);
+    const target = decodeURIComponent(new URL(href, `file://${encodeURI(docMember.path)}`).pathname);
+    const name = target.split("/").pop();
+    openMember(localMember(target, name)).catch(() => status(`Could not open ${name}. To follow links between files, open their folder (Home → Folder).`, true));
+  },
   onChange: () => {
     dirty = changed = true;
     $("textSave").hidden = false;
@@ -2439,6 +2451,8 @@ async function saveText() {
   } catch (error) { status(error.message, true); }
 }
 $("textSave").onclick = () => saveText();
+// A text document open instead of a note: studied by sections.
+function studyText() { return !doc && textView.hasDocument; }
 // The open HTML or text document, when one is open instead of a note.
 function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : webView.hasDocument ? webView : null; }
 const webZoom = zoomControl({ key: "notecomplete-web-zoom", out: $("webZoomOut"), into: $("webZoomIn"), value: $("webZoomValue"), apply: (z) => webView.setZoom(z) });
@@ -2582,9 +2596,27 @@ if (window.notecompleteFiles?.openFolder) {
   };
   $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
 }
+// The quiz and Ask AI windows live in the page editor; a text document, which can be
+// studied too, takes them while it is shown (text-study.js).
+function studyPanelsTo(text) {
+  document.body.classList.toggle("study-text", text);
+  const host = text ? $("textView").querySelector(".side-body") : $("audioBar").parentElement;
+  const after = text ? null : $("audioBar");
+  for (const id of ["quizPanel", "chatPanel"]) {
+    const panel = $(id);
+    if (panel.parentElement === host) continue;
+    if (after) after.after(panel); else host.append(panel);
+  }
+  if (!text) $("quizPanel").after($("chatPanel"));
+  const page = text ? "Section" : "Page";
+  $("practiceAskPage").textContent = page;
+  $("practiceAskPage").title = text ? "The card's section of the document, as text" : "The card's page as an image, with its text";
+  for (const chip of document.querySelectorAll('.practice-ask-material [data-material="page"]:not(#practiceAskPage)')) chip.textContent = text ? "Section" : "Region";
+}
 function showDocument() {
   home.hide();
   const side = sideView();
+  studyPanelsTo(side === textView);
   if (side) {
     $("editor").hidden = true;
     side.show();
@@ -2609,8 +2641,11 @@ $("driveOpen").onclick = () => {
 };
 function documentControls() {
   const open = !!doc;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote", "studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "findOpen", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
+  // Study works on notes and on text documents.
+  for (const id of ["studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
+    if ($(id)) $(id).disabled = !open && !studyText();
   if (!open) $("svg").disabled = true;
 }
 // Menu items that mirror toolbar controls share their handler and state.
@@ -2979,20 +3014,24 @@ const ai = window.notecompleteAI || null;
 // Scratchpad: AI conversations kept per note (View → Scratchpad…).
 const scratch = scratchpad({
   store: library.store,
-  key: () => (doc ? `scratch:${find.fingerprint || doc.title || "note"}` : ""),
+  key: () => (doc ? `scratch:${find.fingerprint || doc.title || "note"}` : studyText() && sideFp ? `scratch:${sideFp}` : ""),
+  canNote: () => !!doc,
   markdown: (text) => call("markdownHtml", { text }),
   status,
   notes: async (text) => (await notesApi()).append(text),
 });
 $("scratchOpen").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; scratch.open(); };
+// Text documents are studied by sections (text-study.js): no page images, no PDF or MCP.
+const textSource = textStudy({ body: $("textBody"), text: () => textView.text });
+const studyFp = () => (studyText() ? sideFp : find.fingerprint);
 const studyDeps = {
   keep: (entry) => scratch.keep(entry),
   ai,
-  pageCanvas,
-  pageText: (p) => find.pageText(p),
-  documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }),
-  currentPage: () => page,
-  notePath: () => notePath,
+  pageCanvas: (p, width, options) => (studyText() ? Promise.resolve(null) : pageCanvas(p, width, options)),
+  pageText: async (p) => (studyText() ? textSource.sectionText(p) : find.pageText(p)),
+  documentInfo: () => (studyText() ? { pages: textSource.count, title: textView.name || "Document", unit: "section" } : { pages: doc?.pages || 0, title: doc?.title || "Note", unit: "page" }),
+  currentPage: () => (studyText() ? textSource.current() : page),
+  notePath: () => (studyText() ? "" : notePath),
   // The note's Markdown notes (loads the notes module on first use).
   notesText: async () => (doc ? (await notesApi()).text : ""),
   status,
@@ -3026,7 +3065,7 @@ async function answerToTextBox(text) {
   await selection.selectId(page, `image:${doc.edit_count - 1}`);
   status("Answer added as a text box: drag it into place, double-click to edit.");
 }
-const chat = chatController({ ...studyDeps, selection, providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: answerToTextBox });
+const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: answerToTextBox });
 const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
 audio.transcript.context = () => ({ title: doc?.title || "" });
@@ -3056,11 +3095,10 @@ const quizzes = quizController({
   grow: () => quizWindow?.fit(),
   continueInChat,
   markdown: (text) => call("markdownHtml", { text }),
-  pagePdf: (index) => pagePdfOf(index),
+  pagePdf: (index) => (studyText() ? Promise.resolve(null) : pagePdfOf(index)),
   library,
-  key: () => `quizzes:${find.fingerprint || doc?.title || "note"}`,
-  pageCanvas,
-  jump: (p) => { showDocument(); jump(p); },
+  key: () => `quizzes:${studyFp() || doc?.title || textView.name || "note"}`,
+  jump: (p, quote) => { showDocument(); if (studyText()) textSource.jump(p, quote); else jump(p); },
   highlight: highlightRegion,
   clarify: ({ question, image }) => { showDocument(); chat.askAbout({ question, image, label: "the part of the notes that answers the quiz question" }); },
   status,
@@ -3081,13 +3119,13 @@ const study = studyController({
   growWindow: () => practiceWindow?.fit(),
   continueInChat,
   library,
-  fingerprint: () => find.fingerprint,
-  jump: (p) => { showDocument(); jump(p); },
+  fingerprint: studyFp,
+  jump: (p) => { showDocument(); if (studyText()) textSource.jump(p); else jump(p); },
   download,
   jobs,
   quizzes,
   markdown: (text) => call("markdownHtml", { text }),
-  pagePdf: (index) => pagePdfOf(index),
+  pagePdf: (index) => (studyText() ? Promise.resolve(null) : pagePdfOf(index)),
 });
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
@@ -3126,7 +3164,7 @@ $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("de
 const quizIndex = allQuizzes({
   library, status,
   // The note on screen (not one left loaded behind Home).
-  currentFingerprint: () => (doc && !$("editor").hidden ? find.fingerprint : ""),
+  currentFingerprint: () => (doc && !$("editor").hidden ? find.fingerprint : studyText() && textView.visible ? sideFp : ""),
   openEntry: async (key) => {
     const entry = await library.store.get("entries", key).catch(() => null);
     const file = entry && await library.open(entry).catch(() => null);
@@ -3163,7 +3201,7 @@ $("shortcutsClose").onclick = () => $("shortcutsDialog").close();
 $("studyCards").onclick = () => study.cards();
 $("studyQuiz").onclick = () => study.quiz();
 $("studyOpenDeck").onclick = () => study.saved();
-$("chatOpen").onclick = $("chatToggle").onclick = () => { if (doc) { showDocument(); chat.toggle(); } };
+$("chatOpen").onclick = $("chatToggle").onclick = () => { if (doc || studyText()) { showDocument(); chat.toggle(); } };
 // Bars above the pages may change height (menubar compaction, wrapping tool
 // row); scroll by the same amount in that frame so the pages never move.
 {

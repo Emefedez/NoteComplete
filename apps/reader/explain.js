@@ -41,6 +41,8 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     notes: chip('Notes', 'Your Markdown notes for this document', false),
     note: chip('Whole note', 'Lets the tool read any page of the note (slower)', false),
   };
+  // data-material lets text documents hide what they do not have (PDF, MCP, notes).
+  for (const [k, b] of Object.entries(chips)) b.dataset.material = k;
   const materialKey = `notecomplete-${tag}-material`;
   try { const s = JSON.parse(localStorage.getItem(materialKey) || 'null'); if (s) for (const [k, b] of Object.entries(chips)) b.setAttribute('aria-pressed', String(!!s[k])); } catch { /* Optional. */ }
   const material = () => Object.fromEntries(Object.entries(chips).map(([k, b]) => [k, b.getAttribute('aria-pressed') === 'true']));

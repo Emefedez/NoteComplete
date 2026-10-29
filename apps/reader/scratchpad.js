@@ -24,7 +24,7 @@ export function keepEntry(list, entry) {
   return [entry, ...list.filter(e => e.id !== entry.id)];
 }
 
-export function scratchpad({ store, key, markdown, status, notes }) {
+export function scratchpad({ store, key, markdown, status, notes, canNote = () => true }) {
   const read = async () => (await store.get('settings', key()).catch(() => null)) || [];
   async function keep({ id, title, messages }) {
     if (!key()) return status('Open a note first.', true);
@@ -48,7 +48,8 @@ export function scratchpad({ store, key, markdown, status, notes }) {
         render();
       }, 'scratch-delete');
       head.append(title, when, document.createElement('span'),
-        button('Add to notes', async () => { await notes(`### ${entry.title}\n\n${entry.text}`); status('Added to the Markdown notes.'); }),
+        // Text documents have no Markdown notes beside them.
+        ...(canNote() ? [button('Add to notes', async () => { await notes(`### ${entry.title}\n\n${entry.text}`); status('Added to the Markdown notes.'); })] : []),
         button('Copy', () => navigator.clipboard.writeText(entry.text).then(() => status('Copied.'), () => status('The clipboard is not available here.', true))),
         remove);
       head.children[2].className = 'spacer';

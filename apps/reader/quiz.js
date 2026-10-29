@@ -16,8 +16,11 @@ export const DEFAULT_QUIZ_PROMPT = `You write multiple-choice questions so a stu
 - Do not explain the answers.
 - For every question say where the notes show the answer: the page number and a box around that region of the page image, as fractions of its width and height [x0, y0, x1, y1].`;
 
-export function quizPrompt(instructions, { amount, language, title }) {
+export function quizPrompt(instructions, { amount, language, title, unit = 'page' }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
+  // Text documents come as numbered sections without images: the source is a quote.
+  if (unit === 'section')
+    return `${instructions.trim()}\nThe notes are the text document "${title}", split into numbered sections; there are no page images, so ignore any instruction about boxes. About ${amount} questions per section. ${lang} Ask about all of each section's material evenly. For every question give the section number and a short exact quote from that section (up to 25 words, copied as written) that shows the answer.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"quote":"…"}}]}`;
   return `${instructions.trim()}\nThe notes are "${title}". About ${amount} questions per page. ${lang} Pages are shown with tape lifted so covered parts are readable; ask about all of each page's material evenly, not mainly what is taped or highlighted.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"box":[0.05,0.3,0.95,0.5]}}]}`;
 }
 
@@ -33,7 +36,7 @@ export function prepareQuestions(value, pages, random = Math.random) {
       question: q.question.trim(),
       options: order.map(i => String(q.options[i])),
       answer: order.indexOf(q.answer),
-      source: page ? { page, box: validBox(q.source.box) ? q.source.box : null } : null,
+      source: page ? { page, box: validBox(q.source.box) ? q.source.box : null, ...(typeof q.source.quote === 'string' && q.source.quote.trim() ? { quote: q.source.quote.trim().slice(0, 400) } : {}) } : null,
     }];
   });
 }
@@ -108,7 +111,7 @@ export function clarifyPrompt(q, { answered = null, history = [], question = '',
   ].filter(Boolean).join('\n\n');
 }
 
-export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null, grow = () => {} }) {
+export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null, grow = () => {}, documentInfo = () => ({}) }) {
   let quiz = null, hint = null;
   const store = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
   async function save() {
@@ -117,9 +120,12 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     await library.store.set('settings', key(), [quiz, ...all]);
   }
   // The hint: the source box cut from the page (tape lifted), or the whole page.
+  // Text documents have no page image (null): their hint is the quote.
   async function capture(source) {
     if (!source) return null;
-    const { canvas, scale } = await pageCanvas(source.page - 1, 1800, { liftTape: true });
+    const drawn = await pageCanvas(source.page - 1, 1800, { liftTape: true });
+    if (!drawn) return null;
+    const { canvas, scale } = drawn;
     let [x0, y0, x1, y1] = source.box || [0, 0, 1, 1];
     const pad = 0.03;
     [x0, y0, x1, y1] = [Math.max(0, x0 - pad), Math.max(0, y0 - pad), Math.min(1, x1 + pad), Math.min(1, y1 + pad)];
@@ -178,7 +184,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizHintButton').hidden = !q.source;
     $('quizClarify').hidden = false;
     $('quizWhere').hidden = !q.source;
-    $('quizWhere').textContent = q.source ? `Where it is: p. ${q.source.page}` : '';
+    $('quizWhere').textContent = q.source ? `Where it is: ${q.source.quote !== undefined || documentInfo().unit === 'section' ? 'section' : 'p.'} ${q.source.page}` : '';
     $('quizNextButton').hidden = !answer;
     $('quizDispute').hidden = $('quizCheck').hidden = !answer;
     $('quizDispute').textContent = q.disputed ? 'Disputed: not counted' : 'Dispute';
@@ -191,6 +197,13 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     if (!q?.source) return;
     if (counts && !quiz.answers[quiz.at]) { quiz.hinted = { ...(quiz.hinted || {}), [quiz.at]: true }; save(); }
     $('quizHint').hidden = false;
+    if (q.source.quote) {
+      const quote = document.createElement('blockquote');
+      quote.textContent = q.source.quote;
+      $('quizHint').replaceChildren(quote);
+      $('quizHintButton').hidden = true;
+      return;
+    }
     $('quizHint').replaceChildren('Cutting the region from the page…');
     const url = await capture(q.source).catch(() => null);
     if (quiz.questions[quiz.at] !== q) return;
@@ -226,7 +239,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   }
   $('quizHintButton').onclick = () => revealHint();
   $('quizNextButton').onclick = next;
-  $('quizWhere').onclick = () => { const q = quiz.questions[quiz.at]; if (q?.source) { jump(q.source.page - 1); highlight(q.source.page - 1, q.source.box); } };
+  $('quizWhere').onclick = () => { const q = quiz.questions[quiz.at]; if (q?.source) { jump(q.source.page - 1, q.source.quote); highlight(q.source.page - 1, q.source.box); } };
   // Clarify in the quiz itself, like Ask AI on flashcards; the answer is kept with the question.
   const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
   const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
@@ -235,7 +248,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
     handoff: continueInChat && (async ({ item: q, history, question, onAnswer, extraImages, useNote }) => {
       const answered = answerOf(q);
-      const about = `The conversation is about this quiz question from the student's notes${q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
+      const about = `The conversation is about this quiz question from the student's notes${q.source?.quote ? ` (section ${q.source.page}, which says: "${q.source.quote}")` : q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
       const image = q.source ? hint || await capture(q.source).catch(() => null) : null;
       return continueInChat({ title: `From the quiz: ${q.question}`, about, messages: history, image, label: 'the part of the notes that answers the quiz question', question, onAnswer, extraImages, useNote });
     }),
@@ -250,7 +263,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
       if (want.page && q.source) {
         const url = hint || await capture(q.source).catch(() => null);
         if (url) out.images.push(await dataUrlImage(url, 'notes-region'));
-        out.text = textBlock(page, await pageText(page).catch(() => ''));
+        out.text = textBlock(page, await pageText(page).catch(() => ''), 6000, documentInfo().unit);
+        if (q.source.quote) out.notes.push(`The quote that shows the answer: "${q.source.quote}"`);
       }
       if (want.pdf && pagePdf && page !== null) {
         const pdf = await pagePdf(page).catch(() => null);

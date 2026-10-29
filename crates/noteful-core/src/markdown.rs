@@ -42,7 +42,17 @@ fn safe_url(url: &str, image: bool) -> bool {
             || lower.starts_with("http://")
             || lower.starts_with("mailto:")
             || lower.starts_with('#')
+            || relative(&lower)
     }
+}
+/// A link to a file beside the document ("otro.md", "../Tema 2.md#parte"): no
+/// scheme before the path, and not protocol-relative ("//host").
+fn relative(url: &str) -> bool {
+    !url.is_empty()
+        && !url.starts_with("//")
+        && url
+            .find(':')
+            .is_none_or(|colon| url[..colon].contains(['/', '?', '#']))
 }
 
 /// Preview HTML. Raw HTML in the notes is shown as text, never interpreted;
@@ -355,6 +365,18 @@ mod tests {
         assert!(html.contains("&lt;script&gt;") && !html.contains("<script>"));
         assert!(!html.contains("javascript:") && !html.contains("file:"));
         assert!(html.contains("checkbox"));
+        // Links to files beside the document stay (the text view opens them).
+        let links = markdown_html("[a](otro.md) [b](../Tema%202.md#parte) [c](//evil.example) [d](data:text/html,x) [e](a/b:c)");
+        assert!(
+            links.contains("href=\"otro.md\"")
+                && links.contains("href=\"../Tema%202.md#parte\"")
+                && links.contains("href=\"a/b:c\""),
+            "{links}"
+        );
+        assert!(
+            !links.contains("evil") && !links.contains("data:"),
+            "{links}"
+        );
         let md = markdown_export(src, "Memoria 1");
         assert!(md.starts_with("# Memoria 1\n"));
         assert!(md.contains("\n---\n\n**Page 10**\n") && !md.contains("<!--"));

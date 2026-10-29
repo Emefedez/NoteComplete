@@ -32,9 +32,46 @@ export function zoomControl({ key = ZOOM_KEY, out, into, value, apply }) {
   return { step, get zoom() { return zoom; }, show };
 }
 
-export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {} }) {
+// GitHub-style heading anchors: "## Tema 1: Introducción" is #tema-1-introducción;
+// repeated headings get -1, -2…
+export function headingSlug(text) {
+  return String(text).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+}
+const loose = (slug) => slug.normalize('NFD').replace(/\p{M}/gu, '').replace(/[-_]+/g, '-').replace(/^-|-$/g, '');
+// Which heading (index into `headings`, their texts) an in-document link (#…) names, or -1.
+export function headingFor(headings, fragment) {
+  let wanted = String(fragment || '');
+  try { wanted = decodeURIComponent(wanted); } catch { /* Kept as written. */ }
+  wanted = wanted.toLowerCase();
+  const seen = new Map(), slugs = headings.map((text) => {
+    const base = headingSlug(text), n = seen.get(base) || 0;
+    seen.set(base, n + 1);
+    return n ? `${base}-${n}` : base;
+  });
+  const exact = slugs.indexOf(wanted);
+  return exact >= 0 ? exact : slugs.findIndex((slug) => loose(slug) === loose(wanted));
+}
+
+// Links in a Markdown document: #anchors scroll to their heading or footnote, web
+// links open in the browser (target=_blank, rich-text.js), other links go to openLink
+// (a file next to this one).
+export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {} }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0;
   const zoomer = zoomControl({ ...zoom, apply: (z) => root.style.setProperty('--text-zoom', String(z)) });
+  body.addEventListener('click', (event) => {
+    const a = event.target.closest?.('a[href]');
+    if (!a || !body.contains(a) || a.target === '_blank') return;
+    event.preventDefault();
+    const href = a.getAttribute('href');
+    if (!href.startsWith('#')) return openLink(href);
+    const fragment = href.slice(1);
+    let target = [...body.querySelectorAll('[id], a[name]')].find((el) => el.id === fragment || el.getAttribute('name') === fragment);
+    if (!target) {
+      const headings = [...body.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+      target = headings[headingFor(headings.map((h) => h.textContent), fragment)];
+    }
+    if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
   body.addEventListener('wheel', (event) => {
     if (!event.ctrlKey) return;
     event.preventDefault();
@@ -46,7 +83,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     body.classList.toggle('text-plain', !markdown);
     if (!markdown) { body.textContent = text; return; }
     const scratch = body.ownerDocument.createElement('div');
-    await renderMarkdown(scratch, text, toHtml);
+    await renderMarkdown(scratch, text, toHtml, { document: true });
     if (token === renders) body.replaceChildren(...scratch.childNodes);
   }
   function changed(next) { text = next; onChange(text); }
@@ -123,6 +160,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     get hasDocument() { return Boolean(name); },
     get editing() { return editing; },
     get name() { return name; },
+    get key() { return key; },
     get text() { return text; },
   };
 }

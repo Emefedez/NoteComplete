@@ -29,10 +29,11 @@ export function resolveAiLink(label = '', url = '') {
 
 // Normalises LaTeX delimiters (\[…\], \(…\), multi-line $$…$$, spaced $ … $)
 // and local/page/image links outside code blocks before CommonMark parsing.
-export function normalizeMarkdown(markdown) {
+// A document's own links (`links: false`) are left as written.
+export function normalizeMarkdown(markdown, { links = true } = {}) {
   const rewriteSegment = segment => segment
     .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (whole, bang, label, url) => {
-      const resolved = resolveAiLink(label, url);
+      const resolved = links && resolveAiLink(label, url);
       if (!resolved) return whole;
       if (bang === '!') {
         const key = resolved.aiFile || (resolved.page ? `page-${resolved.page}` : '');
@@ -64,11 +65,13 @@ function loadKatex() {
   }).catch(error => { katex = null; throw error; });
 }
 
-export async function renderMarkdown(element, text, toHtml) {
-  const html = await toHtml(normalizeMarkdown(text));
+// `document`: a text document's own Markdown, whose links are not AI page or image
+// references (text-view.js follows them); web links still open in the browser.
+export async function renderMarkdown(element, text, toHtml, { document: own = false } = {}) {
+  const html = await toHtml(normalizeMarkdown(text, { links: !own }));
   element.innerHTML = html;
   for (const a of element.querySelectorAll('a')) {
-    const resolved = resolveAiLink(a.textContent, a.getAttribute('href') || '');
+    const resolved = own ? (/^(https?:|mailto:)/i.test(a.getAttribute('href') || '') ? { external: true } : null) : resolveAiLink(a.textContent, a.getAttribute('href') || '');
     if (resolved?.external) {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -84,6 +87,9 @@ export async function renderMarkdown(element, text, toHtml) {
       a.setAttribute('href', '#ai-image');
       a.dataset.aiImage = resolved.image;
       a.title ||= 'Show image';
+    } else if (!own && !(a.getAttribute('href') || '').startsWith('#')) {
+      // Relative links mean something only in a document (a file beside it).
+      a.setAttribute('href', '#');
     }
   }
   const maths = element.querySelectorAll('.math');

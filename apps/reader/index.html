@@ -624,9 +624,9 @@
         <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
           <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><select id="chatModel" data-native aria-label="Model" title="Model"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div><input id="chatModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
           <div class="chat-context">
-            <label><input id="chatPage" type="checkbox" checked /> This page</label>
+            <label><input id="chatPage" type="checkbox" checked /> <span id="chatPageLabel">This page</span></label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
-            <label title="Your Markdown notes for this document"><input id="chatNotes" type="checkbox" /> My notes</label>
+            <label title="Your Markdown notes for this document" data-material="notes"><input id="chatNotes" type="checkbox" /> My notes</label>
             <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
           </div>
           <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
@@ -779,9 +779,9 @@
   <h2 id="studyTitle">Generate flashcards</h2>
   <fieldset class="ocr-scope">
     <legend>Pages</legend>
-    <div><label><input type="radio" name="studyScope" value="page" checked /> Current page</label>
-    <label><input type="radio" name="studyScope" value="range" /> Pages <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
-    <label><input type="radio" name="studyScope" value="all" /> Whole note</label></div>
+    <div><label><input type="radio" name="studyScope" value="page" checked /> <span id="studyScopePage">Current page</span></label>
+    <label><input type="radio" name="studyScope" value="range" /> <span id="studyScopeRange">Pages</span> <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
+    <label><input type="radio" name="studyScope" value="all" /> <span id="studyScopeAll">Whole note</span></label></div>
   </fieldset>
   <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
   <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
@@ -829,10 +829,10 @@
         <select id="practiceAskModel" data-native aria-label="Model"></select>
         <input id="practiceAskModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name" aria-label="Other model" hidden />
         <span class="practice-ask-material" role="group" aria-label="Send with the question">
-          <button id="practiceAskPage" type="button" class="chip" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
-          <button id="practiceAskPdf" type="button" class="chip" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
-          <button id="practiceAskNotes" type="button" class="chip" aria-pressed="false" title="Your Markdown notes for this document">Notes</button>
-          <button id="practiceAskNote" type="button" class="chip" aria-pressed="false" title="Lets the tool read any page of the note (slower)">Whole note</button>
+          <button id="practiceAskPage" type="button" class="chip" data-material="page" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
+          <button id="practiceAskPdf" type="button" class="chip" data-material="pdf" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
+          <button id="practiceAskNotes" type="button" class="chip" data-material="notes" aria-pressed="false" title="Your Markdown notes for this document">Notes</button>
+          <button id="practiceAskNote" type="button" class="chip" data-material="note" aria-pressed="false" title="Lets the tool read any page of the note (slower)">Whole note</button>
         </span>
       </div>
       <div id="practiceAskThread" class="practice-ask-thread" role="log" aria-live="polite" aria-label="AI explanation"></div>
