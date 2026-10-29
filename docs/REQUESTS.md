@@ -17,6 +17,8 @@ To try in the real app or service (`[!]`):
 
 Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
 
+Planned, not started (`[ ]`): collaborative Markdown notes with linked documents (one computer hosts, others join from an invite link). Plan and progress in [COLLABORATION.md](COLLABORATION.md).
+
 ## Study: quizzes and flashcards
 - [D] Generated in the background with real progress: a bar chip shows the phase, elapsed time and continuous progress, with Stop. *Browser test with a fake AI bridge.*
 - [D] Quizzes saved per note and resumable (Q). Answers are stored as they are given. *Reopened the note and resumed at question 3 with the score kept.*
@@ -244,6 +246,16 @@ Owner's idea (2026-10-28), with corrections and additions agreed in review.
 - [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
 - [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
 - [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way. Every source lists .pdf, .noteful, .notepart, .notecomp and .notecomplete, with the same filters (Type included) and folders kept browsable.
+
+## Future: collaborative notes (planned, not started)
+
+Owner's idea (2026-10-29). The full plan, decisions and progress checklist are in [COLLABORATION.md](COLLABORATION.md).
+
+- [ ] **Host + guests.** One computer hosts a document from the desktop app; others join its Markdown notes from an invite link, in a browser or in NoteComplete, and edit together in real time (Yjs CRDT; the host keeps and saves the notes).
+- [ ] **Linked documents.** A chip in the notes for an attached file (a `notecomplete-doc:` Markdown link: a stable document id plus the SHA-256 of the shared version); guests download it from the host with one click.
+- [ ] **Link document… button** in the notes editor's toolbar (also the panel head, Edit menu and drag and drop). It works on one device too, before any sharing.
+- [ ] **Download and bind, like a symlink.** Clicking a link on a device without the file offers to download it (from the host or Drive), use a copy already there (same hash), or locate it; the copy is then bound to the link on that device and opens from the chip.
+- [ ] **Changed copies.** When a copy or the shared version changed, the page comparison made for Drive versions opens again, and each person decides page by page (or hunk by hunk for text) what to keep: Keep mine / Take shared / Keep both, then Save merged copy. When nothing was removed or changed and one or both sides only added pages, it just asks whether to keep both (combined copy). A kept base version makes this a three-way comparison, so additions and deletions are told apart.
 
 ## Home filters
 - [D] Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
