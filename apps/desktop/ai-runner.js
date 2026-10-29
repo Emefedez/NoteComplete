@@ -116,6 +116,8 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   const models = new Map(), asking = new Set();
   return {
     tools: async () => (found ||= await tools()),
+    // Windows with requests in flight (a window's entry is dropped when its last one ends).
+    owners: () => running.size,
     async providers() {
       found ||= await tools();
       return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));

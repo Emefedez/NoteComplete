@@ -42,6 +42,7 @@ import { AudioController } from "./audio.js";
 import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
+import { Engine } from "./engine.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
@@ -67,10 +68,7 @@ document.addEventListener("pointerdown", (event) => {
   if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden)
     setCompact(true);
 });
-const pending = new Map();
-let worker;
-let request = 0,
-  epoch = 0,
+let epoch = 0,
   revision = 0,
   ready = false,
   dirty = false,
@@ -150,64 +148,27 @@ function status(text, error = false) {
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
 }
 function call(op, args = {}) {
-  return new Promise((resolve, reject) => {
-    const id = ++request;
-    pending.set(id, { resolve, reject });
-    worker.postMessage(
-      { id, op, page, ...args },
-      args.bytes ? [args.bytes] : [],
+  return engine.call({ op, page, ...args }, args.bytes ? [args.bytes] : []);
+}
+// Notes of 32 MB and more replace the engine's worker when they close (engine.js).
+const engine = new Engine({
+  create: () => new Worker("./worker.js", { type: "module" }),
+  onReady() {
+    if (ready) return;
+    ready = true;
+    $("open").disabled = $("emptyOpen").disabled = false;
+    status("Ready. Everything is processed on your device.");
+    window.ReactNativeWebView?.postMessage(
+      JSON.stringify({ type: "noteful-ready" }),
     );
-  });
-}
-// The engine runs in its own worker. A big note leaves its WebAssembly memory
-// grown for good (it can never shrink), so closing one replaces the worker.
-function spawnWorker() {
-  const mine = (worker = new Worker("./worker.js", { type: "module" }));
-  worker.onmessage = ({ data }) => {
-    if (mine !== worker) return;
-    if (data.ready) {
-      if (ready) return;
-      ready = true;
-      $("open").disabled = $("emptyOpen").disabled = false;
-      status("Ready. Everything is processed on your device.");
-      window.ReactNativeWebView?.postMessage(
-        JSON.stringify({ type: "noteful-ready" }),
-      );
-      return;
-    }
-    if (data.fatal) {
-      status(data.fatal, true);
-      return;
-    }
-    const p = pending.get(data.id);
-    if (!p) return;
-    pending.delete(data.id);
-    data.error ? p.reject(Error(data.error)) : p.resolve(data.result);
-  };
-  worker.onerror = (e) => {
-    if (mine !== worker) return;
-    for (const p of pending.values()) p.reject(Error(e.message));
-    pending.clear();
+  },
+  onFatal: (text) => status(text, true),
+  onError(message) {
     ready = false;
-    status("Engine error: " + e.message, true);
-  };
-}
-spawnWorker();
-// Notes at least this large make the worker be replaced when they close.
-const RECYCLE_BYTES = 32 * 1024 * 1024;
-let sessionBytes = 0;
-// The note was closed (Home, or a text/HTML/web document opened): free its session in the
-// engine, and for a big one start a fresh worker so the memory goes back to the system.
-function releaseSession() {
-  const big = sessionBytes >= RECYCLE_BYTES;
-  sessionBytes = 0;
-  if (!big) return void call("close").catch(() => {});
-  const old = worker;
-  spawnWorker();
-  old.terminate();
-  for (const p of pending.values()) p.reject(Error("Document closed"));
-  pending.clear();
-}
+    status("Engine error: " + message, true);
+  },
+});
+const releaseSession = () => engine.release();
 function canReplace() {
   return (
     !(dirty && changed) ||
@@ -296,7 +257,7 @@ async function load(file, preparedDocument = null) {
     });
     // Both worker and UI retain the previous document until the replacement validates.
     reset({ opening: true, keepSession: true });
-    sessionBytes = openedBytes;
+    engine.opened(openedBytes);
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);

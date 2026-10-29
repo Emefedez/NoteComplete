@@ -19,10 +19,10 @@ This document details the memory footprint, scaling characteristics, and identif
 
 | # | Concern | Status |
 | :--- | :--- | :--- |
-| 1 | Worker session retained on reset | **Fixed**: new `close` op in `worker.js`, called from `reset()` |
-| 2 | WASM linear memory high-water mark | **Mitigated**: the worker is replaced when a note of 32 MB or more closes |
+| 1 | Worker session retained on reset | **Fixed**: new `close` op in `worker.js`, called from `reset()` via `engine.js` |
+| 2 | WASM linear memory high-water mark | **Mitigated**: `engine.js` replaces the worker when a note of 32 MB or more closes (tested in `engine.test.mjs`) |
 | 3 | `pageList` / `thumbQueue` retention | **Fixed** in `reset()` |
-| 4 | Orphaned child processes, `running` Map | **Fixed**: tab destruction cancels AI and transcription work; empty owners are dropped |
+| 4 | Orphaned child processes, `running` Map | **Fixed**: tab destruction cancels AI and transcription work; empty owners are dropped (tested in `ai-runner.test.mjs`) |
 | 5 | "Unbounded undo history" | **Not a bug, no change** (see below) |
 | 6 | Buffer duplication on open | Open (needs a streaming or transferable open path) |
 
@@ -113,7 +113,7 @@ The codebase already employs several sound memory patterns that should be preser
 ## 6. Remediation
 
 1. **Session close (done):** `worker.js` handles `op === "close"`; `reset()` in `app.js` calls `releaseSession()` unless a note is being opened.
-2. **Worker recycling (done):** `releaseSession()` terminates and respawns the worker when the closed note was at least `RECYCLE_BYTES` (32 MB), returning its WebAssembly memory to the system.
+2. **Worker recycling (done):** `Engine.release()` (`apps/reader/engine.js`) terminates and respawns the worker when the closed note was at least `RECYCLE_BYTES` (32 MB), returning its WebAssembly memory to the system.
 3. **DOM teardown (done):** `reset()` clears `thumbQueue` and `#pageList`.
 4. **Process teardown (done):** `main.js` calls `ai.cancel(id)` and `asr.cancel(id)` when a tab's page is destroyed (closing a tab or window); `ai-runner.js` removes an owner's entry when its last request ends.
 5. **Remaining:** IPC and WASM copy count when opening large notes (item 6); history checkpointing (item 5) if long sessions prove a problem.

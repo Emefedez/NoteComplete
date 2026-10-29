@@ -60,6 +60,28 @@ test('requests run side by side and Stop cancels only its own tag', async () => 
   await assert.rejects(runner.run('w1', { provider: 'claude', prompt: 'x', tag: 'a b' }), /Invalid request tag/);
 });
 
+test('closing a window stops all its requests at once and leaves nothing behind', async () => {
+  // A "claude" that would run for a minute: closing the tab must not wait for it.
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-fake-'));
+  const fake = path.join(bin, 'claude');
+  await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nexec sleep 60\n');
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
+  const started = Date.now();
+  const runs = [runner.run('gone', { provider: 'claude', prompt: 'x', tag: 'study' }), runner.run('gone', { provider: 'claude', prompt: 'x', tag: 'chat' })];
+  const other = runner.run('kept', { provider: 'claude', prompt: 'x' });
+  other.catch(() => {});
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(runner.owners(), 2);
+  runner.cancel('gone');
+  for (const r of await Promise.allSettled(runs)) assert.match(r.reason?.message, /stopped/);
+  assert.ok(Date.now() - started < 5000, 'the processes were killed, not waited for');
+  assert.equal(runner.owners(), 1, 'the closed window is forgotten; the other keeps running');
+  runner.cancel('kept');
+  await assert.rejects(other, /stopped/);
+  assert.equal(runner.owners(), 0);
+});
+
 test('Antigravity model listing is parsed into ids and labels', async () => {
   const { parseAgyModels } = await import('./ai-runner.js');
   assert.deepEqual(parseAgyModels('Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n'),
