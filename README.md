@@ -46,6 +46,7 @@ Play recordings with the handwriting appearing as it was written, tap ink to see
 ### Study with your AI subscription
 Flashcards and quizzes are generated in the background by the tool you already use (Claude Code, Antigravity or Codex) from page images and text.
 - **Quizzes** are saved and resumable. **Hint** (<kbd>H</kbd>) shows where your notes answer it; **Clarify** (<kbd>C</kbd>) explains it and keeps the answer; **Dispute** (<kbd>X</kbd>) and **Double check** (<kbd>V</kbd>) question the quiz; wrong answers can be retaken; **Restart** with the circular arrow (press twice).
+- They are also **generated in the background** so you can keep studying while your material is being created.
 - **Flashcards** are practised in a floating window, with formulas and lists rendered. **Ask AI** (<kbd>C</kbd>) explains a card using its page, source PDF, your notes or the whole note, and keeps the answer with the card. **Edit**, **Double check** and **Discard** fix a card on the spot.
 - Quiz and flashcard windows **grow to fit** the answer as it streams in.
 - **Ask AI** (<kbd>Ctrl</kbd>+<kbd>J</kbd>) answers about a page, a region or your notes. Follow-ups from cards and quizzes continue there.
@@ -57,7 +58,8 @@ Flashcards and quizzes are generated in the background by the tool you already u
 
 <p align="center"><img src="docs/images/quiz-clarify.png" alt="A quiz window grown to fit a streamed answer" width="49%"> <img src="docs/images/card-ask.png" alt="A flashcard window grown to fit an answer" width="49%"></p>
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
-<p align="center"><img src="docs/images/quiz-clarify-light.png" alt="The light theme" width="70%"></p>
+<p align="center"><img src="docs/images/quiz-clarify-light.png" alt="A hint appears!" width="70%"></p>
+<p align ="center"><img src= "docs/images/quiz-generating.png" alt = "background process" width = "70%"</p>
 
 ### Feels like a desktop app
 - **Tabs and windows** (<kbd>Ctrl</kbd>+<kbd>T</kbd>); drag a tab out for its own window.
