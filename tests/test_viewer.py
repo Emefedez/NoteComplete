@@ -12,7 +12,8 @@ from http.server import ThreadingHTTPServer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'research/python'))
 from noteful import FormatError, decode_sample_strokes, parse, values, semantic_summary
-from render_note import render, path_geometry, composite, variable_ink
+from render_note import (TAPE_OPEN, composite, image_crop, path_geometry, render,
+                         stroke_svg, tape_group, variable_ink)
 from viewer import Handler, LocalServer
 
 
@@ -117,7 +118,77 @@ class ViewerTests(unittest.TestCase):
         self.assertEqual(s['style']['rgba'], [1,0,0,.5])
         self.assertEqual(s['style']['tool_raw'], 1)
 
-    def test_upload_valid_invalid_and_recovery(self):
+    def test_eraser_tape_and_crop_render_semantics(self):
+        stroke = {
+            "candidate_points": [[0., 0.], [10., 0.], [20., 0.]],
+            "radii": [],
+            "flags": 2,
+            "point_count": 3,
+            "auxiliary_hex": (struct.pack(">II", 0, 2)
+                              + struct.pack(">ffff", 0, 0, .25, .5)).hex(),
+            "thickness_candidate": 2.,
+            "style": {"rgba": [0., 0., 0., 1.], "tool_raw": 0, "extra_hex": "00" * 8},
+        }
+        svg = stroke_svg(stroke, 4)
+        self.assertEqual(svg.count("<polyline"), 2)
+        self.assertIn("10.00000,0.00000", svg)
+        self.assertIn("17.50000,0.00000", svg)
+        stroke["style"]["tool_raw"] = 2
+        stroke["flags"] = 6
+        taped = stroke_svg(stroke, 4)
+        self.assertIn(f'data-tape="stroke:4" data-revealed="1" opacity="{TAPE_OPEN:.5f}"', taped)
+        self.assertIn('class="nc-tape-pattern"', taped)
+        self.assertEqual(tape_group('<rect/>', 'object:1', False),
+                         '<g data-tape="object:1" data-revealed="0" opacity="1.00000"><rect/></g>')
+        p = {12: {1: [0., 183., 546., 183., 546., 391., 0., 391.],
+                  2: [0, 1, 1, 1, 4]}}
+        crop = image_crop(p, 1092., 416., 546., 632.)
+        self.assertEqual((crop['left'], crop['top'], crop['width'], crop['height']),
+                         (0., -366., 1092., 1264.))
+        self.assertEqual(crop['outline'], 'M0.00000 0.00000 L1092.00000 0.00000 '
+                                          'L1092.00000 416.00000 L0.00000 416.00000 Z')
+        self.assertIsNone(image_crop({}, 10., 10., 10., 10.))
+
+    def test_tape_and_tag_objects_keep_their_owner_note_semantics(self):
+        tape = {"id": "T", "type_raw": 3, "kind_in_samples": "rounded_rectangle",
+                "stroke_object_set_id": None,
+                "transform_raw": [100., 100., 200., 40., 0.], "size": [200., 40.],
+                "payload_fields": [
+                    {"tag": 1, "type": "0x0002", "value": 3},
+                    {"tag": 2, "type": "0x0821", "value": [200., 40.]},
+                    {"tag": 13, "type": "0x0807", "value": [
+                        {"tag": 1, "type": "0x0420",
+                         "value": [0., 0., 200., 0., 200., 40., 0., 40.]},
+                        {"tag": 2, "type": "0x0414", "value": [0, 1, 1, 1, 4]}]},
+                    {"tag": 15, "type": "0x0002", "value": 1},
+                    {"tag": 20, "type": "0x0020", "value": 3.},
+                ],
+                "index": 2, "z_order_raw": 1, "layer_raw": 0,
+                "opacity": 1., "tool_raw": 2}
+        summary = {"title": "Tape", "pages": [
+            {"id": "P", "stroke_object_set_id": None, "attachment_ids": [],
+             "size": [500., 500.], "background_pdf_id": None, "background_provider": None,
+             "paper": None, "background_page_raw": 0, "order_key": ""}],
+            "layers": [], "objects": [tape]}
+        report = {"blocks": []}
+        doc = render(b"", parser=lambda _: report | {"semantic_summary": summary})
+        svg = doc['pages'][0]['svg']
+        self.assertIn(f'data-tape="object:2" data-revealed="1" opacity="{TAPE_OPEN:.5f}"', svg)
+        tag = dict(tape, type_raw=19, kind_in_samples="tag", id="G", index=3,
+                   tool_raw=0, payload_fields=[
+                       {"tag": 1, "type": "0x0002", "value": 19},
+                       {"tag": 2, "type": "0x0821", "value": [60., 20.]},
+                       {"tag": 4, "type": "0x0007", "value": [
+                           {"tag": 2, "type": "0x0405", "value": ["#SD I"]},
+                           {"tag": 3, "type": "0x0402", "value": [0]},
+                           {"tag": 4, "type": "0x0402", "value": []}]},
+                   ])
+        summary["objects"] = [tag]
+        svg = render(b"", parser=lambda _: report | {"semantic_summary": summary})['pages'][0]['svg']
+        self.assertIn('fill="#e8eefb"', svg)
+        self.assertIn('#SD I', svg)
+
+
         server = LocalServer(('127.0.0.1', 0), Handler)
         server.samples = {p.name:p for p in (ROOT/'samples').glob('*.noteful')}
         server.initial = 'Examen wuolah.noteful'

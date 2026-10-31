@@ -1,10 +1,12 @@
 """Local SVG preview from decoded content; no Noteful/PDF reference pixels used for ink."""
 import base64
 import math
-from noteful import FormatError, parse, semantic_summary, values
+from noteful import (FormatError, decode_eraser_mask, parse, semantic_summary,
+                     values, visible_runs)
 from rich_text import decode_rich_text, text_svg
 
 HIGHLIGHTER_OPACITY = .5  # /ca and /CA in the supplied Noteful PDF export.
+TAPE_OPEN = .18  # A tape tapped open stays as a faint band.
 
 
 def num(v):
@@ -17,13 +19,24 @@ def color(rgba):
 
 def composite(element, opacity=1., tool=0):
     """Use the same Multiply/50% composition for freehand and shape highlighters."""
-    if tool not in (0, 1):
+    if tool not in (0, 1, 2):
         raise FormatError(f'Unsupported drawing tool {tool}')
     if not math.isfinite(opacity) or not 0 <= opacity <= 1:
         raise FormatError('Invalid object opacity')
     opacity *= HIGHLIGHTER_OPACITY if tool == 1 else 1
     mode = ' style="mix-blend-mode:multiply"' if tool == 1 else ''
     return f'<g opacity="{num(opacity)}"{mode}>{element}</g>'
+
+
+def tape_group(element, ident, revealed):
+    """Covering tape is opaque; tapped open it stays faint (not a saved edit)."""
+    return (f'<g data-tape="{ident}" data-revealed="{1 if revealed else 0}" '
+            f'opacity="{num(TAPE_OPEN if revealed else 1.)}">{element}</g>')
+
+
+def tape_with_pattern(element):
+    """A tape's own drawing plus its striped copy, as in the product renderer."""
+    return f'{element}<g class="nc-tape-pattern">{element}</g>'
 
 
 def path_geometry(coords, commands):
@@ -92,9 +105,67 @@ def shape_element(obj, payload):
     return f'<g transform="scale({num(sx)} {num(sy)})">{element}</g>'
 
 
+def image_crop(payload, width, height, source_width, source_height):
+    """An image's crop outline (payload tag 12), mapped into its placement box."""
+    outline = payload.get(12)
+    if not isinstance(outline, dict):
+        return None
+    coords, commands = outline.get(1, []), outline.get(2, [])
+    if len(coords) < 4 or not commands:
+        return None
+    points = list(zip(coords[0::2], coords[1::2]))
+    if any(not all(math.isfinite(v) for v in point) for point in points):
+        return None
+    x0 = min(x for x, _ in points)
+    x1 = max(x for x, _ in points)
+    y0 = min(y for _, y in points)
+    y1 = max(y for _, y in points)
+    if x1 - x0 < 1e-9 or y1 - y0 < 1e-9:
+        return None
+    sx, sy = width / (x1 - x0), height / (y1 - y0)
+    scaled = []
+    for x, y in points:
+        scaled.extend(((x - x0) * sx, (y - y0) * sy))
+    return {
+        'left': -x0 * sx, 'top': -y0 * sy,
+        'width': source_width * sx, 'height': source_height * sy,
+        'outline': path_geometry(scaled, commands),
+    }
+
+
+def run_svg(points, radii, radius, rgba):
+    """One visible run, drawn like the core's line or variable-width ink."""
+    if not radii:
+        if len(points) == 1:
+            return (f'<circle cx="{num(points[0][0])}" cy="{num(points[0][1])}" '
+                    f'r="{num(radius)}" fill="{color(rgba)}" opacity="{num(rgba[3])}"/>')
+        attrs = (f'fill="none" stroke="{color(rgba)}" stroke-width="{num(radius*2)}" '
+                 'stroke-linecap="round" stroke-linejoin="round"')
+        return ('<polyline points="' + ' '.join(','.join(num(v) for v in xy) for xy in points)
+                + f'" {attrs} opacity="{num(rgba[3])}"/>')
+    return variable_ink(points, radii, rgba)
+
+
+def stroke_svg(stroke, index):
+    """A stroke's visible runs, composited once; tape strokes are wrapped as tape."""
+    points = stroke['candidate_points']
+    radii = stroke.get('radii') or []
+    auxiliary = bytes.fromhex(stroke.get('auxiliary_hex', ''))
+    mask = decode_eraser_mask(stroke['flags'], stroke.get('point_count', len(points)),
+                              auxiliary)
+    rgba = stroke['style']['rgba']
+    element = ''.join(run_svg(part, part_radii, stroke['thickness_candidate'], rgba)
+                      for part, part_radii in visible_runs(points, radii, mask))
+    element = composite(element, rgba[3], stroke['style']['tool_raw'])
+    if stroke['style']['tool_raw'] == 2:
+        element = tape_group(tape_with_pattern(element), f'stroke:{index}',
+                             bool(stroke['flags'] & 4))
+    return element
+
+
 def render(data, name='Note', parser=parse):
     report = parser(data)
-    summary = semantic_summary(report)
+    summary = report.get('semantic_summary') or semantic_summary(report)
     blocks = {b['id']: b for b in report['blocks']}
     pages = []
     for page in summary['pages']:
@@ -115,20 +186,10 @@ def render(data, name='Note', parser=parse):
         if editable.get('stroke_decode_error'):warnings.append(editable['stroke_decode_error'])
         objects=[o for o in summary['objects'] if o['stroke_object_set_id']==page.get('stroke_object_set_id')]
         elements=[]
-        for s in strokes:
-            pts=s['candidate_points'];style=s['style'];rgba=style['rgba'];tool=style['tool_raw']
-            if not pts:continue
-            # Scalar radius for uniform strokes; channel 3 supplies radius per sample.
-            width=s['thickness_candidate']*2
-            attrs=f'fill="none" stroke="{color(rgba)}" stroke-width="{num(width)}" stroke-linecap="round" stroke-linejoin="round"'
-            if s.get('radii'):
-                el=variable_ink(pts,s['radii'],rgba)
-            elif len(pts)==1:
-                el=f'<circle cx="{num(pts[0][0])}" cy="{num(pts[0][1])}" r="{num(width/2)}" fill="{color(rgba)}"/>'
-            else:
-                el='<polyline points="'+' '.join(','.join(num(v) for v in xy) for xy in pts)+f'" {attrs}/>'
-            el=composite(el, rgba[3], tool)
-            elements.append((s['z_order_raw'],el))
+        for index, s in enumerate(strokes):
+            if not s['candidate_points']:
+                continue
+            elements.append((s['z_order_raw'], stroke_svg(s, index)))
         unsupported=[]
         for o in objects:
             x,y,ow,oh,angle=o['transform_raw'];sw,sh=o['size'];payload=values(o['payload_fields'])
@@ -137,18 +198,37 @@ def render(data, name='Note', parser=parse):
             if o['kind_in_samples']=='image' and o['asset_id'] in blocks:
                 b=blocks[o['asset_id']];raw=data[b['offset']:b['offset']+b['size']]
                 mime={'jpeg':'image/jpeg','png':'image/png'}.get(b['kind'])
-                if mime:el=f'<image width="{num(ow)}" height="{num(oh)}" preserveAspectRatio="none" href="data:{mime};base64,{base64.b64encode(raw).decode()}"/>'
-            elif o['type_raw'] == 2:
+                if mime:
+                    href='data:'+mime+';base64,'+base64.b64encode(raw).decode()
+                    crop=image_crop(payload,ow,oh,sw,sh)
+                    if crop:
+                        clip=f'nc-crop-{o["id"]}'
+                        el=(f'<clipPath id="{clip}"><path d="{crop["outline"]}"/></clipPath>'
+                            f'<image x="{num(crop["left"])}" y="{num(crop["top"])}" '
+                            f'width="{num(crop["width"])}" height="{num(crop["height"])}" '
+                            f'preserveAspectRatio="none" clip-path="url(#{clip})" href="{href}"/>')
+                    else:
+                        el=f'<image width="{num(ow)}" height="{num(oh)}" preserveAspectRatio="none" href="{href}"/>'
+            elif o['type_raw'] in (2,19):
                 text = decode_rich_text(values(payload.get(4, [])))
                 warnings.extend(text['warnings'])
                 sx = ow/sw if abs(sw)>1e-9 else 1
                 sy = oh/sh if abs(sh)>1e-9 else 1
-                el = f'<g transform="scale({num(sx)} {num(sy)})">{text_svg(text,sw)}</g>'
+                # Kind 19 (owner notes) is a tag such as "#SD I": rich text in a pill.
+                pill=(f'<rect width="{num(sw)}" height="{num(sh)}" rx="{num(sh/2)}" '
+                      'fill="#e8eefb" stroke="#9fb3df" stroke-width="0.8"/>'
+                      if o['type_raw']==19 else '')
+                el = f'<g transform="scale({num(sx)} {num(sy)})">{pill}{text_svg(text,sw)}</g>'
             elif o['type_raw'] in (3,6,12,20,21):
                 try:
                     el=shape_element(o,payload)
                 except FormatError as error:
                     warnings.append(str(error))
+                    el=None
+                if el is not None and o['type_raw']==3 and o['tool_raw']==2:
+                    revealed=payload.get(15)==1
+                    ident=f'object:{o.get("index", 0)}'
+                    el=tape_group(tape_with_pattern(el),ident,revealed)
             if el is None:unsupported.append(o['type_raw'])
             else:
                 el=composite(f'<g transform="{transform}">{el}</g>',o['opacity'],o['tool_raw'])

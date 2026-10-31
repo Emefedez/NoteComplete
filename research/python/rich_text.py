@@ -66,7 +66,16 @@ def text_svg(text,width):
         for run,content in line:
             decoration=' '.join(x for x,on in [('underline',run['underline']>0),('line-through',run['strikethrough']>0)] if on) or 'none'
             def family(s):return s.replace('\\','\\\\').replace("'","\\'")
-            fonts=f"'{family(run['font_family'])}', '{family(run['font_name'])}', Arial, sans-serif"
+            lower=run['font_family'].lower()
+            if 'courier' in lower or 'mono' in lower:
+                generic="'Courier New', monospace"
+            elif 'times' in lower or 'georgia' in lower or 'serif' in lower:
+                generic="'Times New Roman', serif"
+            elif 'noteworthy' in lower or 'marker' in lower or 'chalk' in lower:
+                generic="'Comic Neue', 'Comic Sans MS', cursive"
+            else:
+                generic='Arial, sans-serif'
+            fonts=f"'{family(run['font_family'])}', '{family(run['font_name'])}', {generic}"
             rgb='rgb('+','.join(str(round(c*255)) for c in run['rgba'][:3])+')'
             weight=700 if run['bold'] else 400;slant='italic' if run['italic'] else 'normal'
             out.append(f'<tspan font-family="{xml(fonts)}" font-size="{run["font_size"]}" font-weight="{weight}" font-style="{slant}" text-decoration="{decoration}" fill="{rgb}" fill-opacity="{run["rgba"][3]}">{xml(content)}</tspan>')

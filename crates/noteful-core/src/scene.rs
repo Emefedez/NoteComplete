@@ -91,8 +91,9 @@ pub(crate) fn color(c: &[f64; 4]) -> String {
         (c[2].clamp(0., 1.) * 255.).round()
     )
 }
+// Tool 0 is ink, 1 highlighter (multiplied), 2 tape (drawn as covering ink).
 fn composite(el: String, opacity: f64, tool: u64) -> Result<String> {
-    if tool > 1 || !(0.0..=1.0).contains(&opacity) {
+    if tool > 2 || !(0.0..=1.0).contains(&opacity) {
         return Err(Error::new(0, "Unsupported tool or opacity"));
     }
     Ok(format!(
@@ -128,17 +129,26 @@ pub(crate) fn stroke_svg(s: &Stroke) -> Result<String> {
     }
     let mut rgba = s.style.rgba;
     rgba[3] = 1.;
-    let el = if s.radii.is_empty() {
-        line_svg(&s.points, s.radius, &rgba)
+    // Partially erased strokes draw only their remaining runs.
+    let el: String = s
+        .visible_runs()
+        .iter()
+        .map(|(points, radii)| run_svg(points, radii, s.radius, &rgba))
+        .collect();
+    composite(el, s.style.rgba[3], u64::from(s.style.tool))
+}
+fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> String {
+    if radii.is_empty() {
+        line_svg(points, radius, rgba)
     } else {
         let mut parts = String::new();
-        for (p, r) in s.points.iter().zip(&s.radii) {
+        for (p, r) in points.iter().zip(radii) {
             parts.push_str(&format!(
                 "<circle cx=\"{}\" cy=\"{}\" r=\"{r}\"/>",
                 p[0], p[1]
             ));
         }
-        for (pp, rr) in s.points.windows(2).zip(s.radii.windows(2)) {
+        for (pp, rr) in points.windows(2).zip(radii.windows(2)) {
             let dx = pp[1][0] - pp[0][0];
             let dy = pp[1][1] - pp[0][1];
             let d = dx.hypot(dy);
@@ -165,9 +175,64 @@ pub(crate) fn stroke_svg(s: &Stroke) -> Result<String> {
                 pp[0][1] + rr[0] * by
             ));
         }
-        format!("<g fill=\"{}\">{parts}</g>", color(&rgba))
-    };
-    composite(el, s.style.rgba[3], u64::from(s.style.tool))
+        format!("<g fill=\"{}\">{parts}</g>", color(rgba))
+    }
+}
+/// Opacity of tape that has been tapped open.
+pub const TAPE_OPEN: f64 = 0.18;
+/// A tape's own drawing plus its striped copy.
+pub(crate) fn tape_with_pattern(el: &str) -> String {
+    format!("{el}<g class=\"nc-tape-pattern\">{el}</g>")
+}
+struct Crop {
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+    outline: String,
+}
+/// An image's crop (payload tag 12: an outline in the image's native size, with path commands
+/// as in shapes), mapped into the placement box [0, w] × [0, h], which holds the crop's bounds.
+fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop>> {
+    let coords: Vec<f64> = arr(&p["12"]["1"]).iter().map(|v| num(v, 0.)).collect();
+    let cmds = arr(&p["12"]["2"]);
+    if coords.len() < 4 || cmds.is_empty() {
+        return Ok(None);
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for pt in coords.as_chunks::<2>().0 {
+        (x0, y0, x1, y1) = (x0.min(pt[0]), y0.min(pt[1]), x1.max(pt[0]), y1.max(pt[1]));
+    }
+    if x1 - x0 < 1e-9 || y1 - y0 < 1e-9 {
+        return Ok(None);
+    }
+    let (sx, sy) = (w / (x1 - x0), h / (y1 - y0));
+    let mut outline = String::new();
+    let mut cursor = 0;
+    for cmd in cmds {
+        let (letter, n) = match cmd.as_u64() {
+            Some(0) => ("M", 2),
+            Some(1) => ("L", 2),
+            Some(3) => ("C", 6),
+            Some(4) => ("Z", 0),
+            _ => return Err(Error::new(0, "Unsupported crop command")),
+        };
+        if cursor + n > coords.len() {
+            return Err(Error::new(0, "Truncated crop"));
+        }
+        outline.push_str(letter);
+        for pt in coords[cursor..cursor + n].as_chunks::<2>().0 {
+            outline.push_str(&format!("{} {} ", (pt[0] - x0) * sx, (pt[1] - y0) * sy));
+        }
+        cursor += n;
+    }
+    Ok(Some(Crop {
+        left: -x0 * sx,
+        top: -y0 * sy,
+        width: sw * sx,
+        height: sh * sy,
+        outline,
+    }))
 }
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
@@ -190,13 +255,36 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             "png" => "image/png",
             _ => return Err(Error::new(0, "Unsupported image")),
         };
-        format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"data:{mime};base64,{}\"/>",STANDARD.encode(package.resource(id).ok_or_else(||Error::new(0,"Missing image bytes"))?))
-    } else if kind == 2 {
+        let href = format!(
+            "data:{mime};base64,{}",
+            STANDARD.encode(
+                package
+                    .resource(id)
+                    .ok_or_else(|| Error::new(0, "Missing image bytes"))?
+            )
+        );
+        match image_crop(p, w, h, sw, sh)? {
+            // Cropped (Noteful's cutout): the placement box is the crop's bounding box, so the
+            // whole image is drawn larger and offset, and clipped to the crop outline.
+            Some(Crop { left, top, width, height, outline }) => {
+                let clip = format!("nc-crop-{}", text(&o["1"]));
+                format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\" href=\"{href}\"/>")
+            }
+            None => format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{href}\"/>"),
+        }
+    } else if kind == 2 || kind == 19 {
+        // Kind 19 (owner notes: "7- ELECTRÓNICA DIGITAL") is a tag such as "#SD I":
+        // the same rich text in tag 4, its names in tag 14, drawn as a pill.
         let parsed = crate::decode_rich_text(&p["4"]);
         let sx = if sw.abs() > 1e-9 { w / sw } else { 1. };
         let sy = if sh.abs() > 1e-9 { h / sh } else { 1. };
+        let pill = if kind == 19 {
+            format!("<rect width=\"{sw}\" height=\"{sh}\" rx=\"{}\" fill=\"#e8eefb\" stroke=\"#9fb3df\" stroke-width=\"0.8\"/>", sh / 2.)
+        } else {
+            String::new()
+        };
         let svg = format!(
-            "<g transform=\"scale({sx} {sy})\">{}</g>",
+            "<g transform=\"scale({sx} {sy})\">{pill}{}</g>",
             crate::text_svg(&parsed, sw)
         );
         rich_text = Some(parsed);
@@ -268,7 +356,19 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             return Err(Error::new(0, format!("Unsupported object type {kind}")));
         };
         radius = width / 2. * sx.abs().max(sy.abs());
-        format!("<g transform=\"scale({sx} {sy})\">{geometry}</g>")
+        let el = format!("<g transform=\"scale({sx} {sy})\">{geometry}</g>");
+        if kind == 3 && o["9"].as_u64() == Some(2) {
+            // Tape covers what is under it; tapped open it stays as a faint band.
+            let open = p["15"].as_u64() == Some(1);
+            format!(
+                "<g data-tape=\"object:{index}\" data-revealed=\"{}\" opacity=\"{}\">{}</g>",
+                u8::from(open),
+                if open { TAPE_OPEN } else { 1. },
+                tape_with_pattern(&el)
+            )
+        } else {
+            el
+        }
     };
     let svg = composite(
         format!(
@@ -434,7 +534,14 @@ impl Scene {
                             }
                         }
                     }
-                    match stroke_svg(s) {
+                    match stroke_svg(s).map(|svg| {
+                        if s.style.tool == 2 {
+                            let open = s.flags & 4 != 0;
+                            format!("<g data-tape=\"stroke:{i}\" data-revealed=\"{}\" opacity=\"{}\">{}</g>", u8::from(open), if open { TAPE_OPEN } else { 1. }, tape_with_pattern(&svg))
+                        } else {
+                            svg
+                        }
+                    }) {
                         Ok(svg) => items.push(Item {
                             id: format!("stroke:{i}"),
                             stroke: Some(Stroke {
@@ -508,5 +615,44 @@ impl Scene {
             layers,
             pdf_assets,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn image_crops_fill_the_placement_and_clip_to_the_outline() {
+        // Exercise 13 in the ACII exam: a 546 × 632 image cropped to rows 183–391.
+        let p = serde_json::json!({"12":{"1":[0.0,183.0,546.0,183.0,546.0,391.0,0.0,391.0],"2":[0,1,1,1,4]}});
+        let c = super::image_crop(&p, 1092.0, 416.0, 546.0, 632.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (c.left, c.top, c.width, c.height),
+            (0.0, -366.0, 1092.0, 1264.0)
+        );
+        assert_eq!(c.outline, "M0 0 L1092 0 L1092 416 L0 416 Z");
+        assert!(
+            super::image_crop(&serde_json::json!({}), 10.0, 10.0, 10.0, 10.0)
+                .unwrap()
+                .is_none()
+        );
+    }
+    use super::object;
+    use serde_json::json;
+    // Tape shapes of the owner's ACII training exam (kind 3, tool 2).
+    #[test]
+    fn tape_objects_cover_or_reveal() {
+        let tape = json!({"2":{"1":[544.4,982.8,1028.0,94.4,0.0]},"4":0,"5":1,"6":{"1":3,"2":[1028.0,94.4],"5":{"1":{"0":[0.9,0.8,0.9,1.0]},"2":0},"13":{"1":[0.0,0.0,1028.0,0.0,1028.0,94.4,0.0,94.4],"2":[0,1,1,1,4]},"15":0,"20":3.0},"8":1.0,"9":2});
+        let covered = object(&tape, None, 4).unwrap();
+        assert!(covered
+            .svg
+            .contains("data-tape=\"object:4\" data-revealed=\"0\" opacity=\"1\""));
+        let mut open = tape.clone();
+        open["6"]["15"] = json!(1);
+        let open = object(&open, None, 5).unwrap();
+        assert!(open
+            .svg
+            .contains(&format!("opacity=\"{}\"", super::TAPE_OPEN)));
     }
 }

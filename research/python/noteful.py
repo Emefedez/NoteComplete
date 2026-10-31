@@ -23,6 +23,7 @@ def audio_kind(raw):
     if raw.startswith(b'ID3'):return 'mp3'
     if raw.startswith(b'fLaC'):return 'flac'
     if raw.startswith(b'OggS'):return 'ogg'
+    if raw.startswith(b'\x1a\x45\xdf\xa3'):return 'webm'
     return None
 
 
@@ -148,6 +149,62 @@ def walk_fields(fields):
                 yield from walk_fields(group)
 
 
+def decode_eraser_mask(flags, point_count, auxiliary):
+    """Flag 2: `[u32 0][u32 N-1]` then one (a, b) f32 pair per segment.
+
+    `[0, b]` is erased at a segment's start and `[1 - a, 1]` towards its end.
+    None when the flag is unset or the bytes are not in that observed shape.
+    """
+    if not flags & 2 or point_count < 2 or len(auxiliary) != point_count * 8:
+        return None
+    if int.from_bytes(auxiliary[0:4], "big") != 0:
+        return None
+    if int.from_bytes(auxiliary[4:8], "big") != point_count - 1:
+        return None
+    pairs = [list(struct.unpack_from(">ff", auxiliary, 8 + i * 8))
+             for i in range(point_count - 1)]
+    if any(not math.isfinite(v) or not -1e-3 <= v <= 1 + 1e-3
+           for pair in pairs for v in pair):
+        return None
+    return pairs
+
+
+def visible_runs(points, radii, mask):
+    """Polylines still visible after pixel erasing, each with its radii (if any)."""
+    if mask is None:
+        return [(list(points), list(radii))]
+    def point(i):
+        return (points[i], radii[i] if i < len(radii) else None)
+    def at(i, t):
+        p, q = points[i], points[i + 1]
+        r = radii[i] + (radii[i + 1] - radii[i]) * t if radii else None
+        return ([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t], r)
+    out, cur = [], []
+    def flush():
+        if len(cur) > 1:
+            out.append(([p for p, _ in cur], [r for _, r in cur if r is not None]))
+        cur.clear()
+    for i, (a, b) in enumerate(mask):
+        if a <= 0 and b <= 0:
+            if not cur:
+                cur.append(point(i))
+            cur.append(point(i + 1))
+            continue
+        if a + b >= 1:
+            flush()
+            continue
+        if b > 0:
+            flush()
+            cur.append(at(i, b))
+        elif not cur:
+            cur.append(point(i))
+        cur.append(at(i, 1 - a))
+        if a > 0:
+            flush()
+    flush()
+    return out
+
+
 def decode_sample_strokes(blob):
     """Decode observed F1 commands, preserving style and unknown auxiliary channels."""
     r = Reader(blob)
@@ -197,6 +254,9 @@ def decode_sample_strokes(blob):
             encoding = "quantized_uint16"
         if not math.isfinite(thickness) or any(not math.isfinite(v) for point in raw for v in point):
             raise FormatError(f"Non-finite stroke values at +0x{start:x}")
+        points = [point[:2] for point in raw]
+        radii = [point[2] for point in raw] if dim == 3 else []
+        mask = decode_eraser_mask(flags, count, aux)
         strokes.append({
             "offset_in_blob": start, "size": r.pos - start,
             "record_prefix": "f101", "opaque_header_hex": prefix.hex(),
@@ -208,10 +268,14 @@ def decode_sample_strokes(blob):
             "point_count": count, "encoding": encoding,
             "float32_0x38_0x3c_0x40_0x44": bounds[:4],
             "uint16_pairs": [point[:2] for point in pairs],
-            "candidate_points": [point[:2] for point in raw],
-            "pressure_candidate": [point[2] for point in raw] if dim == 3 else [],
-            "radii": [point[2] for point in raw] if dim == 3 else [],
-            "auxiliary_hex": aux.hex(), "style": dict(style),
+            "candidate_points": points,
+            "pressure_candidate": radii,
+            "radii": radii,
+            "auxiliary_hex": aux.hex(),
+            "eraser_mask": mask,
+            "visible_runs": [{"points": run, "radii": run_radii}
+                             for run, run_radii in visible_runs(points, radii, mask)],
+            "style": dict(style),
             "geometry_status": "Decoded observed layout; rendering remains approximate",
         })
     return strokes
@@ -287,6 +351,35 @@ def parse(data):
             "index_fields": fields, "blocks": blocks, "coverage": "exact"}
 
 
+def crop_bounds(payload):
+    """Bounds of an image's crop outline (payload tag 12) in native pixels."""
+    outline = payload.get(12)
+    if not isinstance(outline, dict):
+        return None
+    coords = [v for v in outline.get(1, []) if isinstance(v, (int, float))
+              and math.isfinite(v)]
+    if len(coords) < 4:
+        return None
+    xs, ys = coords[0::2], coords[1::2]
+    bounds = [min(xs), min(ys), max(xs), max(ys)]
+    return bounds if bounds[2] > bounds[0] and bounds[3] > bounds[1] else None
+
+
+def object_semantics(payload, tool_raw):
+    """Owner-note semantics kept beside the raw wire values."""
+    kind = payload.get(1)
+    return {
+        "kind_in_samples": {1: "image", 2: "rich_text", 3: "rounded_rectangle",
+                            6: "ellipse", 12: "polygon", 19: "tag",
+                            20: "line_shape", 21: "curve"}.get(kind, "unknown"),
+        "locked": payload.get(21) == 1,
+        "tape": {"revealed": payload.get(15) == 1}
+                if kind == 3 and tool_raw == 2 else None,
+        "crop_outline": payload.get(12),
+        "crop_bounds": crop_bounds(payload),
+    }
+
+
 def semantic_summary(report):
     """Sample-supported relationships, keeping unverified field semantics explicit."""
     result = {"pages": [], "layers": [], "objects": []}
@@ -314,16 +407,16 @@ def semantic_summary(report):
                                          "opacity_candidate": lv.get(6)})
         if block["kind"] == "stroke_object_set":
             v = values(block["fields"])
-            for obj in values(v[5]).get(0, []):
+            for index, obj in enumerate(values(v[5]).get(0, [])):
                 ov = values(obj)
                 payload = values(ov[6])
                 result["objects"].append({
                     "id": ov[1], "type_raw": payload.get(1),
-                    "kind_in_samples": {1: "image", 2: "rich_text", 3: "rounded_rectangle", 6: "ellipse",
-                                        12: "polygon", 20: "line_shape", 21: "curve"}.get(payload.get(1), "unknown"),
+                    **object_semantics(payload, ov.get(9, 0)),
                     "transform_raw": values(ov[2]).get(1),
                     "size": payload.get(2), "asset_id": payload.get(10),
                     "stroke_object_set_id": block["id"], "payload_fields": ov[6],
+                    "index": index,
                     "z_order_raw": ov.get(5, 0), "layer_raw": ov.get(4, 0),
                     "opacity": ov.get(8, 1.0), "tool_raw": ov.get(9, 0),
                     "source_size": payload.get(11),

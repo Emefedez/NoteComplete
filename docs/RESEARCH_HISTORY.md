@@ -130,6 +130,12 @@ Subtracting uint64 clocks before conversion to seconds preserved precision. Play
 
 The assistant-generated multi-recording fixture is explicitly synthetic: a second recording is placed 20 seconds later and the third stroke is shifted with it. It validates separate clocks, assets and selection, but does not establish support for every native pause/splice/multiple-recording variant. Original PDFs, images and audio remain byte-exact through project saves and tested native exports.
 
+### Later owner-note semantics
+
+Owner notes supplied after the initial corpus filled in several object and ink semantics; the files themselves are not in the corpus. Tape (Noteful's *Cinta*) is a kind-3 object with tool 2, a fill and rectangle path, and payload tag 15 marking whether the strip is tapped open (drawn at 18 % opacity) or covering (opaque). Payload tag 21 marks an object locked in place. An image's payload tag 12 is a crop outline in native pixels; the placement box holds the crop's bounds and the rest is clipped away. Kind 19 is a tag whose rich text is drawn as a pill. Flag-4 tape ink is toggled as a view choice, not saved back.
+
+The pixel-eraser mask was narrowed from "8*N auxiliary bytes" to a specific shape: `[u32 0][u32 N-1]` followed by one `(a, b)` f32 pair per segment, where `[0, b]` is erased at the segment's start and `[1 - a, 1]` towards its end. All flag-2 strokes then available matched; masks of any other shape leave the stroke whole. These interpretations are implemented in both the Rust core and the independent Python oracle, with no official modified-file import yet attempted.
+
 ## 4. Application development built on that analysis
 
 | Owner's direction | Implementation during the assisted work | Relationship to the RE findings |

@@ -6,7 +6,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "research/python"))
-from noteful import FormatError, Reader, decode_sample_strokes, encode_fields, parse, semantic_summary
+from noteful import (FormatError, Reader, audio_kind, decode_eraser_mask,
+                     decode_sample_strokes, encode_fields, object_semantics, parse,
+                     semantic_summary, visible_runs)
 
 
 class NotefulTests(unittest.TestCase):
@@ -74,6 +76,41 @@ class NotefulTests(unittest.TestCase):
                 Reader(raw).fields()
         with self.assertRaises(FormatError):
             decode_sample_strokes(b"\xf1\x02")
+
+    def test_eraser_mask_cuts_strokes_into_visible_runs(self):
+        style = b"\xf1\x02" + struct.pack(">ddddH", 0, 0, 0, 1, 0) + bytes(8)
+        header = bytearray(38)
+        struct.pack_into(">H", header, 8, 2)
+        points = [(0., 0.), (10., 0.), (20., 0.)]
+        mask = [0., 0., .25, .5]
+        auxiliary = struct.pack(">II", 0, 2) + struct.pack(">ffff", *mask)
+        stroke = (b"\xf1\x01" + header + struct.pack(">dII", 2, 0, 3) + auxiliary
+                  + struct.pack(">ffffff", *(v for point in points for v in point)))
+        s, = decode_sample_strokes(style + stroke)
+        self.assertEqual(s["eraser_mask"], [[0., 0.], [.25, .5]])
+        self.assertEqual(len(s["visible_runs"]), 2)
+        self.assertEqual(s["visible_runs"][0]["points"], [[0., 0.], [10., 0.]])
+        self.assertEqual(s["visible_runs"][1]["points"][0], [15., 0.])
+        self.assertEqual(s["visible_runs"][1]["points"][1], [17.5, 0.])
+        self.assertIsNone(decode_eraser_mask(0, 3, auxiliary))
+        self.assertIsNone(decode_eraser_mask(2, 3, auxiliary[:-4]))
+        self.assertEqual(visible_runs(points, [], None), [(points, [])])
+
+    def test_tape_lock_crop_and_tag_semantics(self):
+        tape = object_semantics({1: 3, 15: 1}, 2)
+        self.assertEqual(tape["kind_in_samples"], "rounded_rectangle")
+        self.assertEqual(tape["tape"], {"revealed": True})
+        self.assertFalse(tape["locked"])
+        self.assertIsNone(object_semantics({1: 3, 15: 1}, 0)["tape"])
+        self.assertTrue(object_semantics({1: 1, 21: 1}, 0)["locked"])
+        crop = object_semantics({1: 1, 12: {1: [0, 183, 546, 183, 546, 391, 0, 391],
+                                            2: [0, 1, 1, 1, 4]}}, 0)
+        self.assertEqual(crop["crop_bounds"], [0., 183., 546., 391.])
+        self.assertEqual(object_semantics({1: 19}, 0)["kind_in_samples"], "tag")
+        self.assertIsNone(object_semantics({1: 1, 12: {1: [0, 0, 0, 0]}}, 0)["crop_bounds"])
+
+    def test_audio_signatures_include_webm(self):
+        self.assertEqual(audio_kind(b"\x1aE\xdf\xa3" + bytes(12)), "webm")
 
 
 if __name__ == "__main__":
