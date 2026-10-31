@@ -20,16 +20,17 @@ notebook and write Markdown notes beside it. It cannot *write ink*. This plan ad
 | Annotate an existing page | Text, ticks, circles, arrows, highlights, tape over existing ink |
 | Study look | Titles, cards, columns, colour zones, sticky notes, stats, tree diagrams |
 | SVG → ink | Diagrams drawn as pen and highlighter strokes, not pasted images |
+| Native text boxes | First-class kind-2 Noteful text objects (multi-run rich text, alignment, wrapping, edit imported text) |
 | Copy a page design | Layout read from a mockup picture and rewritten in ink |
 | In-app conversion | Markdown/`.md` → `.noteful`, then existing export to PDF, PNG, SVG |
 
-Everything is produced as ordinary pen, highlighter and tape strokes. The result stays
-editable on the iPad: the user can erase it, recolour it, lasso it and move it.
+Everything is produced as ordinary pen, highlighter and tape strokes, or native Noteful typed
+text boxes. The result stays editable on the iPad: the user can erase it, recolour it,
+lasso it, re-type text, and move it.
 
 Non-goals for the first release:
 
-- Typed text boxes instead of ink (Noteful text boxes are a different record type).
-- OCR or handwriting recognition.
+- OCR or handwriting recognition (handwriting is stored as vector ink strokes, not OCR text).
 - Writing into a live iCloud library. NoteComplete has no macOS/Noteful-for-Mac bridge; it
   writes files. MCP tools therefore write **copies**, never the open note.
 - Reproducing Noteful's exact pen engine. We reproduce the *wire format* faithfully and
@@ -47,22 +48,24 @@ files in `samples/`.
 | Item | Value |
 |---|---|
 | Local snapshot | `work/noteful-mcp-ref` (shallow clone) |
-| HEAD | `175e8d7c5389a9505d0b9fca9082e69b0179b648` |
-| HEAD date | 2026-10-26 21:03 +03:00 |
-| Commit subject | `Read text files as UTF-8 on every platform` |
-| GitHub `main` HEAD on 2026-10-31 | same SHA (`175e8d7`) |
-| Project version | `1.0.0b1` (`pyproject.toml`, `CHANGELOG.md`) |
-| Latest release | `v1.0.0b1`, 2026-10-26 |
+| Local HEAD | `175e8d7c5389a9505d0b9fca9082e69b0179b648` |
+| HEAD date | 2026-10-26 21:03:10 +03:00 |
+| HEAD commit subject | `Read text files as UTF-8 on every platform` |
+| GitHub `main` HEAD on 2026-10-31 | `175e8d7c5389a9505d0b9fca9082e69b0179b648` (verified via `git ls-remote`) |
+| Git release tag `v1.0.0b1` | `0d002525884115c707117f4af9a7c538759d9eed` (2026-10-26 20:30 +03:00) |
+| Relation to release tag | Local HEAD is **1 commit ahead** of `v1.0.0b1` (UTF-8 fix for Windows font loading) |
+| Upstream `pyproject.toml` version | `1.0.0b1` |
 | Repository history | 15 commits, all 2026-10-25/26 |
 
-Conclusion: the downloaded copy **is** the latest GitHub build. There is no newer release and
-no divergence. Two caveats:
+Conclusion: the downloaded copy **is** the latest GitHub build and matches GitHub `main` HEAD byte-for-byte. It is one commit ahead of the tagged release `v1.0.0b1` (`0d00252`), incorporating the critical cross-platform UTF-8 file reading fix for SVG fonts. There are no uncommitted changes or divergent branches.
+
+Two caveats:
 
 - The clone is **shallow** (`git rev-parse --is-shallow-repository` → `true`). Before relying
-  on it again, run `git fetch --depth=1 origin main` and compare `git rev-parse HEAD`.
-- Pin the **commit**, not the version. `1.0.0b1` is a single beta tag covering all 15 commits;
+  on it again, run `git fetch --depth=20 origin main` and compare `git rev-parse HEAD`.
+- Pin the **commit** (`175e8d7`), not the tag or version. `1.0.0b1` is a single beta tag covering all 15 commits;
   anyone who cloned before `cf3748e` (pressure variation) or `e8008b6` (design tools) has the
-  same version number and a different feature set.
+  same version number in `pyproject.toml` but a different feature set.
 
 ### 2.2 Format versions do not match
 
@@ -594,95 +597,648 @@ Safety rules for every write tool:
 
 ### 7.1 `create_notebook`
 
+Generates a brand-new `.noteful` notebook containing handwritten pages synthesized from Markdown.
+
+**Input Schema:**
+
 ```json
 {
-  "title": "Cell biology",
-  "markdown": "# THE CELL\n...",
-  "paper": "dot",
-  "ink": "ink",
-  "accent": "blue",
-  "font": "patrick",
-  "size": 11,
-  "seed": 7,
-  "hand": "natural",
-  "pen": "fineliner",
-  "look": "study",
-  "theme": "light",
-  "out": "/path/Cell biology.noteful",
-  "open_in_noteful": false
+  "title": { "type": "string", "description": "Notebook title" },
+  "markdown": { "type": "string", "description": "Markdown content using the handwriting dialect" },
+  "paper": {
+    "type": "string",
+    "enum": ["dot", "grid", "ruled", "blank", "dark-dot", "dark-grid", "dark-ruled", "dark-blank"],
+    "default": "dot",
+    "description": "Background paper pattern and brightness"
+  },
+  "ink": {
+    "type": "string",
+    "default": "ink",
+    "description": "Base ink color name or hex (#1f2233, #000000, #f4f1ea)"
+  },
+  "accent": {
+    "type": "string",
+    "enum": ["coral", "amber", "sky", "purple", "teal", "pink", "mint", "orange", "yellow"],
+    "default": "sky",
+    "description": "Primary accent color for headings, bold terms, cards, and diagrams"
+  },
+  "font": {
+    "type": "string",
+    "enum": ["patrick", "caveat", "block", "readability", "felix", "allure", "elfin", "nixish"],
+    "default": "patrick",
+    "description": "Handwriting font family"
+  },
+  "size": {
+    "type": "number",
+    "default": 11.0,
+    "minimum": 6.0,
+    "maximum": 36.0,
+    "description": "Base body text size (x-height in page points)"
+  },
+  "seed": {
+    "type": "integer",
+    "description": "Random seed for reproducible natural jitter. Defaults to deterministic hash of title."
+  },
+  "hand": {
+    "type": "string",
+    "enum": ["neat", "natural", "messy"],
+    "default": "natural",
+    "description": "Jitter, slant, and baseline drift preset"
+  },
+  "pen": {
+    "type": "string",
+    "enum": ["fineliner", "ballpoint"],
+    "default": "fineliner",
+    "description": "Pen model (fineliner is uniform width; ballpoint emits pressure-varying strokes)"
+  },
+  "look": {
+    "type": "string",
+    "enum": ["study", "classic"],
+    "default": "study",
+    "description": "Layout style: 'study' adds cards, shadows, pill tags, zones; 'classic' is plain ruled notes"
+  },
+  "theme": {
+    "type": "string",
+    "enum": ["light", "dark"],
+    "default": "light",
+    "description": "Visual theme palette"
+  },
+  "out": {
+    "type": "string",
+    "description": "Destination file path. If omitted, writes to ~/Documents/NoteComplete/ink/<title>.noteful"
+  },
+  "overwrite": {
+    "type": "boolean",
+    "default": false,
+    "description": "Allow replacing an existing file at destination"
+  }
 }
 ```
+*Required properties:* `title`, `markdown`.
 
-Returns: output path, page count, spill warning, per-page warnings, preview image of page 1.
+**Output Response:**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Created notebook 'Cell biology' with 3 pages at /home/user/Documents/NoteComplete/ink/Cell biology.noteful"
+    },
+    {
+      "type": "image",
+      "mimeType": "image/png",
+      "data": "<base64 encoded rendered PNG of page 1>"
+    }
+  ],
+  "meta": {
+    "path": "/home/user/Documents/NoteComplete/ink/Cell biology.noteful",
+    "pages": 3,
+    "warnings": []
+  }
+}
+```
 
 ### 7.2 `add_pages`
 
-Same options plus `path`, `after_page` (1-based, default end). Copies the notebook, inserts
-pages, returns the new path and preview of the first inserted page.
+Appends or inserts newly composed handwritten pages into an existing `.noteful` file.
 
-### 7.3 `clean_copy`
-
-`path`, `page`, `markdown`, plus the style options; defaults `paper: "ruled"`, `hand: "neat"`.
-Inserts after `page`. Thin wrapper over `add_pages`.
-
-### 7.4 `write_on_page`
+**Input Schema:**
 
 ```json
 {
-  "path": "...",
-  "page": 3,
-  "items": [
-    {"type": "text", "text": "Good", "x": 700, "y": 420, "color": "green"},
-    {"type": "check", "x": 640, "y": 410, "size": 18},
-    {"type": "ellipse", "cx": 300, "cy": 500, "rx": 90, "ry": 30, "color": "red"},
-    {"type": "highlight", "x": 120, "y": 470, "w": 380, "h": 24, "color": "yellow"},
-    {"type": "drawing", "svg": "<svg ...>", "x": 600, "y": 200, "width": 350}
-  ],
-  "out": "..."
+  "path": { "type": "string", "description": "Path to the existing .noteful file" },
+  "markdown": { "type": "string", "description": "Markdown to compose into new handwritten pages" },
+  "after_page": {
+    "type": "integer",
+    "minimum": 0,
+    "description": "1-based page index after which new pages are inserted (0 = at beginning; omit for end of note)"
+  },
+  "paper": { "type": "string", "enum": ["inherit", "dot", "grid", "ruled", "blank", "dark-dot", "dark-grid", "dark-ruled", "dark-blank"], "default": "inherit" },
+  "font": { "type": "string", "default": "patrick" },
+  "hand": { "type": "string", "default": "natural" },
+  "pen": { "type": "string", "default": "fineliner" },
+  "look": { "type": "string", "default": "study" },
+  "theme": { "type": "string", "default": "light" },
+  "accent": { "type": "string", "default": "sky" },
+  "seed": { "type": "integer" },
+  "out": { "type": "string", "description": "Destination file path (copies by default; requires in_place to modify input)" },
+  "in_place": { "type": "boolean", "default": false, "description": "Replace source file, creating a <path>.bak backup" }
+}
+```
+*Required properties:* `path`, `markdown`.
+
+### 7.3 `clean_copy`
+
+A streamlined helper for study workflows: takes messy notes or raw lecture notes, reformats them cleanly onto ruled or dotted study pages, and inserts them right after the original page.
+
+**Input Schema:**
+
+```json
+{
+  "path": { "type": "string", "description": "Source .noteful file" },
+  "page": { "type": "integer", "minimum": 1, "description": "Page number to clean copy (new pages inserted immediately after)" },
+  "markdown": { "type": "string", "description": "Cleaned up Markdown text to write" },
+  "hand": { "type": "string", "enum": ["neat", "natural"], "default": "neat" },
+  "paper": { "type": "string", "default": "ruled" },
+  "look": { "type": "string", "default": "study" },
+  "out": { "type": "string" },
+  "in_place": { "type": "boolean", "default": false }
+}
+```
+*Required properties:* `path`, `page`, `markdown`.
+
+### 7.4 `write_on_page`
+
+Annotates an existing page in a `.noteful` file with ink items (text, corrections, checkmarks, arrows, shapes, highlighter bands, tape, SVG drawings).
+
+**Input Schema:**
+
+```json
+{
+  "path": { "type": "string", "description": "Path to source .noteful notebook" },
+  "page": { "type": "integer", "minimum": 1, "description": "1-based page number to annotate" },
+  "items": {
+    "type": "array",
+    "description": "List of annotation items to place on the page",
+    "items": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["text", "markdown", "textbox", "line", "arrow", "rect", "ellipse", "underline", "check", "star", "highlight", "highlight_line", "tape", "drawing"]
+        },
+        "x": { "type": "number", "description": "X coordinate in page points (origin top-left, A4 width = 1091)" },
+        "y": { "type": "number", "description": "Y coordinate in page points (A4 height = 1543)" },
+        "w": { "type": "number", "description": "Width in page points (for rect, highlight, tape, textbox)" },
+        "h": { "type": "number", "description": "Height in page points" },
+        "cx": { "type": "number", "description": "Center X (for ellipse)" },
+        "cy": { "type": "number", "description": "Center Y (for ellipse)" },
+        "rx": { "type": "number", "description": "Radius X (for ellipse)" },
+        "ry": { "type": "number", "description": "Radius Y (for ellipse)" },
+        "x2": { "type": "number", "description": "End X (for line, arrow)" },
+        "y2": { "type": "number", "description": "End Y (for line, arrow)" },
+        "text": { "type": "string", "description": "Text content (for handwriting text or typed textbox)" },
+        "markdown": { "type": "string", "description": "Markdown snippet (for markdown item)" },
+        "svg": { "type": "string", "description": "Raw SVG string (for drawing item)" },
+        "color": { "type": "string", "default": "red", "description": "Color name or hex (e.g. '#1f2233')" },
+        "size": { "type": "number", "description": "Font size or icon size" },
+        "font": { "type": "string", "default": "Helvetica", "description": "Font family for typed textbox (e.g. 'Helvetica', 'Times New Roman', 'Courier New', 'Noteworthy')" },
+        "align": { "type": "string", "enum": ["left", "center", "right"], "default": "left", "description": "Text alignment for typed textbox" },
+        "bold": { "type": "boolean", "default": false, "description": "Bold style for typed textbox" },
+        "italic": { "type": "boolean", "default": false, "description": "Italic style for typed textbox" },
+        "underline": { "type": "boolean", "default": false, "description": "Underline decoration for typed textbox" },
+        "strikethrough": { "type": "boolean", "default": false, "description": "Strikethrough decoration for typed textbox" },
+        "hand": { "type": "string", "enum": ["neat", "natural", "messy"], "description": "Handwriting style for text/markdown items" }
+      },
+      "required": ["type"]
+    }
+  },
+  "out": { "type": "string", "description": "Destination file path" },
+  "in_place": { "type": "boolean", "default": false, "description": "Modify original file with .bak backup" }
+}
+```
+*Required properties:* `path`, `page`, `items`.
+
+*Item types distinction:*
+- `"type": "text"` / `"type": "markdown"`: Synthesizes natural **handwriting vector ink strokes** (erasable by stroke eraser, recolorable).
+- `"type": "textbox"`: Creates a native Noteful **kind-2 typed text object** (editable, selectable, re-typeable on iPad and in NoteComplete).
+- *Under-ink guarantee:* All `highlight` and `highlight_line` items are automatically written to the page's under-ink partition so they lie visually *behind* existing writing, while checks, arrows, and corrections lie on top.
+
+### 7.5 `page_layout` (read-only aiming helper)
+
+Extracts structured layout coordinates of ink clusters, headings, images, and typed text boxes on a page so an agent knows exactly where to place annotations without colliding.
+
+**Input Schema:**
+
+```json
+{
+  "path": { "type": "string", "description": "Path to .noteful file" },
+  "page": { "type": "integer", "minimum": 1, "description": "Page number to inspect" }
 }
 ```
 
-Item types: `text`, `markdown`, `line`, `arrow`, `rect`, `ellipse`, `underline`, `check`,
-`star`, `highlight`, `highlight_line`, `tape`, `drawing`. Coordinates in page units
-(A4 = 1091 × 1543, origin top-left). Highlights are inserted under existing ink; everything
-else is added on top. Returns the output path, preview and warnings.
+**Output Response:**
 
-### 7.5 `page_layout` (read-only, new)
-
-Numbered items with bounding boxes and a short text snippet, so an agent can aim marks:
-`[{n, kind, bbox:[x0,y0,x1,y1], color, text?}]`. This is the missing aiming tool for
-`write_on_page` and grading.
+```json
+{
+  "page": 1,
+  "width": 1091.34,
+  "height": 1543.46,
+  "elements": [
+    {
+      "id": "ink:1",
+      "kind": "ink_cluster",
+      "bbox": [120.0, 140.0, 480.0, 210.0],
+      "color": "#1f2233",
+      "estimated_lines": 2
+    },
+    {
+      "id": "ink:2",
+      "kind": "highlight",
+      "bbox": [118.0, 150.0, 310.0, 172.0],
+      "color": "#ffe066"
+    },
+    {
+      "id": "object:0",
+      "kind": "textbox",
+      "bbox": [120.0, 240.0, 500.0, 310.0],
+      "text": "Cell Biology Lecture Notes",
+      "font": "Helvetica",
+      "size": 18.0,
+      "color": "#1f2233"
+    },
+    {
+      "id": "object:1",
+      "kind": "image",
+      "bbox": [550.0, 120.0, 980.0, 460.0]
+    }
+  ]
+}
+```
 
 ### 7.6 `example_pages`
 
-Without `name`: the index of bundled examples and the style guide. With `name`: its Markdown
-or SVG source plus a rendered preview. Ship 4–6 examples ported from upstream (cell-biology,
-radiation, clean-copy, quiz, answers-tree) with their licence headers.
+Provides AI agents with golden reference examples, style guides, and SVG templates.
+
+**Input Schema:**
+
+```json
+{
+  "name": {
+    "type": "string",
+    "description": "Optional example name ('cell-biology', 'radiation', 'clean-copy', 'quiz', 'answers-tree'). Omit to list all available examples."
+  }
+}
+```
+
+When called without `name`, returns a catalog of examples with brief descriptions and recommended prompt templates. When called with `name`, returns the raw Markdown/SVG source plus rendered PNG preview.
 
 ### 7.7 Design tools (optional, Phase 7)
 
-- `design_mockup(content, look, theme, reference?)` → PNG via an image model. Requires
-  `GEMINI_API_KEY` or Vertex config. This is a network call; it lives in the CLI, is off by
-  default, and is documented as sending the prompt to Google.
-- `mockup_grid(path, step=50, region?)` → the mockup with a labelled pixel grid.
-- `design_page(pages, title?, path?, after_page?)` → each spec is a list of blocks in
-  mockup pixels: `text`, `card`, `band`, `highlight`, `sticky`, `arrow`, `circled_number`,
-  `drawing` (traced from the mockup, labels re-written as text). Returns overlap warnings.
-- Raster tracing (`trace.rs`) is only needed for `design_page` drawings; gate it behind the
-  `design` feature. Without it, `drawing` accepts SVG only.
+- `design_mockup`: Takes note content and invokes Gemini / Vertex image model with the study note prompt to produce a visual page layout mockup PNG.
+  *Parameters:* `content` (string), `look` (string), `theme` (string), `aspect_ratio` (default "3:4").
+  *Environment:* Requires `GEMINI_API_KEY` or Vertex environment variables.
+- `mockup_grid`: Overlays a labeled coordinate grid (50pt or 100pt spacing) over an input mockup image, enabling the agent or user to read exact block coordinates.
+  *Parameters:* `path` (string), `step` (integer, default 50), `region` ([x, y, w, h], optional).
+- `design_page`: Transcribes the visual layout grid into ink blocks on a Noteful page.
+  *Parameters:* `pages` (array of block lists), `title` (string), `path` (string), `out` (string).
+  *Block items:* `text`, `card`, `band`, `highlight`, `sticky`, `arrow`, `drawing` (delegates to SVG or raster trace).
 
 ### 7.8 Resources and prompts
 
-- `noteful://style` — the style guide.
-- `noteful://examples`, `noteful://examples/{name}`, `.../preview`.
-- Prompts: `summary_page`, `clean_copy`, `grade_quiz`, plus the existing `flashcards`.
-- `initialize` instructions mention the write tools and the output folder.
+- MCP Resource `noteful://style`: Read-only Markdown document explaining the handwriting dialect, margins, color palettes, and visual hierarchy rules.
+- MCP Resource `noteful://examples`: Catalog of bundled examples.
+- MCP Resource `noteful://examples/{name}`: Source code and metadata for example `{name}`.
+- MCP Resource `noteful://examples/{name}/preview`: PNG image resource of example `{name}`.
+- Prompts:
+  - `summary_page`: Instructs agent to read an outline/page and synthesize a 1-page study note using `create_notebook` or `add_pages`.
+  - `clean_copy`: Re-writes student handwriting into a clean, legible study note using `clean_copy`.
+  - `grade_quiz`: Inspects student answers on an exercise page and adds ticks, score, and correction ink using `write_on_page`.
+- `initialize` instructions updated to inform client LLMs of the new ink-generation and annotation capabilities.
 
 ---
 
-## 8. In-app integration and conversions
+## 8. Noteful-native text boxes (parity and implementation)
 
-### 8.1 WASM surface
+Beyond handwriting vector ink strokes, Noteful supports first-class typed text boxes. While handwriting strokes are stored in the editable ink blob (`set/5/0[]` payload tag 6 with flags `0xf101`), typed text boxes are stored as **kind-2 objects** (`payload tag 1 = 2`).
+
+This section specifies how to bring NoteComplete's text box implementation into full parity with native Noteful text boxes, resolving existing limitations, enabling bidirectional editing of imported Noteful text, adding rich formatting, and exposing text box synthesis to MCP agents and the in-app converter.
+
+### 8.1 Reverse-engineered wire format and architecture
+
+In Noteful's native protobuf/binary container, text objects live in the page's object collection at `set/5/0[]`:
+
+| Field / Tag | Type | Value & Semantics |
+|---|---|---|
+| `1` | string | Unique object ID (e.g. `object-1730000000-0-1`) |
+| `2 / 1` | `f64[5]` | Placement rectangle: `[centerX, centerY, width, height, angleRadians]` |
+| `4` | `u64` | Layer index (0-based) |
+| `5` | `u64` | Z-order index |
+| `6 / 1` | `u64` | Object kind: `2` (standard text box) or `19` (pill tag) |
+| `6 / 2` | `pair<f64>` | Native content dimensions `[width, height]` |
+| `6 / 4` | nested fields | **Attributed rich text record** (detailed below) |
+| `6 / 9` | nested fields | Container flags (`tag 0 = 0`) |
+| `6 / 19` | nested fields | Formatting traits (`tag 0 = 1`) |
+| `6 / 20`, `21` | `f64` | Horizontal / vertical margins (`0.0`) |
+| `6 / 22` | `u64` | Object type descriptor (`288`) |
+| `7` | string | Optional object label or tag name |
+| `8` | `f64` | Object opacity (1.0 = fully opaque) |
+| `9` | `u64` | Tool identifier (`0` for text) |
+| `10` | `u64` | Edit timestamp / clock |
+
+#### Attributed Rich Text Record (Payload Tag 4)
+
+Native Noteful text uses an attributed string model where runs of text inherit and delta-modify styling from shared typed value pools:
+
+- **`tag 1` (clock):** Lamport timestamp / edit counter (`u64`).
+- **`tag 2` (run strings):** Array of text strings `[run_0, run_1, ..., run_n, "\u{200b}"]`.
+  - The trailing `\u{200b}` (zero-width space) is **mandatory** for Noteful on iPad: it anchors the cursor and preserves active font/color typing attributes when the user taps to continue typing.
+- **`tag 3` (counts):** Array of attribute counts `[count_0, count_1, ..., count_n, count_caret]`.
+- **`tag 4` (delta keys):** Flattened array of attribute keys indicating which traits are modified for the current run:
+  - Key `1` or `13`: Font family (string, looked up in **Pool 5**).
+  - Key `14`: Font PostScript / internal name (string, looked up in **Pool 5**).
+  - Key `2`: Bold flag (`u64` 0 or 1, looked up in **Pool 6**).
+  - Key `3`: Italic flag (`u64` 0 or 1, looked up in **Pool 6**).
+  - Key `4`: Underline (`u64`: 0 = none, 1 = single line, looked up in **Pool 8**).
+  - Key `5`: Strikethrough (`u64`: 0 = none, 1 = single line, looked up in **Pool 8**).
+  - Key `8`: Text alignment (`u64`: 0 = Left, 1 = Center, 2 = Right, looked up in **Pool 8**).
+  - Key `6`: Text color RGBA (nested field `0` with 4 floats `[r, g, b, a]`, looked up in **Pool 7**).
+  - Key `7`: Text background highlight color (looked up in **Pool 7**).
+  - Key `9`: Paragraph attributes record (looked up in **Pool 9**).
+  - Key `10`: Font size in points (float, looked up in **Pool 10**).
+  - Key `11`: Line height (float, looked up in **Pool 10**).
+  - Key `12`: Line spacing (float, looked up in **Pool 10**).
+- **Pools 5–10:** Shared arrays containing the actual attribute values to avoid duplicate storage.
+
+### 8.2 Current limitations and gaps in NoteComplete
+
+Evaluating NoteComplete's current codebase reveals five key discrepancies compared to native Noteful text boxes:
+
+1. **Blocked Editing of Imported Noteful Text:**
+   In `apps/reader/app.js`:
+   ```javascript
+   if (item?.kind === "text") {
+     existing = (p.view.texts || []).find((t) => t.id === item.id);
+     if (!existing) return status("Text from Noteful cannot be edited here yet; move it with Select.", true);
+   }
+   ```
+   Imported text boxes (`object:N`) can only be moved or deleted using the Select tool; users cannot edit their text content or styling.
+2. **Coarse Single-Style Data Model:**
+   `TextBox` in `crates/noteful-core/src/imports.rs` is defined as:
+   ```rust
+   pub struct TextBox {
+       pub text: String,
+       pub font_size: f64,
+       pub rgba: [f64; 4],
+       pub bold: bool,
+       pub italic: bool,
+       pub font: String,
+   }
+   ```
+   It applies a uniform font, size, weight, and color across the entire box. It cannot represent mixed formatting (e.g. bold titles with regular body, or inline colored keywords).
+3. **Missing Essential Styling Traits:**
+   - **Alignment:** Left / Center / Right alignment (Pool 8, Key 8) is parsed in `crates/noteful-core/src/text.rs` for SVG rendering, but cannot be configured, stored, or selected in NoteComplete.
+   - **Decorations:** Underline and strikethrough (Keys 4 and 5) cannot be authored in NoteComplete.
+   - **Line Spacing & Margins:** Hardcoded to default constants (`textAdvance = size + max(8, size * 0.2 + 8)`).
+4. **Lack of Word Wrapping / Reflow:**
+   In `apps/reader/app.js`, `<textarea>` is created with `area.wrap = "off"`. Text box dimensions are calculated purely from hardcoded newline (`\n`) characters. In Noteful, dragging the right edge of a text box widens the box and reflows paragraph text without altering font size; in NoteComplete, resizing a box scales the entire coordinate transform (scaling font size like an image).
+5. **Absence in MCP Write Tools:**
+   Prior MCP designs only permitted writing handwritten ink or markdown notes. Agents could not synthesize or update typed text boxes.
+
+### 8.3 Rust Core architecture and data model
+
+#### Evolving the `TextBox` Representation
+
+Extend `crates/noteful-core/src/imports.rs` and `crates/noteful-core/src/text.rs` to support both simple uniform styling and multi-run rich text:
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TextBox {
+    /// Full plain text or multi-line string.
+    pub text: String,
+    /// Default or fallback font size in points (e.g. 16.0).
+    pub font_size: f64,
+    /// Default text color [r, g, b, a].
+    pub rgba: [f64; 4],
+    /// Primary font family ("Helvetica", "Times New Roman", "Courier New", "Noteworthy").
+    #[serde(default = "default_font")]
+    pub font: String,
+    #[serde(default)]
+    pub bold: bool,
+    #[serde(default)]
+    pub italic: bool,
+    #[serde(default)]
+    pub underline: bool,
+    #[serde(default)]
+    pub strikethrough: bool,
+    /// Text alignment: 0 = Left, 1 = Center, 2 = Right.
+    #[serde(default)]
+    pub alignment: u64,
+    /// Optional rich text runs for multi-styled boxes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<TextRun>,
+    /// Box wrap width (None = auto-width based on content).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_width: Option<f64>,
+}
+```
+
+#### First-Class Editing Actions in `Editor`
+
+Add dedicated edit variants to `crates/noteful-core/src/editor.rs`:
+
+```rust
+pub enum Edit {
+    // ... existing edits ...
+    /// Modifies an existing imported kind-2 text object (`object:N`) in place.
+    RetextObject {
+        page: usize,
+        id: String,
+        text: TextBox,
+        bounds: [f64; 4],
+    },
+    /// Adds a new first-class native text box.
+    AddTextBox {
+        page: usize,
+        text: TextBox,
+        bounds: [f64; 4],
+        layer: usize,
+    },
+}
+```
+
+#### In-Place Modification of Imported Objects in `export_noteful`
+
+In `crates/noteful-core/src/export.rs`, update `edit_object` to detect kind-2 objects:
+- When a `RetextObject` edit targets `object:N`, locate `value` in `nested(&mut fields, 5)? -> array(objects, 0)?`.
+- Replace payload `tag 4` (attributed text) with the newly encoded `rich_text` fields while preserving the original object ID, layer, and z-order.
+- Update payload `tag 2` (`[width, height]`) and placement rectangle `tag 2 / 1` (`[cx, cy, w, h, angle]`).
+
+### 8.4 Reader GUI implementation and canvas interaction (`apps/reader/app.js` & `index.html`)
+
+To achieve true parity with native Noteful on iPad, NoteComplete provides a dedicated text box overlay and floating formatting system on the canvas.
+
+#### 8.4.1 Canvas Text Box DOM Architecture
+
+When a text box is selected or edited, an overlay container is mounted directly onto the page container (`p.el`):
+
+```html
+<div class="textbox-container selected editing" style="left: 120px; top: 250px; width: 400px; height: 180px; transform: rotate(0rad);">
+  <!-- Text Content Area -->
+  <textarea class="textbox-area" wrap="soft" spellcheck="false" placeholder="Type here..."></textarea>
+  
+  <!-- Interactive Transform & Reflow Handles -->
+  <div class="textbox-handle handle-nw" data-handle="nw" title="Resize"></div>
+  <div class="textbox-handle handle-ne" data-handle="ne" title="Resize"></div>
+  <div class="textbox-handle handle-se" data-handle="se" title="Resize"></div>
+  <div class="textbox-handle handle-sw" data-handle="sw" title="Resize"></div>
+  
+  <!-- Horizontal Reflow Width Handles (Adjusts wrap width without scaling font) -->
+  <div class="textbox-handle handle-w" data-handle="w" title="Adjust text wrap width"></div>
+  <div class="textbox-handle handle-e" data-handle="e" title="Adjust text wrap width"></div>
+  
+  <!-- Top Rotation Handle -->
+  <div class="textbox-rot-stem"></div>
+  <div class="textbox-handle handle-rot" data-handle="rot" title="Rotate text box"></div>
+</div>
+```
+
+#### 8.4.2 Rich Text Formatting Toolbar (`#textFormatBar`)
+
+The floating toolbar `#textFormat` is anchored dynamically above the active text box (or below if near the page top margin). It expands to include full parity with Noteful's iPad text inspector:
+
+| Control | ID | Type / Options | Action / Role |
+|---|---|---|---|
+| **Font Family** | `#textFont` | `<select>`: Helvetica, Times New Roman, Courier New, Noteworthy | Sets typeface for selection or entire box |
+| **Font Size** | `#textSize` | Stepper / `<select>`: 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 72 pt | Changes point size |
+| **Bold** | `#textBold` | Button (`aria-pressed`) | Toggles bold trait (`Ctrl+B`) |
+| **Italic** | `#textItalic` | Button (`aria-pressed`) | Toggles italic trait (`Ctrl+I`) |
+| **Underline** | `#textUnderline` | Button (`aria-pressed`) | Toggles underline trait (`Ctrl+U`) |
+| **Strikethrough** | `#textStrikethrough` | Button (`aria-pressed`) | Toggles strikethrough trait |
+| **Alignment** | `#textAlignGroup` | Radio group: Left, Center, Right | Sets paragraph text alignment (`align: 0, 1, 2`) |
+| **Text Color** | `#textSwatches`, `#textColor` | Swatch row (10 theme colors) + native color picker | Applies RGBA text color |
+| **Background Fill** | `#textBgToggle`, `#textBgColor` | Toggle button + color picker | Sets box background fill color and opacity |
+| **Box Border** | `#textBorderToggle` | Toggle button (None / Subtle / Solid) | Sets box border stroke |
+| **Done / Commit** | `#textCommit` | Button (`Enter` or click outside) | Flushes edits to `EditorSession` |
+
+#### 8.4.3 Reflow vs. Scaling Handle Mechanics
+
+A critical distinction in Noteful is the behavior of side handles versus corner handles:
+1. **Horizontal Side Handles (`e`, `w`):**
+   - Dragging the left or right handle resizes `wrap_width` only.
+   - Text automatically reflows across wrapped lines (`wrap="soft"`).
+   - **Font size remains completely unchanged.**
+   - Box height dynamically expands or shrinks to fit the reflowed line count.
+2. **Corner Handles (`nw`, `ne`, `se`, `sw`):**
+   - Dragging a corner handle performs geometric scaling of the bounding box.
+   - Scales the placement transform, matching iPad Noteful's 2-finger pinch/scale behavior.
+3. **Rotation Handle (`rot`):**
+   - Drags to set `angleRadians` in the placement tuple `[cx, cy, w, h, angle]`.
+
+#### 8.4.4 Unlocking Imported Noteful Text Editing (`object:N`)
+
+Previously, imported Noteful text boxes were locked with `"Text from Noteful cannot be edited here yet; move it with Select."`. The new GUI flow:
+1. **Selection:** Clicking an `object:N` text box with the Select tool (`S`) displays the bounding box and handles.
+2. **Editing Activation:** Double-clicking the box (or single-clicking with the Text tool `W`) enters editing mode:
+   - NoteComplete queries `p.view.texts` for the item's decoded `RichText` runs.
+   - Extracts plain text, font family, size, alignment, and style traits.
+   - Populates `<textarea class="textbox-area">` and positions `#textFormatBar` adjacent to the box.
+3. **In-Place Commit:**
+   - On blur, pressing `Esc`, or clicking outside, the new text and formatting are encoded into `TextBox`.
+   - Dispatches WASM `retext_object(page, id, text, bounds)`.
+   - In `export_noteful`, the binary payload tag 4 (attributed text) is rewritten in place, preserving object ID, layer, and z-order.
+
+### 8.5 MCP Tool Integration
+
+Agents can author native Noteful text boxes seamlessly alongside vector ink:
+
+1. **Item in `write_on_page`:**
+   ```json
+   {
+     "type": "textbox",
+     "x": 120.0,
+     "y": 250.0,
+     "w": 400.0,
+     "text": "Key Takeaway:\nCell membrane exhibits selective permeability.",
+     "font": "Helvetica",
+     "size": 16.0,
+     "color": "#1f2233",
+     "align": "left",
+     "bold": false,
+     "italic": false,
+     "underline": false
+   }
+   ```
+2. **`page_layout` Tool:**
+   Returns `kind: "textbox"` with the box's `text`, `font`, `size`, `color`, and bounding box coordinates, allowing agents to read existing typed text and align new annotations or handwriting notes relative to it.
+
+### 8.6 Markdown-to-Textboxes Conversion Mode
+
+In `compose_markdown` and `noteful convert`:
+- Introduce `--mode typed` (or `mode: "typed"` in options JSON).
+- Instead of drawing vector handwriting ink paths for headings and body paragraphs, the composer generates native Noteful kind-2 typed text boxes:
+  - `# Heading 1` → Text box with `Helvetica`, 28pt, bold, primary theme color.
+  - `## Heading 2` → Text box with `Helvetica`, 22pt, bold, secondary color.
+  - Paragraphs & Lists → Text boxes with 14pt regular text, auto-wrapping to page column margins.
+- Allows users who prefer clean, crisp digital typography over simulated handwriting to convert Markdown documents directly into native Noteful notebooks that remain fully editable on iPad.
+
+### 8.7 Shapes Auto-Fill Toggle (UI, Core & Native Parity)
+
+Noteful supports filled geometric shapes natively. In NoteComplete, users can now toggle whether drawn shapes are automatically filled upon creation.
+
+#### 8.7.1 User Interface in `#shapeOptions`
+
+In the Shape tool settings bar (`#shapeOptions`), an **Auto-Fill Toggle Button** is added adjacent to the shape selector icons:
+
+```html
+<!-- Inside #shapeOptions -->
+<button type="button" id="shapeAutoFill" class="tool-toggle" aria-pressed="false" title="Auto-fill shape (F)">
+  <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zm0 16H5V5h14v14z"/><path d="M7 7h10v10H7z" fill="currentColor"/></svg>
+  <span>Fill</span>
+</button>
+<div id="shapeFillOptions" class="shape-fill-options" hidden>
+  <button type="button" id="shapeFillTint" class="active" title="25% Tint of stroke color">Tint</button>
+  <button type="button" id="shapeFillSolid" title="Solid stroke color">Solid</button>
+  <span id="shapeFillSwatches" class="fill-swatches" role="radiogroup" aria-label="Fill color"></span>
+</div>
+```
+
+- **Visual Toggle:** When `#shapeAutoFill` is active (`aria-pressed="true"`), the button is highlighted in the pale accent, and `#shapeFillOptions` opens.
+- **Keyboard Shortcut:** Pressing **F** while the Shape tool (`R`) is active toggles shape auto-fill on/off.
+- **Fill Modes:**
+  - **Tint (Default):** Fill color automatically matches the active stroke color at 25% opacity (`rgba(r, g, b, 0.25)`), creating the classic study-note highlighter fill.
+  - **Solid:** Fill color matches the stroke color at 100% opacity.
+  - **Custom Palette:** Choose an independent fill color swatch from the theme palette.
+
+#### 8.7.2 Interactive Canvas Preview & Real-Time Drawing
+
+While the user drags on the canvas to draw a shape (rectangle, ellipse, triangle):
+- If `shapeAutoFill` is enabled, the interactive preview canvas (`g.ctx`) executes both `ctx.fill()` and `ctx.stroke()` on each mouse/pointer move.
+- High-performance 60fps rendering without lag.
+
+#### 8.7.3 Core Data Model (`crates/noteful-core`)
+
+Extend `Shape` and `Line` structs:
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Shape {
+    pub kind: ShapeKind,
+    pub start: [f64; 2],
+    pub end: [f64; 2],
+    /// Optional fill color [r, g, b, a]. If None, shape is outline-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<[f64; 4]>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Line {
+    // ... existing fields ...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<[f64; 4]>,
+}
+```
+
+#### 8.7.4 Noteful Native Export Parity
+
+When exporting to native `.noteful`:
+- **Kind-3 Objects (Rounded Rectangles):**
+  - If `shape.fill` is `Some(rgba)`: write `rgba` into `payload["5"]["1"]["0"] = [r, g, b, a]`.
+  - Corner radius written to `payload["20"]`.
+  - Stroke width and color written to `payload["7"]`.
+- **Kind-6 Objects (Ellipses):**
+  - If `shape.fill` is `Some(rgba)`: write `rgba` into `payload["5"]["1"]["0"] = [r, g, b, a]`.
+  - Center and radii written to placement and native dimensions.
+- **Polygon / Triangle / Arrow Shapes:**
+  - Written with path commands in `payload["13"]` with fill color in `payload["5"]["1"]["0"]`.
+- On iPad Noteful, the imported shapes render with full native fill and stroke, completely editable via Noteful's native shape tool!
+
+---
+
+## 9. In-app integration and conversions
+
+#### 9.1 WASM surface
 
 Add to `crates/noteful-wasm/src/lib.rs`:
 
@@ -707,20 +1263,74 @@ paths. The desktop app gets:
 - **Export** is unchanged: PDF, PNG, SVG, Noteful. A `.noteful` created from Markdown can be
   exported to any of them immediately.
 
-### 8.2 Other conversions
+### 9.2 In-app converter and export pipeline
 
-| From | To | How |
+The user requested an in-app converter that turns **Markdown → `.noteful`** and can seamlessly **export directly to other formats** (PDF, PNG, SVG).
+
+```mermaid
+graph TD
+    MD[Markdown Source] --> Compose[ink::compose]
+    Compose --> Pages[Vec<PageSpec>]
+    Pages --> CreateDoc[Editor::create_document_with]
+    CreateDoc --> EditorInst[Editor Instance]
+    
+    EditorInst -->|export_noteful| NotefulFile[".noteful / .notecomp Package"]
+    EditorInst -->|page_pdf / export_pdf| PDFFile[Vector PDF Document]
+    EditorInst -->|page_svg| SVGFile[SVG Vector Images]
+    EditorInst -->|page_png / render_scene| PNGFile[High-Res PNG Images]
+```
+
+#### User Interface Flow (Desktop & Web Reader)
+
+1. **Menu Item:** `File → Convert / Import Markdown…` (also accessible via Drag-and-Drop of `.md` files onto the home screen).
+2. **Converter Dialog / Drawer:**
+   - **Editor pane:** Markdown text editor with syntax highlighting for the handwriting dialect (cards, tags, SVG blocks).
+   - **Styling controls:**
+     - Paper style: Dot grid, Ruled, Squared grid, Blank (Light / Dark mode toggle).
+     - Handwriting preset: *Neat*, *Natural*, or *Messy*.
+     - Font family: Patrick Hand (default), Caveat (cursive), Block (caps), or Readability.
+     - Pen type: Fineliner (crisp vector) vs Ballpoint (organic pressure variation).
+     - Theme & Accents: Color palette selection (Coral, Sky, Teal, Amber, Pink).
+     - Conversion Mode: *Handwriting Ink* (vector pen strokes) vs *Typed Text Boxes* (native kind-2 text objects).
+   - **Live Preview:** Instant vector rendering of composed pages using WASM `compose_markdown`, updating reactively as Markdown or settings change.
+   - **Action Buttons:**
+     - **"Open in NoteComplete"**: Instantiates an in-memory `EditorSession` allowing immediate editing, lasso selection, recoloring, or erasing.
+     - **"Save as .noteful"**: Bundles and saves the `.noteful` file to disk.
+     - **"Export to PDF"**: Compiles directly to a vector PDF with full handwriting vector paths and crisp paper background.
+     - **"Export Images (PNG/SVG)"**: Generates standalone image files per page.
+
+#### CLI Command Surface
+
+The CLI exposes the same pipeline directly for scripts and terminal users:
+
+```bash
+# Convert Markdown to a .noteful notebook (handwriting ink)
+noteful convert lecture.md -o lecture.noteful --paper dot --hand natural --theme light
+
+# Convert Markdown to a .noteful notebook with native typed text boxes
+noteful convert lecture.md -o lecture.noteful --mode typed --paper ruled
+
+# Convert Markdown directly to PDF (via in-memory .noteful pipeline)
+noteful convert lecture.md --export pdf -o lecture.pdf
+
+# Convert Markdown directly to high-res PNG pages
+noteful convert lecture.md --export png --dpi 300 -o ./dist/
+```
+
+#### Conversion Matrix
+
+| From | To | Implementation Route |
 |---|---|---|
-| Markdown | `.noteful` | `compose` + `create_document_with` |
-| Markdown | PDF/PNG/SVG | compose → `.noteful` → existing exporters |
-| `.noteful` | Markdown | existing `markdown_export` (typed text + PDF text; handwriting is not text) |
-| SVG | ink on a page | `ink::svg::drawing` |
-| Image mockup | ink page | `design_page` (optional) |
+| Markdown (`.md`) | `.noteful` | `ink::compose` → `Editor::create_document_with` → `export_noteful` |
+| Markdown (`.md`) | PDF (`.pdf`) | `ink::compose` → `Editor` → multi-page PDF generator (`pdf-writer`) |
+| Markdown (`.md`) | PNG / SVG | `ink::compose` → `Editor` → `page_png` / `page_svg` |
+| SVG diagram | Ink strokes | `ink::svg::drawing` placed onto active page |
+| Image mockup | Ink page | `design_page` layout block mapping (optional Phase 7) |
+| `.noteful` | Markdown | Existing `markdown_export` (extracts typed text + PDF text; handwriting requires OCR, not covered in v1) |
 
-Round-tripping ink back to Markdown is **not** possible without OCR; document that plainly.
-The converter is one-way for handwriting.
+*Round-trip note:* Converting handwriting ink back into editable Markdown text is one-way without OCR. The converter generates editable vector ink from Markdown; once exported to `.noteful`, ink strokes remain fully editable on iPad, but cannot be automatically losslessly reversed into raw Markdown source.
 
-### 8.3 Output format defaults
+### 9.3 Output format defaults
 
 - Page size: A4 (1091.34 × 1543.46) unless the source notebook or caller says otherwise.
 - New notebooks: PDF paper, `format_version` from Phase 0.
@@ -730,7 +1340,7 @@ The converter is one-way for handwriting.
 
 ---
 
-## 9. Phased plan
+## 10. Phased plan
 
 Effort assumes one developer familiar with the codebase; calendar time may be longer.
 
@@ -802,16 +1412,34 @@ reference previews (title, diagram, cards, zone, sticky on one page).
 Exit criteria: the upstream drawing examples become ink; a labelled diagram keeps its labels
 as handwriting and its fills as highlighter.
 
-### Phase 6 — MCP write tools (3–4 days)
+### Phase 6 — MCP write tools & Native Text Boxes (4–5 days)
 
-- `create_notebook`, `add_pages`, `clean_copy`, `write_on_page`, `page_layout`,
-  `example_pages`; resources, prompts, initialize text.
+- `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (ink + `"type": "textbox"`),
+  `page_layout` (ink + text elements), `example_pages`; resources, prompts, initialize text.
+- Core: `TextBox` enriched model (alignment, decorations, multi-run rich text).
+- Core: `Edit::RetextObject` and in-place kind-2 object payload rewrite in `export.rs`.
 - Protocol tests; `docs/MCP.md` update.
 
 Exit criteria: an agent creates a notebook from Markdown, reads it back with `page_image`,
-annotates page 1, and the outputs open in Noteful.
+annotates page 1 with both ink and a native text box, and the outputs open and edit in Noteful.
 
-### Phase 7 — Design copy (optional, 1–2 weeks)
+### Phase 7 — Reader GUI Text Box Parity & Shapes Auto-Fill (4–5 days)
+
+- **Text Box GUI Implementation (`apps/reader/`):**
+  - Unlock editing of imported `object:N` text boxes in `app.js` (remove lockout check).
+  - Floating `#textFormat` format bar expansion: Left/Center/Right alignment, Underline/Strikethrough, box fill/border controls, font size stepper, and font selector.
+  - Interactive overlay container with 8 handles: corner scaling handles, top rotation handle, and horizontal side handles (`handle-w`, `handle-e`) for text wrapping reflow without changing font size.
+  - Keyboard shortcuts (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`, `Esc`, `Enter`).
+- **Shapes Auto-Fill Toggle (`apps/reader/` & `crates/noteful-core`):**
+  - Add `#shapeAutoFill` toggle button to `#shapeOptions` with Tint (25%), Solid, and Custom Palette options (keyboard shortcut `F`).
+  - Interactive canvas preview rendering fill and stroke simultaneously at 60fps during drawing.
+  - Core data model: add `fill: Option<[f64; 4]>` to `Shape` and `Line` structs.
+  - Noteful export parity: export filled rectangles and ellipses as native Noteful Kind-3 and Kind-6 objects with `payload["5"]["1"]["0"] = [r, g, b, a]`.
+- End-to-end round-trip test: author/edit text boxes and filled shapes in reader → export `.noteful` → reopen in Noteful and NoteComplete.
+
+Exit criteria: any Noteful text box can be edited inline with custom alignment and width reflow; drawn shapes can be automatically filled; exported `.noteful` opens in iPad Noteful with native editable text and filled shapes.
+
+### Phase 8 — Design copy (optional, 1–2 weeks)
 
 - `mockup_grid` (image overlay, CLI `image` crate).
 - `design_page` spec renderer, collision warnings.
@@ -821,16 +1449,16 @@ annotates page 1, and the outputs open in Noteful.
 Exit criteria: a mockup PNG becomes a one-page ink layout with the same block positions and
 readable body text.
 
-### Phase 8 — In-app integration (1 week)
+### Phase 9 — In-app integration (1 week)
 
-- WASM exports, desktop UI (New from Markdown, Insert pages, Annotate), previews.
+- WASM exports, desktop UI (New from Markdown, Insert pages, Annotate, Convert Mode toggle), previews.
 - Docs and screenshots; end-to-end export tests.
 
-Total: roughly **7–9 weeks** for Phases 0–6 and 8; Phase 7 is additive.
+Total: roughly **8–10 weeks** for Phases 0–7 and 9; Phase 8 (Design Copy) is additive.
 
 ---
 
-## 10. Limits and security
+## 11. Limits and security
 
 | Item | Limit |
 |---|---|
@@ -852,7 +1480,7 @@ Total: roughly **7–9 weeks** for Phases 0–6 and 8; Phase 7 is additive.
 
 ---
 
-## 11. Testing
+## 12. Testing
 
 1. **Unit**: font glyph counts, advances, path flattening, substitutions, scripts, pressure
    encoding (all `n ≤ 4` and `n ≥ 5` cases), bounds with zero range, underline/arrow geometry.
@@ -876,7 +1504,7 @@ page ≤ 250 ms, export a 10-page notebook ≤ 1 s, WASM compose ≤ 600 ms per 
 
 ---
 
-## 12. Risks and mitigations
+## 13. Risks and mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
@@ -893,12 +1521,12 @@ page ≤ 250 ms, export a 10-page notebook ≤ 1 s, WASM compose ≤ 600 ms per 
 
 ---
 
-## 13. Decisions needed before coding
+## 14. Decisions needed before coding
 
 1. **Package version default** for new notebooks after Phase 0: `1.2` (upstream) or the
    version Noteful currently writes (1.21)?
 2. **Paper default**: PDF (proven, larger) or JSON (small, unproven)?
-3. **Scope of Phase 7**: ship `design_mockup` (network + Google key) or only
+3. **Scope of Phase 8**: ship `design_mockup` (network + Google key) or only
    `mockup_grid` + `design_page` with an agent-supplied image?
 4. **In-place writes in MCP**: copies only (safest) or allow `in_place` with `.bak`?
 5. **Fonts**: bundle all seven (~1.1 MB) or the three used by default (~800 KB)?
@@ -910,13 +1538,15 @@ native tape.
 
 ---
 
-## 14. Acceptance for the whole feature
+## 15. Acceptance for the whole feature
 
 - An agent can call `create_notebook` with Markdown containing a title, headings, bullets,
   a card, a highlight and an SVG diagram, and receive a `.noteful` that opens in Noteful with
   editable handwriting, under-ink highlights and a visible diagram.
-- `write_on_page` can add a tick, a circle and a highlight to an existing page without
+- `write_on_page` can add a tick, a circle, a highlight, and a native typed text box to an existing page without
   disturbing existing ink, and the highlight sits behind it.
+- An existing Noteful text box in an imported note can be clicked and edited in NoteComplete,
+  and exported back to `.noteful` without corrupting its native format.
 - The desktop app can do both without an agent, and export the result to PDF/PNG/SVG.
 - Existing read tools and existing edited files are unchanged.
 - `cargo test`, WASM tests and MCP protocol tests pass; the Phase 0 compatibility matrix is
@@ -924,7 +1554,7 @@ native tape.
 
 ---
 
-## 15. Attribution
+## 16. Attribution
 
 - `openninoor/noteful-mcp`, MIT, commit `175e8d7c5389a9505d0b9fca9082e69b0179b648` — format
   notes, layout rules, study themes, SVG and design algorithms.

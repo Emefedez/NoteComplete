@@ -1,361 +1,93 @@
-# Requested changes (owner, 2026-10-27 to 2026-10-28)
+# NoteComplete Feature Requests & Implementation Status
 
-The owner's requests from the latest review, in one place, with how each was checked.
+`[!]` Verification pending on real app/device · `[ ]` Planned / In progress · `[D]` Completed
 
-`[D]` done · `[!]` done, not yet verified against the real app or service · `[ ]` to do
+---
 
-Rounds are listed oldest first; the Future section and three earlier topic sections close the file.
+## 1. Active Implementation Priorities
 
-## Still open
+### 1.1 Text Box Parity with Full GUI Implementation (`[ ]` In Progress)
+- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
+- **Core Engine & Wire Format:**
+  - Full reverse-engineered support for Noteful native Kind-2 objects in `set/5/0[]`.
+  - Attributed rich text (`payload tag 4`) encoding/decoding: run strings, attribute counts, delta keys, and pools 5–10 (family, bold/italic, color RGBA, underline/strikethrough/alignment, font size/line spacing).
+  - Rich text data model in `crates/noteful-core`: `TextBox` with `runs: Vec<TextRun>`, `alignment: u64`, `underline: bool`, `strikethrough: bool`, `wrap_width: Option<f64>`.
+  - In-place kind-2 object modification via `Edit::RetextObject` in `crates/noteful-core/src/export.rs`.
+- **Reader GUI & Canvas Overlay (`apps/reader/app.js` & `index.html`):**
+  - **Unblock Imported Text:** Remove the restriction blocking edits on imported `object:N` text boxes. Double-click or single-click with Text tool (`W`) enters inline editing.
+  - **Floating Format Bar (`#textFormatBar`):**
+    - Font Family picker (`Helvetica`, `Times New Roman`, `Courier New`, `Noteworthy`).
+    - Font Size stepper / dropdown (8 to 72 pt).
+    - Style buttons: Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough.
+    - Alignment group: Left, Center, Right (`align: 0, 1, 2`).
+    - Swatches + custom hex color picker for text color and optional box background fill.
+  - **Interactive Transform & Reflow Handles:**
+    - Corner handles (`nw`, `ne`, `se`, `sw`): Proportional geometric scaling.
+    - Top rotation handle (`rot`): Rotates text box.
+    - Horizontal side handles (`e`, `w`): Adjusts `wrap_width` with automatic soft line wrapping without changing font size.
+- **MCP Integration & Markdown Converter:**
+  - `write_on_page` supports item `"type": "textbox"` with full styling attributes.
+  - `page_layout` returns existing typed text boxes with bounds and text content.
+  - `compose_markdown` / `noteful convert` adds `--mode typed` to generate native typed text boxes instead of handwriting.
 
-To try in the real app or service (`[!]`):
-- Drive: upload unsaved changes before removing a note, move a note to Drive's trash, Back after a search (all tested against a fake Drive only).
-- Desktop: Copy text from Grab, Recent with several windows open.
-- Interface size (Ctrl+Shift+− / + / 0), floating windows (drag, resize, _ □ ×, tray).
-- Recent's newer-version check, the side-by-side comparison and carrying study material to a new version (fake Drive only).
-- Recording in the desktop app (microphone permission) and with a real microphone; the Type filter on a real Drive.
+### 1.2 Shapes Auto-Fill Toggle (`[ ]` In Progress)
+- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8.7](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
+- **Reader GUI (`apps/reader/`):**
+  - Add `#shapeAutoFill` toggle button to `#shapeOptions` with pale accent highlight when active.
+  - Keyboard shortcut **F** toggles auto-fill when Shape tool (`R`) is active.
+  - Fill options dropdown: Tint (25% opacity matching stroke), Solid (100%), or custom swatch.
+  - Real-time 60fps canvas preview rendering both stroke and fill during interactive dragging.
+- **Core Data Model & Export Parity (`crates/noteful-core`):**
+  - `Shape` and `Line` structs extended with `fill: Option<[f64; 4]>`.
+  - Stored in `.nfedit` edit history and project state.
+  - Export parity with native Noteful Kind-3 (rounded rectangle) and Kind-6 (ellipse) objects where `payload["5"]["1"]["0"] = [r, g, b, a]`.
+  - Reopened in iPad Noteful as native filled shapes editable via Noteful's shape tool.
 
-Planned, not started (`[ ]`): three file formats (.noteful / .notepart / .notecomp), converters, choosing which pages to export, repositories as a library source, the Home source switch, infinite canvas. See *Future* below.
+### 1.3 MCP Vector Ink Writing & Page Generation (`[ ]` In Progress)
+- **Detailed Specification:** See [`docs/INK-WRITING.md`](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md) and [`docs/MCP.md`](file:///home/m1-max/Documents/noteful-re/docs/MCP.md).
+- **Core Engine:**
+  - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
+  - True 3-value per-point pressure encoding (`new_stroke` flags = 1).
+  - Under-ink highlight placement (`add_line_under`) that preserves existing handwriting.
+  - Greek letters, super/subscripts, mathematical symbols, and calligraphic hands.
+  - Study-note layout generator (titles, cards, multi-columns, sticky notes, SVG diagrams).
+- **MCP Tools:**
+  - `create_notebook`, `add_pages`, `clean_copy`, `write_on_page`, `page_layout`, `example_pages`.
+  - Safe export workflows (writes to copies by default; `.bak` for in-place edits).
+  - Multi-format export chaining (Markdown → `.noteful` → PDF / PNG / SVG).
 
-To do (`[ ]`): Ask AI about HTML pages. See *Ask AI on HTML and text files* below (Ask AI opening slowly is fixed in 1.0.15, to try with Antigravity).
+---
 
-Planned, not started (`[ ]`): reordering pages in any note. See *Future: pages* below.
+## 2. Pending Verification on Real App / Device (`[!]`)
 
-Planned, not started (`[ ]`): collaborative Markdown notes with linked documents (one computer hosts, others join from an invite link). Plan and progress in [COLLABORATION.md](COLLABORATION.md).
+- [!] **Google Drive Writes:** Upload unsaved changes before removing a note; move note to Drive trash (tested against fake Drive server; needs physical sign-in test).
+- [!] **Desktop Grab & Clipboard:** Copy text from Grab tool in desktop Electron app.
+- [!] **Interface Scaling & Floating Windows:** Scaling with `Ctrl+Shift+-/+/0` across all windows; tray minimization (`_`), maximize (`□`), close (`×`) on floating Ask AI / Quiz / Audio windows.
+- [!] **Drive Version Comparison:** Newer-version check on open and side-by-side comparison with study material migration.
+- [!] **Desktop Audio Recording:** Real microphone recording in Electron desktop app; type filter on live Google Drive.
+- [!] **Image Crop Export:** Validate imported image crops in physical iPad Noteful.
 
-## Study: quizzes and flashcards
-- [D] Generated in the background with real progress: a bar chip shows the phase, elapsed time and continuous progress, with Stop. *Browser test with a fake AI bridge.*
-- [D] Quizzes saved per note and resumable (Q). Answers are stored as they are given. *Reopened the note and resumed at question 3 with the score kept.*
-- [D] The quiz panel floats over the pages and minimizes (M) to a pill, so the theory stays readable.
-- [D] Questions about content, not about worked-exercise solutions. Rare new exercises are marked **NUEVO EJERCICIO**. Options of similar length, shuffled locally. *Prompt checked by unit tests.*
-- [D] No explanations. The AI cites a page and box, and the hint is cut from that region at runtime. Scoring: 2 correct, 1 with the hint, 0 wrong. Falls back to the whole page.
-- [D] Clarify (C): asks the chat with that region attached.
-- [D] Dispute (X, press twice): the question stops counting, is left out of retakes, and new quizzes are told to avoid it.
-- [D] Double check (V): asks the AI again. The reply lands in an editable box with the options, and the correction is saved with the note's quizzes.
-- [D] Retake wrong answers (Shift W), gathered from all the note's quizzes.
-- [D] Editable quiz instructions, with Restore default.
-- [D] Keys: 1–4 answer, H hint, C clarify, X dispute, V double check, Enter next, M or Esc minimize.
+---
 
-## AI chat
-- [D] Ask AI in the Study menu as well as the bar (Ctrl+J).
-- [D] The chat panel resizes from its left edge; the width is remembered.
-- [D] Grab tool (G): drag a box to copy its PDF, OCR and typed text in reading order, or add it to the chat. *Copied a Temas1+2 paragraph in the browser.*
+## 3. Planned Future Roadmap (`[ ]`)
 
-## Tools and layout
-- [D] Tool settings are rows of visual choices: highlighter mode, color swatches, widths, tape shape.
-- [D] Tool settings open under the pressed tool button. *Measured: same x as the button.*
-- [D] Rectangle tape (drag a box), besides strips. Tape has square ends and a washi stripe pattern, including Noteful's own tape.
-- [D] Pinch or Ctrl+wheel zooms towards the pointer: a CSS transform during the gesture, then one re-raster. *0 page re-renders mid-gesture.*
-- [D] Type a zoom percentage (or "fit") in the zoom box.
-- [D] Single-key shortcuts for tools, study, quiz and audio, listed in Help → Keyboard shortcuts (?).
-- [D] Audio and transcript in a side panel opened from the headphones icon next to Layers (A): play/pause icons, ±10 s, seek, show the handwriting, dim future ink, download the recording, transcribe with model and language choice, follow along, export, and edit words while keeping their timings (K, J, L).
+- [ ] **Reorder Pages in Any Note:** Drag thumbnails in Pages panel, keyboard commands (*Move page up/down*), automatic reference renumbering (flashcards, quizzes, page markers, audio).
+- [ ] **Collaborative Notes:** Real-time Yjs CRDT notes sharing with linked documents ([COLLABORATION.md](COLLABORATION.md)).
+- [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles with notes and audio).
+- [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all).
+- [ ] **Library Sources:** Home switch for Recent · Google Drive · GitHub Repositories (with Git LFS support).
+- [ ] **Infinite Canvas:** Unbounded canvas mode that exports to Noteful by tiling into sheets.
+- [ ] **Ask AI on HTML Pages:** Extract text and run study/quiz generation on opened HTML documents.
 
-## Files
-- [D] Remove a note from Recent and the downloads folder (× on its card).
-- [!] If it is the open note with unsaved changes, upload them to Drive first. Write access is asked for only then.
-- [!] "Also delete it in Google Drive": a red section that needs DELETE typed, and moves the file to Drive's trash, restorable for 30 days. *Both Drive writes are unit-tested against a fake server; they need a real sign-in to confirm.*
-- [D] Enter starts the Drive note search.
-- [D] Progress bar and percentage for Drive downloads.
-- [D] `tools/update_appimage.py` rebuilds everything and replaces the installed AppImage, keeping `.previous`.
+---
 
-## Audio and transcription (second round)
-- [D] Compact transport: square-rounded buttons in one row. "Go to where this recording starts" and "Dim ink not yet written" are two small icon buttons to the right of back/play/forward. The confusing "Show handwriting" label is gone.
-- [D] Dimming checked in the browser with the Practice book recording: all timed ink dimmed at 0 s, two of three strokes shown at 10 s, all shown with dimming off. *If it still looks wrong on one of your notes, tell me which note and page.*
-- [D] Transcription keeps running in the background: switching recordings or closing the panel no longer cancels it, and a bar chip shows its progress. Only Cancel stops it.
-- [D] Text appears while transcribing (greyed until timings are final): Whisper sends each 30 s window, other engines each piece.
-- [D] Engine choice: Whisper on this device; Voxtype (local whisper.cpp, 30 s pieces cut by ffmpeg); Gemini via Antigravity (cloud, 10-minute pieces three at a time, sends audio to Google). *The desktop pieces are tested with the real Voxtype and Antigravity CLIs.*
-- [D] Export as text, SRT, WebVTT or JSON with word times.
-- [D] The audio and Ask AI panels share one look and resize from the left edge, the bottom edge or the corner; sizes are remembered.
+## 4. Completed Delivery Summary (Rounds 1–13 Archive)
 
-## Reader (second round)
-- [D] Dark pages (D, or the moon next to Pages): inverts the document's lightness, keeping hues, including the page previews. Presentation only.
-- [D] Find can be limited to any combination of Text, PDF, OCR and Audio, with a count per source.
-- [D] Recent cards: a ⋯ button in the card's top corner, always visible, opens a menu anchored to it (dropping up when there is no room below); right-clicking the card opens it too. It replaces the hover-only × and the centred dialog. *Removed a note and opened the menu by right-click in the browser.*
-- [D] Background-job chips and "Open …" buttons shrink with the compact bar and truncate on narrow windows.
-- [D] README with a header banner and screenshots (reader, night view, Home, Find, flashcards, key badges), all made from the sample notes in `samples/`.
-
-## Flashcards and keys (third round)
-- [D] The practice card has a fixed size: showing the answer no longer resizes the dialog. *Measured: 513 px before and after every reveal.*
-- [D] Practice text is left-aligned inside a block centred in the card, so lines share one left edge; the hidden answer keeps its space, so the question does not move on reveal. *Question's left edge measured equal before and after.*
-- [D] Cards before export are shown as readable cards (question over answer, page badge, ✕), not two clipped textareas. Click a card to edit it in place with fields that grow to the text; Esc or Ctrl+Enter finishes.
-- [D] Answers keep the model's structure: the prompt asks for one list item per line, and inline enumerations ("1) … 2) … 3) …", "a) … b) …") are split one per line, also in decks saved earlier. Anki export keeps the breaks as `<br>`. *Unit test with the SECDED Hamming (8,4) answer: four lines.*
-- [D] Practice keys: Space shows the answer, 1 not yet, 2 I knew it.
-- [D] Decks deleted themselves when reopened from Study → Saved decks and quizzes. Cause: a style made each row's ✕ as wide as the open button, so the right half of every row deleted it at once. The saved list now has separate **Flashcard decks** and **Quizzes** sections; ✕ is a small separate button that asks "Delete …? Delete / Keep", and a deleted item can be restored with **Undo** until the dialog closes. *Browser test: Keep, Delete, Undo.*
-- [D] Your lost 50-card ACII deck was recovered from the app's storage log and saved as `~/Downloads/ACII-mazo-recuperado.json`; bring it back with the new **Import deck…** button in the same dialog (with the ACII note open). *Import tested: 50 cards.*
-- [D] **?** outside a text box toggles key badges on the buttons: tools, Ask AI, Layers, dark pages, audio transport, the new audio buttons (Shift A: go to the recording's page; I: dim ink), quiz minimize, practice. Labelled buttons show the key after the label, icon buttons a corner badge; Ctrl shortcuts stay in the menus. Help → Keyboard shortcuts still lists everything.
-
-## Fourth round
-- [D] Recent empty with several windows open. Cause: launching NoteComplete again started a second process on the same profile, which cannot open its storage (Recent, decks, settings came up empty). The app is now single-instance: a second launch opens a new window in the running app. *Needs a restart of the installed app to take effect.*
-- [D] Thumbnails that never load (Discover Chinese, Memoria 1). The byte-range cover reader works on both (tested on the real files: 2 small reads each). Cause: covers still loading when you left Home were cancelled and the card was marked "no cover" for good; going back did not ask again. Cancelled or failed covers are now retried each time Home is shown, and a note whose Google thumbnail fails falls back to its own cover. *Unit-tested.*
-- [!] Drive Back after a search returns to the view before it. *Unit-tested; not yet checked against your real Drive.*
-- [D] Saved transcripts load when a recording is selected (with the panel open), so **Export** (text, SRT, WebVTT, JSON) is there without transcribing again.
-- [D] **Revise with AI**: after a fast local pass (Voxtype or Whisper), your AI tool corrects misheard words, terms and punctuation in parts of about 120 words; every corrected word keeps the time of the word it replaces. Replies that look like summaries are ignored. **Undo revision** brings back the automatic text. *Browser test with a fake AI.*
-- [D] Voxtype "Invalid UTF-8 detected in a string from Whisper": the selected language is now passed to Voxtype (`--language es`), a failing 30 s piece is cut in two and retried, and a part that still fails is left out (the status says how many) instead of stopping the whole transcription. *Tested with a fake Voxtype that fails like this one.*
-- [D] "Audio for transcription" is a small button with a chevron beside the dim-ink button; gain, voice filter and normalize open below the transport row.
-- [D] Everything that expands shows a small chevron that turns when open (transcript, connection setup, public link, fonts, Drive delete…). The File/Edit/View menubar keeps the native look.
-- [D] Handwriting is recognized on PDF pages: OCR now has a separate pass over the ink alone (PDF, images, typed text and highlighter removed, ink drawn black) at two sizes, merged with the page pass; other readings of the same word stay searchable. *Memoria 1 p. 130: "Sector" is found (read as "Sector" and "Sectov").*
-- [D] Night view (D) now really inverts the pages: white paper turns black and dark ink light, keeping hues (red ink stays red), including strokes while you draw. Cause of "nothing happens": the display-adjustment filter was "none", which made the dark filter invalid CSS.
-- [D] Ctrl+F closes the find bar when it is open, also from inside the box.
-- [D] Eraser sizes: small, medium, large, extra large, remembered; the cursor shows the size.
-- [D] Pages can sit on the left, in the middle or on the right when narrower than the window (three buttons in the page bar, remembered). The page bar is shorter (33 px).
-- [D] View → "Tool settings" was a vague toggle that collapsed the toolbar. It is now two checkable items: **Auto-open tool settings** (on by default; when off, press the selected tool again to see its settings) and **Compact toolbar**. Pressing the selected tool always shows or hides its settings. Open menus now sit above the tool settings popup.
-- [D] Quick list on Home: a Cards / List switch beside Sort. The list shows names, dates and sizes only; no covers are read and nothing is parsed from Drive files, so it appears as soon as Drive answers. Switching back to cards loads the covers. Filters by recordings or tags say they need the cards view. Remembered.
-- [D] The note title is centred on the window, also in the compact bar (it sat between the menus and the buttons, whose widths differ). *Measured: centre at 700 of 1400 px.*
-- [D] The Cards / List switch no longer stretches the filter row; the ⋯ on Recent cards sits small in the bottom-right corner.
-- [D] Free page position: a button beside the left / middle / right buttons leaves the pages wherever the trackpad puts them, sideways too, with no centring. Switching keeps the page where it is on screen. *Measured.*
-- [D] Dimming ink not yet written is off by default (I or the button turns it on).
-- [D] The chat's Ask button is centred beside the question box.
-- [!] Recent with several windows: one process now (single-instance), storage holds your 3 Recent notes, and two windows show Recent in the browser test, so I could not reproduce it. If Recent is missing again, a message now says why (storage error or no answer within 6 s) instead of hiding the section silently. Please tell me what it says.
-
-## Fifth round
-- [!] **Copy text** (Grab → Copy text) said "The clipboard is not available here" in the desktop app. Cause: the app denied every web permission, clipboard writes included. It now allows only writing text to the clipboard (never reading), and only from the reader's own pages. *Fixed in code; not yet checked in the desktop app.*
-- [D] **Lock / unlock tool** (Lock in the toolbar, **O**). Click an item to lock it in place; click again to unlock. While the tool is chosen, locked items show a dashed outline and a padlock. Locked items cannot be selected, moved, erased (eraser and right-click) or resized. As planned, it reuses the Adjust edit with an optional `locked` field, so it is undoable and saved in the project; Noteful's own locks (tag 21) can be lifted the same way. Native export writes the lock as tag 21 on images (and on objects that already carry it). Ink and shapes have no lock field in Noteful's format (other kinds use tag 21 for other values), so their lock stays in the project. *Core tests (lock, undo, reload, export → reopen locked → unlock → export); browser test: lock, select and erase refused, unlock, undo.*
-- [D] **OCR as a background task.** Recognize closes the dialog and runs as a bar chip (language download, page n of m, progress, Stop), like quizzes and transcription. Closing the dialog no longer stops it; reopening it while it runs says so. Pages done before Stop are kept. *Browser test on the scanned Examen page.*
-- [D] **View → Compact toolbar did nothing**: removed. It only hid the tool settings, which the arrow at the end of the toolbar and pressing the selected tool again already do; nothing made the toolbar itself smaller, and icon-only collapsing is what you asked to avoid.
-- [D] **Flashcards through Antigravity were slow.** Each part (6 pages) took about 30 s and they ran one after another, so all of *Memoria 1* (35 parts) took 20–35 minutes. Three parts now run at once, and pages for the next part are prepared while the others wait. The bar also sat near 0 % the whole time (it counted pages prepared before anything else); it now moves with every page prepared and every part answered, and says how many parts are done and running. Stopping a deck no longer stops the chat or a double check. *Browser test with a fake AI: 33 parts, 3 at a time, 31 s; runner tested with real parallel processes.*
-- [D] **Drawing made the PDF blink.** After each stroke every nearby page was redrawn, and each redraw removed the PDF image until it was fetched again. Now only the page you drew on is redrawn, and its PDF image is kept. On zoom, the old image stays until the sharper one is ready. *Measured: 0 of 229 frames without the PDF while drawing three strokes; 0 blank checks while zooming.*
-- [D] **Saved / unsaved** is a floppy disk beside the title instead of text: a dot means unsaved changes, and clicking it saves. The title stays centred.
-- [D] **Select and copy text with the cursor.** PDF text could not be selected either (only Grab copied it), so both now can: with the Pan tool the cursor becomes a text cursor over PDF words and recognized words, a drag selects them (instead of panning; dragging elsewhere still pans), and Ctrl+C copies them in reading order, one line per row. Where PDF text and OCR read the same spot, the PDF text is used. A right-click while text is selected no longer deletes the element under it. Words recognized in the background become selectable as soon as their page is done. *Browser test: 121 PDF words on Practice book p. 1, a two-line drag copied as two lines; 145 words on the scanned Examen page after OCR.*
-- [D] **Text input tool** (Text in the toolbar, **W**). Click on a page and type; Enter starts a new line, Ctrl+Enter or a click outside finishes, Esc cancels. The tool settings choose the size (small to title), bold and the color (the same swatches as the pen). Click a typed box again to edit it; Select moves, resizes and rotates it; it can be locked, removed and undone, and Find and the AI see its text. The box is typed exactly where the text will be drawn (measured: no shift on commit). Native export writes a Noteful text object copied from a real one (samples/texto.noteful); reopened, the same text, size, color, bold and place come back. *Core test with export → reopen; browser test: type, two lines, commit, re-edit, click outside, Esc, undo.* Text that came from Noteful can be moved but not yet edited.
-- [D] **Tabs in one window.** Several notes open as tabs in the top bar, in place of the title: + (or **Ctrl+T**, File → New tab) opens a tab on Home, × or a middle click closes one, drag to reorder, **Ctrl+Tab** / **Ctrl+Shift+Tab** (or Ctrl+PageDown/PageUp) switch, **Ctrl+W** closes the current tab. Many tabs scroll sideways (wheel). Unsaved tabs show a dot; closing one asks first, and closing the window lists what is unsaved. With one tab the bar looks as before, with a small + beside the title. Each tab is a reader of its own, so notes, edits, quizzes and transcriptions in different tabs never mix. A second launch opens a tab instead of a window; File → New window still opens a separate window, and Ctrl+K lists every open tab. *Tab strip tested in the browser; the window and tab code was run against a stand-in for Electron (17 checks: open, switch, reorder, close, unsaved prompts, palette, second launch). Not yet seen in the real desktop app: please try it.*
-- [D] **Resize a page** (Pages → Page size…), PDF or not: add writing space on the right (half or full width) or below, a standard size (A4, Letter, slides), the original size, or a custom size in mm. Writing stays where it is; the PDF keeps its size and place unless you tick "Scale the PDF to fill the new size" (then it fills the page as far as its proportions allow, centred). One undo step; saved in the project; native export writes the size and the PDF rectangle the way Noteful's own widened pages do. *Core test: resize, insert + resize, PDF fit, project, export → reopen with the same sizes and PDF rectangles, undo; browser test on the Examen PDF page.*
-
-## Sixth round
-- [D] **Model dropdown** for Ask AI and Study instead of a text box: "Tool default", the models the chosen tool offers, and "Other…" for any name. Antigravity's list comes from the tool itself (`agy models`), so the chat and flashcards can use Google's models (Gemini 4 Argon, Gemini 3.8 Flash) as well as Claude and GPT-OSS through it; Claude Code offers Opus, Sonnet and Haiku; Codex offers the model in its settings. The choice is remembered per tool. Also fixed: opening Ask AI failed before the tool list was filled (a tool that is not installed made it throw). *Browser test with a fake bridge; the real lists were read from the installed tools.*
-
-- [D] **Resize pages by dragging their borders**: Pages → Resize by dragging the borders (or "Drag the borders instead" in the Page size dialog) puts handles on the current page's right edge, bottom edge and corner. A dashed frame and the size in mm follow the pointer; releasing resizes the page (one undo step), and the handles stay for further changes until Done or Esc. Only the right and bottom borders move, because writing is anchored to the top-left corner. *Browser test: right edge 210 → 268 mm wide, corner shrink, Esc.*
-
-## Seventh round
-- [D] **Formatting text is now done on the text itself.** While you type, and whenever a typed text box is selected with Select, a format bar sits right above it: font (Sans, Serif, Mono, Handwriting), size, **B**, *I* and colour (swatches or any colour). Changes apply at once: live while typing, as one undoable change on a selected box. The last style you used is the one new boxes start with. Double-click a text box with Select to type in it. The Text tool no longer has a settings popup. Fonts and italic are exported to Noteful (the iPad fonts of the same names). *Core test (font, italic through export); browser test: bold and serif while typing without losing the cursor, recolour and resize a selected box, double-click to edit.*
-
-- [D] **Reorder the tool row** (Pan, Pen, Lock, … and Image): drag a button along the row; it lifts and follows the pointer while the others slide aside. The order is remembered; View → Reset tool order restores it. A drag never counts as a click.
-- [D] **Tab dragging** now works the same way (the tab moves with the pointer and the others make room) instead of lighting up the edge of the tab under it.
-- [D] **Rectangle highlighter**: Highlight has a third mode, Rectangle; drag a box and it is highlighted with square edges. Exported to Noteful as a highlighter band whose round ends stay inside the box. *Core test (square ends, export inset, project); browser test.*
-- [D] **"Text and fonts" bar removed** from the bottom of the page. It listed every text run with its size and font, a leftover inspection aid; a text box's font and size are shown in its format bar when selected.
-
-## Eighth round
-- [D] **Markdown notes beside the pages** (View → Notes, **N**). A panel that docks like Layers (the pages make room; drag its left edge to resize). The editor is TinyMDE: Markdown is formatted and coloured as you type, with a formatting toolbar; **Preview** renders it with pulldown-cmark in the Rust core (raw HTML shown as text, unsafe links dropped). **+ Page** inserts a `<!-- page N -->` marker shown as a chip: click it to go to that page; **Follow** scrolls the notes to the current page's section. Notes autosave per note on the device and travel in projects (.nfedit version 5) and .notecomplete files. To keep the footprint small, the editor script loads only when the panel is first opened and is torn down when it closes.
-- [D] **Exports**: File → Export Noteful (.noteful), Export Noteful + Markdown (the .noteful plus a .md where each marker becomes a visible "Page N" break), Export NoteComplete (.notecomplete: a tar with manifest.json, note.noteful and notes.md, written and read by the Rust core with the `tar` crate). Opening a .notecomplete (or .notecomp) loads the note with its notes. *Core tests (rendering, safety, export text, archive round trip); browser test: lazy loading, formatting while typing, page chip, preview, close, export, reopen with notes.*
-- [D] **Notes toolbar buttons were nearly invisible** (TinyMDE's own fixed light greys, e.g. #f8f8f8 buttons with dark icons, on the dark theme). The buttons, dividers, code, link and marker colours now follow the app's theme in light and dark. *Checked in both.*
-- [D] **Export row**: File → Export is one row of three buttons, **NF** (Noteful), **N+MD** (Noteful + Markdown) and **NC** (NoteComplete), with each full name and description on hover; the command palette still lists them by full name. The NoteComplete file is now **.notecomp** by default (.notecomplete still opens).
-- [D] **OCR could not be stopped, and a new run started over.** Stop now ends the run at once (it had to wait for the page being read, which could hang); pages already recognized are kept after every page and skipped by the next run, so a stopped run continues where it left off (tick "Recognize again" to redo them). For long runs the recognition engine is restarted every 12 pages, so its memory does not keep growing. *Browser test: stopped during page 2 in 54 ms, the next run did only pages 2–3, a third run found everything done.*
-- [D] **README** has a "Notes in Markdown" section (and now mentions text boxes, locking, page resizing, tabs and text selection).
-
-## Ninth round
-- [D] **Ask AI answers stream** as they are written (Claude Code's stream events and Antigravity's step updates; Codex gives its answer at the end). The bubble re-renders at most every 120 ms.
-- [D] **Answers render properly**: Markdown through the Rust renderer (lists, tables, code, headings, quotes) and formulas typeset with KaTeX (`$\rightarrow$` shows as an arrow). KaTeX loads only when an answer or note has math. The Notes preview typesets math too.
-- [D] **T under each answer** puts its text into a text box on the current page (lists keep their bullets, formulas become characters such as →, lines wrap to the page), selected so it can be dragged into place; ⧉ copies the text.
-- [D] **Resize Ask AI and the audio panel vertically**: drag the top edge, the bottom edge (now with a visible handle) or the corner. The audio panel's grips scrolled away with its content; it now scrolls inside, so they stay on the frame. *Browser test: chat top 112 → 234, height 633 → 410; audio height 633 → 482 after scrolling its content.*
-- [D] **The note's MCP tools now reach Antigravity too** (Codex already had them). Antigravity has no flag for it, so each request's temporary workspace carries a NoteComplete plugin (`.agents/plugins/notecomplete/`) with the server; your global Antigravity settings are not changed. *Checked with the real agy: it lists all seven notecomplete tools.*
-
-## Tenth round
-- [D] **Closing a window no longer crashes** with "Object has been destroyed": the window's cleanup read its id after Electron had destroyed it. *Checked in the real app: closed through Hyprland, no error dialog.*
-- [D] **High power draw**: the owner reports it fine now. Idle, the app uses about 1% of a core even with Memoria 1 (259 MB) open; loading it takes a few seconds of CPU; the GPU process draws in hardware.
-- [D] **Correct flashcards while practising**, as quizzes allow. After Show answer: Edit (E) corrects the card yourself; Double check (V) has your AI tool check the card against its page (image and text) and puts its suggestion and reason in an editable box; Discard (X, press twice) removes a wrong card. Corrections save to the deck at once. *Browser test with a fake AI bridge: the request carries the card's page, the suggestion lands one item per line, saved and discarded cards are right in storage.*
-- [D] The practice keys (1, 2) work after Show answer again: hiding that button had moved focus out of the dialog.
-- [D] **One design language**: the viewer's look everywhere. 28px buttons with 6px corners, filled light buttons, the pale accent for chosen items and main actions (no solid blue), 8px dialogs and panels, wider dialogs with labels beside their fields, page scope as a row of choices, quiz options as filled rows. Pills stay for secondary things: tags, filters, the job chip, the toast. *Before/after screenshots of every dialog and panel, light and dark.*
-- [D] **Multiple windows**: launching the app again opens a new window (Ctrl+T and + still make tabs). Dragging a tab out of the strip moves it to a window of its own, still loaded, with its edits. *Stub-Electron test of the main process; browser test of the drag.* Not yet tried in the real app. Dropping a tab onto another window's strip is not supported; Wayland doesn't tell the app where the pointer is outside its own windows.
-- [D] **Ask AI on flashcards while practising** (C, after Show answer): your AI tool explains the card using its page (image and text); the answer streams in under the card with formatting and formulas, and a field below takes follow-up questions on the same card. Esc or the next card closes it and stops a running request. *Browser test with a fake streaming AI.*
-- [D] **No spell checker**: no red underlines in Markdown notes, text boxes or any field (Electron's checker off, `spellcheck="false"` on the page). *Browser check: no editable field has spellcheck on.*
-- [D] **Dim the background while studying**: a sun button in the quiz panel and the practice window dims everything behind them (about 70%), remembered between sessions; it lifts when they are minimized or closed, and the pages can still be scrolled underneath. *Browser test: windows stay above the veil, on/off and minimize/close behave.*
-- [D] **Flashcard practice floats like the quiz**- [D] **Flashcard practice floats like the quiz**: the pages stay visible and usable beside it; drag it by its head (position remembered), M or – minimizes, × closes. Its keys come first while it is open. *Browser test: not modal, drag moved it 320 px, keys and minimize work.*
-- [D] **Ask AI on cards: choose the tool and what to send.** Tool and model pickers; Page (image and text, on by default), Source PDF (the PDF the page comes from) and Whole note (the note's MCP tools; off by default, slower). It no longer always handed over the whole note, which made tools explore other pages first; the page image is also smaller. Waiting shows the seconds and Stop. *Real Claude Code through the app's runner: first words 1.3 s, done 3.3 s. Browser test: default request carries only the page image; Codex + PDF + whole note go through when chosen.*
-- [D] **The last explanation is kept with the card** (no tokens spent again): folded under the answer with an arrow, editable (Edit → Save; marked "edited by you"), Continue with AI for follow-ups, Ask again to replace it. C on a card that has one opens it without a new request. *Browser test: saved in storage, reused, edited.*
-- [D] **The quiz hint stays hidden until asked for**, also after answering (it used to open by itself once a question was answered). After answering, Hint (H) still shows the region, at no cost. *Browser check: answered question, no clipping shown.*
-- [D] **No white flash on new tabs or windows**: they paint the reader's own background colour (light or dark) and the new tab appears once it has drawn, while the previous one stays up.
-
-## Eleventh round
-- [D] **Flashcards: I knew it / Not yet (2 / 1) work again** (the floating-practice rewrite had dropped them). *Browser test through a whole deck.*
-- [D] **The job chip's Stop button follows the pill** at every bar size (same 2 px gap on every side), and the title no longer slides under the chip. *Measured in normal, compact and narrow bars.*
-- [D] **Ask AI can read your Markdown notes**: My notes in the Ask AI panel (on when the note has notes) and a Notes chip in the flashcard Ask AI. Up to 20 000 characters go as text. *Browser test: typed notes reach the request; unticked, they don't.*
-- [D] **Quiz hints open large**: click (or Enter on) the hint image to see it fitted to the window; Esc or a click closes it. *Browser test: 1129×669, closes both ways, the quiz stays.*
-- [D] **Double check is light red** in the quiz and the flashcards: it is for when something looks wrong.
-- [D] **Quizzes and flashcards cover whole pages evenly.** They always saw the full page (tape lifted), but the flashcard instructions told the AI to weigh handwriting, highlights and taped parts heavily, which biased questions towards them. Both prompts now ask for all of each page's material evenly.
-- [!] **Interface size**: Ctrl+Shift+− / + / 0 (or View → Interface smaller / larger / 100%) scales the whole interface in every tab and window and is remembered; Ctrl+− / + / 0 stay the document's zoom. The window type the app uses has no built-in zoom, so the interface could not be scaled at all before. *Stub-Electron test: Spanish, US and numpad keys; not yet tried in the real app.*
-- [!] **Floating windows** (Ask AI, audio, quiz, flashcards): drag them anywhere by their head, resize them from any edge or corner (a mark shows the bottom-right one), and they stay inside the work area so the head and × are always reachable. The head has _ □ ×: _ puts the window in the tray at the bottom left (a pill with an arrow listing what is put away; choosing one brings it back in place), □ makes it small (head only) or large again, × closes. Place and size are remembered per window. A narrow Ask AI window used to push its × out of sight: its head now squeezes the selects instead. *Browser test (dark): drag, corner resize, pushed past edges and grown past the area with × still clickable, tray with two windows, restore one, close takes it off the tray.* Not yet tried in the real app.
-- [D] **Export as PDF and as images**: File → Pages as SVG · PDF · IMG. PDF holds every page as shown, each at its own size, made in the background with Stop (pages drawn here, bound by the Rust core with pdf-writer); IMG opens JPEG / WebP / PNG for the current page. *Browser test: 3-page A4 PDF (1.3 MB, title set), WebP page 160 KB; Rust tests for the PDF binder.*
-
-## Twelfth round
-- [D] **Drive notes are not downloaded again when nothing changed.** Noteful backups upload a new Drive file (new id) instead of updating the old one, so the app re-downloaded identical notes (259 MB for Memoria 1) and Recent showed two copies. Kept copies now record Drive's checksum (MD5, computed by the Rust core for older copies, once, only for same name and size): a file with the same content reuses the kept copy and its Recent entry moves to the new file. Identical duplicates already in Recent are merged once. *Unit tests; browser test with a fake Drive: no download, one Recent entry.*
-- [!] **Recent asks before opening an old copy.** Opening a Drive note from Recent asks Drive for the newest file with its name in its folder. If it differs, a dialog shows both dates and sizes: Open Drive version, Open my copy, Keep both, or Compare… *Needs Drive connected in that session (or a public folder with an API key); otherwise the copy opens and a note says it was not checked.*
-- [!] **Compare two versions side by side**: both versions open in their own background readers; pages are aligned like a text diff (an inserted page doesn't mark the rest as changed) and changed, added and removed pages are shown in pairs, with the same three choices. *Browser test with a fake Drive: "1 changed · 2 only in your copy".* Not yet tried with a real Drive.
-- [D] **Quiz window: □ stays in the head.** □ makes the quiz small and large again (it used to vanish once small, leaving only a click on the word Quiz); _ puts it in the tray. Opening or resuming a quiz (Q), or practising flashcards, always brings the window out of the tray at full size. *Browser test.*
-- [D] **Quiz Clarify works like Ask AI on flashcards**: the answer appears inside the quiz (tool, model and material chosen there: the region that answers it by default, the source PDF, your notes, the whole note), is kept with the question (folded under the options, editable) and reused instead of asking again. Asked before answering, it does not say which option is correct; one made after answering stays hidden until the question is answered. *Browser test.*
-- [D] **Follow-ups continue in Ask AI**, from quizzes and flashcards: the conversation moves to the Ask AI panel with its thread, the question or card as context (kept for every request until New) and its page region, and carries on there. *Browser test: the chat request holds the topic, the thread and the new question.*
-- [D] **□ collapses without moving or narrowing**: a window keeps its width and its head stays where it was (the quiz used to shrink to the width of its title and drop to the bottom); □ again restores the same size. Windows stretched top to bottom (Ask AI, audio) keep their height; the quiz and flashcards keep following their content until resized by hand. *Browser test: same left, top and width for quiz, Ask AI and flashcards.*
-- [D] **The window used last is in front**, and a window that opens comes in front; dimming lifts them all above the veil in the same order (Ask AI used to cover the quiz when dimmed). *Browser test: click order decides which is on top, dimmed or not.*
-- [D] **README updated**: export, Drive versions and comparison, study windows (Ask AI on cards, saved explanations, dimming), floating windows, interface size, and a Roadmap section with the planned formats, repositories and infinite canvas.
-- [!] **Taking a new version offers to bring the study material**: flashcard decks (with saved explanations), quizzes and Markdown notes are stored per version, so the app asks which to copy to the new one (the old version keeps its own). *Browser test: the deck arrived on the new version.*
-
-## Thirteenth round
-- [!] **Record or import audio into any note** from the audio panel. The headphones button is always there with a note open; a note without audio shows only **Record** and **Import…**. Record (Shift R) uses the microphone, with Pause/Resume and Stop; while recording, the headphones button lights up in the accent with a pulsing dot, also with the panel closed or put away. Stop keeps the recording in the note and selects it; Import adds an audio file (up to 500 MB). Added recordings are kept per note on this device, can be transcribed like the note's own, are removed with **Remove** (press twice), and are offered with the study material when taking a newer version. Opening another note stops and keeps a recording in progress. *Browser test with a fake microphone (dark): empty panel, record, button lit with the panel closed, pause holds the clock, stop keeps it (WebM, 44 KB) and it plays with a duration and seek bar, import of a WAV, remove needs two presses, still there after reloading. Not yet tried in the desktop app with a real microphone.*
-- [D] **.notecomp files carry added recordings**: the core writes them to `audio/` with their names in the manifest, and opening the file brings them back into the note. *Core test; browser test: exported with two recordings (audio/1.webm, audio/2.wav), opened in a fresh profile with both, playing.*
-- [D] Browser recordings (WebM) have no duration: the player now finds it before playing, so the seek bar works and the time no longer reads "Infinity:NaN".
-- [!] **Type filter on Home**: PDF · Noteful · NotePart · NoteComp, in any combination, over Recent and Drive; folders are never hidden. `.notecomp` and `.notecomplete` count as NoteComp. Drive now lists and opens `.notepart`, `.notecomp` and `.notecomplete`, and the file pickers and the desktop downloads folder accept them; `.notepart` opens like today's archives. *Unit test only, as agreed.*
-- [D] **Cropped images show only the cut-out part** (Noteful's cutout tool). The crop is an outline in the image's own pixels (payload tag 12, path commands as in shapes); the image's box on the page is the crop's bounds, so the core now draws the whole image larger and offset, clipped to the outline, instead of squeezing all of it into the box. *Checked on the ACII exam (latest copy): page 14, exercise 13 shows only Apartado C and its five lines; page 13's two crops render too. Core test.*
-- [D] **Export quizzes to Anki**, like decks: Study → Export quiz to Anki… (the open quiz, or the latest), or **Anki** on any quiz or deck in Saved decks and quizzes. Each question becomes a card: the question with lettered options on the front; the accepted answer (your correction wins), your correction note and a saved explanation on the back; the page as a tag. Disputed questions are left out. *Unit test; browser check of the menu item.*
-- [!] **Crop images in NoteComplete**: select an image with Select and press **Crop** in its bar (or double-click it, or Edit → Crop image). The whole image shows faintly, the kept part brightly in an accent frame with corner and edge handles; drag the frame to move it. **Done** or Enter applies as one undoable edit, **Cancel** or Esc leaves it, **Whole image** shows all of it again. Works on images already cropped in Noteful (the hidden part can be brought back) and on images added in NoteComplete. The crop is saved in projects and written to `.noteful` as Noteful's own crop outline. *Core tests (crop, export, reopen, whole image again); browser test (dark): crop to a quarter, clipped drawing, double-click, Esc, undo. Not yet opened in Noteful after export.*
-- [!] **Narrow windows**: phones get two bars instead of three (undo, redo, audio, notes and layers join the page row; tools are one row that scrolls instead of squeezing), medium widths show tools as icons before the toolbar would wrap, and View → Pages Left/Middle/Right/Free reaches what phones used to hide. *Browser screenshots at 1000, 800, 620 and 420 px (dark); every tool reachable. A white patch over Undo at 420 px appears in headless screenshots only, before and after; check on a phone.*
-- [D] **Quiz progress bar** under the quiz head: one segment per question, filling as you answer: pastel green right (2 points), the accent with the hint (1 point), pastel red wrong, grey disputed; the current question is outlined. *Unit test; browser test with a fake AI (dark): right, hinted, wrong in order.*
-- [D] **New document** (File → New document…, Ctrl N): name, page size (A4, Letter, slides or custom), number of pages and the format Save writes: NoteComplete (.notecomp), NotePart (.notepart) or Noteful (.noteful); the choice is remembered. Save then reads "Save (.notecomp)". *Browser test: 3 landscape A4 pages, saved as Apuntes.notecomp.*
-- [D] View → Pages position buttons are icons now; the text labels ran out of the menu. *Browser check: row ends inside the menu.*
-- [D] **Export to Anki inside the quiz window** (beside Next), besides Study → Export quiz to Anki… and the saved list. *Browser test: 5 cards exported.*
-- [D] The quiz progress bar moved into the window head beside _ □ ×, as one continuous, muted fill (no segments). *Browser check (dark).*
-- [!] **Migrate content to file…** in a Recent note's ⋯ menu, for two files the automatic match did not pair: pick the destination note (filterable list), choose what to bring (flashcard decks, quizzes, Markdown notes, recordings, with counts), optionally tick "Also remove them from the old note" (off by default), then decide about the old file: leave it (default), remove it from this device, move it to Google Drive's trash, or both; Drive asks for a second press. *Browser test of the whole dialog with a stand-in library (copy, old copy kept, keep default, two-press Drive trash). Not yet tried with real Drive files.*
-- [D] **Clarify and flashcard Ask AI wait for you**: pressing them opens the box with the cursor in the question field and sends nothing; Enter with nothing typed asks for an explanation. The first question is answered in the box and saved with its question; follow-ups continue in Ask AI, and that answer is copied back under the saved explanation automatically (the original stays on top; Edit or Ask again override it). *Browser test with a fake AI: no request on Clarify, first answer in the quiz, follow-up in Ask AI saved back with its question.*
-- [D] Ask AI shows three pulsing dots while the answer is on its way (still with reduced motion). *Browser check.*
-- [D] **Thumbnails appear one by one, top first**: page-list thumbnails used to start together and finish together in random order (ACII: pages 5, 4, 2, 1, 3; page 1 at 0.69 s); now 1, 2, 3, 4, 5 with page 1 at 0.42 s and the same total. On Home, covers kept on this device show at once instead of queueing behind network reads, and recordings/tags for filters load after the covers. *Browser timing on the ACII exam; Drive covers by unit tests only.*
-- [D] **Floating windows use the whole screen** below the top bar: Ask AI, audio, quiz and flashcards can go over the toolbar, the page row and the page list; the top bar and its menus stay above them. They open where they used to; positions saved before this change are not reused. *Browser test (dark): Ask AI dragged to the top-left stops under the top bar, covers the page list, menus open over it.*
-- [D] **All quizzes** (Study → All quizzes…): every quiz on this device under its document's name, with progress, points and date, filterable; the open note comes first. Opening a quiz of another note opens that note first (from Recent), then the quiz; an Anki button exports any of them. Documents are remembered as notes are opened; older quizzes are matched to the notes in Recent once. *Browser test (dark) with two notes; opening another note from the list works only for notes in Recent, so it was not exercised headless.*
-- [D] **Export flashcards and quizzes from files**: File → Study as **Anki** for the open note, and **Export flashcards and quizzes to Anki** in a Recent note's ⋯ menu without opening it. One Anki file with a deck per deck and quiz, named "Note::Deck". *Unit test; browser test of File → Study as Anki.*
-- [D] The quiz progress colours now come from the right-answer green, the accent and the Double check red, mixed softer so the bar stays quiet. *Browser check (dark).*
-- [!] **Study material** (Study → All quizzes and decks…) replaces All quizzes: quizzes and flashcard decks in two columns, each under its document, filterable, with Open and Anki on every row. One damaged quiz no longer empties the list (it shows as "cannot be read"), and a failure says why. *Memoria 1's quizzes are in the app's storage (checked on a copy of it), so they should now show; why they were missing before was not reproduced. Browser test with a deck.*
-- [D] **Flashcards fit their window**: the card takes the height the floating window has left and scrolls only its own long text, so the window itself no longer scrolls, also with Ask AI open. *Browser test (dark): default, 330 px and 700 px tall windows, and with Ask AI open: nothing scrolls; the card grows from 170 to 548 px in the tall window.*
-- [!] **Update checks** (desktop): on open (at most every 6 hours, can be turned off in Help) and from Help → Check for updates…, against GitHub Releases. A pill in the top bar shows the new version with Update, Later and Skip; nothing installs without Update. Linux AppImages download the matching build (x86-64 or ARM64, now built by the release workflow), verify it against SHA256SUMS.txt, keep the old copy as .previous, swap and offer Restart now; other installs open the release page. *Unit tests (versions, assets, checksums, a full swap with a bad and a good checksum); browser test of the pill with a stand-in bridge. No release exists yet, so it has not run against GitHub: ship one by raising the version in apps/desktop/package.json and pushing a v tag (docs/BUILDS.md).*
-- [D] The audio window's headphones icon sat on the window's edge; it is inside the head now. A note without audio no longer shows an empty recording list. *Browser screenshots.*
-- [D] The focus ring around the flashcard Ask AI field was clipped at the window's left edge. *CSS; not re-captured.*
-- [D] **Formulas on flashcards**: card fronts and backs render Markdown and LaTeX (KaTeX) like Ask AI answers; single line breaks stay line breaks, so numbered steps stay a list. *Browser test (dark): $\\int_0^1 x^2\\,dx$ inline and a display formula rendered by KaTeX.*
-- [D] **Scratchpad per note**: a Scratchpad button under every AI answer (Ask AI, quiz Clarify, flashcard Ask AI) keeps that conversation up to the answer; pressing it again in the same conversation rewrites the entry. View → Scratchpad… shows them newest first with formulas, and Add to notes (appends to the Markdown notes), Copy and Delete (press twice). *Unit tests; browser test (dark): two presses in one conversation give one rewritten entry, a new conversation a second, Add to notes saved.*
-- [!] **Dictation in Ask AI fields**: a mic beside Ask in Ask AI, quiz Clarify and flashcard Ask AI. Press it and speak; press again or Enter to stop; the words are typed into the field at the cursor (nothing is sent until you press Ask); Esc drops the take. It uses the transcript engine, language and model chosen in the audio panel (Whisper on this device by default; Voxtype or Gemini on desktop), keeping the Whisper model loaded between takes. *Unit test; browser test with a fake microphone and a stand-in engine: lit while listening, text inserted after what was typed, Esc drops it. Real Whisper on a real microphone not tried.*
-- [D] **Study material fits and starts with the open note**: rows no longer push their Anki button out of the column (name on one line, details under it, full text on hover; one scroll on phones). Opened from a note it shows that note's quizzes and decks with a This note · All notes switch; opened from Home it shows everything. *Browser test (dark) at 1280, 900 and 420 px with 15 quizzes and 7 decks: no sideways scroll; scope from a note and from Home.*
-- [D] **Every follow-up is saved with its question or card**: only the first answer in Ask AI used to be copied back; now each answer in that Ask AI conversation is added under the saved explanation until New (or until you ask about something else). *Browser tests with a fake AI: quiz (box answer, then two in Ask AI) and flashcard (box answer, then two in Ask AI): all saved in order.*
-- [D] **Explanation ▾ beside Clarify and Ask AI**: a saved explanation opens from its own button next to the Ask button (quiz and flashcards), shown only when the item has one; it no longer sits as an easy-to-miss line under the item. Spoiler rule unchanged. *Browser test with a fake AI: hidden without an explanation, opens it, hidden again on the next question; same on a flashcard.*
-- [D] **Audio window tidy-up**: a note with audio showed the recording list twice (the plain dropdown came back beside the styled one); now once. The headset icon in the head was squeezed and cut; it keeps its size. Record and Import sit beside the recording list as icons instead of on their own row (with their labels on a note without audio). *Browser screenshots (dark) with and without a recording.*
-- [D] **README brought up to date**: crop, New document and save formats, export rows (Study as Anki), Scratchpad, file types and Migrate content, recording and import, quiz progress bar, Clarify and Explanation ▾, formulas on cards, Study material, dictation, floating windows, phones, update checks, ARM64 AppImages, known issues and roadmap.
-- [D] **Skill**: export rows, the single download path and focus dimming in full (`references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js`), plus recording into a document.
-
-## Future: file formats and repositories (agreed, not started)
-
-Owner's idea (2026-10-28), with corrections and additions agreed in review.
-
-- [ ] **Three formats, chosen when saving.** The first Save or Export asks which one and remembers it (NoteComplete by default); Save as… switches. Not asked on every new file.
-  - **Noteful (.noteful)**: maximum compatibility with the official app. Markdown and study material stay outside (or are lost), and the app says so.
-  - **NotePartial (.notepart)**: today's archive renamed: the original .noteful plus the Markdown notes. The bridge for people who still open the notebook in Noteful.
-  - **NoteComplete (.notecomp, also opens .notecomplete), recommended**: a clean open format, easy to extract and to read with other tools. `.notecomp` is the default extension when saving; `.notecomplete` is accepted everywhere as the same format.
-- [ ] **Keep opening what exists.** Today's .notecomp and .notecomplete archives (tar: the note plus its Markdown) keep opening forever. Since the new format reuses those extensions, files are recognized by content, not extension: a tar archive is read as NotePartial, a ZIP package as NoteComplete. Nothing a user saved stops opening.
-- [ ] **NoteComplete as an open, documented package.** A ZIP (not tar: every system opens ZIP and single files can be read without unpacking the rest, like .docx/.epub) holding:
-  - `manifest.json`: format version, title, page list and sizes, layers, where everything is;
-  - `pages/NNN.json`: each page's ink, shapes, text and images in a documented JSON schema (in `spec/`), plus `pages/NNN.svg` as a preview any viewer can show;
-  - `resources/`: original PDFs, images and audio, as they are;
-  - `notes.md`: the Markdown notes;
-  - `study/`: flashcard decks, quizzes, corrections and saved AI explanations (today they live in the app's storage, so sharing a note loses them);
-  - optionally `original.noteful`, so going back to Noteful is lossless for unchanged notes.
-- [ ] **Converters.** Noteful → NoteComplete (one way, straightforward from the core's model). NoteComplete → Noteful is also feasible for everything Noteful can show, since the core already writes `.noteful` exports for edited notes; only what Noteful cannot represent (Markdown, study material) is dropped, with a warning.
-- [ ] **Repositories as a library source.** GitHub repositories with notes, files and solved exams, browsed from Home like Google Drive:
-  - an index `notecomplete.json` at the repository root lists subjects, notes and solved exams, with titles and tags (so the app need not crawl the tree);
-  - public repositories without an account; private ones with a token (device sign-in) or the user's own `gh`;
-  - read-only first; contributing back (fork + pull request) later;
-  - large notes: GitHub refuses files over 100 MB (Memoria 1 is 259 MB), so repositories need Git LFS or release assets for those; the app should read both;
-  - downloaded files cached and reused like Drive copies.
-- [ ] **Choose which pages to export.** SVG, PDF and IMG ask which pages instead of one at a time: this page, a range (3–7), a list (1, 4, 9–12) or every page. PDF puts the chosen pages in one file; SVG and IMG with several pages save them together (a ZIP, or one file per page in a chosen folder in the desktop app).
-- [ ] **Infinite canvas (NoteComplete only).** A note page without fixed size that grows in every direction. Exporting to Noteful splits it into sheets of up to 147456 × 147456 pt, Noteful's maximum page: a sheet is only as large as the content it holds needs, so a small canvas becomes one smaller sheet. Sheets are laid out in reading order, with an index of which sheet holds which region. NotePartial and Noteful saves warn that the canvas will be split.
-- [ ] **Home picks the source.** A switch on Home: Recent · Google Drive · Repositories, built on one "library source" interface so GitLab or a local folder can be added the same way. Every source lists .pdf, .noteful, .notepart, .notecomp and .notecomplete, with the same filters (Type included) and folders kept browsable.
-
-## Ask AI on HTML and text files (owner, 2026-10-29)
-
-- [ ] **Ask AI about this note on HTML pages.** Text and Markdown files already have it (since 1.0.11: the part being read plus the selected text). HTML pages have none: the Study menu items and the Ask AI button are disabled there. Plan:
-  - **What the AI gets**:
-    - the page's visible text, asked from the sandboxed frame through its shim (a `noteCompleteText` message answered with `document.body.innerText` and the current selection), so text that the page's own scripts write is included;
-    - the page source as a fallback when the frame does not answer;
-    - long pages split into sections, as for text files.
-  - **Selection**: text selected inside the page counts as *Selection*.
-  - **Optional image**: a capture of the visible part of the page (the desktop app's `capturePage`), since many HTML pages are exercises with layout or drawings.
-  - **Also**: My notes (the page's Markdown notes from 1.0.14) and the scratchpad.
-  - **Same for study**: flashcards and quizzes from HTML pages, by sections, once the text extraction exists.
-- [!] **Ask AI took about a minute to come up on a Markdown file.** Cause: the panel waited for the model list. For Antigravity that means `agy models`, inside muvm, with a 30-second timeout, and an empty answer was not cached, so it could wait again. Once loaded it was much faster (owner). Fixed as the owner described (1.0.15):
-  - every model dropdown (Ask AI, Generate flashcards / Quiz me, the card and quiz Ask boxes) opens at once with the list kept on this device;
-  - the tool is asked again in the background, and its answer replaces the list, keeping the chosen model if it is still offered (a typed *Other…* name is kept; a listed model that is gone falls back to Tool default);
-  - several dropdowns opening together share one request per tool.
-
-  *Checked in a headless browser with a fake tool whose list takes 3 s: the panel opened in 4 ms with the kept list and the choice survived the refresh. Not yet tried with the real Antigravity.* The tool lookup (`bash -lic`) takes about 30 ms here, so it was not the cause.
-
-## Future: pages (agreed, not started)
-
-Owner's decision (2026-10-29), from the collaboration plan: a merge never asks where pages go; any order is fixed with this general feature.
-
-- [ ] **Reorder pages in any note.**
-  - **Ways to move pages**:
-    - drag page thumbnails in the Pages panel (the page lifts and follows the pointer while the others slide aside, like the tool row);
-    - Pages → *Move page up* / *Move page down* / *Move page to…* (a position);
-    - several pages at once: Shift- or Ctrl-click thumbnails, then drag or *Move to…*.
-  - **Undo**: every move is one undoable edit (Ctrl+Z).
-  - **Core**: the core already keeps a display order of page slots and exports pages in that order (inserted pages use it), so moving pages is an edit of that order. It is saved in projects and `.notecomp`, and the native `.noteful` export writes the new order.
-  - **References follow the pages**: after a move, everything that names a page by number is renumbered, so nothing points at the wrong page:
-    - flashcard `page`;
-    - quiz `source.page` and its hint region;
-    - `<!-- page N -->` markers in the Markdown notes;
-    - audio page sync and transcript sections;
-    - Find results and OCR text kept per page (unless they are already stored by slot, which does not move; to check when implementing).
-  - **Tests**: Rust (the order edit, undo, export order, a `.noteful` round trip that `verify_document` accepts) and a headless run (drag in the Pages panel, references renumbered).
-- [ ] **Merged copies** (collaboration plan, *Keep both*) use the same feature: mine first, then rearranged here.
-
-## Future: collaborative notes (planned, not started)
-
-Owner's idea (2026-10-29). The full plan, decisions and progress checklist are in [COLLABORATION.md](COLLABORATION.md).
-
-- [ ] **Host + guests.** One computer hosts a document from the desktop app; others join its Markdown notes from an invite link, in a browser or in NoteComplete, and edit together in real time (Yjs CRDT; the host keeps and saves the notes).
-- [ ] **Linked documents.** A chip in the notes for an attached file (a `notecomplete-doc:` Markdown link: a stable document id plus the SHA-256 of the shared version); guests download it from the host with one click.
-- [ ] **Link document… button** in the notes editor's toolbar (also the panel head, Edit menu and drag and drop). It works on one device too, before any sharing.
-- [ ] **Download and bind, like a symlink.** Clicking a link on a device without the file offers to download it (from the host or Drive), use a copy already there (same hash), or locate it; the copy is then bound to the link on that device and opens from the chip.
-- [ ] **Changed copies.** When a copy or the shared version changed, the page comparison made for Drive versions opens again, and each person decides page by page (or hunk by hunk for text) what to keep: Keep mine / Take shared / Keep both, then Save merged copy. When nothing was removed or changed and one or both sides only added pages, it just asks whether to keep both (combined copy). A kept base version makes this a three-way comparison, so additions and deletions are told apart.
-
-## Home filters
-- [D] Stackable filters over Recent and Drive: modified date (today, week, month, year), with audio, size (under 10 MB, 10–100 MB, over 100 MB) and Noteful tags. All selected tags must be present.
-- [D] Sort: A–Z by default (natural order: "Tema 2" before "Tema 10"), or newest, oldest, largest, smallest. Drive folders stay on top.
-- [D] Recordings and tags are read with byte ranges, sharing the cover's head and tail reads, and kept per file version. Notes whose pages exceed 3 MB are marked "not yet read for tags" until opened once. *Browser test with four real notes on a simulated Drive.*
-- [D] Releasing a pinch no longer shifts the document: the page point under the pointer is kept (measured drift under 1 px).
-
-## Format
-- [D] "7- ELECTRÓNICA DIGITAL Copiar 2": object kind 19 is a tag ("#SD I"). It renders as a pill and is searchable as text.
-
-## Earlier in this review
-- [D] Tape (kind 3, tool 2) and lock in place (payload tag 21); tap to lift or cover tape.
-- [D] Compact tool row; Ctrl +/−/0 on any keyboard layout.
-- [D] Pages stay put when the bars change height.
-- [D] Shapes as an icon row; File → New window and window switching from Ctrl+K.
-
-## Quiz, flashcards and AI chat polish
-- [D] Restart quiz: circular-arrow button left of the dim button; clears answers on a second press.
-- [D] Quiz and flashcard windows grow to fit the Ask box and the streaming answer, up to the screen's edges.
-- [D] Paste images from the clipboard into any AI question (Ask AI, quiz Clarify, flashcard Ask AI); thumbnails with × and they follow the thread into Ask AI.
-- [D] Flashcard/quiz action rows wrap without odd gaps when the window is resized.
-- [D] Antigravity no longer stalls on the second question: Ask AI no longer turns on "Whole note" (MCP) by itself, and the chosen model is loaded before asking.
-- [D] Scratchpad: `\(…\)`, `\[…\]` and multi-line formulas render; no forced sideways scrollbars.
-- [D] Ask / Ask again / Close in the Ask boxes are icons (enter, spark, ×).
-- [D] Links in AI answers are clickable: page links jump to the page, attached images open large, web links open in the browser.
-- [D] Light/dark theme toggle in View (and Ctrl+K: "Toggle light/dark theme", "Theme: follow the system"); the choice is remembered, the default follows the system.
-
-## HTML documents
-- [D] HTML pages (exercises, summaries, tests such as the Gemini FAT32 tutors or "Resumen · Ingeniería del Software I") open in the desktop app instead of a blank white page: each render gets a new sandboxed frame, since Electron never painted the one created with the page. Reload, Home and back keep working.
-- [D] Dark HTML pages: the Dark pages switch (moon, **D**) also darkens HTML documents, from the same moon on the HTML bar. Inside the page it is Dark Reader (the extension's engine, vendored, loaded on first use) in the app's dark colours, switched on the spot without reloading the page. Pages that are already dark are left alone.
-
-## Recent
-- [D] Rename (⋯ → Rename…): changes only the name shown in Recent (stored as the entry's `title`); the file keeps its own name for Drive, the downloads folder and the file type, and the rename survives re-downloads and reopening. "Use the file name" undoes it. Sorting A–Z uses the shown name.
-
-## Text, Markdown and groups
-- [D] HTML bar: the moon (Dark pages, D) sits at the right end.
-- [D] .txt, .md and .markdown open as documents: Markdown with tables, task lists, code and LaTeX (KaTeX), rendered as in the Notes panel; plain text as written; the Markdown button switches either way. Recent shows their first lines as the cover, Type filter "Text", Drive lists them.
-- [D] Groups: File → Open folder… opens the notes, PDFs, HTML, text and images in a folder as a group; File → Add documents… (or + in the list) adds files to the open document's group, so text or Markdown files can sit beside a note or HTML page. The group is listed above the pages in the page panel, and at the left of HTML and text documents; click to jump. Files stay where they are; only chosen files and folders can be opened. Added documents have × to take them out (the file is not deleted).
-- [ ] Groups: subfolders, renaming a group, relative links between Markdown files in a group, drag to reorder.
-- [D] Boot time: the AppImage is recompressed with zstd behind AppImage's type2 runtime (tools/repack_appimage.py, pinned and checksum-checked; local installs and CI both). Reading Electron's start-up files through the mount went from 1015 ms (gzip) to 275 ms; the file is 129 MB instead of 142 MB.
-- [D] HTML and text bars: sidebar button and moon at the left, as in notes; the sidebar button hides or shows the file list (remembered).
-- [D] Files without an extension (examen-1's ciudades, municipios…) open as text when their content is text, and folders list them; CSV, logs, JSON, code and config files open as text too; open dialogs have "All files".
-- [D] Edit text and Markdown files (Edit; TinyMDE for Markdown, a plain editor otherwise) and Save / Ctrl S back to the file; downloads a copy when the file is not on this device.
-- [D] Zoom for text files and HTML pages: −, 100% and + in the bar, Ctrl +/−/0, Ctrl+wheel on text.
-- [D] Switching documents no longer flashes Home; an untouched PDF or image no longer asks about unsaved changes when switching or closing.
-- [D] Web links (File → Open link…): Notion and other pages open like documents in a sandboxed webview with its own sign-ins; in Recent and groups; Back, Reload, Open in browser, zoom, Dark pages.
-- [D] Ctrl + zooms again on the Spanish layout: the native menu no longer has Electron's Zoom In on Ctrl+Plus (app-menu.js, so every build keeps it).
-- [D] Open folder… beside Open file… on Home.
-- [D] Every text file edits like GUIA_COMANDOS.md: the editor follows MD (on: TinyMDE with its toolbar; off: plain), and MD on/off is remembered per file.
-- [D] Home buttons are File and Folder (icons kept); document bar actions are filled chips like the export MD button: MD, a pen for Edit, a floppy for Save, a circular arrow for Reload, Clear, Browser.
-- [D] Folders on Home: recently opened folders (on disk) and folders made in NoteComplete (New folder), most recent first; a folder card shows its documents in place of Recent (← All notes back). ⋯ on a note → Move to folder… (or New folder…; Take out of the folder when viewing one); ⋯ on a folder → Rename, Remove folder (no file is deleted). The folder's documents are also the side list beside an open document.
-- [D] Mouse wheel click (middle button) drags PDFs and notes with any tool, like Pan, and scrolls text documents; no auto-scroll or primary-selection paste.
-- [D] Free position + Fit: pages fit the window again (Fit subtracted free position's half-window side padding, leaving almost no width; switching position now refits).
-- [D] The desktop top bar always shows the tab strip, also with a single note; the centred title is gone there (kept in the web reader, which has no tabs).
-- [D] Study on text and Markdown files: Generate flashcards, Quiz me, Ask AI, saved decks/quizzes, All quizzes, Study as Anki and the scratchpad work on text documents. The text is split into numbered sections (at headings and blank lines, ~3500 characters) that stand in for pages: "Section being read", "Sections", "Whole document"; the sections go to the AI as text (no images, no PDF or whole-note MCP chips). Quizzes cite a short quote: Hint shows it, "Where it is: section N" scrolls to it and marks it. Ask AI sends the part being read plus the text selected in the document. The quiz and Ask AI windows show over the text document. Keys q / Shift Q / Shift C / Shift D / Shift W work there too.
-- [D] Links in Markdown documents: #anchors (a table of contents) scroll to their heading, GitHub-style (accents may be left out) or to a footnote; web links open in the browser; links to files beside the document (otro.md, ../Tema 2.md) open them in NoteComplete when the file or its folder was opened on this device (otherwise a message says to open the folder). The core used to turn every link that was not http(s)/mailto/# into "#".
-- [D] Ctrl F in text documents: a find bar like the notes' one (Edit → Find… and / too); every match marked, the current one stronger; Enter / Shift Enter or ↑ ↓ move between them; case and accents ignored; works while editing (Markdown editor marks, plain editor selects the match); Ctrl F again or Esc closes it.
-- [D] Stars in folders: every document of a folder has a star (empty; filled amber when clicked) on its Home card and in the side list beside an open document; starred documents are listed first (whatever the sort), the rest keep their order. Stars belong to the folder and follow a rename.
-- [D] Rename and delete in the side list: a pen at the right of a file's row on hover (or a right click) turns its name into a field (the name without its extension selected; Enter renames the real file on disk, Esc cancels; never over an existing file, the message says so); Recent, its cover, its folder, its star, the open document's title and Save follow the new name. × on hover asks in the row (Move to trash / Cancel; Only remove from list for added files) and moves the file to the system trash; it leaves Recent, groups and stars, and an open one closes. Files on this computer only.
-- [D] HTML documents can be edited: pen (Edit) shows the HTML source in the plain editor (not the Markdown editor: its toolbar writes Markdown syntax into HTML), Edit again or Reload shows the page with the changes; Save chip / Ctrl S writes the file back.
-- [D] Notes on HTML pages: the same Markdown Notes panel as notes, from a notes button at the right end of the HTML bar (N); kept on this device per page (no + Page / Follow, a page has no pages). Saving an edited HTML or text file moves its notes, decks, quizzes, recordings and scratchpad to the new content's fingerprint, so they are not lost.
+| Topic | Completed Highlights (`[D]`) |
+|---|---|
+| **Study & Quizzes** | Background generation with progress bar chip, floating minimizable quiz window, dispute (X), double check (V), hint clipping from page region, Anki export. |
+| **AI Chat & Flashcards** | Streaming responses, KaTeX math typesetting, Ask AI on cards with tool/model selector, scratchpad per note, follow-up retention. |
+| **Audio & Transcription** | Floating audio panel, timed ink dimming, background Whisper/Voxtype/Gemini transcription, word-level timestamps, SRT/WebVTT export. |
+| **Tools & Canvas** | Pan, Pen, Highlighter (straight/freehand/rectangle), Eraser (4 sizes), Tape (strips & rectangles with washi pattern), Lock/unlock tool (`O`), Crop tool for images. |
+| **Reader & Files** | Single-instance app, tabs strip with drag reorder, Dark pages (D) with Dark Reader engine, zoom to fit/percent, recent notes management, folders on Home. |
+| **Notes & Markdown** | TinyMDE docked Notes panel (`N`), LaTeX preview, `<!-- page N -->` markers, `.notecomp` archive export, HTML/plain text editing. |
