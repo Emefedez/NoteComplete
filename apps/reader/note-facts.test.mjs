@@ -55,3 +55,10 @@ test('file types filter in any combination; .notecomplete counts as NoteComp', (
   assert.equal(matches(note('Diagram.jpg'), { types: ['image'] }), true);
   assert.equal(matches(note('A.png'), { types: [] }), true);
 });
+
+test('sort by last opened, favourites first, and the favourites filter', () => {
+  const notes = [{ name: 'a', opened: 1 }, { name: 'b', opened: 3, favourite: false }, { name: 'c', opened: 2, favourite: true }];
+  assert.deepEqual([...notes].sort(compareNotes('opened')).map(n => n.name), ['b', 'c', 'a']);
+  assert.deepEqual([...notes].sort(compareNotes('favourites')).map(n => n.name), ['c', 'b', 'a']);
+  assert.deepEqual(notes.filter(n => matches(n, { favourites: true })).map(n => n.name), ['c']);
+});

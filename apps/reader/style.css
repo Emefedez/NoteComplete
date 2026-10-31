@@ -1337,6 +1337,11 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .chip { padding: 2px 10px; border-radius: 99px; background: var(--fill); font-size: 12px; }
 .chip:hover { background: var(--accent-soft); }
 .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.format-pill { display: inline-flex; align-items: center; gap: 2px; min-height: var(--control); padding: 2px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); }
+.format-pill .chip { padding: 2px 12px; background: transparent; color: var(--muted); }
+.format-pill .chip:hover { background: var(--fill); color: var(--ink); }
+.format-pill .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+body.bar-compact .format-pill { min-height: 22px; }
 .chip-clear { padding: 2px 8px; border-radius: 99px; font-size: 12px; color: var(--accent); }
 #filterSummary { font-size: 12px; }
 #empty .home-filters .chip, #empty .home-filters .chip-clear { padding: 2px 10px; }
@@ -2076,3 +2081,15 @@ body.home-list #recentList li:has(.star-toggle) .note-meta { padding-right: 64px
 .group-list li.group-confirm { flex-wrap: wrap; gap: 4px; padding: 6px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--fill); }
 .group-confirm-text { flex: 1 0 100%; font-size: 12px; overflow-wrap: anywhere; }
 .group-confirm button { min-height: 24px; padding: 0 8px; font-size: 12px; }
+
+/* Internet Archive source */
+.archive-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.archive-source { display: inline-flex; gap: 2px; }
+.archive-source .chip:last-child { padding: 2px 8px; color: var(--muted); }
+.archive-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.archive-row { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); text-align: left; overflow-wrap: anywhere; }
+.archive-row span { font-size: 12px; color: var(--muted); }
+.archive-row.folder { flex-direction: row; align-items: center; font-weight: 600; }
+.archive-row.folder::before { content: ""; flex: none; width: 18px; height: 14px; margin-right: 8px; border: 1.6px solid var(--muted); border-radius: 2px 2px 3px 3px; border-top-width: 4px; }
+#archiveStatus { min-height: 1.6em; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+#archiveStatus.error { color: var(--danger); }

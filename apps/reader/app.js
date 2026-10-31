@@ -13,6 +13,7 @@ import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
+import { archiveBrowser } from "./archive-browser.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
@@ -2535,9 +2536,18 @@ $("linkAdd").onclick = async () => {
   status(`${m.name} added to ${g.name}.`);
 };
 htmlDarkApply();
+// Internet Archive items as a notes source: documents open from the download, with no Recent entry.
+const archive = archiveBrowser({
+  open: async (file) => {
+    const opened = await openChosen(file);
+    if (opened) { notePath = ""; noteEntryKey = ""; }
+    return opened;
+  },
+});
 var home = homeScreen({
   library,
   drive,
+  archive,
   versions,
   open: openFromLibrary,
   openLink: (entry) => openWeb(webMember(entry.url, entry.name)),

@@ -195,6 +195,8 @@
         <div class="home-view" role="radiogroup" aria-label="Show notes as"><button type="button" role="radio" data-home-view="cards" title="Cards with covers" aria-label="Cards with covers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button><button type="button" role="radio" data-home-view="list" title="Quick list: no covers, nothing read from the files" aria-label="Quick list without covers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
         <div class="filter-group" data-group="types" aria-label="Type"><span class="filter-label">Type</span></div>
         <div class="filter-group" data-group="period" aria-label="Modified"><span class="filter-label">Modified</span></div>
+        <div class="filter-group" data-group="sources" aria-label="Source"><span class="filter-label">Source</span></div>
+        <div class="filter-group" data-group="favourites"><button type="button" class="chip" data-filter="favourites" aria-pressed="false" title="Only notes you starred">★ Favourites</button></div>
         <div class="filter-group" data-group="audio"><button type="button" class="chip" data-filter="audio" aria-pressed="false">With audio</button></div>
         <div class="filter-group" data-group="sizes" aria-label="Size"><span class="filter-label">Size</span></div>
         <div class="filter-group" data-group="tags" aria-label="Tags" hidden><span class="filter-label">Tags</span></div>
@@ -244,6 +246,17 @@
         <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
         <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
         <button id="driveMore" type="button" hidden>Load more</button>
+      </section>
+      <section id="archiveSection" class="home-section" aria-labelledby="archiveTitle">
+        <div class="drive-heading">
+          <h3 id="archiveTitle">Internet Archive</h3>
+          <div class="drive-actions"><button id="archiveBack" type="button" disabled>Back</button></div>
+        </div>
+        <div id="archiveSources" class="archive-sources" role="group" aria-label="Internet Archive sources"></div>
+        <div class="drive-search"><strong id="archivePath"></strong><label class="drive-filter"><span class="sr-only">Internet Archive item link or identifier</span><input id="archiveLink" type="text" autocomplete="off" spellcheck="false" placeholder="Add a source: https://archive.org/details/…" /></label><button id="archiveAdd" type="button">Add</button></div>
+        <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
+        <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+        <ul id="archiveList" class="archive-list" aria-label="Internet Archive documents"></ul>
       </section>
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>

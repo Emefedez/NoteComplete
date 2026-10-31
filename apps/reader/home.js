@@ -12,7 +12,7 @@ import { icon } from './icons.js';
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, groups = null }) {
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, groups = null, archive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -21,6 +21,10 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     if (minutes < 1440) return `${Math.round(minutes / 60)} h ago`;
     return new Date(time).toLocaleDateString();
   };
+  // Favourites: a star on a Recent card; kept on this device, by entry key.
+  let favourites = new Set();
+  try { favourites = new Set(JSON.parse(localStorage.getItem('notecomplete-favourites')) || []); } catch { /* Optional. */ }
+  const saveFavourites = () => { try { localStorage.setItem('notecomplete-favourites', JSON.stringify([...favourites])); } catch { /* Optional. */ } };
   let quick = false; // Quick list view: see setView.
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
   // Identical copies kept before checksums existed are merged once per session.
@@ -180,7 +184,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
-      button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
+      button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, opened: entry.openedAt || 0, favourite: favourites.has(entry.key), size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
       if (!quick) {
         library.cover(coverKey(entry)).then(async url => {
           if (url) {
@@ -220,6 +224,11 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       // In a folder: a star keeps the document at the top of it.
       const folder = shownFolder;
       if (folder) item.append(starButton(!!entry.starred, entryTitle(entry), async on => { await groups.star(folder, entry.key, on); renderRecent(); }));
+      else {
+        const fav = starButton(favourites.has(entry.key), entryTitle(entry), on => { if (on) favourites.add(entry.key); else favourites.delete(entry.key); saveFavourites(); button.note.favourite = on; renderRecent(); });
+        fav.title = favourites.has(entry.key) ? 'Favourite (click to remove)' : 'Add to favourites';
+        item.append(fav);
+      }
       return [item];
     } catch (error) { console.warn('Recent entry skipped', entry?.key, error); return []; }
   }
@@ -322,9 +331,11 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     } catch (error) { if (error.name !== 'AbortError') status(error.message, true); }
   };
   // Stackable filters over Recent and Drive cards; remembered on this device.
-  let filters = { since: 0, period: '', tags: [], audio: false, sizes: [], types: [], sort: 'name' };
+  let filters = { since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [], sort: 'name' };
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
   if (!Array.isArray(filters.types)) filters.types = [];
+  if (!Array.isArray(filters.sources)) filters.sources = [];
+  const SOURCES = { drive: 'Google Drive', archive: 'Internet Archive' };
   const chip = (label, pressed, onclick) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = label;
@@ -342,14 +353,23 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   function renderFilters() {
     const label = n => n.querySelector('.filter-label');
     group('period').replaceChildren(label(group('period')), ...Object.entries(PERIODS).map(([k, [name]]) => chip(name, filters.period === k, () => { filters.period = filters.period === k ? '' : k; changed(); })));
-    group('types').replaceChildren(label(group('types')), ...Object.entries(TYPES).map(([k, [name]]) => chip(name, filters.types.includes(k), () => { filters.types = filters.types.includes(k) ? filters.types.filter(x => x !== k) : [...filters.types, k]; changed(); })));
+    const typeChip = ([k, [name]]) => chip(name, filters.types.includes(k), () => { filters.types = filters.types.includes(k) ? filters.types.filter(x => x !== k) : [...filters.types, k]; changed(); });
+    // The three NoteComplete formats share one big pill with a pill each; the other file types stay loose chips.
+    const own = ['noteful', 'notepart', 'notecomp'], types = Object.entries(TYPES);
+    const formats = document.createElement('div');
+    formats.className = 'format-pill'; formats.setAttribute('role', 'group'); formats.setAttribute('aria-label', 'NoteComplete formats');
+    formats.append(...types.filter(([k]) => own.includes(k)).map(typeChip));
+    group('types').replaceChildren(label(group('types')), formats, ...types.filter(([k]) => !own.includes(k)).map(typeChip));
     group('sizes').replaceChildren(label(group('sizes')), ...Object.entries(SIZES).map(([k, [name]]) => chip(name, filters.sizes.includes(k), () => { filters.sizes = filters.sizes.includes(k) ? filters.sizes.filter(x => x !== k) : [...filters.sizes, k]; changed(); })));
+    // Hosts besides this device: picking some shows only their sections.
+    group('sources').replaceChildren(label(group('sources')), ...Object.entries(SOURCES).map(([k, name]) => chip(name, filters.sources.includes(k), () => { filters.sources = filters.sources.includes(k) ? filters.sources.filter(x => x !== k) : [...filters.sources, k]; changed(); })));
     const known = new Set(filters.tags);
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
     group('tags').hidden = !known.size;
     group('tags').replaceChildren(label(group('tags')), ...[...known].sort().map(t => chip(`#${t.replace(/^#/, '')}`, filters.tags.includes(t), () => { filters.tags = filters.tags.includes(t) ? filters.tags.filter(x => x !== t) : [...filters.tags, t]; changed(); })));
     document.querySelector('#homeFilters [data-filter="audio"]').setAttribute('aria-pressed', String(filters.audio));
-    $('filtersClear').hidden = !(filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length);
+    document.querySelector('#homeFilters [data-filter="favourites"]').setAttribute('aria-pressed', String(filters.favourites));
+    $('filtersClear').hidden = !(filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length);
   }
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
@@ -366,7 +386,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   }
   function applyFilters() {
     sortCards();
-    const active = filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
+    for (const [k, id] of [['drive', 'driveSection'], ['archive', 'archiveSection']]) $(id).hidden = (filters.sources.length > 0 && !filters.sources.includes(k)) || (k === 'archive' && !archive);
+    const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0;
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) {
       const show = !active || !card.note || matches(card.note, filters);
@@ -380,8 +401,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   let filterFrame = 0;
   // New tags can appear as facts arrive; refresh the chips at most once per frame.
   const renderFiltersSoon = () => { cancelAnimationFrame(filterFrame); filterFrame = requestAnimationFrame(renderFilters); };
+  document.querySelector('#homeFilters [data-filter="favourites"]').onclick = () => { filters.favourites = !filters.favourites; changed(); };
   document.querySelector('#homeFilters [data-filter="audio"]').onclick = () => { filters.audio = !filters.audio; changed(); };
-  $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, sizes: [], types: [] }; changed(); };
+  $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [] }; changed(); };
   for (const [value, label] of Object.entries(SORTS)) $('homeSort').add(new Option(label, value));
   $('homeSort').value = SORTS[filters.sort] ? filters.sort : 'name';
   $('homeSort').onchange = () => { filters.sort = $('homeSort').value; changed(); };
@@ -459,12 +481,12 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     show(hasDocument) {
       $('empty').hidden = false;
       $('homeBack').hidden = !hasDocument;
-      if (!shown) { shown = true; drive.show(); }
+      if (!shown) { shown = true; drive.show(); archive?.show(); }
       renderRecent(); renderFolder();
     },
     hide() {
       $('empty').hidden = true;
-      if (shown) { shown = false; drive.hide(); }
+      if (shown) { shown = false; drive.hide(); archive?.hide(); }
     },
     get visible() { return !$('empty').hidden; },
     rememberCover,

@@ -69,7 +69,8 @@ export const TYPES = {
 };
 export const typeOf = name => Object.keys(TYPES).find(k => TYPES[k][1].test(name || '')) || '';
 export function matches(note, filters) {
-  const { since = 0, tags = [], audio = false, sizes = [], types = [] } = filters;
+  const { since = 0, tags = [], audio = false, sizes = [], types = [], favourites = false } = filters;
+  if (favourites && !note.favourite) return false;
   if (types.length && !types.includes(typeOf(note.name))) return false;
   if (since && !(note.modified >= since)) return false;
   if (audio && !(note.facts?.audio?.count > 0)) return false;
@@ -80,10 +81,12 @@ export function matches(note, filters) {
 export const SIZES = { small: ['Under 10 MB', 0, 10e6], medium: ['10–100 MB', 10e6, 100e6], large: ['Over 100 MB', 100e6, Infinity] };
 const inSize = (bytes, key) => Number.isFinite(Number(bytes)) && Number(bytes) >= SIZES[key][1] && Number(bytes) < SIZES[key][2];
 // Sorting: natural A–Z by default ("Tema 2" before "Tema 10").
-export const SORTS = { name: 'A–Z', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
+export const SORTS = { name: 'A–Z', opened: 'Last opened', favourites: 'Favourites first', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 export function compareNotes(sort = 'name') {
   return (a, b) => {
+    if (sort === 'opened') return (b.opened || 0) - (a.opened || 0) || collator.compare(a.title || a.name || '', b.title || b.name || '');
+    if (sort === 'favourites') return (b.favourite ? 1 : 0) - (a.favourite ? 1 : 0) || (b.opened || 0) - (a.opened || 0);
     if (sort === 'newest') return (b.modified || 0) - (a.modified || 0);
     if (sort === 'oldest') return (a.modified || 0) - (b.modified || 0);
     if (sort === 'largest') return (b.size || 0) - (a.size || 0);
