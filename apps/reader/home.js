@@ -359,7 +359,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     const formats = document.createElement('div');
     formats.className = 'format-pill'; formats.setAttribute('role', 'group'); formats.setAttribute('aria-label', 'NoteComplete formats');
     formats.append(...types.filter(([k]) => own.includes(k)).map(typeChip));
-    group('types').replaceChildren(label(group('types')), formats, ...types.filter(([k]) => !own.includes(k)).map(typeChip));
+    group('types').replaceChildren(label(group('types')), ...types.filter(([k]) => !own.includes(k)).map(typeChip), formats);
     group('sizes').replaceChildren(label(group('sizes')), ...Object.entries(SIZES).map(([k, [name]]) => chip(name, filters.sizes.includes(k), () => { filters.sizes = filters.sizes.includes(k) ? filters.sizes.filter(x => x !== k) : [...filters.sizes, k]; changed(); })));
     // Hosts besides this device: picking some shows only their sections.
     group('sources').replaceChildren(label(group('sources')), ...Object.entries(SOURCES).map(([k, name]) => chip(name, filters.sources.includes(k), () => { filters.sources = filters.sources.includes(k) ? filters.sources.filter(x => x !== k) : [...filters.sources, k]; changed(); })));
@@ -375,18 +375,65 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   function sortCards() {
     const compare = compareNotes(filters.sort);
     for (const list of [$('recentList'), $('driveList')]) {
+      if (!list) continue;
       const items = [...list.children], notes = items.filter(li => li.querySelector('.note-card')?.note);
       if (notes.length < 2) continue;
-      // Starred documents of a folder stay first, whatever the sort.
-      const sorted = [...notes].sort((a, b) => { const x = a.querySelector('.note-card').note, y = b.querySelector('.note-card').note; return (y.starred ? 1 : 0) - (x.starred ? 1 : 0) || compare(x, y); });
+      // Starred and favourite documents stay at the top, sorted among each other by the active sort;
+      // then non-favourites follow, also sorted among each other by the active sort.
+      const sorted = [...notes].sort((a, b) => {
+        const x = a.querySelector('.note-card').note, y = b.querySelector('.note-card').note;
+        const favX = (x.starred || x.favourite) ? 1 : 0;
+        const favY = (y.starred || y.favourite) ? 1 : 0;
+        return (favY - favX) || compare(x, y);
+      });
       if (sorted.every((li, i) => li === notes[i])) continue;
       const others = items.filter(li => !notes.includes(li));
       list.append(...others, ...sorted);
     }
   }
+  // Collapsible sections: Folders, Recent, Cloud
+  let collapsed = {};
+  try { collapsed = JSON.parse(localStorage.getItem('notecomplete-home-collapsed') || '{}'); } catch {}
+  function setupCollapsible(toggleId, contentId, key) {
+    const toggle = $(toggleId), content = $(contentId);
+    if (!toggle || !content) return;
+    const update = (open) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      content.hidden = !open;
+      collapsed[key] = !open;
+      try { localStorage.setItem('notecomplete-home-collapsed', JSON.stringify(collapsed)); } catch {}
+    };
+    if (collapsed[key]) update(false);
+    toggle.onclick = () => update(toggle.getAttribute('aria-expanded') === 'false');
+  }
+  setupCollapsible('foldersToggle', 'foldersContent', 'folders');
+  setupCollapsible('recentToggle', 'recentContent', 'recent');
+  setupCollapsible('cloudToggle', 'cloudContent', 'cloud');
+
+  // Cloud provider tabs: Google Drive vs Internet Archive
+  let activeCloud = 'drive';
+  try { activeCloud = localStorage.getItem('notecomplete-cloud-provider') || 'drive'; } catch {}
+  function setCloudProvider(provider) {
+    activeCloud = provider;
+    try { localStorage.setItem('notecomplete-cloud-provider', provider); } catch {}
+    const isDrive = provider === 'drive';
+    if ($('cloudTabDrive')) $('cloudTabDrive').setAttribute('aria-selected', String(isDrive));
+    if ($('cloudTabArchive')) $('cloudTabArchive').setAttribute('aria-selected', String(!isDrive));
+    if ($('driveSection')) $('driveSection').hidden = !isDrive;
+    if ($('archiveSection')) $('archiveSection').hidden = isDrive;
+    if (isDrive) drive.show(); else archive?.show();
+  }
+  if ($('cloudTabDrive')) $('cloudTabDrive').onclick = () => setCloudProvider('drive');
+  if ($('cloudTabArchive')) $('cloudTabArchive').onclick = () => setCloudProvider('archive');
+  setCloudProvider(activeCloud);
+
   function applyFilters() {
     sortCards();
-    for (const [k, id] of [['drive', 'driveSection'], ['archive', 'archiveSection']]) $(id).hidden = (filters.sources.length > 0 && !filters.sources.includes(k)) || (k === 'archive' && !archive);
+    if (filters.sources.length === 1) {
+      if ($('cloudContent')) $('cloudContent').hidden = false;
+      if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
+      setCloudProvider(filters.sources[0]);
+    }
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0;
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) {

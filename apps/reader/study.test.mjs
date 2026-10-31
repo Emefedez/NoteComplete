@@ -12,6 +12,11 @@ test('Anki export escapes tabs and newlines and tags pages', () => {
 test('AI replies are parsed leniently but only well-formed items survive', () => {
   const reply = 'Here you go:\n```json\n{"cards":[{"front":"¿Qué es DRAM?","back":"Un condensador y un transistor","page":7},{"front":"","back":"x"},{"front":"q"}]}\n```';
   assert.deepEqual(cleanCards(jsonFrom(reply)), [{ front: '¿Qué es DRAM?', back: 'Un condensador y un transistor', page: 7 }]);
+
+  // Multi-page batch relative page mapping
+  const relativeReply = { cards: [{ front: 'Concept', back: 'Definition', page: 2 }] };
+  assert.deepEqual(cleanCards(relativeReply, [4, 5, 6]), [{ front: 'Concept', back: 'Definition', page: 6 }]);
+
   const quiz = cleanQuestions({ questions: [
     { question: 'SRAM cell?', options: ['biestable', 'condensador', 'fusible', 'diodo'], answer: 0, explanation: 'Flip-flop', page: 8 },
     { question: 'bad', options: ['a'], answer: 0 },
@@ -23,6 +28,7 @@ test('AI replies are parsed leniently but only well-formed items survive', () =>
 
 test('prompts ask for the JSON shape and respect the chosen language', () => {
   assert.match(prompts('cards', { amount: 4, language: '', title: 'Memoria 1' }), /about 4 flashcards per page[\s\S]*"cards"/);
+  assert.match(prompts('cards', { amount: 3, language: '', title: 'Tema 1', pages: [2, 3, 4] }), /TOTAL of about 9 flashcards[\s\S]*3, 4, 5/);
   assert.match(prompts('quiz', { amount: 2, language: 'English', title: 'T' }), /Write in English[\s\S]*"questions"/);
   assert.match(textBlock(2, { pdf: 'DRAM', ocr: 'condensador' }), /Page 3[\s\S]*PDF text:\nDRAM[\s\S]*Recognized handwriting/);
   assert.match(textBlock(0, {}), /read the image/);

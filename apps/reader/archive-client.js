@@ -41,10 +41,21 @@ export class ArchiveClient {
     return { id, title: Array.isArray(title) ? title[0] : title || id, files: data.files };
   }
   async download(id, document, signal, onProgress = () => {}) {
-    const response = await this.fetcher(archiveUrl(id, document.path), { signal });
+    const url = archiveUrl(id, document.path);
+    if (globalThis.notecompleteFiles?.downloadUrl) {
+      const bytes = await globalThis.notecompleteFiles.downloadUrl(url, (received, total) => {
+        onProgress(received, total || document.size || 0);
+      });
+      return new File([bytes], document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
+    }
+    const response = await this.fetcher(url, { signal });
     if (!response.ok) throw Error(`Internet Archive answered ${response.status}.`);
     const total = Number(response.headers?.get?.('Content-Length')) || document.size || 0;
-    if (!response.body?.getReader) return new File([await response.blob()], document.name);
+    if (!response.body?.getReader) {
+      const blob = await response.blob();
+      onProgress(blob.size, total || blob.size);
+      return new File([blob], document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
+    }
     const reader = response.body.getReader(), chunks = [];
     let received = 0;
     for (;;) {
@@ -52,6 +63,6 @@ export class ArchiveClient {
       if (done) break;
       chunks.push(value); received += value.length; onProgress(received, total);
     }
-    return new File(chunks, document.name);
+    return new File(chunks, document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
   }
 }

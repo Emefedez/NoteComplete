@@ -54,9 +54,27 @@ export function listLines(text) {
   }
   return out + text.slice(last);
 }
-export function cleanCards(value) {
-  return (value?.cards || []).filter(c => typeof c?.front === 'string' && typeof c?.back === 'string' && c.front.trim() && c.back.trim())
-    .map(c => ({ front: listLines(c.front.trim()), back: listLines(c.back.trim()), page: Number.isInteger(c.page) ? c.page : undefined }));
+export function cleanCards(value, pages = []) {
+  const list = value?.cards || value?.flashcards || value?.deck || (Array.isArray(value) ? value : []);
+  return list.filter(c => typeof c?.front === 'string' && typeof c?.back === 'string' && c.front.trim() && c.back.trim())
+    .map(c => {
+      let pageNum = undefined;
+      if (Number.isInteger(c.page)) pageNum = c.page;
+      else if (typeof c.page === 'string') {
+        const m = c.page.match(/\d+/);
+        if (m) pageNum = Number(m[0]);
+      }
+      if (pages.length && Number.isInteger(pageNum)) {
+        if (!pages.includes(pageNum - 1) && pageNum >= 1 && pageNum <= pages.length) {
+          pageNum = pages[pageNum - 1] + 1;
+        }
+      }
+      return {
+        front: listLines(c.front.trim()),
+        back: listLines(c.back.trim()),
+        page: Number.isInteger(pageNum) ? pageNum : undefined
+      };
+    });
 }
 export function cleanQuestions(value) {
   return (value?.questions || []).filter(q => typeof q?.question === 'string' && Array.isArray(q.options) && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length)
@@ -85,19 +103,29 @@ export function cardVerdict(value, card) {
   return { correct: value?.correct === true, front: text(value?.front, card.front), back: text(value?.back, card.back), reason: typeof value?.reason === 'string' ? value.reason.trim() : '' };
 }
 
-export function prompts(kind, { amount, language, title, unit = 'page' }) {
+export function prompts(kind, { amount, language, title, unit = 'page', pages = [] }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
+  const count = pages.length || 1;
+  const total = (Number(amount) || 4) * count;
+  const pageNums = pages.length ? pages.map(p => p + 1) : [1];
+  const samplePage = pageNums[0];
+  const multiInfo = count > 1
+    ? `This request covers ${count} ${unit}s (${pageNums.join(', ')}). Make about ${amount} flashcards per ${unit}, for a TOTAL of about ${total} flashcards across these ${count} ${unit}s. Distribute them evenly and do NOT stop early.`
+    : `Make about ${amount} flashcards per ${unit}.`;
+  const multiQuestions = count > 1
+    ? `This request covers ${count} ${unit}s (${pageNums.join(', ')}). Write about ${amount} questions per ${unit}, for a TOTAL of about ${total} questions across these ${count} ${unit}s. Distribute the questions evenly across all ${count} ${unit}s; do NOT stop at only ${amount} questions.`
+    : `Write about ${amount} multiple-choice questions per ${unit} that test understanding, each with 4 plausible options and exactly one correct.`;
   // Text documents come as numbered sections of text, without images.
   if (unit === 'section') {
     const intro = `You are helping a student study their own text document, "${title}". You get its text split into numbered sections. Cover all the material in each section evenly.`;
     if (kind === 'cards')
-      return `${intro}\nMake about ${amount} flashcards per section: one fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":<section number>}]}`;
-    return `${intro}\nWrite about ${amount} multiple-choice questions per section that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<section number>}]}`;
+      return `${intro}\n${multiInfo} One fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). For each card set "page" to the integer section number (${pageNums.join(', ')}). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":${samplePage}}]}`;
+    return `${intro}\n${multiQuestions} ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":${samplePage}}]}`;
   }
   const intro = `You are helping a student study their own notes, "${title}". You get page images and the text extracted from those pages. The images show any tape lifted, so covered parts are readable. Cover all the material on each page evenly (printed text, slides, typed notes and handwriting alike); being highlighted or under tape does not make something more important. Ignore slide decoration and page furniture.`;
   if (kind === 'cards')
-    return `${intro}\nMake about ${amount} flashcards per page: one fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":<page number>}]}`;
-  return `${intro}\nWrite about ${amount} multiple-choice questions per page that test understanding, each with 4 plausible options and exactly one correct. ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":<page number>}]}`;
+    return `${intro}\n${multiInfo} One fact or concept per card, a clear question on the front and a short, exact answer on the back (definitions, comparisons, causes and effects, formulas, worked steps). Keep the answer's structure: each item of a list, case or step goes on its own line (use \\n in the JSON string). For each card set "page" to the integer page number (${pageNums.join(', ')}). ${lang}\nReply with ONLY this JSON, no prose: {"cards":[{"front":"…","back":"…","page":${samplePage}}]}`;
+  return `${intro}\n${multiQuestions} ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":${samplePage}}]}`;
 }
 
 export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {} }) {
@@ -139,12 +167,21 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     $('studyPromptEdit').hidden = kind !== 'quiz';
     $('studyDialog').showModal();
   }
+  const selectRange = () => {
+    const r = document.querySelector('input[name="studyScope"][value="range"]');
+    if (r) r.checked = true;
+  };
+  $('studyFrom').onfocus = $('studyFrom').oninput = $('studyFrom').onchange = $('studyFrom').onclick =
+  $('studyTo').onfocus = $('studyTo').oninput = $('studyTo').onchange = $('studyTo').onclick = selectRange;
+  $('studyScopeRange').onclick = selectRange;
   function chosenPages() {
     const { pages } = documentInfo();
-    const scope = document.querySelector('input[name="studyScope"]:checked').value;
+    const scope = document.querySelector('input[name="studyScope"]:checked')?.value || 'page';
     if (scope === 'all') return [...Array(pages).keys()];
-    const from = Math.max(1, Math.min(pages, Number($('studyFrom').value) || 1));
-    const to = scope === 'page' ? from : Math.max(from, Math.min(pages, Number($('studyTo').value) || from));
+    const v1 = Math.max(1, Math.min(pages, Number($('studyFrom').value) || 1));
+    const v2 = Math.max(1, Math.min(pages, Number($('studyTo').value) || v1));
+    const from = Math.min(v1, v2);
+    const to = scope === 'page' ? from : Math.max(v1, v2);
     return Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
   }
   $('studyGo').onclick = () => {
@@ -163,7 +200,11 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       // A few batches at a time: each request mostly waits on the AI service,
       // and page preparation for the next batch overlaps the ones in flight.
       const answers = [];
-      let prepared = 0, next = 0, failure = null, prompt = '';
+      let prepared = 0, next = 0, failure = null;
+      let avoid = [];
+      try {
+        avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
+      } catch { /* Optional. */ }
       const lane = async () => {
         while (!cancelled && !failure && next < batches.length) {
           const b = next++, batch = batches[b];
@@ -171,10 +212,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
             const context = await pagesContext(batch, { pageCanvas, pageText, unit, onProgress: () => job.prepared(++prepared) });
             if (cancelled) return;
             job.asking(b, providerName);
-            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${prompt}\n\n${context.text}`, tag: 'study' });
+            const batchPrompt = (kind === 'cards'
+              ? prompts('cards', { amount, language, title, unit, pages: batch })
+              : quizPrompt(instructions(), { amount, language, title, unit, pages: batch }))
+              + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
+            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study' });
             if (cancelled) return;
             const parsed = jsonFrom(text);
-            answers[b] = kind === 'cards' ? cleanCards(parsed) : prepareQuestions(parsed, batch);
+            answers[b] = kind === 'cards' ? cleanCards(parsed, batch) : prepareQuestions(parsed, batch);
             job.answered(b);
           } catch (error) {
             // One failed batch stops the rest; what came back is still kept.
@@ -185,9 +230,6 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
         }
       };
       try {
-        const avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
-        prompt = (kind === 'cards' ? prompts('cards', { amount, language, title, unit }) : quizPrompt(instructions(), { amount, language, title, unit }))
-          + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
         await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
         const results = answers.flatMap(a => a || []);
         if (failure && !results.length) throw failure;

@@ -204,59 +204,129 @@
         <span id="filterSummary" class="muted"></span>
       </div>
       <section id="foldersSection" class="home-section" aria-labelledby="foldersTitle">
-        <div class="drive-heading"><h3 id="foldersTitle">Folders</h3><div class="drive-actions"><button id="folderNew" type="button" title="Make a folder in NoteComplete to keep notes together; files stay where they are">New folder</button></div></div>
-        <div id="folderNewRow" class="folder-new" hidden><label for="folderNewName">Name</label><input id="folderNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderNewCreate" type="button" class="primary">Create</button><button id="folderNewCancel" type="button">Cancel</button></div>
-        <ul id="folderList" class="folder-list"></ul>
-        <p id="foldersEmpty" class="muted folders-empty" hidden>Folders you open (File → Open folder…) or make here appear here.</p>
+        <div class="drive-heading">
+          <button id="foldersToggle" type="button" class="category-toggle" aria-expanded="true" aria-controls="foldersContent"><h3 id="foldersTitle">Folders</h3><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="drive-actions"><button id="folderNew" type="button" title="Make a folder in NoteComplete to keep notes together; files stay where they are">New folder</button></div>
+        </div>
+        <div id="foldersContent" class="category-content">
+          <div id="folderNewRow" class="folder-new" hidden><label for="folderNewName">Name</label><input id="folderNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderNewCreate" type="button" class="primary">Create</button><button id="folderNewCancel" type="button">Cancel</button></div>
+          <ul id="folderList" class="folder-list"></ul>
+          <p id="foldersEmpty" class="muted folders-empty" hidden>Folders you open (File → Open folder…) or make here appear here.</p>
+        </div>
       </section>
       <section id="recentSection" class="home-section" aria-labelledby="recentTitle" hidden>
-        <div class="recent-heading"><button id="folderBack" type="button" hidden>← All notes</button><h3 id="recentTitle">Recent</h3></div>
-        <p id="folderEmpty" class="muted" hidden>This folder is empty. Use ⋯ → Move to folder on a note in Recent.</p>
-        <ul id="recentList" class="note-grid"></ul>
-      </section>
-      <section id="driveSection" class="home-section" aria-labelledby="driveTitle">
-        <div class="drive-heading">
-          <h3 id="driveTitle">Google Drive</h3>
-          <div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button><button id="driveDisconnect" type="button" disabled hidden>Disconnect</button></div>
+        <div class="recent-heading">
+          <button id="recentToggle" type="button" class="category-toggle" aria-expanded="true" aria-controls="recentContent"><h3 id="recentTitle">Recent</h3><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button id="folderBack" type="button" hidden>← All notes</button>
         </div>
-        <div id="driveSignin" class="drive-signin">
-          <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
-          <div>
-            <p><strong>See your Noteful library here.</strong> NoteComplete only reads Drive; it never uploads, edits or deletes files.</p>
-            <ol>
-              <li>In Noteful, back up or export your notebooks to a Google Drive folder.</li>
-              <li>Choose <strong>Connect Google Drive</strong> and allow read-only access in the Google window.</li>
-              <li>Open that folder below. It reopens automatically next time, and opened notes are kept on this device.</li>
-            </ol>
-            <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
-            <details class="drive-setup">
-              <summary>Connection setup</summary>
-              <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
-              <p id="driveOrigin" class="muted"></p>
-              <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
-              <p class="muted">The app owner must enable the Drive API and register this website’s origin in Google Cloud. Enter the public client ID, never a client secret.</p>
-            </details>
-            <details id="driveLinkSetup" class="drive-setup"><summary>Use a public folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
+        <div id="recentContent" class="category-content">
+          <p id="folderEmpty" class="muted" hidden>This folder is empty. Use ⋯ → Move to folder on a note in Recent.</p>
+          <ul id="recentList" class="note-grid"></ul>
+        </div>
+      </section>
+      <section id="cloudSection" class="home-section" aria-labelledby="cloudTitle">
+        <div class="drive-heading">
+          <button id="cloudToggle" type="button" class="category-toggle" aria-expanded="true" aria-controls="cloudContent"><h3 id="cloudTitle">Cloud</h3><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div id="cloudTabs" class="cloud-tabs" role="tablist" aria-label="Cloud providers">
+            <button id="cloudTabDrive" type="button" class="cloud-tab" role="tab" aria-selected="true" aria-controls="driveSection">
+              <svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.96h5.36c-.46 2.3-2.43 3.94-5.36 3.94a5.99 5.99 0 0 1-6-6 5.99 5.99 0 0 1 6-6c1.47 0 2.8.56 3.82 1.48l2.2-2.2A9.97 9.97 0 0 0 12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9c5.21 0 8.66-3.66 8.66-8.83 0-.71-.07-1.4-.2-2.07h-.11z"/></svg>
+              Google Drive
+            </button>
+            <button id="cloudTabArchive" type="button" class="cloud-tab" role="tab" aria-selected="false" aria-controls="archiveSection">
+              <svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M4 10v9M8 10v9M12 10v9M16 10v9M20 10v9M2 20h20M12 3 3 6h18z"/></svg>
+              Internet Archive
+            </button>
           </div>
         </div>
-        <div id="driveBrowse" hidden>
-          <div class="drive-search"><strong id="drivePath">Find your Noteful folder</strong><label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
+        <div id="cloudContent" class="category-content">
+          <div id="cloudQueueBar" class="cloud-queue-bar" hidden>
+            <div class="cloud-queue-header">
+              <div class="cloud-queue-info">
+                <svg class="cloud-queue-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/></svg>
+                <strong id="cloudQueueStatus">Downloading batch…</strong>
+              </div>
+              <div class="cloud-queue-actions">
+                <button id="cloudQueueToggle" type="button" class="category-toggle cloud-queue-toggle" aria-expanded="false"><span id="cloudQueueCount">Queue (0)</span><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <button id="cloudQueueClear" type="button" class="chip-clear" title="Clear completed and cancel pending">Clear</button>
+              </div>
+            </div>
+            <progress id="cloudQueueProgress" class="drive-progress" max="1" value="0"></progress>
+            <ul id="cloudQueueList" class="cloud-queue-list" hidden></ul>
+          </div>
+          <div id="driveSection" class="cloud-panel" role="tabpanel" aria-labelledby="cloudTabDrive">
+            <div class="drive-heading">
+              <h4 id="driveTitle" class="cloud-panel-title">Google Drive</h4>
+              <div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button><button id="driveDisconnect" type="button" disabled hidden>Disconnect</button></div>
+            </div>
+            <div id="driveSignin" class="drive-signin">
+              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+              <div>
+                <p><strong>See your Noteful library here.</strong> NoteComplete only reads Drive; it never uploads, edits or deletes files.</p>
+                <ol>
+                  <li>In Noteful, back up or export your notebooks to a Google Drive folder.</li>
+                  <li>Choose <strong>Connect Google Drive</strong> and allow read-only access in the Google window.</li>
+                  <li>Open that folder below. It reopens automatically next time, and opened notes are kept on this device.</li>
+                </ol>
+                <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
+                <details class="drive-setup">
+                  <summary>Connection setup</summary>
+                  <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
+                  <p id="driveOrigin" class="muted"></p>
+                  <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
+                  <p class="muted">The app owner must enable the Drive API and register this website’s origin in Google Cloud. Enter the public client ID, never a client secret.</p>
+                </details>
+                <details id="driveLinkSetup" class="drive-setup"><summary>Use a public folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
+              </div>
+            </div>
+            <div id="driveBrowse" hidden>
+              <div class="drive-search">
+                <strong id="drivePath">Find your Noteful folder</strong>
+                <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label>
+                <button id="driveFind" type="button" disabled>Search</button>
+                <div class="cloud-queue-controls">
+                  <button id="driveQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
+                  <button id="driveQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
+                  <button id="driveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                  <button id="driveQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+                </div>
+              </div>
+            </div>
+            <p id="driveStatus" role="status" aria-live="polite"></p>
+            <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+            <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
+            <button id="driveMore" type="button" hidden>Load more</button>
+          </div>
+
+          <div id="archiveSection" class="cloud-panel" role="tabpanel" aria-labelledby="cloudTabArchive" hidden>
+            <div class="drive-heading">
+              <h4 id="archiveTitle" class="cloud-panel-title">Internet Archive</h4>
+              <div class="drive-actions">
+                <button id="archiveBack" type="button" hidden>← Repositories</button>
+                <button id="archiveFolderUp" type="button" hidden>↑ Up</button>
+                <button id="archiveAddBtn" type="button" class="bar-icon" title="Add an Internet Archive repository" aria-label="Add repository">+</button>
+              </div>
+            </div>
+            <div id="archiveRepoView">
+              <p class="muted archive-repo-hint">Select a repository to browse notes and files, or add another archive.org item with +.</p>
+              <ul id="archiveRepoList" class="note-grid" aria-label="Internet Archive repositories"></ul>
+            </div>
+            <div id="archiveFileView" hidden>
+              <div class="drive-search">
+                <strong id="archivePath"></strong>
+                <label class="drive-filter"><span class="sr-only">Filter this repository folder</span><input id="archiveSearch" type="search" placeholder="Filter this folder…" /></label>
+                <div class="cloud-queue-controls">
+                  <button id="archiveQueueMode" type="button" class="chip" title="Select documents to queue for download" hidden>Queue</button>
+                  <button id="archiveQueueDownload" type="button" class="primary chip" title="Download selected documents" hidden>Download (0)</button>
+                  <button id="archiveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                  <button id="archiveQueueAll" type="button" class="chip" title="Queue all documents in this folder for download" hidden>Queue all</button>
+                </div>
+              </div>
+              <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
+              <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+              <ul id="archiveList" class="note-grid" aria-label="Internet Archive files"></ul>
+            </div>
+          </div>
         </div>
-        <p id="driveStatus" role="status" aria-live="polite"></p>
-        <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
-        <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
-        <button id="driveMore" type="button" hidden>Load more</button>
-      </section>
-      <section id="archiveSection" class="home-section" aria-labelledby="archiveTitle">
-        <div class="drive-heading">
-          <h3 id="archiveTitle">Internet Archive</h3>
-          <div class="drive-actions"><button id="archiveBack" type="button" disabled>Back</button></div>
-        </div>
-        <div id="archiveSources" class="archive-sources" role="group" aria-label="Internet Archive sources"></div>
-        <div class="drive-search"><strong id="archivePath"></strong><label class="drive-filter"><span class="sr-only">Internet Archive item link or identifier</span><input id="archiveLink" type="text" autocomplete="off" spellcheck="false" placeholder="Add a source: https://archive.org/details/…" /></label><button id="archiveAdd" type="button">Add</button></div>
-        <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
-        <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
-        <ul id="archiveList" class="archive-list" aria-label="Internet Archive documents"></ul>
       </section>
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
@@ -534,7 +604,7 @@
         </div>
       </div>
       <div class="workspace">
-        <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
+        <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabSelect" type="button">Select</button><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
         <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
           <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
           <!-- The recording list, with Record and Import beside it (recorder.js). -->
@@ -800,7 +870,7 @@
   <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
   <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
   <div class="study-row">
-    <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>2</option><option selected>4</option><option>6</option><option>10</option></select></label>
+    <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>1</option><option>2</option><option selected>4</option><option>6</option><option>8</option><option>10</option><option>15</option><option>20</option></select></label>
     <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>
   </div>
   <p id="studyStatus" class="muted" role="status" aria-live="polite"></p>
@@ -990,6 +1060,18 @@
     <div class="ocr-actions"><button id="migrateFinish" type="button" class="primary">Done</button></div>
   </div>
   <p id="migrateStatus" class="muted" role="status" aria-live="polite"></p>
+</dialog>
+
+<dialog id="archiveAddDialog" class="deck-dialog" aria-labelledby="archiveAddTitle">
+  <h2 id="archiveAddTitle">Add Internet Archive repository</h2>
+  <p class="muted">Paste an archive.org item link (e.g. <code>https://archive.org/details/1GREIUvigo</code>) or its identifier.</p>
+  <label for="archiveAddInput" class="sr-only">Repository URL or ID</label>
+  <input id="archiveAddInput" type="text" autocomplete="off" spellcheck="false" placeholder="https://archive.org/details/…" style="width: 100%; margin: 10px 0 16px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit;" />
+  <div class="ocr-actions">
+    <button id="archiveAddCancel" type="button">Cancel</button>
+    <span class="spacer"></span>
+    <button id="archiveAddSubmit" type="button" class="primary">Add repository</button>
+  </div>
 </dialog>
 
 <dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">

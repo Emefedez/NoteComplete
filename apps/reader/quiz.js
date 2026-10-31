@@ -16,12 +16,18 @@ export const DEFAULT_QUIZ_PROMPT = `You write multiple-choice questions so a stu
 - Do not explain the answers.
 - For every question say where the notes show the answer: the page number and a box around that region of the page image, as fractions of its width and height [x0, y0, x1, y1].`;
 
-export function quizPrompt(instructions, { amount, language, title, unit = 'page' }) {
+export function quizPrompt(instructions, { amount, language, title, unit = 'page', pages = [] }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
+  const count = pages.length || 1;
+  const total = (Number(amount) || 4) * count;
+  const multiInfo = count > 1
+    ? ` This request covers ${count} ${unit}s (${pages.map(p => p + 1).join(', ')}). Write about ${amount} questions per ${unit}, for a TOTAL of about ${total} questions across these ${unit}s. Distribute the questions evenly across all ${count} ${unit}s; do NOT stop at only ${amount} questions.`
+    : ` About ${amount} questions per ${unit}.`;
+  const samplePage = pages[0] !== undefined ? pages[0] + 1 : 3;
   // Text documents come as numbered sections without images: the source is a quote.
   if (unit === 'section')
-    return `${instructions.trim()}\nThe notes are the text document "${title}", split into numbered sections; there are no page images, so ignore any instruction about boxes. About ${amount} questions per section. ${lang} Ask about all of each section's material evenly. For every question give the section number and a short exact quote from that section (up to 25 words, copied as written) that shows the answer.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"quote":"…"}}]}`;
-  return `${instructions.trim()}\nThe notes are "${title}". About ${amount} questions per page. ${lang} Pages are shown with tape lifted so covered parts are readable; ask about all of each page's material evenly, not mainly what is taped or highlighted.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":3,"box":[0.05,0.3,0.95,0.5]}}]}`;
+    return `${instructions.trim()}\nThe notes are the text document "${title}", split into numbered sections; there are no page images, so ignore any instruction about boxes.${multiInfo} ${lang} Ask about all of each section's material evenly. For every question give the section number and a short exact quote from that section (up to 25 words, copied as written) that shows the answer.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":${samplePage},"quote":"…"}}]}`;
+  return `${instructions.trim()}\nThe notes are "${title}".${multiInfo} ${lang} Pages are shown with tape lifted so covered parts are readable; ask about all of each page's material evenly, not mainly what is taped or highlighted.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":${samplePage},"box":[0.05,0.3,0.95,0.5]}}]}`;
 }
 
 const validBox = b => Array.isArray(b) && b.length === 4 && b.every(v => Number.isFinite(v) && v >= 0 && v <= 1) && b[2] - b[0] > 0.02 && b[3] - b[1] > 0.01;
@@ -31,7 +37,11 @@ export function prepareQuestions(value, pages, random = Math.random) {
   return (value?.questions || []).flatMap(q => {
     if (typeof q?.question !== 'string' || !Array.isArray(q.options) || q.options.length < 2 || !Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) return [];
     const order = q.options.map((_, i) => i).sort(() => random() - 0.5);
-    const page = Number.isInteger(q.source?.page) && pages.includes(q.source.page - 1) ? q.source.page : undefined;
+    let page = undefined;
+    if (Number.isInteger(q.source?.page)) {
+      if (pages.includes(q.source.page - 1)) page = q.source.page;
+      else if (q.source.page >= 1 && q.source.page <= pages.length) page = pages[q.source.page - 1] + 1;
+    }
     return [{
       question: q.question.trim(),
       options: order.map(i => String(q.options[i])),

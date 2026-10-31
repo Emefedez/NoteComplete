@@ -13,6 +13,14 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
   renameOpened: (file, name) => ipcRenderer.invoke('files:rename-opened', file, name),
   trashOpened: (file) => ipcRenderer.invoke('files:trash-opened', file),
+  downloadUrl: (url, onProgress) => {
+    const streamId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const listener = (_event, data) => onProgress?.(data.received, data.total);
+    ipcRenderer.on(`download:progress:${streamId}`, listener);
+    return ipcRenderer.invoke('files:download-url', url, streamId).finally(() => {
+      ipcRenderer.removeListener(`download:progress:${streamId}`, listener);
+    });
+  },
 });
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),

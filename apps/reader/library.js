@@ -137,12 +137,16 @@ export class Library {
     } else return null;
     return this.folder;
   }
-  key(file) { return 'drive:' + file.id; }
+  key(file) {
+    if (typeof file === 'string') return file;
+    if (file?.source === 'archive' || file?.archiveId) return `archive:${file.archiveId}:${file.path || file.name}`;
+    return 'drive:' + file.id;
+  }
   entry(file) { return this.store.get('entries', this.key(file)); }
   // The kept copy of a Drive file, or null when it must be downloaded.
   async cached(file) {
     const entry = await this.entry(file);
-    if (entry && entry.modifiedTime === file.modifiedTime && (!file.size || String(entry.size) === String(file.size))) {
+    if (entry && (!file.modifiedTime || entry.modifiedTime === file.modifiedTime) && (!file.size || String(entry.size) === String(file.size))) {
       const blob = await (await this.location()).read(entry.filename);
       if (blob && (!entry.size || blob.size === Number(entry.size))) return new File([blob], file.name, { type: file.mimeType || '' });
     }
@@ -181,9 +185,23 @@ export class Library {
     const previous = await this.entry(file);
     let filename = previous?.filename || safeName(file.name);
     const taken = (await this.store.values('entries')).some(e => e.filename === filename && e.key !== this.key(file));
-    if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${String(file.id).slice(0, 6)})$1`);
+    if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${String(file.id || file.archiveId || 'arc').slice(0, 6)})$1`);
     await folder.write(filename, downloaded);
-    const entry = { key: this.key(file), source: 'drive', driveId: file.id, resourceKey: file.resourceKey, name: file.name, mimeType: file.mimeType, modifiedTime: file.modifiedTime, size: String(downloaded.size), md5: file.md5Checksum || null, parent: file.parents?.[0] || null, filename, openedAt: this.now(), ...(previous?.title ? { title: previous.title } : {}) };
+    const isArchive = file.source === 'archive' || !!file.archiveId;
+    const entry = {
+      key: this.key(file),
+      source: isArchive ? 'archive' : 'drive',
+      name: file.name,
+      mimeType: file.mimeType || (file.name.endsWith('.pdf') ? 'application/pdf' : ''),
+      modifiedTime: file.modifiedTime || null,
+      size: String(downloaded.size),
+      filename,
+      openedAt: this.now(),
+      ...(isArchive
+        ? { archiveId: file.archiveId, path: file.path }
+        : { driveId: file.id, resourceKey: file.resourceKey, md5: file.md5Checksum || null, parent: file.parents?.[0] || null }),
+      ...(previous?.title ? { title: previous.title } : {})
+    };
     await this.store.set('entries', entry.key, entry);
     return entry;
   }

@@ -41,6 +41,10 @@ test('the quiz prompt carries the instructions, language and JSON shape', () => 
   assert.match(p, /note's own language/);
   assert.match(p, /"source":\{"page"/);
   assert.doesNotMatch(p, /explanation/);
+
+  const multi = quizPrompt(DEFAULT_QUIZ_PROMPT, { amount: 4, language: 'Spanish', title: 'Tema 1', pages: [2, 3, 4] });
+  assert.match(multi, /TOTAL of about 12 questions/);
+  assert.match(multi, /3 pages \(3, 4, 5\)/);
 });
 
 test('job progress moves continuously within each batch', () => {

@@ -4,7 +4,7 @@ import { driveThumbnails } from './drive-thumbs.js';
 
 // The Drive section of the home screen. show()/hide() follow the home screen:
 // hiding cancels listings, downloads, previews and a pending sign-in.
-export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {} }) {
+export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {}, queue = null }) {
   const $ = id => document.getElementById(id);
   const previews = thumbs || driveThumbnails(client, { library });
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
@@ -65,7 +65,118 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     catch (error) { if (version === generation && error.name !== 'AbortError') message(error.message); }
     finally { if (version === generation) { loading = false; controls(); } }
   }
-  function resetList() { nextPage = ''; cards.clear(); pending.clear(); $('driveList').replaceChildren(); }
+  let currentFiles = [];
+  let selectingQueue = false;
+  const selectedFiles = new Set();
+  function resetList() {
+    nextPage = '';
+    cards.clear();
+    pending.clear();
+    currentFiles = [];
+    selectedFiles.clear();
+    selectingQueue = false;
+    updateQueueControls();
+    $('driveList').replaceChildren();
+  }
+  function updateQueueControls() {
+    const qMode = $('driveQueueMode');
+    const qDl = $('driveQueueDownload');
+    const qCancel = $('driveQueueCancel');
+    const qAll = $('driveQueueAll');
+    const list = $('driveList');
+    const downloadable = currentFiles.filter(f => f.mimeType !== FOLDER_MIME && supportedDriveFile(f) && f.capabilities?.canDownload !== false);
+
+    if (!queue || !downloadable.length) {
+      if (qMode) qMode.hidden = true;
+      if (qDl) qDl.hidden = true;
+      if (qCancel) qCancel.hidden = true;
+      if (qAll) qAll.hidden = true;
+      list?.classList?.remove?.('queue-selecting');
+      return;
+    }
+
+    if (selectingQueue) {
+      if (qMode) qMode.hidden = true;
+      if (qAll) qAll.hidden = true;
+      if (qDl) {
+        qDl.hidden = false;
+        qDl.textContent = `Download (${selectedFiles.size})`;
+        qDl.disabled = selectedFiles.size === 0;
+      }
+      if (qCancel) qCancel.hidden = false;
+      list?.classList?.add?.('queue-selecting');
+    } else {
+      if (qMode) qMode.hidden = false;
+      if (qAll) {
+        qAll.hidden = false;
+        qAll.textContent = `Queue all (${downloadable.length})`;
+      }
+      if (qDl) qDl.hidden = true;
+      if (qCancel) qCancel.hidden = true;
+      list?.classList?.remove?.('queue-selecting');
+    }
+  }
+
+  const qMode = $('driveQueueMode');
+  if (qMode) {
+    qMode.onclick = () => {
+      selectingQueue = true;
+      selectedFiles.clear();
+      updateQueueControls();
+      for (const card of $('driveList').querySelectorAll('button')) {
+        card.classList?.remove?.('is-selected');
+      }
+    };
+  }
+  const qDl = $('driveQueueDownload');
+  if (qDl) {
+    qDl.onclick = () => {
+      const downloadable = currentFiles.filter(f => f.mimeType !== FOLDER_MIME && supportedDriveFile(f) && f.capabilities?.canDownload !== false);
+      const toEnqueue = downloadable.filter(f => selectedFiles.has(f.id));
+      if (toEnqueue.length) {
+        queue?.enqueue(toEnqueue.map(f => ({
+          source: 'drive',
+          id: `drive:${f.id}`,
+          name: f.name,
+          size: Number(f.size) || 0,
+          doc: f,
+          client
+        })));
+      }
+      selectingQueue = false;
+      selectedFiles.clear();
+      updateQueueControls();
+      for (const card of $('driveList').querySelectorAll('button')) {
+        card.classList?.remove?.('is-selected');
+      }
+    };
+  }
+  const qCancel = $('driveQueueCancel');
+  if (qCancel) {
+    qCancel.onclick = () => {
+      selectingQueue = false;
+      selectedFiles.clear();
+      updateQueueControls();
+      for (const card of $('driveList').querySelectorAll('button')) {
+        card.classList?.remove?.('is-selected');
+      }
+    };
+  }
+  const qAll = $('driveQueueAll');
+  if (qAll) {
+    qAll.onclick = () => {
+      const downloadable = currentFiles.filter(f => f.mimeType !== FOLDER_MIME && supportedDriveFile(f) && f.capabilities?.canDownload !== false);
+      queue?.enqueue(downloadable.map(f => ({
+        source: 'drive',
+        id: `drive:${f.id}`,
+        name: f.name,
+        size: Number(f.size) || 0,
+        doc: f,
+        client
+      })));
+    };
+  }
+
   const megabytes = size => `${(Number(size) / 1048576).toFixed(1)} MB`;
   // Cards whose note has a current copy in the library say so.
   const cards = new Map();
@@ -102,6 +213,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     });
   }
   function addFiles(files) {
+    currentFiles.push(...files);
     const fragment = document.createDocumentFragment();
     for (const file of files) {
       const isFolder = file.mimeType === FOLDER_MIME;
@@ -132,10 +244,80 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         cards.set(entry, file);
         badge(entry, file);
       }
-      button.onclick = () => isFolder ? enter(file) : choose(file);
-      item.append(button); fragment.append(item);
+      if (!isFolder && allowed) {
+        const check = document.createElement('span');
+        check.className = 'note-select-check';
+        check.setAttribute('aria-hidden', 'true');
+        check.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`;
+        button.append(check);
+        if (selectedFiles.has(file.id)) button.classList?.add?.('is-selected');
+      }
+      button.onclick = () => {
+        if (!isFolder && selectingQueue) {
+          if (selectedFiles.has(file.id)) {
+            selectedFiles.delete(file.id);
+            button.classList?.remove?.('is-selected');
+          } else {
+            selectedFiles.add(file.id);
+            button.classList?.add?.('is-selected');
+          }
+          updateQueueControls();
+          return;
+        }
+        return isFolder ? enter(file) : choose(file);
+      };
+      item.append(button);
+
+      if (!isFolder && allowed && queue) {
+        const qBtn = document.createElement('button');
+        qBtn.type = 'button';
+        qBtn.className = 'card-queue-btn';
+        const fileId = `drive:${file.id}`;
+        const updateQBtn = (isDone) => {
+          const st = isDone ? 'done' : queue.statusOf(fileId);
+          if (st === 'done') {
+            qBtn.className = 'card-queue-btn is-done';
+            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
+            qBtn.title = 'Downloaded to library';
+          } else if (st === 'downloading' || st === 'queued') {
+            qBtn.className = 'card-queue-btn is-queued';
+            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`;
+            qBtn.title = 'Queued for download (click to remove)';
+          } else {
+            qBtn.className = 'card-queue-btn';
+            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14"/></svg>`;
+            qBtn.title = 'Queue for download';
+          }
+        };
+        updateQBtn(false);
+        library?.cached(file).then(hit => { if (hit) updateQBtn(true); }).catch(() => {});
+        qBtn.onclick = (e) => {
+          e.stopPropagation();
+          const st = queue.statusOf(fileId);
+          if (st === 'queued' || st === 'downloading') {
+            queue.cancel(fileId);
+            updateQBtn(false);
+          } else {
+            queue.enqueue({
+              source: 'drive',
+              id: fileId,
+              name: file.name,
+              size: Number(file.size) || 0,
+              doc: file,
+              client
+            });
+            updateQBtn(false);
+          }
+        };
+        item.append(qBtn);
+      }
+
+      fragment.append(item);
     }
     $('driveList').append(fragment);
+
+    updateQueueControls();
+
     onCards();
   }
   async function fetchList(signal, valid, append = false) {
@@ -326,5 +508,20 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     if (parent && !entry.parent) { entry.parent = parent; await library?.store.set('entries', entry.key, entry).catch(() => {}); }
     return (await client.sameName(entry.name, parent)).filter(f => supportedDriveFile(f));
   }
-  return { show, hide, update, trash, setQuick, newest, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
+  function onQueueItemDone(item) {
+    if (item.source !== 'drive') return;
+    for (const [entry, file] of cards) {
+      if (file.id === item.doc?.id || `drive:${file.id}` === item.id) {
+        badge(entry, file);
+        const li = entry.closest('li');
+        const qBtn = li?.querySelector('.card-queue-btn');
+        if (qBtn) {
+          qBtn.className = 'card-queue-btn is-done';
+          qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
+          qBtn.title = 'Downloaded to library';
+        }
+      }
+    }
+  }
+  return { show, hide, update, trash, setQuick, newest, onQueueItemDone, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
 }

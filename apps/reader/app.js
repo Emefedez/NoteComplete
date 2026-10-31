@@ -14,6 +14,7 @@ import { driveBrowser } from "./drive-browser.js";
 import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
+import { createDownloadQueue } from "./download-queue.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
@@ -1538,11 +1539,18 @@ for (const button of document.querySelectorAll("[data-tool]"))
       setCompact(false);
       return;
     }
+    const prevGrab = grabbed;
     tool = button.dataset.tool;
     endResizeDrag();
     optionsOpen = toolSettingsAuto;
     if (tool !== "select") selection.clear();
-    if (tool !== "grab") clearGrab();
+    if (tool !== "grab") {
+      if (tool === "select" && prevGrab) {
+        selectGrab(prevGrab);
+      } else {
+        clearGrab();
+      }
+    }
     chromeState.reset($("viewport").scrollTop);
     setCompact(false);
     for (const p of panels) p.el.dataset.tool = tool;
@@ -2335,8 +2343,111 @@ window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.p
 // The open note's file on disk (desktop), so AI tools can read other pages via MCP,
 // and its Recent entry, so removing it can first upload unsaved changes to Drive.
 let notePath = "", noteEntryKey = "";
+
+const mb = (size) => `${(Number(size) / 1048576).toFixed(1)} MB`;
+
+function queueStatusIcon(status) {
+  if (status === "done") {
+    return `<svg class="queue-status-svg is-done" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
+  }
+  if (status === "downloading") {
+    return `<svg class="queue-status-svg is-downloading" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14"/></svg>`;
+  }
+  if (status === "error") {
+    return `<svg class="queue-status-svg is-error" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`;
+  }
+  return `<svg class="queue-status-svg is-queued" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" stroke-dasharray="2 3"/><path d="M12 7v5l3 3"/></svg>`;
+}
+
+function renderQueueList(stats, listEl) {
+  listEl.replaceChildren(
+    ...stats.items.map((item) => {
+      const li = document.createElement("li");
+      li.className = "cloud-queue-item";
+      const info = document.createElement("span");
+      info.className = "cloud-queue-item-info";
+      info.innerHTML = `${queueStatusIcon(item.status)}<span>${item.name}${item.size ? ` (${mb(item.size)})` : ""}</span>`;
+      if (item.error) info.title = item.error;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "item-remove";
+      remove.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+      remove.title = "Remove from queue";
+      remove.setAttribute("aria-label", `Remove ${item.name}`);
+      remove.onclick = () => downloadQueue.cancel(item.id);
+      li.append(info, remove);
+      return li;
+    })
+  );
+}
+
+const downloadQueue = createDownloadQueue({
+  library,
+  onItemDone: (item) => {
+    drive?.onQueueItemDone?.(item);
+    archive?.onQueueItemDone?.(item);
+  },
+  onUpdate: (stats) => {
+    const bar = $("cloudQueueBar");
+    if (!bar) return;
+    if (stats.total === 0) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    const countEl = $("cloudQueueCount");
+    if (countEl) countEl.textContent = `Queue (${stats.completed}/${stats.total})`;
+    const progEl = $("cloudQueueProgress");
+    if (progEl) progEl.value = stats.overallProgress;
+
+    const iconEl = bar.querySelector(".cloud-queue-icon");
+    if (iconEl) {
+      if (stats.completed === stats.total && stats.total > 0 && !stats.isBusy) {
+        iconEl.innerHTML = `<path d="M5 13l4 4L19 7"/>`;
+      } else {
+        iconEl.innerHTML = `<path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/>`;
+      }
+    }
+
+    const statusEl = $("cloudQueueStatus");
+    if (statusEl) {
+      if (stats.activeItem) {
+        const pct = stats.activeItem.progress ? ` (${Math.round(stats.activeItem.progress * 100)}%)` : "";
+        statusEl.textContent = `Downloading ${stats.completed + 1} of ${stats.total}: ${stats.activeItem.name}${pct}`;
+      } else if (stats.pending > 0) {
+        statusEl.textContent = `${stats.pending} item${stats.pending === 1 ? "" : "s"} waiting in queue…`;
+      } else {
+        statusEl.textContent = `Batch download complete (${stats.completed} files saved to library)`;
+      }
+    }
+
+    const listEl = $("cloudQueueList");
+    if (listEl && !listEl.hidden) {
+      renderQueueList(stats, listEl);
+    }
+  },
+});
+
+const toggleBtn = $("cloudQueueToggle");
+if (toggleBtn) {
+  toggleBtn.onclick = () => {
+    const listEl = $("cloudQueueList");
+    if (!listEl) return;
+    const willOpen = listEl.hidden;
+    listEl.hidden = !willOpen;
+    toggleBtn.setAttribute("aria-expanded", String(willOpen));
+    if (willOpen) renderQueueList(downloadQueue.stats(), listEl);
+  };
+}
+
+const clearBtn = $("cloudQueueClear");
+if (clearBtn) {
+  clearBtn.onclick = () => downloadQueue.clear();
+}
+
 const drive = driveBrowser({
   library,
+  queue: downloadQueue,
   onCards: () => home?.applyFilters(),
   open: async (file, driveFile) => {
     const opened = await openChosen(file);
@@ -2538,6 +2649,8 @@ $("linkAdd").onclick = async () => {
 htmlDarkApply();
 // Internet Archive items as a notes source: documents open from the download, with no Recent entry.
 const archive = archiveBrowser({
+  library,
+  queue: downloadQueue,
   open: async (file) => {
     const opened = await openChosen(file);
     if (opened) { notePath = ""; noteEntryKey = ""; }
@@ -2803,6 +2916,111 @@ async function grabImage() {
   canvas.width = canvas.height = 0;
   return crop.toDataURL("image/jpeg", 0.88);
 }
+async function findItemsInGrab(p, rect) {
+  if (!p?.render) return [];
+  const [gx, gy, gw, gh] = rect;
+  const elements = p.render.querySelectorAll("[data-item]");
+  const matches = [];
+  for (const el of elements) {
+    const id = el.getAttribute("data-item");
+    if (!id) continue;
+    let box = null;
+    try {
+      box = el.getBBox();
+    } catch {}
+    if (!box || (box.width === 0 && box.height === 0)) {
+      if (p.el && el.getBoundingClientRect) {
+        try {
+          const pr = p.el.getBoundingClientRect();
+          const er = el.getBoundingClientRect();
+          if (pr.width > 0 && pr.height > 0) {
+            const sx = p.size[0] / pr.width;
+            const sy = p.size[1] / pr.height;
+            box = { x: (er.left - pr.left) * sx, y: (er.top - pr.top) * sy, width: er.width * sx, height: er.height * sy };
+          }
+        } catch {}
+      }
+    }
+    if (!box) continue;
+    const overlapX = Math.max(0, Math.min(gx + gw, box.x + box.width) - Math.max(gx, box.x));
+    const overlapY = Math.max(0, Math.min(gy + gh, box.y + box.height) - Math.max(gy, box.y));
+    if (overlapX > 0 && overlapY > 0) {
+      try {
+        const info = await call("selection", { page: p.index, itemId: id });
+        if (info) matches.push({ ...info, el, bbox: box });
+      } catch {}
+    }
+  }
+  return matches;
+}
+async function selectGrab(targetGrab = grabbed) {
+  if (!targetGrab) return;
+  const currentGrab = targetGrab;
+  clearGrab();
+
+  const p = panels[currentGrab.page];
+  const [gx, gy, gw, gh] = currentGrab.rect;
+
+  if (tool !== "select") {
+    const selectButton = document.querySelector('#toolbar [data-tool="select"]');
+    selectButton?.click();
+  }
+
+  const members = await findItemsInGrab(p, currentGrab.rect);
+  if (members.length > 0) {
+    if (members.length === 1) {
+      await selection.selectId(currentGrab.page, members[0].id);
+      status("Selected element. Drag to move, or drag handles to resize.");
+    } else {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const m of members) {
+        const b = m.bbox || m.bounds;
+        if (b) {
+          minX = Math.min(minX, b.x ?? b[0]);
+          minY = Math.min(minY, b.y ?? b[1]);
+          maxX = Math.max(maxX, (b.x ?? b[0]) + (b.width ?? b[2]));
+          maxY = Math.max(maxY, (b.y ?? b[1]) + (b.height ?? b[3]));
+        }
+      }
+      const bounds = isFinite(minX) ? [minX, minY, maxX - minX, maxY - minY] : currentGrab.rect;
+      selection.selectGroup(currentGrab.page, members, bounds);
+      status(`Selected ${members.length} elements as a group. Drag to move or resize.`);
+    }
+    return;
+  }
+
+  try {
+    status("Converting grab to editable selection…");
+    const { canvas, scale } = await pageCanvas(currentGrab.page, 2200, { liftTape: true });
+    const crop = document.createElement("canvas");
+    crop.width = Math.max(1, Math.round(gw * scale));
+    crop.height = Math.max(1, Math.round(gh * scale));
+    crop.getContext("2d").drawImage(canvas, gx * scale, gy * scale, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    canvas.width = canvas.height = 0;
+    const dataUrl = crop.toDataURL("image/png");
+    const base64 = dataUrl.split(",")[1];
+
+    const image = {
+      base64,
+      mime: "image/png",
+      bounds: [gx, gy, gw, gh],
+      layer: activeLayer,
+    };
+    const result = await call("image", { page: currentGrab.page, image });
+    dirty = changed = true;
+    revision++;
+    doc = result;
+    updateTools(result);
+    savedState();
+    await renderPage(p, result);
+
+    await selection.selectId(currentGrab.page, `image:${doc.edit_count - 1}`);
+    status("Grab selected. Drag to move, or drag handles to resize.");
+  } catch (err) {
+    status("Could not select grab: " + err.message, true);
+  }
+}
+$("grabSelect").onclick = () => selectGrab();
 $("grabCopy").onclick = async () => {
   if (!grabbed) return;
   const text = await find.wordsIn(grabbed.page, grabbed.rect);

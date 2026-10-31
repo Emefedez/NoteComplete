@@ -205,6 +205,13 @@ app.whenReady().then(async () => {
     && (permission === 'clipboard-sanitized-write' || (permission === 'media' && media.length > 0 && media.every(type => type === 'audio')));
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.(), details?.mediaTypes || [])));
   session.defaultSession.setPermissionCheckHandler((_contents, permission, origin, details) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`, details?.mediaType ? [details.mediaType] : []));
+  session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*.archive.org/*', '*://archive.org/*'] }, (details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    responseHeaders['access-control-allow-origin'] = ['*'];
+    responseHeaders['access-control-allow-headers'] = ['*'];
+    responseHeaders['cross-origin-resource-policy'] = ['cross-origin'];
+    callback({ responseHeaders });
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate()));
   // Web pages may sign in (pop-ups in their own sandboxed windows) and copy text; nothing else.
   const web = session.fromPartition(WEB_SESSION);
@@ -267,6 +274,28 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
+  ipcMain.handle('files:download-url', guarded(async (event, url, streamId) => {
+    const res = await net.fetch(url);
+    if (!res.ok) throw Error(`Download answered ${res.status}`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (streamId) event.sender.send(`download:progress:${streamId}`, { received, total });
+    }
+    const combined = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return combined;
+  }));
   ipcMain.handle('files:pick', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, HTML pages, text, PDFs and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];
