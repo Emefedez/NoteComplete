@@ -109,7 +109,11 @@ test('search filters inside a folder and a cleared box lists the top level', asy
   ui.node('driveFind').onclick();await tick();
   assert.equal(filters.at(-1),'Examen');
   assert.deepEqual(ui.calls,['search','children','children']);
+  // Back first undoes the filter, then leaves the folder for the search it came from.
   ui.node('driveBack').onclick();await tick();
+  assert.deepEqual([ui.calls.at(-1), filters.at(-1), ui.node('driveSearch').value],['children','','']);
+  ui.node('driveBack').onclick();await tick();
+  assert.equal(ui.calls.at(-1),'search');
   ui.node('driveSearch').value='';
   ui.node('driveFind').onclick();await tick();
   assert.equal(ui.calls.at(-1),'roots');
@@ -151,4 +155,34 @@ test('the last folder reopens after connecting', async t => {
   ui.drive.hide(); ui.client.clear();
   await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick(); await tick();
   assert.deepEqual(ui.calls.slice(-2), ['open-folder:folder', 'children']);
+});
+test('Back after filtering a reopened folder returns to that folder, not a Drive-wide search', async t => {
+  const saved = new Map([['notecomplete-drive-folder-v1', JSON.stringify([{ id: 'folder', name: 'Noteful' }])]]);
+  const filters = [];
+  const ui = setup(t, { filters });
+  globalThis.localStorage = { getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v) };
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick(); await tick();
+  assert.deepEqual(ui.calls, ['open-folder:folder', 'children']);
+  ui.node('driveSearch').value = 'Tema';
+  ui.node('driveFind').onclick(); await tick();
+  assert.equal(filters.at(-1), 'Tema');
+  assert.equal(ui.node('driveBack').disabled, false);
+  ui.node('driveBack').onclick(); await tick();
+  assert.deepEqual([ui.calls.at(-1), filters.at(-1), ui.node('driveSearch').value], ['children', '', '']);
+  assert.ok(!ui.calls.includes('search'));
+});
+test('a cover cancelled by leaving Home is asked for again when Home returns', async t => {
+  const answers = [null, 'data:cover'], asked = [];
+  const thumbs = { get: f => { asked.push(f.id); return Promise.resolve(answers.length ? answers.shift() : ''); }, facts: async () => ({ audio: { count: 0 }, tags: [] }), cancel() {} };
+  const ui = setup(t, { thumbs });
+  await ui.drive.show(); ui.node('driveConnect').onclick(); ui.authorize(); await tick();
+  ui.node('driveList').querySelectorAll('button')[0].onclick(); await tick(); await tick();
+  const card = ui.node('driveList').children[0].children[0], img = card.children[0];
+  assert.deepEqual(asked, ['file']);
+  assert.ok(!img.src);
+  ui.drive.hide(); await ui.drive.show(); await tick();
+  assert.deepEqual(asked, ['file', 'file']);
+  assert.equal(img.src, 'data:cover');
+  ui.drive.hide(); await ui.drive.show(); await tick();
+  assert.equal(asked.length, 2);
 });

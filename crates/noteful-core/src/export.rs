@@ -32,6 +32,16 @@ fn set(fs: &mut Vec<Field>, tag: u16, ty: u16, value: V, clock: u64) {
         fs.push(item);
     }
 }
+pub(crate) fn crop_outline([x0, y0, x1, y1]: [f64; 4]) -> V {
+    V::Fields(vec![
+        f(
+            1,
+            0x420,
+            V::Array([x0, y0, x1, y0, x1, y1, x0, y1].map(V::Float).to_vec()),
+        ),
+        f(2, 0x414, V::Array([0, 1, 1, 1, 4].map(V::UInt).to_vec())),
+    ])
+}
 fn nested(fs: &mut [Field], tag: u16) -> Result<&mut Vec<Field>> {
     match fs.iter_mut().find(|f| f.tag == tag).map(|f| &mut f.value) {
         Some(V::Fields(v)) => Ok(v),
@@ -204,6 +214,28 @@ fn edit_object(
         .map(|n| V::Float(n.as_f64().unwrap()))
         .collect();
     set(nested(fs, 2)?, 1, 0x403, V::Array(values), time);
+    // Lock in place is payload tag 21 (u8 with clock) on images. Other kinds use
+    // tag 21 for other values, so their lock stays in the project only.
+    if let Some(locked) = a.locked {
+        let payload = nested(fs, 6)?;
+        let lockable = match field(payload, 21) {
+            Some(_) => payload.iter().any(|f| f.tag == 21 && f.wire_type == 0x801),
+            None => crate::manipulation::item_geometry(item).kind == "image",
+        };
+        if lockable {
+            set(payload, 21, 0x801, V::UInt(u64::from(locked)), time);
+        }
+    }
+    // A crop is Noteful's outline (payload tag 12) in the image's native size.
+    if let Some([x0, y0, x1, y1]) = a.crop {
+        set(
+            nested(fs, 6)?,
+            12,
+            0x807,
+            crop_outline([x0, y0, x1, y1]),
+            time,
+        );
+    }
     if crate::manipulation::item_geometry(item).styled {
         let st = nested(nested(fs, 6)?, 7)?;
         set(
@@ -229,6 +261,75 @@ fn edit_object(
     Ok(())
 }
 impl Editor {
+    /// Add records for inserted pages to the page collection (d:/2). Their tag-5
+    /// order keys fall between the display neighbours' keys, so native sorting by
+    /// that string reproduces the display order without touching existing pages.
+    fn insert_page_records(
+        &self,
+        collection: &mut [Field],
+        order: &[usize],
+        page_assets: &HashMap<String, String>,
+        time: u64,
+    ) -> Result<()> {
+        let originals = self.scene.pages.len();
+        let key_of = |records: &[V], id: &str| {
+            records
+                .iter()
+                .filter_map(V::as_fields)
+                .find(|fs| field(fs, 1).and_then(V::as_text) == Some(id))
+                .and_then(|fs| field(fs, 5).and_then(V::as_text))
+                .unwrap_or("")
+                .to_owned()
+        };
+        let records = array(collection, 0)?.clone();
+        let mut previous = String::new();
+        let mut added = Vec::new();
+        for (i, &slot) in order.iter().enumerate() {
+            let page = self.page(slot)?;
+            if slot < originals {
+                previous = key_of(&records, &page.id);
+                continue;
+            }
+            let next = order[i + 1..]
+                .iter()
+                .find(|&&s| s < originals)
+                .map(|&s| self.page(s).map(|p| key_of(&records, &p.id)))
+                .transpose()?;
+            let key = crate::pages::order_between(&previous, next.as_deref())
+                .ok_or_else(|| Error::new(0, "No order key between neighbouring pages"))?;
+            let mut spec = self
+                .inserted_spec(slot)
+                .ok_or_else(|| Error::new(0, "Inserted page missing"))?
+                .clone();
+            // A resized inserted page is written at its final size and placement.
+            let (size, background) = self.page_geometry(slot)?;
+            spec.size = size;
+            if let (Some(p), Some(b)) = (spec.pdf.as_mut(), background) {
+                if b.rect != [0., 0., size[0], size[1]] || p.rect.is_some() {
+                    p.rect = Some(b.rect);
+                }
+            }
+            let spec = &spec;
+            let set = page_assets.get(&page.id).cloned().unwrap_or_default();
+            added.push((
+                page.id.clone(),
+                V::Fields(vec![
+                    f(1, 5, V::Text(page.id.clone())),
+                    f(2, 7, V::Fields(vec![f(0, 5, V::Text(set))])),
+                    f(4, 7, V::Fields(Self::inserted_background(spec))),
+                    f(5, 5, V::Text(key.clone())),
+                ]),
+            ));
+            previous = key;
+        }
+        for (id, record) in added {
+            array(collection, 0)?.push(record);
+            array(collection, 1)?.push(V::Text(id));
+            array(collection, 2)?.push(V::UInt(time));
+            array(collection, 3)?.push(V::UInt(1));
+        }
+        Ok(())
+    }
     /// Flatten the applied history into a native container. Redo entries stay unapplied.
     pub fn export_noteful(&self) -> Result<Vec<u8>> {
         if self.cursor == 0 {
@@ -281,7 +382,10 @@ impl Editor {
             .collect();
         let mut next_id = 1u64;
         let mut page_assets = HashMap::new();
-        for (page_no, page) in self.scene.pages.iter().enumerate() {
+        let order = self.page_order();
+        let originals = self.scene.pages.len();
+        for &page_no in &order {
+            let page = self.page(page_no)?;
             let deleted = self.deleted(page_no);
             let adjustments = self.adjustments(page_no);
             let added: Vec<_> = self
@@ -381,10 +485,14 @@ impl Editor {
                         &resource,
                         z,
                         adjustments.get(id.as_str()).copied(),
+                        time,
                     )),
                 ));
-                array(&mut index, 3)?.push(V::Text(resource.clone()));
-                blocks.push((resource, image.bytes()?));
+                // Text boxes are self-contained objects; pictures add a resource.
+                if image.text.is_none() {
+                    array(&mut index, 3)?.push(V::Text(resource.clone()));
+                    blocks.push((resource, image.bytes()?));
+                }
             }
             for (_, line) in added {
                 while ids.contains(&next_id) {
@@ -396,6 +504,21 @@ impl Editor {
                 z = z
                     .checked_add(1)
                     .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                // Noteful draws highlighter ends round: pull a square band's ends
+                // in by half its width so it stays inside its rectangle.
+                let line = if line.square && line.tool == 1 && line.points.len() == 2 {
+                    let mut l = line.clone();
+                    let [a, b] = [l.points[0], l.points[1]];
+                    let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+                    let t = (l.width / 2. / len.max(1e-9)).min(0.5);
+                    l.points = vec![
+                        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+                        [b[0] - (b[0] - a[0]) * t, b[1] - (b[1] - a[1]) * t],
+                    ];
+                    l
+                } else {
+                    line
+                };
                 new_stroke(&mut ink, &line, next_id, time, z);
             }
             set(
@@ -485,7 +608,28 @@ impl Editor {
         let layers_changed = self.history[..self.cursor]
             .iter()
             .any(|e| matches!(e, Edit::Layer { .. }));
-        if !page_assets.is_empty() || layers_changed {
+        let pages_inserted = order.iter().any(|&s| s >= originals);
+        let resized: Vec<usize> = order
+            .iter()
+            .copied()
+            .filter(|&s| {
+                s < originals
+                    && self.history[..self.cursor]
+                        .iter()
+                        .any(|e| matches!(e, Edit::ResizePage { page, .. } if *page == s))
+            })
+            .collect();
+        // PDFs added with inserted pages become ordinary resources.
+        for edit in &self.history[..self.cursor] {
+            if let Edit::InsertPages { pdf: Some(pdf), .. } = edit {
+                let bytes = self
+                    .added_pdf(&pdf.id)
+                    .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
+                array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
+                blocks.push((pdf.id.clone(), bytes.to_vec()));
+            }
+        }
+        if !page_assets.is_empty() || layers_changed || pages_inserted || !resized.is_empty() {
             for b in package
                 .blocks
                 .iter()
@@ -503,6 +647,26 @@ impl Editor {
                             }
                         }
                     }
+                }
+                // Resized pages: background tag 1 is the page size and tag 9 the
+                // PDF's rectangle, written so the PDF keeps its place and scale.
+                for &slot in &resized {
+                    let id = self.page(slot)?.id.clone();
+                    let (size, background) = self.page_geometry(slot)?;
+                    for v in array(nested(&mut fields, 2)?, 0)? {
+                        if let V::Fields(fs) = v {
+                            if field(fs, 1).and_then(V::as_text) == Some(id.as_str()) {
+                                let bg = nested(fs, 4)?;
+                                set(bg, 1, 0x21, V::Pair(size), time);
+                                if let Some(b) = &background {
+                                    set(bg, 9, 0x23, V::Rect(b.rect), time);
+                                }
+                            }
+                        }
+                    }
+                }
+                if pages_inserted {
+                    self.insert_page_records(nested(&mut fields, 2)?, &order, &page_assets, time)?;
                 }
                 if layers_changed {
                     let collection = nested(&mut fields, 3)?;

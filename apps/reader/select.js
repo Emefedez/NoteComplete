@@ -3,7 +3,8 @@ const controls = new Map();
 let active = null;
 export function refreshSelects() { for (const control of controls.values()) control.sync(); }
 export function enhanceSelects() {
-  for (const select of document.querySelectorAll('select')) {
+  // Dialog selects (data-native) and multi-selects stay native controls.
+  for (const select of document.querySelectorAll('select:not([multiple]):not([data-native])')) {
     if (controls.has(select)) continue;
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'select-trigger';

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       reader_url:
-        description: 'HTTPS URL of the hosted reader (defaults to repository variable READER_URL)'
+        description: 'Optional HTTPS URL of a hosted reader; leave empty to bundle the reader in the APK'
         type: string
         required: false
   workflow_call:
@@ -34,12 +34,25 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
-      - name: Validate hosted reader configuration
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build bundled reader
+        working-directory: .
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.128 --locked --root work/wasm-tools
+          python tools/build_web.py
+          node --test apps/reader/*.test.mjs
+          node apps/reader/test.mjs
+          node apps/desktop/stage.mjs
+      - name: Validate optional hosted reader
+        if: env.EXPO_PUBLIC_READER_URL != ''
         run: |
           node --input-type=module -e '
-            const raw = process.env.EXPO_PUBLIC_READER_URL;
-            if (!raw) throw Error("Set READER_URL in repository variables or provide reader_url when running this workflow.");
-            const url = new URL(raw);
+            const url = new URL(process.env.EXPO_PUBLIC_READER_URL);
             if (url.protocol !== "https:" || url.username || url.password || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) throw Error("Use a reachable HTTPS reader URL without credentials.");
           '
       - uses: actions/setup-java@v4
@@ -61,7 +74,7 @@ jobs:
       - name: Explain artifact
         run: |
           echo '### Android APK' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Release-mode preview, signed with the Expo template debug key. Includes the React Native bundle; no Metro required. The hosted reader URL must remain reachable. Not a Play Store release.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Release-mode preview, signed with the Expo template debug key. Includes the React Native bundle and the reader/WASM assets, served on loopback; no Metro or hosted reader required unless reader_url was set. Not a Play Store release.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: NoteComplete-android-preview

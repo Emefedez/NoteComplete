@@ -44,6 +44,36 @@ export function rasterTarget(original, cssWidth, pixelRatio = globalThis.deviceP
   };
 }
 
+const multiply = (m, n) => [
+  m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
+];
+// Words of a pdf.js text layer with boxes in page units. Each item is mapped
+// through the viewport (rotation included), split at spaces with widths shared
+// by character count, then placed through the page's PDF rect.
+export function textWords(items, viewport, place) {
+  const out = [];
+  const sx = place.width / viewport.width, sy = place.height / viewport.height;
+  for (const item of items) {
+    if (!item.str?.trim() || !item.transform) continue;
+    const t = multiply(viewport.transform, item.transform);
+    const length = Math.hypot(t[0], t[1]) || 1, width = (item.width || 0) * viewport.scale;
+    const dir = [t[0] / length, t[1] / length], up = [t[2], t[3]];
+    for (const match of item.str.matchAll(/\S+/g)) {
+      const a = width * match.index / item.str.length, b = width * (match.index + match[0].length) / item.str.length;
+      const corners = [a, b].flatMap(d => {
+        const base = [t[4] + dir[0] * d, t[5] + dir[1] * d];
+        return [base, [base[0] + up[0], base[1] + up[1]]];
+      });
+      const xs = corners.map(c => c[0]), ys = corners.map(c => c[1]);
+      const x0 = Math.min(...xs), y0 = Math.min(...ys);
+      out.push({ text: match[0], box: [place.x + x0 * sx, place.y + y0 * sy, (Math.max(...xs) - x0) * sx, (Math.max(...ys) - y0) * sy] });
+    }
+  }
+  return out;
+}
+
 // Where the PDF page sits on its Noteful page. Widened pages keep the PDF at
 // native scale in `rect`; older cores without it fill the whole page.
 export function backgroundPlacement(background, size) {
@@ -100,6 +130,16 @@ export class PdfBackgrounds {
       canvas.width = canvas.height = 0;
       page.cleanup();
     }
+  }
+  // The PDF page's own text, for search; pages without a text layer return [].
+  async words(background, size) {
+    const doc = await this.document(background.resource_id);
+    const page = await doc.getPage(background.page_index + 1);
+    try {
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      return textWords(content.items, viewport, backgroundPlacement(background, size));
+    } finally { page.cleanup(); }
   }
   close() {
     this.closed = true;

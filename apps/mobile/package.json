@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-expo",
-  "version": "1.0.0",
+  "version": "1.0.15",
   "main": "index.js",
   "scripts": {
     "start": "node ../../tools/start_expo.mjs",
@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@react-native-google-signin/google-signin": "16.1.5",
-    "expo": "~57.0.24",
-    "expo-constants": "~57.0.19",
+    "expo": "~57.0.31",
+    "expo-constants": "~57.0.22",
     "expo-file-system": "~57.0.7",
-    "expo-sharing": "~57.0.21",
+    "expo-sharing": "~57.0.24",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",

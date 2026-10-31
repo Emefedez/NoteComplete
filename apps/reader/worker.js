@@ -1,4 +1,4 @@
-import init, { EditorSession } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -11,7 +11,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       const bytes = new Uint8Array(args.bytes);
       let candidate;
       try {
-        candidate = args.sizes
+        candidate = args.notecomplete
+          ? EditorSession.open_notecomplete(bytes)
+          : args.sizes
           ? EditorSession.create_document(
               args.title,
               JSON.stringify(args.sizes),
@@ -24,6 +26,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
             : new EditorSession(bytes);
         if (args.image) candidate.add_image(0, JSON.stringify(args.image));
         const result = JSON.parse(candidate.view(0));
+        // Recordings added in NoteComplete travel inside .notecomp files.
+        if (args.notecomplete)
+          result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
         session?.free();
         session = candidate;
         candidate = undefined;
@@ -32,6 +37,22 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       } finally {
         candidate?.free();
       }
+    } else if (op === "markdownHtml") {
+      postMessage({ id, result: markdown_html(args.text) });
+      return;
+    } else if (op === "close") {
+      // The document was closed in the reader: release its archive and scene now.
+      session?.free();
+      session = undefined;
+      postMessage({ id, result: true });
+      return;
+    } else if (op === "md5") {
+      postMessage({ id, result: md5_hex(new Uint8Array(args.bytes)) });
+      return;
+    } else if (op === "jpegPagesPdf") {
+      const result = jpeg_pages_pdf(args.data, args.layout, args.title);
+      postMessage({ id, result }, [result.buffer]);
+      return;
     } else if (!session) {
       throw Error("Open a document first.");
     }
@@ -44,11 +65,31 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       });
       return;
     }
+    // Markdown notes: kept in the session (saved with projects and .notecomplete).
+    if (op === "getMarkdown" || op === "setMarkdown" || op === "exportMarkdown") {
+      if (op === "setMarkdown") session.set_markdown(args.text);
+      const text = session.markdown();
+      postMessage({ id, result: op === "exportMarkdown" ? markdown_export(text, args.title || "") : text });
+      return;
+    }
+    if (op === "exportNotecomplete") {
+      const bytes = session.export_notecomplete(new Uint8Array(args.audioData || []), args.audioLayout || "");
+      postMessage({ id, result: bytes }, [bytes.buffer]);
+      return;
+    }
+    if (op === "pickLock") {
+      postMessage({ id, result: JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)) });
+      return;
+    }
     if (op === "selection") {
       postMessage({
         id,
         result: JSON.parse(session.selection(page, args.itemId)),
       });
+      return;
+    }
+    if (op === "crop") {
+      postMessage({ id, result: JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))) });
       return;
     }
     if (op === "adjust") {
@@ -65,6 +106,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       return;
     }
     if (op === "remove") session.remove_item(page, args.itemId);
+    if (op === "lock") session.set_locked(page, args.itemId, args.locked);
+    if (op === "resizePage") session.resize_page(page, args.size[0], args.size[1], args.pdfRect ? JSON.stringify(args.pdfRect) : undefined);
+    if (op === "editText") session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height);
     if (op === "export") {
       const bytes = session.export_noteful();
       postMessage({ id, result: bytes }, [bytes.buffer]);
@@ -77,6 +121,8 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (op === "image") session.add_image(page, JSON.stringify(args.image));
     if (op === "erase")
       session.erase(page, JSON.stringify(args.points), args.radius);
+    if (op === "insertPages")
+      session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
     if (op === "undo") session.undo();
     if (op === "redo") session.redo();
     if (op === "audio" || op === "pdf") {

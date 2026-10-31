@@ -6,6 +6,69 @@ Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, 
 
 The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
 
+Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) is a night view: white paper turns black and dark ink light, colours keep their hue (red ink stays red), also in the page previews and while drawing. It only changes the display. The three buttons beside the zoom place the pages on the left, in the middle or on the right when they are narrower than the window; the button next to them leaves the pages wherever you scroll them. **Ctrl+F** opens Find and closes it again. Choosing a tool opens its settings under it; press the tool again to hide or show them. **View → Auto-open tool settings** turns the automatic opening off; the arrow at the end of the toolbar hides or shows the settings too. The floppy disk beside the note title shows whether the project is saved: a dot means unsaved changes, and clicking it saves (**Ctrl S**).
+
+## Study with your AI tool
+
+Study and Ask AI use an AI tool already installed and signed in on your computer (Claude Code, Antigravity or Codex) and run in the desktop app. Pages are sent as images with tape lifted, together with their typed, PDF, recognized and transcript text.
+
+- **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
+- **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.
+- **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
+
+## Tape and locked items
+
+Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, tap a tape to lift it and tap again to cover; **View → Lift all tape / Cover with all tape / Tape as saved** applies to the whole note. Tape state is a viewing choice and is not saved. Items locked in place in Noteful cannot be selected, moved or erased. Zoom with <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd>, and <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the page; this works on any keyboard layout.
+
+## Insert pages
+
+**Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
+
+## Audio
+
+The headphones button next to Layers (**A**) opens the recordings in a side panel that resizes from its left edge, bottom edge or corner: play/pause (**K**), back and forward 10 s (**J**, **L**), seek, go to the page where the recording starts (**Shift+A**), dim ink not yet written at this point (**I**, off by default), and download the recording. The transcript follows the audio, and **Edit** lets you correct words while keeping their timing. Corrections are used by Find and the AI.
+
+**Transcribe** offers the engines found on this computer:
+- **Whisper on this device** (choose the model and language). Runs in the reader; the model downloads once.
+- **Voxtype** (desktop app, when `voxtype` and `ffmpeg` are installed): local whisper.cpp, in 30-second pieces.
+- **Gemini via Antigravity** (desktop app, when Antigravity is installed and signed in): ten-minute pieces, three at a time. The audio is sent to Google.
+
+A transcript made earlier for the selected recording and engine appears on its own, with **Export**. **Revise with AI** (desktop app) lets your AI tool correct misheard words, terms and punctuation; every word keeps its time, and **Undo revision** brings back the automatic text. A quick local Voxtype pass followed by a revision is a good combination. The sliders button beside the dim-ink button holds gain, voice filter and normalize for transcription.
+
+Text appears while it is transcribed, greyed until the timings are final. Transcription runs in the background with a chip in the bar: switching recordings or closing the panel does not stop it, only **Cancel** or the chip's Stop does. Export the transcript as text, SRT, WebVTT or JSON with word times.
+
+## Sort and filter notes
+
+On Home, **Sort** orders Recent and Drive notes A–Z (default), by date or by size. The switch beside it shows notes as cards with covers or as a quick list that reads nothing from the files, for when you only want the list fast. The chips filter by modification date, notes with audio, size and Noteful tags. Filters stack, and selecting several tags keeps notes that have all of them. Recordings and tags are read from each note without downloading it. Tags of very large notes appear once they have been opened.
+
+## Remove a note
+
+On Home, each Recent card has a **⋯** button in its top corner (or right-click the card). **Remove from this device** drops it from Recent; for Drive notes it also deletes the copy kept on this device, and Drive is not changed. If the note is open with unsaved changes, you can upload them to Drive first. **Also delete it in Google Drive** needs `DELETE` typed and moves the file to Drive's trash, where it can be restored for 30 days.
+
+In the Drive section, **Back** returns to the view you had before the last search, filter or folder change.
+
+## Find in a note
+
+**Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. The source chips under the box limit the search to any combination of Text, PDF, OCR and Audio, with a count for each; the choice is remembered. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
+
+**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. Handwriting is read in a separate pass over the ink alone, so it is found on PDF pages too, even when their printed text is skipped. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. It then runs in the background with a chip in the bar (progress and **Stop**), so the dialog can close and you can keep reading. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
+
+**Tool row.** Drag the tool buttons to put them in the order you like; **View → Reset tool order** puts them back. The highlighter has three modes: straight, freehand and rectangle (drag a box).
+
+**Notes in Markdown.** **View → Notes** (**N**) opens a panel beside the pages for your own notes in Markdown. Headings, bold, lists, code and links are formatted as you type; the toolbar above has the usual formatting buttons; **Preview** shows the result. **+ Page** inserts a page marker for the page you are reading: what follows belongs to that page, the marker jumps to it when clicked, and with **Follow** the notes scroll to the section of the page you turn to. Notes save themselves as you type (on this device, and in the project when you save it). **File → Export** has three buttons (hover for their full names): **NF** writes the .noteful file; **N+MD** writes it and a .md file with the page breaks spelled out; **NC** writes one .notecomp file with both, which NoteComplete opens with its notes (.notecomplete files open too).
+
+**Ask AI answers** appear while they are written and are formatted (lists, tables, formulas). Under each answer, **T** puts its text in a text box on the current page, and **⧉** copies it. Drag the panel's top or bottom edge to change its height.
+
+**Tabs (desktop).** Open several notes in one window: **+** in the top bar or **Ctrl+T** opens a tab, **Ctrl+Tab** switches, **Ctrl+W** or × closes (asking if there are unsaved changes), and tabs can be dragged to reorder. Each tab is independent.
+
+**Page size.** **Pages → Page size…** changes the current page: extra writing space on the right or below, a standard size, the original size or a custom size in millimetres. Writing stays in place and the PDF keeps its size unless you choose to scale it to the new page. Undo restores the previous size. **Pages → Resize by dragging the borders** does the same by hand: drag the handle on the right edge, the bottom edge or the corner; the size in millimetres follows the pointer. **Done** or **Esc** hides the handles.
+
+**Text boxes.** The Text tool (**W**) types a text box where you click; Enter starts a new line, **Ctrl+Enter** or a click outside finishes, **Esc** cancels. A format bar above the box sets the font, size, bold, italic and colour while you type; select a typed box with Select to change them later, or double-click it to type. Click a box you typed to edit it (emptying it removes it); move or resize it with Select. Text boxes are searchable and are exported as Noteful text.
+
+**Lock in place.** The Lock tool (**O**) locks or unlocks the item you click. Locked items show a dashed outline and a padlock while the tool is chosen, and cannot be selected, moved or erased. Locks are undoable and saved in the project; on export an image's lock becomes Noteful's own (strokes and shapes keep theirs in the project only).
+
+**Selecting text.** With the Pan tool, the cursor turns into a text cursor over printed PDF text and over recognized words; drag to select and press **Ctrl+C** to copy, line by line in reading order. Dragging anywhere else still moves the page.
+
 ## Open from Google Drive
 
 Choose **☰ → Google Drive** in the browser or an installed NoteComplete build, connect your account, find the Noteful folder and select a file to download and open. Subfolders, Refresh and paginated listings are supported. Local edits are never uploaded to Drive. Unsaved edits are checked before opening a downloaded document. See [Google Drive setup and platform support](GOOGLE_DRIVE.md).
@@ -28,7 +91,7 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 | Select | Select existing ink, supported shapes, images or text placement; drag to move, use four corners to resize, or the upper handle to rotate. The inspector changes dimensions/angle and ink/shape stroke color and width. |
 | Pen | Fixed-width freehand ink; no pressure input required. |
 | Highlight | Straight segment by default; choose Freehand for sampled ink. Multiply at 50% preserves the appearance over images. |
-| Erase | Remove whole strokes and supported line objects. Other selected objects can be deleted with Select. |
+| Erase | Remove whole strokes and supported line objects the eraser touches; choose its size (small to extra large) in the tool settings. Other selected objects can be deleted with Select. |
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |
 | Shapes | Draw a bounding box or use Insert for a line, rectangle, ellipse, triangle or arrow. New shapes are editable outlines. |
 
@@ -36,25 +99,22 @@ Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-
 
 **Layers** selects where to draw, creates/renames layers, controls visibility/opacity and locks them. Hidden or locked layers cannot be edited. New strokes inherit the selected layer.
 
-## Audio
+## Audio details
 
-Select a recording in the single player, then play, pause or seek. Nonempty recording names are shown unchanged; otherwise the UI generates a recording number/date. **Recording & sync** shrinks the bar back to the player even after the recording controls, handwriting options or transcript were opened, and expands them again. **Show handwriting** jumps to the first associated page. **Dim future handwriting** shows strokes at 20% opacity before pen-down and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay. Unrelated/untimed ink remains visible. Each recording retains its own playback position.
-
-The supplied native audio example contains one recording. Multiple-recording behavior is tested using an explicitly synthetic fixture. Codec support varies by browser/device; **Download** remains available when playback is unsupported.
+Nonempty recording names are shown unchanged; otherwise the UI generates a recording number and date. Dimming shows strokes at 20% opacity before they were written and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay, and untimed ink remains visible. Each recording keeps its own playback position. Codec support varies by browser and device; **Download** remains available when playback is unsupported.
 
 ### On-device transcripts
 
-For notes with audio, expand **Transcript** in the playback controls and choose
-**Transcribe recording**. Whisper runs in a local WASM worker and detects
+With **Whisper on this device**, Whisper runs in a local WASM worker and detects
 the spoken language when **Detect language** is selected. A progress bar shows
 the model download and each transcription chunk while it runs. Castellano is the
 default, with Galego and English available alongside other language options.
-Expand **Language, model & audio** to select Tiny (fastest), Base (default) or
-Small (higher accuracy, more memory). Gain and the voice filter affect playback
+The model list offers Tiny (fastest), Base (default) or
+Small (higher accuracy, more memory). Under **Audio for transcription**, gain and the voice filter affect playback
 and transcription; normalization applies to transcription only. Processing never
 overwrites the original recording. Changes take effect on the next transcription.
 The cache distinguishes the model, language and audio settings.
-The first run downloads model weights from Hugging Face; audio is never uploaded.
+The first run downloads model weights from Hugging Face; Whisper never uploads audio (only the Gemini engine does).
 Downloaded weights are browser-cached when storage is available.
 
 Words follow playback and clicking a word seeks the same clock used for timed
@@ -65,10 +125,10 @@ Automatic transcription and word boundaries can be inaccurate, especially for
 noise or quiet speech. Processing speed and memory depend on the device.
 
 Transcripts are cached by audio content in this browser on secure origins
-(including localhost), and can be exported as JSON with word timestamps.
+(including localhost), separately for each engine.
 They are not included in `.nfedit` or `.noteful` exports. On LAN HTTP without
 SubtleCrypto, transcripts remain available for the session and can be exported.
-Use **Hide transcript** or its disclosure to collapse it. Long transcripts display
+Long transcripts display
 100 words at a time, with section arrows and optional automatic following. Hidden
 transcripts perform no word highlight updates. Speech workers terminate after
 completion or cancellation; page thumbnails retain small bitmaps only.
@@ -87,7 +147,7 @@ The Expo wrapper uses SDK 57 and the same browser/WASM engine. Install dependenc
 
 Use an Expo Go client compatible with the SDK 57 dependencies pinned in this repository. See [mobile setup](../README.md#expo-go).
 
-For an existing hosted reader, set `EXPO_PUBLIC_READER_URL` before starting or building the wrapper. A standalone build needs that reachable HTTP(S) URL; the development LAN host is not available when Metro is absent. The browser reader can also be installed to the home screen over HTTPS. Its application cache supports offline use after assets have been cached; opened notes are never stored in that cache.
+Installed Android builds include the reader and serve it on the device's loopback address, so no hosted website or computer is needed. To use a hosted reader instead, set `EXPO_PUBLIC_READER_URL` before starting or building the wrapper. The browser reader can also be installed to the home screen over HTTPS. Its application cache supports offline use after assets have been cached; opened notes are never stored in that cache.
 
 Exports in the wrapper open the OS share sheet. Select Save to Files or another destination. Dismissing a share sheet does not prove a file was saved, so unsaved-change protection remains active. Large exports temporarily require base64 copies in memory; there is no fixed MB ceiling.
 
@@ -97,7 +157,7 @@ Android default-file handling requires an installed NoteComplete build. Expo Go 
 
 The Android app ID is `com.notecomplete.viewer`. Its manifest registers ACTION_VIEW for `.noteful` file/content URIs, the `application/x-noteful` MIME type, and generic `application/octet-stream` content-provider files. The generic fallback is needed for providers that hide the filename; it can also offer NoteComplete for other binary files, which the decoder will reject if unsupported. Some file managers use other MIME types or do not offer persistent defaults.
 
-For local builds or GitHub Actions APK artifacts, follow [Installable builds](BUILDS.md#android-apk). That guide covers the hosted-reader URL, preview signing and build prerequisites.
+For local builds or GitHub Actions APK artifacts, follow [Installable builds](BUILDS.md#android-apk). That guide covers the bundled reader, the optional hosted-reader override, preview signing and build prerequisites.
 
 In Android Files, choose a `.noteful` file, select **Open with → NoteComplete**, then **Always** if offered. Android controls that choice; the application cannot silently make itself the default. A running app receives new file intents too. The file is read using the provider's URI grant, queued until the reader is ready, and passed to the normal local decoder. Existing unsaved edits still require confirmation before replacement. This is file opening, not an ACTION_SEND share target.
 

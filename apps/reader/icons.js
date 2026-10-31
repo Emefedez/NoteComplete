@@ -17,12 +17,27 @@ const paths = {
  plus:'M12 5v14M5 12h14',
  note:'M6 3h10l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm9 0v5h5M8 12h8M8 16h6',
  headphones:'M4 14v-3a8 8 0 0 1 16 0v3M4 12H2v8h5v-8H4Zm16 0h2v8h-5v-8h3',
+ restart:'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
+ enter:'M19 6v6a2 2 0 0 1-2 2H6m4-4-4 4 4 4',
+ mic:'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8',
+ upload:'M12 16V4M7 9l5-5 5 5M5 20h14',
  home:'M3 11 12 3l9 8M5 9v12h5v-6h4v6h5V9',
  search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4',
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
  cloud:'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8H7Z',
  cards:'M7 4h12v14H7zM4 7v13h12',
- save:'M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm2 0v6h9V3M7 21v-7h10v7'
+ save:'M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm2 0v6h9V3M7 21v-7h10v7',
+ spark:'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Zm7 11 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z',
+ moon:'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z',
+ folder:'M3.5 7A1.5 1.5 0 0 1 5 5.5h4.2l2 2H19A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z',
+ minimize:'M6 17h12',
+ maximize:'M6 6h12v12H6Z',
+ restore:'M9 9h9v9H9ZM6 15V6h9',
+ sun:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4',
+ text:'M5 6V4h14v2M12 4v16M9 20h6',
+ lock:'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
+ grab:'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M9 9h6v6H9z',
+ tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');

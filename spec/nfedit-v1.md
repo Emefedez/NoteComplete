@@ -1,4 +1,4 @@
-# Noteful RE Project v1 (.nfedit)
+# Noteful RE Project (.nfedit), versions 1–3
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -45,7 +45,51 @@ Translation, scale and rotation are required. `width` and `rgba` may be omitted 
 
 Validation requires finite translation within ±1e6, scale in 0.001–1000, rotation within ±36000, optional width in 0.1–100 and RGBA in 0–1. Target IDs must exist and remain visible, unlocked and undeleted at that point in history. Identity/repeated adjustments do not add an action. Each completed gesture or inspector change is one undo step. Current readers load older v1 histories; older readers must reject the unfamiliar `Adjust` action rather than silently omit it.
 
+`locked` (optional boolean) locks the item in place (the Lock tool): a locked item cannot be picked, adjusted, resized, removed or erased. Omitted, it keeps the previous adjustment's value, else the item's own state (Noteful payload tag 21 for imported objects, unlocked otherwise). A change of `locked` is its own edit and must not change any other parameter. On native export an image's lock is written as payload tag 21 (type 0x801, clocked u8), as are objects that already carry that field; other object kinds use tag 21 for other values, and ink has no lock field, so their lock stays in the project only.
+
 Native export transforms current geometry while retaining original imported IDs, audio timing and auxiliary stroke data. `.nfedit` keeps the unchanged source and complete edit history.
+
+## Inserted pages (project version 3)
+
+`InsertPages` adds pages before display position `at` (the page count appends), optionally with a PDF resource in the same undo step:
+
+```json
+{"kind":"InsertPages","at":2,"pages":[{"size":[2640,990],"pdf":{"resource":"pdf-1a2b","page_index":0,"rect":[0,0,1320,990]}}],"pdf":{"id":"pdf-1a2b","base64":"JVBERi0..."}}
+```
+
+Pages are addressed by stable **slots**: original pages keep `0..n`, inserted pages take `n, n+1, …` in history order (redo entries included), and every `page` field in the history is a slot. The display order is the original order with the applied insertions replayed, so ink drawn on a page stays on it when pages are inserted before it, and undo removes the inserted slots from the order without renumbering others. Without insertions slot and display position coincide, so v1/v2 projects are unchanged. Hosts convert display positions with `Editor::slot`; the WASM adapter does this for every page argument, and `view` reports both `page` (display) and `slot`.
+
+`size` is in page units; `pdf.resource` names an existing PDF of the note or the edit's own `pdf.id`; `rect` places the PDF page (background tag 9) and defaults to the whole page. Validation: finite sizes of at least 10 units, at most 2000 pages per edit, PDF bytes starting with `%PDF-`, alphanumeric/hyphen IDs not already used. Projects containing `InsertPages` are written as version 3.
+
+Native export writes inserted pages into the page collection (`d:/2`) with an editable-set ID when they have ink, background tag 0 = 1 plus tag 9 for PDF pages (blank pages use this project's paper JSON), and a tag-5 order key strictly between the display neighbours' keys, so sorting by that string reproduces the display order without changing existing page records. Added PDFs become ordinary resources. Official Noteful acceptance of these records is unverified.
+
+## Text boxes (project version 4)
+
+A typed text box is an `Image` edit whose image has empty `base64` and `mime` and a `text` object: `{"text":"Hola\nmundo","font_size":20,"rgba":[0.8,0,0,1],"bold":true}`. Its `bounds` are the box in page units (the reader measures the text: 5 units of left padding, first baseline at 8 + size, line advance size + max(8, size / 5 + 8)). It is drawn, picked, adjusted, locked and removed like an added image, with id `image:<history index>`.
+
+```json
+{"kind":"Retext","page":0,"id":"image:3","image":{"base64":"","mime":"","bounds":[100,100,120,40],"layer":0,"text":{"text":"Adiós","font_size":20,"rgba":[0,0,0,1],"bold":false}}}
+```
+
+`Retext` replaces a text box's content, style and size (its top-left corner stays). The target must be a live, unlocked text box on a visible, unlocked layer; text must not be blank (removing the box is an `Erase`), at most 20 000 bytes, font size 2–400. Projects using either are version 4.
+
+Native export writes each text box as a kind-2 object with the field layout and wire types of `samples/texto.noteful`: rect `2/1` (float64 ×5), size pair `6/2`, and attributed text in `6/4` with fragments `[text, U+200B]`, counts `[5, 1]`, keys `[13, 10, 6, 2, 9, 10]` and pools 5 (family "Helvetica"), 6 (bold), 7 (color), 9 (paragraph) and 10 (sizes). Reopened, the core decodes the same text, size, color, weight and position.
+
+## Page sizes (project version 4)
+
+```json
+{"kind":"ResizePage","page":0,"size":[1637,1543.46],"pdf_rect":[0,0,1091.34,1543.46]}
+```
+
+`ResizePage` sets a page slot's size. Ink, objects and text keep their page coordinates (the page grows or shrinks from its top-left corner). The PDF background keeps its rectangle unless `pdf_rect` (optional, only for PDF pages) gives a new one. Sizes must be finite, at least 10 units and within ±1e6; identical sizes add no action. Views report the current `size` and the page's `base_size` before resizes. Native export writes the size in background tag 1 and the PDF rectangle in background tag 9 (type 0x23, as on widened Noteful pages), so the PDF stays in place; inserted pages are written at their final size.
+
+## Markdown notes (project version 5)
+
+A project may carry the note's Markdown notes in a top-level `markdown` string (omitted when empty; at most 8 MiB). They are not part of the edit history. A line consisting of `<!-- page N -->` ties the text after it to display page N (1-based).
+
+## .notecomp archives
+
+A `.notecomp` file (readers also accept the longer `.notecomplete`) is a POSIX ustar archive with `manifest.json` (`{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`), `note.noteful` (the native export of the note) and `notes.md` (the notes, page markers kept). Readers require the manifest's format and the note entry; other entries are ignored.
 
 ## Native export
 

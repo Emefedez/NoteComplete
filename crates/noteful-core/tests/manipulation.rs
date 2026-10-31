@@ -7,6 +7,7 @@ fn line() -> Line {
         tool: 0,
         layer: 0,
         shape: None,
+        square: false,
     }
 }
 fn adjustment() -> Adjustment {
@@ -16,6 +17,8 @@ fn adjustment() -> Adjustment {
         rotation: 90.,
         width: Some(8.),
         rgba: Some([1., 0., 0., 1.]),
+        locked: None,
+        crop: None,
     }
 }
 #[test]
@@ -182,4 +185,91 @@ fn locked_deleted_and_invalid_adjustments_do_not_change_history() {
     e.undo();
     e.remove_item(0, "new:0").unwrap();
     assert!(e.adjust_item(0, "new:0", adjustment()).is_err());
+}
+
+#[test]
+fn locking_in_place_blocks_edits_until_unlocked_and_survives_reload() {
+    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    e.add_line(0, line()).unwrap();
+    e.set_locked(0, "new:0", true).unwrap();
+    // Locked: not picked for selection, not moved, not erased, not removed.
+    assert!(e.pick_item(0, [60., 10.], 2.).unwrap().is_none());
+    let found = e.pick_lockable(0, [60., 10.], 2.).unwrap().unwrap();
+    assert_eq!(
+        (found["id"].as_str(), found["locked"].as_bool()),
+        (Some("new:0"), Some(true))
+    );
+    assert!(e.adjust_item(0, "new:0", adjustment()).is_err());
+    assert_eq!(e.erase_path(0, &[[60., 10.]], 2.).unwrap(), 0);
+    assert!(e.remove_item(0, "new:0").is_err());
+    let view = e.view(0).unwrap();
+    assert_eq!(view["locked"][0]["id"], "new:0");
+    // Locking and a move cannot share one edit.
+    let mut both = adjustment();
+    both.locked = Some(false);
+    assert!(e.adjust_item(0, "new:0", both).is_err());
+    // The lock is saved in the project and undoable.
+    let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap()["locked"], view["locked"]);
+    e.undo();
+    assert!(e.pick_item(0, [60., 10.], 2.).unwrap().is_some());
+    e.redo();
+    e.set_locked(0, "new:0", false).unwrap();
+    // A move after unlocking keeps it unlocked (the adjustment omits `locked`).
+    e.adjust_item(0, "new:0", adjustment()).unwrap();
+    assert_eq!(e.view(0).unwrap()["locked"].as_array().unwrap().len(), 0);
+    assert_eq!(e.erase_path(0, &[[110., 50.]], 1.).unwrap(), 1);
+    let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap(), e.view(0).unwrap());
+}
+
+#[test]
+fn cropping_an_image_shows_part_of_it_and_survives_export() {
+    let mut e = Editor::open(include_bytes!("../../../samples/nota_imagen.noteful")).unwrap();
+    let info = e.selection(0, "object:0").unwrap();
+    assert_eq!(info["kind"], "image");
+    let [sw, sh]: [f64; 2] = serde_json::from_value(info["native"].clone()).unwrap();
+    let b: [f64; 4] = serde_json::from_value(info["bounds"].clone()).unwrap();
+    // Keep the top-left quarter: the box halves and stays anchored at the top left
+    // (for an unrotated image).
+    e.crop_item(0, "object:0", [0., 0., sw / 2., sh / 2.])
+        .unwrap();
+    let after = e.selection(0, "object:0").unwrap();
+    assert_eq!(after["crop"], serde_json::json!([0., 0., sw / 2., sh / 2.]));
+    let svg = e.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+    assert!(svg.contains("clip-path=\"url(#nc-crop-"));
+    let reopened = Editor::open(&e.export_noteful().unwrap()).unwrap();
+    let back = reopened.selection(0, "object:0").unwrap();
+    let nb: [f64; 4] = serde_json::from_value(back["bounds"].clone()).unwrap();
+    let rotated = info["base_rotation"].as_f64().unwrap().abs() > 1e-6;
+    assert!(
+        (nb[2] - b[2] / 2.).abs() < 1e-3 && (nb[3] - b[3] / 2.).abs() < 1e-3,
+        "{nb:?} from {b:?}"
+    );
+    if !rotated {
+        assert!((nb[0] - b[0]).abs() < 1e-3 && (nb[1] - b[1]).abs() < 1e-3);
+    }
+    assert_eq!(back["crop"], serde_json::json!([0., 0., sw / 2., sh / 2.]));
+    assert!(reopened.view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .contains("nc-crop-"));
+    // Cropping again to the whole image shows all of it, at the original size.
+    let mut again = reopened;
+    again.crop_item(0, "object:0", [0., 0., sw, sh]).unwrap();
+    let full = again.selection(0, "object:0").unwrap();
+    let fb = full["bounds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_f64().unwrap())
+        .collect::<Vec<_>>();
+    let m = full["adjustment"]["scale"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_f64().unwrap())
+        .collect::<Vec<_>>();
+    assert!((fb[2] * m[0] - b[2]).abs() < 1e-3 && (fb[3] * m[1] - b[3]).abs() < 1e-3);
+    assert!(e.crop_item(0, "object:0", [5., 5., 5., 9.]).is_err());
 }

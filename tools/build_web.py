@@ -54,6 +54,37 @@ def main():
     runtime=ROOT/'apps/reader/node_modules/onnxruntime-web/dist'
     for name in ['ort-wasm-simd-threaded.asyncify.mjs','ort-wasm-simd-threaded.asyncify.wasm']:
         shutil.copy2(runtime/name,speech/name)
+    # Text recognition engine, loaded only on request; language data is fetched on first use.
+    ocr=ROOT/'apps/reader/vendor/tesseract'
+    if ocr.exists(): shutil.rmtree(ocr)
+    ocr.mkdir(parents=True,exist_ok=True)
+    tesseract=ROOT/'apps/reader/node_modules/tesseract.js'
+    for name in ['tesseract.esm.min.js','worker.min.js']: shutil.copy2(tesseract/'dist'/name,ocr/name)
+    shutil.copy2(tesseract/'LICENSE.md' if (tesseract/'LICENSE.md').exists() else tesseract/'LICENSE',ocr/'LICENSE')
+    core=ROOT/'apps/reader/node_modules/tesseract.js-core'
+    for name in ['tesseract-core-lstm.wasm.js','tesseract-core-simd-lstm.wasm.js','tesseract-core-relaxedsimd-lstm.wasm.js']: shutil.copy2(core/name,ocr/name)
+    shutil.copy2(core/'LICENSE',ocr/'LICENSE-core')
+    # Markdown notes editor, loaded only when the Notes panel is opened.
+    mde=ROOT/'apps/reader/vendor/tinymde'
+    if mde.exists(): shutil.rmtree(mde)
+    mde.mkdir(parents=True,exist_ok=True)
+    tinymde=ROOT/'apps/reader/node_modules/tiny-markdown-editor'
+    for name in ['tiny-mde.min.js','tiny-mde.min.css']: shutil.copy2(tinymde/'dist'/name,mde/name)
+    shutil.copy2(tinymde/'LICENSE',mde/'LICENSE')
+    # Math typesetting for AI answers and notes, loaded only when there is math.
+    tex=ROOT/'apps/reader/vendor/katex'
+    if tex.exists(): shutil.rmtree(tex)
+    tex.mkdir(parents=True,exist_ok=True)
+    katex=ROOT/'apps/reader/node_modules/katex'
+    for name in ['katex.mjs','katex.min.css']: shutil.copy2(katex/'dist'/name,tex/name)
+    shutil.copytree(katex/'dist/fonts',tex/'fonts',ignore=shutil.ignore_patterns('*.ttf','*.woff'))
+    shutil.copy2(katex/'LICENSE',tex/'LICENSE')
+    # Dark Reader, inlined into HTML documents in the dark theme, fetched on first use.
+    dr=ROOT/'apps/reader/vendor/darkreader'
+    if dr.exists(): shutil.rmtree(dr)
+    dr.mkdir(parents=True,exist_ok=True)
+    darkreader=ROOT/'apps/reader/node_modules/darkreader'
+    for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))

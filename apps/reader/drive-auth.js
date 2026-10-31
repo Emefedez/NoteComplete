@@ -30,11 +30,12 @@ export function loadGoogleIdentity() {
   });
   return loading;
 }
-export function requestDriveAccess(identity, clientId, callback, error) {
-  if (identity.native) { identity.signIn().then(callback, error); return; }
+export function requestDriveAccess(identity, clientId, callback, error, scope = DRIVE_SCOPE) {
+  const write = scope !== DRIVE_SCOPE;
+  if (identity.native) { identity.signIn({ write }).then(callback, error); return; }
   if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId)) throw Error('Enter a Google OAuth web client ID in Connection setup.');
   identity.initTokenClient({
-    client_id: clientId, scope: DRIVE_SCOPE, include_granted_scopes: false,
+    client_id: clientId, scope, include_granted_scopes: false,
     callback: response => response.error ? error(Error(googleAuthError(response.error))) : callback(response),
     error_callback: () => error(Error('Google sign-in was closed or blocked. Allow the sign-in popup and try again.')),
   }).requestAccessToken({ prompt: 'select_account' });

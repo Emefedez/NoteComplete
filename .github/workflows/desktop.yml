@@ -44,6 +44,9 @@ jobs:
           - os: ubuntu-24.04
             platform: linux
             arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
           - os: macos-15
             platform: mac
             arch: arm64
@@ -77,6 +80,23 @@ jobs:
         working-directory: apps/desktop
       - run: npm run dist -- --${{ matrix.platform }} --${{ matrix.arch }}
         working-directory: apps/desktop
+      # zstd behind AppImage's type2 runtime starts ~0.8 s faster than electron-builder's gzip image.
+      - name: Repack the AppImage with zstd
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools
+          python3 tools/repack_appimage.py apps/desktop/dist/*.AppImage --arch ${{ matrix.arch }}
+      - name: Verify packaged macOS signatures
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=(apps/desktop/dist/*.zip)
+          test "${#archive[@]}" -eq 1
+          extracted="$RUNNER_TEMP/notecomplete-signature-check"
+          ditto -x -k "${archive[0]}" "$extracted"
+          codesign --verify --deep --strict --verbose=2 "$extracted/NoteComplete.app"
       - uses: actions/upload-artifact@v4
         with:
           name: NoteComplete-${{ matrix.platform }}-${{ matrix.arch }}

@@ -1,12 +1,11 @@
 # Development guide
 
-This is the current development and validation procedure. The [research provenance and history](docs/RESEARCH_HISTORY.md) separately records the owner's prior work, what was supplied, how the assistant used it, and the resulting evidence. The [native format specification](spec/noteful-v0.1.md) documents observed semantics; [`.nfedit`](spec/nfedit-v1.md) documents this project's edit history and writer.
+This is the current development and validation guide for the NoteComplete client. Format research and its provenance are on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. The [native format specification](spec/noteful-v0.1.md) documents observed semantics; [`.nfedit`](spec/nfedit-v1.md) documents this project's edit history and writer.
 
 ## Architecture
 
 | Component | Responsibility |
 |---|---|
-| `research/python/` | Independent parser/renderer used as a regression oracle; historical viewer and migration scripts remain research tools. |
 | `crates/noteful-core/` | Portable decoding, scene extraction and editing; no filesystem, network or UI APIs, and `forbid(unsafe_code)`. |
 | `crates/noteful-cli/`, `crates/noteful-wasm/` | CLI and browser adapters to the shared core. |
 | `apps/reader/` | Virtualized pages, SVG ink, PDF rasterization, imports, editing UI, audio and local speech processing. |
@@ -18,97 +17,21 @@ Source bytes remain immutable during editing. `.nfedit` stores the original arch
 
 Selection gestures preview one SVG item at most once per animation frame and send one adjustment when the gesture ends. Item patches retain PDF/audio nodes. Hidden and locked layers are excluded from editing.
 
-## Procedure: from supplied evidence to implementation
+## Format research
 
-### 1. Record the handoff and ownership
+The format work behind the core (Ghidra scripts and static-analysis evidence, the independent Python parser/renderer oracle, the legacy comparison viewer, corpus analysis and Rust/Python parity checks, and the evidence-to-implementation procedure) lives on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. New format variants found in real notes are analysed and documented there first; this branch carries the [specification](spec/noteful-v0.1.md) the core implements and synthetic regression tests for each variant (for example `crates/noteful-core/tests/page_geometry.rs`).
 
-For each contribution, record who supplied it, its source, whether it is prior research, an original native sample, a native export, a tool-generated result, a synthetic fixture or a product requirement. Record original filename, size and SHA-256 for binary evidence. Preserve the original bytes. Do not infer authorship from a filename or from possession of a file.
-
-Keep prior explanations and hypotheses distinguishable from conclusions reached during the new analysis. Link handoff records from [research history](docs/RESEARCH_HISTORY.md); use `samples/manifest.json` for retained corpus files. Do not retroactively add generated evidence to `research/evidence/initial-inputs.json`, which describes the original handoff.
-
-### 2. Form a testable question
-
-Prefer a native sample with one changed feature and, when available, an independently exported reference or the owner's explicit ground truth. State what the comparison can establish: field boundaries, text traits, geometric position, compositing or timing. Product requests such as a hamburger menu or speech recognition belong in application requirements, not the recovered format specification.
-
-### 3. Analyze without replacing evidence
-
-Use indexed resource extents and the strict parser. Write extractions and reports under ignored `work/`; leave corpus originals and committed measurement baselines unchanged. Use native symbol names and static pseudocode as corroborating leads, interpreted alongside sample bytes. Label provisional interpretations and retain unknown channels without inventing meanings.
-
-For optional Ghidra extraction, use the matching recorded binary and a separate project:
-
-```sh
-"$GHIDRA_HOME/support/analyzeHeadless" "$PROJECT_DIRECTORY" "$PROJECT_NAME" \
-  -process Noteful -noanalysis -readOnly -scriptPath research/ghidra \
-  -postScript NotefulTargets.java work/ghidra-targets
-```
-
-Run `NotefulTextTargets.java` with a separate output directory for text. `GHIDRA_HOME` points to the installation's `libexec`; use a supported JDK. Addresses in the scripts are specific to the binary fingerprint in `research/evidence/binary.json`. Ghidra and the historical external database are not required for ordinary builds.
-
-### 4. Validate the interpretation
-
-- **Byte round-trip:** require exact parsing/re-encoding and malformed-input rejection. This validates syntax and preservation.
-- **Independent reference:** compare with native thumbnails/PDF exports or supplied ground truth for visual and semantic claims.
-- **Implementation parity:** compare Rust with the independent Python oracle. Agreement checks consistency, not official interoperability.
-- **Synthetic regression:** isolate corner cases and label generated fixtures explicitly. A synthetic multiple-recording test cannot establish every native pause/splice behavior.
-- **Native interoperability:** import modified exports into official Noteful before claiming compatibility. This remains outstanding.
-
-Update the observed format specification only with the supporting evidence and scope of the conclusion. Record superseded hypotheses in research history instead of silently presenting them as facts.
-
-### 5. Implement at the appropriate layer
-
-Put format semantics in the portable core, host integration in adapters/wrappers, and UI/performance behavior in the reader. Preserve opaque fields and resource bytes where supported. Keep new product formats and inferred speech timings distinct from decoded native data. Add focused regressions for correctness risks and use UI checks for layout/interaction changes.
-
-### 6. Build, check and report the actual result
-
-Follow [README build and validation commands](README.md#validate). Web runtime tests require a fresh WASM/web build. Use [BUILDS.md](docs/BUILDS.md) for package workflows, signing and Android's hosted-reader requirement.
-
-Report separately: source changes implemented, automated checks passed, packages actually built, application execution observed, and physical-device/native interoperability still untested. A workflow file, successful target compilation or generated Android project is not a completed device test. Record validation limits beside the claim rather than implying universal support.
-
-## Repository and documentation maintenance
+## Documentation map
 
 - `README.md`: entry point, build commands and documentation map.
-- `docs/RESEARCH_HISTORY.md`: attribution, supplied inputs, derived evidence and development history.
-- `DEVELOPMENT.md`: current architecture, contribution procedure and tool inventory.
+- `DEVELOPMENT.md`: architecture, next steps and validation limits.
 - `docs/USER_GUIDE.md`: current user-facing behavior.
-- `docs/BUILDS.md`: packaging procedure and its validation/signing limits.
+- `docs/GOOGLE_DRIVE.md`, `docs/BUILDS.md`: Drive setup; packaging procedure and its validation/signing limits.
 - `spec/`: observed native semantics and the project's own editing format.
 
-Keep procedural instructions in their owning document and link to them elsewhere. Preserve corpus manifests and small evidence baselines. Generated media, reports, dependencies, bindings and packages belong in ignored directories. Historical scripts remain explicitly marked; do not run obsolete migration scripts against current source. The [earlier cleanup record](docs/RESEARCH_HISTORY.md#historical-evidence-cleanup) documents retained provenance and the external backup.
+Generated media, reports, dependencies, bindings and packages belong in ignored directories (`work/`, `pkg`, `vendor`). The corpus in `samples/` and the synthetic fixtures in `tests/fixtures/` are required by the Rust and WASM tests.
 
-## Python tool inventory
-
-All commands below run from the repository root. Core oracle scripts require only Python's standard library; optional evidence tools list their extra dependencies. Generated output belongs under ignored `work/`.
-
-| Script | Purpose / invocation | Dependencies and output |
-|---|---|---|
-| `research/python/noteful.py` | Strict parser/encoder, semantic inspection; `python3 research/python/noteful.py samples/nota_1linea.noteful --extract work/one-line` | Standard library; extraction refuses an existing destination; preserves original input. `--view` opens the historical viewer. |
-| `research/python/render_note.py` | Importable independent SVG scene oracle | Standard library; approximate paper/ink rendering, no production PDF rasterizer. |
-| `research/python/rich_text.py` | Importable attributed-text pool decoder and SVG text renderer | Standard library; exercised by text tests and scene parity. |
-| `research/python/rust_backend.py` | Historical adapter running the Rust CLI parser through the Python renderer | Built `target/debug/noteful` or release CLI; no silent Python fallback. |
-| `research/python/viewer.py` | Optional historical loopback viewer; `python3 research/python/viewer.py --no-browser --port 8770` | Standard library; serves the corpus and independent PDF reference locally. `--engine rust` uses the migration adapter. Not the product app. |
-| `tools/build_web.py` | Build WASM bindings and stage browser dependencies | Rust, matching wasm-bindgen CLI, Node/npm, Python 3.11+; no sample notes copied into the app. |
-| `tools/build_examples.py` | Optional static research gallery | Standard library; writes `work/examples/`, not app assets. |
-| `tools/analyze_corpus.py` | Recreate extracted blocks, diagnostic SVG and corpus comparison | Standard library; writes `work/reports/` and `work/extracted/`. |
-| `tools/validate_geometry.py` | Compare decoded initial stroke positions with native JPEG thumbnails | Pillow; reads originals directly, writes `work/reports/geometry-validation.json`. Position evidence only. |
-| `tools/validate_variable_width.py` | Independently measure PDF caps against the third coordinate channel | NumPy and pypdf; writes `work/reports/variable-width-validation.json`. Does not overwrite the committed baseline. |
-| `tools/check_rust_parity.py` | Compare Rust fields/semantics and round-trip against Python | Rust CLI + standard library; current report under `work/reports/`. |
-| `tools/check_scene_parity.py` | Compare ordered native/Python SVG primitives and inherited transforms | Rust CLI + standard library; tolerance 2e-5 internal units; no pixel-equivalence claim. |
-| `tools/check_export.py` | Decode native writer output independently and check original media bytes | Rust CLI + standard library; current report under `work/reports/`. |
-| `tools/build_audio_fixture.py` | Regenerate the synthetic 0.25-second WAV resource fixture | Standard library; intentionally writes the named test fixture and a scratch report. |
-| `tools/build_multi_audio_fixture.py` | Regenerate the synthetic two-recording fixture | Standard library; intentionally writes the named test fixture. |
-| `research/python/historical/update_decoder.py` | Preserved one-off early migration script | Historical only: expects obsolete `tools/noteful.py`; do not run against current source. Its replacement logic is already superseded by the maintained parser. |
-| `tests/test_noteful.py`, `test_text.py`, `test_viewer.py` | Parser, text, rendering and historical HTTP regression tests | `python3 -m unittest discover -s tests -v`; standard library. |
-
-Optional evidence environment:
-
-```sh
-python3 -m venv work/evidence-env
-work/evidence-env/bin/pip install Pillow numpy pypdf
-work/evidence-env/bin/python tools/validate_geometry.py
-work/evidence-env/bin/python tools/validate_variable_width.py
-```
-
-The tests cover observed corpus syntax, malformed inputs, scene correspondence, media preservation, timing, edit history and writer output. CI checks desktop operating systems and Android/iOS compilation targets as well as actual WASM runtime behavior. Target compilation and Expo bundles do not prove physical-device file selection, codec playback or sharing.
+The tests cover observed corpus syntax, malformed inputs, media preservation, timing, edit history and writer output. CI checks desktop operating systems and Android/iOS compilation targets as well as actual WASM runtime behavior. Target compilation and Expo bundles do not prove physical-device file selection, codec playback or sharing.
 
 ## Reader rendering and speech settings
 
@@ -122,25 +45,20 @@ Build output (`pkg`, `vendor`, `precache.json`), dependencies and scratch report
 
 ## Mobile and desktop integration
 
-Expo uses the same reader through a WebView. Android ACTION_VIEW filters are generated from `apps/mobile/app.json`; `IncomingFiles` queues cold/warm file intents until the reader is ready, deduplicates delivery and respects unsaved edits. Expo Go cannot register project-specific file handlers. A standalone APK currently needs a reachable configured reader URL; embedded offline reader assets are not implemented. See the [user guide](docs/USER_GUIDE.md#android-installed-build).
+Expo uses the same reader through a WebView. Android ACTION_VIEW filters are generated from `apps/mobile/app.json`; `IncomingFiles` queues cold/warm file intents until the reader is ready, deduplicates delivery and respects unsaved edits. Expo Go cannot register project-specific file handlers. Installed APKs bundle the staged reader assets and serve them from a loopback-only native module (`apps/mobile/modules/reader-server`, `127.0.0.1:8768`); `EXPO_PUBLIC_READER_URL` optionally overrides this with a hosted reader. See the [user guide](docs/USER_GUIDE.md#android-installed-build).
 
-The desktop stage copies only assets listed in the web precache manifest. The desktop workflow shares one tested web build across AppImage, macOS ARM64/x64 DMG/ZIP and Windows NSIS jobs. The Android workflow generates the Expo project and builds a release-mode preview using its debug signing key. See [packaging instructions and validation limits](docs/BUILDS.md).
+Desktop windows are `BaseWindow`s holding one `WebContentsView` per tab (`apps/desktop/tabs.js` keeps the order and active tab; `main.js` shows only the active view). Each tab is a complete reader, so IPC owners (AI requests, transcription) are per tab; readers draw the tab strip from the `tabs:list` message (`apps/reader/tab-strip.js`) and report title and unsaved state. The desktop stage copies only assets listed in the web precache manifest. The desktop workflow shares one tested web build across AppImage, macOS ARM64/x64 DMG/ZIP and Windows NSIS jobs. The Android workflow generates the Expo project and builds a release-mode preview using its debug signing key. See [packaging instructions and validation limits](docs/BUILDS.md).
 
 ## Next steps
 
 Status 2026-10-27. Done in this sprint: wire type 0x23 (PDF rect on widened pages), flag-0x10 linked strokes and kind-23 groups, so the owner's *Memoria 1* (258 MB, 206 pages, 6 recordings) and *Temas1+2* (215 MB, 47 pages) open warning-free and round-trip byte-exact; widened pages draw the PDF at native scale; home screen (Recent + Drive grid) with range-read native covers (~320 KiB per note instead of the whole file); downloaded notes kept in a folder and reused while Drive's version matches; native-style File/Edit/View/Pages/Study/Help menubar (compacts from 36 to 26 px while scrolling, menu items mirror toolbar state, hover switches menus) with a Ctrl/Cmd+K palette, replacing the hamburger menu; status messages are a transient toast instead of a permanent strip. Electron hides its own duplicate menubar (Alt reveals it).
 
-1. **Search and on-demand OCR (next sprint).** One search box (Pages → Find…, Ctrl+F, and palette `find …`) over three text sources, each indexed lazily and cached per note version in the library store:
-   - *PDF text:* pdf.js `getTextContent()` per page, run on first search in a worker; hits are highlighted with the text item boxes mapped through the page's PDF rect (background tag 9) so widened pages line up.
-   - *OCR of handwriting and scanned/image pages:* never automatic. **Pages → Recognize text…** asks for current page / page range / whole note and runs Tesseract.js (WASM, lazily loaded like Whisper, `spa+eng` by default, language picker) in a disposable worker over the reader's own page raster (PDF + ink + images at ~2× fit width), with progress and Cancel. Results (words, boxes, confidence) are stored per page; pages already covered by PDF text are skipped unless the user asks. Optional later: ink-only rasterization for handwriting-only passes, and the Study bridge's CLIs as a higher-quality OCR backend on desktop.
-   - *Audio:* existing Whisper transcripts (already cached per recording/settings); hits seek the recording and highlight the timed ink.
-   - Matching: accent- and case-insensitive normalized tokens (NFD, strip diacritics) with prefix matching; typo tolerance (edit distance ≤1 for words ≥5 letters) for OCR and transcript text where recognition errors are common. Results list grouped by page with source badges (PDF / OCR / Audio) and next/previous navigation. Full phonetic fuzzy search over audio is out of scope; users try a few word variants.
-   - Bounds: index stored as compact per-page word arrays; no OCR above the user's selection; memory/time limits reported in the progress UI. MCP `search_note` reuses the cached index.
-2. **Pages menu: insert pages.** `Insert blank page…` (presets + custom size, including widened pages) and `Insert PDF pages…` are in the bar but disabled. Needs a core `Edit::InsertPage` with stable page keys (UI indices map to keys at the API boundary so earlier edits keep their pages), fractional tag-5 order strings, export of new page records/editable sets/PDF resources, and a background tag 9 rect for PDFs placed on larger pages.
-3. **Study menu: flashcards and quiz.** Desktop-only bridge spawning the user's own CLIs in print mode (`claude -p --output-format json`, `antigravity -p --output-format json --json-schema`, `codex exec --output-schema`, plus a custom command). The reader renders selected pages to PNG (PDF raster + ink) into a temp dir passed with `--add-dir`; typed text and transcripts go in the prompt. Output: reviewable card list, Anki TSV with `#separator`/`#deck` headers, optional AnkiConnect push from the main process, and an in-app quiz mode. `Review a saved deck…` is wired in markup only.
-4. **MCP server.** `noteful mcp` (stdio) on the Rust core: list notes in the library folder, outline (pages, sizes, PDF page, ink counts, typed text, recordings), extract PDF/audio/cover to files, page image (resvg with the PDF page from `pdftoppm` when installed), and an Anki TSV writer. Borrow from MIT noteful-mcp: lenient record tails, tape/highlight semantics.
-5. **Pixel-eraser masks (stroke flag 2).** Partially erased strokes still render whole; apply the per-segment mask described by noteful-mcp (12 strokes in *Examen wuolah*, a few in the owner notes).
-6. **Desktop bridge.** `window.notecompleteFiles` (folder/choose/read/write/openFile/readRecent) is consumed by the reader but not yet implemented in `apps/desktop/main.js`; until then the desktop build uses browser storage and no local-path Recent entries. Restrict read/write to the chosen folder and paths opened through the main-process dialog.
+1. **Search and OCR follow-ups.** Implemented 2026-10-27 (`search-index.js`, `find.js`, `ocr.js`): Find over typed text (with bounds from the core), PDF text (pdf.js text layer mapped through background tag 9) and OCR are kept per note fingerprint in the library's `search` store; transcripts come from the transcript cache. OCR is Tesseract.js 7 (vendored LSTM cores, `@tesseract.js-data` language files fetched from jsDelivr on first use) over the reader's own page raster at 2200 px width. Verified on the owner notes: 47-page index in 1.4 s, one handwritten page recognized in ~6 s and found with a one-letter typo. Remaining: audio hits are unit-covered but not exercised end to end; hashing every recording to look up cached transcripts reads all audio once per index build (skip when the transcript store is empty); rotated-PDF word boxes are approximate; MCP `search_note` should reuse the stored index; consider ink-only rasters for handwriting-only passes.
+2. **Inserted pages: follow-ups.** Implemented 2026-10-27 (`crates/noteful-core/src/pages.rs`, `apps/reader/insert-pages.js`): stable page slots, `InsertPages` (project v3), native export with order keys between neighbours and embedded PDFs; verified by tests and by inserting a blank and two PDF pages into Temas1+2 in the reader, exporting (216.8 MB) and reopening. Remaining: delete/reorder/resize existing pages (same slot model: `RemovePages`, `MovePages`, `ResizePage` with background tag 9 kept); official Noteful import of exported inserted pages; page thumbnails' drag-and-drop.
+3. **Study menu: flashcards and quiz in the app.** The MCP route is done (item 4), so agents already make decks with the user's subscription. In-app: the reader renders pages (as for OCR) and passes them with typed/PDF text, OCR and transcripts to a local runner: `claude -p --output-format json`, `antigravity -p --output-format json --json-schema`, `codex exec --output-schema`, or a custom command. Then: a reviewable card list, Anki export (same format as `write_anki_deck`) and a quiz mode. The runner needs a process bridge: Electron main (pending a working Electron on Asahi, item 6) or a loopback companion started with the web server (token + Origin check).
+4. **MCP server: done, follow-ups.** `noteful mcp` (`crates/noteful-cli/src/mcp.rs`, docs/MCP.md): list/outline/page text/page image/search/extract/Anki deck, plus a `flashcards` prompt. It was exercised over stdio JSON-RPC against the owner notes: outline of 206 pages in 0.2 s, page image in 0.2–0.4 s. Remaining: expose the reader's OCR and transcripts (export them next to kept notes), audio transcription server-side, and a `quiz` prompt with answer checking.
+5. **Pixel-eraser masks: done.** Flag-2 strokes render only their visible runs (`Stroke::visible_runs`); all 17 masked strokes in the corpus and owner notes parse as valid. Hit testing and selection still use the whole stroke.
+6. **Desktop bridge: confirm in the running app.** `window.notecompleteFiles` is implemented (`apps/desktop/library-files.js`, unit-tested): downloads go to `~/Documents/NoteComplete` or a chosen folder (plain note names only, atomic writes), and Recent reopens only paths picked in the main-process open dialog. The packaged arm64 AppImage runs on the owner's Asahi machine under Wayland (`ELECTRON_OZONE_PLATFORM_HINT=auto`); only Chromium's headless ozone backend segfaults in Electron (null call, also inside muvm), so the app cannot be driven invisibly for automated checks there. The 2026-10-21 core dump was a network-service helper process. Still to observe in the running app: folder choice, kept Drive copies and Recent reopening.
 7. **Drive session persistence.** Tokens stay in memory, so each launch needs Reconnect (one click; the folder reopens). Consider desktop refresh tokens in `safeStorage`.
 8. Add the two owner notes' structural facts (not the files) to regression fixtures: a synthetic widened-page archive and linked-stroke blob are in `crates/noteful-core/tests/page_geometry.rs`.
 

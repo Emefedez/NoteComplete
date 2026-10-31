@@ -1,8 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, StyleSheet, Text, View, Pressable, useColorScheme, Linking} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View, Pressable, useColorScheme, Linking, Platform} from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import Constants from 'expo-constants';
+import {requireNativeModule} from 'expo';
 import {WebView} from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -16,8 +17,17 @@ export default function App() {
  const [error, setError] = useState(''), [attempt, setAttempt] = useState(0);
  const dark = useColorScheme() === 'dark';
  const background = dark ? '#1c2839' : '#f1f5f9', ink = dark ? '#e8eef8' : '#202d40';
+ // Installed Android builds serve the bundled reader on loopback unless a hosted URL is configured.
+ const bundled = Platform.OS === 'android' && Constants.appOwnership !== 'expo' && !process.env.EXPO_PUBLIC_READER_URL;
+ const [localUri, setLocalUri] = useState('');
+ useEffect(() => {
+  if (!bundled) return;
+  let active = true;
+  requireNativeModule('ReaderServer').start().then(value => { if (active) setLocalUri(value); }).catch(e => { if (active) setError(e.message); });
+  return () => { active = false; };
+ }, [bundled, attempt]);
  let uri, configError;
- try { uri = readerURL(process.env.EXPO_PUBLIC_READER_URL, Constants.expoConfig?.hostUri, Constants.expoConfig?.extra?.readerPort); }
+ try { uri = bundled ? localUri : readerURL(process.env.EXPO_PUBLIC_READER_URL, Constants.expoConfig?.hostUri, Constants.expoConfig?.extra?.readerPort); }
  catch (e) { configError = e.message; }
  if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message)});
  useEffect(()=>{const subscription=Linking.addEventListener('url',event=>incoming.current.open(event.url));Linking.getInitialURL().then(url=>incoming.current.open(url)).catch(e=>setError(e.message));return()=>subscription.remove();},[]);
@@ -72,10 +82,10 @@ export default function App() {
   {notice ? <View style={styles.notice}><Text style={{color:ink,flex:1}}>{notice}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dismiss file error" onPress={()=>setNotice('')} style={{padding:12}}><Text style={{color:ink}}>Dismiss</Text></Pressable></View> : null}
   {error || configError ? <View style={styles.message}>
    <Text style={[styles.title,{color:ink}]}>Your notebook is within reach.</Text>
-   <Text style={[styles.description,{color:ink}]}>Keep your computer and phone on the same Wi-Fi, with the reader running on your computer.</Text>
+   <Text style={[styles.description,{color:ink}]}>{bundled ? 'The bundled reader could not start. Try opening it again.' : 'Keep your computer and phone on the same Wi-Fi, with the reader running on your computer.'}</Text>
    <Text selectable style={[styles.detail,{color:ink}]}>{error || configError}</Text>
    <Pressable accessibilityRole="button" style={styles.retry} onPress={()=>{setError('');setAttempt(attempt+1);}}><Text style={styles.retryText}>Reconnect</Text></Pressable>
-  </View> : <WebView key={attempt} ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
+  </View> : !uri ? <View style={styles.loading}><ActivityIndicator size="large" color="#438ee3"/></View> : <WebView key={attempt} ref={web} source={{uri}} style={{flex:1,backgroundColor:background}}
    originWhitelist={[new URL(uri).origin]} onShouldStartLoadWithRequest={request=>allowsNavigation(request.url,uri)}
    onLoadStart={()=>{incoming.current.setReady(false);driveSession.current.generation++;}} onMessage={onMessage} onError={event=>setError(event.nativeEvent.description)} onHttpError={event=>setError(`Could not open the reader (${event.nativeEvent.statusCode}).`)}
    startInLoadingState renderLoading={()=> <View style={[styles.loading,{backgroundColor:background}]}><ActivityIndicator size="large" color="#438ee3"/><Text style={[styles.description,{color:ink}]}>Preparing your workspace…</Text></View>}

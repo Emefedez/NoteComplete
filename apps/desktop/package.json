@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.0.0",
+  "version": "1.0.16",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -27,6 +27,12 @@
     "files": [
       "main.js",
       "asset-path.js",
+      "library-files.js",
+      "ai-runner.js",
+      "transcriber.js",
+      "tabs.js",
+      "updater.js",
+      "app-menu.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",
@@ -39,7 +45,8 @@
         "zip"
       ],
       "category": "public.app-category.productivity",
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "target": [
@@ -56,6 +63,12 @@
       ],
       "category": "Office"
     },
-    "icon": "build/icon.png"
+    "icon": "build/icon.png",
+    "extraResources": [
+      {
+        "from": "../../target/release/noteful",
+        "to": "noteful"
+      }
+    ]
   }
 }

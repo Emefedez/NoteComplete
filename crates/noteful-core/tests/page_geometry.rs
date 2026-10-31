@@ -160,3 +160,44 @@ fn linked_strokes_decode_with_their_object_id() {
     assert!((strokes[0].points[1][0] - 2191.2).abs() < 1e-3);
     assert!((strokes[0].radius - 3.7).abs() < 1e-12);
 }
+
+/// Flag 2: per-segment eraser mask splits a stroke into the parts still visible.
+#[test]
+fn pixel_eraser_masks_leave_only_the_visible_runs() {
+    let points: Vec<[f64; 2]> = (0..6).map(|i| [i as f64 * 10., 0.]).collect();
+    let mut aux = vec![0, 0, 0, 0];
+    aux.extend(5u32.to_be_bytes());
+    // Segments: untouched, tail erased from 0.5, fully erased, head erased to 0.25, untouched.
+    for [a, b] in [[0f32, 0.], [0.5, 0.], [1., 1.], [0., 0.25], [0., 0.]] {
+        aux.extend(a.to_be_bytes());
+        aux.extend(b.to_be_bytes());
+    }
+    let stroke = noteful_core::Stroke {
+        offset: 0,
+        size: 0,
+        header: [0; 38],
+        flags: 2,
+        id: 1,
+        z_order: 0,
+        layer: 0,
+        radius: 1.,
+        unknown: 0,
+        link: None,
+        points: points.clone(),
+        radii: vec![],
+        bounds: vec![],
+        quantized: vec![],
+        auxiliary: aux,
+        style: Default::default(),
+    };
+    let runs = stroke.visible_runs();
+    let xs: Vec<Vec<f64>> = runs
+        .iter()
+        .map(|(p, _)| p.iter().map(|q| q[0]).collect())
+        .collect();
+    assert_eq!(xs, vec![vec![0., 10., 15.], vec![32.5, 40., 50.]]);
+    // A mask of the wrong shape is ignored: the stroke renders whole.
+    let mut odd = stroke.clone();
+    odd.auxiliary.truncate(16);
+    assert_eq!(odd.visible_runs(), vec![(points, vec![])]);
+}

@@ -34,12 +34,32 @@ pub(crate) struct Item {
     pub text: Option<crate::RichText>,
 }
 impl Item {
+    /// Payload tag 21: "lock in place" (owner notes: the table image on page 13 of
+    /// the ACII training exam). Locked items cannot be selected or edited.
+    pub(crate) fn locked(&self) -> bool {
+        self.object
+            .as_ref()
+            .is_some_and(|o| o["6"]["21"].as_u64() == Some(1))
+    }
+    /// Tape: kind-3 objects with tool 9 = 2 (payload tag 15 is 1 while tapped
+    /// open), or ink in style 2 (stroke flag 4 while tapped open, per noteful-mcp).
+    pub(crate) fn tape(&self) -> Option<bool> {
+        if let Some(s) = &self.stroke {
+            return (s.style.tool == 2).then_some(s.flags & 4 != 0);
+        }
+        let o = self.object.as_ref()?;
+        (o["6"]["1"].as_u64() == Some(3) && o["9"].as_u64() == Some(2))
+            .then(|| o["6"]["15"].as_u64() == Some(1))
+    }
     pub(crate) fn hit_points(&self) -> &[[f64; 2]] {
         self.stroke
             .as_ref()
             .map(|s| s.points.as_slice())
             .unwrap_or(&self.hit)
     }
+}
+pub(crate) fn fields_json(fs: &[Field]) -> Value {
+    fields(fs)
 }
 fn fields(fs: &[Field]) -> Value {
     Value::Object(
@@ -180,6 +200,9 @@ fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> 
 }
 /// Opacity of tape that has been tapped open.
 pub const TAPE_OPEN: f64 = 0.18;
+/// Washi-tape look: light diagonal stripes drawn over a copy of each tape (class
+/// `nc-tape-pattern`). Page SVGs define it once; the CSS overrides the copy's paint.
+pub(crate) const TAPE_DEFS: &str = "<defs><pattern id=\"ncTape\" width=\"14\" height=\"14\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\"><rect width=\"6\" height=\"14\" fill=\"#fff\" fill-opacity=\"0.42\"/></pattern><style>.nc-tape-pattern path,.nc-tape-pattern rect,.nc-tape-pattern circle,.nc-tape-pattern polygon{fill:url(#ncTape)!important;stroke:none!important}.nc-tape-pattern polyline{stroke:url(#ncTape)!important}</style></defs>";
 /// A tape's own drawing plus its striped copy.
 pub(crate) fn tape_with_pattern(el: &str) -> String {
     format!("{el}<g class=\"nc-tape-pattern\">{el}</g>")
@@ -200,7 +223,7 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
         return Ok(None);
     }
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    for pt in coords.as_chunks::<2>().0 {
+    for pt in coords.chunks_exact(2) {
         (x0, y0, x1, y1) = (x0.min(pt[0]), y0.min(pt[1]), x1.max(pt[0]), y1.max(pt[1]));
     }
     if x1 - x0 < 1e-9 || y1 - y0 < 1e-9 {
@@ -221,7 +244,7 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
             return Err(Error::new(0, "Truncated crop"));
         }
         outline.push_str(letter);
-        for pt in coords[cursor..cursor + n].as_chunks::<2>().0 {
+        for pt in coords[cursor..cursor + n].chunks_exact(2) {
             outline.push_str(&format!("{} {} ", (pt[0] - x0) * sx, (pt[1] - y0) * sy));
         }
         cursor += n;
@@ -233,6 +256,36 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
         height: sh * sy,
         outline,
     }))
+}
+/// An image object drawn from its data URL with its crop, in its placement (for edits).
+pub(crate) fn cropped_image(o: &Value, href: &str) -> Result<String> {
+    let [x, y, w, h, a] = floats::<5>(&o["2"]["1"])?;
+    let [sw, sh] = floats::<2>(&o["6"]["2"])?;
+    let el = match image_crop(&o["6"], w, h, sw, sh)? {
+        Some(Crop {
+            left,
+            top,
+            width,
+            height,
+            outline,
+        }) => {
+            let clip = format!("nc-crop-{}-edit", text(&o["1"]));
+            format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\" href=\"{href}\"/>")
+        }
+        None => format!(
+            "<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{href}\"/>"
+        ),
+    };
+    composite(
+        format!(
+            "<g transform=\"translate({x} {y}) rotate({}) translate({} {})\">{el}</g>",
+            a.to_degrees(),
+            -w / 2.,
+            -h / 2.
+        ),
+        num(&o["8"], 1.),
+        o["9"].as_u64().unwrap_or(0),
+    )
 }
 pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> Result<Item> {
     let p = &o["6"];
@@ -640,19 +693,26 @@ mod tests {
     }
     use super::object;
     use serde_json::json;
-    // Tape shapes of the owner's ACII training exam (kind 3, tool 2).
+    // Shapes of the owner's ACII training exam: tape (kind 3, tool 2) and a locked image.
     #[test]
-    fn tape_objects_cover_or_reveal() {
-        let tape = json!({"2":{"1":[544.4,982.8,1028.0,94.4,0.0]},"4":0,"5":1,"6":{"1":3,"2":[1028.0,94.4],"5":{"1":{"0":[0.9,0.8,0.9,1.0]},"2":0},"13":{"1":[0.0,0.0,1028.0,0.0,1028.0,94.4,0.0,94.4],"2":[0,1,1,1,4]},"15":0,"20":3.0},"8":1.0,"9":2});
-        let covered = object(&tape, None, 4).unwrap();
+    fn tape_and_locked_objects() {
+        let tape = |open: u64| json!({"2":{"1":[544.4,982.8,1028.0,94.4,0.0]},"4":0,"5":1,"6":{"1":3,"2":[1028.0,94.4],"5":{"1":{"0":[0.9,0.8,0.9,1.0]},"2":0},"13":{"1":[0.0,0.0,1028.0,0.0,1028.0,94.4,0.0,94.4],"2":[0,1,1,1,4]},"15":open,"20":3.0},"8":1.0,"9":2});
+        let covered = object(&tape(0), None, 4).unwrap();
+        assert_eq!(covered.tape(), Some(false));
         assert!(covered
             .svg
             .contains("data-tape=\"object:4\" data-revealed=\"0\" opacity=\"1\""));
-        let mut open = tape.clone();
-        open["6"]["15"] = json!(1);
-        let open = object(&open, None, 5).unwrap();
+        let open = object(&tape(1), None, 5).unwrap();
+        assert_eq!(open.tape(), Some(true));
         assert!(open
             .svg
             .contains(&format!("opacity=\"{}\"", super::TAPE_OPEN)));
+        assert!(!open.locked());
+        let mut shape = tape(0);
+        shape["9"] = json!(0);
+        shape["6"]["21"] = json!(1);
+        let locked = object(&shape, None, 6).unwrap();
+        assert!(locked.locked());
+        assert_eq!(locked.tape(), None);
     }
 }

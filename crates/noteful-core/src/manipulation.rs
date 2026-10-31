@@ -12,6 +12,15 @@ pub struct Adjustment {
     pub rotation: f64,
     pub width: Option<f64>,
     pub rgba: Option<[f64; 4]>,
+    /// Lock in place, set by the Lock tool. `None` keeps the item's own state
+    /// (Noteful's payload tag 21 for objects, unlocked otherwise).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked: Option<bool>,
+    /// Images only: the visible part, `[x0, y0, x1, y1]` in the image's native size
+    /// (payload tag 2), as Noteful's crop outline (payload tag 12). Set by `crop_item`,
+    /// which also moves and scales the item so its box is the visible part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<[f64; 4]>,
 }
 impl Default for Adjustment {
     fn default() -> Self {
@@ -21,6 +30,8 @@ impl Default for Adjustment {
             rotation: 0.,
             width: None,
             rgba: None,
+            locked: None,
+            crop: None,
         }
     }
 }
@@ -109,6 +120,9 @@ impl Adjustment {
             && self
                 .rgba
                 .is_none_or(|c| c.iter().all(|n| n.is_finite() && (0.0..=1.).contains(n)))
+            && self
+                .crop
+                .is_none_or(|c| c.iter().all(|n| n.is_finite()) && c[2] > c[0] && c[3] > c[1])
     }
     pub(crate) fn matrix(&self, g: &Geometry) -> [f64; 6] {
         let old = g.rotation.to_radians();
@@ -201,7 +215,29 @@ pub(crate) fn adjusted_object(item: &Item, a: &Adjustment) -> Value {
             o["6"]["7"]["7"]["0"] = json!(c);
         }
     }
+    if let Some([x0, y0, x1, y1]) = a.crop {
+        o["6"]["12"] = json!({"1": [x0, y0, x1, y0, x1, y1, x0, y1], "2": [0, 1, 1, 1, 4]});
+    }
     o
+}
+/// An image's native size (payload tag 2) and its visible part: the crop outline's
+/// bounds, or the whole image.
+pub(crate) fn image_frame(o: &Value) -> ([f64; 2], [f64; 4]) {
+    let sw = o["6"]["2"][0].as_f64().unwrap_or(1.);
+    let sh = o["6"]["2"][1].as_f64().unwrap_or(1.);
+    let coords: Vec<f64> = o["6"]["12"]["1"]
+        .as_array()
+        .map(|v| v.iter().filter_map(|n| n.as_f64()).collect())
+        .unwrap_or_default();
+    if coords.len() >= 4 {
+        let (xs, ys) = (coords.iter().step_by(2), coords.iter().skip(1).step_by(2));
+        let (x0, x1) = xs.fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        let (y0, y1) = ys.fold((f64::MAX, f64::MIN), |(a, b), &y| (a.min(y), b.max(y)));
+        if x1 > x0 && y1 > y0 {
+            return ([sw, sh], [x0, y0, x1, y1]);
+        }
+    }
+    ([sw, sh], [0., 0., sw, sh])
 }
 pub(crate) fn item_svg(item: &Item, a: Option<&Adjustment>) -> Result<String> {
     let Some(a) = a else {
@@ -209,6 +245,16 @@ pub(crate) fn item_svg(item: &Item, a: Option<&Adjustment>) -> Result<String> {
     };
     if let Some(s) = &item.stroke {
         return crate::scene::stroke_svg(&adjusted_stroke(s, a));
+    }
+    if item_geometry(item).kind == "image" && a.crop.is_some() {
+        // A new crop changes which part of the image shows: draw it again from its bytes.
+        let href = item
+            .svg
+            .split("href=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .ok_or_else(|| Error::new(0, "Image data missing"))?;
+        return crate::scene::cropped_image(&adjusted_object(item, a), href);
     }
     if item_geometry(item).kind == "image" {
         let m = a.matrix(&item_geometry(item));
@@ -248,7 +294,21 @@ impl Editor {
             .map(|(_, l)| line_geometry(l))
             .ok_or_else(|| Error::new(0, "Item not found"))
     }
-    fn editable_layer(&self, page: usize, id: &str) -> Result<u32> {
+    /// Whether an item is locked in place: the Lock tool's choice, else the
+    /// native lock of imported objects.
+    pub(crate) fn is_locked(&self, page: usize, id: &str) -> bool {
+        self.adjustments(page)
+            .get(id)
+            .and_then(|a| a.locked)
+            .unwrap_or_else(|| {
+                self.page(page)
+                    .ok()
+                    .and_then(|p| p.items.iter().find(|i| i.id == id))
+                    .is_some_and(|i| i.locked())
+            })
+    }
+    /// The layer of a live item, if that layer is visible and unlocked.
+    fn item_layer(&self, page: usize, id: &str) -> Result<u32> {
         if self.deleted(page).contains(id) {
             return Err(Error::new(0, "Item was erased"));
         }
@@ -278,8 +338,48 @@ impl Editor {
         }
         Ok(layer)
     }
-    pub fn adjust_item(&mut self, page: usize, id: &str, adjustment: Adjustment) -> Result<()> {
-        self.editable_layer(page, id)?;
+    pub(crate) fn editable_layer(&self, page: usize, id: &str) -> Result<u32> {
+        let layer = self.item_layer(page, id)?;
+        if self.is_locked(page, id) {
+            return Err(Error::new(0, "This item is locked in place"));
+        }
+        Ok(layer)
+    }
+    /// Lock or unlock one item in place, as one undoable edit.
+    pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<()> {
+        if self.is_locked(page, id) == locked {
+            return Ok(());
+        }
+        let mut a = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        a.locked = Some(locked);
+        self.adjust_item(page, id, a)
+    }
+    pub fn adjust_item(&mut self, page: usize, id: &str, mut adjustment: Adjustment) -> Result<()> {
+        let current = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        // Moves and restyles leave the lock as it was; a lock change is its own edit.
+        if adjustment.locked.is_none() {
+            adjustment.locked = current.locked;
+        }
+        if adjustment.locked != current.locked {
+            let mut rest = adjustment.clone();
+            rest.locked = current.locked;
+            if rest != current {
+                return Err(Error::new(0, "Lock and move items in separate edits"));
+            }
+            self.item_layer(page, id)?;
+        } else {
+            self.editable_layer(page, id)?;
+        }
         let g = self.geometry(page, id)?;
         if !adjustment.valid()
             || (!g.styled && (adjustment.width.is_some() || adjustment.rgba.is_some()))
@@ -313,6 +413,58 @@ impl Editor {
             adjustment,
         })
     }
+    /// Show only part of an image: `rect` is `[x0, y0, x1, y1]` in the image's native size,
+    /// clamped to the image. One undoable edit that also moves and scales the item so its box
+    /// is the visible part; a rect covering the whole image shows all of it again.
+    pub fn crop_item(&mut self, page: usize, id: &str, rect: [f64; 4]) -> Result<()> {
+        let frame = |item: &Item| (item_geometry(item), item.object.as_ref().map(image_frame));
+        let (g, frame) = if let Some(item) = self.page(page)?.items.iter().find(|i| i.id == id) {
+            frame(item)
+        } else if let Some((key, image)) = self.images(page).find(|(key, _)| key == id) {
+            frame(&image.item(key))
+        } else {
+            return Err(Error::new(0, "Item not found"));
+        };
+        let Some(([sw, sh], original)) = frame.filter(|_| g.kind == "image") else {
+            return Err(Error::new(0, "Only images can be cropped"));
+        };
+        let a = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        let current = a.crop.unwrap_or(original);
+        let r = [
+            rect[0].max(0.),
+            rect[1].max(0.),
+            rect[2].min(sw),
+            rect[3].min(sh),
+        ];
+        if !(r[2] - r[0] > 1e-3 && r[3] - r[1] > 1e-3) {
+            return Err(Error::new(0, "The crop is empty"));
+        }
+        // Native units to page units along the item's own axes, from the current crop.
+        let kx = g.bounds[2] * a.scale[0] / (current[2] - current[0]);
+        let ky = g.bounds[3] * a.scale[1] / (current[3] - current[1]);
+        let d = [
+            ((r[0] + r[2]) - (current[0] + current[2])) / 2. * kx,
+            ((r[1] + r[3]) - (current[1] + current[3])) / 2. * ky,
+        ];
+        let angle = (g.rotation + a.rotation).to_radians();
+        let (s, c) = angle.sin_cos();
+        let mut next = a.clone();
+        next.scale = [
+            a.scale[0] * (r[2] - r[0]) / (current[2] - current[0]),
+            a.scale[1] * (r[3] - r[1]) / (current[3] - current[1]),
+        ];
+        next.translation = [
+            a.translation[0] + d[0] * c - d[1] * s,
+            a.translation[1] + d[0] * s + d[1] * c,
+        ];
+        next.crop = Some(r);
+        self.adjust_item(page, id, next)
+    }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<()> {
         self.editable_layer(page, id)?;
         self.commit(Edit::Erase {
@@ -325,9 +477,23 @@ impl Editor {
         let g = self.geometry(page, id)?;
         let adjustments = self.adjustments(page);
         let a = adjustments.get(id).copied().cloned().unwrap_or_default();
-        Ok(
-            json!({"id":id,"page":page,"bounds":g.bounds,"base_rotation":g.rotation,"base_width":g.width,"base_rgba":g.rgba,"styled":g.styled,"kind":g.kind,"adjustment":a}),
-        )
+        let mut out = json!({"id":id,"page":page,"bounds":g.bounds,"base_rotation":g.rotation,"base_width":g.width,"base_rgba":g.rgba,"styled":g.styled,"kind":g.kind,"adjustment":a});
+        // Images: their native size and visible part, for the crop handles.
+        if g.kind == "image" {
+            let object = if let Some(item) = self.page(page)?.items.iter().find(|i| i.id == id) {
+                item.object.clone()
+            } else {
+                self.images(page)
+                    .find(|(key, _)| key == id)
+                    .and_then(|(key, image)| image.item(key).object)
+            };
+            if let Some(o) = object {
+                let (native, original) = image_frame(&o);
+                out["native"] = json!(native);
+                out["crop"] = json!(a.crop.unwrap_or(original));
+            }
+        }
+        Ok(out)
     }
     pub fn item_patch(&self, page: usize, id: &str) -> Result<Value> {
         let selection = self.selection(page, id)?;
@@ -352,6 +518,38 @@ impl Editor {
         )
     }
     pub fn pick_item(&self, page: usize, p: [f64; 2], tolerance: f64) -> Result<Option<Value>> {
+        match self.pick(page, p, tolerance, false)? {
+            Some(id) => self.selection(page, &id).map(Some),
+            None => Ok(None),
+        }
+    }
+    /// The topmost item under a point, locked ones included, for the Lock tool.
+    pub fn pick_lockable(&self, page: usize, p: [f64; 2], tolerance: f64) -> Result<Option<Value>> {
+        Ok(self.pick(page, p, tolerance, true)?.map(|id| {
+            let locked = self.is_locked(page, &id);
+            json!({"id": id, "page": page, "locked": locked, "bounds": self.current_bounds(page, &id).ok()})
+        }))
+    }
+    /// Axis-aligned bounds of an item as it now sits (adjustments applied).
+    pub(crate) fn current_bounds(&self, page: usize, id: &str) -> Result<[f64; 4]> {
+        let g = self.geometry(page, id)?;
+        let adjustments = self.adjustments(page);
+        let a = adjustments.get(id).copied().cloned().unwrap_or_default();
+        let m = a.matrix(&g);
+        let [x, y, w, h] = g.bounds;
+        let corners: Vec<_> = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]
+            .iter()
+            .map(|c| point(m, *c))
+            .collect();
+        Ok(bounds(&corners))
+    }
+    fn pick(
+        &self,
+        page: usize,
+        p: [f64; 2],
+        tolerance: f64,
+        include_locked: bool,
+    ) -> Result<Option<String>> {
         if p.iter().any(|n| !n.is_finite())
             || !tolerance.is_finite()
             || !(0.0..=100.).contains(&tolerance)
@@ -362,6 +560,9 @@ impl Editor {
         let adjustments = self.adjustments(page);
         let deleted = self.deleted(page);
         let added: Vec<_> = self.additions(page).collect();
+        let skip = |id: &str, native: bool| {
+            !include_locked && adjustments.get(id).and_then(|a| a.locked).unwrap_or(native)
+        };
         for layer in self
             .layers()
             .iter()
@@ -370,6 +571,7 @@ impl Editor {
         {
             for (id, line) in added.iter().rev().filter(|(_, l)| l.layer == layer.id) {
                 if !deleted.contains(id.as_str())
+                    && !skip(id, false)
                     && hit_geometry(
                         p,
                         tolerance,
@@ -379,7 +581,7 @@ impl Editor {
                         false,
                     )
                 {
-                    return self.selection(page, id).map(Some);
+                    return Ok(Some(id.clone()));
                 }
             }
             for (id, image) in self
@@ -391,6 +593,7 @@ impl Editor {
             {
                 let item = image.item(id.clone());
                 if !deleted.contains(id.as_str())
+                    && !skip(id, false)
                     && hit_geometry(
                         p,
                         tolerance,
@@ -400,10 +603,15 @@ impl Editor {
                         true,
                     )
                 {
-                    return self.selection(page, id).map(Some);
+                    return Ok(Some(id.clone()));
                 }
             }
-            for item in page_ref.items.iter().rev().filter(|i| i.layer == layer.id) {
+            for item in page_ref
+                .items
+                .iter()
+                .rev()
+                .filter(|i| i.layer == layer.id && !skip(&i.id, i.locked()))
+            {
                 if !deleted.contains(item.id.as_str())
                     && hit_geometry(
                         p,
@@ -414,7 +622,7 @@ impl Editor {
                         item.object.is_some(),
                     )
                 {
-                    return self.selection(page, &item.id).map(Some);
+                    return Ok(Some(item.id.clone()));
                 }
             }
         }

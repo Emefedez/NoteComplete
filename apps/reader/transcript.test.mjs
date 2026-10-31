@@ -5,7 +5,10 @@ globalThis.document = { addEventListener() {} };
 const { TranscriptController } = await import('./transcript.js');
 
 function element() {
-  return { hidden: false, disabled: false, children: [], attrs: {},
+  const classes = new Set();
+  return { hidden: false, disabled: false, children: [], attrs: {}, value: '', options: [], dataset: {},
+    classList: { toggle(c, on = !classes.has(c)) { on ? classes.add(c) : classes.delete(c); return on; }, add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) },
+    add(option) { this.options.push(option); },
     append(...nodes) { this.children.push(...nodes); },
     replaceChildren(...nodes) { this.children = nodes; },
     setAttribute(k, v) { this.attrs[k] = v; },
@@ -26,14 +29,19 @@ test('transcripts isolate recordings, click to seek, and stop workers on reset',
   controller.buttons[0].onclick(); controller.update();
   assert.deepEqual(seeks, [1]);
   assert.equal(controller.buttons[0].attrs['aria-current'], 'true');
+  // A running job survives switching recordings, shows its partial text greyed, and only Cancel or reset stops it.
   let terminated = false;
-  controller.worker = { terminate() { terminated = true; } };
+  controller.job = { asset: { id: 'c' }, partial: [{ text: 'parcial' }], worker: { terminate() { terminated = true; } } };
   controller.select({ id: 'b' });
-  assert.equal(terminated, true);
+  assert.equal(terminated, false);
   assert.deepEqual(controller.words, []);
+  controller.select({ id: 'c' });
+  assert.equal(controller.words[0].text, 'parcial');
+  assert.equal(controller.provisional, true);
   controller.select({ id: 'a' });
   assert.equal(controller.words[0].text, 'Hola');
   controller.reset();
+  assert.equal(terminated, true);
   assert.equal(controller.results.size, 0);
   assert.equal(nodes.get('transcribeAudio').disabled, true);
   controller.render(Array.from({ length: 5000 }, (_, i) => ({ text: `word${i}`, start: i, end: i + 1 })));
@@ -57,10 +65,10 @@ test('cancelling while bytes are being read prevents stale work from starting', 
   controller.cancel();
   release(new Uint8Array([1, 2, 3]));
   await pending;
-  assert.equal(controller.worker, null);
+  assert.equal(controller.job, null);
   assert.deepEqual(controller.words, []);
 });
-test('transcription progress fills the bar and hides when idle', () => {
+test('transcription progress fills the bar and the job chip, and hides for other recordings', () => {
   const nodes = new Map();
   globalThis.document = {
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); },
@@ -70,11 +78,16 @@ test('transcription progress fills the bar and hides when idle', () => {
   const controller = new TranscriptController(audio);
   controller.select({ id: 'a' });
   assert.equal(nodes.get('transcriptProgress').hidden, true);
-  controller.busy(true);
+  const chip = [];
+  controller.job = { asset: { id: 'a' }, partial: [], chip: { set: (f, p) => chip.push([f, p]), fail() {} } };
+  controller.controls();
   assert.equal(nodes.get('transcriptProgress').hidden, false);
-  controller.progress(1, 4);
+  controller.progress(0.25, 'Piece 1 of 4');
   assert.equal(nodes.get('transcriptProgress').value, 25);
-  assert.match(nodes.get('transcriptStatus').textContent, /25%/);
-  controller.busy(false);
+  assert.match(nodes.get('transcriptStatus').textContent, /Piece 1 of 4/);
+  assert.deepEqual(chip, [[0.25, 'Piece 1 of 4']]);
+  controller.select({ id: 'b' });
+  assert.equal(nodes.get('transcriptProgress').hidden, true);
+  controller.cancel();
   assert.equal(nodes.get('transcriptProgress').hidden, true);
 });

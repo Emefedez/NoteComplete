@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="NoteComplete: your Noteful notebooks on the desktop">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d3f7a"/>
+      <stop offset="1" stop-color="#246bce"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity="0.28"/></filter>
+  </defs>
+  <rect width="1200" height="300" rx="24" fill="url(#bg)"/>
+  <g opacity="0.08" stroke="#fff" stroke-width="1">
+    <path d="M0 60h1200M0 120h1200M0 180h1200M0 240h1200"/>
+  </g>
+  <!-- Two pages: a slide with handwriting, and a dark night-view page. -->
+  <g transform="translate(760 46) rotate(-4)" filter="url(#shadow)">
+    <rect width="250" height="190" rx="10" fill="#fff"/>
+    <rect x="22" y="22" width="150" height="12" rx="3" fill="#c8d3e6"/>
+    <rect x="22" y="46" width="206" height="7" rx="3" fill="#e3e9f3"/>
+    <rect x="22" y="60" width="180" height="7" rx="3" fill="#e3e9f3"/>
+    <rect x="22" y="74" width="196" height="7" rx="3" fill="#ffe98a"/>
+    <path d="M28 120c14-14 22-14 30 0s16 12 26-4 18-10 26 4" fill="none" stroke="#d13b2f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M124 124h40m-10-9 10 9-10 9" fill="none" stroke="#d13b2f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M180 112c6 16 18 18 30 2" fill="none" stroke="#11043c" stroke-width="4" stroke-linecap="round"/>
+    <rect x="22" y="150" width="120" height="16" rx="8" fill="#e3c6e6"/>
+  </g>
+  <g transform="translate(930 92) rotate(5)" filter="url(#shadow)">
+    <rect width="210" height="160" rx="10" fill="#141414"/>
+    <rect x="20" y="20" width="120" height="10" rx="3" fill="#4a5568"/>
+    <path d="M24 70c12-12 20-12 28 0s14 10 22-4 16-8 22 4" fill="none" stroke="#ff8a6a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M24 106h150M24 124h110" stroke="#e8ecf4" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="176" cy="40" r="12" fill="none" stroke="#9fb8ff" stroke-width="3"/>
+    <path d="M182 34a10 10 0 1 0 0 12" fill="none" stroke="#9fb8ff" stroke-width="3"/>
+  </g>
+  <text x="64" y="132" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#fff">NoteComplete</text>
+  <text x="66" y="182" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#dbe6ff">Your Noteful notebooks on the desktop, no Mac required.</text>
+  <text x="66" y="230" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#b9cdf5">Read · annotate · search handwriting · listen along · study with your AI tool</text>
+</svg>

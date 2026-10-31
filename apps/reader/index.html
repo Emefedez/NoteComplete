@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" spellcheck="false">
   <meta charset="utf-8" /><meta
     name="viewport"
     content="width=device-width,initial-scale=1,viewport-fit=cover"
@@ -23,11 +23,32 @@
         <div class="menu-content" role="menu">
           <button data-proxy="homeButton">Home</button>
           <button id="open" disabled>Open…<kbd>Ctrl O</kbd></button>
+          <button id="openFolder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
+          <button id="openLink" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
+          <button id="addDocuments" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
+          <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
+          <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
+          <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
           <button id="driveOpen">Google Drive</button>
           <hr />
           <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
-          <button id="native" disabled>Export .noteful <span class="experimental">Experimental</span></button>
-          <button id="svg" disabled>Export page as SVG</button>
+          <div class="menu-export" role="group" aria-label="Export">
+            <span>Export</span>
+            <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
+            <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
+            <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note and its notes; NoteComplete opens it with both.">NC</button>
+          </div>
+          <div class="menu-export" role="group" aria-label="Export pages as">
+            <span>Pages as</span>
+            <button id="svg" disabled data-palette="Export page as SVG" title="This page as SVG (vector)">SVG</button>
+            <button id="exportPdf" disabled data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)">PDF</button>
+            <button id="exportImage" disabled class="has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format">IMG<span class="caret"></span></button>
+          </div>
+          <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+          <div class="menu-export" role="group" aria-label="Export study material as">
+            <span>Study as</span>
+            <button id="exportStudy" disabled data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Anki</button>
+          </div>
           <hr />
           <button data-proxy="libraryChoose">Downloads folder…</button>
         </div>
@@ -38,12 +59,17 @@
           <button data-proxy="undo">Undo<kbd>Ctrl Z</kbd></button>
           <button data-proxy="redo">Redo<kbd>Ctrl Shift Z</kbd></button>
           <hr />
-          <button data-proxy-tool="pan" role="menuitemradio">Pan</button>
-          <button data-proxy-tool="select" role="menuitemradio">Select</button>
-          <button data-proxy-tool="draw" role="menuitemradio">Pen</button>
-          <button data-proxy-tool="highlight" role="menuitemradio">Highlight</button>
-          <button data-proxy-tool="erase" role="menuitemradio">Erase</button>
-          <button data-proxy-tool="shape" role="menuitemradio">Shapes</button>
+          <button id="findOpen" disabled>Find…<kbd>Ctrl F</kbd></button>
+          <button data-proxy="cropSelection" title="Select an image first; or double-click it with Select">Crop image</button>
+          <hr />
+          <button data-proxy-tool="pan" role="menuitemradio">Pan<kbd>V</kbd></button>
+          <button data-proxy-tool="select" role="menuitemradio">Select<kbd>S</kbd></button>
+          <button data-proxy-tool="draw" role="menuitemradio">Pen<kbd>P</kbd></button>
+          <button data-proxy-tool="highlight" role="menuitemradio">Highlight<kbd>H</kbd></button>
+          <button data-proxy-tool="erase" role="menuitemradio">Erase<kbd>E</kbd></button>
+          <button data-proxy-tool="tape" role="menuitemradio">Tape<kbd>T</kbd></button>
+          <button data-proxy-tool="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
+          <button data-proxy-tool="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
           <hr />
           <button data-proxy="importImage">Insert image…</button>
         </div>
@@ -53,12 +79,35 @@
         <div class="menu-content" role="menu">
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
-          <button data-proxy="toolbarToggle">Tool settings</button>
+          <button data-proxy="notesToggle">Notes<kbd>N</kbd></button>
+          <button id="scratchOpen" disabled title="AI conversations kept with this note">Scratchpad…</button>
+          <div class="menu-export" role="group" aria-label="Page position">
+            <span>Pages</span>
+            <button type="button" class="menu-icon" data-align-menu="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
+            <button type="button" class="menu-icon" data-align-menu="free" title="Free position: pages stay where you scroll them, with no centring" aria-label="Free position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
+          </div>
+          <button id="themeToggle" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
+          <button id="themeSystem" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
+          <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
+          <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
           <hr />
-          <button data-proxy="zoomIn">Zoom in</button>
-          <button data-proxy="zoomOut">Zoom out</button>
-          <button data-proxy="zoomFit">Fit page width</button>
+          <button data-proxy="zoomIn">Zoom in<kbd>Ctrl +</kbd></button>
+          <button data-proxy="zoomOut">Zoom out<kbd>Ctrl −</kbd></button>
+          <button data-proxy="zoomFit">Fit page width<kbd>Ctrl 0</kbd></button>
           <hr />
+          <div id="uiSizeItems" class="menu-group" hidden>
+            <button id="uiSmaller" data-palette="Interface smaller">Interface smaller<kbd>Ctrl Shift −</kbd></button>
+            <button id="uiLarger" data-palette="Interface larger">Interface larger<kbd>Ctrl Shift +</kbd></button>
+            <button id="uiReset" data-palette="Interface size 100%">Interface size 100%<kbd>Ctrl Shift 0</kbd></button>
+            <hr />
+          </div>
+          <button id="tapeReveal" disabled>Lift all tape</button>
+          <button id="tapeCover" disabled>Cover with all tape</button>
+          <button id="tapeNote" disabled>Tape as saved</button>
+          <hr />
+          <button data-proxy="pagesDark">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen">Display quality…</button>
         </div>
       </details>
@@ -66,36 +115,56 @@
         <summary role="menuitem">Pages</summary>
         <div class="menu-content" role="menu">
           <button id="gotoPage" disabled>Go to page…</button>
+          <button id="ocrOpen" disabled>Recognize text (OCR)…</button>
           <hr />
           <button id="insertBlank" disabled>Insert blank page…</button>
           <button id="insertPdf" disabled>Insert PDF pages…</button>
+          <button id="resizePage" disabled>Page size…</button>
+          <button id="resizeDrag" disabled>Resize by dragging the borders</button>
         </div>
       </details>
       <details class="menu bar-menu" id="studyMenu">
         <summary role="menuitem">Study</summary>
         <div class="menu-content" role="menu">
-          <button id="studyCards" disabled>Generate flashcards…</button>
-          <button id="studyQuiz" disabled>Quiz me…</button>
-          <button id="studyOpenDeck" disabled>Review a saved deck…</button>
+          <button id="studyCards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
+          <button id="studyQuiz" disabled>Quiz me…<kbd>Shift Q</kbd></button>
+          <button id="studyResume" disabled>Resume quiz<kbd>Q</kbd></button>
+          <button id="studyRetake" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
+          <button id="studyOpenDeck" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
+          <button id="studyExportQuiz" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
+          <button id="studyAllQuizzes" title="Every quiz and flashcard deck on this device, with its document">All quizzes and decks…</button>
+          <hr />
+          <button id="chatOpen" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
         </div>
       </details>
       <details class="menu bar-menu" id="helpMenu">
         <summary role="menuitem">Help</summary>
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
+          <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
+          <div id="updateItems" class="menu-group" hidden>
+            <hr />
+            <button id="updateCheck">Check for updates…</button>
+            <button id="updateOnOpen" role="menuitemcheckbox" aria-checked="true" title="Look for a new version when NoteComplete opens (at most every 6 hours); it always asks before installing">Check for updates on open</button>
+            <p id="updateVersion" class="menu-note muted"></p>
+          </div>
         </div>
       </details>
     </nav>
     <div class="brand">
       <p id="title">Home</p>
-      <span id="saveState" hidden>Unsaved changes</span>
+      <button id="saveState" class="save-state" data-icon="save" aria-label="Unsaved changes" title="Unsaved changes" hidden></button>
+      <div id="tabStrip" class="tab-strip" role="tablist" aria-label="Open notes" hidden></div>
     </div>
+    <div id="jobArea" class="job-area"></div>
+    <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
+    <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
     <div hidden>
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.notepart,.notecomplete,.notecomp,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -117,11 +186,32 @@
         </div>
         <div class="home-actions">
           <button id="homeBack" hidden>Back to document</button>
-          <button id="emptyOpen" class="primary" data-icon="open" disabled>Open file…</button>
+          <button id="emptyOpen" class="primary" data-icon="open" title="Open a note, PDF, HTML page, text file or image (Ctrl O)" disabled>File</button>
+          <button id="emptyOpenFolder" data-icon="folder" title="Open a folder: its notes and files as a group, listed beside the document" hidden>Folder</button>
         </div>
       </div>
+      <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
+        <label class="filter-group sort-group"><span class="filter-label">Sort</span><select id="homeSort" data-native aria-label="Sort notes"></select></label>
+        <div class="home-view" role="radiogroup" aria-label="Show notes as"><button type="button" role="radio" data-home-view="cards" title="Cards with covers" aria-label="Cards with covers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button><button type="button" role="radio" data-home-view="list" title="Quick list: no covers, nothing read from the files" aria-label="Quick list without covers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
+        <div class="filter-group" data-group="types" aria-label="Type"><span class="filter-label">Type</span></div>
+        <div class="filter-group" data-group="period" aria-label="Modified"><span class="filter-label">Modified</span></div>
+        <div class="filter-group" data-group="sources" aria-label="Source"><span class="filter-label">Source</span></div>
+        <div class="filter-group" data-group="favourites"><button type="button" class="chip" data-filter="favourites" aria-pressed="false" title="Only notes you starred">★ Favourites</button></div>
+        <div class="filter-group" data-group="audio"><button type="button" class="chip" data-filter="audio" aria-pressed="false">With audio</button></div>
+        <div class="filter-group" data-group="sizes" aria-label="Size"><span class="filter-label">Size</span></div>
+        <div class="filter-group" data-group="tags" aria-label="Tags" hidden><span class="filter-label">Tags</span></div>
+        <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
+        <span id="filterSummary" class="muted"></span>
+      </div>
+      <section id="foldersSection" class="home-section" aria-labelledby="foldersTitle">
+        <div class="drive-heading"><h3 id="foldersTitle">Folders</h3><div class="drive-actions"><button id="folderNew" type="button" title="Make a folder in NoteComplete to keep notes together; files stay where they are">New folder</button></div></div>
+        <div id="folderNewRow" class="folder-new" hidden><label for="folderNewName">Name</label><input id="folderNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderNewCreate" type="button" class="primary">Create</button><button id="folderNewCancel" type="button">Cancel</button></div>
+        <ul id="folderList" class="folder-list"></ul>
+        <p id="foldersEmpty" class="muted folders-empty" hidden>Folders you open (File → Open folder…) or make here appear here.</p>
+      </section>
       <section id="recentSection" class="home-section" aria-labelledby="recentTitle" hidden>
-        <h3 id="recentTitle">Recent</h3>
+        <div class="recent-heading"><button id="folderBack" type="button" hidden>← All notes</button><h3 id="recentTitle">Recent</h3></div>
+        <p id="folderEmpty" class="muted" hidden>This folder is empty. Use ⋯ → Move to folder on a note in Recent.</p>
         <ul id="recentList" class="note-grid"></ul>
       </section>
       <section id="driveSection" class="home-section" aria-labelledby="driveTitle">
@@ -153,14 +243,39 @@
           <div class="drive-search"><strong id="drivePath">Find your Noteful folder</strong><label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label><button id="driveFind" type="button" disabled>Search</button></div>
         </div>
         <p id="driveStatus" role="status" aria-live="polite"></p>
+        <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
         <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
         <button id="driveMore" type="button" hidden>Load more</button>
+      </section>
+      <section id="archiveSection" class="home-section" aria-labelledby="archiveTitle">
+        <div class="drive-heading">
+          <h3 id="archiveTitle">Internet Archive</h3>
+          <div class="drive-actions"><button id="archiveBack" type="button" disabled>Back</button></div>
+        </div>
+        <div id="archiveSources" class="archive-sources" role="group" aria-label="Internet Archive sources"></div>
+        <div class="drive-search"><strong id="archivePath"></strong><label class="drive-filter"><span class="sr-only">Internet Archive item link or identifier</span><input id="archiveLink" type="text" autocomplete="off" spellcheck="false" placeholder="Add a source: https://archive.org/details/…" /></label><button id="archiveAdd" type="button">Add</button></div>
+        <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
+        <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+        <ul id="archiveList" class="archive-list" aria-label="Internet Archive documents"></ul>
       </section>
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" hidden>Change folder…</button>
-        <span class="supported-formats">Noteful · PDF · PNG · JPEG · WebP · Your documents stay on this device.</span>
+        <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · Text · Markdown · PNG · JPEG · WebP · Your documents stay on this device.</span>
+        <span id="homeVersion" class="home-version">v1.0.1</span>
       </footer>
+    </section>
+    <section id="htmlView" hidden>
+      <div class="html-bar chrome"><button id="htmlSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="htmlDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="htmlTitle"></strong><span class="muted">Page running in a sandbox, offline</span><button id="htmlSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="htmlEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the HTML source; Save (Ctrl S) writes it back to the file, Edit again shows the page"></button><button id="htmlReload" type="button" data-icon="restart" aria-label="Reload" title="Reload the page"></button><button id="htmlClear" type="button" title="Clear saved state: forget the answers this page saved on this device">Clear</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="htmlZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="htmlZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="htmlZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div><button id="htmlNotes" type="button" class="html-notes" data-icon="note" aria-label="Notes" title="Notes: your Markdown notes beside the page (N)" aria-expanded="false"></button></div>
+      <div class="side-body"><div id="htmlGroupSlot" class="group-slot"></div><iframe id="htmlFrame" title="HTML document"></iframe><div id="htmlEditor" class="doc-editor" hidden></div></div>
+    </section>
+    <section id="webView" hidden>
+      <div class="html-bar chrome"><button id="webSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="webDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="webTitle"></strong><span id="webAddress" class="muted"></span><button id="webBack" type="button" aria-label="Back" title="Back" disabled>←</button><button id="webReload" type="button" data-icon="restart" aria-label="Reload" title="Reload the page"></button><button id="webExternal" type="button" title="Open this page in your web browser">Browser</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="webZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="webZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="webZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
+    </section>
+    <section id="textView" hidden>
+      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" aria-label="Previous match" title="Previous match (Shift Enter)" disabled>↑</button><button id="textFindNext" type="button" aria-label="Next match" title="Next match (Enter)" disabled>↓</button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">
@@ -175,6 +290,14 @@
             <span class="tool-name">Highlight</span></button
           ><button data-tool="erase" aria-pressed="false">
             <span class="tool-name">Erase</span></button
+          ><button data-tool="tape" aria-pressed="false">
+            <span class="tool-name">Tape</span></button
+          ><button data-tool="grab" aria-pressed="false">
+            <span class="tool-name">Grab</span></button
+          ><button data-tool="text" aria-pressed="false">
+            <span class="tool-name">Text</span></button
+          ><button data-tool="lock" aria-pressed="false" title="Lock in place: click an item to lock or unlock it">
+            <span class="tool-name">Lock</span></button
           ><button data-tool="shape" aria-pressed="false">
             <span class="tool-name">Shapes</span>
           </button>
@@ -198,6 +321,21 @@
             title="Ctrl/⌘ Shift Z"
             aria-label="Redo"
             data-icon="redo"
+          ></button
+          ><button
+            id="audioToggle"
+            aria-label="Audio and transcript"
+            title="Audio and transcript (A)"
+            data-icon="headphones"
+            aria-expanded="false"
+            hidden
+          ></button
+          ><button
+            id="notesToggle"
+            aria-label="Notes"
+            title="Notes: Markdown beside the pages (N)"
+            data-icon="note"
+            aria-expanded="false"
           ></button
           ><button
             id="layersToggle"
@@ -262,6 +400,13 @@
                   aria-label="Item angle"
                 />°</label
               ><button
+                id="cropSelection"
+                type="button"
+                title="Show only part of the image"
+                hidden
+              >
+                Crop</button
+              ><button
                 id="deleteSelection"
                 type="button"
                 aria-label="Delete item"
@@ -278,7 +423,14 @@
           </div>
           <div id="drawingOptions" class="option-group">
             <div id="shapeOptions" class="option-group" hidden>
-              <select id="shape" aria-label="Shape">
+              <div id="shapePicker" class="shape-picker" role="radiogroup" aria-label="Shape">
+                <button type="button" data-shape="line" role="radio" title="Line"><svg viewBox="0 0 24 24"><path d="M4 19 20 5"/></svg></button
+                ><button type="button" data-shape="rectangle" role="radio" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></button
+                ><button type="button" data-shape="ellipse" role="radio" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6"/></svg></button
+                ><button type="button" data-shape="triangle" role="radio" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 19H3Z"/></svg></button
+                ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button>
+              </div>
+              <select id="shape" data-native hidden aria-label="Shape">
                 <option value="line">Line</option>
                 <option value="rectangle">Rectangle</option>
                 <option value="ellipse">Ellipse</option>
@@ -293,25 +445,47 @@
                 Insert
               </button>
             </div>
-            <div id="highlightOptions" class="option-group" hidden>
-              <select id="highlightMode" aria-label="Highlighter">
-                <option value="straight" selected>Straight</option>
-                <option value="free">Freehand</option>
+            <div id="eraseOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="eraserSize" role="radiogroup" aria-label="Eraser size"></div>
+              <select id="eraserSize" data-native hidden aria-label="Eraser size">
+                <option value="4">Small</option>
+                <option value="10" selected>Medium</option>
+                <option value="20">Large</option>
+                <option value="40">Extra large</option>
               </select>
             </div>
-            <label class="color-label"
+            <div id="tapeOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="tapeMode" role="radiogroup" aria-label="Tape shape"></div>
+              <select id="tapeMode" data-native hidden aria-label="Tape shape">
+                <option value="band" selected>Strip</option>
+                <option value="box">Rectangle</option>
+              </select>
+            </div>
+            <div id="highlightOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="highlightMode" role="radiogroup" aria-label="Highlighter"></div>
+              <select id="highlightMode" data-native hidden aria-label="Highlighter">
+                <option value="straight" selected>Straight</option>
+                <option value="free">Freehand</option>
+                <option value="box">Rectangle</option>
+              </select>
+            </div>
+            <div class="choice-row swatches" data-for="color" role="radiogroup" aria-label="Color"></div>
+            <label class="color-label" title="Custom color"
               ><input
                 type="color"
                 id="color"
                 value="#246bce"
-                aria-label="Color" /></label
-            ><select id="width" aria-label="Stroke width">
+                aria-label="Custom color" /></label
+            ><div class="choice-row" data-for="width" role="radiogroup" aria-label="Stroke width"></div
+            ><select id="width" data-native hidden aria-label="Stroke width">
               <option value="1">1 pt</option>
               <option value="2" selected>2 pt</option>
               <option value="4">4 pt</option>
               <option value="8">8 pt</option>
               <option value="16">16 pt</option>
               <option value="24">24 pt</option>
+              <option value="40">40 pt</option>
+              <option value="64">64 pt</option>
             </select>
           </div>
         </div>
@@ -325,6 +499,14 @@
           aria-expanded="false"
           aria-controls="pagesPanel"
         ></button
+        ><button
+          id="pagesDark"
+          class="pages-dark-toggle"
+          aria-label="Dark pages"
+          title="Dark pages: invert the document's contrast (D)"
+          aria-pressed="false"
+          data-icon="moon"
+        ></button
         ><label
           >Page
           <input
@@ -336,26 +518,177 @@
             value="1" /></label
         ><span id="pageLabel"></span><span id="counts" class="muted"></span
         ><span class="spacer"></span>
+        <div id="pageAlign" class="page-align" role="radiogroup" aria-label="Page position when narrower than the window">
+          <button type="button" role="radio" data-align="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button
+          ><button type="button" role="radio" data-align="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button
+          ><button type="button" role="radio" data-align="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
+        </div>
+        <button id="pageAlignFree" type="button" class="page-free" aria-pressed="false" title="Free position: pages stay where you scroll them (trackpad), with no centring" aria-label="Free page position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
         <div class="zoom-controls" role="group" aria-label="Page zoom">
           <button id="zoomFit" aria-label="Fit page width" aria-pressed="true">
             Fit</button
           ><span class="zoom-divider" aria-hidden="true"></span
           ><button id="zoomOut" aria-label="Zoom out">−</button
-          ><output id="zoomValue" aria-label="Zoom level">100%</output
+          ><input id="zoomValue" class="zoom-input" type="text" inputmode="numeric" aria-label="Zoom level; type a percentage" title="Type a zoom percentage and press Enter" value="Fit" /
           ><button id="zoomIn" aria-label="Zoom in">+</button>
         </div>
       </div>
       <div class="workspace">
+        <div id="grabMenu" class="grab-menu" role="toolbar" aria-label="Grabbed region" hidden><button id="grabCopy" type="button">Copy text</button><button id="grabAsk" type="button" class="primary">Ask AI</button><button id="grabAttach" type="button">Add to chat</button><button id="grabCancel" type="button" aria-label="Cancel">×</button></div>
+        <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
+          <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
+          <!-- The recording list, with Record and Import beside it (recorder.js). -->
+          <div class="audio-pick">
+            <select id="recording" aria-label="Recording"></select>
+            <div id="audioSources" class="audio-sources">
+              <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)" aria-label="Record"><span class="label">Record</span></button>
+              <button id="importAudio" type="button" data-icon="upload" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
+              <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
+            </div>
+          </div>
+          <div id="recordingRow" class="recording-row" hidden>
+            <span class="rec-dot" aria-hidden="true"></span><output id="recordingClock" aria-live="off">0:00</output><span id="recordingNote" class="muted">Recording</span>
+            <span class="spacer"></span>
+            <button id="pauseRecording" type="button">Pause</button>
+            <button id="stopRecording" type="button" class="primary" title="Stop and keep the recording (Shift R)">Stop</button>
+          </div>
+          <input id="audioFile" type="file" hidden />
+          <div class="audio-transport">
+            <button id="backAudio" type="button" aria-label="Back 10 seconds" title="Back 10 s (J)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7 5 12l6 5V7Zm8 0-6 5 6 5V7Z"/></svg></button>
+            <button id="playAudio" type="button" class="play" data-state="paused" aria-label="Play" title="Play / pause (K)" disabled><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+            <button id="forwardAudio" type="button" aria-label="Forward 10 seconds" title="Forward 10 s (L)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 7 6 5-6 5V7ZM5 7l6 5-6 5V7Z"/></svg></button>
+            <span class="spacer"></span>
+            <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
+            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
+            <button id="speechSettingsToggle" type="button" class="icon-button has-caret" aria-expanded="false" aria-controls="speechSettings" title="Audio for transcription: gain, voice filter, normalize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="caret" aria-hidden="true"></span><span class="sr-only">Audio for transcription</span></button>
+          </div>
+          <div id="speechSettings" class="speech-settings" hidden>
+            <div class="transcript-controls">
+              <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
+              <label><input id="speechVoice" type="checkbox" /> Voice filter</label>
+              <label><input id="speechNormalize" type="checkbox" checked /> Normalize</label>
+            </div>
+            <p class="muted">Used when transcribing. Gain and voice filter also apply to playback.</p>
+          </div>
+          <div class="audio-seek"><input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled /><output id="audioTime">0:00 / 0:00</output></div>
+          <p id="audioState" role="status"></p>
+          <details id="transcriptPanel" class="transcript-panel" open>
+            <summary>Transcript <span class="muted">on this device</span></summary>
+            <div class="transcript-controls">
+              <select id="transcriptBackend" data-native aria-label="Transcription engine"><option value="whisper">Whisper on this device</option></select>
+              <select id="transcriptLanguage" data-native aria-label="Spoken language">
+                <option value="">Detect language</option>
+                <option value="spanish" selected>Castellano</option>
+                <option value="galician">Galego</option>
+                <option value="english">English</option>
+                <option value="catalan">Català</option>
+                <option value="french">Français</option>
+                <option value="german">Deutsch</option>
+                <option value="italian">Italiano</option>
+                <option value="portuguese">Português</option>
+              </select>
+            </div>
+            <div id="transcriptModelRow" class="transcript-controls">
+              <select id="transcriptModel" data-native aria-label="Whisper model">
+                <option value="tiny">Tiny · fastest</option>
+                <option value="base" selected>Base · balanced</option>
+                <option value="small">Small · more accurate</option>
+              </select>
+            </div>
+            <div class="transcript-controls">
+              <button id="transcribeAudio" type="button" class="primary">Transcribe</button>
+              <button id="cancelTranscript" type="button" hidden>Cancel</button>
+              <button id="transcriptEdit" type="button" aria-pressed="false" hidden title="Click a word to correct it">Edit</button>
+              <button id="transcriptRevise" type="button" hidden title="Let your AI tool correct misheard words and punctuation; every word keeps its time">Revise with AI</button>
+              <button id="transcriptRestore" type="button" hidden title="Bring back the automatic transcript from before the AI revision">Undo revision</button>
+              <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">Text</option><option value="srt">SRT subtitles</option><option value="vtt">WebVTT</option><option value="json">JSON (word times)</option></select>
+              <button id="downloadTranscript" type="button" hidden>Export</button>
+              <button id="hideTranscript" type="button" hidden>Hide</button>
+            </div>
+            <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
+            <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
+            <div id="transcriptWords" aria-label="Transcript words"></div>
+            <div id="transcriptNavigation" class="transcript-controls" hidden>
+              <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
+              <output id="transcriptRange"></output>
+              <button id="transcriptNext" type="button" aria-label="Next transcript section">→</button>
+              <label><input id="transcriptFollow" type="checkbox" checked /> Follow audio</label>
+            </div>
+          </details>
+          <audio id="audio" preload="metadata"></audio>
+        </section>
+        <aside id="quizPanel" class="quiz-panel" aria-label="Quiz" hidden>
+          <div class="quiz-panel-head"><button id="quizMini" type="button" class="quiz-mini" title="Expand quiz (M)"></button><span id="quizPanelProgress" class="muted"></span><div id="quizBar" class="quiz-bar" role="img"></div><button id="quizRestartIcon" type="button" class="restart-quiz" data-icon="restart" aria-label="Restart quiz" title="Restart this quiz: clear the answers (press twice)"></button><button id="quizDim" type="button" class="dim-toggle" data-icon="sun" aria-pressed="false" aria-label="Dim the background" title="Dim everything behind the quiz"></button><button id="quizMinimize" type="button" title="Minimize (M)" aria-label="Minimize">–</button><button id="quizPanelClose" type="button" title="Close; progress is saved" aria-label="Close">×</button></div>
+          <div class="quiz-panel-body">
+            <div id="quizPanelQuestion" class="quiz-question"></div>
+            <div id="quizPanelOptions" class="quiz-options"></div>
+            <div id="quizExplainSaved"></div>
+            <div id="quizHint" class="quiz-hint" hidden></div>
+            <p id="quizCorrection" class="quiz-correction" hidden></p>
+            <div id="quizCheckBox" class="quiz-check" hidden>
+              <textarea id="quizCheckText" rows="4" aria-label="Checked answer; you can edit it"></textarea>
+              <div id="quizCheckOptions" class="quiz-check-options" role="radiogroup" aria-label="Correct option"></div>
+              <div class="quiz-actions"><span class="spacer"></span><button id="quizCheckCancel" type="button">Cancel</button><button id="quizCheckSave" type="button" class="primary">Save as correct answer</button></div>
+            </div>
+            <div id="quizExplainBox"></div>
+            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizExplainedToggle" type="button" class="has-caret" aria-expanded="false" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizAnki" type="button" title="Export this quiz to Anki: each question becomes a card">Export to Anki</button><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
+          </div>
+        </aside>
+        <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
+          <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><select id="chatModel" data-native aria-label="Model" title="Model"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div><input id="chatModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+          <div class="chat-context">
+            <label><input id="chatPage" type="checkbox" checked /> <span id="chatPageLabel">This page</span></label>
+            <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
+            <label title="Your Markdown notes for this document" data-material="notes"><input id="chatNotes" type="checkbox" /> My notes</label>
+            <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
+          </div>
+          <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
+          <div id="chatAttachments" class="chat-attachments" hidden></div>
+          <form id="chatForm" class="chat-form"><textarea id="chatInput" rows="2" placeholder="Ask about this page, or select something first with Select" aria-label="Question"></textarea><button id="chatSend" type="submit" class="primary">Ask</button><button id="chatStop" type="button" hidden>Stop</button></form>
+        </aside>
+        <div id="findBar" class="find-bar" role="search" hidden>
+          <div class="find-row">
+            <input id="findInput" type="search" aria-label="Find in note" placeholder="Find in note: text, PDF, OCR, audio" autocomplete="off" />
+            <span id="findCount" class="find-count" aria-live="polite"></span>
+            <button id="findPrev" type="button" aria-label="Previous match" title="Previous match (Shift Enter)" disabled>↑</button>
+            <button id="findNext" type="button" aria-label="Next match" title="Next match (Enter)" disabled>↓</button>
+            <button id="findListToggle" type="button" aria-label="Show all matches" title="Show all matches">☰</button>
+            <button id="findClose" type="button" aria-label="Close find" title="Close (Esc)">×</button>
+          </div>
+          <div id="findSources" class="find-sources" role="group" aria-label="Search in"></div>
+          <p id="findProgress" class="find-progress" hidden></p>
+          <ol id="findResults" class="find-results" hidden></ol>
+        </div>
         <aside id="pagesPanel" aria-label="Page navigation">
           <div class="panel-heading">
             <h2>Pages</h2>
             <button id="closePages" aria-label="Close pages">×</button>
+          </div>
+          <div id="pagesGroupSlot" class="group-slot">
+            <aside id="groupPanel" class="group-panel" aria-label="Documents in this group" hidden>
+              <div class="panel-heading"><h2 id="groupName">Documents</h2><button id="groupAdd" type="button" title="Add documents to this group…" aria-label="Add documents to this group">+</button></div>
+              <ol id="groupList" class="group-list"></ol>
+            </aside>
           </div>
           <nav id="pageList" aria-label="Document pages"></nav>
         </aside>
         <div id="viewport" tabindex="0" aria-label="Note pages">
           <div id="pages"></div>
         </div>
+        <aside id="notesPanel" class="chrome notes-panel" aria-label="Notes" hidden>
+          <div id="notesResize" class="notes-resize" title="Drag to resize"></div>
+          <div class="row notes-head">
+            <h2>Notes</h2>
+            <span class="spacer"></span>
+            <button id="notesMarker" type="button" title="Tie what follows to the page you are on">+ Page</button>
+            <button id="notesPreview" type="button" aria-pressed="false" title="Show the notes formatted">Preview</button>
+            <label class="notes-follow" title="Scroll the notes to the section of the page you are reading"><input id="notesFollow" type="checkbox" checked /> Follow</label>
+            <button id="closeNotes" type="button" aria-label="Close notes">×</button>
+          </div>
+          <div id="notesCommands" class="notes-commands"></div>
+          <div id="notesEditor" class="notes-editor"></div>
+          <div id="notesRender" class="notes-render" hidden></div>
+        </aside>
         <aside id="layersPanel" class="chrome" hidden>
           <div class="row">
             <h2>Layers</h2>
@@ -367,89 +700,8 @@
           <div id="layersList"></div>
         </aside>
       </div>
-      <section
-        id="audioBar"
-        class="audio-bar chrome"
-        hidden
-        aria-label="Recordings"
-      >
-        <h2 id="recordingTitle"></h2>
-        <button id="audioDetails" aria-controls="audioMeta" aria-expanded="false">Recording &amp; sync</button>
-        <div id="audioMeta" class="row audio-meta">
-          <span class="audio-icon" data-icon="headphones"></span
-          ><select id="recording" aria-label="Recording"></select
-          ><button id="audioPage">Show handwriting</button
-          ><label class="sync"
-            ><input id="syncEnabled" type="checkbox" checked />Dim future
-            handwriting</label
-          ><span class="spacer"></span><a id="audioDownload" hidden>Download</a>
-        </div>
-        <div class="row audio-transport">
-          <button id="backAudio" aria-label="Back 10 seconds">−10</button
-          ><button id="playAudio" disabled>Play</button
-          ><button id="forwardAudio" aria-label="Forward 10 seconds">+10</button
-          ><input
-            id="audioSeek"
-            type="range"
-            min="0"
-            max="0"
-            step=".01"
-            value="0"
-            aria-label="Audio position"
-            disabled
-          /><output id="audioTime">0:00 / 0:00</output>
-        </div>
-        <p id="audioState" role="status"></p>
-        <details id="transcriptPanel" class="transcript-panel">
-          <summary>Transcript <span class="muted">On device · show / hide</span></summary>
-          <button id="hideTranscript" type="button">Hide transcript</button>
-          <details class="transcript-settings">
-            <summary>Language, model &amp; audio</summary>
-          <div class="transcript-controls">
-            <select id="transcriptLanguage" aria-label="Spoken language">
-              <option value="">Detect language</option>
-              <option value="spanish" selected>Castellano</option>
-              <option value="galician">Galego</option>
-              <option value="english">English</option>
-              <option value="catalan">Catalan</option>
-              <option value="french">French</option>
-              <option value="german">German</option>
-              <option value="italian">Italian</option>
-              <option value="portuguese">Portuguese</option>
-            </select>
-            <select id="transcriptModel" aria-label="Whisper model">
-              <option value="tiny">Tiny · fastest</option>
-              <option value="base" selected>Base · balanced</option>
-              <option value="small">Small · higher accuracy</option>
-            </select>
-            <label>Gain <input id="speechGain" type="range" min="-6" max="18" step="1" value="0" /><output id="speechGainValue">0 dB</output></label>
-            <label><input id="speechVoice" type="checkbox" />Voice filter</label>
-            <label><input id="speechNormalize" type="checkbox" checked />Normalize for transcription</label>
-          </div>
-          <p class="muted">Gain and voice filter apply to playback and transcription. Larger models need more memory and time; each model downloads on first use.</p>
-          </details>
-          <div class="transcript-controls">
-            <button id="transcribeAudio" type="button">Transcribe recording</button>
-            <button id="cancelTranscript" type="button" hidden>Cancel</button>
-            <button id="downloadTranscript" type="button" hidden>Export transcript</button>
-          </div>
-          <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
-          <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
-          <div id="transcriptWords" aria-label="Transcript words"></div>
-          <div id="transcriptNavigation" class="transcript-controls" hidden>
-            <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
-            <output id="transcriptRange"></output>
-            <button id="transcriptNext" type="button" aria-label="Next transcript section">→</button>
-            <label><input id="transcriptFollow" type="checkbox" checked />Follow audio</label>
-          </div>
-        </details>
-        <audio id="audio" preload="metadata"></audio>
-      </section>
+
       <p id="warnings" class="muted"></p>
-      <details id="textInfo" hidden>
-        <summary>Text and fonts</summary>
-        <ul id="textRuns"></ul>
-      </details>
     </section>
   </main>
 
@@ -470,6 +722,280 @@
     <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
+</dialog>
+
+<dialog id="linkDialog" class="ocr-dialog" aria-labelledby="linkDialogTitle">
+  <h2 id="linkDialogTitle">Open a link</h2>
+  <p class="muted">A web page, such as a course's Notion page, opens here like a document and stays in Recent. Sign-ins made in these pages are kept apart from NoteComplete.</p>
+  <label class="ocr-languages">Link<input id="linkUrl" type="url" placeholder="https://…notion.site/…" spellcheck="false" autocomplete="off" /></label>
+  <p id="linkError" class="muted link-error" hidden>Type a web address (https://…).</p>
+  <div class="ocr-actions"><button id="linkCancel" type="button">Cancel</button><button id="linkAdd" type="button" title="List the link with the open document, to jump between them" disabled>Add to this group</button><button id="linkOpen" type="button" class="primary">Open</button></div>
+</dialog>
+
+<dialog id="newDialog" class="ocr-dialog" aria-labelledby="newTitle">
+  <h2 id="newTitle">New document</h2>
+  <label class="ocr-languages">Name<input id="newName" type="text" value="Untitled" spellcheck="false" /></label>
+  <label class="ocr-languages">Page size<select id="newPreset" data-native></select></label>
+  <div id="newCustom" class="insert-custom" hidden><label>Width <input id="newWidth" type="number" min="20" max="5000" step="1" value="210" /> mm</label><label>Height <input id="newHeight" type="number" min="20" max="5000" step="1" value="297" /> mm</label></div>
+  <label class="ocr-languages">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
+  <fieldset class="new-format">
+    <legend>Save as</legend>
+    <label><input type="radio" name="newFormat" value="notecomplete" checked /> <strong>NoteComplete</strong> <span class="muted">.notecomp · the note, Markdown notes and recordings in one file</span></label>
+    <label><input type="radio" name="newFormat" value="notepart" /> <strong>NotePart</strong> <span class="muted">.notepart · the note and its Markdown notes</span></label>
+    <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful; notes and recordings stay in NoteComplete</span></label>
+  </fieldset>
+  <div class="ocr-actions"><button id="newCancel" type="button">Cancel</button><button id="newCreate" type="button" class="primary">Create</button></div>
+</dialog>
+
+<dialog id="insertDialog" class="ocr-dialog" aria-labelledby="insertTitle">
+  <h2 id="insertTitle">Insert pages</h2>
+  <p id="insertSource" class="muted"></p>
+  <label class="ocr-languages">Position<select id="insertWhere" data-native><option value="after">After the current page</option><option value="before">Before the current page</option><option value="end">At the end</option></select></label>
+  <div id="insertBlankOptions">
+    <label class="ocr-languages">Size<select id="insertPreset" data-native></select></label>
+    <div id="insertCustom" class="insert-custom" hidden><label>Width <input id="insertWidth" type="number" min="20" max="5000" step="1" /> mm</label><label>Height <input id="insertHeight" type="number" min="20" max="5000" step="1" /> mm</label></div>
+    <label class="ocr-languages">Pages to add<input id="insertCount" type="number" min="1" max="100" value="1" /></label>
+  </div>
+  <div id="insertPdfOptions" hidden>
+    <label class="ocr-languages">PDF pages <span><input id="insertFrom" type="number" min="1" value="1" aria-label="First PDF page" /> to <input id="insertTo" type="number" min="1" value="1" aria-label="Last PDF page" /></span></label>
+    <label class="ocr-languages">Extra writing space<select id="insertSpace" data-native></select></label>
+  </div>
+  <p id="insertStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="insertCancel" type="button">Cancel</button><button id="insertConfirm" type="button" class="primary">Insert</button></div>
+</dialog>
+
+<div id="textFormat" class="text-format" role="toolbar" aria-label="Text format" hidden>
+  <select id="textFont" data-native aria-label="Font" title="Font">
+    <option value="Helvetica">Sans</option>
+    <option value="Times New Roman">Serif</option>
+    <option value="Courier New">Mono</option>
+    <option value="Noteworthy">Handwriting</option>
+  </select>
+  <select id="textSize" data-native aria-label="Size" title="Size"></select>
+  <button id="textBold" type="button" class="fmt-bold" aria-pressed="false" title="Bold">B</button>
+  <button id="textItalic" type="button" class="fmt-italic" aria-pressed="false" title="Italic">I</button>
+  <span id="textSwatches" class="text-swatches" role="radiogroup" aria-label="Color"></span>
+  <label class="color-label" title="Custom color"><input type="color" id="textColor" value="#1f2328" aria-label="Custom color" /></label>
+</div>
+
+<dialog id="resizeDialog" class="ocr-dialog" aria-labelledby="resizeTitle">
+  <h2 id="resizeTitle">Page size</h2>
+  <p id="resizeCurrent" class="muted"></p>
+  <label class="ocr-languages">New size<select id="resizePreset" data-native></select></label>
+  <div id="resizeCustom" class="insert-custom" hidden><label>Width <input id="resizeWidth" type="number" min="10" max="5000" step="1" /> mm</label><label>Height <input id="resizeHeight" type="number" min="10" max="5000" step="1" /> mm</label></div>
+  <label id="resizeFitRow" class="ocr-skip"><input id="resizeFit" type="checkbox" /> Scale the PDF to fill the new size (otherwise it keeps its size and place)</label>
+  <p class="muted">Writing and drawings stay where they are on the page. Undo restores the previous size.</p>
+  <div class="ocr-actions"><button id="resizeDragInstead" type="button">Drag the borders instead</button><button id="resizeCancel" type="button">Cancel</button><button id="resizeConfirm" type="button" class="primary">Resize</button></div>
+</dialog>
+
+<dialog id="studyDialog" class="ocr-dialog" aria-labelledby="studyTitle">
+  <h2 id="studyTitle">Generate flashcards</h2>
+  <fieldset class="ocr-scope">
+    <legend>Pages</legend>
+    <div><label><input type="radio" name="studyScope" value="page" checked /> <span id="studyScopePage">Current page</span></label>
+    <label><input type="radio" name="studyScope" value="range" /> <span id="studyScopeRange">Pages</span> <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
+    <label><input type="radio" name="studyScope" value="all" /> <span id="studyScopeAll">Whole note</span></label></div>
+  </fieldset>
+  <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
+  <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
+  <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+  <div class="study-row">
+    <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>2</option><option selected>4</option><option>6</option><option>10</option></select></label>
+    <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>
+  </div>
+  <p id="studyStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="studyPromptEdit" type="button" hidden>Edit quiz instructions…</button><span class="spacer"></span><button id="studyClose" type="button">Close</button><button id="studyGo" type="button" class="primary">Generate in background</button></div>
+</dialog>
+
+<dialog id="deckDialog" class="deck-dialog" aria-labelledby="deckTitleLabel">
+  <div class="deck-head"><label id="deckTitleLabel" class="sr-only" for="deckTitle">Deck name</label><input id="deckTitle" type="text" /><span id="deckCount" class="muted"></span><span id="deckSaved" class="muted"></span><button id="deckDim" type="button" class="deck-float-only icon-button dim-toggle" data-icon="sun" aria-pressed="false" aria-label="Dim the background" title="Dim everything behind the cards"></button><button id="deckMinimize" type="button" class="deck-float-only icon-button" title="Minimize (M)" aria-label="Minimize">–</button><button id="deckFloatClose" type="button" class="deck-float-only icon-button" title="Close; the deck is saved" aria-label="Close">×</button></div>
+  <div id="deckList">
+    <ol id="deckCards" class="deck-cards"></ol>
+    <div class="ocr-actions"><button id="deckAdd" type="button">Add card</button><span class="spacer"></span><button id="deckClose" type="button">Close</button><button id="deckExport" type="button">Export to Anki…</button><button id="deckSave" type="button">Save</button><button id="deckPracticeStart" type="button" class="primary">Practise</button></div>
+  </div>
+  <div id="deckPractice" class="deck-practice" hidden>
+    <p id="practiceProgress" class="muted"></p>
+    <div class="practice-card">
+      <div class="practice-text">
+        <div id="practiceFront" class="practice-front"></div>
+        <div id="practiceBack" class="practice-back" hidden></div>
+      </div>
+    </div>
+    <div id="practiceFixBox" class="quiz-check practice-fix" hidden>
+      <p id="practiceFixReason" class="muted" role="status" aria-live="polite"></p>
+      <textarea id="practiceFixFront" rows="1" aria-label="Card question"></textarea>
+      <textarea id="practiceFixBack" rows="1" aria-label="Card answer"></textarea>
+      <div class="quiz-actions"><span class="spacer"></span><button id="practiceFixCancel" type="button">Cancel</button><button id="practiceFixSave" type="button" class="primary">Save correction</button></div>
+    </div>
+    <details id="practiceExplained" class="practice-explained" hidden>
+      <summary>Explanation <span id="practiceExplainedMeta" class="muted"></span></summary>
+      <div id="practiceExplainedText" class="practice-ask-answer chat-body"></div>
+      <div id="practiceExplainedTools" class="quiz-actions"><button id="practiceExplainedChange" type="button">Edit</button><button id="practiceExplainedAsk" type="button">Continue with AI<kbd>C</kbd></button></div>
+      <div id="practiceExplainedEdit" class="practice-explained-edit" hidden>
+        <textarea id="practiceExplainedArea" rows="3" aria-label="Explanation; you can correct it"></textarea>
+        <div class="quiz-actions"><span class="spacer"></span><button id="practiceExplainedCancel" type="button">Cancel</button><button id="practiceExplainedSave" type="button" class="primary">Save</button></div>
+      </div>
+    </details>
+    <div id="practiceAskBox" class="practice-ask" hidden>
+      <div class="practice-ask-bar">
+        <select id="practiceAskProvider" data-native aria-label="AI tool"></select>
+        <select id="practiceAskModel" data-native aria-label="Model"></select>
+        <input id="practiceAskModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name" aria-label="Other model" hidden />
+        <span class="practice-ask-material" role="group" aria-label="Send with the question">
+          <button id="practiceAskPage" type="button" class="chip" data-material="page" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
+          <button id="practiceAskPdf" type="button" class="chip" data-material="pdf" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
+          <button id="practiceAskNotes" type="button" class="chip" data-material="notes" aria-pressed="false" title="Your Markdown notes for this document">Notes</button>
+          <button id="practiceAskNote" type="button" class="chip" data-material="note" aria-pressed="false" title="Lets the tool read any page of the note (slower)">Whole note</button>
+        </span>
+      </div>
+      <div id="practiceAskThread" class="practice-ask-thread" role="log" aria-live="polite" aria-label="AI explanation"></div>
+      <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask a follow-up (it continues in Ask AI)" aria-label="Follow-up question" /><button type="submit" class="icon-button" data-icon="enter" aria-label="Ask" title="Ask (Enter)"></button><button id="practiceAskStop" type="button" hidden>Stop</button><button id="practiceAskAgain" type="button" class="icon-button" data-icon="spark" aria-label="Ask again" title="Ask again: a new explanation that replaces the saved one"></button><button id="practiceAskClose" type="button" class="icon-button" aria-label="Close" title="Close">×</button></form>
+    </div>
+    <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceAsk" type="button" title="Ask AI to explain this card with its page (C)" hidden>Ask AI<kbd>C</kbd></button><button id="practiceExplainedToggle" type="button" class="has-caret" aria-expanded="false" aria-controls="practiceExplained" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
+  </div>
+</dialog>
+
+<dialog id="versionDialog" class="ocr-dialog" aria-labelledby="versionTitle">
+  <h2 id="versionTitle">Newer version in Google Drive</h2>
+  <p id="versionText"></p>
+  <dl class="version-facts"><dt>Your copy</dt><dd id="versionMine"></dd><dt>Google Drive</dt><dd id="versionDrive"></dd></dl>
+  <div class="ocr-actions"><button id="versionCompare" type="button">Compare…</button><span class="spacer"></span><button id="versionOpenMine" type="button">Open my copy</button><button id="versionBoth" type="button" title="Download the Drive version and keep your copy too">Keep both</button><button id="versionOpenDrive" type="button" class="primary">Open Drive version</button></div>
+</dialog>
+<dialog id="compareDialog" class="compare-dialog" aria-labelledby="compareTitle">
+  <div class="compare-head"><h2 id="compareTitle">Compare</h2><p id="compareSummary" class="muted" role="status" aria-live="polite"></p></div>
+  <div class="compare-sides"><span id="compareLeftLabel"></span><span id="compareRightLabel"></span></div>
+  <ol id="compareRows" class="compare-rows"></ol>
+  <div class="ocr-actions"><span class="spacer"></span><button id="compareMine" type="button">Use my copy</button><button id="compareBoth" type="button">Keep both</button><button id="compareDrive" type="button" class="primary">Use Drive version</button></div>
+</dialog>
+<dialog id="carryDialog" class="ocr-dialog" aria-labelledby="carryTitle">
+  <h2 id="carryTitle">Bring your study material?</h2>
+  <p>Flashcards, quizzes and Markdown notes are kept per version of a file. Copy them to the new version (the old version keeps its own):</p>
+  <div id="carryList"></div>
+  <div class="ocr-actions"><button id="carrySkip" type="button">Skip</button><button id="carryBring" type="button" class="primary">Bring them</button></div>
+</dialog>
+
+<dialog id="imageViewer" class="image-viewer" aria-label="Hint, large"><img id="imageViewerImage" alt="" /></dialog>
+
+<dialog id="quizPromptDialog" class="deck-dialog" aria-labelledby="quizPromptTitle">
+  <h2 id="quizPromptTitle">Quiz instructions</h2>
+  <p class="muted">These instructions are sent to your AI tool with the pages. The reply format and the language are added automatically.</p>
+  <textarea id="quizPromptText" class="prompt-text" rows="14" spellcheck="false"></textarea>
+  <div class="ocr-actions"><button id="quizPromptReset" type="button">Restore default</button><span class="spacer"></span><button id="quizPromptCancel" type="button">Cancel</button><button id="quizPromptSave" type="button" class="primary">Save</button></div>
+</dialog>
+
+<dialog id="deckPickerDialog" class="ocr-dialog saved-dialog" aria-labelledby="savedTitle">
+  <h2 id="savedTitle">Saved for this note</h2>
+  <section aria-labelledby="savedDecksTitle">
+    <h3 id="savedDecksTitle">Flashcard decks</h3>
+    <ul id="deckPicker" class="deck-picker"></ul>
+  </section>
+  <section aria-labelledby="savedQuizzesTitle">
+    <h3 id="savedQuizzesTitle">Quizzes</h3>
+    <ul id="quizPicker" class="deck-picker"></ul>
+  </section>
+  <div class="ocr-actions"><button id="deckImport" type="button">Import deck…</button><span class="spacer"></span><button id="deckPickerClose" type="button">Close</button></div>
+</dialog>
+
+<dialog id="ocrDialog" class="ocr-dialog" aria-labelledby="ocrTitle">
+  <h2 id="ocrTitle">Recognize text</h2>
+  <p>Finds handwriting and text in scanned pages so Find can search it and you can select it. It runs on this device in the background (progress and Stop are in the bar); results are kept with this note.</p>
+  <fieldset class="ocr-scope">
+    <legend>Pages</legend>
+    <div><label><input type="radio" name="ocrScope" value="page" checked /> Current page</label>
+    <label><input type="radio" name="ocrScope" value="range" /> Pages <input id="ocrFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="ocrTo" type="number" min="1" value="1" aria-label="To page" /></label>
+    <label><input type="radio" name="ocrScope" value="all" /> Whole note <span class="muted">(slow on long notes)</span></label></div>
+  </fieldset>
+  <label class="ocr-languages">Languages <span class="muted">(Ctrl/⌘-click for several)</span><select id="ocrLanguage" multiple size="4"></select></label>
+  <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
+  <label class="ocr-skip"><input id="ocrRedo" type="checkbox" /> Recognize again pages already done (otherwise a stopped run continues where it left off)</label>
+  <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="ocrClose" type="button">Close</button><button id="ocrStart" type="button" class="primary">Recognize</button></div>
+</dialog>
+
+<div id="folderMenu" class="note-menu" role="menu" aria-labelledby="folderMenuTitle" hidden>
+  <p id="folderMenuTitle" class="note-menu-title"></p>
+  <button id="folderRename" type="button" role="menuitem">Rename…</button>
+  <div id="folderRenameRow" class="note-rename" hidden><div class="note-rename-field"><label for="folderRenameName">Name</label><input id="folderRenameName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderRenameSave" type="button">Rename</button></div></div>
+  <p id="folderMenuText" class="muted"></p>
+  <button id="folderRemove" type="button" role="menuitem">Remove folder</button>
+</div>
+
+<div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
+  <p id="forgetTitle" class="note-menu-title"></p>
+  <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>
+  <div id="renameRow" class="note-rename" hidden>
+    <div class="note-rename-field"><label for="renameInput">Name</label><input id="renameInput" type="text" autocomplete="off" spellcheck="false" maxlength="200" /><button id="renameSave" type="button">Rename</button></div>
+    <p id="renameOriginal" class="muted"></p>
+    <button id="renameRestore" type="button" hidden>Use the file name</button>
+  </div>
+  <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
+  <div id="moveRow" class="note-move" role="group" aria-label="Folders" hidden></div>
+  <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
+  <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
+  <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
+  <p id="forgetText" class="muted"></p>
+  <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
+  <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
+  <details id="forgetDanger" class="danger-zone" hidden>
+    <summary>Also delete it in Google Drive…</summary>
+    <p>Moves the Drive file to Drive’s trash for everyone who can see it; it can be restored there for 30 days. Type <strong>DELETE</strong> to confirm.</p>
+    <input id="forgetConfirm" type="text" autocomplete="off" spellcheck="false" aria-label="Type DELETE to confirm" />
+    <button id="forgetDriveDelete" type="button" class="danger" disabled>Delete in Google Drive and here</button>
+  </details>
+  <p id="forgetStatus" class="muted" role="status" aria-live="polite"></p>
+  <button id="forgetCancel" type="button" hidden>Cancel</button>
+</div>
+
+<dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog" aria-labelledby="scratchTitle">
+  <h2 id="scratchTitle">Scratchpad</h2>
+  <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
+  <ul id="scratchList" class="scratch-list"></ul>
+  <p id="scratchEmpty" class="muted" hidden>Nothing kept yet.</p>
+  <div class="ocr-actions"><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
+</dialog>
+
+<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study" aria-labelledby="allQuizzesTitle">
+  <div class="all-study-head"><h2 id="allQuizzesTitle">Study material</h2><div id="allScope" class="segmented" role="radiogroup" aria-label="Show material from"><button type="button" role="radio" data-scope="note" aria-pressed="true">This note</button><button type="button" role="radio" data-scope="all" aria-pressed="false">All notes</button></div></div>
+  <input id="allQuizzesFilter" type="search" placeholder="Filter by name or document" aria-label="Filter quizzes and decks" spellcheck="false" />
+  <div class="all-study-columns">
+    <section aria-labelledby="allQuizzesHead"><h3 id="allQuizzesHead">Quizzes</h3><ul id="all-quizzes" class="deck-picker all-quizzes"></ul><p id="all-quizzes-empty" class="muted" hidden>None yet: Study → Quiz me….</p></section>
+    <section aria-labelledby="allDecksHead"><h3 id="allDecksHead">Flashcard decks</h3><ul id="all-decks" class="deck-picker all-quizzes"></ul><p id="all-decks-empty" class="muted" hidden>None yet: Study → Generate flashcards….</p></section>
+  </div>
+  <p id="allQuizzesStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><span class="spacer"></span><button id="allQuizzesClose" type="button">Close</button></div>
+</dialog>
+
+<dialog id="migrateDialog" class="ocr-dialog migrate-dialog" aria-labelledby="migrateTitle">
+  <h2 id="migrateTitle">Migrate content</h2>
+  <div id="migratePick">
+    <p class="muted">The note that should receive the flashcards, quizzes, Markdown notes and recordings.</p>
+    <input id="migrateFilter" type="search" placeholder="Filter notes" aria-label="Filter notes" spellcheck="false" />
+    <div id="migrateList" class="migrate-list" role="radiogroup" aria-label="Destination note"></div>
+    <div class="ocr-actions"><button id="migrateCancel" type="button">Cancel</button><button id="migrateNext" type="button" class="primary" disabled>Next</button></div>
+  </div>
+  <div id="migrateWhat" hidden>
+    <p id="migrateWhatTitle"></p>
+    <div id="migrateKinds" class="migrate-kinds"></div>
+    <label class="check"><input id="migrateRemove" type="checkbox" /> Also remove them from the old note</label>
+    <div class="ocr-actions"><button id="migrateBack" type="button">Back</button><button id="migrateGo" type="button" class="primary">Migrate</button></div>
+  </div>
+  <div id="migrateAfter" hidden>
+    <p id="migrateDone"></p>
+    <div class="migrate-kinds" role="radiogroup" aria-label="The old file">
+      <label class="check"><input type="radio" name="migrateOld" value="keep" checked /> Leave it as it is</label>
+      <label class="check"><input type="radio" name="migrateOld" value="local" /> <span id="migrateLocalLabel">Remove the copy kept on this device</span></label>
+      <label class="check" id="migrateDriveRow"><input type="radio" name="migrateOld" value="drive" /> Move it to Google Drive’s trash</label>
+      <label class="check" id="migrateBothRow"><input type="radio" name="migrateOld" value="both" /> Both: Drive’s trash and this device</label>
+    </div>
+    <div class="ocr-actions"><button id="migrateFinish" type="button" class="primary">Done</button></div>
+  </div>
+  <p id="migrateStatus" class="muted" role="status" aria-live="polite"></p>
+</dialog>
+
+<dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">
+  <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
+  <table class="shortcuts"><tbody id="shortcutsList"></tbody></table>
+  <div class="ocr-actions"><button id="shortcutsClose" type="button" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

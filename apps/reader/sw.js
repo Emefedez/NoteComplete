@@ -1,5 +1,5 @@
 // Cache only application assets. Notes opened with the file picker never enter CacheStorage.
-const CACHE='noteful-reader-v10';
+const CACHE='noteful-reader-v11';
 self.addEventListener('install',event=>event.waitUntil((async()=>{
  const files=await (await fetch('./precache.json',{cache:'no-store'})).json();
  const cache=await caches.open(CACHE);await cache.addAll(files);

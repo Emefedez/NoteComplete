@@ -1,12 +1,15 @@
 import http from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
-const scope = 'https://www.googleapis.com/auth/drive.readonly';
+const READ = 'https://www.googleapis.com/auth/drive.readonly';
+// Write access is asked for only when the user chooses to upload changes.
+const WRITE = 'https://www.googleapis.com/auth/drive';
 export function desktopCredentials(value) {
   const config = value?.installed;
   if (!config || !/^[\w-]+\.apps\.googleusercontent\.com$/.test(config.client_id)) throw Error('Choose the downloaded OAuth JSON for a Google Desktop app client.');
   return { clientId: config.client_id, clientSecret: config.client_secret || '' };
 }
-export async function desktopSignIn({ credentials, openExternal, signal, fetcher = fetch }) {
+export async function desktopSignIn({ credentials, openExternal, signal, fetcher = fetch, write = false }) {
+  const scope = write ? WRITE : READ;
   const state = randomBytes(32).toString('base64url');
   const verifier = randomBytes(48).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -45,7 +48,7 @@ export async function desktopSignIn({ credentials, openExternal, signal, fetcher
     const response = await fetcher('https://oauth2.googleapis.com/token', { method: 'POST', body, signal: abort.signal });
     if (!response.ok) throw Error('Google could not complete sign-in. Check the Desktop OAuth client configuration.');
     const token = await response.json();
-    if (!token.access_token || !String(token.scope || '').split(/\s+/).includes(scope)) throw Error('Read-only Drive permission was not granted.');
+    if (!token.access_token || !String(token.scope || '').split(/\s+/).includes(scope)) throw Error(write ? 'Permission to update Drive files was not granted.' : 'Read-only Drive permission was not granted.');
     return { access_token: token.access_token, scope: token.scope, expires_in: token.expires_in };
   } finally {
     clearTimeout(timeout); signal?.removeEventListener('abort', cancel);

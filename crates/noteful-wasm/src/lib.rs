@@ -11,6 +11,14 @@ pub struct EditorSession {
 fn js_error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
+// JavaScript addresses pages by display position; the core edits stable slots.
+// Item payloads name their page, so they are reported back as the display position.
+fn on_page(mut v: serde_json::Value, display: usize) -> serde_json::Value {
+    if v.get("page").is_some_and(|p| p.is_u64()) {
+        v["page"] = json!(display);
+    }
+    v
+}
 #[wasm_bindgen]
 impl EditorSession {
     #[wasm_bindgen(constructor)]
@@ -31,14 +39,17 @@ impl EditorSession {
         })
     }
     pub fn add_image(&mut self, page: usize, image: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .add_image(page, serde_json::from_str(image).map_err(js_error)?)
             .map_err(js_error)
     }
     pub fn view(&self, page: usize) -> Result<String, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         Ok(self.inner.view(page).map_err(js_error)?.to_string())
     }
     pub fn draw(&mut self, page: usize, line: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         let line = serde_json::from_str(line).map_err(js_error)?;
         self.inner.add_line(page, line).map_err(js_error)
     }
@@ -49,20 +60,118 @@ impl EditorSession {
         y: f64,
         tolerance: f64,
     ) -> Result<String, JsValue> {
-        serde_json::to_string(
-            &self
-                .inner
-                .pick_item(page, [x, y], tolerance)
-                .map_err(js_error)?,
-        )
-        .map_err(js_error)
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let picked = self
+            .inner
+            .pick_item(page, [x, y], tolerance)
+            .map_err(js_error)?
+            .map(|v| on_page(v, display));
+        serde_json::to_string(&picked).map_err(js_error)
+    }
+    /// The item under a point for the Lock tool, locked ones included.
+    pub fn pick_lockable(
+        &self,
+        page: usize,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+    ) -> Result<String, JsValue> {
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let picked = self
+            .inner
+            .pick_lockable(page, [x, y], tolerance)
+            .map_err(js_error)?
+            .map(|v| on_page(v, display));
+        serde_json::to_string(&picked).map_err(js_error)
+    }
+    /// Replace a text box's content; `text` is a TextBox, `size` its new [w, h].
+    pub fn edit_text(
+        &mut self,
+        page: usize,
+        id: &str,
+        text: &str,
+        width: f64,
+        height: f64,
+    ) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let text = serde_json::from_str(text).map_err(js_error)?;
+        self.inner
+            .edit_text(page, id, text, [width, height])
+            .map_err(js_error)
+    }
+    /// Resize a page (display position); `pdf_rect` (JSON [x, y, w, h]) moves its PDF.
+    pub fn resize_page(
+        &mut self,
+        page: usize,
+        width: f64,
+        height: f64,
+        pdf_rect: Option<String>,
+    ) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let rect = pdf_rect
+            .map(|r| serde_json::from_str(&r))
+            .transpose()
+            .map_err(js_error)?;
+        self.inner
+            .resize_page(page, [width, height], rect)
+            .map_err(js_error)
+    }
+    /// Open a `.notecomplete` archive: the note and its Markdown notes.
+    pub fn open_notecomplete(data: &[u8]) -> Result<EditorSession, JsValue> {
+        Ok(Self {
+            inner: noteful_core::Editor::open_notecomplete(data).map_err(js_error)?,
+        })
+    }
+    pub fn markdown(&self) -> String {
+        self.inner.markdown().to_owned()
+    }
+    pub fn set_markdown(&mut self, markdown: &str) -> Result<(), JsValue> {
+        self.inner.set_markdown(markdown).map_err(js_error)
+    }
+    /// `audio_data` holds the recordings added in NoteComplete one after another; `audio_layout`
+    /// lists them in order (`id`, `name`, `mime`, `created`, `length`).
+    pub fn export_notecomplete(
+        &self,
+        audio_data: &[u8],
+        audio_layout: &str,
+    ) -> Result<Vec<u8>, JsValue> {
+        let layout: Vec<serde_json::Value> = if audio_layout.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(audio_layout).map_err(js_error)?
+        };
+        let mut audio = Vec::with_capacity(layout.len());
+        let mut at = 0usize;
+        for item in layout {
+            let length = item["length"].as_u64().unwrap_or(0) as usize;
+            let end = at
+                .checked_add(length)
+                .filter(|end| *end <= audio_data.len())
+                .ok_or_else(|| JsValue::from_str("Recording data is shorter than its layout"))?;
+            let text = |key: &str| item[key].as_str().unwrap_or("").to_owned();
+            let meta = noteful_core::AddedAudio {
+                id: text("id"),
+                name: text("name"),
+                mime: text("mime"),
+                created: item["created"].as_f64().unwrap_or(0.0),
+            };
+            audio.push((meta, &audio_data[at..end]));
+            at = end;
+        }
+        self.inner
+            .export_notecomplete_with(&audio)
+            .map_err(js_error)
+    }
+    pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        self.inner.set_locked(page, id, locked).map_err(js_error)
     }
     pub fn selection(&self, page: usize, id: &str) -> Result<String, JsValue> {
-        Ok(self
-            .inner
-            .selection(page, id)
-            .map_err(js_error)?
-            .to_string())
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        Ok(on_page(self.inner.selection(page, id).map_err(js_error)?, display).to_string())
     }
     pub fn adjust_item(
         &mut self,
@@ -70,6 +179,8 @@ impl EditorSession {
         id: &str,
         adjustment: &str,
     ) -> Result<String, JsValue> {
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .adjust_item(
                 page,
@@ -77,18 +188,38 @@ impl EditorSession {
                 serde_json::from_str(adjustment).map_err(js_error)?,
             )
             .map_err(js_error)?;
-        Ok(self
-            .inner
-            .item_patch(page, id)
-            .map_err(js_error)?
-            .to_string())
+        Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
+    }
+    /// Show only `[x0, y0, x1, y1]` (JSON, in the image's native size) of an image.
+    pub fn crop_item(&mut self, page: usize, id: &str, rect: &str) -> Result<String, JsValue> {
+        let display = page;
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let rect: [f64; 4] = serde_json::from_str(rect).map_err(js_error)?;
+        self.inner.crop_item(page, id, rect).map_err(js_error)?;
+        Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
     }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.remove_item(page, id).map_err(js_error)
     }
     pub fn erase(&mut self, page: usize, path: &str, radius: f64) -> Result<usize, JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         let path: Vec<[f64; 2]> = serde_json::from_str(path).map_err(js_error)?;
         self.inner.erase_path(page, &path, radius).map_err(js_error)
+    }
+    /// Insert pages before display position `at`; `pdf` adds its resource in the same step.
+    pub fn insert_pages(
+        &mut self,
+        at: usize,
+        pages: &str,
+        pdf: Option<String>,
+    ) -> Result<(), JsValue> {
+        let pages = serde_json::from_str(pages).map_err(js_error)?;
+        let pdf = pdf
+            .map(|p| serde_json::from_str(&p))
+            .transpose()
+            .map_err(js_error)?;
+        self.inner.insert_pages(at, pages, pdf).map_err(js_error)
     }
     pub fn undo(&mut self) {
         self.inner.undo();
@@ -97,6 +228,7 @@ impl EditorSession {
         self.inner.redo();
     }
     pub fn resize_shape(&mut self, page: usize, id: &str, shape: &str) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
         self.inner
             .resize_shape(page, id, serde_json::from_str(shape).map_err(js_error)?)
             .map_err(js_error)
@@ -171,6 +303,36 @@ fn summary(data: &[u8]) -> noteful_core::Result<String> {
 }
 
 /// Versioned, JavaScript-safe summary. Input is a Uint8Array; result is JSON text.
+/// Preview HTML for Markdown notes (raw HTML shown as text; see markdown.rs).
+#[wasm_bindgen]
+pub fn markdown_html(src: &str) -> String {
+    noteful_core::markdown_html(src)
+}
+/// Notes as a plain .md file, page markers turned into visible breaks.
+#[wasm_bindgen]
+pub fn markdown_export(src: &str, title: &str) -> String {
+    noteful_core::markdown_export(src, title)
+}
+/// Pages drawn as JPEGs, packed one after another, bound into one PDF (see page_pdf.rs).
+#[wasm_bindgen]
+pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>, JsValue> {
+    noteful_core::jpeg_pages_pdf(data, layout, title).map_err(|e| JsValue::from_str(&e))
+}
+/// MD5 hex of a file, to match it with Google Drive's md5Checksum.
+#[wasm_bindgen]
+pub fn md5_hex(data: &[u8]) -> String {
+    noteful_core::md5_hex(data)
+}
+/// Recordings added in NoteComplete inside a `.notecomp` file: JSON list with byte ranges of `data`.
+#[wasm_bindgen]
+pub fn notecomplete_audio(data: &[u8]) -> Result<String, JsValue> {
+    let found = noteful_core::notecomplete_audio(data).map_err(js_error)?;
+    serde_json::to_string(&found).map_err(js_error)
+}
+#[wasm_bindgen]
+pub fn is_notecomplete(data: &[u8]) -> bool {
+    noteful_core::is_notecomplete(data)
+}
 #[wasm_bindgen]
 pub fn inspect_document(data: &[u8]) -> Result<String, JsValue> {
     summary(data).map_err(|error| JsValue::from_str(&error.to_string()))
