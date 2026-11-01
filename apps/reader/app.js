@@ -1191,6 +1191,15 @@ function edited(op, args, result) {
   revision++;
   doc = result;
   savedState();
+  // An infinite canvas that grew (or shrank on undo) keeps its place on screen: the
+  // page is resized where it is and redrawn, not rebuilt.
+  const size = result.page_sizes[0];
+  if (result.canvas && result.pages === 1 && panels.length === 1 && (size[0] !== panels[0].size[0] || size[1] !== panels[0].size[1])) {
+    panels[0].size = size;
+    panels[0].el.style.aspectRatio = size.join("/");
+    resize();
+    return false;
+  }
   if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
     restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : undefined);
     return true;
@@ -2103,20 +2112,35 @@ async function save(native, as = native ? "noteful" : "project") {
   }
 }
 $("save").onclick = () => (saveAs ? save(saveAs === "noteful", saveAs) : save(false));
-// New document: blank pages of a chosen size, saved in the chosen format.
+// New document: blank pages of a chosen size, saved in the chosen format, or an
+// infinite canvas: one page (two sheets wide, two tall) that grows as ink nears its edge.
+const CANVAS_START = [3087, 2182.8];
 for (const [value, { label }] of Object.entries(PRESETS)) if (value !== "current") $("newPreset").add(new Option(label, value));
-$("newPreset").onchange = () => { $("newCustom").hidden = $("newPreset").value !== "custom"; };
+$("newPreset").onchange = () => { $("newCustom").hidden = newKind() === "canvas" || $("newPreset").value !== "custom"; };
+const newKind = () => document.querySelector('[name="newKind"]:checked')?.value || "pages";
+// Noteful has no infinite page: a canvas is saved as .notecomp or .notepart only.
+function newKindChanged() {
+  const canvas = newKind() === "canvas", noteful = document.querySelector('[name="newFormat"][value="noteful"]');
+  for (const el of document.querySelectorAll("#newDialog .new-pages-only")) el.hidden = canvas;
+  noteful.disabled = canvas;
+  noteful.closest("label").title = canvas ? "An infinite canvas cannot be a .noteful file" : "";
+  if (canvas && noteful.checked) document.querySelector('[name="newFormat"][value="notecomplete"]').checked = true;
+  $("newPreset").onchange();
+}
+for (const box of document.querySelectorAll('[name="newKind"]')) box.onchange = newKindChanged;
 $("newDocument").onclick = () => {
   for (const m of document.querySelectorAll("details.menu")) m.open = false;
   try { const f = localStorage.getItem("notecomplete-new-format"); const box = document.querySelector(`[name="newFormat"][value="${f}"]`); if (box) box.checked = true; } catch { /* Optional. */ }
+  newKindChanged();
   $("newDialog").showModal();
   $("newName").select();
 };
 $("newCancel").onclick = () => $("newDialog").close();
 $("newCreate").onclick = async () => {
   if (!canReplace()) return;
-  const preset = $("newPreset").value, count = Math.max(1, Math.min(200, Math.round(Number($("newCount").value) || 1)));
-  const size = preset === "custom" ? [Number($("newWidth").value), Number($("newHeight").value)].map(mmToUnits) : PRESETS[preset].mm.map(mmToUnits);
+  const canvas = newKind() === "canvas";
+  const preset = $("newPreset").value, count = canvas ? 1 : Math.max(1, Math.min(200, Math.round(Number($("newCount").value) || 1)));
+  const size = canvas ? CANVAS_START : preset === "custom" ? [Number($("newWidth").value), Number($("newHeight").value)].map(mmToUnits) : PRESETS[preset].mm.map(mmToUnits);
   if (!size.every((n) => Number.isFinite(n) && n > 0)) return status("Choose a page size.", true);
   const format = document.querySelector('[name="newFormat"]:checked')?.value || "notecomplete";
   try { localStorage.setItem("notecomplete-new-format", format); } catch { /* Optional. */ }
@@ -2124,7 +2148,7 @@ $("newCreate").onclick = async () => {
   $("newDialog").close();
   // A unique stand-in file, so this document's notes and study material get their own key.
   const seed = crypto.getRandomValues(new Uint8Array(16));
-  await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format });
+  await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format, canvas });
 };
 // Markdown written as handwriting ink (the MCP ink engine): a new note, or pages in this one.
 const converter = handwritingConverter({
@@ -2976,6 +3000,14 @@ function documentControls() {
   $("findOpen").disabled = !open && !textView.hasDocument;
   for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
+  // Noteful has no infinite page: a canvas exports to .notecomp only.
+  for (const id of ["native", "nativeMarkdown"]) {
+    $(id).dataset.title ??= $(id).title;
+    $(id).disabled ||= !!doc?.canvas;
+    $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.notecomp)" : $(id).dataset.title;
+  }
+  // A canvas is one page that grows: no inserted pages.
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();

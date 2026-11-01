@@ -353,7 +353,18 @@ impl Editor {
         Ok(())
     }
     /// Flatten the applied history into a native container. Redo entries stay unapplied.
+    /// The note as a `.noteful` file. An infinite canvas has no Noteful form.
     pub fn export_noteful(&self) -> Result<Vec<u8>> {
+        if self.canvas {
+            return Err(Error::new(
+                0,
+                "An infinite canvas cannot be a .noteful file; save it as .notecomp or .notepart",
+            ));
+        }
+        self.noteful_bytes()
+    }
+    /// The Noteful package itself, also for a canvas (inside its `.notecomp`).
+    pub(crate) fn noteful_bytes(&self) -> Result<Vec<u8>> {
         if self.cursor == 0 {
             return Ok(self.source.clone());
         }

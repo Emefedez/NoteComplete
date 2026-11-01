@@ -108,6 +108,9 @@ struct Project {
     /// Words of handwriting written from Markdown on original pages (project version 6).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     ink_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
+    /// An infinite canvas (project version 7).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    canvas: bool,
 }
 pub struct Editor {
     pub(crate) source: Vec<u8>,
@@ -123,6 +126,8 @@ pub struct Editor {
     /// and on inserted pages (with their InsertPages edit, so undo keeps them in step).
     pub(crate) base_words: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
     pub(crate) inserted_words: Vec<Vec<crate::InkWord>>,
+    /// An infinite canvas (canvas.rs): one page that grows as you write.
+    pub(crate) canvas: bool,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -189,6 +194,7 @@ impl Editor {
             markdown: String::new(),
             base_words: Default::default(),
             inserted_words: Vec::new(),
+            canvas: false,
         })
     }
     /// A page by slot (see pages.rs); hosts map display positions with `slot`.
@@ -571,7 +577,7 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page)}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page),"canvas":self.canvas}),
         )
     }
     /// Items locked in place on a page, with their current bounds.
@@ -601,7 +607,9 @@ impl Editor {
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if !self.base_words.is_empty()
+            version: if self.canvas {
+                7
+            } else if !self.base_words.is_empty()
                 || self.history.iter().any(|e| {
                     matches!(e, Edit::InsertPages { pages, .. } if pages.iter().any(|p| !p.words.is_empty()))
                 }) {
@@ -629,6 +637,7 @@ impl Editor {
             cursor: self.cursor,
             markdown: self.markdown.clone(),
             ink_text: self.base_words.clone(),
+            canvas: self.canvas,
         })
         .map_err(|e| Error::new(0, e.to_string()))?;
         Ok(data)
@@ -694,7 +703,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=6)
+            || !matches!(project.version, 1..=7)
             || project
                 .ink_text
                 .values()
@@ -776,6 +785,7 @@ impl Editor {
         for (slot, words) in project.ink_text {
             editor.set_ink_words(slot, words)?;
         }
+        editor.set_canvas(project.canvas)?;
         Ok(editor)
     }
 }

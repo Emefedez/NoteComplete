@@ -21,6 +21,10 @@ Study and Ask AI use an AI tool already installed and signed in on your computer
 
 Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, tap a tape to lift it and tap again to cover; **View → Lift all tape / Cover with all tape / Tape as saved** applies to the whole note. Tape state is a viewing choice and is not saved. Items locked in place in Noteful cannot be selected, moved or erased. Zoom with <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd>, and <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the page; this works on any keyboard layout.
 
+## Infinite canvas
+
+**File → New document… → Canvas** makes one page that grows as you write. When ink, a picture or a text box comes near its right or bottom edge, the page gets bigger, and the view stays where it is. Undo removes the stroke first and then the growth. A canvas is saved as `.notecomp` or `.notepart` (or a project). It is never a `.noteful` file, because Noteful has no infinite page: the Noteful format and the NF exports are off for it. Pages cannot be inserted into a canvas. PDF, SVG and image exports show it as one large page.
+
 ## Insert pages
 
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).

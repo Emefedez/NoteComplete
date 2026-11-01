@@ -819,9 +819,14 @@
 <dialog id="newDialog" class="ocr-dialog" aria-labelledby="newTitle">
   <h2 id="newTitle">New document</h2>
   <label class="ocr-languages">Name<input id="newName" type="text" value="Untitled" spellcheck="false" /></label>
-  <label class="ocr-languages">Page size<select id="newPreset" data-native></select></label>
+  <fieldset class="new-format new-kind">
+    <legend>Kind</legend>
+    <label><input type="radio" name="newKind" value="pages" checked /> <strong>Pages</strong> <span class="muted">sheets of a fixed size</span></label>
+    <label><input type="radio" name="newKind" value="canvas" /> <strong>Canvas</strong> <span class="muted">one infinite page that grows as you write; .notecomp or .notepart only</span></label>
+  </fieldset>
+  <label class="ocr-languages new-pages-only">Page size<select id="newPreset" data-native></select></label>
   <div id="newCustom" class="insert-custom" hidden><label>Width <input id="newWidth" type="number" min="20" max="5000" step="1" value="210" /> mm</label><label>Height <input id="newHeight" type="number" min="20" max="5000" step="1" value="297" /> mm</label></div>
-  <label class="ocr-languages">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
+  <label class="ocr-languages new-pages-only">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
   <fieldset class="new-format">
     <legend>Save as</legend>
     <label><input type="radio" name="newFormat" value="notecomplete" checked /> <strong>NoteComplete</strong> <span class="muted">.notecomp · the note, Markdown notes and recordings in one file</span></label>
