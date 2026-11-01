@@ -42,12 +42,21 @@ if (DIR) mkdirSync(DIR, { recursive: true });
   await p.waitForFunction(() => document.getElementById('hwAiStatus').textContent.startsWith('Written'));
   // The written Markdown stays editable, and the Markdown tab can make your own text richer.
   assert.equal(await p.isVisible('#hwMarkdown'), true);
+  // The result lands in the From Markdown tab, ready to edit or enrich.
+  assert.equal(await p.getAttribute('#hwModeMarkdown', 'aria-selected'), 'true');
+  // Every button of the dialog is inside the window, also on a short screen.
+  for (const size of [{ width: 1400, height: 860 }, { width: 1280, height: 640 }, { width: 390, height: 700 }]) {
+    await p.setViewportSize(size);
+    const cut = await p.evaluate(() => [...document.querySelectorAll('.handwriting-dialog[open] .ocr-actions button:not([hidden])')].filter((b) => { const r = b.getBoundingClientRect(); return r.bottom > innerHeight || r.right > innerWidth || r.top < 0; }).map((b) => b.id));
+    assert.deepEqual(cut, [], `buttons cut off at ${size.width}×${size.height}`);
+    if (DIR) await p.screenshot({ path: DIR + `dialog-${size.width}x${size.height}.png` });
+  }
+  await p.setViewportSize({ width: 1400, height: 860 });
   assert.match(await p.inputValue('#hwMarkdown'), /^# THE \*\*CARDIAC\*\* CYCLE/);
   assert.equal(await p.inputValue('#hwName'), 'THE CARDIAC CYCLE');
   assert.match(await p.evaluate(() => window.__aiPrompt), /the cardiac cycle for a first-year exam$/);
   await p.waitForFunction(() => document.querySelectorAll('#hwPages svg').length >= 1);
   if (DIR) await p.screenshot({ path: DIR + 'ai.png' });
-  await p.click('#hwModeMarkdown');
   assert.equal(await p.isVisible('#hwRequest'), false);
   assert.equal(await p.isVisible('#hwEnrich'), true);
   await p.click('#hwEnrich');
@@ -57,8 +66,11 @@ if (DIR) mkdirSync(DIR, { recursive: true });
   await p.fill('#hwMarkdown', '# Mine');
   await p.click('#hwEnrich');
   await p.waitForFunction(() => document.getElementById('hwAiStatus').textContent.startsWith('Done'));
-  await p.click('#hwRevert');
+  await p.click('#hwUndo');
   assert.equal(await p.inputValue('#hwMarkdown'), '# Mine');
+  await p.click('#hwRedo');
+  assert.match(await p.inputValue('#hwMarkdown'), /CARDIAC/);
+  await p.click('#hwUndo');
   await p.click('#hwModePrompt');
   await p.click('#hwWrite');
   await p.waitForFunction(() => document.getElementById('hwAiStatus').textContent.startsWith('Written'));

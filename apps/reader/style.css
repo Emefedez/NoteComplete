@@ -2550,3 +2550,12 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .hw-tools { margin-top: -2px; }
 .hw-ai-status { margin: 0; font-size: 12px; min-height: 0; }
 .hw-ai-status:empty { display: none; }
+/* The handwriting dialog fits the window: its form scrolls, the buttons stay visible. */
+.handwriting-dialog[open] { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); box-sizing: border-box; }
+.handwriting-dialog .hw-layout { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+.handwriting-dialog > .ocr-actions { flex: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.handwriting-dialog > h2, .handwriting-dialog > p { flex: none; }
+@media (max-height: 760px) { .hw-source textarea#hwMarkdown { min-height: 160px; } .hw-pages { max-height: 48vh; } }
+.hw-edit-bar { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.hw-edit-bar span { margin-right: auto; }
+.hw-edit-bar button { min-height: 26px; padding: 0 10px; font-size: 12px; }

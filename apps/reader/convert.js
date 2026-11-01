@@ -67,7 +67,30 @@ export function optionsFrom(values) {
 }
 
 export function handwritingConverter({ call, status, onCreate, onInsert, sourceText = () => "", hasDocument = () => false, store = globalThis.localStorage, ai = null }) {
-  let dialog = null, timer = 0, ask = 0, writing = null, model = null, mine = null;
+  let dialog = null, timer = 0, ask = 0, writing = null, model = null, typing = 0;
+  // The Markdown's history: past versions and the position in them.
+  let versions = [], at = -1;
+  function snapshot() {
+    const text = el("hwMarkdown").value;
+    if (versions[at] === text) return;
+    versions = versions.slice(0, at + 1).concat(text).slice(-50);
+    at = versions.length - 1;
+    buttons();
+  }
+  function step(by) {
+    clearTimeout(typing);
+    snapshot();
+    const next = at + by;
+    if (next < 0 || next >= versions.length) return;
+    at = next;
+    el("hwMarkdown").value = versions[at];
+    buttons();
+    schedule();
+  }
+  function buttons() {
+    el("hwUndo").disabled = at <= 0;
+    el("hwRedo").disabled = at >= versions.length - 1;
+  }
   const el = (id) => dialog.querySelector(`#${id}`);
   const remembered = () => { try { return JSON.parse(store?.getItem(STORE) || "{}"); } catch { return {}; } };
   const remember = (v) => { try { store?.setItem(STORE, JSON.stringify(v)); } catch { /* Optional. */ } };
@@ -98,11 +121,11 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
           <div id="hwMarkdownPanel" class="hw-import" role="tabpanel">
             <button id="hwOpenFile" type="button">Open a Markdown file…</button><input id="hwFile" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
             <button id="hwEnrich" type="button" title="Your AI tool rewrites this Markdown with highlights, cards, colours and drawings, keeping what it says">Make it richer with AI</button>
-            <button id="hwRevert" type="button" hidden title="Put back the Markdown as it was before the AI rewrote it">Use my version</button>
           </div>
           <div id="hwAiTools" class="hw-ai-row hw-tools"${ai ? "" : " hidden"}><select id="hwTool" data-native aria-label="AI tool"></select><select id="hwModel" data-native aria-label="Model"></select><input id="hwModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden /></div>
           <p id="hwAiStatus" class="muted hw-ai-status" role="status"></p>
           <label class="ocr-languages">Name<input id="hwName" type="text" spellcheck="false" /></label>
+          <div class="hw-edit-bar"><span class="muted">Markdown</span><button id="hwUndo" type="button" disabled title="Undo the last change to the Markdown (an AI write, an opened file or your typing)">Undo</button><button id="hwRedo" type="button" disabled title="Redo">Redo</button></div>
           <textarea id="hwMarkdown" spellcheck="false" aria-label="Markdown" rows="14"></textarea>
           <details class="hw-help"><summary>Markdown for handwriting</summary><p class="muted"><code># TITLE</code>, <code>## Section</code>, <code>**term**</code>, <code>==highlight==</code>, <code>[[tag]]</code>, <code>((grey detail))</code>, <code>- item</code>, <code>1. step</code>, <code>&gt; [sky] CARD: text</code>, <code>&gt;&gt; A: … || B: …</code>, <code>!columns 55</code> … <code>!col</code> … <code>!end</code>, <code>!zone [mint]</code> … <code>!end</code>, <code>!sticky [yellow] TITLE: text</code>, <code>!stat 42 label</code>, <code>!draw 480</code> &lt;svg…&gt; <code>!end</code>, <code>\\pagebreak</code>. Greek letters, <code>T^4</code> and <code>CO_2</code> are drawn by hand.</p></details>
           <div class="hw-fields">${selects}<label class="ocr-languages">Text size<input id="hwSize" type="number" min="4" max="60" step="0.5" value="11" /></label></div>
@@ -118,14 +141,10 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
     document.body.append(dialog);
     el("hwCancel").onclick = () => dialog.close();
     dialog.addEventListener("close", () => stopWriting());
-    el("hwRevert").onclick = () => {
-      if (mine == null) return;
-      el("hwMarkdown").value = mine;
-      mine = null;
-      el("hwRevert").hidden = true;
-      el("hwAiStatus").textContent = "Your version is back.";
-      schedule();
-    };
+    // Undo and redo for the Markdown: every AI write, opened file and pause in typing is a step.
+    el("hwUndo").onclick = () => step(-1);
+    el("hwRedo").onclick = () => step(1);
+    el("hwMarkdown").addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(() => snapshot(), 800); });
     el("hwModePrompt").onclick = () => mode("prompt");
     el("hwModeMarkdown").onclick = () => mode("markdown");
     // Your own Markdown from a file: it replaces the text and names the note.
@@ -135,7 +154,9 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       el("hwFile").value = "";
       if (!file) return;
       if (file.size > 4 * 1024 * 1024) { el("hwStatus").textContent = "That file is too large for one note."; return; }
+      snapshot();
       el("hwMarkdown").value = await file.text();
+      snapshot();
       el("hwName").value = titleOf(el("hwMarkdown").value) || file.name.replace(/\.[^.]+$/, "");
       schedule();
     };
@@ -200,6 +221,7 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
     button.textContent = "Stop";
     el("hwAiStatus").textContent = kind === "prompt" ? "Writing… (your AI tool can take a minute)" : "Making it richer… (your AI tool can take a minute)";
     const before = el("hwMarkdown").value;
+    snapshot();
     let streamed = "";
     try {
       const dialect = await call("dialect");
@@ -217,8 +239,10 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       el("hwMarkdown").value = markdown;
       const name = el("hwName").value.trim();
       if (!name || name === "Handwritten notes") el("hwName").value = titleOf(markdown) || name || "Handwritten notes";
-      if (kind === "enrich") { mine = source; el("hwRevert").hidden = false; }
-      el("hwAiStatus").textContent = kind === "prompt" ? "Written. Check the preview, change anything, then create the note." : "Done: your Markdown now uses highlights, cards and colours. Check the preview, or use your version again.";
+      snapshot();
+      // The note written from a prompt is now its Markdown: show it there, ready to edit or enrich.
+      if (kind === "prompt") { mode("markdown"); el("hwMarkdown").scrollTop = 0; }
+      el("hwAiStatus").textContent = kind === "prompt" ? "Written. Check the preview, change anything, then create the note." : "Done: your Markdown now uses highlights, cards and colours. Check the preview; Undo brings back your version.";
       schedule();
     } catch (e) {
       if (!run.stopped) {
@@ -278,6 +302,9 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       const source = sourceText();
       if (source.trim() || !el("hwMarkdown").value.trim()) el("hwMarkdown").value = source.trim() ? source : withAi ? "" : SAMPLE;
       if (!el("hwName").value) el("hwName").value = "Handwritten notes";
+      versions = [el("hwMarkdown").value];
+      at = 0;
+      buttons();
       const canInsert = hasDocument();
       el("hwInsert").hidden = el("hwWhereLabel").hidden = !canInsert;
       el("hwCreate").classList.toggle("primary", !insert || !canInsert);
