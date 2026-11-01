@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node ../../tools/start_expo.mjs",
     "check": "expo install --check",
-    "export": "expo export --platform ios --platform android",
+    "export": "expo export --platform android",
     "test": "node --test *.test.mjs",
     "android": "expo run:android"
   },

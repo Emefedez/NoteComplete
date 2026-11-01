@@ -1,0 +1,50 @@
+name: Web app (GitHub Pages)
+# The website: the web app for any phone, tablet or computer (Android, iPad and iPhone
+# included: Add to Home Screen), with tabs, opening a welcome notebook the app writes from
+# docs/site/welcome.md. Built on every push to main and published to GitHub Pages; set
+# Settings → Pages → Source to "GitHub Actions" once.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cargo install wasm-bindgen-cli --version 0.2.128 --locked --root work/wasm-tools
+      - run: python tools/build_web.py
+      - run: node apps/reader/test.mjs
+      # Only the audited asset list (precache.json), as the desktop and Android apps ship it.
+      - run: node apps/desktop/stage.mjs
+      # Tabs at the site's address, opening the welcome notebook (docs/site/welcome.md) and Home.
+      - run: node tools/build_site.mjs
+      - run: touch apps/desktop/reader/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/desktop/reader
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

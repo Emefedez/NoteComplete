@@ -5,16 +5,6 @@
     "version": "1.1.2",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
-        },
-        "NSLocalNetworkUsageDescription": "NoteComplete connects to a computer on this network when you use this device as its drawing tablet."
-      },
-      "icon": "./assets/icon.png"
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

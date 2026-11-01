@@ -78,6 +78,7 @@ enum Kind {
     Highlight,
     Pill,
     Grey,
+    Link,
 }
 #[derive(Clone, Debug, PartialEq)]
 struct Span {
@@ -85,6 +86,8 @@ struct Span {
     end: usize,
     kind: Kind,
     color: Option<String>,
+    /// For links (`[label](url)`): where the written label goes.
+    link: Option<String>,
 }
 
 fn chars(s: &str) -> Vec<char> {
@@ -100,8 +103,8 @@ fn starts(hay: &[char], at: usize, s: &str) -> bool {
     let n: Vec<char> = s.chars().collect();
     hay.len() >= at + n.len() && hay[at..at + n.len()] == n[..]
 }
-/// `**bold**`, `==highlight==` (`=={pink}..==`, `{hl:pink}==..==`), `[[pill]]`
-/// and `((grey))`: plain text and the spans they mark, in characters.
+/// `**bold**`, `==highlight==` (`=={pink}..==`, `{hl:pink}==..==`), `[[pill]]`,
+/// `((grey))` and `[label](url)` links: plain text and the spans they mark, in characters.
 fn parse_inline(text: &str) -> (String, Vec<Span>) {
     let t = chars(text);
     let mut out: Vec<char> = Vec::new();
@@ -148,15 +151,32 @@ fn parse_inline(text: &str) -> (String, Vec<Span>) {
                 matched = Some((i + 2, e, e + 2, Kind::Grey, None));
             }
         }
+        // [label](https://…): the label is written, the address kept with its words.
+        if matched.is_none() && t[i] == '[' && !starts(&t, i, "[[") {
+            if let Some(e) = closing(i + 1, "](") {
+                if let Some(z) = find_from(&t, &[')'], e + 2) {
+                    let url: String = t[e + 2..z].iter().collect();
+                    if crate::pages::link_valid(&url) {
+                        matched = Some((i + 1, e, z + 1, Kind::Link, Some(url)));
+                    }
+                }
+            }
+        }
         match matched {
             Some((a, z, next, kind, col)) => {
                 let start = out.len();
                 out.extend(&t[a..z]);
+                let (color, link) = if kind == Kind::Link {
+                    (None, col)
+                } else {
+                    (col, None)
+                };
                 spans.push(Span {
                     start,
                     end: out.len(),
                     kind,
-                    color: col.or_else(|| (kind == Kind::Highlight).then(|| "yellow".into())),
+                    color: color.or_else(|| (kind == Kind::Highlight).then(|| "yellow".into())),
+                    link,
                 });
                 i = next;
             }
@@ -908,12 +928,32 @@ impl Composer {
                     col = neon(s.color.as_deref().unwrap_or("yellow"));
                 }
             }
+            let link = kinds.iter().find_map(|s| s.link.clone());
+            if link.is_some() {
+                col = self.colour();
+            }
             let mut pen = self.pen_for(Some(col), wd);
             let lead = piece.chars().take_while(|c| c.is_whitespace()).count();
             let x_start = cx + text_width(&piece.chars().take(lead).collect::<String>(), &pst);
             let (s, end) = write_line(&mut pen, &piece, cx, b, &pst);
+            let first_word = self.page().words.len();
             self.words(&piece, cx, b, &pst);
             self.add(s);
+            // A link: its words carry the address, and it is underlined like a link.
+            if let Some(link) = link {
+                for w in &mut self.page().words[first_word..] {
+                    w.link = Some(link.clone());
+                }
+                let trail = piece
+                    .chars()
+                    .rev()
+                    .take_while(|c| c.is_whitespace())
+                    .count();
+                let x_end = end - text_width(&" ".repeat(trail), &pst);
+                let mut under = self.pen_for(Some(col), Some(0.9));
+                let u = underline(&mut under, x_start, x_end, b + pst.size * 0.35, false);
+                self.add(u);
+            }
             cx = end;
             let trail = piece
                 .chars()
@@ -933,7 +973,7 @@ impl Composer {
         for sp in spans {
             let a = (sp.start as isize - offset as isize).max(0) as usize;
             let z = ((sp.end as isize - offset as isize).max(0) as usize).min(n);
-            if a >= z || matches!(sp.kind, Kind::Bold | Kind::Grey) || dark_hl(sp) {
+            if a >= z || matches!(sp.kind, Kind::Bold | Kind::Grey | Kind::Link) || dark_hl(sp) {
                 continue;
             }
             let (xa, xb) = (
@@ -1875,6 +1915,31 @@ fn arrow_open(pen: &mut Pen, a: Pt, b: Pt, head: f64) -> Vec<Line> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn links_are_written_as_their_label_and_kept_with_its_words() {
+        let (plain, spans) = parse_inline(
+            "see [the source](https://example.com/a) or [x](javascript:alert(1)) [[pill]]",
+        );
+        assert_eq!(plain, "see the source or [x](javascript:alert(1)) pill");
+        assert_eq!(spans[0].kind, Kind::Link);
+        assert_eq!(spans[0].link.as_deref(), Some("https://example.com/a"));
+        assert_eq!((spans[0].start, spans[0].end), (4, 14));
+        assert_eq!(spans[1].kind, Kind::Pill);
+        // Written: the label's words carry the address; the others do not.
+        let pages = crate::ink::compose(
+            "- Code on [GitHub here](https://github.com/x/y) and [install](notecomplete:install)",
+            &Default::default(),
+        )
+        .unwrap()
+        .0;
+        let words = &pages[0].words;
+        let link = |t: &str| words.iter().find(|w| w.text == t).unwrap().link.clone();
+        assert_eq!(link("GitHub").as_deref(), Some("https://github.com/x/y"));
+        assert_eq!(link("here").as_deref(), Some("https://github.com/x/y"));
+        assert_eq!(link("install").as_deref(), Some("notecomplete:install"));
+        assert_eq!(link("Code"), None);
+        assert!(crate::pages::words_valid(words));
+    }
     #[test]
     fn inline_marks_and_caps() {
         let (plain, spans) = parse_inline("a **b** =={pink}c== [[d]] ((e)) {hl:mint}==f==");

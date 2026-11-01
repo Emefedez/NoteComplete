@@ -902,6 +902,7 @@ mod tests {
         let w = |t: &str, x: f64, y: f64| noteful_core::InkWord {
             text: t.into(),
             bounds: [x, y, 50., 20.],
+            link: None,
         };
         // Recognized in the reader: two rows, out of order on purpose.
         e.set_recognized_words(

@@ -88,7 +88,7 @@ def main():
     for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
     vendor_modules()
     reader=ROOT/'apps/reader'
-    assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
+    assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
     assets.append('./')
     (reader/'precache.json').write_text(json.dumps(assets)+'\n')

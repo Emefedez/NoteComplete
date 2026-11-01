@@ -426,6 +426,7 @@ pub fn word_boxes(text: &str, x: f64, y: f64, style: &TextStyle) -> Vec<crate::I
             out.push(crate::InkWord {
                 text: word.chars().take(200).collect(),
                 bounds: [left, y - style.size * 1.25, width, style.size * 1.65],
+                link: None,
             });
         }
     }

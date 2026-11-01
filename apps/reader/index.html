@@ -14,9 +14,14 @@
   ><link rel="manifest" href="./manifest.webmanifest" /><link
     rel="icon"
     href="./icon.svg"
+  /><link rel="apple-touch-icon" href="./apple-touch-icon.png" /><meta
+    name="apple-mobile-web-app-title"
+    content="NoteComplete"
   /><link rel="stylesheet" href="./style.css" />
   <header class="chrome command-bar" id="commandBar">
     <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and Google Drive"></button>
+    <button id="tabCount" class="tab-count" type="button" aria-haspopup="menu" aria-expanded="false" title="Open tabs" hidden>1</button>
+    <div id="tabMenu" class="tab-menu" role="menu" aria-label="Open tabs" hidden></div>
     <nav class="bar-actions" role="menubar" aria-label="Application menu">
       <details class="menu bar-menu" id="fileMenu">
         <summary role="menuitem">File</summary>
@@ -149,6 +154,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
           <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
+          <button id="installApp" data-palette="Add this site as an app…" title="Install NoteComplete from this site: it opens from your Home Screen or app list, offline">Add this site as an app…</button>
           <button id="agentsOpen" data-palette="Connect AI tools to your notes…" title="Let Claude Code, Codex, Antigravity or OpenCode read and write your notes" hidden>Connect AI tools…</button>
           <div id="updateItems" class="menu-group" hidden>
             <hr />
@@ -814,6 +820,13 @@
   <label class="ocr-languages">Link<input id="linkUrl" type="url" placeholder="https://…notion.site/…" spellcheck="false" autocomplete="off" /></label>
   <p id="linkError" class="muted link-error" hidden>Type a web address (https://…).</p>
   <div class="ocr-actions"><button id="linkCancel" type="button">Cancel</button><button id="linkAdd" type="button" title="List the link with the open document, to jump between them" disabled>Add to this group</button><button id="linkOpen" type="button" class="primary">Open</button></div>
+</dialog>
+
+<dialog id="installDialog" class="ocr-dialog" aria-labelledby="installTitle">
+  <h2 id="installTitle">Add this site as an app</h2>
+  <p>NoteComplete then opens from your Home Screen or app list, full screen and offline, like any app.</p>
+  <p id="installSteps"></p>
+  <div class="ocr-actions"><button id="installOk" type="button" class="primary">OK</button></div>
 </dialog>
 
 <dialog id="newDialog" class="ocr-dialog" aria-labelledby="newTitle">

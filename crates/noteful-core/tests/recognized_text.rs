@@ -6,6 +6,7 @@ fn word(text: &str, x: f64) -> InkWord {
     InkWord {
         text: text.into(),
         bounds: [x, 100., 60., 20.],
+        link: None,
     }
 }
 

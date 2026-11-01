@@ -31,6 +31,17 @@ pub struct InkWord {
     pub text: String,
     /// x, y, width, height.
     pub bounds: [f64; 4],
+    /// A link written as `[label](url)`: hosts open it when the word is clicked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+}
+/// Links in written text: web addresses and the host's own actions (`notecomplete:…`).
+pub(crate) fn link_valid(link: &str) -> bool {
+    link.len() <= 500
+        && (link.starts_with("https://")
+            || link.starts_with("http://")
+            || link.starts_with("notecomplete:"))
+        && !link.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 /// At most this many words per page are kept (a dense page has a few hundred).
 pub(crate) const PAGE_WORDS: usize = 5000;
@@ -40,6 +51,7 @@ pub(crate) fn words_valid(words: &[InkWord]) -> bool {
             !w.text.is_empty()
                 && w.text.len() <= 200
                 && w.bounds.iter().all(|v| v.is_finite() && v.abs() <= 1e6)
+                && w.link.as_deref().is_none_or(link_valid)
         })
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]

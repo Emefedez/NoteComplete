@@ -528,6 +528,10 @@ input[type="color"]::-webkit-color-swatch {
   align-items: center;
   gap: 24px;
 }
+/* After the last page: add a blank page. */
+.add-page-end { display: flex; align-items: center; justify-content: center; gap: 8px; width: min(100%, 420px); min-height: 56px; margin: 8px auto 48px; border: 2px dashed var(--line); border-radius: 14px; background: transparent; color: var(--muted); font-size: 14px; }
+.add-page-end:hover, .add-page-end:focus-visible { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.add-page-end[hidden], body.tablet-mode .add-page-end, body.guest-mode .add-page-end { display: none; }
 .sheet {
   position: relative;
   flex-shrink: 0;
@@ -1757,6 +1761,10 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .text-layer text { fill: transparent; font-family: sans-serif; white-space: pre; }
 .text-layer text::selection, .text-layer tspan::selection { fill: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .sheet[data-tool="pan"] .text-layer tspan { pointer-events: auto; cursor: text; }
+/* Links written in the handwriting: clickable with Pan or Select, never while drawing. */
+.text-layer .ink-link rect { fill: transparent; }
+.sheet:is([data-tool="pan"], [data-tool="select"]) .text-layer .ink-link { pointer-events: auto; cursor: pointer; }
+.text-layer .ink-link:hover rect, .text-layer .ink-link:focus-visible rect { fill: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* Lock tool: locked items show a dashed outline and a padlock. */
 .lock-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; display: none; overflow: visible; }
@@ -1790,6 +1798,17 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .tab-strip { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
 .tab-strip::-webkit-scrollbar { display: none; }
 .tab-strip[hidden] { display: none; }
+/* Narrow windows: the number of tabs, opening a list of them, instead of the strip. */
+.tab-count { display: none; flex: none; min-width: 26px; height: 26px; padding: 0 6px; border: 1.5px solid currentColor; border-radius: 7px; background: transparent; font: 600 12px/1 system-ui, sans-serif; color: var(--ink); }
+.tab-menu { position: fixed; top: 40px; left: 8px; z-index: 40; width: min(320px, calc(100vw - 16px)); max-height: calc(100dvh - 56px); overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 0.18); }
+.tab-menu[hidden] { display: none; }
+.tab-menu-row { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.tab-menu-row.current { background: var(--accent-soft); }
+.tab-menu-row > button:first-child { flex: 1; min-width: 0; min-height: 38px; justify-content: flex-start; padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: transparent; }
+.tab-menu-row.current > button:first-child { color: var(--accent); font-weight: 600; }
+.tab-menu .tab-close { width: 34px; min-height: 34px; background: transparent; }
+.tab-menu-new { width: 100%; min-height: 38px; margin-top: 4px; justify-content: flex-start; padding: 6px 10px; background: transparent; color: var(--accent); }
+@media (max-width: 700px) { body.has-tabs .tab-count:not([hidden]) { display: inline-grid; place-items: center; } }
 .tab { flex: 0 1 180px; display: flex; align-items: center; gap: 2px; min-width: 120px; height: 26px; padding: 0 2px 0 10px; border: 1px solid transparent; border-radius: var(--radius); color: var(--muted); cursor: default; user-select: none; }
 .tab:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .tab.current { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: 0 1px 2px #0001; }

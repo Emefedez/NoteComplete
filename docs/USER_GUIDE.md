@@ -27,6 +27,8 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 
 ## Insert pages
 
+Scroll past the last page and **New page** adds a blank page the size of the last one (one Undo takes it away).
+
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
 
 ## Handwriting from Markdown

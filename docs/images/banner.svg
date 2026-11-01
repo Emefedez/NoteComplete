@@ -31,6 +31,6 @@
     <path d="M182 34a10 10 0 1 0 0 12" fill="none" stroke="#9fb8ff" stroke-width="3"/>
   </g>
   <text x="64" y="132" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#fff">NoteComplete</text>
-  <text x="66" y="182" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#dbe6ff">Your Noteful notebooks on the desktop, no Mac required.</text>
-  <text x="66" y="230" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#b9cdf5">Read · annotate · search handwriting · listen along · study with your AI tool</text>
+  <text x="66" y="182" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#dbe6ff">Handwritten notes, PDFs and study, on every screen.</text>
+  <text x="66" y="230" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#b9cdf5">Write · annotate · search handwriting · share · study with your AI tool</text>
 </svg>
