@@ -48,8 +48,8 @@ export class SyncClient {
   // digest() returns the core's history digest (tablets and host, for the agreement check).
   // on(type, detail) reports: welcome, peers, doc, live, notes-reset, ending, ended, lost,
   // closed, status, nack.
-  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES, checkEvery = 100 }) {
-    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries, checkEvery });
+  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES }) {
+    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries });
     this.queue = Promise.resolve();
     this.pending = new Map();
     this.ref = 0;
@@ -138,9 +138,15 @@ export class SyncClient {
           this.send(packSnapshot({ req: m.req, gen: m.gen, seq: this.seq }, project));
         });
       case 'check':
+        // Right after edit `seq` in the stream: report this copy's digest (the hub compares).
         return this.enqueue(async () => {
-          if (m.gen !== this.gen || m.seq !== this.seq || !this.loaded) return;
-          if ((await this.digest()) !== m.digest) this.resync('This copy differed from the computer’s; reloading.');
+          if (m.gen !== this.gen || m.seq !== this.seq || (this.role !== 'host' && !this.loaded)) return;
+          this.send({ t: 'digest', gen: m.gen, seq: m.seq, digest: await this.digest() });
+        });
+      case 'resyncing':
+        return this.enqueue(() => {
+          this.loaded = false;
+          this.on('status', { state: 'resync', error: 'This copy differed from the computer’s; reloading.' });
         });
       case 'doc':
         // The host reset itself when it sent this (documentChanged).
@@ -187,10 +193,6 @@ export class SyncClient {
     } catch (e) {
       // Every copy refuses the same edit in the same state, so they still agree.
       mine?.reject(e);
-    }
-    // The host checks now and then that the tablets' copies match its own.
-    if (this.role === 'host' && this.checkEvery && this.seq % this.checkEvery === 0 && this.peers.some((p) => p.role === 'tablet')) {
-      this.send({ t: 'check', gen: this.gen, seq: this.seq, digest: await this.digest() });
     }
   }
   resync(reason) {

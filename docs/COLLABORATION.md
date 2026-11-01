@@ -53,7 +53,7 @@ Where the original proposal said something else, the change is marked **Changed*
    - A Yjs array of edits orders concurrent inserts deterministically but can still put a late edit *before* ones a copy already applied; every later name would shift and erase/undo would hit the wrong items.
    - Instead the hub numbers every ink edit (`seq`) and sends it to every copy that holds the note, the sender included; each applies them in that order to its own core. Same snapshot + same edits in the same order = the same document, item names and undo. An edit the core refuses is refused by every copy, so they still agree.
    - Undo is the note's shared history, as in the reader today: a tablet's undo undoes the last edit, whoever made it.
-   - A copy that drifted anyway is caught: every 100 edits the host sends the core's `history_digest` (MD5 of the history and undo position) and a tablet that differs reloads from a snapshot.
+   - A copy that drifted anyway is caught: every 100 edits the hub puts a *check* in the edit stream; the host and each tablet answer with the core's `history_digest` (MD5 of the history and undo position) at exactly that point, and a tablet that differs from the host reloads from a snapshot.
    - Edits go through the hub only while a tablet is connected. Without one, the host edits exactly as without a session (no extra round trip).
 
 3. **Guests render and edit locally; they are not "thin" in the sense of receiving rendered HTML.** **Changed** from "viewers never load the WASM core and only receive rendered Markdown".
@@ -302,7 +302,7 @@ A phone or tablet joins a desktop NoteComplete as a drawing surface for the note
 ## Tests
 
 - `cargo test`: replicas loaded from one project that apply the same edits (pressure, erase, undo, redo) agree on views and digest.
-- `node --test apps/desktop/collab-server.test.mjs`: the real server with host, guests and tablets: refused/expired invites and codes, second host, full session, oversized messages and floods; snapshot join; concurrent edits from host and tablet in one order; refused edits; live strokes; the digest check repairing a drifted copy; a new note reloading the tablet; removed tablets; three people typing at once; presence and cursors; a guest offline and back; view-only edits dropped; ending with the guests' last text; the host disappearing.
+- `node --test apps/desktop/collab-server.test.mjs`: the real server with host, guests and tablets: refused/expired invites and codes, second host, full session, oversized messages and floods; snapshot join; concurrent edits from host and tablet in one order; refused edits; live strokes; the digest check (asked in the edit stream, so it holds while edits keep coming) repairing a drifted copy; a new note reloading the tablet; removed tablets; three people typing at once; presence and cursors; a guest offline and back; view-only edits dropped; ending with the guests' last text; the host disappearing.
 - `node --test apps/reader/sync.test.mjs`: minimal text diffs, emoji, caret mapping through remote edits, snapshot framing.
 - `node tools/collab_e2e.mjs` (after a web build, with Playwright): host, tablet (touch + pen with pressure via CDP) and guest in Chromium: code pairing, live stroke, pressure stroke saved on the host, highlighter, eraser, undo, host strokes on the tablet, pinch zoom on the tablet only, dock side, phone width, guest name prompt, typing, chips and cursors, disconnect, ending with the guest's copy.
 

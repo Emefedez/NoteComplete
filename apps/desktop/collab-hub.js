@@ -49,8 +49,9 @@ export function unpackSnapshot(frame) {
 export class CollabHub {
   // notes: 'edit' | 'view' | null (no notes shared, tablets only). The clock and limits are
   // options for the tests.
-  constructor({ notes = 'edit', maxPeers = 10, now = Date.now, codeLife = 10 * 60e3, flushWait = 2000, rate = { burst: 800, perSecond: 400 }, maxMessage = 2 * 1024 * 1024, onEnded = () => {} } = {}) {
-    Object.assign(this, { notes, maxPeers, now, codeLife, flushWait, rate, maxMessage, onEnded });
+  constructor({ notes = 'edit', maxPeers = 10, now = Date.now, codeLife = 10 * 60e3, flushWait = 2000, rate = { burst: 800, perSecond: 400 }, maxMessage = 2 * 1024 * 1024, checkEvery = 100, onEnded = () => {} } = {}) {
+    Object.assign(this, { notes, maxPeers, now, codeLife, flushWait, rate, maxMessage, checkEvery, onEnded });
+    this.digests = new Map();
     this.id = randomBytes(4).toString('hex');
     this.tokens = { host: token(), guest: token(), tablet: token() };
     this.newCode();
@@ -199,6 +200,7 @@ export class CollabHub {
     this.title = clean(title, 200);
     this.seq = 0;
     this.log = [];
+    this.digests.clear();
     this.requests.clear();
     this.broadcast({ t: 'doc', gen: this.gen, open: this.open, title: this.title });
     for (const p of this.members()) {
@@ -219,6 +221,12 @@ export class CollabHub {
     if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);
     const data = JSON.stringify(entry);
     for (const p of this.members()) if (p.synced && p.role !== 'guest') this.send(p, data);
+    // Now and then every copy reports its history digest right after this edit (in the same
+    // stream, so all at the same point); a tablet that differs from the host reloads.
+    if (this.checkEvery && entry.seq % this.checkEvery === 0 && this.members().some((p) => p.role === 'tablet' && p.synced)) {
+      const check = JSON.stringify({ t: 'check', gen: this.gen, seq: entry.seq });
+      for (const p of this.members()) if (p.synced && p.role !== 'guest') this.send(p, check);
+    }
   }
   // A stroke being drawn: shown live on the other screens, never stored.
   on_live(peer, message) {
@@ -226,11 +234,27 @@ export class CollabHub {
     const data = JSON.stringify({ ...message, from: peer.id, color: peer.color });
     for (const p of this.members()) if (p !== peer && p.synced && p.role !== 'guest') this.send(p, data);
   }
-  // The host's history digest at an edit; tablets compare it with theirs (sync.js).
-  on_check(peer, { gen, seq, digest }) {
-    if (peer.role !== 'host' || gen !== this.gen) return;
-    const data = JSON.stringify({ t: 'check', gen, seq, digest });
-    for (const p of this.members()) if (p.role === 'tablet' && p.synced) this.send(p, data);
+  // Digests at a check: kept until the host's arrives, then each tablet's is compared with it.
+  on_digest(peer, { gen, seq, digest }) {
+    if (gen !== this.gen || typeof digest !== 'string' || (peer.role !== 'host' && peer.role !== 'tablet')) return;
+    let round = this.digests.get(seq);
+    if (!round) {
+      round = { host: null, tablets: new Map() };
+      this.digests.set(seq, round);
+      for (const key of [...this.digests.keys()]) if (key < seq - 5 * this.checkEvery) this.digests.delete(key);
+    }
+    if (peer.role === 'host') round.host = digest;
+    else round.tablets.set(peer.id, digest);
+    if (round.host == null) return;
+    for (const [id, value] of round.tablets) {
+      const p = this.peers.get(id);
+      if (p && value !== round.host) {
+        this.send(p, { t: 'resyncing' });
+        p.synced = false;
+        this.requestSnapshot(p);
+      }
+    }
+    round.tablets.clear();
   }
   requestSnapshot(peer) {
     const host = this.host;

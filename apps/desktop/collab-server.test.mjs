@@ -140,10 +140,10 @@ test('refuses missing, wrong and expired invites; limits size and rate', async (
 
 test('a tablet joins from a snapshot; everyone applies edits in one order', async () => {
   const root = await reader();
-  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', notes: null, hubOptions: { rate: { burst: 2000, perSecond: 2000 } } });
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', notes: null, hubOptions: { rate: { burst: 2000, perSecond: 2000 }, checkEvery: 5 } });
   try {
     const mine = new Replica();
-    const h = host(server, mine, { checkEvery: 5 });
+    const h = host(server, mine);
     await welcomed(h);
     h.documentChanged({ open: true, title: 'Exam' });
     await h.submit('draw', { page: 0, line: 'host-1' });
