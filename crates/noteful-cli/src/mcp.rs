@@ -918,7 +918,8 @@ mod tests {
         let mut server = Server::default();
         let call = |server: &mut Server, name: &str, args: Value| -> Value {
             let r = server.handle(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}})).unwrap();
-            serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+            let text = r["result"]["content"][0]["text"].as_str().unwrap();
+            serde_json::from_str(text).unwrap_or_else(|_| panic!("{name}: {text}"))
         };
         let page = call(&mut server, "page_text", json!({"path":path,"page":1}));
         assert_eq!(page["handwriting_text"], "mitosis fase\nanafase");
@@ -929,8 +930,16 @@ mod tests {
             json!({"path":path,"query":"anafase"}),
         );
         assert_eq!(found["hits"][0]["source"], "handwriting");
-        // A plain .noteful has no known handwriting text: the tool says to look at the image.
-        let plain = call(&mut server, "page_text", json!({"path":EXAM,"page":1}));
+        // A note with no known handwriting text: the tool says to look at the image.
+        let plain_path = dir.join("plain.notecomp");
+        let plain =
+            Editor::create_document_with("Plain", &[([800., 600.], None)], &[], "x", 1.).unwrap();
+        std::fs::write(&plain_path, plain.export_notecomplete().unwrap()).unwrap();
+        let plain = call(
+            &mut server,
+            "page_text",
+            json!({"path":plain_path,"page":1}),
+        );
         assert!(plain["handwriting_note"]
             .as_str()
             .unwrap()
