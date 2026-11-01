@@ -26,6 +26,11 @@ NoteComplete is an independent desktop and web companion for people who take not
 ### Notes in Markdown
 A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+ Page** ties a section to a page; the notes follow you as you turn pages, and Ask AI can read them. The **Scratchpad** (View → Scratchpad…) keeps AI conversations you want with the note. Saved with the note, or as one `.notecomp` file.
 
+### Share notes and draw on a tablet
+- **Shared notes**: File → *Share and draw on a tablet…* (desktop) invites people on your network to write the Markdown notes with you, in a browser or in NoteComplete. Names and coloured cursors show who is where; when you end the session everyone keeps a copy.
+- **Your phone or tablet as a drawing tablet**: scan the QR code (or type the 6-digit code) and draw on the note open on your computer. The device shows just the note and a tool bar on the side you choose; it zooms on its own, and what you draw appears live on the computer and is saved there, with pen pressure, highlighter, eraser and undo.
+- Meant for a trusted local network; not yet tried on real phones and tablets ([details](docs/COLLABORATION.md)).
+
 ### Your library
 - **Google Drive on Home**: connect read-only and open your Noteful backup folder; notes appear as cards with their real covers, or as a quick list.
 - **Filters and sorting** by type, date, size, recordings and Noteful tags.
@@ -54,6 +59,8 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Links in answers** work: pages jump to the page, images open large, web links open in the browser.
 - **Study material** (Study → All quizzes and decks…): everything on this device in two lists, exportable to Anki.
 - The sun in the study windows **dims everything behind them**.
+- **Handwriting from Markdown**: File → *New from Markdown…* or Pages → *Insert handwritten pages…* writes Markdown as real, editable handwriting, with a live preview.
+- **Connect AI tools** (Help, desktop app) registers the bundled note server with Claude Code, Codex, Antigravity and OpenCode in one click.
 - The bundled MCP server lets agents read your notebooks, write Markdown notes into them, and write real editable handwriting: new notebooks, added pages, clean copies and marks such as ticks, highlights and text boxes ([AI agents](docs/MCP.md)).
 
 <p align="center"><img src="docs/images/quiz-clarify.png" alt="A quiz window grown to fit a streamed answer" width="49%"> <img src="docs/images/card-ask.png" alt="A flashcard window grown to fit an answer" width="49%"></p>
@@ -64,7 +71,7 @@ Flashcards and quizzes are generated in the background by the tool you already u
 ### Feels like a desktop app
 - **Tabs and windows** (<kbd>Ctrl</kbd>+<kbd>T</kbd>); drag a tab out for its own window.
 - **Floating windows** for Ask AI, audio, quizzes and flashcards: drag anywhere, resize from any edge, put away in a tray.
-- **Narrow windows and phones**: two bottom bars; tools turn into icons before the toolbar wraps.
+- **Narrow windows and phones**: two bottom bars; tools turn into icons before the toolbar wraps, and rows that still do not fit scroll sideways (mouse wheel too) with a faded edge, so every button stays reachable.
 - **Updates**: checked on open, installed only when you agree.
 - **Command search** (<kbd>Ctrl</kbd>+<kbd>K</kbd>), single-key shortcuts, and <kbd>?</kbd> to show each button's key.
 - **Interface size** with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>−</kbd> / <kbd>+</kbd> / <kbd>0</kbd>.
@@ -77,7 +84,7 @@ Screenshots use the sample notes in [`samples/`](samples/).
 
 ## Get it
 
-**Installers.** Tagged releases attach Linux AppImages (x86-64 and ARM64), macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview. Builds are unsigned previews; Linux is the tested platform for now. See [builds](docs/BUILDS.md).
+**Installers.** The [Releases page](https://github.com/Emefedez/NoteComplete/releases) has Linux AppImages (x86-64 and ARM64), macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview, with SHA-256 checksums. A release is published automatically whenever the version on `main` changes; the desktop app offers it as an update. Builds are unsigned previews; Linux is the tested platform for now. See [builds](docs/BUILDS.md).
 
 **Browser.** Build and serve the web app (below), then open it in any modern browser. It also installs as a PWA.
 
@@ -92,7 +99,8 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Known issues
 
 - Exports to `.noteful` after editing, crops made in NoteComplete included, have not yet been verified in Noteful itself.
-- No release has been published yet, so the update check has nothing to find until one is.
+- Releases are published automatically from 1.1.0 on; earlier local builds (1.0.x) find 1.1.0 as their first update. The release pipeline itself is new and its first run is the 1.1.0 release.
+- Sharing and the drawing tablet have been tested in Node and headless Chromium only, not yet on real devices, styluses or networks.
 - Uploading a change to Google Drive and deleting a note there are tested against a fake server only.
 - A tab dragged out of the tab strip opens in its own window, but cannot be dropped onto another window's strip: Wayland does not tell the app where the pointer is outside its own windows.
 - The Google Drive sign-in is not remembered between sessions, so Recent can only check Drive for newer versions after you connect (or for a public folder with an API key).
