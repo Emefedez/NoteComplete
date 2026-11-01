@@ -134,7 +134,7 @@ pub(crate) fn parse_path(d: &str) -> Vec<Vec<Pt>> {
     let flush = |cmd: char, nums: &mut Vec<f64>, cur: &mut Vec<Pt>, paths: &mut Vec<Vec<Pt>>| {
         match cmd {
             'M' => {
-                for (i, p) in nums.chunks_exact(2).enumerate() {
+                for (i, p) in nums.as_chunks::<2>().0.iter().enumerate() {
                     if i == 0 {
                         if cur.len() > 1 {
                             paths.push(std::mem::take(cur));
@@ -144,9 +144,9 @@ pub(crate) fn parse_path(d: &str) -> Vec<Vec<Pt>> {
                     cur.push([p[0], -p[1]]);
                 }
             }
-            'L' => cur.extend(nums.chunks_exact(2).map(|p| [p[0], -p[1]])),
+            'L' => cur.extend(nums.as_chunks::<2>().0.iter().map(|p| [p[0], -p[1]])),
             'C' => {
-                for c in nums.chunks_exact(6) {
+                for c in nums.as_chunks::<6>().0 {
                     let p0 = cur.last().copied().unwrap_or([c[4], -c[5]]);
                     cur.extend(bezier(p0, [c[0], -c[1]], [c[2], -c[3]], [c[4], -c[5]], 8));
                 }

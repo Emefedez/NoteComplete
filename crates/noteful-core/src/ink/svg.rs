@@ -395,7 +395,7 @@ fn intervals(polys: &[Vec<Pt>], y: f64) -> Vec<(f64, f64)> {
         .map(|([x0, y0], [x1, y1])| x0 + (y - y0) * (x1 - x0) / (y1 - y0))
         .collect();
     xs.sort_by(f64::total_cmp);
-    xs.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    xs.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 fn subtract(mut segs: Vec<(f64, f64)>, cuts: &[(f64, f64)]) -> Vec<(f64, f64)> {
     for &(c0, c1) in cuts {
@@ -753,10 +753,7 @@ fn walk(
         )],
         "polyline" | "polygon" => {
             let v = numbers(el.attribute("points").unwrap_or(""));
-            vec![(
-                v.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
-                tag == "polygon",
-            )]
+            vec![(v.as_chunks::<2>().0.to_vec(), tag == "polygon")]
         }
         other => {
             cx.warn(format!("SVG <{other}> is not drawn"));

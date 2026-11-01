@@ -223,7 +223,7 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
         return Ok(None);
     }
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-    for pt in coords.chunks_exact(2) {
+    for pt in coords.as_chunks::<2>().0 {
         (x0, y0, x1, y1) = (x0.min(pt[0]), y0.min(pt[1]), x1.max(pt[0]), y1.max(pt[1]));
     }
     if x1 - x0 < 1e-9 || y1 - y0 < 1e-9 {
@@ -244,7 +244,7 @@ fn image_crop(p: &Value, w: f64, h: f64, sw: f64, sh: f64) -> Result<Option<Crop
             return Err(Error::new(0, "Truncated crop"));
         }
         outline.push_str(letter);
-        for pt in coords[cursor..cursor + n].chunks_exact(2) {
+        for pt in coords[cursor..cursor + n].as_chunks::<2>().0 {
             outline.push_str(&format!("{} {} ", (pt[0] - x0) * sx, (pt[1] - y0) * sy));
         }
         cursor += n;
