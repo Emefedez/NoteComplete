@@ -194,6 +194,14 @@ pub(super) fn destination(
     }
     Ok((path, None))
 }
+/// Whether the file keeps the text of the handwriting just written, so NoteComplete
+/// search and page_text find it without OCR.
+fn kept_text(out: &Path) -> &'static str {
+    match ext(out).as_str() {
+        "notecomp" | "notepart" | "nfedit" => "kept: searchable in NoteComplete and readable with page_text",
+        _ => "not kept: .noteful files have no place for it; write .notecomp (or .nfedit) to keep the handwriting searchable",
+    }
+}
 pub(super) fn save(
     editor: &Editor,
     path: &Path,
@@ -341,7 +349,7 @@ impl Server {
         let editor = new_notebook(title, &pages)?;
         let (out, _) = destination(args, None, title)?;
         save(&editor, &out, None, None)?;
-        let report = json!({"written":out,"pages":pages.len(),"warnings":warnings,"note":spill(pages.len()),
+        let report = json!({"written":out,"pages":pages.len(),"warnings":warnings,"note":spill(pages.len()),"handwriting_text":kept_text(&out),
             "open":"Open it in NoteComplete, or import it on the iPad (Files → share to Noteful)."});
         self.preview(&out, 0, report)
     }
@@ -393,7 +401,7 @@ impl Server {
         let (out, backup) = destination(args, Some(&source), &title)?;
         save(&editor, &out, Some(&data), backup.as_deref())?;
         let report = json!({"written":out,"backup":backup,"new_pages":shown.iter().map(|p| p + 1).collect::<Vec<_>>(),
-            "pages":editor.page_order().len(),"warnings":warnings,"note":spill(pages.len())});
+            "pages":editor.page_order().len(),"warnings":warnings,"note":spill(pages.len()),"handwriting_text":kept_text(&out)});
         self.preview(&out, shown[0], report)
     }
 
@@ -459,7 +467,7 @@ impl Server {
         let title = editor.scene.title.clone();
         let (out, backup) = destination(args, Some(&source), &title)?;
         save(&editor, &out, Some(&data), backup.as_deref())?;
-        let report = json!({"written":out,"backup":backup,"page":display + 1,"strokes":strokes,"under_ink":under,"text_boxes":boxes,"warnings":warnings});
+        let report = json!({"written":out,"backup":backup,"page":display + 1,"strokes":strokes,"under_ink":under,"text_boxes":boxes,"warnings":warnings,"handwriting_text":kept_text(&out)});
         self.preview(&out, display, report)
     }
 

@@ -86,7 +86,7 @@ fn tools() -> Value {
     let mut tools = json!([
         tool("list_notes", "List notes in a folder (default: the NoteComplete downloads folder) with title, page count and size.", json!({"folder":{"type":"string"}}), &[]),
         tool("note_outline", "Title, pages (size, PDF background, ink and typed-text counts, a text snippet) and recordings of a note.", json!({"path":path}), &["path"]),
-        tool("page_text", "Typed text and PDF text of one page. Handwriting is not included: use page_image to read it.", json!({"path":path,"page":page}), &["path","page"]),
+        tool("page_text", "Typed text, PDF text and the text of the handwriting of one page. The handwriting text is known when the ink was written from Markdown (NoteComplete or this server) or recognized with OCR in NoteComplete, in .notecomp, .notepart and .nfedit files; otherwise read the page with page_image.", json!({"path":path,"page":page}), &["path","page"]),
         tool("page_image", "PNG of one page as the reader draws it: PDF background, handwriting, highlights, images and typed text. Use it to read handwritten notes.", json!({"path":path,"page":page,"width":{"type":"integer","minimum":200,"maximum":2400,"description":"Pixel width (default 1100)"}}), &["path","page"]),
         tool("search_note", "Find words in a note's typed text and PDF text (accent- and case-insensitive). Returns pages and snippets.", json!({"path":path,"query":{"type":"string"}}), &["path","query"]),
         tool("extract_resource", "Write a note's embedded PDFs, recordings or cover image to a folder. Without `index` it lists them.", json!({"path":path,"kind":{"type":"string","enum":["pdf","audio","cover"]},"index":{"type":"integer","minimum":0},"out_dir":{"type":"string"}}), &["path","kind"]),
@@ -177,8 +177,10 @@ impl Server {
                     .map(|display| {
                         let v = editor.view(editor.slot(display)?)?;
                         let typed = typed_text(&v);
+                        let (handwriting, _) = handwriting_text(&v);
                         Ok(json!({"page":display + 1,"size":v["size"],"pdf":v["pdf_background"],
                             "ink_and_objects":v["visible_imported"],"typed_text":snippet(&typed, 160),
+                            "handwriting_text":snippet(&handwriting, 160),
                             "timed_ink":v["timings"].as_array().map_or(0, Vec::len)}))
                     })
                     .collect::<Res<Vec<_>>>()?;
@@ -192,7 +194,15 @@ impl Server {
                     Some(bg) => self.pdf_page_text(&path, bg)?,
                     None => String::new(),
                 };
-                text(json!({"page":display + 1,"typed_text":typed_text(&v),"pdf_text":pdf}))
+                let (handwriting, source) = handwriting_text(&v);
+                let mut out = json!({"page":display + 1,"typed_text":typed_text(&v),"pdf_text":pdf,"handwriting_text":handwriting});
+                if let Some(source) = source {
+                    out["handwriting_source"] = source.into();
+                } else {
+                    out["handwriting_note"] =
+                        "Not known for this page: read it with page_image.".into();
+                }
+                text(out)
             }
             "page_image" => {
                 let display = page_arg(args)?;
@@ -395,7 +405,10 @@ impl Server {
         let mut hits = Vec::new();
         for display in 0..pages {
             let v = self.view(args, display)?;
-            let mut sources = vec![("text", typed_text(&v))];
+            let mut sources = vec![
+                ("text", typed_text(&v)),
+                ("handwriting", handwriting_text(&v).0),
+            ];
             if let Some(bg) = v["pdf_background"].as_object() {
                 sources.push(("pdf", self.pdf_page_text(&path, bg).unwrap_or_default()));
             }
@@ -411,7 +424,7 @@ impl Server {
             }
         }
         Ok(
-            json!({"query":args["query"],"hits":hits,"note":"Handwriting is not searched here; use page_image on candidate pages."}),
+            json!({"query":args["query"],"hits":hits,"note":"Handwriting is searched where its text is known (written from Markdown or recognized in NoteComplete); for other pages use page_image."}),
         )
     }
     fn extract(&mut self, args: &Value) -> Res<Value> {
@@ -491,6 +504,56 @@ fn page_arg(args: &Value) -> Res<usize> {
         .filter(|p| *p >= 1)
         .ok_or("page must be 1 or more")? as usize
         - 1)
+}
+/// The words of a page's handwriting in reading order, one line per row of words:
+/// written from Markdown (`ink_text`) and recognized with OCR (`recognized_text`).
+/// The second value says where they came from, None when neither is known.
+fn handwriting_text(v: &Value) -> (String, Option<&'static str>) {
+    let words = |key: &str| -> Vec<(String, [f64; 4])> {
+        v[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|w| {
+                let b = w["bounds"].as_array()?;
+                let n = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.);
+                Some((w["text"].as_str()?.to_owned(), [n(0), n(1), n(2), n(3)]))
+            })
+            .collect()
+    };
+    let (written, recognized) = (words("ink_text"), words("recognized_text"));
+    let source = match (written.is_empty(), recognized.is_empty()) {
+        (true, true) => return (String::new(), None),
+        (false, true) => "written",
+        (true, false) => "recognized",
+        (false, false) => "written and recognized",
+    };
+    let mut all: Vec<_> = written.into_iter().chain(recognized).collect();
+    let middle = |b: &[f64; 4]| b[1] + b[3] / 2.;
+    all.sort_by(|a, b| middle(&a.1).total_cmp(&middle(&b.1)));
+    // Rows: a word joins the row when its middle is within ~half a word height of the
+    // row's first word; each row then reads left to right.
+    let mut rows: Vec<Vec<(String, [f64; 4])>> = Vec::new();
+    for word in all {
+        match rows.last_mut() {
+            Some(row)
+                if (middle(&word.1) - middle(&row[0].1)).abs()
+                    < row[0].1[3].min(word.1[3]) * 0.6 =>
+            {
+                row.push(word)
+            }
+            _ => rows.push(vec![word]),
+        }
+    }
+    let out = rows
+        .into_iter()
+        .map(|mut row| {
+            row.sort_by(|a, b| a.1[0].total_cmp(&b.1[0]));
+            row.into_iter().map(|w| w.0).collect::<Vec<_>>().join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (out, Some(source))
 }
 fn typed_text(v: &Value) -> String {
     v["texts"]
@@ -829,6 +892,51 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../samples/Examen wuolah.noteful"
     );
+
+    #[test]
+    fn handwriting_text_written_or_recognized_is_read_and_searched() {
+        let dir = std::env::temp_dir().join(format!("nc-hand-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut e =
+            Editor::create_document_with("Bio", &[([800., 600.], None)], &[], "x", 1.).unwrap();
+        let w = |t: &str, x: f64, y: f64| noteful_core::InkWord {
+            text: t.into(),
+            bounds: [x, y, 50., 20.],
+        };
+        // Recognized in the reader: two rows, out of order on purpose.
+        e.set_recognized_words(
+            0,
+            vec![
+                w("fase", 80., 101.),
+                w("anafase", 10., 160.),
+                w("mitosis", 10., 100.),
+            ],
+        )
+        .unwrap();
+        let path = dir.join("bio.notecomp");
+        std::fs::write(&path, e.export_notecomplete().unwrap()).unwrap();
+        let mut server = Server::default();
+        let call = |server: &mut Server, name: &str, args: Value| -> Value {
+            let r = server.handle(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":args}})).unwrap();
+            serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+        };
+        let page = call(&mut server, "page_text", json!({"path":path,"page":1}));
+        assert_eq!(page["handwriting_text"], "mitosis fase\nanafase");
+        assert_eq!(page["handwriting_source"], "recognized");
+        let found = call(
+            &mut server,
+            "search_note",
+            json!({"path":path,"query":"anafase"}),
+        );
+        assert_eq!(found["hits"][0]["source"], "handwriting");
+        // A plain .noteful has no known handwriting text: the tool says to look at the image.
+        let plain = call(&mut server, "page_text", json!({"path":EXAM,"page":1}));
+        assert!(plain["handwriting_note"]
+            .as_str()
+            .unwrap()
+            .contains("page_image"));
+        std::fs::remove_dir_all(dir).ok();
+    }
 
     #[test]
     fn protocol_lists_tools_and_reports_tool_errors_as_results() {

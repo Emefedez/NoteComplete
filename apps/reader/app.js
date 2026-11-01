@@ -2070,6 +2070,9 @@ async function save(native, as = native ? "noteful" : "project") {
   const token = epoch;
   try {
     await notes?.flush();
+    // Text recognized in the handwriting goes with the note, so other tools (the MCP
+    // server) and other copies find it. .noteful files have no place for it.
+    if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch(() => {});
     const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
     const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
     if (token !== epoch) return;

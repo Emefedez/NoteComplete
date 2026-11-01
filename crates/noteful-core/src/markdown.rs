@@ -122,6 +122,7 @@ const MANIFEST: &str = "manifest.json";
 const NOTE: &str = "note.noteful";
 const NOTES: &str = "notes.md";
 const INK_TEXT: &str = "ink-text.json";
+const OCR_TEXT: &str = "ocr-text.json";
 
 fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<()> {
     let mut header = tar::Header::new_ustar();
@@ -190,7 +191,7 @@ pub fn pack_notecomplete_with(
     title: &str,
     audio: &[(AddedAudio, &[u8])],
 ) -> Result<Vec<u8>> {
-    pack_notecomplete_text(note, markdown, title, audio, &[], false)
+    pack_notecomplete_text(note, markdown, title, audio, &[], false, &[])
 }
 
 /// With the words of handwriting written from Markdown, by page in the note's
@@ -202,6 +203,7 @@ pub fn pack_notecomplete_text(
     audio: &[(AddedAudio, &[u8])],
     ink_text: &[&[crate::InkWord]],
     canvas: bool,
+    recognized: &[&[crate::InkWord]],
 ) -> Result<Vec<u8>> {
     if audio.len() > AUDIO_LIMIT {
         return Err(Error::new(0, "Too many recordings"));
@@ -229,6 +231,14 @@ pub fn pack_notecomplete_text(
     if text.is_some() {
         manifest["ink_text"] = INK_TEXT.into();
     }
+    // Text recognized in the handwriting (OCR), by page in the same order.
+    let ocr = recognized
+        .iter()
+        .any(|w| !w.is_empty())
+        .then(|| serde_json::json!({ "pages": recognized }).to_string());
+    if ocr.is_some() {
+        manifest["ocr_text"] = OCR_TEXT.into();
+    }
     // An infinite canvas (canvas.rs): one page that grows; NoteComplete reopens it as one.
     if canvas {
         manifest["canvas"] = true.into();
@@ -239,6 +249,9 @@ pub fn pack_notecomplete_text(
     add(&mut builder, NOTES, markdown.as_bytes())?;
     if let Some(text) = text {
         add(&mut builder, INK_TEXT, text.as_bytes())?;
+    }
+    if let Some(ocr) = ocr {
+        add(&mut builder, OCR_TEXT, ocr.as_bytes())?;
     }
     for (file, data) in files {
         add(&mut builder, &file, data)?;
@@ -311,11 +324,18 @@ pub fn is_notecomplete(data: &[u8]) -> bool {
 /// The words of handwriting written from Markdown in a `.notecomp` file, by page
 /// (empty when the file has none, as older files).
 pub fn notecomplete_ink_text(data: &[u8]) -> Result<Vec<Vec<crate::InkWord>>> {
+    page_words(data, INK_TEXT)
+}
+/// The text recognized in the handwriting (OCR) of a `.notecomp` file, by page.
+pub fn notecomplete_recognized_text(data: &[u8]) -> Result<Vec<Vec<crate::InkWord>>> {
+    page_words(data, OCR_TEXT)
+}
+fn page_words(data: &[u8], name: &str) -> Result<Vec<Vec<crate::InkWord>>> {
     let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
     let mut archive = tar::Archive::new(data);
     for entry in archive.entries().map_err(invalid)? {
         let entry = entry.map_err(invalid)?;
-        if entry.path().map_err(invalid)?.to_string_lossy() != INK_TEXT {
+        if entry.path().map_err(invalid)?.to_string_lossy() != name {
             continue;
         }
         let size = entry.header().size().map_err(invalid)?;
@@ -417,6 +437,11 @@ impl Editor {
                 editor.set_ink_words(slot, words)?;
             }
         }
+        for (slot, words) in notecomplete_recognized_text(data)?.into_iter().enumerate() {
+            if slot < editor.scene.pages.len() && crate::pages::words_valid(&words) {
+                editor.set_recognized_words(slot, words)?;
+            }
+        }
         Ok(editor)
     }
     pub fn export_notecomplete(&self) -> Result<Vec<u8>> {
@@ -426,6 +451,8 @@ impl Editor {
     pub fn export_notecomplete_with(&self, audio: &[(AddedAudio, &[u8])]) -> Result<Vec<u8>> {
         let order = self.page_order();
         let text: Vec<&[crate::InkWord]> = order.iter().map(|s| self.ink_words(*s)).collect();
+        let recognized: Vec<&[crate::InkWord]> =
+            order.iter().map(|s| self.recognized_words(*s)).collect();
         pack_notecomplete_text(
             &self.noteful_bytes()?,
             &self.markdown,
@@ -433,6 +460,7 @@ impl Editor {
             audio,
             &text,
             self.canvas,
+            &recognized,
         )
     }
 }

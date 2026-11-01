@@ -28,7 +28,7 @@ Page images use librsvg (`rsvg-convert`), and imported PDFs need poppler (`pdfto
 |---|---|
 | `list_notes` | Notes in a folder with title, page count and size (read from the index, without loading the note). |
 | `note_outline` | Title, every page's size, PDF background, ink/object count and typed-text snippet, and the recordings. |
-| `page_text` | A page's typed text and PDF text. |
+| `page_text` | A page's typed text, PDF text and handwriting text (when written from Markdown or recognized in NoteComplete). |
 | `page_image` | A PNG of the page as the reader draws it: PDF, handwriting, highlights, images and typed text. This is how the agent reads handwriting. |
 | `search_note` | Pages whose typed or PDF text contains every query word, ignoring case and accents. |
 | `extract_resource` | Lists or writes the note's embedded PDFs, recordings or cover image. |
@@ -121,7 +121,13 @@ noteful convert lecture.md --export svg -o pages/lecture.svg
   - `quiz`: a handwritten multiple-choice quiz from notes.
   - `tree_page`: a topic classified as a tree diagram on black paper.
 
-Recognized text (OCR) and transcripts made in the reader stay in its browser storage, so the server doesn't see them yet. The agent reads handwriting from page images instead.
+**Handwriting text.** `page_text` returns `handwriting_text`, the page's handwriting in reading order, when the note knows it:
+- written from Markdown, by NoteComplete or by these tools;
+- recognized with **Recognize text (OCR)** in NoteComplete, then saved as `.notecomp`, `.notepart` or a project (`.nfedit`).
+
+`handwriting_source` says which. `search_note` searches it as `handwriting`, and `note_outline` shows its start. For other pages, and for `.noteful` files (which have no place for the text), the agent reads handwriting from `page_image`. The writing tools say in `handwriting_text` whether the file they wrote keeps the text: `.notecomp` and `.nfedit` do, `.noteful` doesn't.
+
+Transcripts made in the reader still stay in its browser storage.
 
 ## Not yet
 
