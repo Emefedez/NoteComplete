@@ -16,6 +16,7 @@ fn line() -> Line {
 }
 fn blank(w: f64, h: f64) -> NewPage {
     NewPage {
+        words: vec![],
         size: [w, h],
         pdf: None,
     }
@@ -95,6 +96,7 @@ fn inserted_pdf_pages_embed_the_pdf_and_place_it_in_a_wider_page() {
     let mut editor = Editor::create_document("Base", &[[1091., 1543.]], &[]).unwrap();
     let pages = (0..2)
         .map(|i| NewPage {
+            words: vec![],
             size: [2242.6, 990.],
             pdf: Some(PdfPlacement {
                 resource: "slides-1".into(),
@@ -137,6 +139,7 @@ fn invalid_insertions_are_rejected_without_changing_history() {
         (
             0,
             vec![NewPage {
+                words: vec![],
                 size: [100., 100.],
                 pdf: Some(PdfPlacement {
                     resource: "missing".into(),

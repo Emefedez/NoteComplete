@@ -14,7 +14,7 @@ NoteComplete is an independent desktop and web companion for people who take not
 
 ### Read and annotate
 - **Everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images (crops included), typed text, tape, locked items, tags and recordings, up to notebooks of hundreds of pages.
-- **Edit**: pen, highlighter, eraser, shapes, tape, text boxes, crop, layers, undo/redo; move, resize and lock items. The original file is never changed.
+- **Edit**: pen (with stylus pressure), highlighter, eraser, shapes (outline, tint or solid fill), tape, text boxes, crop, layers, undo/redo; move, resize and lock items. The original file is never changed.
 - **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size, saved as `.notecomp`, `.notepart` or `.noteful`.
 - **Pages**: add blank pages or pages from another PDF; resize a page from a menu or by dragging its borders.
 - **Select and copy text** from PDFs and recognized handwriting.
@@ -63,7 +63,8 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Links in answers** work: pages jump to the page, images open large, web links open in the browser.
 - **Study material** (Study → All quizzes and decks…): everything on this device in two lists, exportable to Anki.
 - The sun in the study windows **dims everything behind them**.
-- **Handwriting from Markdown**: File → *New from Markdown…* or Pages → *Insert handwritten pages…* writes Markdown as real, editable handwriting, with a live preview.
+- **Handwriting from Markdown**: File → *New from Markdown…* or Pages → *Insert handwritten pages…* writes Markdown as real, editable handwriting, with a live preview. The written text is searchable at once, without OCR.
+- **New note with AI** (File, desktop app): describe a topic or paste data or notes; your AI tool writes the Markdown and it becomes a handwritten note.
 - **Connect AI tools** (Help, desktop app) registers the bundled note server with Claude Code, Codex, Antigravity and OpenCode in one click.
 - The bundled MCP server lets agents read your notebooks, write Markdown notes into them, and write real editable handwriting: new notebooks, added pages, clean copies and marks such as ticks, highlights and text boxes ([AI agents](docs/MCP.md)).
 
@@ -117,7 +118,7 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Roadmap
 
 Planned, not started (details in [docs/REQUESTS.md](docs/REQUESTS.md)):
-- **The open NoteComplete format**: today `.notecomp` and `.notepart` are an archive of the note, its Markdown and added recordings; the plan is an open, documented ZIP package with pages, resources, notes and study material, chosen on first save for every note (New document already asks). Files saved today keep opening: they are recognised by content.
+- **The open NoteComplete format**: today `.notecomp` is a tar archive holding the native note, its Markdown notes, recordings added in NoteComplete and the text of handwriting written from Markdown ([layout](spec/nfedit-v1.md#notecomp-archives)); `.notepart` is still written the same way. The plan: study material (flashcards, quizzes) in the package too, `.notepart` as a partial patch for another copy of a note, and the format chosen on first save for every note (New document already asks). Files saved today keep opening: they are recognised by content.
 - **Choose which pages to export**: this page, a range, a list or every page, for SVG, PDF and images.
 - **Repositories** as a library source next to Google Drive: GitHub repositories with notes, files and solved exams, browsed from Home.
 - **Infinite canvas** in `.notecomplete`, split into sheets of up to Noteful's maximum page size when saved as `.noteful`.

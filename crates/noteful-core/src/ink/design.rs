@@ -143,6 +143,7 @@ struct Page<'a> {
     dy: f64,
     mock: Option<&'a Raster>,
     strokes: Vec<Line>,
+    words: Vec<crate::InkWord>,
     under: Vec<Line>,
     warnings: Vec<String>,
 }
@@ -426,6 +427,8 @@ impl Page<'_> {
                 let c = col.clone().unwrap_or_else(|| base.clone());
                 let mut pen = pg.pen(&c, weight * (1. + (k - 1.) * 0.6), false);
                 let (s, end) = write_line(&mut pen, piece, x, b, &scaled(st, *k));
+                pg.words
+                    .extend(super::hand::word_boxes(piece, x, b, &scaled(st, *k)));
                 strokes.extend(s);
                 x = end;
                 if let Some(hl) = hl {
@@ -1118,6 +1121,7 @@ fn draw_spec(
         dy: 0.,
         mock: None,
         strokes: vec![],
+        words: vec![],
         under: vec![],
         warnings: vec![],
     };
@@ -1283,6 +1287,7 @@ fn draw_spec(
             .collect(),
         lines: pg.strokes,
         paper: paper.with_dark(dark),
+        words: pg.words,
     };
     Ok((page, hits, warnings))
 }

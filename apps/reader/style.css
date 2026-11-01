@@ -2524,3 +2524,41 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
    the left edge; the place to insert gets its own line. */
 .handwriting-dialog .ocr-actions { flex-wrap: wrap; row-gap: 8px; }
 @media (max-width: 520px) { .handwriting-dialog .hw-where { flex: 1 0 100%; } .handwriting-dialog .hw-where select { flex: 1; min-width: 0; } }
+.collab-people .collab-remove { width: 28px; min-width: 28px; min-height: 28px; padding: 5px; display: grid; place-items: center; color: var(--muted); }
+.collab-people .collab-remove:hover { color: var(--danger); background: var(--danger-soft); }
+.collab-people .collab-remove svg { width: 16px; height: 16px; }
+/* Handwriting from Markdown: the AI writes the Markdown (convert.js). */
+.hw-ai { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--radius); background: var(--accent-soft); }
+.hw-ai[open] { gap: 8px; }
+.hw-ai summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); }
+.hw-ai textarea { width: 100%; box-sizing: border-box; resize: vertical; font: 13px/1.45 system-ui, sans-serif; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.hw-ai-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hw-ai-row select, .hw-ai-row input { flex: 1 1 120px; min-width: 0; min-height: var(--control); }
+.hw-ai-row button { flex: none; }
+.hw-ai p { margin: 0; font-size: 12px; }
+.fill-picker { margin-left: 6px; }
+.tablet-dock .dock-shapes { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border-radius: 10px; background: var(--fill); }
+.tablet-dock .dock-shapes[hidden] { display: none; }
+.tablet-dock .dock-shapes button { width: 40px; min-width: 40px; height: 36px; min-height: 36px; }
+.tablet-dock .dock-shapes svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* The handwriting dialog's approach: a prompt for the AI, or your own Markdown. Both fill the
+   same Markdown editor below, so either can be edited afterwards. */
+.hw-modes { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); align-self: flex-start; }
+.hw-modes button { min-height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; font-size: 13px; }
+.hw-modes button[aria-selected="true"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px #0002; }
+.hw-import { display: flex; flex-wrap: wrap; gap: 6px; }
+.hw-tools { margin-top: -2px; }
+.hw-ai-status { margin: 0; font-size: 12px; min-height: 0; }
+.hw-ai-status:empty { display: none; }
+/* The handwriting dialog fits the window: its form scrolls, the buttons stay visible. */
+.handwriting-dialog[open] { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); box-sizing: border-box; }
+.handwriting-dialog .hw-layout { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+.handwriting-dialog > .ocr-actions { flex: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.handwriting-dialog > h2, .handwriting-dialog > p { flex: none; }
+@media (max-height: 760px) { .hw-source textarea#hwMarkdown { min-height: 160px; } .hw-pages { max-height: 48vh; } }
+.hw-edit-bar { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.hw-edit-bar span { margin-right: auto; }
+.hw-edit-bar button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+/* No preview yet: a short placeholder with a line of text instead of an empty strip. */
+.hw-pages:empty { display: grid; place-items: center; height: 160px; padding: 0; background: var(--fill); border: 1px dashed var(--line); }
+.hw-pages:empty::before { content: "The preview appears here"; color: var(--muted); font-size: 13px; }

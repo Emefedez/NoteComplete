@@ -30,7 +30,9 @@
   - `page_layout` returns existing typed text boxes with bounds and text content.
   - `compose_markdown` / `noteful convert` adds `--mode typed` to generate native typed text boxes instead of handwriting.
 
-### 1.2 Shapes Auto-Fill Toggle (`[ ]` In Progress)
+### 1.2 Shapes Auto-Fill Toggle (`[!]` Built 2026-11-01; native filled objects pending)
+- **Built:** `Shape.fill` (rectangle, ellipse, triangle), validated and kept on resize; Fill picker (outline / tint 25% / solid) in the shape settings and the tablet dock, **F** cycles it; live filled preview; projects keep it; `.noteful` export writes the inside as highlighter bands under the outline.
+- **Pending:** native Kind-3/Kind-6 filled objects for iPad parity (below), a custom fill swatch, and an iPad import check.
 - **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8.7](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
 - **Reader GUI (`apps/reader/`):**
   - Add `#shapeAutoFill` toggle button to `#shapeOptions` with pale accent highlight when active.
@@ -68,7 +70,8 @@
 - [!] **Drive Version Comparison:** Newer-version check on open and side-by-side comparison with study material migration.
 - [!] **Desktop Audio Recording:** Real microphone recording in Electron desktop app; type filter on live Google Drive.
 - [!] **Image Crop Export:** Validate imported image crops in physical iPad Noteful.
-- [!] **Sharing and drawing tablets:** shared Markdown notes (Yjs) with guest names, presence, cursors and ending; a phone or tablet as the computer's drawing surface (QR or 6-digit code, tool dock left/right, own zoom, live strokes with pen pressure, shared undo). Tested in Node and headless Chromium (`tools/collab_e2e.mjs`); still to try on real devices, a real stylus, a real Wi-Fi network and the packaged apps ([COLLABORATION.md](COLLABORATION.md#not-yet-verified)).
+- [!] **Sharing and drawing tablets:** shared Markdown notes (Yjs) with guest names, presence, cursors and ending; a phone or tablet as the computer's drawing surface (QR or 6-digit code, tool dock left/right with pen, highlighter, shapes and fill, own zoom, live strokes with pen pressure, shared undo). Tested in Node and headless Chromium (`tools/collab_e2e.mjs`); still to try on real devices, a real stylus, a real Wi-Fi network and the packaged apps ([COLLABORATION.md](COLLABORATION.md#not-yet-verified)).
+- [!] **Handwriting text and New note with AI:** handwriting written from Markdown keeps its words with their boxes (projects version 6, `ink-text.json` in `.notecomp`), so Find searches it at once without OCR; File → New note with AI… has the user's AI tool write the Markdown (streamed into the preview). Tested with a stand-in AI tool (`tools/ink_features_e2e.mjs`); still to try with the real CLIs. `.noteful` files do not carry the text.
 - [!] **Narrow windows and phones:** the menubar, tools and page row scroll sideways with the mouse wheel and a faded edge instead of hiding buttons; dark pages and Fit stay in the phone page row; the page number box fits its digits; opened menus look as on the desktop. Checked in Chromium at 320–480 px, not yet on a phone.
 
 ---
@@ -77,7 +80,7 @@
 
 - [ ] **Reorder Pages in Any Note:** Drag thumbnails in Pages panel, keyboard commands (*Move page up/down*), automatic reference renumbering (flashcards, quizzes, page markers, audio).
 - [ ] **Collaborative Notes, remaining:** linked documents (download, changed copies, per-page merge, proposing versions) and resuming sessions ([COLLABORATION.md](COLLABORATION.md), Phases 1, 4–8).
-- [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles with notes and audio).
+- [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles). Today `.notecomp` holds the note, notes, added recordings and the text of written handwriting ([layout](../spec/nfedit-v1.md#notecomp-archives)); `.notepart` is still written the same way; study material is not packed yet.
 - [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all).
 - [ ] **Library Sources:** Home switch for Recent · Google Drive · GitHub Repositories (with Git LFS support).
 - [ ] **Infinite Canvas:** Unbounded canvas mode that exports to Noteful by tiling into sheets.

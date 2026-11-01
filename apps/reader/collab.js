@@ -283,7 +283,7 @@ class Session {
       el('span', { className: 'collab-dot', style: `background:${p.color}` }),
       el('span', { textContent: p.name }),
       el('small', { className: 'muted', textContent: p.role === 'tablet' ? 'drawing tablet' : 'notes' }),
-      el('button', { type: 'button', textContent: 'Remove', onclick: () => this.client.removePeer(p.id) }))) : [el('li', { className: 'muted', textContent: 'No one has joined yet.' })]));
+      (() => { const b = el('button', { type: 'button', className: 'collab-remove', title: `Remove ${p.name}`, 'aria-label': `Remove ${p.name}`, onclick: () => this.client.removePeer(p.id) }); b.append(icon('close')); return b; })())) : [el('li', { className: 'muted', textContent: 'No one has joined yet.' })]));
   }
   // Closing the tab while sharing (app.js asks this first): Minimize / End session and close / Cancel.
   beforeClose() {
@@ -571,7 +571,7 @@ class Session {
     const action = (label, glyph, onclick) => { const b = el('button', { type: 'button', className: 'dock-tool', title: label, 'aria-label': label, onclick }); b.append(icon(glyph)); return b; };
     this.dot = el('span', { className: 'dock-status', title: 'Connected' });
     this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
-      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('shape', 'Shapes', 'shape'), this.shapeGroup(), tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
       el('hr'),
       ...['#202d40', '#246bce', '#d13b30', '#2f9a4c', '#f2c500'].map(swatch),
       el('hr'),
@@ -591,7 +591,34 @@ class Session {
     window.addEventListener('pointerdown', this.onPen, true);
     this.pinch();
   }
+  // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
+  shapeGroup() {
+    const group = el('div', { className: 'dock-shapes', hidden: true });
+    const mirror = (source, attr) => {
+      for (const original of document.querySelectorAll(source)) {
+        const b = original.cloneNode(true);
+        b.removeAttribute('id');
+        b.setAttribute('aria-label', original.title);
+        b.dataset.mirror = `${attr}:${original.dataset[attr]}`;
+        b.onclick = () => { original.click(); this.markTool(); };
+        group.append(b);
+      }
+    };
+    mirror('#shapePicker [data-shape]', 'shape');
+    group.append(el('hr'));
+    mirror('#shapeFill [data-fill]', 'fill');
+    return group;
+  }
   markTool() {
+    const group = this.dock?.querySelector('.dock-shapes');
+    if (group) {
+      group.hidden = this.host.tool !== 'shape';
+      for (const b of group.querySelectorAll('[data-mirror]')) {
+        const [attr, value] = b.dataset.mirror.split(':');
+        const original = document.querySelector(attr === 'shape' ? `#shapePicker [data-shape="${value}"]` : `#shapeFill [data-fill="${value}"]`);
+        b.setAttribute('aria-pressed', String(original?.getAttribute('aria-checked') === 'true'));
+      }
+    }
     for (const b of this.dock?.querySelectorAll('[data-dock-tool]') || []) b.setAttribute('aria-pressed', String(b.dataset.dockTool === this.host.tool));
     for (const b of this.dock?.querySelectorAll('.dock-width') || []) b.setAttribute('aria-pressed', String(b.dataset.width === $('width').value));
     for (const b of this.dock?.querySelectorAll('.dock-swatch') || []) b.setAttribute('aria-pressed', String(b.title.toLowerCase() === $('color').value.toLowerCase()));

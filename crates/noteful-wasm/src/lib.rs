@@ -373,6 +373,11 @@ pub fn markdown_export(src: &str, title: &str) -> String {
 pub fn jpeg_pages_pdf(data: &[u8], layout: &str, title: &str) -> Result<Vec<u8>, JsValue> {
     noteful_core::jpeg_pages_pdf(data, layout, title).map_err(|e| JsValue::from_str(&e))
 }
+/// The Markdown dialect the handwriting engine writes (what an AI tool is asked to write).
+#[wasm_bindgen]
+pub fn handwriting_dialect() -> String {
+    noteful_core::ink::DIALECT.to_owned()
+}
 /// MD5 hex of a file, to match it with Google Drive's md5Checksum.
 #[wasm_bindgen]
 pub fn md5_hex(data: &[u8]) -> String {

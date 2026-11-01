@@ -1,4 +1,4 @@
-# Noteful RE Project (.nfedit), versions 1–3
+# Noteful RE Project (.nfedit), versions 1–6
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -87,9 +87,31 @@ Native export writes each text box as a kind-2 object with the field layout and 
 
 A project may carry the note's Markdown notes in a top-level `markdown` string (omitted when empty; at most 8 MiB). They are not part of the edit history. A line consisting of `<!-- page N -->` ties the text after it to display page N (1-based).
 
+## Text of handwriting written from Markdown (project version 6)
+
+Handwriting the core writes from Markdown (New from Markdown, Insert handwritten pages, the MCP ink tools) keeps its words, so hosts can search it without recognizing the ink. A word is `{"text": "…", "bounds": [x, y, width, height]}` in page units (at most 5000 per page, 200 bytes per word).
+
+- Inserted pages carry theirs in the `InsertPages` edit: `pages[i].words` (omitted when empty), so undo and redo keep them with their page.
+- Original pages (a notebook made from Markdown) carry theirs in a top-level `ink_text` object: page slot → words (omitted when empty).
+- Projects with either are version 6. `view(page)` returns them as `ink_text`.
+
+The words describe the ink as written; erasing or moving that ink later does not change them (like recognized text).
+
+## Filled shapes
+
+A shape (`line.shape`) may have `fill`: an RGBA (0–1) inside colour, for rectangles, ellipses and triangles only. Resizing a shape keeps its fill. The app draws the inside under the outline. Native export writes the inside as highlighter bands under the outline (Noteful files have no filled shape for drawn ink); native filled-shape objects are not written yet.
+
 ## .notecomp archives
 
-A `.notecomp` file (readers also accept the longer `.notecomplete`) is a POSIX ustar archive with `manifest.json` (`{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`), `note.noteful` (the native export of the note) and `notes.md` (the notes, page markers kept). Readers require the manifest's format and the note entry; other entries are ignored.
+A `.notecomp` file (readers also accept the longer `.notecomplete`; `.notepart` is currently written the same way) is a POSIX ustar archive with:
+
+- `manifest.json`: `{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`, plus `"audio":[…]` and `"ink_text":"ink-text.json"` when present;
+- `note.noteful`: the native export of the note (inserted pages flattened into place);
+- `notes.md`: the Markdown notes, page markers kept;
+- `audio/N.ext`: recordings added in NoteComplete, listed in the manifest with `id`, `name`, `mime` and `created`;
+- `ink-text.json`: `{"pages": [[word, …], …]}`, the words of handwriting written from Markdown by page in display order.
+
+Readers require the manifest's format and the note entry; other entries are ignored.
 
 ## Native export
 
