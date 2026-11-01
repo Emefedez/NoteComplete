@@ -443,10 +443,14 @@ impl Editor {
         let mut imported = 0;
         let mut added = 0;
         let layers = self.layers();
+        // Tape covers whatever is under it, so it is drawn after every layer's content
+        // (keeping its own layer's opacity).
+        let mut tapes = String::new();
         for layer in &layers {
             if !layer.visible {
                 continue;
             }
+            let mut layer_tapes = String::new();
             content.push_str(&format!(
                 "<g data-layer=\"{}\" opacity=\"{}\">",
                 layer.id, layer.opacity
@@ -473,7 +477,12 @@ impl Editor {
             }
             for item in p.items.iter().filter(|i| i.layer == layer.id) {
                 if !deleted.contains(item.id.as_str()) {
-                    content.push_str(&format!(
+                    let target = if item.tape().is_some() {
+                        &mut layer_tapes
+                    } else {
+                        &mut content
+                    };
+                    target.push_str(&format!(
                         "<g data-item=\"{}\">{}</g>",
                         item.id,
                         crate::manipulation::item_svg(
@@ -502,7 +511,12 @@ impl Editor {
             }
             for (id, line) in added_in_layer(false) {
                 if !deleted.contains(id.as_str()) {
-                    content.push_str(&format!(
+                    let target = if line.tool == 2 {
+                        &mut layer_tapes
+                    } else {
+                        &mut content
+                    };
+                    target.push_str(&format!(
                         "<g data-item=\"{id}\"{}>{}</g>",
                         if line.tool == 2 {
                             format!(" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\"")
@@ -527,7 +541,14 @@ impl Editor {
                 }
             }
             content.push_str("</g>");
+            if !layer_tapes.is_empty() {
+                tapes.push_str(&format!(
+                    "<g data-tapes=\"{}\" opacity=\"{}\">{layer_tapes}</g>",
+                    layer.id, layer.opacity
+                ));
+            }
         }
+        content.push_str(&tapes);
         let (size, pdf_background) = self.page_geometry(page)?;
         let [w, h] = size;
         let texts: Vec<_> = p

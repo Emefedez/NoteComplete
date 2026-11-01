@@ -81,6 +81,13 @@ a:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* In the bars, rows scroll sideways and clip anything outside a button: the ring sits
+   inside it instead, following its corners, so it is never cut or doubled. */
+:is(header, .toolbar, .navigation, .tablet-dock) :is(button, summary, select, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+:is(header, .toolbar, .navigation) :is(div, nav, section):focus-visible { outline: none; }
 button svg,
 summary svg,
 .audio-icon svg {
