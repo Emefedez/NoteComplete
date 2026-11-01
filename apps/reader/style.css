@@ -2541,3 +2541,12 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .tablet-dock .dock-shapes[hidden] { display: none; }
 .tablet-dock .dock-shapes button { width: 40px; min-width: 40px; height: 36px; min-height: 36px; }
 .tablet-dock .dock-shapes svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* The handwriting dialog's approach: a prompt for the AI, or your own Markdown. Both fill the
+   same Markdown editor below, so either can be edited afterwards. */
+.hw-modes { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); align-self: flex-start; }
+.hw-modes button { min-height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; font-size: 13px; }
+.hw-modes button[aria-selected="true"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px #0002; }
+.hw-import { display: flex; flex-wrap: wrap; gap: 6px; }
+.hw-tools { margin-top: -2px; }
+.hw-ai-status { margin: 0; font-size: 12px; min-height: 0; }
+.hw-ai-status:empty { display: none; }

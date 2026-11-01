@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { optionsFrom, LOOK_FIELDS, SAMPLE, aiPrompt, answerMarkdown, titleOf } from './convert.js';
+import { optionsFrom, LOOK_FIELDS, SAMPLE, aiPrompt, aiEnrichPrompt, answerMarkdown, titleOf } from './convert.js';
 
 test('only known look options reach the core, and defaults are left out', () => {
   assert.deepEqual(optionsFrom({ look: 'classic', theme: 'dark', paper: 'ruled', hand: '', pen: 'ballpoint', size: '13' }), { look: 'classic', theme: 'dark', paper: 'ruled', pen: 'ballpoint', size: 13 });
@@ -25,4 +25,13 @@ test("answers lose code fences; the note is named after its first heading", () =
   assert.equal(titleOf("_sub_\n# THE **CARDIAC** CYCLE :heart:\n## x"), "THE CARDIAC CYCLE");
   assert.equal(titleOf("# SOLAR & TERRESTRIAL // RADIATION"), "SOLAR & TERRESTRIAL RADIATION");
   assert.equal(titleOf("no heading"), "");
+});
+
+test("making your Markdown richer keeps its content and asks for the dialect's means", () => {
+  const prompt = aiEnrichPrompt({ markdown: "# Tema 2\n<!-- page 3 -->\n- uno", dialect: "DIALECT-TEXT" });
+  assert.match(prompt, /Keep every fact/);
+  assert.match(prompt, /==highlights==/);
+  assert.match(prompt, /!draw/);
+  assert.match(prompt, /<!-- page N -->/);
+  assert.ok(prompt.endsWith("The note:\n# Tema 2\n<!-- page 3 -->\n- uno"));
 });
