@@ -1,6 +1,6 @@
-# Collaborative Markdown notes (plan, not started)
+# Collaborative Markdown notes and drawing tablets
 
-Owner's idea (2026-10-29), polished into a plan. Nothing here is implemented yet.
+Owner's idea (2026-10-29), polished into a plan. **Status 2026-11-01:** the session layer (Phases 2 and 3: host server, invites, editing together, presence, ending) and **drawing tablet mode** (below) are built and tested in Node and in headless Chromium. Linked documents (Phases 1, 4–7) are not started. Nothing has been tried yet on real phones, tablets or a second computer on a real network; see *Not yet verified*.
 
 `[D]` done · `[!]` done, not yet verified against the real app or service · `[ ]` to do
 
@@ -21,7 +21,7 @@ On a device that does not have the file, clicking the chip offers to download it
   - For an HTML page (since 3173d94): only in `notes:<fingerprint>`. The worker is never touched.
   - Saving an edited text or HTML file carries notes and study material to the new fingerprint.
 - **Notes editor**: TinyMDE, loaded on first use (`notes.js`). Page markers are HTML comments (`<!-- page 3 -->`) shown as chips; clicking one shows that page.
-- **Single device everywhere**: there is no network layer, no shared session, no presence and no merging of concurrent edits.
+- **Single device everywhere** (before this work): there was no network layer, no shared session, no presence and no merging of concurrent edits.
 
 Markdown notes are the right place to start collaborating:
 - they are already a separate layer from the binary ink/PDF model;
@@ -46,6 +46,15 @@ Where the original proposal said something else, the change is marked **Changed*
      - the existing storage (`setMarkdown`, `notes:<fp>`) receives plain Markdown snapshots, debounced. Everything that reads notes today (export, study prompts, MCP, Ask AI's My notes) keeps working unchanged.
    - Yjs is loaded only while a session is active (lazy load, like TinyMDE).
    - If hosting later moves out of Electron (a `noteful serve` CLI), `yrs` (Yjs in Rust, same wire format) slots in there.
+   - **Built as planned for the notes.** For **ink**, see decision 8: one sync layer (one connection, one hub), but not a CRDT.
+
+8. **Ink is an ordered edit log on the same connection, not a Yjs CRDT.** **Changed** (2026-11-01), because the code shows a better fit:
+   - The core's edit history is linear, and new items are named by their place in it (`new:<index>`, `editor.rs`). Erase, adjust, lock and undo all point at those names.
+   - A Yjs array of edits orders concurrent inserts deterministically but can still put a late edit *before* ones a copy already applied; every later name would shift and erase/undo would hit the wrong items.
+   - Instead the hub numbers every ink edit (`seq`) and sends it to every copy that holds the note, the sender included; each applies them in that order to its own core. Same snapshot + same edits in the same order = the same document, item names and undo. An edit the core refuses is refused by every copy, so they still agree.
+   - Undo is the note's shared history, as in the reader today: a tablet's undo undoes the last edit, whoever made it.
+   - A copy that drifted anyway is caught: every 100 edits the host sends the core's `history_digest` (MD5 of the history and undo position) and a tablet that differs reloads from a snapshot.
+   - Edits go through the hub only while a tablet is connected. Without one, the host edits exactly as without a session (no extra round trip).
 
 3. **Guests render and edit locally; they are not "thin" in the sense of receiving rendered HTML.** **Changed** from "viewers never load the WASM core and only receive rendered Markdown".
    - Guests edit, so they need the raw text and an editor (TinyMDE).
@@ -193,6 +202,22 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
   - A file that changed since it was linked is not served silently as the old version.
   - The host is asked to share the change: *Share as the new version* (new `v`, the text is rewritten, the old hash goes to `history`), or *Compare first* (the per-page comparison against the last shared version).
 
+## Drawing tablet mode (built)
+
+A phone or tablet joins a desktop NoteComplete as a drawing surface for the note open in the sharing tab.
+
+- **Pairing**: File → *Share and draw on a tablet…* shows a QR code (the tablet link, `http://<LAN address>:<port>/tablet#<session>.<token>`) and a 6-digit code with the address. The device scans the QR with its camera (opens the reader in its browser, served by the computer), or in NoteComplete (app or browser) uses File → *Join as drawing tablet…* and types the address and code.
+  - The code lasts 10 minutes and is used up after 5 wrong tries (*New code* makes another). A device that paired with the code receives the tablet token and reconnects with it.
+  - Removing a tablet replaces the tablet link and code, so it cannot come back with the old ones.
+- **On the device**: the note and a tool dock, nothing else. The dock: pen, highlighter, eraser, move, five colours, three widths, undo, redo, fit width, *move the bar to the other side* (remembered), disconnect, and a status dot.
+  - The device zooms and scrolls its own view. Once a stylus has drawn, fingers move the page and two fingers zoom; before that (a phone without a stylus) a finger draws.
+  - The device's copy is never kept in its Recent and never marked unsaved: the computer saves the note.
+- **On the computer**: the strokes appear while they are drawn (live preview, one message per animation frame with only the new points), then as ordinary edits in its history: saved, exported and undone like its own. Its own view and tools are unchanged; its strokes appear on the tablet.
+- **Pen pressure**: a stylus's pressure (0–1) becomes the core's per-point radius (`Line.pressure`, about 0.3–1.7 × half the width). This applies to any stylus in the reader, not only tablets.
+- **Opening another note** on the computer reloads the tablet with it; closing it shows *Waiting for the computer's note*.
+- **Disconnecting** (dock button, closing the page, or *Remove* on the computer) leaves the computer's note as it is; the tablet goes back to Home.
+- **Online later**: the client connects to any `ws(s)://…/sync`; a link with `https` becomes `wss`. Running the hub behind a relay or tunnel needs no protocol change.
+
 ## Sessions, invites and safety
 
 - **Start**: *Share notes…* in the notes panel head or File → Share notes…
@@ -202,6 +227,7 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
     - an optional *Include the note itself* (adds the open document as a linked file, so page markers become usable for guests);
     - *Guests may propose versions* (Phase 7; off by default; the owner is fine either way).
   - The host gets an invite link and a QR code.
+- **Built**: one *Share and draw on a tablet…* dialog (desktop app only) with *Guests can edit* / *Guests can view* / *Not shared*, the tablet QR and code, the notes invite link with its QR and *Copy link*, and the people list with *Remove*. Not built yet: choosing linked files and *Include the note itself* (Phase 4), *Guests may propose versions* (Phase 7).
 - **Invite link**: `http://<host LAN address>:<port>/join#<session id>.<token>`.
   - The token: 128 random bits, one per session (or per guest when *Invite each person separately* is on).
   - It sits in the fragment, so it never reaches proxies or logs. The guest page sends it in the first WebSocket message.
@@ -211,7 +237,7 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
   - Off-network guests need the host's own tunnel or VPN (Tailscale, a reverse proxy). Documented, not built in.
   - A relay service is out of scope until there is a reason.
 - **Transport security**: plain `http`/`ws` on the LAN in the first version, with the token. The UI says it is meant for a trusted network. Tracked for later: TLS with a self-signed certificate whose fingerprint is pinned in the invite link (guests using NoteComplete can check it; browsers would show a warning).
-- **Limits**:
+- **Limits** (built: guest/tablet limit, 2 MB per message from guests and tablets, a token-bucket rate limit, a 10-second hello timeout; downloads are Phase 4):
   - a maximum number of guests (default 10);
   - message size and update-rate limits;
   - downloads with HTTP range requests, at most a few at a time per guest. There is no file size limit (owner's decision): big notes download in resumable parts, and an interrupted download continues where it stopped;
@@ -264,6 +290,30 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
 - The Yjs update log is kept as `collab:<fingerprint>` while sessions are planned to resume (same link). It is dropped when the host clears the session.
 - **No session**: the notes behave exactly as today. Collaboration code is not loaded.
 
+## How it is built
+
+- `apps/desktop/collab-hub.js`: the session (tokens, pairing code, roles, peers, the notes `Y.Doc` and awareness, the ink order and its log, snapshots, ending). Pure: no sockets, so a relay can run it later.
+- `apps/desktop/collab-server.js`: HTTP for the reader's own files (`/join`, `/tablet`) and the `/sync` WebSocket (`ws`), on a free port, started from `main.js` over IPC (`notecompleteCollab` in `preload.cjs`). Loaded only with the first session.
+- `apps/reader/sync.js`: the client (reconnects with back-off, ordered ink queue, snapshots, notes CRDT, digest check). `apps/reader/collab.js`: dialogs, presence, guest mode, tablet mode, live strokes. Both load only when a session starts; Yjs (vendored by `tools/build_web.py`) only for notes, never on tablets.
+- `app.js`: every edit goes through `mutate()` (the engine directly, or the shared order while a tablet is connected); `applyShared` applies others' edits and redraws only the page they touch.
+- Core: `Editor::history_digest` (`history_digest` in WASM, `digest` in the worker).
+- Wire: JSON text frames `{t: …}`; binary frames `0` y-sync, `1` awareness, `2` snapshot (header length, JSON header, project).
+
+## Tests
+
+- `cargo test`: replicas loaded from one project that apply the same edits (pressure, erase, undo, redo) agree on views and digest.
+- `node --test apps/desktop/collab-server.test.mjs`: the real server with host, guests and tablets: refused/expired invites and codes, second host, full session, oversized messages and floods; snapshot join; concurrent edits from host and tablet in one order; refused edits; live strokes; the digest check repairing a drifted copy; a new note reloading the tablet; removed tablets; three people typing at once; presence and cursors; a guest offline and back; view-only edits dropped; ending with the guests' last text; the host disappearing.
+- `node --test apps/reader/sync.test.mjs`: minimal text diffs, emoji, caret mapping through remote edits, snapshot framing.
+- `node tools/collab_e2e.mjs` (after a web build, with Playwright): host, tablet (touch + pen with pressure via CDP) and guest in Chromium: code pairing, live stroke, pressure stroke saved on the host, highlighter, eraser, undo, host strokes on the tablet, pinch zoom on the tablet only, dock side, phone width, guest name prompt, typing, chips and cursors, disconnect, ending with the guest's copy.
+
+## Not yet verified
+
+- [!] Real devices: an Android or iOS phone/tablet in the installed app and in its browser, with a real stylus (pressure range, palm/finger handling), on a real Wi-Fi network; a second computer as a notes guest.
+- [!] The installed apps' network settings: Android now allows cleartext (needed for `ws://<LAN address>`), iOS allows local networking and asks for the local network permission. Neither has been built and tried.
+- [!] The packaged desktop app: the server serves the staged reader from inside the package; the window close prompt; firewalls prompting on first listen (Windows, macOS).
+- [!] Very large notes on a tablet: the snapshot is the whole project (source included), so a 250 MB note sends ~330 MB and needs that much memory on the device while it loads.
+- Undo on the tablet is the shared history's (it can undo the computer's last edit). Per-person ink undo would need per-author history in the core.
+
 ## Progress plan
 
 Each phase ends with something usable and tested. Tests follow the repo's style:
@@ -290,12 +340,12 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 ### Phase 2: host server and invites (desktop)
 
-- [ ] `apps/desktop/collab-server.js`:
+- [!] `apps/desktop/collab-server.js`:
   - HTTP + WebSocket on a chosen free port, started and stopped from IPC;
   - serves the reader in guest mode;
   - tokens, guest limits and rate limits.
-- [ ] *Share notes…* dialog: Can edit / Can view, files allowed, the note itself, link + QR code, list of people with *Remove*.
-- [ ] Security tests (Node):
+- [!] *Share notes…* dialog: Can edit / Can view, link + QR code, list of people with *Remove*. (Files allowed and the note itself: Phase 4.)
+- [D] Security tests (Node), except path traversal of linked files (Phase 4); reader-file traversal is tested:
   - no token or a wrong token: refused;
   - path traversal and unlinked hashes: refused;
   - a revoked token is disconnected;
@@ -305,20 +355,26 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 ### Phase 3: editing together
 
-- [ ] Yjs (+ `y-protocols`) vendored and lazy-loaded; the host `Y.Doc` per shared document; sync and awareness over the WebSocket.
-- [ ] TinyMDE ↔ `Y.Text` binding:
+- [D] Yjs (+ `y-protocols`) vendored and lazy-loaded; the host `Y.Doc` per shared document; sync and awareness over the WebSocket.
+- [D] TinyMDE ↔ `Y.Text` binding:
   - local changes become minimal diffs into `Y.Text`;
   - remote updates are applied to the editor keeping the caret and selection;
   - undo stays per person (`Y.UndoManager`).
-- [ ] Presence: the name prompt (*Guest N* filled in, Enter or OK), colours, remote cursors (view-only guests too), names in the top bar beside the file name, click a name to scroll to that person's cursor.
-- [ ] Ending: the close prompt (Minimize / End session and close / Cancel), the *session ending* message, guests' last flush and local copy, the host's final save.
-- [ ] Persistence to `setMarkdown` / `notes:<fp>` (debounced, and when the session ends); `collab:<fp>` update log for resuming.
-- [ ] Tests:
+- [D] Presence: the name prompt (*Guest N* filled in, Enter or OK), colours, remote cursors (view-only guests too), names in the top bar beside the file name, click a name to scroll to that person's cursor.
+- [!] Ending: the close prompt (Minimize / End session and close / Cancel), the *session ending* message, guests' last flush and local copy, the host's final save.
+- [!] Persistence to `setMarkdown` / `notes:<fp>` (debounced, and when the session ends). Not built: the `collab:<fp>` update log for resuming (Phase 8).
+- [D] Tests (Node and headless Chromium; *Minimize* needs the real window):
   - two headless guests and the host type at the same place at once, and all three end with the same text;
   - a guest offline for a while reconnects and their edits merge;
   - closing the host (End session and close) saves the final text on the host and a copy on every guest;
   - Minimize keeps the session running.
 - Done when: three people edit the same notes at once without losing text, and the host's saved notes match.
+
+### Drawing tablets (built alongside Phase 3)
+
+- [D] Ink edits through the hub's order; snapshot join; digest check; live strokes; stylus pressure.
+- [D] Pairing by QR link or address + 6-digit code; tablet dock (sides, tools, colours, widths, undo/redo, fit, disconnect); own zoom and scroll; finger pan and pinch after a stylus.
+- [!] On real devices and networks (see *Not yet verified*).
 
 ### Phase 4: downloading linked documents
 
