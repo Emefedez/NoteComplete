@@ -107,7 +107,7 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 ## Known issues
 
 - Exports to `.noteful` after editing, crops made in NoteComplete included, have not yet been verified in Noteful itself.
-- Releases are published automatically from 1.1.0 on; earlier local builds (1.0.x) find 1.1.0 as their first update. The release pipeline itself is new and its first run is the 1.1.0 release.
+- Releases are published automatically from 1.1.0 on; earlier local builds (1.0.x) find them as updates (Help → Check for updates… checks at once).
 - Sharing and the drawing tablet have been tested in Node and headless Chromium only, not yet on real devices, styluses or networks.
 - Uploading a change to Google Drive and deleting a note there are tested against a fake server only.
 - A tab dragged out of the tab strip opens in its own window, but cannot be dropped onto another window's strip: Wayland does not tell the app where the pointer is outside its own windows.
