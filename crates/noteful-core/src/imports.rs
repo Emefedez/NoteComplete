@@ -76,7 +76,11 @@ impl TextBox {
         let floats = |v: &[f64]| V::Array(v.iter().map(|n| V::Float(*n)).collect());
         let mut keys = vec![13, 10, 6, 2, 3];
         let mut decorations = vec![];
-        for (key, value) in [(4, u64::from(self.underline)), (5, u64::from(self.strikethrough)), (8, self.align)] {
+        for (key, value) in [
+            (4, u64::from(self.underline)),
+            (5, u64::from(self.strikethrough)),
+            (8, self.align),
+        ] {
             if value != 0 {
                 keys.push(key);
                 decorations.push(V::UInt(value));
@@ -357,7 +361,9 @@ impl Editor {
             || title.len() > 512
             || !(1.0..=9.).contains(&version)
             || pdf_id.is_empty()
-            || !pdf_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            || !pdf_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
             || pages.iter().any(|p| p.1.is_some()) && pdf.is_empty()
             || sizes
                 .iter()
@@ -378,10 +384,9 @@ impl Editor {
             ];
             match pdf_page {
                 None => background.push(f(6, 5, V::Text("{\"pc\":16777215}".into()))),
-                Some(index) => background.extend([
-                    f(3, 2, V::UInt(*index)),
-                    f(4, 5, V::Text(pdf_id.into())),
-                ]),
+                Some(index) => {
+                    background.extend([f(3, 2, V::UInt(*index)), f(4, 5, V::Text(pdf_id.into()))])
+                }
             }
             page_records.push(V::Fields(vec![
                 f(1, 5, V::Text(format!("page-{i}"))),

@@ -34,7 +34,10 @@ fn mul(m: Matrix, n: Matrix) -> Matrix {
     ]
 }
 fn apply(m: Matrix, p: Pt) -> Pt {
-    [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]]
+    [
+        m[0] * p[0] + m[2] * p[1] + m[4],
+        m[1] * p[0] + m[3] * p[1] + m[5],
+    ]
 }
 fn numbers(s: &str) -> Vec<f64> {
     let mut out = Vec::new();
@@ -67,7 +70,9 @@ fn parse_transform(s: &str) -> Matrix {
     let mut rest = s;
     while let Some(open) = rest.find('(') {
         let name = rest[..open].trim().trim_start_matches([',', ' ']).trim();
-        let Some(close) = rest[open..].find(')') else { break };
+        let Some(close) = rest[open..].find(')') else {
+            break;
+        };
         let v = numbers(&rest[open + 1..open + close]);
         rest = &rest[open + close + 1..];
         let at = |i: usize, d: f64| v.get(i).copied().unwrap_or(d);
@@ -79,7 +84,10 @@ fn parse_transform(s: &str) -> Matrix {
                 let r = at(0, 0.).to_radians();
                 let t = [r.cos(), r.sin(), -r.sin(), r.cos(), 0., 0.];
                 if v.len() == 3 {
-                    mul(mul([1., 0., 0., 1., v[1], v[2]], t), [1., 0., 0., 1., -v[1], -v[2]])
+                    mul(
+                        mul([1., 0., 0., 1., v[1], v[2]], t),
+                        [1., 0., 0., 1., -v[1], -v[2]],
+                    )
                 } else {
                     t
                 }
@@ -179,7 +187,11 @@ fn arc(p0: Pt, rx: f64, ry: f64, phi: f64, large: bool, sweep: bool, p1: Pt) -> 
     }
     let num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
     let den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
-    let mut k = if den != 0. { (num / den).max(0.).sqrt() } else { 0. };
+    let mut k = if den != 0. {
+        (num / den).max(0.).sqrt()
+    } else {
+        0.
+    };
     if large == sweep {
         k = -k;
     }
@@ -188,7 +200,12 @@ fn arc(p0: Pt, rx: f64, ry: f64, phi: f64, large: bool, sweep: bool, p1: Pt) -> 
     let cy = sp * cx1 + cp * cy1 + (p0[1] + p1[1]) / 2.;
     let ang = |ux: f64, uy: f64, vx: f64, vy: f64| (ux * vy - uy * vx).atan2(ux * vx + uy * vy);
     let t1 = ang(1., 0., (x1 - cx1) / rx, (y1 - cy1) / ry);
-    let mut dt = ang((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
+    let mut dt = ang(
+        (x1 - cx1) / rx,
+        (y1 - cy1) / ry,
+        (-x1 - cx1) / rx,
+        (-y1 - cy1) / ry,
+    );
     if !sweep && dt > 0. {
         dt -= 2. * PI;
     } else if sweep && dt < 0. {
@@ -289,7 +306,9 @@ pub fn path_subpaths(d: &str) -> Vec<(Vec<Pt>, bool)> {
                 } else {
                     last_ctrl.map_or(pos, |l| [2. * pos[0] - l[0], 2. * pos[1] - l[1]])
                 };
-                let (Some(p2), Some(p3)) = (pt(&mut i), pt(&mut i)) else { break };
+                let (Some(p2), Some(p3)) = (pt(&mut i), pt(&mut i)) else {
+                    break;
+                };
                 cur.extend(cubic(pos, p1, p2, p3));
                 pos = p3;
                 ctrl = Some(p2);
@@ -302,15 +321,23 @@ pub fn path_subpaths(d: &str) -> Vec<(Vec<Pt>, bool)> {
                     last_ctrl.map_or(pos, |l| [2. * pos[0] - l[0], 2. * pos[1] - l[1]])
                 };
                 let Some(p3) = pt(&mut i) else { break };
-                let p1 = [pos[0] + 2. / 3. * (q[0] - pos[0]), pos[1] + 2. / 3. * (q[1] - pos[1])];
-                let p2 = [p3[0] + 2. / 3. * (q[0] - p3[0]), p3[1] + 2. / 3. * (q[1] - p3[1])];
+                let p1 = [
+                    pos[0] + 2. / 3. * (q[0] - pos[0]),
+                    pos[1] + 2. / 3. * (q[1] - pos[1]),
+                ];
+                let p2 = [
+                    p3[0] + 2. / 3. * (q[0] - p3[0]),
+                    p3[1] + 2. / 3. * (q[1] - p3[1]),
+                ];
                 cur.extend(cubic(pos, p1, p2, p3));
                 pos = p3;
                 ctrl = Some(q);
             }
             'A' => {
                 let v: Option<Vec<f64>> = (0..5).map(|_| next(&mut i)).collect();
-                let (Some(v), Some(p3)) = (v, pt(&mut i)) else { break };
+                let (Some(v), Some(p3)) = (v, pt(&mut i)) else {
+                    break;
+                };
                 cur.extend(arc(pos, v[0], v[1], v[2], v[3] != 0., v[4] != 0., p3));
                 pos = p3;
             }
@@ -353,7 +380,7 @@ pub fn rect_pts(x: f64, y: f64, w: f64, h: f64, rx: f64, ry: f64) -> Vec<Pt> {
         (x + rx, y + ry, 180.),
     ] {
         for k in (0..=90).step_by(15) {
-            let a = ((a0 + k as f64) as f64).to_radians();
+            let a = (a0 + k as f64).to_radians();
             pts.push([cx + rx * a.cos(), cy + ry * a.sin()]);
         }
     }
@@ -392,7 +419,12 @@ fn subtract(mut segs: Vec<(f64, f64)>, cuts: &[(f64, f64)]) -> Vec<(f64, f64)> {
 /// Colour shapes (polygons, highlighter colour) in painter's order with
 /// abutting highlighter strokes. Inside is even-odd; a later shape covers
 /// earlier ones, so two translucent colours never stack.
-pub fn fill_shapes(shapes: &[(Vec<Vec<Pt>>, Rgba)], band: f64, angle: f64, rng: &mut Rng) -> Vec<Line> {
+pub fn fill_shapes(
+    shapes: &[(Vec<Vec<Pt>>, Rgba)],
+    band: f64,
+    angle: f64,
+    rng: &mut Rng,
+) -> Vec<Line> {
     let (ca, sa) = (angle.cos(), angle.sin());
     let rots: Vec<Vec<Vec<Pt>>> = shapes
         .iter()
@@ -400,7 +432,11 @@ pub fn fill_shapes(shapes: &[(Vec<Vec<Pt>>, Rgba)], band: f64, angle: f64, rng: 
             polys
                 .iter()
                 .filter(|p| p.len() > 2)
-                .map(|p| p.iter().map(|[x, y]| [x * ca - y * sa, x * sa + y * ca]).collect())
+                .map(|p| {
+                    p.iter()
+                        .map(|[x, y]| [x * ca - y * sa, x * sa + y * ca])
+                        .collect()
+                })
                 .collect()
         })
         .collect();
@@ -408,7 +444,11 @@ pub fn fill_shapes(shapes: &[(Vec<Vec<Pt>>, Rgba)], band: f64, angle: f64, rng: 
     if ys.is_empty() {
         return vec![];
     }
-    let (lo, hi) = ys.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(*y), b.max(*y)));
+    let (lo, hi) = ys
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| {
+            (a.min(*y), b.max(*y))
+        });
     let r = band / 2.;
     let mut out = Vec::new();
     let mut y = lo + r;
@@ -427,7 +467,13 @@ pub fn fill_shapes(shapes: &[(Vec<Vec<Pt>>, Rgba)], band: f64, angle: f64, rng: 
                 }
                 let jitter = rng.uniform(-0.3, 0.3);
                 let back = |[px, py]: Pt| [px * ca + py * sa, -px * sa + py * ca];
-                out.push(highlight_line(back([a2, y]), back([b2 + 0.01, y + jitter]), band, *col, rng));
+                out.push(highlight_line(
+                    back([a2, y]),
+                    back([b2 + 0.01, y + jitter]),
+                    band,
+                    *col,
+                    rng,
+                ));
             }
         }
         y += band * 0.98;
@@ -478,16 +524,34 @@ pub struct DrawOptions {
 }
 
 /// Place an SVG drawing at (x, y) scaled to `width` (and at most `height`).
-pub fn drawing(svg: &str, x: f64, y: f64, width: f64, height: Option<f64>, pen: &mut Pen, opts: &DrawOptions) -> Result<Drawing, String> {
+pub fn drawing(
+    svg: &str,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: Option<f64>,
+    pen: &mut Pen,
+    opts: &DrawOptions,
+) -> Result<Drawing, String> {
     if svg.len() > MAX_SVG {
         return Err("The SVG drawing is larger than 256 KB.".into());
     }
-    let doc = roxmltree::Document::parse(svg.trim()).map_err(|e| format!("The SVG drawing is not valid XML: {e}"))?;
+    let doc = roxmltree::Document::parse(svg.trim())
+        .map_err(|e| format!("The SVG drawing is not valid XML: {e}"))?;
     let root = doc.root_element();
     let mut vb = root.attribute("viewBox").map(numbers).unwrap_or_default();
     if vb.len() != 4 || vb[2] <= 0. || vb[3] <= 0. {
-        let size = |k| root.attribute(k).and_then(|v| numbers(v).first().copied()).filter(|v| *v > 0.);
-        vb = vec![0., 0., size("width").unwrap_or(100.), size("height").unwrap_or(100.)];
+        let size = |k| {
+            root.attribute(k)
+                .and_then(|v| numbers(v).first().copied())
+                .filter(|v| *v > 0.)
+        };
+        vb = vec![
+            0.,
+            0.,
+            size("width").unwrap_or(100.),
+            size("height").unwrap_or(100.),
+        ];
     }
     let [vx, vy, vw, vh] = [vb[0], vb[1], vb[2], vb[3]];
     let mut k = width / vw;
@@ -534,7 +598,9 @@ impl Collect {
 }
 
 fn attr_f(el: roxmltree::Node, k: &str) -> f64 {
-    el.attribute(k).and_then(|v| numbers(v).first().copied()).unwrap_or(0.)
+    el.attribute(k)
+        .and_then(|v| numbers(v).first().copied())
+        .unwrap_or(0.)
 }
 fn style_of(el: roxmltree::Node, parent: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     let mut st = parent.clone();
@@ -562,13 +628,23 @@ fn style_of(el: roxmltree::Node, parent: &BTreeMap<String, String>) -> BTreeMap<
             }
         }
     }
-    let inherited: f64 = parent.get("opacity").and_then(|v| v.parse().ok()).unwrap_or(1.);
+    let inherited: f64 = parent
+        .get("opacity")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.);
     let own: f64 = own_opacity.and_then(|v| v.parse().ok()).unwrap_or(1.);
     st.insert("opacity".into(), (inherited * own).to_string());
     st
 }
 
-fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: &mut Pen, opts: &DrawOptions, cx: &mut Collect) {
+fn walk(
+    el: roxmltree::Node,
+    m: Matrix,
+    parent: &BTreeMap<String, String>,
+    pen: &mut Pen,
+    opts: &DrawOptions,
+    cx: &mut Collect,
+) {
     if !el.is_element() {
         return;
     }
@@ -580,7 +656,12 @@ fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: 
     if st.get("display").is_some_and(|d| d == "none") {
         return;
     }
-    let m = mul(m, el.attribute("transform").map(parse_transform).unwrap_or(IDENTITY));
+    let m = mul(
+        m,
+        el.attribute("transform")
+            .map(parse_transform)
+            .unwrap_or(IDENTITY),
+    );
     let tag = el.tag_name().name();
     if SKIPPED.contains(&tag) {
         if !matches!(tag, "title" | "desc" | "metadata" | "defs") {
@@ -598,7 +679,11 @@ fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: 
             return;
         }
         "text" => {
-            let text: String = el.descendants().filter(|n| n.is_text()).filter_map(|n| n.text()).collect::<String>();
+            let text: String = el
+                .descendants()
+                .filter(|n| n.is_text())
+                .filter_map(|n| n.text())
+                .collect::<String>();
             let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
             if text.is_empty() {
                 return;
@@ -617,9 +702,14 @@ fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: 
                 Some("middle") => px -= w / 2.,
                 _ => {}
             }
-            let mut col = st.get("fill").and_then(|f| parse_color(f)).unwrap_or(opts.ink);
+            let mut col = st
+                .get("fill")
+                .and_then(|f| parse_color(f))
+                .unwrap_or(opts.ink);
             col[3] = opacity.clamp(0.05, 1.);
-            let bold = st.get("font-weight").is_some_and(|w| w == "bold" || w == "700");
+            let bold = st
+                .get("font-weight")
+                .is_some_and(|w| w == "bold" || w == "700");
             let mut tp = pen.child(col, pen.width * if bold { 1.3 } else { 1. });
             let (s, _) = write_line(&mut tp, &text, px, py, &ts);
             cx.points += s.iter().map(|l| l.points.len()).sum::<usize>();
@@ -631,18 +721,42 @@ fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: 
     let shapes: Vec<(Vec<Pt>, bool)> = match tag {
         "path" => path_subpaths(el.attribute("d").unwrap_or("")),
         "rect" => vec![(
-            rect_pts(attr_f(el, "x"), attr_f(el, "y"), attr_f(el, "width"), attr_f(el, "height"), attr_f(el, "rx"), attr_f(el, "ry")),
+            rect_pts(
+                attr_f(el, "x"),
+                attr_f(el, "y"),
+                attr_f(el, "width"),
+                attr_f(el, "height"),
+                attr_f(el, "rx"),
+                attr_f(el, "ry"),
+            ),
             true,
         )],
         "circle" => {
             let r = attr_f(el, "r");
             vec![(ellipse_pts(attr_f(el, "cx"), attr_f(el, "cy"), r, r), true)]
         }
-        "ellipse" => vec![(ellipse_pts(attr_f(el, "cx"), attr_f(el, "cy"), attr_f(el, "rx"), attr_f(el, "ry")), true)],
-        "line" => vec![(vec![[attr_f(el, "x1"), attr_f(el, "y1")], [attr_f(el, "x2"), attr_f(el, "y2")]], false)],
+        "ellipse" => vec![(
+            ellipse_pts(
+                attr_f(el, "cx"),
+                attr_f(el, "cy"),
+                attr_f(el, "rx"),
+                attr_f(el, "ry"),
+            ),
+            true,
+        )],
+        "line" => vec![(
+            vec![
+                [attr_f(el, "x1"), attr_f(el, "y1")],
+                [attr_f(el, "x2"), attr_f(el, "y2")],
+            ],
+            false,
+        )],
         "polyline" | "polygon" => {
             let v = numbers(el.attribute("points").unwrap_or(""));
-            vec![(v.chunks_exact(2).map(|c| [c[0], c[1]]).collect(), tag == "polygon")]
+            vec![(
+                v.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
+                tag == "polygon",
+            )]
         }
         other => {
             cx.warn(format!("SVG <{other}> is not drawn"));
@@ -660,9 +774,14 @@ fn walk(el: roxmltree::Node, m: Matrix, parent: &BTreeMap<String, String>, pen: 
         .unwrap_or(1.)
         * opacity;
     if tag != "line" {
-        let fill = st.get("fill").map_or(Some([0., 0., 0., 1.]), |f| parse_color(f));
+        let fill = st
+            .get("fill")
+            .map_or(Some([0., 0., 0., 1.]), |f| parse_color(f));
         if let Some(fill) = fill.filter(|_| fill_opacity > 0.05) {
-            cx.fills.push((placed.iter().map(|(p, _)| p.clone()).collect(), pastel(fill)));
+            cx.fills.push((
+                placed.iter().map(|(p, _)| p.clone()).collect(),
+                pastel(fill),
+            ));
         }
     }
     if let Some(mut col) = st.get("stroke").and_then(|s| parse_color(s)) {
@@ -731,18 +850,37 @@ mod tests {
             <text x="100" y="95" font-size="20" text-anchor="middle">Label</text>
             <linearGradient id="g"/><image href="x.png"/></svg>"##;
         let mut pen = Pen::new([0., 0., 0., 1.], 1);
-        let opts = DrawOptions { label_font: FontName::Patrick, caps: false, band: 5., ink: [0., 0., 0., 1.], pastel: true };
+        let opts = DrawOptions {
+            label_font: FontName::Patrick,
+            caps: false,
+            band: 5.,
+            ink: [0., 0., 0., 1.],
+            pastel: true,
+        };
         let d = drawing(svg, 100., 100., 400., None, &mut pen, &opts).unwrap();
         assert_eq!(d.size, [400., 200.]);
         assert!(d.strokes.len() > 5, "outlines plus label letters");
         assert!(!d.under.is_empty() && d.under.iter().all(|l| l.tool == 1 && l.under));
-        assert!(d.under.iter().flat_map(|l| &l.points).all(|p| p[0] > 115. && p[0] < 290. && p[1] > 115. && p[1] < 245.), "fill stays inside the rect");
+        assert!(
+            d.under
+                .iter()
+                .flat_map(|l| &l.points)
+                .all(|p| p[0] > 115. && p[0] < 290. && p[1] > 115. && p[1] < 245.),
+            "fill stays inside the rect"
+        );
         assert!(d.warnings.iter().any(|w| w.contains("<image>")));
         assert!(d.warnings.iter().any(|w| w.contains("<linearGradient>")));
         assert!(drawing("<svg><rect", 0., 0., 10., None, &mut pen, &opts).is_err());
-        assert_eq!(parse_transform("rotate(90)").map(|v| (v * 1e9).round() / 1e9), [0., 1., -1., 0., 0., 0.]);
+        assert_eq!(
+            parse_transform("rotate(90)").map(|v| (v * 1e9).round() / 1e9),
+            [0., 1., -1., 0., 0., 0.]
+        );
         assert_eq!(numbers("1.5.5-2e-1,3"), vec![1.5, 0.5, -0.2, 3.]);
-        let long = Line::new((0..20).map(|i| [i as f64, 0.]).collect(), 1., [0., 0., 0., 1.]);
+        let long = Line::new(
+            (0..20).map(|i| [i as f64, 0.]).collect(),
+            1.,
+            [0., 0., 0., 1.],
+        );
         let parts = split_long(long, 8);
         assert!(parts.iter().all(|p| p.points.len() <= 8) && parts.len() == 3);
     }

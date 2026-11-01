@@ -43,8 +43,10 @@
   - Export parity with native Noteful Kind-3 (rounded rectangle) and Kind-6 (ellipse) objects where `payload["5"]["1"]["0"] = [r, g, b, a]`.
   - Reopened in iPad Noteful as native filled shapes editable via Noteful's shape tool.
 
-### 1.3 MCP Vector Ink Writing & Page Generation (`[ ]` In Progress)
-- **Detailed Specification:** See [`docs/INK-WRITING.md`](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md) and [`docs/MCP.md`](file:///home/m1-max/Documents/noteful-re/docs/MCP.md).
+### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; iPad import check pending)
+- **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
+- **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts and `noteful convert`.
+- **Pending:** open written files in Noteful on the iPad (Phase 0); design copy tools; the in-app converter.
 - **Core Engine:**
   - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
   - True 3-value per-point pressure encoding (`new_stroke` flags = 1).
@@ -86,7 +88,7 @@
 | Topic | Completed Highlights (`[D]`) |
 |---|---|
 | **Study & Quizzes** | Background generation with progress bar chip, floating minimizable quiz window, dispute (X), double check (V), hint clipping from page region, Anki export. |
-| **AI Chat & Flashcards** | Streaming responses, KaTeX math typesetting, Ask AI on cards with tool/model selector, scratchpad per note, follow-up retention. |
+| **AI Chat & Flashcards** | Streaming responses, KaTeX math typesetting, Ask AI on cards with tool/model selector, scratchpad per note, follow-up retention; Claude Code, Antigravity, Codex and OpenCode. |
 | **Audio & Transcription** | Floating audio panel, timed ink dimming, background Whisper/Voxtype/Gemini transcription, word-level timestamps, SRT/WebVTT export. |
 | **Tools & Canvas** | Pan, Pen, Highlighter (straight/freehand/rectangle), Eraser (4 sizes), Tape (strips & rectangles with washi pattern), Lock/unlock tool (`O`), Crop tool for images. |
 | **Reader & Files** | Single-instance app, tabs strip with drag reorder, Dark pages (D) with Dark Reader engine, zoom to fit/percent, recent notes management, folders on Home. |

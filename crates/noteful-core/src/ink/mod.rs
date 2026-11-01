@@ -11,6 +11,7 @@ mod compose;
 mod font;
 mod glyphs;
 mod hand;
+mod layout;
 pub mod paper;
 mod rng;
 mod svg;
@@ -19,6 +20,7 @@ pub use annotate::{annotate, Annotation, Item};
 pub use compose::accent_index;
 pub use font::{FontName, FONT_NAMES};
 pub use hand::{color, highlight_color, Hand};
+pub use layout::{layout_overlay, page_layout};
 pub use paper::{paper_pdf, paper_svg, Paper, PaperKind, A4};
 pub use rng::seed_of;
 
@@ -107,7 +109,9 @@ pub fn compose(markdown: &str, o: &ComposeOptions) -> Result<(Vec<InkPage>, Vec<
         accent: o.accent.clone(),
         font: o.font,
         size: o.size,
-        hand: o.hand.unwrap_or(if study { Hand::Neat } else { Hand::Natural }),
+        hand: o
+            .hand
+            .unwrap_or(if study { Hand::Neat } else { Hand::Natural }),
         fineliner: o.fineliner.unwrap_or(study),
         seed: o.seed,
     });
@@ -116,11 +120,21 @@ pub fn compose(markdown: &str, o: &ComposeOptions) -> Result<(Vec<InkPage>, Vec<
     warnings.dedup();
     let mut pages = c.pages;
     // A trailing page that only a page break opened.
-    if pages.len() > 1 && pages.last().is_some_and(|p| p.lines.is_empty() && p.under.is_empty()) {
+    if pages.len() > 1
+        && pages
+            .last()
+            .is_some_and(|p| p.lines.is_empty() && p.under.is_empty())
+    {
         pages.pop();
     }
     if pages.len() > MAX_PAGES {
-        return Err(Error::new(0, format!("The Markdown makes {} pages; the limit is {MAX_PAGES}", pages.len())));
+        return Err(Error::new(
+            0,
+            format!(
+                "The Markdown makes {} pages; the limit is {MAX_PAGES}",
+                pages.len()
+            ),
+        ));
     }
     for page in &mut pages {
         page.lines = split_all(std::mem::take(&mut page.lines));
@@ -129,7 +143,10 @@ pub fn compose(markdown: &str, o: &ComposeOptions) -> Result<(Vec<InkPage>, Vec<
     Ok((pages, warnings))
 }
 fn split_all(lines: Vec<Line>) -> Vec<Line> {
-    lines.into_iter().flat_map(|l| svg::split_long(l, 8000)).collect()
+    lines
+        .into_iter()
+        .flat_map(|l| svg::split_long(l, 8000))
+        .collect()
 }
 
 /// The paper PDF for `pages` and each page's index in it.
@@ -184,13 +201,26 @@ pub fn insert_pages(editor: &mut Editor, at: usize, pages: &[InkPage]) -> Result
             }),
         })
         .collect();
-    editor.insert_pages(at, new_pages, Some(NewPdf { id, base64: STANDARD.encode(pdf) }))?;
+    editor.insert_pages(
+        at,
+        new_pages,
+        Some(NewPdf {
+            id,
+            base64: STANDARD.encode(pdf),
+        }),
+    )?;
     let layer = writable_layer(editor)?;
     let mut shown = Vec::new();
     for (k, page) in pages.iter().enumerate() {
         let display = at + k;
         let slot = editor.slot(display)?;
-        editor.add_lines(slot, page.strokes().cloned().map(|l| Line { layer, ..l }).collect())?;
+        editor.add_lines(
+            slot,
+            page.strokes()
+                .cloned()
+                .map(|l| Line { layer, ..l })
+                .collect(),
+        )?;
         shown.push(display);
     }
     Ok(shown)
@@ -272,14 +302,28 @@ mod tests {
             assert!(!pages.is_empty(), "{}", e.name);
             for p in &pages {
                 for l in p.strokes() {
-                    assert!(l.points.iter().flatten().all(|v| v.is_finite()), "{}", e.name);
-                    assert!(l.points.iter().all(|[x, y]| *x > -50. && *x < A4[0] + 50. && *y > -50. && *y < A4[1] + 50.), "{} stays on the page", e.name);
+                    assert!(
+                        l.points.iter().flatten().all(|v| v.is_finite()),
+                        "{}",
+                        e.name
+                    );
+                    assert!(
+                        l.points.iter().all(|[x, y]| *x > -50.
+                            && *x < A4[0] + 50.
+                            && *y > -50.
+                            && *y < A4[1] + 50.),
+                        "{} stays on the page",
+                        e.name
+                    );
                 }
             }
             assert!(pages[0].lines.len() > 30, "{} writes ink", e.name);
         }
         let dark = example_pages("answers-tree").unwrap();
-        assert!(dark[0].paper.dark && dark[0].under.is_empty(), "dark pages get no pastel washes");
+        assert!(
+            dark[0].paper.dark && dark[0].under.is_empty(),
+            "dark pages get no pastel washes"
+        );
     }
 
     #[test]
@@ -292,20 +336,47 @@ mod tests {
         let (b, _) = compose(md, &o).unwrap();
         assert_eq!(a[2].lines[3].points, b[2].lines[3].points);
         assert!(!a[2].under.is_empty(), "card fill and highlight");
-        let classic = ComposeOptions { look: Look::Classic, paper: Paper::parse("ruled").unwrap(), ..o.clone() };
-        let (c, _) = compose("# Title\n[x] done\n{color:red} red line\n!tape pink\n> boxed", &classic).unwrap();
+        let classic = ComposeOptions {
+            look: Look::Classic,
+            paper: Paper::parse("ruled").unwrap(),
+            ..o.clone()
+        };
+        let (c, _) = compose(
+            "# Title\n[x] done\n{color:red} red line\n!tape pink\n> boxed",
+            &classic,
+        )
+        .unwrap();
         assert_eq!(c.len(), 1);
         assert!(c[0].lines.iter().any(|l| l.tool == 2), "native tape");
-        assert!(c[0].lines.iter().any(|l| l.pressure.is_some()), "classic writes with a ballpoint");
-        let long: String = (0..400).map(|i| format!("Paragraph {i} with a few words in it.\n")).collect();
+        assert!(
+            c[0].lines.iter().any(|l| l.pressure.is_some()),
+            "classic writes with a ballpoint"
+        );
+        let long: String = (0..400)
+            .map(|i| format!("Paragraph {i} with a few words in it.\n"))
+            .collect();
         let (many, _) = compose(&long, &o).unwrap();
         assert!(many.len() > 3);
-        assert!(compose("x", &ComposeOptions { size: 100., ..ComposeOptions::default() }).is_err());
+        assert!(compose(
+            "x",
+            &ComposeOptions {
+                size: 100.,
+                ..ComposeOptions::default()
+            }
+        )
+        .is_err());
     }
 
     #[test]
     fn notebooks_get_paper_pages_and_ink_that_round_trips() {
-        let (pages, _) = compose("# Paper\ntext ==marked==\n\\pagebreak\nmore", &ComposeOptions { paper: Paper::parse("grid").unwrap(), ..ComposeOptions::default() }).unwrap();
+        let (pages, _) = compose(
+            "# Paper\ntext ==marked==\n\\pagebreak\nmore",
+            &ComposeOptions {
+                paper: Paper::parse("grid").unwrap(),
+                ..ComposeOptions::default()
+            },
+        )
+        .unwrap();
         let editor = new_notebook("Ink", &pages).unwrap();
         let bytes = editor.export_noteful().unwrap();
         let back = Editor::open(&bytes).unwrap();
@@ -313,24 +384,44 @@ mod tests {
         let v = back.view(0).unwrap();
         assert_eq!(v["title"], "Ink");
         assert_eq!(v["pdf_background"]["resource_id"], "paper-1");
-        assert_eq!(paper_styles(back.pdf_bytes("paper-1").unwrap()).unwrap(), vec![Paper::parse("grid").unwrap()]);
+        assert_eq!(
+            paper_styles(back.pdf_bytes("paper-1").unwrap()).unwrap(),
+            vec![Paper::parse("grid").unwrap()]
+        );
         let strokes = pages[0].under.len() + pages[0].lines.len();
         assert_eq!(v["visible_imported"].as_u64().unwrap() as usize, strokes);
         // The highlighter was written first, under the handwriting.
         let package = crate::Package::parse(&bytes).unwrap();
-        let ink: Vec<_> = package.blocks.iter().filter_map(|b| b.strokes.as_ref()).flatten().collect();
+        let ink: Vec<_> = package
+            .blocks
+            .iter()
+            .filter_map(|b| b.strokes.as_ref())
+            .flatten()
+            .collect();
         assert_eq!(ink.first().unwrap().style.tool, 1);
-        assert!(ink.iter().any(|s| s.flags & 1 == 0 && s.style.tool == 0), "fineliner strokes carry no pressure");
+        assert!(
+            ink.iter().any(|s| s.flags & 1 == 0 && s.style.tool == 0),
+            "fineliner strokes carry no pressure"
+        );
 
         let mut more = back;
-        let classic = ComposeOptions { look: Look::Classic, ..ComposeOptions::default() };
+        let classic = ComposeOptions {
+            look: Look::Classic,
+            ..ComposeOptions::default()
+        };
         let (extra, _) = compose("## Added\nballpoint text", &classic).unwrap();
         assert_eq!(insert_pages(&mut more, 1, &extra).unwrap(), vec![1]);
         let bytes = more.export_noteful().unwrap();
         let again = Editor::open(&bytes).unwrap();
         assert_eq!(again.page_order().len(), 3);
         let package = crate::Package::parse(&bytes).unwrap();
-        let pressured = package.blocks.iter().filter_map(|b| b.strokes.as_ref()).flatten().filter(|s| s.flags & 1 == 1).count();
+        let pressured = package
+            .blocks
+            .iter()
+            .filter_map(|b| b.strokes.as_ref())
+            .flatten()
+            .filter(|s| s.flags & 1 == 1)
+            .count();
         assert!(pressured > 10, "ballpoint strokes keep their pressure");
     }
 }

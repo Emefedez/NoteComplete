@@ -75,10 +75,19 @@ fn need(v: Option<f64>, item: usize, name: &str) -> Result<f64, String> {
         None => Err(format!("item {item}: {name} is required")),
     }
 }
-fn point(p: Option<[f64; 2]>, x: Option<f64>, y: Option<f64>, item: usize, name: &str) -> Result<[f64; 2], String> {
+fn point(
+    p: Option<[f64; 2]>,
+    x: Option<f64>,
+    y: Option<f64>,
+    item: usize,
+    name: &str,
+) -> Result<[f64; 2], String> {
     match p {
         Some(p) => Ok([need(Some(p[0]), item, name)?, need(Some(p[1]), item, name)?]),
-        None => Ok([need(x, item, &format!("{name} x"))?, need(y, item, &format!("{name} y"))?]),
+        None => Ok([
+            need(x, item, &format!("{name} x"))?,
+            need(y, item, &format!("{name} y"))?,
+        ]),
     }
 }
 
@@ -91,7 +100,8 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
     let mut rng = Rng::new(seed);
     for (n, it) in items.iter().enumerate() {
         let n = n + 1;
-        let text_len = it.text.as_deref().map_or(0, str::len) + it.markdown.as_deref().map_or(0, str::len);
+        let text_len =
+            it.text.as_deref().map_or(0, str::len) + it.markdown.as_deref().map_or(0, str::len);
         if text_len > MAX_TEXT {
             return Err(format!("item {n}: text is longer than 64 KB"));
         }
@@ -108,16 +118,23 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
             pen.fineliner = true;
             pen.width = 1.0;
         }
-        if let Some(w) = it.pen_width.filter(|w| w.is_finite() && (0.3..=20.).contains(w)) {
+        if let Some(w) = it
+            .pen_width
+            .filter(|w| w.is_finite() && (0.3..=20.).contains(w))
+        {
             pen.width = w;
         }
         // A text box's font is a typeface name (Helvetica, …), not a hand.
         let font = match it.font.as_deref().filter(|_| kind != "textbox") {
             None => FontName::Patrick,
-            Some(f) => FontName::parse(f).ok_or_else(|| format!("item {n}: unknown handwriting font '{f}'"))?,
+            Some(f) => FontName::parse(f)
+                .ok_or_else(|| format!("item {n}: unknown handwriting font '{f}'"))?,
         };
         let hand_of = || -> Result<Hand, String> {
-            it.hand.as_deref().map_or(Ok(Hand::Natural), |h| Hand::parse(h).ok_or_else(|| format!("item {n}: hand must be neat, natural or messy")))
+            it.hand.as_deref().map_or(Ok(Hand::Natural), |h| {
+                Hand::parse(h)
+                    .ok_or_else(|| format!("item {n}: hand must be neat, natural or messy"))
+            })
         };
         match kind.as_str() {
             "text" => {
@@ -250,7 +267,11 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
             )),
         }
     }
-    out.lines = out.lines.into_iter().flat_map(|l| svg::split_long(l, 8000)).collect();
+    out.lines = out
+        .lines
+        .into_iter()
+        .flat_map(|l| svg::split_long(l, 8000))
+        .collect();
     Ok(out)
 }
 
@@ -276,7 +297,10 @@ mod tests {
         ]"###), 1).unwrap();
         assert!(a.warnings.is_empty(), "{:?}", a.warnings);
         let unders = a.lines.iter().filter(|l| l.under).count();
-        assert!(unders >= 3, "highlight passes and the drawing's fill go under the ink");
+        assert!(
+            unders >= 3,
+            "highlight passes and the drawing's fill go under the ink"
+        );
         assert!(a.lines.iter().filter(|l| l.under).all(|l| l.tool == 1));
         assert!(a.lines.iter().any(|l| l.tool == 2), "tape");
         assert!(a.lines.iter().any(|l| l.rgba == color("green").unwrap()));

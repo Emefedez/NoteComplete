@@ -131,7 +131,9 @@ fn new_stroke(out: &mut Vec<u8>, line: &Line, id: u64, time: u64, z: u64) {
     let mut bounds = [[0f32; 2]; 3];
     for (axis, b) in bounds.iter_mut().enumerate().take(dims) {
         b[0] = (0..n).map(|i| value(i, axis)).fold(f64::INFINITY, f64::min) as f32;
-        b[1] = ((0..n).map(|i| value(i, axis)).fold(f64::NEG_INFINITY, f64::max)
+        b[1] = ((0..n)
+            .map(|i| value(i, axis))
+            .fold(f64::NEG_INFINITY, f64::max)
             - f64::from(b[0]))
         .max(0.) as f32;
         out.extend(b[0].to_be_bytes());

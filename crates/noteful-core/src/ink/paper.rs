@@ -133,7 +133,16 @@ pub fn paper_pdf(styles: &[Paper]) -> Vec<u8> {
                 cell.move_to(step / 2., step / 2.);
                 cell.line_to(step / 2., step / 2.);
                 cell.stroke();
-                Some((cell.finish(), [2. * step - step / 2., step - step / 2.], [2. * step - step / 2., step, w - step, h - 2. * step - step / 2.]))
+                Some((
+                    cell.finish(),
+                    [2. * step - step / 2., step - step / 2.],
+                    [
+                        2. * step - step / 2.,
+                        step,
+                        w - step,
+                        h - 2. * step - step / 2.,
+                    ],
+                ))
             }
             PaperKind::Grid => {
                 let mut cell = Content::new();
@@ -272,7 +281,10 @@ mod tests {
         assert!(pdf.starts_with(b"%PDF-"));
         assert!(pdf.len() < 12_000, "{} bytes", pdf.len());
         let text = String::from_utf8_lossy(&pdf);
-        assert_eq!(text.matches("/Type /Page").count() - text.matches("/Type /Pages").count(), 5);
+        assert_eq!(
+            text.matches("/Type /Page").count() - text.matches("/Type /Pages").count(),
+            5
+        );
         assert!(text.contains("/PatternType 1"));
         assert!(paper_svg(Paper::DOT, A4).contains("nc-paper-dot"));
     }

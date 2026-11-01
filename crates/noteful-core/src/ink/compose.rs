@@ -107,7 +107,8 @@ fn parse_inline(text: &str) -> (String, Vec<Span>) {
     let mut out: Vec<char> = Vec::new();
     let mut spans = Vec::new();
     let mut i = 0;
-    let closing = |from: usize, close: &str| find_from(&t, &chars(close), from).filter(|&e| e > from);
+    let closing =
+        |from: usize, close: &str| find_from(&t, &chars(close), from).filter(|&e| e > from);
     while i < t.len() {
         let mut matched = None;
         if starts(&t, i, "**") {
@@ -170,10 +171,12 @@ fn parse_inline(text: &str) -> (String, Vec<Span>) {
 
 fn doodle(name: &str, cx: f64, cy: f64, s: f64) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) {
     let circle = |cx: f64, cy: f64, r: f64, n: usize| -> Vec<Pt> {
-        (0..=n).map(|i| {
-            let a = TAU * i as f64 / n as f64;
-            [cx + r * a.cos(), cy + r * a.sin()]
-        }).collect()
+        (0..=n)
+            .map(|i| {
+                let a = TAU * i as f64 / n as f64;
+                [cx + r * a.cos(), cy + r * a.sin()]
+            })
+            .collect()
     };
     match name {
         "sun" => {
@@ -181,36 +184,50 @@ fn doodle(name: &str, cx: f64, cy: f64, s: f64) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) 
             let mut out = vec![body.clone()];
             for i in 0..8 {
                 let a = TAU * i as f64 / 8.;
-                out.push(vec![[cx + s * 0.58 * a.cos(), cy + s * 0.58 * a.sin()], [cx + s * 0.85 * a.cos(), cy + s * 0.85 * a.sin()]]);
+                out.push(vec![
+                    [cx + s * 0.58 * a.cos(), cy + s * 0.58 * a.sin()],
+                    [cx + s * 0.85 * a.cos(), cy + s * 0.85 * a.sin()],
+                ]);
             }
             (out, vec![body])
         }
         "heart" => {
-            let h: Vec<Pt> = (0..=40).map(|i| {
-                let t = TAU * i as f64 / 40.;
-                let x = 16. * t.sin().powi(3);
-                let y = 13. * t.cos() - 5. * (2. * t).cos() - 2. * (3. * t).cos() - (4. * t).cos();
-                [cx + x * s * 1.6 / 32., cy - y * s * 1.6 / 32.]
-            }).collect();
+            let h: Vec<Pt> = (0..=40)
+                .map(|i| {
+                    let t = TAU * i as f64 / 40.;
+                    let x = 16. * t.sin().powi(3);
+                    let y =
+                        13. * t.cos() - 5. * (2. * t).cos() - 2. * (3. * t).cos() - (4. * t).cos();
+                    [cx + x * s * 1.6 / 32., cy - y * s * 1.6 / 32.]
+                })
+                .collect();
             (vec![h.clone()], vec![h])
         }
         "star" => {
-            let p: Vec<Pt> = (0..11).map(|i| {
-                let r = s * if i % 2 == 0 { 0.8 } else { 0.35 };
-                let a = -PI / 2. + i as f64 * PI / 5.;
-                [cx + r * a.cos(), cy + r * a.sin()]
-            }).collect();
+            let p: Vec<Pt> = (0..11)
+                .map(|i| {
+                    let r = s * if i % 2 == 0 { 0.8 } else { 0.35 };
+                    let a = -PI / 2. + i as f64 * PI / 5.;
+                    [cx + r * a.cos(), cy + r * a.sin()]
+                })
+                .collect();
             (vec![p.clone()], vec![p])
         }
         "atom" => {
-            let mut rings: Vec<Vec<Pt>> = (0..3).map(|k| {
-                let a0 = k as f64 * PI / 3.;
-                (0..=40).map(|i| {
-                    let t = TAU * i as f64 / 40.;
-                    [cx + s * 0.85 * t.cos() * a0.cos() - s * 0.3 * t.sin() * a0.sin(),
-                     cy + s * 0.85 * t.cos() * a0.sin() + s * 0.3 * t.sin() * a0.cos()]
-                }).collect()
-            }).collect();
+            let mut rings: Vec<Vec<Pt>> = (0..3)
+                .map(|k| {
+                    let a0 = k as f64 * PI / 3.;
+                    (0..=40)
+                        .map(|i| {
+                            let t = TAU * i as f64 / 40.;
+                            [
+                                cx + s * 0.85 * t.cos() * a0.cos() - s * 0.3 * t.sin() * a0.sin(),
+                                cy + s * 0.85 * t.cos() * a0.sin() + s * 0.3 * t.sin() * a0.cos(),
+                            ]
+                        })
+                        .collect()
+                })
+                .collect();
             let core = circle(cx, cy, s * 0.14, 16);
             rings.push(core.clone());
             (rings, vec![core])
@@ -225,12 +242,24 @@ fn doodle(name: &str, cx: f64, cy: f64, s: f64) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) 
             (vec![p.clone()], vec![p])
         }
         "bolt" => {
-            let p = vec![[cx + s * 0.15, cy - s * 0.85], [cx - s * 0.4, cy + s * 0.1], [cx, cy + s * 0.1], [cx - s * 0.2, cy + s * 0.85], [cx + s * 0.45, cy - s * 0.15], [cx + s * 0.05, cy - s * 0.15], [cx + s * 0.15, cy - s * 0.85]];
+            let p = vec![
+                [cx + s * 0.15, cy - s * 0.85],
+                [cx - s * 0.4, cy + s * 0.1],
+                [cx, cy + s * 0.1],
+                [cx - s * 0.2, cy + s * 0.85],
+                [cx + s * 0.45, cy - s * 0.15],
+                [cx + s * 0.05, cy - s * 0.15],
+                [cx + s * 0.15, cy - s * 0.85],
+            ];
             (vec![p.clone()], vec![p])
         }
         "cloud" => {
             let mut p = Vec::new();
-            for (ccx, ccy, r, a0, a1) in [(-0.45, 0.15, 0.32, 90, 270), (-0.12, -0.15, 0.4, 160, 360), (0.38, 0.05, 0.36, 230, 450)] {
+            for (ccx, ccy, r, a0, a1) in [
+                (-0.45, 0.15, 0.32, 90, 270),
+                (-0.12, -0.15, 0.4, 160, 360),
+                (0.38, 0.05, 0.36, 230, 450),
+            ] {
                 p.extend((a0..=a1).step_by(15).map(|a| {
                     let a = (a as f64).to_radians();
                     [cx + s * (ccx + r * a.cos()), cy + s * (ccy + r * a.sin())]
@@ -241,10 +270,15 @@ fn doodle(name: &str, cx: f64, cy: f64, s: f64) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) 
         }
         "leaf" => {
             let side = |sign: f64, rev: bool| -> Vec<Pt> {
-                let mut v: Vec<Pt> = (0..=20).map(|i| {
-                    let t = i as f64 / 20.;
-                    [cx - s * 0.7 + s * 1.4 * t, cy + s * 0.6 - s * 1.2 * t + sign * s * 0.45 * (PI * t).sin()]
-                }).collect();
+                let mut v: Vec<Pt> = (0..=20)
+                    .map(|i| {
+                        let t = i as f64 / 20.;
+                        [
+                            cx - s * 0.7 + s * 1.4 * t,
+                            cy + s * 0.6 - s * 1.2 * t + sign * s * 0.45 * (PI * t).sin(),
+                        ]
+                    })
+                    .collect();
                 if rev {
                     v.reverse();
                 }
@@ -252,7 +286,16 @@ fn doodle(name: &str, cx: f64, cy: f64, s: f64) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) 
             };
             let mut outline = side(-1., false);
             outline.extend(side(1., true));
-            (vec![outline.clone(), vec![[cx - s * 0.75, cy + s * 0.65], [cx + s * 0.5, cy - s * 0.45]]], vec![outline])
+            (
+                vec![
+                    outline.clone(),
+                    vec![
+                        [cx - s * 0.75, cy + s * 0.65],
+                        [cx + s * 0.5, cy - s * 0.45],
+                    ],
+                ],
+                vec![outline],
+            )
         }
         _ => (vec![], vec![]),
     }
@@ -309,7 +352,11 @@ impl Composer {
             palette.rotate_left(first);
         }
         let classic_ink = color("ink").unwrap();
-        let ink = s.ink.unwrap_or(if s.study { hand::hex(ink).unwrap() } else { classic_ink });
+        let ink = s.ink.unwrap_or(if s.study {
+            hand::hex(ink).unwrap()
+        } else {
+            classic_ink
+        });
         let accent = if s.study {
             palette[0].ink
         } else {
@@ -369,10 +416,14 @@ impl Composer {
         self.palette[self.section % ACCENTS_PER_PAGE].ink
     }
     fn tone_of(&self, ink: Rgba) -> Tone {
-        self.palette.iter().copied().find(|t| t.ink == ink).unwrap_or(Tone {
-            ink,
-            pastel: highlight_color("yellow"),
-        })
+        self.palette
+            .iter()
+            .copied()
+            .find(|t| t.ink == ink)
+            .unwrap_or(Tone {
+                ink,
+                pastel: highlight_color("yellow"),
+            })
     }
     fn colour_named(&mut self, name: Option<&str>) -> Rgba {
         let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) else {
@@ -386,7 +437,8 @@ impl Composer {
         match hand::hex(name) {
             Some(c) => c,
             None => {
-                self.warnings.push(format!("Unknown colour '{name}'; used the section colour."));
+                self.warnings
+                    .push(format!("Unknown colour '{name}'; used the section colour."));
                 self.colour()
             }
         }
@@ -451,11 +503,16 @@ impl Composer {
         page.under.splice(0..0, lines);
     }
     fn capture(&mut self, f: impl FnOnce(&mut Self)) -> (Vec<Line>, Vec<Line>) {
-        let saved = (std::mem::take(&mut self.page().lines), std::mem::take(&mut self.page().under));
+        let saved = (
+            std::mem::take(&mut self.page().lines),
+            std::mem::take(&mut self.page().under),
+        );
         f(self);
         let page = self.page();
-        let got = (std::mem::replace(&mut page.lines, saved.0), std::mem::replace(&mut page.under, saved.1));
-        got
+        (
+            std::mem::replace(&mut page.lines, saved.0),
+            std::mem::replace(&mut page.under, saved.1),
+        )
     }
     fn place(&mut self, (mut lines, mut under): (Vec<Line>, Vec<Line>), rotate: f64, centre: Pt) {
         if rotate != 0. {
@@ -528,8 +585,15 @@ impl Composer {
             }
             let word = tok.trim_matches(|c| ".,;:!?()[]".contains(c));
             let wc = chars(word);
-            let keep = tok.chars().any(|c| c.is_ascii_digit() || c == '^' || c == '_' || ('\u{370}'..='\u{3ff}').contains(&c) || c == 'µ')
-                || wc.windows(2).any(|w| w[0].is_alphanumeric() && w[1].is_ascii_uppercase())
+            let keep = tok.chars().any(|c| {
+                c.is_ascii_digit()
+                    || c == '^'
+                    || c == '_'
+                    || ('\u{370}'..='\u{3ff}').contains(&c)
+                    || c == 'µ'
+            }) || wc
+                .windows(2)
+                .any(|w| w[0].is_alphanumeric() && w[1].is_ascii_uppercase())
                 || (wc.len() == 1 && wc[0].is_lowercase());
             out.push_str(&if keep { tok } else { self.upper(&tok) });
         }
@@ -540,7 +604,15 @@ impl Composer {
     }
 
     // -- classic blocks ---------------------------------------------------------
-    fn highlight_spans(&mut self, line: &str, offset: usize, spans: &[Span], x: f64, b: f64, st: &TextStyle) {
+    fn highlight_spans(
+        &mut self,
+        line: &str,
+        offset: usize,
+        spans: &[Span],
+        x: f64,
+        b: f64,
+        st: &TextStyle,
+    ) {
         let lc = chars(line);
         for sp in spans.iter().filter(|s| s.kind == Kind::Highlight) {
             let (a, z) = (sp.start.max(offset), sp.end.min(offset + lc.len()));
@@ -554,7 +626,13 @@ impl Composer {
             let yc = b - st.size * 0.55;
             let col = highlight_color(sp.color.as_deref().unwrap_or("yellow"));
             let dy = self.pen.rng.uniform(-1., 1.);
-            let l = highlight_line([xa, yc], [xb, yc + dy], st.size * 2.3, col, &mut self.pen.rng);
+            let l = highlight_line(
+                [xa, yc],
+                [xb, yc + dy],
+                st.size * 2.3,
+                col,
+                &mut self.pen.rng,
+            );
             self.add_under(vec![l]);
         }
     }
@@ -571,7 +649,13 @@ impl Composer {
         self.add(s);
         if level <= 2 {
             let mut p = self.pen_for(Some(colour.unwrap_or(self.accent)), None);
-            let u = underline(&mut p, self.x0, x_end.min(self.x1), b + st.size * 0.55, level == 1);
+            let u = underline(
+                &mut p,
+                self.x0,
+                x_end.min(self.x1),
+                b + st.size * 0.55,
+                level == 1,
+            );
             self.add(u);
         }
         self.y += st.size * 0.3;
@@ -614,7 +698,12 @@ impl Composer {
                 }
             }
             "arrow" => {
-                let a = arrow(&mut pen, [self.x0, y - st.size * 0.45], [self.x0 + 18., y - st.size * 0.45], 6.);
+                let a = arrow(
+                    &mut pen,
+                    [self.x0, y - st.size * 0.45],
+                    [self.x0 + 18., y - st.size * 0.45],
+                    6.,
+                );
                 self.add(a);
             }
             _ => {
@@ -626,7 +715,11 @@ impl Composer {
     fn callout(&mut self, text: &str, colour: Option<Rgba>) {
         let st = self.style(1.);
         let pad = 16.;
-        let lines = wrap(&parse_inline(text).0, self.x1 - self.x0 - 2. * pad - 10., &st);
+        let lines = wrap(
+            &parse_inline(text).0,
+            self.x1 - self.x0 - 2. * pad - 10.,
+            &st,
+        );
         let h = lines.len() as f64 * st.size * st.line_height + pad;
         self.ensure(h + 20.);
         let top = self.y + 6.;
@@ -637,7 +730,14 @@ impl Composer {
         self.paragraph(text, colour, 0.);
         (self.x0, self.x1) = saved;
         let mut pen = self.pen_for(Some(self.accent), None);
-        let r = rect(&mut pen, self.x0, top, self.x1 - self.x0, self.y - top + pad / 2., 0.);
+        let r = rect(
+            &mut pen,
+            self.x0,
+            top,
+            self.x1 - self.x0,
+            self.y - top + pad / 2.,
+            0.,
+        );
         self.add(r);
         self.y += pad + 4.;
     }
@@ -647,14 +747,24 @@ impl Composer {
             self.y += 14.;
             let mut pen = self.pen_for(Some(self.grey), Some(0.9));
             let dy = self.pen.rng.uniform(0., 1.);
-            let l = hand::line(&mut pen, [self.x0 - 10., self.y], [self.x1 + 10., self.y + dy], 0.4);
+            let l = hand::line(
+                &mut pen,
+                [self.x0 - 10., self.y],
+                [self.x1 + 10., self.y + dy],
+                0.4,
+            );
             self.add1(l);
             self.y += 18.;
         } else {
             self.y += 18.;
             let mut pen = self.pen_for(Some(self.accent), None);
             let dy = self.pen.rng.uniform(-3., 3.);
-            let l = hand::line(&mut pen, [self.x0 + 40., self.y], [self.x1 - 40., self.y + dy], 1.6);
+            let l = hand::line(
+                &mut pen,
+                [self.x0 + 40., self.y],
+                [self.x1 - 40., self.y + dy],
+                1.6,
+            );
             self.add1(l);
             self.y += 18.;
         }
@@ -710,8 +820,14 @@ impl Composer {
                 self.heading(t, 2, colour);
             } else if let Some(t) = l.strip_prefix("# ") {
                 self.heading(t, 1, colour);
-            } else if l.len() > 4 && (l.starts_with("[ ] ") || l.starts_with("[x] ") || l.starts_with("[X] ")) {
-                self.classic_bullet(&l[4..], colour, if l.starts_with("[ ]") { "todo" } else { "done" });
+            } else if l.len() > 4
+                && (l.starts_with("[ ] ") || l.starts_with("[x] ") || l.starts_with("[X] "))
+            {
+                self.classic_bullet(
+                    &l[4..],
+                    colour,
+                    if l.starts_with("[ ]") { "todo" } else { "done" },
+                );
             } else if let Some(t) = l.strip_prefix("- ").or_else(|| l.strip_prefix("* ")) {
                 self.classic_bullet(t, colour, "dot");
             } else if let Some(t) = l.strip_prefix("-> ") {
@@ -727,12 +843,25 @@ impl Composer {
     // -- study: inline -------------------------------------------------------
     /// One line with its inline marks; returns the end x.
     #[allow(clippy::too_many_arguments)]
-    fn rich_line(&mut self, line: &str, offset: usize, spans: &[Span], x: f64, b: f64, st: &TextStyle, colour: Option<Rgba>, width: Option<f64>) -> f64 {
+    fn rich_line(
+        &mut self,
+        line: &str,
+        offset: usize,
+        spans: &[Span],
+        x: f64,
+        b: f64,
+        st: &TextStyle,
+        colour: Option<Rgba>,
+        width: Option<f64>,
+    ) -> f64 {
         let lc = chars(line);
         let n = lc.len();
         let mut cuts = vec![0, n];
         for sp in spans {
-            for v in [sp.start as isize - offset as isize, sp.end as isize - offset as isize] {
+            for v in [
+                sp.start as isize - offset as isize,
+                sp.end as isize - offset as isize,
+            ] {
                 if v > 0 && (v as usize) < n {
                     cuts.push(v as usize);
                 }
@@ -750,7 +879,10 @@ impl Composer {
             let piece: String = lc[a..z].iter().collect();
             let kinds: Vec<&Span> = spans
                 .iter()
-                .filter(|s| s.start as isize - offset as isize <= a as isize && z as isize <= s.end as isize - offset as isize)
+                .filter(|s| {
+                    s.start as isize - offset as isize <= a as isize
+                        && z as isize <= s.end as isize - offset as isize
+                })
                 .collect();
             let mut col = colour.unwrap_or(self.ink);
             let mut wd = width;
@@ -774,9 +906,20 @@ impl Composer {
             let (s, end) = write_line(&mut pen, &piece, cx, b, &pst);
             self.add(s);
             cx = end;
-            let trail = piece.chars().rev().take_while(|c| c.is_whitespace()).count();
+            let trail = piece
+                .chars()
+                .rev()
+                .take_while(|c| c.is_whitespace())
+                .count();
             starts_at.insert(a, x_start);
-            ends_at.insert(z, if trail > 0 { cx - text_width(&" ".repeat(trail), &pst) } else { cx });
+            ends_at.insert(
+                z,
+                if trail > 0 {
+                    cx - text_width(&" ".repeat(trail), &pst)
+                } else {
+                    cx
+                },
+            );
         }
         for sp in spans {
             let a = (sp.start as isize - offset as isize).max(0) as usize;
@@ -784,18 +927,31 @@ impl Composer {
             if a >= z || matches!(sp.kind, Kind::Bold | Kind::Grey) || dark_hl(sp) {
                 continue;
             }
-            let (xa, xb) = (*starts_at.get(&a).unwrap_or(&x), *ends_at.get(&z).unwrap_or(&cx));
+            let (xa, xb) = (
+                *starts_at.get(&a).unwrap_or(&x),
+                *ends_at.get(&z).unwrap_or(&cx),
+            );
             if sp.kind == Kind::Highlight {
                 let yc = b - st.size * 0.55;
                 let col = highlight_color(sp.color.as_deref().unwrap_or("yellow"));
                 let dy = self.pen.rng.uniform(-1., 1.);
-                let l = highlight_line([xa - 3., yc], [xb + 3., yc + dy], st.size * 2.2, col, &mut self.pen.rng);
+                let l = highlight_line(
+                    [xa - 3., yc],
+                    [xb + 3., yc + dy],
+                    st.size * 2.2,
+                    col,
+                    &mut self.pen.rng,
+                );
                 self.add_under(vec![l]);
             } else {
                 let h = st.size * 2.3;
                 let y0 = b - st.size * 1.65;
                 let c = self.colour();
-                self.fill(vec![rect_pts(xa - 7., y0, xb - xa + 14., h, h / 2., 0.)], c, 4.);
+                self.fill(
+                    vec![rect_pts(xa - 7., y0, xb - xa + 14., h, h / 2., 0.)],
+                    c,
+                    4.,
+                );
                 let mut pen = self.pen_for(Some(c), Some(1.));
                 let r = rect(&mut pen, xa - 7., y0, xb - xa + 14., h, h / 2. - 1.);
                 self.add(r);
@@ -804,7 +960,15 @@ impl Composer {
         cx
     }
     #[allow(clippy::too_many_arguments)]
-    fn rich_paragraph(&mut self, text: &str, x0: f64, x1: f64, st: &TextStyle, colour: Option<Rgba>, width: Option<f64>) {
+    fn rich_paragraph(
+        &mut self,
+        text: &str,
+        x0: f64,
+        x1: f64,
+        st: &TextStyle,
+        colour: Option<Rgba>,
+        width: Option<f64>,
+    ) {
         let (plain, spans) = parse_inline(text);
         let plain = self.body_text(&plain);
         let pc = chars(&plain);
@@ -863,7 +1027,16 @@ impl Composer {
         let thick = (st.size * 0.15).max(4.2);
         self.section = 0;
         let shadow = self.shadow;
-        self.rich_line(&plain, 0, &[], x + thick * 0.8, b + thick * 0.8, &st, Some(shadow), Some(thick));
+        self.rich_line(
+            &plain,
+            0,
+            &[],
+            x + thick * 0.8,
+            b + thick * 0.8,
+            &st,
+            Some(shadow),
+            Some(thick),
+        );
         let xe = self.rich_line(&plain, 0, &spans, x, b, &st, None, Some(thick));
         let mid = b - st.size * 0.7;
         if let Some(icon) = icon {
@@ -873,7 +1046,10 @@ impl Composer {
             }
         } else {
             for (x0, x1) in [(x - 70., x - 22.), (xe + 22., xe + 70.)] {
-                for (k, dy) in [-st.size * 0.55, 0., st.size * 0.55].into_iter().enumerate() {
+                for (k, dy) in [-st.size * 0.55, 0., st.size * 0.55]
+                    .into_iter()
+                    .enumerate()
+                {
                     let c = if k == 1 { accent } else { self.ink };
                     let mut pen = self.pen_for(Some(c), Some(thick * 0.8));
                     let j = self.pen.rng.uniform(-1., 1.);
@@ -899,17 +1075,38 @@ impl Composer {
         let xe = self.rich_line(&t_plain, 0, &t_spans, x0, b1, &tst, None, Some(3.2));
         if let Some(icon) = icon {
             let c = self.palette[1].ink;
-            self.doodle(icon, xe + tst.size * 2.2, b1 - tst.size * 0.7, tst.size * 1.6, c);
+            self.doodle(
+                icon,
+                xe + tst.size * 2.2,
+                b1 - tst.size * 0.7,
+                tst.size * 1.6,
+                c,
+            );
         }
         let b2 = self.baseline(bst.size * 2.4);
         let mut xe2 = 0.;
         let cap = self.capture(|c| {
-            xe2 = c.rich_line(&b_plain, 0, &b_spans, x0, b2, &bst, None, Some((bst.size * 0.15).max(4.6)));
+            xe2 = c.rich_line(
+                &b_plain,
+                0,
+                &b_spans,
+                x0,
+                b2,
+                &bst,
+                None,
+                Some((bst.size * 0.15).max(4.6)),
+            );
         });
         if !self.dark {
             let yc = b2 - bst.size * 0.25;
             let pastel = self.pastel(accent);
-            let band = highlight_line([x0 - 10., yc], [xe2 + 10., yc + 1.5], bst.size * 0.9, pastel, &mut self.pen.rng);
+            let band = highlight_line(
+                [x0 - 10., yc],
+                [xe2 + 10., yc + 1.5],
+                bst.size * 0.9,
+                pastel,
+                &mut self.pen.rng,
+            );
             self.add_under(vec![band]);
         }
         self.place(cap, 0., [0., 0.]);
@@ -931,7 +1128,9 @@ impl Composer {
     fn doodle(&mut self, name: &str, cx: f64, cy: f64, size: f64, colour: Rgba) {
         let (outlines, fills) = doodle(name, cx, cy, size / 2.);
         if outlines.is_empty() {
-            self.warnings.push(format!("Unknown doodle ':{name}:'; use heart, sun, star, atom, drop, bolt, cloud or leaf."));
+            self.warnings.push(format!(
+                "Unknown doodle ':{name}:'; use heart, sun, star, atom, drop, bolt, cloud or leaf."
+            ));
             return;
         }
         if !fills.is_empty() {
@@ -964,7 +1163,11 @@ impl Composer {
         let mut pos = 0;
         let (mut xe, mut b) = (self.x0, self.y);
         for (k, line) in wrap(&plain, self.x1 - self.x0, &st).into_iter().enumerate() {
-            let adv = if k == 0 { st.size * if level == 2 { 2.9 } else { 2.4 } } else { st.size * 2.1 };
+            let adv = if k == 0 {
+                st.size * if level == 2 { 2.9 } else { 2.4 }
+            } else {
+                st.size * 2.1
+            };
             b = self.baseline(adv);
             if !line.is_empty() {
                 pos = find_from(&pc, &chars(&line), pos).unwrap_or(pos);
@@ -992,7 +1195,11 @@ impl Composer {
     fn item(&mut self, text: &str, mark: &str) {
         let st = self.st(1.);
         self.last_baselines.clear();
-        let indent = if matches!(mark, "star" | "dot" | "hook") { 26. } else { 34. };
+        let indent = if matches!(mark, "star" | "dot" | "hook") {
+            26.
+        } else {
+            34.
+        };
         let (x0, x1) = (self.x0, self.x1);
         self.rich_paragraph(text, x0 + indent, x1, &st, None, Some(1.15));
         let b = self.last_baselines.first().copied().unwrap_or(self.y);
@@ -1009,7 +1216,12 @@ impl Composer {
                 self.add1(s);
             }
             "hook" => {
-                let l = hand::line(&mut pen, [self.x0 + 3., y - st.size * 0.9], [self.x0 + 3., y], 0.3);
+                let l = hand::line(
+                    &mut pen,
+                    [self.x0 + 3., y - st.size * 0.9],
+                    [self.x0 + 3., y],
+                    0.3,
+                );
                 self.add1(l);
                 let a = arrow_open(&mut pen, [self.x0 + 3., y], [self.x0 + 19., y], 6.);
                 self.add(a);
@@ -1017,17 +1229,25 @@ impl Composer {
             number => {
                 let r = st.size * 0.95;
                 let cx = self.x0 + r + 2.;
-                let ring: Vec<Pt> = (0..=30).map(|i| {
-                    let a = TAU * i as f64 / 30.;
-                    [cx + r * a.cos(), y + r * a.sin()]
-                }).collect();
+                let ring: Vec<Pt> = (0..=30)
+                    .map(|i| {
+                        let a = TAU * i as f64 / 30.;
+                        [cx + r * a.cos(), y + r * a.sin()]
+                    })
+                    .collect();
                 let mut pts = ring[..ring.len() - 2].to_vec();
                 pts.push(ring[2]);
                 let w = wobble(&mut pen, &pts, 0.3);
                 let s = pen.stroke(&w, 1.2, 0, 0.15);
                 self.add1(s);
                 let small = self.st(0.8);
-                let (s, _) = write_line(&mut pen, number, cx - text_width(number, &small) / 2., y + st.size * 0.45, &small);
+                let (s, _) = write_line(
+                    &mut pen,
+                    number,
+                    cx - text_width(number, &small) / 2.,
+                    y + st.size * 0.45,
+                    &small,
+                );
                 self.add(s);
             }
         }
@@ -1067,7 +1287,11 @@ impl Composer {
         let t = text.trim_start();
         if let Some(rest) = t.strip_prefix('[') {
             if let Some((name, after)) = rest.split_once(']') {
-                if !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '#' || c == ' ' || c == '_') {
+                if !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '#' || c == ' ' || c == '_')
+                {
                     return (Some(self.colour_named(Some(name))), after.trim_start());
                 }
             }
@@ -1077,14 +1301,26 @@ impl Composer {
     fn titled(text: &str, max: usize) -> (String, String) {
         if let Some((title, body)) = text.split_once(": ") {
             let tl = title.trim();
-            if !tl.is_empty() && tl.chars().count() <= max && !tl.contains("((") && !tl.contains(':') {
+            if !tl.is_empty()
+                && tl.chars().count() <= max
+                && !tl.contains("((")
+                && !tl.contains(':')
+            {
                 return (tl.to_owned(), body.trim_start().to_owned());
             }
         }
         (String::new(), text.trim().to_owned())
     }
     #[allow(clippy::too_many_arguments)]
-    fn card(&mut self, text: &str, x0: Option<f64>, x1: Option<f64>, height: Option<f64>, measure: bool, colour: Option<Rgba>) -> f64 {
+    fn card(
+        &mut self,
+        text: &str,
+        x0: Option<f64>,
+        x1: Option<f64>,
+        height: Option<f64>,
+        measure: bool,
+        colour: Option<Rgba>,
+    ) -> f64 {
         let x0 = x0.unwrap_or(self.x0);
         let x1 = x1.unwrap_or(self.x1);
         let (named, text) = self.colour_prefix(text);
@@ -1093,15 +1329,32 @@ impl Composer {
         let pad = 20.;
         let st = self.st(1.);
         let tst = self.st(1.2);
-        let lines = wrap(&self.body_text(&parse_inline(&body).0), x1 - x0 - 2. * pad, &st);
-        let mut h = if title.is_empty() { 0. } else { tst.size * 2.7 } + lines.len() as f64 * st.size * st.line_height + pad * 1.5;
+        let lines = wrap(
+            &self.body_text(&parse_inline(&body).0),
+            x1 - x0 - 2. * pad,
+            &st,
+        );
+        let mut h = if title.is_empty() { 0. } else { tst.size * 2.7 }
+            + lines.len() as f64 * st.size * st.line_height
+            + pad * 1.5;
         h = h.max(height.unwrap_or(0.));
         if measure {
             return h;
         }
         let top = self.y + 4.;
         let inset = 3.;
-        self.fill(vec![rect_pts(x0 + inset, top + inset, x1 - x0 - 2. * inset, h - 2. * inset, 18., 0.)], colour, 11.);
+        self.fill(
+            vec![rect_pts(
+                x0 + inset,
+                top + inset,
+                x1 - x0 - 2. * inset,
+                h - 2. * inset,
+                18.,
+                0.,
+            )],
+            colour,
+            11.,
+        );
         let mut pen = self.pen_for(Some(colour), Some(1.3));
         let r = rect(&mut pen, x0, top, x1 - x0, h, 20.);
         self.add(r);
@@ -1114,7 +1367,16 @@ impl Composer {
             let b = self.baseline(tst.size * 2.7);
             let (plain, spans) = parse_inline(&title);
             let plain = self.caps(&plain);
-            self.rich_line(&plain, 0, &spans, x0 + pad, b, &tst, Some(colour), Some(2.1));
+            self.rich_line(
+                &plain,
+                0,
+                &spans,
+                x0 + pad,
+                b,
+                &tst,
+                Some(colour),
+                Some(2.1),
+            );
         }
         self.last_baselines.clear();
         self.rich_paragraph(&body, x0 + pad, x1 - pad, &st, None, Some(1.15));
@@ -1126,7 +1388,14 @@ impl Composer {
         let gap = 24.;
         let n = parts.len() as f64;
         let w = (self.x1 - self.x0 - gap * (n - 1.)) / n;
-        let cols: Vec<(f64, f64)> = (0..parts.len()).map(|i| (self.x0 + i as f64 * (w + gap), self.x0 + i as f64 * (w + gap) + w)).collect();
+        let cols: Vec<(f64, f64)> = (0..parts.len())
+            .map(|i| {
+                (
+                    self.x0 + i as f64 * (w + gap),
+                    self.x0 + i as f64 * (w + gap) + w,
+                )
+            })
+            .collect();
         let colours: Vec<Rgba> = parts
             .iter()
             .enumerate()
@@ -1160,20 +1429,40 @@ impl Composer {
         let pad = 22.;
         let st = self.st(1.02);
         let tst = self.st(1.2);
-        let lines = wrap(&self.body_text(&parse_inline(&body).0), x1 - x0 - 2. * pad, &st);
-        let h = if title.is_empty() { 0. } else { tst.size * 2.7 } + lines.len() as f64 * st.size * st.line_height + pad * 2.;
+        let lines = wrap(
+            &self.body_text(&parse_inline(&body).0),
+            x1 - x0 - 2. * pad,
+            &st,
+        );
+        let h = if title.is_empty() { 0. } else { tst.size * 2.7 }
+            + lines.len() as f64 * st.size * st.line_height
+            + pad * 2.;
         self.ensure(h + 40.);
         let top = self.y + 22.;
-        let paper_colour = if colour == self.palette[1].ink { highlight_color("yellow") } else { self.pastel(colour) };
+        let paper_colour = if colour == self.palette[1].ink {
+            highlight_color("yellow")
+        } else {
+            self.pastel(colour)
+        };
         let dark = self.dark;
         let title_colour = self.palette[0].ink;
         let cap = self.capture(|c| {
             if !dark {
-                let f = svg::fill_shapes(&[(vec![rect_pts(x0, top, x1 - x0, h, 3., 0.)], paper_colour)], 10., 0., &mut c.pen.rng);
+                let f = svg::fill_shapes(
+                    &[(vec![rect_pts(x0, top, x1 - x0, h, 3., 0.)], paper_colour)],
+                    10.,
+                    0.,
+                    &mut c.pen.rng,
+                );
                 c.add_under(f);
             }
             let tape = rect_pts((x0 + x1) / 2. - 50., top - 12., 100., 24., 0., 0.);
-            let f = svg::fill_shapes(&[(vec![tape], highlight_color("pink"))], 4., 0.9, &mut c.pen.rng);
+            let f = svg::fill_shapes(
+                &[(vec![tape], highlight_color("pink"))],
+                4.,
+                0.9,
+                &mut c.pen.rng,
+            );
             c.add_under(f);
             if dark {
                 let mut pen = c.pen_for(Some(colour), Some(1.2));
@@ -1283,7 +1572,12 @@ impl Composer {
             let (s, _) = write_line(&mut pen, q, cx - qw / 2., qb, &qst);
             self.add(s);
             let mut pen = self.pen_for(Some(self.ink), Some(1.));
-            let l = hand::line(&mut pen, [cx - qw / 2., qb + 6.], [cx + qw / 2., qb + 7.], 0.4);
+            let l = hand::line(
+                &mut pen,
+                [cx - qw / 2., qb + 6.],
+                [cx + qw / 2., qb + 7.],
+                0.4,
+            );
             self.add1(l);
             top = qb + 14.;
         }
@@ -1312,9 +1606,19 @@ impl Composer {
                 y += lst.size * lst.line_height;
                 let x = lx + *depth as f64 * 22.;
                 let mut pen = self.pen_for(Some(self.ink), Some(1.1));
-                let l = hand::line(&mut pen, [x, y - lst.size * 1.3], [x, y - lst.size * 0.45], 0.2);
+                let l = hand::line(
+                    &mut pen,
+                    [x, y - lst.size * 1.3],
+                    [x, y - lst.size * 0.45],
+                    0.2,
+                );
                 self.add1(l);
-                let a = arrow_open(&mut pen, [x, y - lst.size * 0.45], [x + 13., y - lst.size * 0.45], 5.);
+                let a = arrow_open(
+                    &mut pen,
+                    [x, y - lst.size * 0.45],
+                    [x + 13., y - lst.size * 0.45],
+                    5.,
+                );
                 self.add(a);
                 for ln in wrap(leaf, colw - (x - lx) - 30., &lst) {
                     let (s, _) = write_line(&mut pen, &ln, x + 18., y, &lst);
@@ -1328,7 +1632,9 @@ impl Composer {
         self.y = bottom + 30.;
     }
     fn drawing(&mut self, svg_text: &str, width: Option<f64>) {
-        let width = width.unwrap_or((self.x1 - self.x0) * 0.85).min(self.x1 - self.x0);
+        let width = width
+            .unwrap_or((self.x1 - self.x0) * 0.85)
+            .min(self.x1 - self.x0);
         let opts = DrawOptions {
             label_font: self.font,
             caps: false,
@@ -1349,7 +1655,8 @@ impl Composer {
                         *p = [p[0] + dx, p[1] + dy];
                     }
                 }
-                self.warnings.extend(d.warnings.into_iter().map(|w| format!("Drawing: {w}")));
+                self.warnings
+                    .extend(d.warnings.into_iter().map(|w| format!("Drawing: {w}")));
                 self.add_under(d.under);
                 self.add(d.strokes);
                 self.y += h + 24.;
@@ -1390,7 +1697,12 @@ impl Composer {
             } else if let Some(arg) = line.strip_prefix("!draw") {
                 let (body, next) = Self::until_end(lines, i);
                 i = next;
-                let w = arg.trim().trim_matches(['[', ']']).parse::<f64>().ok().filter(|w| *w > 20.);
+                let w = arg
+                    .trim()
+                    .trim_matches(['[', ']'])
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|w| *w > 20.);
                 self.drawing(&body.join("\n"), w);
             } else if let Some(arg) = line.strip_prefix("!columns") {
                 let (body, next) = Self::until_end(lines, i);
@@ -1399,7 +1711,8 @@ impl Composer {
                 let mut depth = 0;
                 for ln in body {
                     let s = ln.trim();
-                    if s.starts_with("!columns") || s.starts_with("!zone") || s.starts_with("!draw") {
+                    if s.starts_with("!columns") || s.starts_with("!zone") || s.starts_with("!draw")
+                    {
                         depth += 1;
                     } else if s == "!end" {
                         depth -= 1;
@@ -1410,7 +1723,11 @@ impl Composer {
                         groups.last_mut().unwrap().push(ln);
                     }
                 }
-                let ratio = arg.trim().trim_matches(['[', ']']).parse::<f64>().map_or(0.5, |r| (r / 100.).clamp(0.15, 0.85));
+                let ratio = arg
+                    .trim()
+                    .trim_matches(['[', ']'])
+                    .parse::<f64>()
+                    .map_or(0.5, |r| (r / 100.).clamp(0.15, 0.85));
                 self.columns(&groups, ratio);
             } else if let Some(arg) = line.strip_prefix("!zone") {
                 let name = arg.trim().trim_matches(['[', ']']).trim().to_owned();
@@ -1426,7 +1743,8 @@ impl Composer {
                 while i < lines.len() {
                     let ln = lines[i];
                     let body = ln.trim_start();
-                    let Some(item) = body.strip_prefix("- ").or_else(|| body.strip_prefix("* ")) else {
+                    let Some(item) = body.strip_prefix("- ").or_else(|| body.strip_prefix("* "))
+                    else {
                         break;
                     };
                     let indent = ln.len() - body.len();
@@ -1439,16 +1757,30 @@ impl Composer {
                         };
                         branches.push((
                             name.trim().to_owned(),
-                            leaves.split(';').map(str::trim).filter(|v| !v.is_empty()).map(|v| (v.to_owned(), 0)).collect(),
+                            leaves
+                                .split(';')
+                                .map(str::trim)
+                                .filter(|v| !v.is_empty())
+                                .map(|v| (v.to_owned(), 0))
+                                .collect(),
                         ));
                     } else {
-                        branches.last_mut().unwrap().1.push((item.to_owned(), (indent / 2).saturating_sub(1)));
+                        branches
+                            .last_mut()
+                            .unwrap()
+                            .1
+                            .push((item.to_owned(), (indent / 2).saturating_sub(1)));
                     }
                     i += 1;
                 }
                 self.tree(head.trim(), &branches);
             } else if line.starts_with("!tape") {
-                let palette = line.split_whitespace().nth(1).unwrap_or("mint").trim_matches(['[', ']']).to_owned();
+                let palette = line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("mint")
+                    .trim_matches(['[', ']'])
+                    .to_owned();
                 self.tape(self.x0 - 30., self.y + 2., 200., 36., -0.06, &palette);
             } else if line == "---" {
                 self.divider();
@@ -1458,7 +1790,11 @@ impl Composer {
                 self.section_heading(t, 2);
             } else if let Some(t) = line.strip_prefix("# ") {
                 self.title(t);
-            } else if line.len() > 2 && line.starts_with('_') && line.ends_with('_') && !line.starts_with("__") {
+            } else if line.len() > 2
+                && line.starts_with('_')
+                && line.ends_with('_')
+                && !line.starts_with("__")
+            {
                 self.subtitle(&line[1..line.len() - 1]);
             } else if let Some(t) = line.strip_prefix(">> ") {
                 self.cards(t);
@@ -1472,11 +1808,18 @@ impl Composer {
                 self.item(t, "dot");
             } else if let Some((n, rest)) = numbered(line) {
                 self.item(rest, n);
-            } else if let Some(t) = line.strip_prefix("[ ] ").or_else(|| line.strip_prefix("[x] ")).or_else(|| line.strip_prefix("[X] ")) {
+            } else if let Some(t) = line
+                .strip_prefix("[ ] ")
+                .or_else(|| line.strip_prefix("[x] "))
+                .or_else(|| line.strip_prefix("[X] "))
+            {
                 let done = !line.starts_with("[ ]");
                 self.item(t, if done { "✓" } else { "·" });
             } else if line.starts_with('!') && !line.starts_with("!=") {
-                self.warnings.push(format!("Unknown directive '{}'; written as text.", line.split_whitespace().next().unwrap_or(line)));
+                self.warnings.push(format!(
+                    "Unknown directive '{}'; written as text.",
+                    line.split_whitespace().next().unwrap_or(line)
+                ));
                 self.body(line);
             } else {
                 self.body(line);
@@ -1492,7 +1835,9 @@ fn numbered(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     let rest = &line[digits..];
-    let rest = rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") "))?;
+    let rest = rest
+        .strip_prefix(". ")
+        .or_else(|| rest.strip_prefix(") "))?;
     Some((&line[..digits], rest))
 }
 
@@ -1500,8 +1845,14 @@ fn numbered(line: &str) -> Option<(&str, &str)> {
 fn arrow_open(pen: &mut Pen, a: Pt, b: Pt, head: f64) -> Vec<Line> {
     let ang = (b[1] - a[1]).atan2(b[0] - a[0]);
     let base = [b[0] - head * ang.cos(), b[1] - head * ang.sin()];
-    let l = [base[0] + head * 0.55 * (ang + PI / 2.).cos(), base[1] + head * 0.55 * (ang + PI / 2.).sin()];
-    let r = [base[0] + head * 0.55 * (ang - PI / 2.).cos(), base[1] + head * 0.55 * (ang - PI / 2.).sin()];
+    let l = [
+        base[0] + head * 0.55 * (ang + PI / 2.).cos(),
+        base[1] + head * 0.55 * (ang + PI / 2.).sin(),
+    ];
+    let r = [
+        base[0] + head * 0.55 * (ang - PI / 2.).cos(),
+        base[1] + head * 0.55 * (ang - PI / 2.).sin(),
+    ];
     let shaft = hand::line(pen, a, base, 1.6);
     let tri = wobble(pen, &[b, l, r, b, l], 0.4);
     vec![shaft, pen.stroke(&tri, 1.5, 0, 0.2)]
@@ -1514,16 +1865,36 @@ mod tests {
     fn inline_marks_and_caps() {
         let (plain, spans) = parse_inline("a **b** =={pink}c== [[d]] ((e)) {hl:mint}==f==");
         assert_eq!(plain, "a b c d e f");
-        let kinds: Vec<_> = spans.iter().map(|s| (s.start, s.end, s.kind, s.color.clone())).collect();
-        assert_eq!(kinds, vec![
-            (2, 3, Kind::Bold, None),
-            (4, 5, Kind::Highlight, Some("pink".into())),
-            (6, 7, Kind::Pill, None),
-            (8, 9, Kind::Grey, None),
-            (10, 11, Kind::Highlight, Some("mint".into())),
-        ]);
-        let c = Composer::new(Setup { study: true, dark: false, paper: Paper::DOT, ink: None, accent: "sky".into(), font: FontName::Patrick, size: 11., hand: Hand::Neat, fineliner: true, seed: 1 });
-        assert_eq!(c.caps("energy in mV and pH of T^4, `keep` x"), "ENERGY IN mV AND pH OF T^4, keep x");
+        let kinds: Vec<_> = spans
+            .iter()
+            .map(|s| (s.start, s.end, s.kind, s.color.clone()))
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (2, 3, Kind::Bold, None),
+                (4, 5, Kind::Highlight, Some("pink".into())),
+                (6, 7, Kind::Pill, None),
+                (8, 9, Kind::Grey, None),
+                (10, 11, Kind::Highlight, Some("mint".into())),
+            ]
+        );
+        let c = Composer::new(Setup {
+            study: true,
+            dark: false,
+            paper: Paper::DOT,
+            ink: None,
+            accent: "sky".into(),
+            font: FontName::Patrick,
+            size: 11.,
+            hand: Hand::Neat,
+            fineliner: true,
+            seed: 1,
+        });
+        assert_eq!(
+            c.caps("energy in mV and pH of T^4, `keep` x"),
+            "ENERGY IN mV AND pH OF T^4, keep x"
+        );
         assert_eq!(c.caps("biología celular"), "BIOLOGÍA CELULAR");
         assert_eq!(numbered("12. twelve"), Some(("12", "twelve")));
         assert_eq!(numbered("2020 was"), None);

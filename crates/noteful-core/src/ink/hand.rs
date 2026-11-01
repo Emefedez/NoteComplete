@@ -22,7 +22,11 @@ pub fn hex(s: &str) -> Option<Rgba> {
     if !(h.len() == 6 || h.len() == 8) || !h.is_ascii() {
         return None;
     }
-    let v = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok().map(|n| n as f64 / 255.);
+    let v = |i: usize| {
+        u8::from_str_radix(&h[i..i + 2], 16)
+            .ok()
+            .map(|n| n as f64 / 255.)
+    };
     Some([v(0)?, v(2)?, v(4)?, 1.])
 }
 /// Pen colours by name, or #hex.
@@ -271,7 +275,13 @@ pub fn text_width(text: &str, style: &TextStyle) -> f64 {
 /// One line with its baseline at y; returns the strokes and the end x.
 /// `T^4`, `CO_2` and Unicode scripts come out small and raised/lowered;
 /// arrows are drawn; Greek and math signs the font lacks are drawn by hand.
-pub fn write_line(pen: &mut Pen, text: &str, x: f64, y: f64, style: &TextStyle) -> (Vec<Line>, f64) {
+pub fn write_line(
+    pen: &mut Pen,
+    text: &str,
+    x: f64,
+    y: f64,
+    style: &TextStyle,
+) -> (Vec<Line>, f64) {
     let chars: Vec<char> = glyphs::scripts(text).chars().collect();
     let f = font(style.font);
     let k = style.size / f.xheight;
@@ -290,8 +300,18 @@ pub fn write_line(pen: &mut Pen, text: &str, x: f64, y: f64, style: &TextStyle) 
             let (a, b) = ([cx + 2., ay], [cx + w, ay + pen.rng.uniform(-1., 1.)]);
             if ch == '⇄' {
                 let d = style.size * 0.32;
-                out.extend(arrow(pen, [a[0], a[1] - d], [b[0], b[1] - d], style.size * 0.5));
-                out.extend(arrow(pen, [b[0], b[1] + d], [a[0], a[1] + d], style.size * 0.5));
+                out.extend(arrow(
+                    pen,
+                    [a[0], a[1] - d],
+                    [b[0], b[1] - d],
+                    style.size * 0.5,
+                ));
+                out.extend(arrow(
+                    pen,
+                    [b[0], b[1] + d],
+                    [a[0], a[1] + d],
+                    style.size * 0.5,
+                ));
             } else if ch == '←' {
                 out.extend(arrow(pen, b, a, style.size * 0.6));
             } else {
@@ -343,7 +363,9 @@ pub fn write_line(pen: &mut Pen, text: &str, x: f64, y: f64, style: &TextStyle) 
         let rot: f64 = pen.rng.uniform(-0.05, 0.05);
         let amp = style.distortion * style.size;
         let soff = pen.rng.uniform(0., 60.);
-        let by = y + slope * (cx - x) + style.baseline_drift * style.size * drift.at(doff + i as f64 * 0.35);
+        let by = y
+            + slope * (cx - x)
+            + style.baseline_drift * style.size * drift.at(doff + i as f64 * 0.35);
         let (cr, sr) = (rot.cos(), rot.sin());
         for path in &g.paths {
             let mut pts: Vec<Pt> = resample(path, f.em * 0.04)
@@ -391,7 +413,14 @@ pub fn wrap(text: &str, width: f64, style: &TextStyle) -> Vec<String> {
 }
 
 /// A wrapped paragraph; y is the first baseline. Returns strokes and the next baseline.
-pub fn write_block(pen: &mut Pen, text: &str, x: f64, mut y: f64, width: f64, style: &TextStyle) -> (Vec<Line>, f64) {
+pub fn write_block(
+    pen: &mut Pen,
+    text: &str,
+    x: f64,
+    mut y: f64,
+    width: f64,
+    style: &TextStyle,
+) -> (Vec<Line>, f64) {
     let mut out = Vec::new();
     let lh = style.size * style.line_height;
     for line in wrap(text, width, style) {
@@ -440,7 +469,7 @@ pub fn arrow(pen: &mut Pen, a: Pt, b: Pt, head: f64) -> Vec<Line> {
 }
 /// A box drawn in one go with overshooting corners, like a quick sketch.
 pub fn rect(pen: &mut Pen, x: f64, y: f64, w: f64, h: f64, radius: f64) -> Vec<Line> {
-    let j = (0.1 * w.min(h)).min(3.).max(0.);
+    let j = (0.1 * w.min(h)).clamp(0., 3.);
     let o = |pen: &mut Pen| pen.rng.uniform(-j, j);
     if radius > 0. {
         let mut pts = Vec::new();
@@ -451,7 +480,7 @@ pub fn rect(pen: &mut Pen, x: f64, y: f64, w: f64, h: f64, radius: f64) -> Vec<L
             (x + radius, y + radius, 180.),
         ] {
             for k in (0..=90).step_by(10) {
-                let a = ((a0 + k as f64) as f64).to_radians();
+                let a = (a0 + k as f64).to_radians();
                 pts.push([cx + radius * a.cos(), cy + radius * a.sin()]);
             }
         }
@@ -468,7 +497,10 @@ pub fn rect(pen: &mut Pen, x: f64, y: f64, w: f64, h: f64, radius: f64) -> Vec<L
         [x + w + o(pen), y + h + o(pen)],
         [x + o(pen), y + h + o(pen)],
     ];
-    let close = [corners[0][0] + o(pen), corners[0][1] + pen.rng.uniform(1.3, 3.) * j];
+    let close = [
+        corners[0][0] + o(pen),
+        corners[0][1] + pen.rng.uniform(1.3, 3.) * j,
+    ];
     let mut pts = vec![[corners[0][0] - 2. * j, corners[0][1] + 1.]];
     pts.extend(corners);
     pts.push(close);
@@ -485,7 +517,10 @@ pub fn ellipse(pen: &mut Pen, cx: f64, cy: f64, rx: f64, ry: f64) -> Line {
             let a = start + loops * TAU * i as f64 / n as f64;
             let grow = 1. + 0.06 * i as f64 / n as f64;
             let (x, y) = (rx * grow * a.cos(), ry * grow * a.sin());
-            [cx + x * tilt.cos() - y * tilt.sin(), cy + x * tilt.sin() + y * tilt.cos()]
+            [
+                cx + x * tilt.cos() - y * tilt.sin(),
+                cy + x * tilt.sin() + y * tilt.cos(),
+            ]
         })
         .collect();
     let pts = wobble(pen, &pts, 1.5);
@@ -501,7 +536,11 @@ pub fn underline(pen: &mut Pen, x0: f64, x1: f64, y: f64, double: bool) -> Vec<L
     out
 }
 pub fn checkmark(pen: &mut Pen, x: f64, y: f64, size: f64) -> Line {
-    let pts = [[x, y], [x + size * 0.35, y + size * 0.4], [x + size, y - size * 0.6]];
+    let pts = [
+        [x, y],
+        [x + size * 0.35, y + size * 0.4],
+        [x + size, y - size * 0.6],
+    ];
     let pts = wobble(pen, &pts, 0.8);
     pen.stroke(&pts, 2., 1, 0.35)
 }
@@ -557,10 +596,20 @@ pub fn highlight_rect(x: f64, y: f64, w: f64, h: f64, col: Rgba, rng: &mut Rng) 
     let passes = (((h - band) / (band * 0.8)).ceil().max(0.) as usize) + 1;
     (0..passes)
         .map(|i| {
-            let f = if passes > 1 { i as f64 / (passes - 1) as f64 } else { 0.5 };
+            let f = if passes > 1 {
+                i as f64 / (passes - 1) as f64
+            } else {
+                0.5
+            };
             let cy = y + band / 2. + (h - band) * f;
             let dy = rng.uniform(-0.8, 0.8);
-            highlight_line([x + band / 4., cy + dy], [x + w - band / 4., cy - dy], band, col, rng)
+            highlight_line(
+                [x + band / 4., cy + dy],
+                [x + w - band / 4., cy - dy],
+                band,
+                col,
+                rng,
+            )
         })
         .collect()
 }
@@ -582,7 +631,15 @@ mod tests {
     #[test]
     fn writes_varied_pressure_ink_that_repeats_for_a_seed() {
         let style = text_style(FontName::Patrick, 11., Hand::Natural);
-        let write = |seed| write_line(&mut Pen::new(color("ink").unwrap(), seed), "Hello, Αθήνα — T^4 ≈ 10^{-8} → ∞", 100., 200., &style);
+        let write = |seed| {
+            write_line(
+                &mut Pen::new(color("ink").unwrap(), seed),
+                "Hello, Αθήνα — T^4 ≈ 10^{-8} → ∞",
+                100.,
+                200.,
+                &style,
+            )
+        };
         let (a, end) = write(3);
         assert_eq!(a.len(), write(3).0.len());
         assert_eq!(a[5].points, write(3).0[5].points, "same seed, same strokes");
@@ -593,8 +650,17 @@ mod tests {
         assert!(p.iter().all(|v| *v > 0. && *v < 3.));
         let mut fine = Pen::new([0., 0., 0., 1.], 1);
         fine.fineliner = true;
-        assert!(fine.stroke(&[[0., 0.], [40., 0.]], 2., 1, 0.3).pressure.is_none());
-        let h = highlight_line([0., 0.], [100., 0.], 24., highlight_color("pink"), &mut Rng::new(1));
+        assert!(fine
+            .stroke(&[[0., 0.], [40., 0.]], 2., 1, 0.3)
+            .pressure
+            .is_none());
+        let h = highlight_line(
+            [0., 0.],
+            [100., 0.],
+            24.,
+            highlight_color("pink"),
+            &mut Rng::new(1),
+        );
         assert!(h.under && h.tool == 1 && h.width == 24.);
         assert!(wrap("one two three four five six", 60., &style).len() > 2);
         assert_eq!(hex("#fff"), Some([1., 1., 1., 1.]));

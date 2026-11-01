@@ -107,9 +107,9 @@ fn unescape(s: &str) -> String {
             "lt" => Some('<'),
             "gt" => Some('>'),
             "apos" => Some('\''),
-            e if e.starts_with("#x") || e.starts_with("#X") => {
-                u32::from_str_radix(&e[2..], 16).ok().and_then(char::from_u32)
-            }
+            e if e.starts_with("#x") || e.starts_with("#X") => u32::from_str_radix(&e[2..], 16)
+                .ok()
+                .and_then(char::from_u32),
             e if e.starts_with('#') => e[1..].parse().ok().and_then(char::from_u32),
             _ => None,
         };
@@ -164,7 +164,10 @@ pub(crate) fn parse_path(d: &str) -> Vec<Vec<Pt>> {
             token.clear();
             flush(cmd, &mut nums, &mut cur, &mut paths);
             cmd = ch.to_ascii_uppercase();
-        } else if ch.is_whitespace() || ch == ',' || (ch == '-' && !token.is_empty() && !token.ends_with(['e', 'E'])) {
+        } else if ch.is_whitespace()
+            || ch == ','
+            || (ch == '-' && !token.is_empty() && !token.ends_with(['e', 'E']))
+        {
             if let Some(n) = number(&token) {
                 nums.push(n);
             }
@@ -234,7 +237,11 @@ impl Font {
         let height = |c: char| {
             glyphs.get(&c).and_then(|g| {
                 let ys: Vec<f64> = g.paths.iter().flatten().map(|p| p[1]).collect();
-                let (lo, hi) = ys.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(*y), b.max(*y)));
+                let (lo, hi) = ys
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| {
+                        (a.min(*y), b.max(*y))
+                    });
                 (hi > lo).then_some(hi - lo)
             })
         };
@@ -297,7 +304,11 @@ impl Font {
             paths: g
                 .paths
                 .iter()
-                .map(|p| p.iter().map(|q| [2. * cx - q[0], 2. * cy - q[1] + drop]).collect())
+                .map(|p| {
+                    p.iter()
+                        .map(|q| [2. * cx - q[0], 2. * cy - q[1] + drop])
+                        .collect()
+                })
                 .collect(),
         })
     }
@@ -307,7 +318,11 @@ impl Font {
         };
         let k = self.xheight;
         let cx = (x0 + x1) / 2.;
-        let top = if upper { y0.min(-self.cap) } else { y0.min(-self.xheight) };
+        let top = if upper {
+            y0.min(-self.cap)
+        } else {
+            y0.min(-self.xheight)
+        };
         for stroke in super::glyphs::accent_strokes(accent) {
             g.paths.push(
                 stroke
@@ -318,10 +333,9 @@ impl Font {
                             [cx + x * k, -y * k]
                         }
                         // A bar through the letter, across its box.
-                        super::glyphs::Accent::Stroke => [
-                            x0 + (x1 - x0) * (x + 0.5),
-                            y1 + (y0 - y1) * (y + 0.5),
-                        ],
+                        super::glyphs::Accent::Stroke => {
+                            [x0 + (x1 - x0) * (x + 0.5), y1 + (y0 - y1) * (y + 0.5)]
+                        }
                         _ => [cx + x * k, top - k * 0.28 - y * k],
                     })
                     .collect(),
@@ -332,9 +346,19 @@ impl Font {
 }
 
 pub(crate) fn bbox(paths: &[Vec<Pt>]) -> Option<[f64; 4]> {
-    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut b = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
     for p in paths.iter().flatten() {
-        b = [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])];
+        b = [
+            b[0].min(p[0]),
+            b[1].min(p[1]),
+            b[2].max(p[0]),
+            b[3].max(p[1]),
+        ];
     }
     b[0].is_finite().then_some(b)
 }
@@ -358,15 +382,25 @@ mod tests {
             let f = font(FontName::parse(name).unwrap());
             assert!(f.xheight > 100. && f.cap > f.xheight, "{name}");
             for c in "aZ09?!éÉÑñ¿¡αΣ√≈→".chars().filter(|c| *c != '→') {
-                assert!(f.glyph(c).is_some_and(|g| !g.paths.is_empty()), "{name} {c}");
+                assert!(
+                    f.glyph(c).is_some_and(|g| !g.paths.is_empty()),
+                    "{name} {c}"
+                );
             }
         }
         let f = font(FontName::Patrick);
         let plain = f.glyph('I').unwrap().paths.len();
-        assert_eq!(f.glyph('Í').unwrap().paths.len(), plain + 1, "an acute is one stroke");
+        assert_eq!(
+            f.glyph('Í').unwrap().paths.len(),
+            plain + 1,
+            "an acute is one stroke"
+        );
         let e = bbox(&f.glyph('É').unwrap().paths).unwrap();
         assert!(e[1] < -f.cap, "the accent sits above the capital");
         assert!(f.glyph('\u{e123}').is_none());
-        assert_eq!(parse_path("M 1 2 L 3 -4 M 5 6 L 7 8"), vec![vec![[1., -2.], [3., 4.]], vec![[5., -6.], [7., -8.]]]);
+        assert_eq!(
+            parse_path("M 1 2 L 3 -4 M 5 6 L 7 8"),
+            vec![vec![[1., -2.], [3., 4.]], vec![[5., -6.], [7., -8.]]]
+        );
     }
 }
