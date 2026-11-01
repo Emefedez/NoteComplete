@@ -8,7 +8,7 @@ AI acts on what the user is looking at: the selection, the visible range, the cu
 
 | Option | When | Notes |
 |---|---|---|
-| User's own CLI agents (Claude Code, Codex, Antigravity) | desktop apps for technical users | their logins, no keys in the app; run read-only with a temp dir and the app's MCP server |
+| User's own CLI agents (Claude Code, Codex, Antigravity, OpenCode) | desktop apps for technical users | their logins, no keys in the app; run read-only with a temp dir and the app's MCP server |
 | API with the user's key | general users, web apps | key in the OS keychain (keytar/Tauri stronghold/keyring crate), never in project files or logs |
 | Local models (llama.cpp, Ollama, whisper.cpp) | offline, private, cheap | download on first use, show size; run in a worker/process |
 
@@ -19,8 +19,9 @@ CLI calls (prompt on stdin unless noted):
 | Claude Code | `claude -p --output-format json --add-dir <tmp> --strict-mcp-config --allowedTools Read [--mcp-config '{"mcpServers":{"app":{"command":"<bin>","args":["mcp"]}}}' --allowedTools mcp__app] [--model M]` | `JSON.parse(out).result` |
 | Codex | `codex exec --skip-git-repo-check --sandbox read-only --ephemeral --color never -o <file> [-i image]… [-m M] -` | contents of `<file>` |
 | Antigravity | `agy -p "<prompt>" --output-format json --add-dir <tmp> --print-timeout 600s [--model M]` | `JSON.parse(out).response` |
+| OpenCode | `opencode run --format json [-m provider/model] [-f image]…` with `OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","bash":"deny","webfetch":"deny"},"mcp":{"app":{"type":"local","command":["<bin>","mcp"],"enabled":true}}}'` | `text` parts after the last `tool_use` line |
 
-- Streaming: Claude `--output-format stream-json --verbose --include-partial-messages`; forward deltas per request id.
+- Streaming: Claude `--output-format stream-json --verbose --include-partial-messages`; OpenCode writes each text part whole; forward deltas per request id.
 - Launchers lack the shell PATH: resolve binaries once via the login shell (`$SHELL -lic 'command -v claude'`).
 - Attachments in a private temp dir per request, deleted after.
 - Expose the project through an MCP server built on the core, so agents query real data instead of screenshots only.

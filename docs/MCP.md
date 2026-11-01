@@ -1,6 +1,6 @@
 # NoteComplete for AI agents (MCP)
 
-`noteful mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an agent you already pay for, such as Claude Code, Antigravity or Codex, read your notes, turn them into study material, and synthesize real editable Noteful handwriting ink. Everything runs on your computer. Existing notes are never modified unless explicitly requested via backup-guarded tools.
+`noteful mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server. It lets an agent you already pay for, such as Claude Code, Antigravity, Codex or OpenCode, read your notes, turn them into study material, and synthesize real editable Noteful handwriting ink. Everything runs on your computer. Existing notes are never modified unless explicitly requested via backup-guarded tools.
 
 Detailed technical design, wire-format analysis, and phased implementation plans are specified in [docs/INK-WRITING.md](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
 
@@ -12,7 +12,11 @@ Build the CLI once (`cargo build --release -p noteful-cli`), then register the b
 claude mcp add -s user notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
 antigravity mcp add notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
 codex mcp add notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
+opencode mcp add   # interactive; or add to ~/.config/opencode/opencode.json:
+                   # "mcp": { "notecomplete": { "type": "local", "command": ["~/path/to/noteful-re/target/release/noteful", "mcp"], "enabled": true } }
 ```
+
+The desktop app's Ask AI, Study and transcript revision already pass this server to whichever tool you pick (Claude Code, Antigravity, Codex or OpenCode) for the open note; no setup is needed there.
 
 Page images and PDF text use poppler (`pdftoppm`, `pdftotext`) and librsvg (`rsvg-convert`); on Arch: `pacman -S poppler librsvg`. Without them the text tools still work and image tools explain what is missing. By default the agent looks for notes in NoteComplete's downloads folder (`~/Documents/NoteComplete`); set `NOTECOMPLETE_LIBRARY` to use another folder, or give any path.
 

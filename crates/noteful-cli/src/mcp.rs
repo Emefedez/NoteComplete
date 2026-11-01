@@ -1,5 +1,5 @@
 //! `noteful mcp`: a stdio Model Context Protocol server over the core, so AI
-//! agents (Claude Code, Antigravity, Codex) can read notes and make study
+//! agents (Claude Code, Antigravity, Codex, OpenCode) can read notes and make study
 //! material with the user's own subscription. Pages, ink and recordings are never
 //! modified; files are written only by `extract_resource`, `write_anki_deck` and
 //! `write_notes` (the Markdown notes kept in `.notecomp`/`.notepart`/`.nfedit`

@@ -147,7 +147,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     await model.load(select.value);
   }
   function unavailable() {
-    status('Flashcards, quizzes and chat use AI tools installed on your computer (Claude Code, Antigravity or Codex) and are available in the desktop app.', true);
+    status('Flashcards, quizzes and chat use AI tools installed on your computer (Claude Code, Antigravity, Codex or OpenCode) and are available in the desktop app.', true);
   }
   async function open(kind) {
     if (!ai) return unavailable();

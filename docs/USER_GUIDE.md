@@ -10,7 +10,7 @@ Press **?** (outside a text box) to show each button's key on the button itself;
 
 ## Study with your AI tool
 
-Study and Ask AI use an AI tool already installed and signed in on your computer (Claude Code, Antigravity or Codex) and run in the desktop app. Pages are sent as images with tape lifted, together with their typed, PDF, recognized and transcript text.
+Study and Ask AI use an AI tool already installed and signed in on your computer (Claude Code, Antigravity, Codex or OpenCode) and run in the desktop app. Pages are sent as images with tape lifted, together with their typed, PDF, recognized and transcript text.
 
 - **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
 - **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.

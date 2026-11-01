@@ -74,7 +74,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   }
   async function open() {
     if (!ai) {
-      status('Ask AI uses AI tools installed on your computer (Claude Code, Antigravity or Codex) and is available in the desktop app.', true);
+      status('Ask AI uses AI tools installed on your computer (Claude Code, Antigravity, Codex or OpenCode) and is available in the desktop app.', true);
       return;
     }
     const select = $('chatProvider');
