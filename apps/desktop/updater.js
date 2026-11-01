@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto';
 import { chmod, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
 
 export const REPOSITORY = 'Emefedez/NoteComplete';
-const CHECK_EVERY = 6 * 60 * 60 * 1000;
+// Checks on open are skipped for an hour after one that found nothing (GitHub allows 60
+// unauthenticated requests an hour); a running app checks again every six hours.
+export const CHECK_EVERY = 60 * 60 * 1000;
+export const RECHECK_RUNNING = 6 * 60 * 60 * 1000;
 
 // "1.2.3" or "v1.2.3-beta.1" → comparable parts; a pre-release sorts before its release.
 export function parseVersion(text) {

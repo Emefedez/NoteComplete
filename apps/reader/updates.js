@@ -60,4 +60,6 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
   }).catch(() => {});
   // On open: shortly after start, so it never slows the first paint.
   setTimeout(() => check(false), 3000);
+  // Left open for days: look again every six hours (the offer stays until answered).
+  setInterval(() => { if ($('updateChip').hidden) check(false); }, 6 * 60 * 60 * 1000);
 }

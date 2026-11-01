@@ -373,13 +373,18 @@ app.whenReady().then(async () => {
   ipcMain.on('asr:cancel', event => { if (trusted(event)) asr.cancel(event.sender.id); });
   // Several documents: tabs in a window, and windows; the command palette lists every tab.
   ipcMain.handle('windows:new', guarded(() => { createWindow(); }));
-  // Version checks (updater.js): once per session on open, or from Help; installing always
+  // Version checks (updater.js): on open, every few hours while running, or from Help; installing always
   // waits for the user's go-ahead in the reader.
   const updates = updater({ app, stateFile: path.join(app.getPath('userData'), 'updates.json') });
-  let opening = null;
+  // Windows opening together share one check; a later one (the app left running) asks again.
+  let opening = null, openedAt = 0;
   ipcMain.handle('update:check', guarded((_event, manual) => {
     if (manual) return updates.check({ manual: true });
-    return (opening ||= updates.check().catch(error => ({ current: app.getVersion(), error: error.message })));
+    if (!opening || Date.now() - openedAt > 60_000) {
+      openedAt = Date.now();
+      opening = updates.check().catch(error => ({ current: app.getVersion(), error: error.message }));
+    }
+    return opening;
   }));
   ipcMain.handle('update:install', guarded(event => updates.install(p => { if (!event.sender.isDestroyed()) event.sender.send('update:progress', p); })));
   ipcMain.handle('update:skip', guarded((_event, version) => updates.skip(String(version))));

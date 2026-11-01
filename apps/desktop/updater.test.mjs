@@ -60,3 +60,17 @@ test('an AppImage updates itself only with a matching checksum, keeping the old 
   const same = updater({ app: { getVersion: () => '1.2.0' }, fetch, stateFile: path.join(dir, 's2.json'), appImage, platform: 'linux', arch: 'arm64' });
   assert.equal((await same.check({ manual: true })).version, undefined);
 });
+
+test('a release published soon after an empty check is found on the next open, an hour later', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-update-'));
+  let releases = [], asked = 0, clock = Date.UTC(2026, 10, 1);
+  const fetch = async () => { asked++; return { ok: true, json: async () => releases }; };
+  const u = updater({ app: { getVersion: () => '1.0.18' }, fetch, stateFile: path.join(dir, 'state.json'), platform: 'win32', arch: 'x64', now: () => clock });
+  assert.equal((await u.check()).version, undefined);
+  releases = [{ tag_name: 'v1.1.0', html_url: 'r', assets: [{ name: 'NoteComplete-1.1.0-win-x64.exe' }] }];
+  clock += 10 * 60 * 1000;
+  assert.equal((await u.check()).recent, true);
+  clock += 60 * 60 * 1000;
+  const found = await u.check();
+  assert.deepEqual([found.version, found.install, asked], ['1.1.0', 'page', 2]);
+});
