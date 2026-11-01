@@ -3,11 +3,14 @@
 Design and implementation plan for turning Markdown, SVG and page designs into editable
 Noteful handwriting, and for annotating existing pages, inside NoteComplete's Rust core.
 
-Status (2026-11-01): **Phases 1–6 implemented** in `crates/noteful-core/src/ink/` and the MCP
-server (`crates/noteful-cli/src/ink_tools.rs`), plus `noteful convert`; user-facing docs are in
-[MCP.md](MCP.md). Not done yet: the Phase 0 iPad import check, the reader GUI work of Phase 7
-(text box format bar, reflow handles, editing imported text, shape auto-fill), Phase 8 (design
-copy) and the in-app converter of Phase 9.
+Status (2026-11-01): **Phases 1–6, 8 and 9 implemented** in `crates/noteful-core/src/ink/`
+(design copy in `design.rs` and `trace.rs`), the MCP server (`crates/noteful-cli/src/ink_tools.rs`,
+`design_tools.rs`), `noteful convert` (with `--export pdf|png|svg`) and the reader (File → New
+from Markdown, Pages → Insert handwritten pages; WASM `compose_preview`, `create_handwritten`,
+`insert_handwritten`). The desktop app ships the server and registers it with the user's AI tools
+(Help → Connect AI tools). User-facing docs are in [MCP.md](MCP.md). Not done yet: the Phase 0
+iPad import check, and the reader GUI work of Phase 7 (text box format bar, reflow handles,
+editing imported text, shape auto-fill).
 
 Where the implementation differs from the plan below:
 
@@ -26,6 +29,10 @@ Where the implementation differs from the plan below:
   only when set; the rich multi-run model and `Edit::RetextObject` are left for Phase 7.
 - New notebooks keep package version 1.0 (`create_document_with` takes the version) until the
   Phase 0 check picks one.
+- Design copy (Phase 8) is pure Rust: the tracer implements Zhang-Suen thinning, a chamfer
+  distance transform, grey closing, connected components, Douglas-Peucker and median-cut colour
+  clustering instead of SciPy/scikit-image; mockups are decoded by the CLI (`image` crate) and
+  `design_mockup` calls the image model through `curl`, so the core still has no I/O.
 Reference implementation studied: [`openninoor/noteful-mcp`](https://github.com/openninoor/noteful-mcp) (MIT).
 
 ---

@@ -2416,3 +2416,11 @@ button.category-toggle:hover {
 @media (max-width: 720px) { .hw-layout { grid-template-columns: 1fr; } .hw-pages { max-height: 40vh; } }
 .hw-fields .ocr-languages, .hw-source > .ocr-languages { display: flex; flex-direction: column; align-items: stretch; gap: 3px; margin: 0; font-size: 12px; }
 .hw-fields .ocr-languages :is(select, input) { width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Help > Connect AI tools (agents.js) */
+.agents-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.agents-row { display: grid; grid-template-columns: 9em 1fr auto; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.agents-ok { color: #2a9d5f; font-weight: 600; }
+.agents-manual { grid-column: 1 / -1; font-size: 12px; }
+.agents-manual summary { cursor: pointer; color: var(--muted, #666); }
+.agents-manual pre { white-space: pre-wrap; word-break: break-all; margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--line); font-size: 12px; }

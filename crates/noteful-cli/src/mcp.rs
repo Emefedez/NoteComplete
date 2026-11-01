@@ -115,7 +115,7 @@ impl Server {
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
+                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),

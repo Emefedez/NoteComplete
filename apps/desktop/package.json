@@ -66,8 +66,12 @@
     "icon": "build/icon.png",
     "extraResources": [
       {
-        "from": "../../target/release/noteful",
-        "to": "noteful"
+        "from": "../../target/release",
+        "to": ".",
+        "filter": [
+          "noteful",
+          "noteful.exe"
+        ]
       }
     ]
   }

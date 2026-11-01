@@ -45,8 +45,8 @@
 
 ### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; iPad import check pending)
 - **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
-- **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts and `noteful convert`.
-- **Pending:** open written files in Noteful on the iPad (Phase 0); design copy tools; the in-app converter.
+- **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts, design copy (`design_mockup`, `mockup_grid`, `design_page` with tracing), `noteful convert` with `--export pdf|png|svg`, the in-app converter (File → New from Markdown, Pages → Insert handwritten pages), and Help → Connect AI tools (the server ships with the desktop app).
+- **Pending:** open written files in Noteful on the iPad (Phase 0); `design_mockup` with a real Gemini key.
 - **Core Engine:**
   - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
   - True 3-value per-point pressure encoding (`new_stroke` flags = 1).

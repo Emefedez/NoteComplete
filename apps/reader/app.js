@@ -41,6 +41,7 @@ import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
 import { handwritingConverter } from "./convert.js";
+import { agentConnector } from "./agents.js";
 import { AudioController } from "./audio.js";
 import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
 import { TranscriptController } from "./transcript.js";
@@ -3521,6 +3522,14 @@ dictate.attach($("chatInput"), $("chatSend"));
 dictate.attach($("practiceAskInput"), $("practiceAskForm").querySelector('button[type="submit"]'));
 { const box = $("quizExplainBox").querySelector(".practice-ask-form"); if (box) dictate.attach(box.querySelector("input"), box.querySelector('button[type="submit"]')); }
 $("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
+// Help > Connect AI tools (desktop): the bundled note server for the user's own agents,
+// offered once by itself a few seconds after start.
+const agents = agentConnector({ status });
+if (agents) {
+  $("agentsOpen").hidden = false;
+  $("agentsOpen").onclick = () => { closeMenus(); agents.open(); };
+  setTimeout(() => { if (!document.querySelector("dialog[open]")) agents.offer().catch(() => {}); }, 4000);
+}
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
     const row = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td");

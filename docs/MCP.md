@@ -6,17 +6,19 @@ The design, wire-format notes and remaining phases are in [INK-WRITING.md](INK-W
 
 ## Set up
 
-Build the CLI once (`cargo build --release -p noteful-cli`), then register the binary:
+**With the desktop app (nothing to install):** NoteComplete ships the note server. Open **Help → Connect AI tools…** and press **Connect** next to each tool; the app copies the server to a stable place in its settings folder (so updates and AppImage launches don't move it) and registers it the way each tool expects. It offers this once by itself when it finds an installed tool that is not connected. Restart the tool, then ask it about your notes. *Run it yourself* in the same dialog shows the exact command if you prefer to type it.
+
+Inside the app, Ask AI, Study and transcript revision already pass the server to whichever tool you pick (Claude Code, Antigravity, Codex or OpenCode) for the open note.
+
+**From source:** build the CLI (`cargo build --release -p noteful-cli`), then register it:
 
 ```sh
 claude mcp add -s user notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
 antigravity mcp add notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
 codex mcp add notecomplete -- ~/path/to/noteful-re/target/release/noteful mcp
-opencode mcp add   # interactive; or add to ~/.config/opencode/opencode.json:
-                   # "mcp": { "notecomplete": { "type": "local", "command": ["~/path/to/noteful-re/target/release/noteful", "mcp"], "enabled": true } }
 ```
 
-The desktop app's Ask AI, Study and transcript revision already pass this server to whichever tool you pick (Claude Code, Antigravity, Codex or OpenCode) for the open note; no setup is needed there.
+For OpenCode, add to `~/.config/opencode/opencode.json`: `"mcp": { "notecomplete": { "type": "local", "command": ["~/path/to/noteful-re/target/release/noteful", "mcp"], "enabled": true } }`.
 
 Page images use librsvg (`rsvg-convert`), and imported PDFs need poppler (`pdftoppm`, `pdftotext`); on Arch: `pacman -S poppler librsvg`. Without them the text tools still work and image tools explain what is missing. Generated paper is drawn without poppler. By default the agent looks for notes in NoteComplete's downloads folder (`~/Documents/NoteComplete`); set `NOTECOMPLETE_LIBRARY` to use another folder, or give any path.
 
@@ -46,6 +48,16 @@ Text becomes real pen strokes (a fineliner, or a ballpoint with per-point pressu
 | `write_on_page` | Marks on an existing page: `text` (handwriting), `markdown`, `textbox` (a native typed Noteful text box, with font, size, colour, bold, italic, underline, strikethrough, alignment), `line`, `arrow`, `rect`, `ellipse`, `underline`, `check`, `cross`, `star`, `highlight`, `highlight_line`, `tape` and `drawing` (SVG). Coordinates are page units, origin top-left; A4 is 1091 × 1543. |
 | `page_layout` | Where things are on a page, to aim marks: the handwriting grouped into numbered items (words and phrases on one line) in reading order, highlighted regions, text boxes (with their text), images, shapes and tape, each with a bbox `[x0, y0, x1, y1]`, and the page with each item outlined and numbered. |
 | `example_pages` | The example pages and drawings to imitate, with their source and a preview; without a name, the list and the style guide. |
+
+### Copying a page design
+
+An image model is good at the look of a study page and bad at its words. These tools take the look from a picture and write the right words in ink:
+
+| Tool | What it does |
+|---|---|
+| `design_mockup` | Asks an image model for a picture of the page (`content`, `look` calm or rich, `theme`, an example or the previous page's mockup as `reference`), on your own Google account: set `GEMINI_API_KEY` (or `NOTEFUL_VERTEX_PROJECT` with `gcloud auth application-default login`) in the server's environment; `NOTEFUL_IMAGE_MODEL` picks the model. Saves it under `ink/mockups/` and returns it with a grid. Needs `curl`; the key is passed on its standard input. Any picture of a page works instead. |
+| `mockup_grid` | The picture with a labelled pixel grid, to read coordinates; `region` [x, y, w, h] zooms in. |
+| `design_page` | Draws one spec per page, in the picture's own pixels: `text` and `lines` (handwriting at the same place, size and line length), `rect` cards, `band` zones, `hl` highlighter, `sticky` notes, `line` arrows, `circle` numbers, `hook` marks, and `trace`, which copies a drawing straight out of the picture as pen outlines and highlighter colouring. Colours can be `auto` (sampled from the picture). Text that runs into the text below pushes it down; what cannot be fixed is reported. Writes a new notebook (`title`) or pages in a note (`path`, `after_page`), with the same safety rules. |
 
 Shared options for the Markdown tools: `paper` (`dot`, `grid`, `ruled`, `blank`, or `dark-…`), `theme` (`light` ivory page with pastel washes, `dark` black page with neon ink), `look` (`study` composed study notes, or `classic` plain notebook), `accent` (`coral`, `amber`, `sky`, `purple`, `teal`, `pink`), `ink`, `font` (`patrick`, `caveat`, `readability`, `felix`, `allure`, `elfin`, `nixish`), `hand` (`neat`, `natural`, `messy`), `pen` (`fineliner`, `ballpoint`), `size` (body x-height, default 11) and `seed` (same seed, same strokes).
 
@@ -83,16 +95,19 @@ Science: Greek letters, `T^4`, `m^{-2}`, `CO_2`, `λ_{max}`, `→ ⇄ ≈ ± ° 
 
 Drawings: plain SVG with a viewBox 400–650 wide. Outlines become pen strokes, fills become pastel highlighter under the ink (later shapes cover earlier ones), and `<text>` becomes handwriting. Gradients, patterns, masks, clip paths, images and `<use>` are skipped with a warning.
 
-### From the terminal
+### In the app and from the terminal
 
-The same engine writes notebooks without an agent:
+The same engine writes notebooks without an agent. In the desktop app: **File → New from Markdown…** and **Pages → Insert handwritten pages…**, with a live preview. From a terminal:
 
 ```sh
 noteful convert lecture.md -o lecture.noteful --paper ruled --look classic
 noteful convert summary.md -o summary.notecomp --theme dark --accent pink
+noteful convert lecture.md --export pdf -o lecture.pdf
+noteful convert lecture.md --export png -o pages/ --width 1654
+noteful convert lecture.md --export svg -o pages/lecture.svg
 ```
 
-Open the result in NoteComplete to export it as PDF, PNG or SVG.
+`--export pdf` writes vector A4 pages (rsvg-convert); `png` and `svg` write one file per page (`name-1.png`, …).
 
 ## Resources and prompts
 
@@ -111,4 +126,4 @@ Recognized text (OCR) and transcripts made in the reader stay in its browser sto
 ## Not yet
 
 - Files written here have not yet been imported on an iPad (the compatibility check in INK-WRITING.md, Phase 0). They open in NoteComplete; text boxes keep the layout confirmed from Noteful's own files, and alignment, underline and strikethrough use attribute keys read from the decompiled app.
-- Copying a page design from a picture (`design_mockup`, `mockup_grid`, `design_page`) and the desktop app's Markdown converter are planned.
+- `trace` follows outlines a few pixels wide; hair-thin anti-aliased lines in a small picture may be missed (zoom or use a larger mockup).
