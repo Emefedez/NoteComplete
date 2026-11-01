@@ -1,11 +1,16 @@
 //! `noteful mcp`: a stdio Model Context Protocol server over the core, so AI
-//! agents (Claude Code, Antigravity, Codex) can read notes and make study
-//! material with the user's own subscription. Pages, ink and recordings are never
-//! modified; files are written only by `extract_resource`, `write_anki_deck` and
-//! `write_notes` (the Markdown notes kept in `.notecomp`/`.notepart`/`.nfedit`
-//! files), to paths the agent names. Page images and PDF text use poppler (`pdftoppm`, `pdftotext`)
-//! and librsvg (`rsvg-convert`) when installed.
+//! agents (Claude Code, Antigravity, Codex, OpenCode) can read notes, make study
+//! material and write real Noteful handwriting with the user's own subscription.
+//! Files are written by `extract_resource`, `write_anki_deck`, `write_notes`
+//! (the Markdown notes kept in `.notecomp`/`.notepart`/`.nfedit` files) and the
+//! ink tools in ink_tools.rs, which write copies unless asked to change a note
+//! in place (keeping a `.bak`). Page images and PDF text use poppler
+//! (`pdftoppm`, `pdftotext`) and librsvg (`rsvg-convert`) when installed;
+//! generated paper is drawn without poppler.
+#[path = "ink_tools.rs"]
+mod ink_tools;
 use base64::{engine::general_purpose::STANDARD, Engine};
+pub(crate) use ink_tools::convert;
 use noteful_core::{
     is_notecomplete, markdown_pages, notecomplete_audio, pack_notecomplete_with,
     unpack_notecomplete, AddedAudio, Editor,
@@ -76,7 +81,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
 fn tools() -> Value {
     let path = json!({"type":"string","description":"Path to a .noteful or .nfedit file"});
     let page = json!({"type":"integer","minimum":1,"description":"Page number, starting at 1"});
-    json!([
+    let mut tools = json!([
         tool("list_notes", "List notes in a folder (default: the NoteComplete downloads folder) with title, page count and size.", json!({"folder":{"type":"string"}}), &[]),
         tool("note_outline", "Title, pages (size, PDF background, ink and typed-text counts, a text snippet) and recordings of a note.", json!({"path":path}), &["path"]),
         tool("page_text", "Typed text and PDF text of one page. Handwriting is not included: use page_image to read it.", json!({"path":path,"page":page}), &["path","page"]),
@@ -86,7 +91,11 @@ fn tools() -> Value {
         tool("read_notes", "The Markdown notes kept with a note (.notecomp, .notepart or .nfedit), with the pages their <!-- page N --> markers tie sections to.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"}}), &["path"]),
         tool("write_notes", "Add to or replace the Markdown notes kept with a note (.notecomp, .notepart or .nfedit). Pages, ink and recordings are untouched; the previous file is kept as <name>.bak. With `page`, appended text goes under a <!-- page N --> marker so it follows that page in NoteComplete.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"},"text":{"type":"string","description":"Markdown to write"},"mode":{"type":"string","enum":["append","replace"],"description":"append (default) adds after the existing notes; replace overwrites them"},"page":page}), &["path","text"]),
         tool("write_anki_deck", "Write flashcards as an Anki-importable text file (File → Import in Anki). Refuses to overwrite unless overwrite is true.", json!({"path":{"type":"string","description":"Output .txt or .tsv path"},"deck":{"type":"string"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string"},"back":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}}},"required":["front","back"]}},"overwrite":{"type":"boolean"}}), &["path","deck","cards"]),
-    ])
+    ]);
+    if let Value::Array(list) = &mut tools {
+        list.extend(ink_tools::tools());
+    }
+    tools
 }
 
 impl Server {
@@ -101,17 +110,31 @@ impl Server {
                     .find(|v| **v == asked)
                     .unwrap_or(&VERSIONS[0]);
                 Ok(
-                    json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{}},
+                    json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads Noteful notes (.noteful/.nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes.", library().display())}),
+                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({"tools":tools()})),
-            "prompts/list" => Ok(
-                json!({"prompts":[{"name":"flashcards","description":"Make Anki flashcards (and optionally a short quiz) from a note's pages","arguments":[{"name":"path","required":true},{"name":"pages","description":"e.g. 3-8; default all"},{"name":"deck","description":"Anki deck name"}]}]}),
-            ),
-            "prompts/get" => Ok(flashcards_prompt(&params["arguments"])),
+            "prompts/list" => {
+                let mut prompts = vec![
+                    json!({"name":"flashcards","description":"Make Anki flashcards (and optionally a short quiz) from a note's pages","arguments":[{"name":"path","required":true},{"name":"pages","description":"e.g. 3-8; default all"},{"name":"deck","description":"Anki deck name"}]}),
+                ];
+                prompts.extend(ink_tools::prompts());
+                Ok(json!({"prompts":prompts}))
+            }
+            "prompts/get" => match params["name"].as_str().unwrap_or("flashcards") {
+                "flashcards" => Ok(flashcards_prompt(&params["arguments"])),
+                name => ink_tools::prompt(name, &params["arguments"]).ok_or_else(
+                    || json!({"code":-32602,"message":format!("Unknown prompt {name}")}),
+                ),
+            },
+            "resources/list" => Ok(ink_tools::resources()),
+            "resources/templates/list" => Ok(ink_tools::resource_templates()),
+            "resources/read" => self
+                .read_resource(params["uri"].as_str().unwrap_or(""))
+                .map_err(|e| json!({"code":-32002,"message":e.to_string()})),
             "tools/call" => Ok(
                 match self.call(params["name"].as_str().unwrap_or(""), &params["arguments"]) {
                     Ok(content) => json!({"content":content}),
@@ -129,6 +152,9 @@ impl Server {
     }
 
     fn call(&mut self, name: &str, args: &Value) -> Res<Value> {
+        if let Some(result) = self.call_ink(name, args) {
+            return result;
+        }
         let text = |v: Value| -> Res<Value> {
             Ok(json!([{"type":"text","text":serde_json::to_string_pretty(&v)?}]))
         };
@@ -271,7 +297,26 @@ impl Server {
                 .map(|r| r.iter().filter_map(Value::as_f64).collect())
                 .unwrap_or_default();
             let [x, y, w, h] = <[f64; 4]>::try_from(rect).unwrap_or([0., 0., size[0], size[1]]);
-            let file = self.pdf_file(args, bg["resource_id"].as_str().unwrap_or_default())?;
+            let resource = bg["resource_id"].as_str().unwrap_or_default();
+            let index = bg["page_index"].as_u64().unwrap_or(0);
+            // Generated paper is drawn directly; other PDFs are rasterized.
+            let paper = self
+                .open(args)?
+                .pdf_bytes(resource)
+                .ok()
+                .and_then(|pdf| ink_tools::paper_background(pdf, index, [x, y, w, h]));
+            let marker = "<g data-background=\"true\">";
+            let end_of_background = |svg: &str| {
+                svg.find(marker)
+                    .and_then(|at| svg[at..].find("</g>").map(|end| at + end))
+            };
+            if let Some(paper) = paper {
+                if let Some(at) = end_of_background(&svg) {
+                    svg.insert_str(at, &paper);
+                }
+                return rasterize(svg, width);
+            }
+            let file = self.pdf_file(args, resource)?;
             let page = bg["page_index"].as_u64().unwrap_or(0) + 1;
             let raster_width = ((width as f64) * w / size[0]).ceil().max(1.) as u32;
             let output = Command::new("pdftoppm")
@@ -298,14 +343,17 @@ impl Server {
                 .into());
             }
             let image = format!("<image x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"data:image/png;base64,{}\"/>", STANDARD.encode(&output.stdout));
-            let marker = "<g data-background=\"true\">";
-            if let Some(at) = svg
-                .find(marker)
-                .and_then(|at| svg[at..].find("</g>").map(|end| at + end))
-            {
+            if let Some(at) = end_of_background(&svg) {
                 svg.insert_str(at, &image);
             }
         }
+        rasterize(svg, width)
+    }
+}
+
+/// SVG to PNG with rsvg-convert.
+fn rasterize(svg: String, width: u32) -> Res<Vec<u8>> {
+    {
         let mut child = Command::new("rsvg-convert")
             .args(["-w", &width.to_string(), "-b", "white", "-f", "png"])
             .stdin(Stdio::piped())
@@ -326,6 +374,8 @@ impl Server {
         }
         Ok(output.stdout)
     }
+}
+impl Server {
     fn search(&mut self, args: &Value) -> Res<Value> {
         let path = note_path(args)?;
         let terms: Vec<String> = fold(args["query"].as_str().unwrap_or_default())
@@ -785,7 +835,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 9);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 15);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();

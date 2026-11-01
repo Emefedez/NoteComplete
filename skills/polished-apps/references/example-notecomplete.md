@@ -11,7 +11,7 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Web UI, one module per feature | `apps/reader/*.js` with `*.test.mjs` beside each (study.js, quiz.js, chat.js, find.js, jobs.js, tab-strip.js, command-palette.js…) |
 | Tokens + components | top of `apps/reader/style.css` (`:root` tokens: `--control`, `--radius`, `--fill`, `--accent-soft`…) |
 | Electron shell | `apps/desktop/main.js` (BaseWindow + WebContentsView tabs, `app://`-style protocol, guarded IPC), `tabs.js`, `preload.cjs` |
-| AI through the user's CLIs | `apps/desktop/ai-runner.js` (Claude Code, Codex, Antigravity; streaming, cancel tags, PDF/image attachments, MCP) |
+| AI through the user's CLIs | `apps/desktop/ai-runner.js` (Claude Code, Codex, Antigravity, OpenCode; streaming, cancel tags, PDF/image attachments, MCP) |
 | Command palette | `apps/reader/command-palette.js`, palette built from menu items in `app.js` |
 | Background jobs | `apps/reader/jobs.js` (job chip with phase, seconds, creeping progress, Stop) |
 | Drag to reorder / drag out | `apps/reader/reorder.js` (tools and tabs), `tabs:detach` in `main.js` |

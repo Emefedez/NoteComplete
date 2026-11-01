@@ -21,6 +21,30 @@ pub struct Line {
     /// Square ends (a highlighter rectangle): the band ends exactly at its points.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub square: bool,
+    /// Pen pressure per point (a ballpoint stroke), as Noteful stores it: the
+    /// drawn radius at each point, about 1.05 × pressure in the app. `width`
+    /// is then only the nominal width. Fineliners, highlighters and tape omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pressure: Option<Vec<f64>>,
+    /// Drawn below the page's other ink (a highlighter under handwriting).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub under: bool,
+}
+impl Line {
+    /// A plain stroke: the given points, full width and colour, on layer 0.
+    pub fn new(points: Vec<[f64; 2]>, width: f64, rgba: [f64; 4]) -> Self {
+        Self {
+            points,
+            width,
+            rgba,
+            tool: 0,
+            layer: 0,
+            shape: None,
+            square: false,
+            pressure: None,
+            under: false,
+        }
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
@@ -235,17 +259,48 @@ impl Editor {
         }
         self.commit(Edit::Layer { layer })
     }
-    pub fn add_line(&mut self, page: usize, mut line: Line) -> Result<()> {
+    pub fn add_line(&mut self, page: usize, line: Line) -> Result<()> {
+        self.add_lines(page, vec![line])
+    }
+    /// Like `add_line`, under the page's other ink (a highlighter fill).
+    pub fn add_line_under(&mut self, page: usize, mut line: Line) -> Result<()> {
+        line.under = true;
+        self.add_lines(page, vec![line])
+    }
+    /// Many strokes on one page (written handwriting): checked once against
+    /// the layers, then added in order. Nothing is added when one is invalid.
+    pub fn add_lines(&mut self, page: usize, mut lines: Vec<Line>) -> Result<()> {
         self.page(page)?;
-        if let Some(shape) = &line.shape {
-            line.points = shape.points();
-        }
-        // Tools: 0 pen, 1 highlighter, 2 tape (exported as native tape ink).
-        if line.tool > 2
-            || !self
-                .layers()
+        let layers = self.layers();
+        for line in &mut lines {
+            if let Some(shape) = &line.shape {
+                line.points = shape.points();
+            }
+            if !layers
                 .iter()
                 .any(|l| l.id == line.layer && l.visible && !l.locked)
+            {
+                return Err(Error::new(0, "Invalid fixed-width line"));
+            }
+            Self::check_line(line)?;
+        }
+        self.history
+            .try_reserve(lines.len())
+            .map_err(|e| Error::new(0, e.to_string()))?;
+        for line in lines {
+            self.commit(Edit::Add { page, line })?;
+        }
+        Ok(())
+    }
+    fn check_line(line: &Line) -> Result<()> {
+        let pressure_ok = line.pressure.as_ref().is_none_or(|p| {
+            line.tool == 0
+                && p.len() == line.points.len()
+                && p.iter().all(|v| v.is_finite() && (0.0..=50.).contains(v))
+        });
+        // Tools: 0 pen, 1 highlighter, 2 tape (exported as native tape ink).
+        if line.tool > 2
+            || !pressure_ok
             || !points_valid(&line.points)
             || !line.width.is_finite()
             // Tape strips can cover a whole block of text; ink stays thin.
@@ -257,7 +312,7 @@ impl Editor {
         {
             return Err(Error::new(0, "Invalid fixed-width line"));
         }
-        self.commit(Edit::Add { page, line })
+        Ok(())
     }
     pub fn resize_shape(&mut self, page: usize, id: &str, shape: crate::Shape) -> Result<()> {
         let mut line = self
@@ -372,6 +427,26 @@ impl Editor {
                 "<g data-layer=\"{}\" opacity=\"{}\">",
                 layer.id, layer.opacity
             ));
+            // Under-ink additions (highlighter fills) go below the layer's ink.
+            let added_in_layer = |under: bool| {
+                additions
+                    .iter()
+                    .filter(move |(_, l)| l.layer == layer.id && l.under == under)
+            };
+            for (id, line) in added_in_layer(true) {
+                if !deleted.contains(id.as_str()) {
+                    content.push_str(&format!(
+                        "<g data-item=\"{id}\">{}</g>",
+                        added_svg(
+                            &adjustments
+                                .get(id.as_str())
+                                .map(|a| crate::manipulation::adjusted_line(line, a))
+                                .unwrap_or_else(|| (*line).clone())
+                        )
+                    ));
+                    added += 1;
+                }
+            }
             for item in p.items.iter().filter(|i| i.layer == layer.id) {
                 if !deleted.contains(item.id.as_str()) {
                     content.push_str(&format!(
@@ -401,7 +476,7 @@ impl Editor {
                     added += 1;
                 }
             }
-            for (id, line) in additions.iter().filter(|(_, l)| l.layer == layer.id) {
+            for (id, line) in added_in_layer(false) {
                 if !deleted.contains(id.as_str()) {
                     content.push_str(&format!(
                         "<g data-item=\"{id}\"{}>{}</g>",
@@ -639,6 +714,16 @@ impl Editor {
 }
 
 pub(crate) fn added_svg(line: &Line) -> String {
+    // A ballpoint stroke draws its stored pressure as the radius, as decoded ink does.
+    if let Some(pressure) = line.pressure.as_ref().filter(|_| line.tool == 0) {
+        let mut rgba = line.rgba;
+        rgba[3] = 1.;
+        return format!(
+            "<g opacity=\"{}\">{}</g>",
+            line.rgba[3],
+            crate::scene::run_svg(&line.points, pressure, line.width / 2., &rgba)
+        );
+    }
     let mut svg = line_svg(&line.points, line.width / 2., &line.rgba);
     // Tape is a strip, and a highlighter rectangle a band: square ends, so a
     // drag can lay a rectangle.

@@ -3,7 +3,29 @@
 Design and implementation plan for turning Markdown, SVG and page designs into editable
 Noteful handwriting, and for annotating existing pages, inside NoteComplete's Rust core.
 
-Status: **design, not implemented**. No code in this document has been written yet.
+Status (2026-11-01): **Phases 1–6 implemented** in `crates/noteful-core/src/ink/` and the MCP
+server (`crates/noteful-cli/src/ink_tools.rs`), plus `noteful convert`; user-facing docs are in
+[MCP.md](MCP.md). Not done yet: the Phase 0 iPad import check, the reader GUI work of Phase 7
+(text box format bar, reflow handles, editing imported text, shape auto-fill), Phase 8 (design
+copy) and the in-app converter of Phase 9.
+
+Where the implementation differs from the plan below:
+
+- No `rand`/`svgtypes`: a SplitMix64 generator (`ink/rng.rs`) and small path parsers keep the
+  core dependency-free apart from `roxmltree` for SVG drawings.
+- `Line.pressure` stores the value written to the file (the drawn radius, as decoded ink is
+  rendered), validated to `0..=50`, not a normalised `0..=1`.
+- Paper PDFs use PDF tiling patterns, so a page costs a few hundred bytes; the PDF title lists
+  the styles so previews redraw the paper as SVG without poppler.
+- Six of the seven fonts are bundled (`PatrickHandBlock`, 600 KB, is not; `font: block` maps to
+  Patrick Hand). Letters a font lacks, such as capital accented vowels and `¿ ¡`, are composed
+  from the base glyph and a drawn accent instead of losing the accent.
+- Tape is native tape ink, not a washi PNG.
+- The bundled examples are translated to English.
+- `TextBox` gained `align`, `underline` and `strikethrough` (keys 8, 4, 5 in pool 8), written
+  only when set; the rich multi-run model and `Edit::RetextObject` are left for Phase 7.
+- New notebooks keep package version 1.0 (`create_document_with` takes the version) until the
+  Phase 0 check picks one.
 Reference implementation studied: [`openninoor/noteful-mcp`](https://github.com/openninoor/noteful-mcp) (MIT).
 
 ---

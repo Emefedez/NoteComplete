@@ -3,9 +3,10 @@
 // NoteComplete. Page images go to a private temporary folder that the tool may
 // read; every tool also gets the bundled `noteful mcp` server for the open
 // note (Claude and Codex by flags, Antigravity as a plugin in the request's
-// own temporary workspace, so its global settings are untouched). Permissions
-// stay minimal: Claude may only Read and use the note server, Codex runs
-// read-only, Antigravity gets only the folder.
+// own temporary workspace, OpenCode through inline config in its environment,
+// so global settings are untouched). Permissions stay minimal: Claude may only
+// Read and use the note server, Codex runs read-only, Antigravity gets only the
+// folder, OpenCode may not edit, run commands or fetch the web.
 import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
@@ -15,6 +16,7 @@ export const PROVIDERS = {
   claude: { label: 'Claude Code', names: ['claude'] },
   antigravity: { label: 'Antigravity', names: ['agy', 'antigravity'] },
   codex: { label: 'Codex', names: ['codex'] },
+  opencode: { label: 'OpenCode', names: ['opencode'] },
 };
 
 // Desktop launchers often lack the shell's PATH (mise, npm, ~/.local/bin), so
@@ -46,9 +48,36 @@ export function streamLine(provider, line) {
     const step = value.event === 'step_update' ? value.step_update : null;
     return step?.step_type === 'agent_response' && typeof step.text_delta === 'string' ? { delta: step.text_delta } : {};
   }
+  if (provider === 'opencode') {
+    // OpenCode writes each text part whole once it ends; tool calls separate the
+    // agent's working notes from its answer.
+    if (value.type === 'text' && typeof value.part?.text === 'string') return { delta: value.part.text + '\n\n', part: value.part.text };
+    if (value.type === 'tool_use') return { tool: true };
+    if (value.type === 'error') return { error: String(value.error?.data?.message || value.error?.message || value.error?.name || 'unknown error') };
+  }
   return {};
 }
-export const STREAMS = new Set(['claude', 'antigravity']);
+export const STREAMS = new Set(['claude', 'antigravity', 'opencode']);
+
+// OpenCode's answer: the text written after its last tool call.
+export function openCodeAnswer(out) {
+  let parts = [];
+  for (const line of out.split('\n')) {
+    const { part, tool, error } = streamLine('opencode', line);
+    if (error) throw Error(`OpenCode failed: ${error}`);
+    if (tool) parts = [];
+    else if (typeof part === 'string' && part.trim()) parts.push(part.trim());
+  }
+  return parts.join('\n\n');
+}
+
+// Config given to OpenCode for one request: the note server, and no edits,
+// shell commands or web fetches (reading the request's folder stays allowed).
+export function openCodeConfig(mcp) {
+  const config = { permission: { edit: 'deny', bash: 'deny', webfetch: 'deny' } };
+  if (mcp) config.mcp = { notecomplete: { type: 'local', command: [mcp, 'mcp'], enabled: true } };
+  return JSON.stringify(config);
+}
 
 // The command line for one request. `images` are absolute paths in `dir`.
 export function invocation(provider, { prompt, images, dir, model, mcp, stream = false }) {
@@ -80,16 +109,37 @@ export function invocation(provider, { prompt, images, dir, model, mcp, stream =
     args.push('-');
     return { args, stdin: prompt + (images.some(i => !/\.(png|jpe?g)$/i.test(i)) ? listed : ''), parse: async () => readFile(last, 'utf8') };
   }
+  if (provider === 'opencode') {
+    // The prompt goes on stdin (no length limit on the command line); images are
+    // attached with -f, PDFs (often over its 10 MiB attachment limit) are listed.
+    const args = ['run', '--format', 'json'];
+    if (model) args.push('-m', model);
+    for (const image of images) if (/\.(png|jpe?g)$/i.test(image)) args.push('-f', image);
+    const others = images.some(i => !/\.(png|jpe?g)$/i.test(i));
+    return {
+      args,
+      stdin: prompt + (others ? listed : ''),
+      env: { OPENCODE_CONFIG_CONTENT: openCodeConfig(mcp), OPENCODE_DISABLE_AUTOUPDATE: '1' },
+      parse: openCodeAnswer,
+      failure: out => out.split('\n').map(l => streamLine('opencode', l).error).filter(Boolean).at(-1),
+    };
+  }
   throw Error('Unknown AI provider.');
 }
 
 export const MAX_PARALLEL = 4;
-// Models offered per tool. Antigravity lists its own (Gemini, Claude, …);
-// Claude Code takes its aliases; Codex has no listing, so the model set in its
-// config is offered. Any other name can still be typed in the reader.
+// Models offered per tool. Antigravity and OpenCode list their own; Claude
+// Code takes its aliases; Codex has no listing, so the model set in its config
+// is offered. Any other name can still be typed in the reader.
 export function parseAgyModels(out) {
   return out.split('\n').map(l => l.match(/^([\w.:/-]+)\t(.+)$/)).filter(Boolean).map(m => ({ id: m[1], label: m[2].trim() }));
 }
+// `opencode models` prints one provider/model per line.
+export function parseOpenCodeModels(out) {
+  return out.split('\n').map(l => l.trim()).filter(l => MODEL.test(l) && l.includes('/')).map(id => ({ id, label: id }));
+}
+// Model names: aliases, provider/model paths, versions (@date) and variants (#high).
+const MODEL = /^[\w.:/@#-]{1,120}$/;
 const CLAUDE_MODELS = [{ id: 'opus', label: 'Opus (latest)' }, { id: 'sonnet', label: 'Sonnet (latest)' }, { id: 'haiku', label: 'Haiku (latest)' }];
 async function listModels(provider, binary, home = homedir()) {
   if (provider === 'claude') return CLAUDE_MODELS;
@@ -100,6 +150,9 @@ async function listModels(provider, binary, home = homedir()) {
   }
   if (provider === 'antigravity') {
     return new Promise(resolve => execFile(binary, ['models'], { timeout: 30000, env: { ...process.env, NO_COLOR: '1' } }, (_e, stdout = '') => resolve(parseAgyModels(stdout))));
+  }
+  if (provider === 'opencode') {
+    return new Promise(resolve => execFile(binary, ['models'], { timeout: 30000, maxBuffer: 4e6, env: { ...process.env, NO_COLOR: '1', OPENCODE_DISABLE_AUTOUPDATE: '1' } }, (_e, stdout = '') => resolve(parseOpenCodeModels(stdout))));
   }
   return [];
 }
@@ -148,7 +201,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
-      if (typeof model !== 'string' || !/^[\w.:/-]{0,80}$/.test(model)) throw Error('Invalid model name.');
+      if (typeof model !== 'string' || (model && !MODEL.test(model))) throw Error('Invalid model name.');
       if (typeof tag !== 'string' || !/^[\w-]{0,40}$/.test(tag)) throw Error('Invalid request tag.');
       found ||= await tools();
       const binary = found[provider];
@@ -178,7 +231,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
         }
         const output = await new Promise((resolve, reject) => {
           if (entry.cancelled) return reject(Error('The AI request was stopped.'));
-          const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+          const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...call.env }, stdio: ['pipe', 'pipe', 'pipe'] });
           entry.child = child;
           let out = '', err = '', pending = '';
           const timer = setTimeout(() => child.kill('SIGTERM'), 10 * 60 * 1000);
@@ -198,7 +251,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           child.on('close', (code, signal) => {
             clearTimeout(timer);
             if (signal) reject(Error('The AI request was stopped.'));
-            else if (code) reject(Error(`${PROVIDERS[provider].label} failed: ${tail(err || out) || `exit ${code}`}`));
+            else if (code) reject(Error(`${PROVIDERS[provider].label} failed: ${call.failure?.(out) || tail(err || out) || `exit ${code}`}`));
             else resolve(out);
           });
           if (call.stdin != null) child.stdin.end(call.stdin);

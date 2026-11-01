@@ -31,7 +31,7 @@ test('runs a provider in a temporary folder, passes images and cleans up', async
   await writeFile(fake, '#!/bin/sh\nprompt=$(cat)\nprintf \'{"result":"%s"}\' "$(printf %s "$prompt" | grep -c png) images in $(pwd | grep -c notecomplete-ai)"\n');
   await chmod(fake, 0o755);
   const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
-  assert.deepEqual((await runner.providers()).map(p => [p.id, p.available]), [['claude', true], ['antigravity', false], ['codex', false]]);
+  assert.deepEqual((await runner.providers()).map(p => [p.id, p.available]), [['claude', true], ['antigravity', false], ['codex', false], ['opencode', false]]);
   const png = new Uint8Array([137, 80, 78, 71]);
   const { text } = await runner.run('w1', { provider: 'claude', prompt: 'Cards please', images: [{ bytes: png, type: 'image/png', label: 'p1' }, { bytes: png, type: 'image/png', label: 'p2' }] });
   assert.equal(text, '2 images in 1');
@@ -133,4 +133,46 @@ test('models are kept, asked again when fresh, and opening several pickers asks 
   const [a, b, c] = await Promise.all([1, 2, 3].map(() => runner.models('antigravity', { fresh: true })));
   assert.deepEqual([a[0].id, b[0].id, c[0].id], ['gemini-2', 'gemini-2', 'gemini-2'], 'one request for pickers opening together');
   assert.equal((await runner.models('antigravity', { fresh: true }))[0].id, 'gemini-3');
+});
+
+test('OpenCode gets the prompt on stdin, images as files and the note server in its inline config', async () => {
+  const { openCodeAnswer, parseOpenCodeModels } = await import('./ai-runner.js');
+  const call = invocation('opencode', { prompt: 'Q', images: ['/t/01.png', '/t/02-source.pdf'], dir: '/t', model: 'anthropic/claude-sonnet-5-5', mcp: '/app/noteful' });
+  assert.deepEqual(call.args, ['run', '--format', 'json', '-m', 'anthropic/claude-sonnet-5-5', '-f', '/t/01.png']);
+  assert.match(call.stdin, /^Q[\s\S]*Attached files[\s\S]*02-source\.pdf/);
+  const config = JSON.parse(call.env.OPENCODE_CONFIG_CONTENT);
+  assert.deepEqual(config.mcp.notecomplete, { type: 'local', command: ['/app/noteful', 'mcp'], enabled: true });
+  assert.deepEqual(config.permission, { edit: 'deny', bash: 'deny', webfetch: 'deny' });
+  assert.equal(JSON.parse(invocation('opencode', { prompt: 'Q', images: [], dir: '/t' }).env.OPENCODE_CONFIG_CONTENT).mcp, undefined);
+  // The answer is what it wrote after its last tool call.
+  const text = t => JSON.stringify({ type: 'text', part: { type: 'text', text: t } });
+  const out = [text('Let me read page 2.'), '{"type":"tool_use","part":{"tool":"notecomplete_page_text"}}', text('Mitosis has'), text('four phases.'), '{"type":"step_finish"}'].join('\n');
+  assert.equal(openCodeAnswer(out), 'Mitosis has\n\nfour phases.');
+  assert.equal(openCodeAnswer(text('Hi')), 'Hi');
+  assert.throws(() => openCodeAnswer('{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"no key"}}}'), /no key/);
+  assert.equal(call.failure('{"type":"error","error":{"message":"Model not found"}}\n'), 'Model not found');
+  assert.deepEqual(parseOpenCodeModels('anthropic/claude-opus-5-5\nopenrouter/meta/llama-4:free\n\nnot a model\nvertex/claude@2026#high\n').map(m => m.id),
+    ['anthropic/claude-opus-5-5', 'openrouter/meta/llama-4:free', 'vertex/claude@2026#high']);
+});
+
+test('a fake OpenCode streams its text parts and its error message reaches the reader', async () => {
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-oc-'));
+  const fake = path.join(bin, 'opencode');
+  // Echoes back whether the config arrived and the prompt it read on stdin.
+  await writeFile(fake, `#!/bin/sh
+prompt=$(cat)
+case "$prompt" in fail*) echo '{"type":"error","error":{"name":"UnknownError","data":{"message":"Model not found: x/y"}}}'; exit 1;; esac
+echo '{"type":"text","part":{"text":"Reading."}}'
+sleep 0.2
+echo '{"type":"tool_use","part":{}}'
+printf '{"type":"text","part":{"text":"%s %s"}}\\n' "$prompt" "$(printf %s "$OPENCODE_CONFIG_CONTENT" | grep -c deny)"
+`);
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: null, antigravity: null, codex: null, opencode: fake }) });
+  assert.ok((await runner.providers()).find(p => p.id === 'opencode').available);
+  const seen = [];
+  const { text } = await runner.run('w1', { provider: 'opencode', prompt: 'Hola', model: 'anthropic/claude-haiku-5-5' }, d => seen.push(d));
+  assert.equal(text, 'Hola 1');
+  assert.deepEqual(seen, ['Reading.\n\n', 'Hola 1\n\n']);
+  await assert.rejects(runner.run('w1', { provider: 'opencode', prompt: 'fail' }), /OpenCode failed: Model not found: x\/y/);
 });

@@ -160,7 +160,7 @@ export class TranscriptController {
     let provider = '';
     try { provider = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
     if (!provider) provider = (await ai.providers()).find(p => p.available)?.id || '';
-    if (!provider) { this.status('Revision needs Claude Code, Antigravity or Codex installed and signed in.'); return; }
+    if (!provider) { this.status('Revision needs Claude Code, Antigravity, Codex or OpenCode installed and signed in.'); return; }
     let stopped = false;
     this.revising = true;
     $('transcriptRevise').disabled = true;

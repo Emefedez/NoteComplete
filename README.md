@@ -44,7 +44,7 @@ One search (<kbd>Ctrl</kbd>+<kbd>F</kbd>) over typed text, PDF text, transcripts
 Play recordings with the handwriting appearing as it was written, tap ink to seek, **record** from the microphone or **import** audio into any note. Transcribe with Whisper on the device, Voxtype or Gemini through Antigravity; your AI tool can then **revise** the text while every word keeps its time. Export as text, SRT, WebVTT or JSON.
 
 ### Study with your AI subscription
-Flashcards and quizzes are generated in the background by the tool you already use (Claude Code, Antigravity or Codex) from page images and text.
+Flashcards and quizzes are generated in the background by the tool you already use (Claude Code, Antigravity, Codex or OpenCode) from page images and text.
 - **Quizzes** are saved and resumable. **Hint** (<kbd>H</kbd>) shows where your notes answer it; **Clarify** (<kbd>C</kbd>) explains it and keeps the answer; **Dispute** (<kbd>X</kbd>) and **Double check** (<kbd>V</kbd>) question the quiz; wrong answers can be retaken; **Restart** with the circular arrow (press twice).
 - They are also **generated in the background** so you can keep studying while your material is being created.
 - **Flashcards** are practised in a floating window, with formulas and lists rendered. **Ask AI** (<kbd>C</kbd>) explains a card using its page, source PDF, your notes or the whole note, and keeps the answer with the card. **Edit**, **Double check** and **Discard** fix a card on the spot.
@@ -54,7 +54,7 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Links in answers** work: pages jump to the page, images open large, web links open in the browser.
 - **Study material** (Study → All quizzes and decks…): everything on this device in two lists, exportable to Anki.
 - The sun in the study windows **dims everything behind them**.
-- The bundled MCP server lets agents read your notebooks and write Markdown notes into them ([AI agents](docs/MCP.md)).
+- The bundled MCP server lets agents read your notebooks, write Markdown notes into them, and write real editable handwriting: new notebooks, added pages, clean copies and marks such as ticks, highlights and text boxes ([AI agents](docs/MCP.md)).
 
 <p align="center"><img src="docs/images/quiz-clarify.png" alt="A quiz window grown to fit a streamed answer" width="49%"> <img src="docs/images/card-ask.png" alt="A flashcard window grown to fit an answer" width="49%"></p>
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>

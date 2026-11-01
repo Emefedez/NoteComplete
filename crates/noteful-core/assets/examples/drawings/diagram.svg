@@ -1,0 +1,19 @@
+<svg viewBox="-10 -24 640 384">
+  <circle cx="64" cy="58" r="34" fill="#ffe066" stroke="#1f2233"/>
+  <rect x="0" y="120" width="620" height="88" fill="#c9b6ff" stroke="none"/>
+  <path d="M0 312 C90 286 160 300 240 290 C330 278 410 304 490 288 C560 276 600 284 620 282 L620 360 L0 360 Z" fill="#9fe3c4" stroke="#1f2233"/>
+  <line x1="96" y1="86" x2="250" y2="290" stroke="#f39a1e" stroke-width="3"/>
+  <polyline points="234,280 250,292 250,272" fill="none" stroke="#f39a1e" stroke-width="3"/>
+  <line x1="182" y1="120" x2="290" y2="24" stroke="#f39a1e" stroke-width="3"/>
+  <polyline points="272,26 290,24 286,42" fill="none" stroke="#f39a1e" stroke-width="3"/>
+  <path d="M420 288 Q430 276 420 264 Q410 252 420 240 Q430 228 420 216 Q410 204 420 192 Q430 180 420 168 Q410 156 420 144 Q430 132 420 120 Q410 108 420 96 Q430 84 420 72 Q410 60 420 48" fill="none" stroke="#e9573f" stroke-width="3"/>
+  <polyline points="410,62 420,46 430,62" fill="none" stroke="#e9573f" stroke-width="3"/>
+  <path d="M520 132 Q510 144 520 156 Q530 168 520 180 Q510 192 520 204 Q530 216 520 228 Q510 240 520 252 Q530 264 520 276" fill="none" stroke="#7a52c7" stroke-width="3"/>
+  <polyline points="510,264 520,278 530,264" fill="none" stroke="#7a52c7" stroke-width="3"/>
+  <text x="108" y="52" font-size="22" fill="#f39a1e">100 in</text>
+  <text x="206" y="-2" font-size="22" fill="#f39a1e">30 bounce back</text>
+  <text x="214" y="170" font-size="22" fill="#7a52c7">19 warm the air</text>
+  <text x="120" y="342" font-size="22">51 warm the ground</text>
+  <text x="436" y="30" font-size="21" fill="#e9573f">longwave out</text>
+  <text x="536" y="232" font-size="21" fill="#7a52c7">back down</text>
+</svg>

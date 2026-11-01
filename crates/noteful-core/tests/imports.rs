@@ -104,6 +104,9 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         bold: true,
         italic: true,
         font: "Times New Roman".into(),
+        align: 0,
+        underline: false,
+        strikethrough: false,
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
