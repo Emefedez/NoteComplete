@@ -3777,5 +3777,7 @@ $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");
 $("joinNotes").onclick = () => startCollab("join-notes");
+// Share in the bar: the desktop shares (or shows its session); elsewhere it offers the ways to join.
+$("shareButton").onclick = () => startCollab(window.notecompleteCollab ? "host" : "share-menu");
 // Opened from an invite (/join#… or /tablet#…, served by the host's computer).
 if (/^\/(join|tablet)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");

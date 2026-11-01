@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('notecompleteCollab', {
   start: (options = {}) => ipcRenderer.invoke('collab:start', { notes: ['edit', 'view'].includes(options.notes) ? options.notes : null }),
   stop: () => ipcRenderer.invoke('collab:stop'),
   info: () => ipcRenderer.invoke('collab:info'),
+  useAddress: address => ipcRenderer.invoke('collab:address', String(address)),
   minimize: () => ipcRenderer.invoke('collab:minimize'),
   onEnded: callback => ipcRenderer.on('collab:ended', (_event, detail) => callback(detail)),
 });

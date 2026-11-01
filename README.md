@@ -27,7 +27,7 @@ NoteComplete is an independent desktop and web companion for people who take not
 A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+ Page** ties a section to a page; the notes follow you as you turn pages, and Ask AI can read them. The **Scratchpad** (View → Scratchpad…) keeps AI conversations you want with the note. Saved with the note, or as one `.notecomp` file.
 
 ### Share notes and draw on a tablet
-- **Shared notes**: File → *Share and draw on a tablet…* (desktop) invites people on your network to write the Markdown notes with you, in a browser or in NoteComplete. Names and coloured cursors show who is where; when you end the session everyone keeps a copy.
+- **Shared notes**: *Share* in the top bar (desktop) invites people on your network to write the Markdown notes with you, in a browser or in NoteComplete. Names and coloured cursors show who is where; when you end the session everyone keeps a copy.
 - **Your phone or tablet as a drawing tablet**: scan the QR code (or type the 6-digit code) and draw on the note open on your computer. The device shows just the note and a tool bar on the side you choose; it zooms on its own, and what you draw appears live on the computer and is saved there, with pen pressure, highlighter, eraser and undo.
 - Meant for a trusted local network; not yet tried on real phones and tablets ([details](docs/COLLABORATION.md)).
 

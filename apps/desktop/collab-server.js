@@ -1,7 +1,9 @@
 // The host's sharing server (docs/COLLABORATION.md): HTTP for the reader's own files, so a
 // phone or another computer can open the guest or tablet page in a browser, and one WebSocket
-// (/sync) carrying the session (collab-hub.js). Bound only while sharing, on a free port.
+// (/sync) carrying the session (collab-hub.js). Bound only while sharing, on port 41237 when
+// it is free (one port to allow in a firewall), else on any free port.
 import http from 'node:http';
+import dgram from 'node:dgram';
 import os from 'node:os';
 import path from 'node:path';
 import { createReadStream } from 'node:fs';
@@ -13,11 +15,33 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 // Pages that open the reader as a guest or as a drawing tablet; the invite is in the fragment.
 const PAGES = new Set(['/join', '/tablet']);
 
-// The computer's address on the local network: private IPv4 first (Wi-Fi/Ethernet).
-export function lanAddress(interfaces = os.networkInterfaces()) {
-  const all = Object.values(interfaces).flat().filter((i) => i && (i.family === 'IPv4' || i.family === 4) && !i.internal);
-  const rank = (a) => (/^192\.168\./.test(a) ? 0 : /^10\./.test(a) ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(a) ? 2 : /^169\.254\./.test(a) ? 4 : 3);
-  return all.map((i) => i.address).sort((a, b) => rank(a) - rank(b))[0] || '127.0.0.1';
+export const DEFAULT_PORT = 41237;
+// Adapters a phone on the Wi-Fi cannot reach: containers, virtual machines, VPNs.
+const VIRTUAL = /^(docker|br-|virbr|veth|vmnet|vboxnet|vnic|utun|tun|tap|tailscale|zt|wg|ham|llw|awdl|bridge|lxc|lxd|podman|cni|flannel|kube|vethernet|virtualbox|vmware|hyper-v)/i;
+// The computer's addresses on the local network, best first: the one its default route
+// uses (`preferred`), then Wi-Fi/Ethernet-looking private IPv4, virtual adapters last.
+export function lanAddresses(interfaces = os.networkInterfaces(), preferred = '') {
+  const all = Object.entries(interfaces).flatMap(([name, list]) => (list || [])
+    .filter((i) => i && (i.family === 'IPv4' || i.family === 4) && !i.internal)
+    .map((i) => ({ name, address: i.address })));
+  const rank = ({ name, address }) => (address === preferred ? -10 : 0) + (VIRTUAL.test(name) ? 10 : 0)
+    + (/^192\.168\./.test(address) ? 0 : /^10\./.test(address) ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(address) ? 2 : /^169\.254\./.test(address) ? 4 : 3);
+  return [...new Set(all.sort((a, b) => rank(a) - rank(b)).map((i) => i.address))];
+}
+export function lanAddress(interfaces = os.networkInterfaces(), preferred = '') {
+  return lanAddresses(interfaces, preferred)[0] || '127.0.0.1';
+}
+// The local address of the default route (a UDP "connect" sends nothing); '' offline.
+export function routeAddress() {
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket('udp4');
+    const done = (address) => { try { socket.close(); } catch { /* Closed. */ } resolve(address); };
+    const timer = setTimeout(() => done(''), 1000);
+    socket.on('error', () => { clearTimeout(timer); done(''); });
+    try {
+      socket.connect(53, '1.1.1.1', () => { clearTimeout(timer); try { done(socket.address().address); } catch { done(''); } });
+    } catch { clearTimeout(timer); done(''); }
+  });
 }
 // A reader file under root, or null: no dot files, no node_modules, nothing outside.
 export function readerFile(root, pathname) {
@@ -30,7 +54,9 @@ export function readerFile(root, pathname) {
 }
 
 // Starts a session. Returns its links and tokens, `stop()`, and the hub.
-export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port = 0, address = lanAddress(), maxPeers = 10, onEnded = () => {}, hubOptions = {} }) {
+export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port = DEFAULT_PORT, address, maxPeers = 10, onEnded = () => {}, hubOptions = {} }) {
+  const addresses = address ? [address] : lanAddresses(undefined, await routeAddress());
+  address = addresses[0] || '127.0.0.1';
   let stopping = null;
   const hub = new CollabHub({ notes, maxPeers, ...hubOptions, onEnded: (result) => { onEnded(result); stop(); } });
   const server = http.createServer(async (req, res) => {
@@ -60,12 +86,14 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
       ws.on('error', () => ws.terminate());
     });
   });
-  await new Promise((resolve, reject) => {
+  const listen = (at) => new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, host, resolve);
+    server.listen(at, host, () => { server.off('error', reject); resolve(); });
   });
+  // The usual port when it is free, so a firewall rule keeps working; else any.
+  await listen(port).catch((error) => { if (port && error.code === 'EADDRINUSE') return listen(0); throw error; });
   const actualPort = server.address().port;
-  const origin = `http://${address}:${actualPort}`;
+  const origin = () => `http://${address}:${actualPort}`;
   function stop() {
     stopping ||= new Promise((resolve) => {
       hub.dispose();
@@ -79,13 +107,16 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   return {
     hub,
     port: actualPort,
-    address,
-    origin,
+    get address() { return address; },
+    addresses,
+    // Another of this computer's addresses for the links (a phone on another adapter's network).
+    useAddress(next) { if (addresses.includes(next)) address = next; return address; },
+    get origin() { return origin(); },
     // The host's own reader connects over loopback with the host token.
     hostUrl: `ws://127.0.0.1:${actualPort}/sync`,
     hostToken: hub.tokens.host,
-    guestLink: notes ? `${origin}/join#${hub.id}.${hub.tokens.guest}` : '',
-    tabletLink: () => `${origin}/tablet#${hub.id}.${hub.tokens.tablet}`,
+    get guestLink() { return notes ? `${origin()}/join#${hub.id}.${hub.tokens.guest}` : ''; },
+    tabletLink: () => `${origin()}/tablet#${hub.id}.${hub.tokens.tablet}`,
     code: () => ({ code: hub.code.value, expires: hub.code.expires }),
     stop,
   };

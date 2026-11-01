@@ -157,11 +157,13 @@ try {
 
   // Ending: the guest keeps a copy; the host keeps the notes.
   const download = guest.waitForEvent('download');
-  await host.evaluate(() => document.querySelector('#collabPeopleBar .collab-share').click());
+  // Share in the bar says Sharing while the session runs, and opens it.
+  assert.equal((await host.textContent('#shareButton')).trim(), 'Sharing');
+  await host.click('#shareButton');
   await host.click('#collabDialog button.danger');
   assert.match((await download).suggestedFilename(), /shared notes\.md$/);
   await guest.waitForSelector('#collabDialog h2:text("Session ended")');
-  await host.waitForFunction(() => !document.getElementById('collabPeopleBar'));
+  await host.waitForFunction(() => !document.getElementById('collabPeopleBar') && document.getElementById('shareButton').textContent.trim() === 'Share');
   step('ending the session saves a copy for the guest');
   console.log('Sharing end to end: passed.');
 } finally {
