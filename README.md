@@ -121,7 +121,6 @@ Planned, not started (details in [docs/REQUESTS.md](docs/REQUESTS.md)):
 - **The open NoteComplete format**: today `.notecomp` is a tar archive holding the native note, its Markdown notes, recordings added in NoteComplete and the text of handwriting written from Markdown ([layout](spec/nfedit-v1.md#notecomp-archives)); `.notepart` is still written the same way. The plan: study material (flashcards, quizzes) in the package too, `.notepart` as a partial patch for another copy of a note, and the format chosen on first save for every note (New document already asks). Files saved today keep opening: they are recognised by content.
 - **Choose which pages to export**: this page, a range, a list or every page, for SVG, PDF and images.
 - **Repositories** as a library source next to Google Drive: GitHub repositories with notes, files and solved exams, browsed from Home.
-- **Infinite canvas** in `.notecomplete`, split into sheets of up to Noteful's maximum page size when saved as `.noteful`.
 
 ## Build from source
 

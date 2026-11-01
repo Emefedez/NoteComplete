@@ -45,6 +45,11 @@
   - Export parity with native Noteful Kind-3 (rounded rectangle) and Kind-6 (ellipse) objects where `payload["5"]["1"]["0"] = [r, g, b, a]`.
   - Reopened in iPad Noteful as native filled shapes editable via Noteful's shape tool.
 
+### 1.4 Infinite Canvas (`[D]` First slice)
+- **Done:** File → New document → *Canvas*: one page that grows right and down (800-unit steps) when ink, pictures or text boxes come within 300 units of its edge. Each growth is its own undo step, under the stroke that caused it, and the page keeps its place on screen. Kept as a flag in projects (version 7) and `.notecomp`/`.notepart` (`"canvas": true` in the manifest). The flag survives sharing and tablets, because every copy grows the same way from the same edits.
+- **Never a `.noteful` file:** Noteful has no infinite page. The core refuses `export_noteful` for a canvas, so the app, the CLI and the MCP tools all refuse it. New document turns off Noteful for a canvas, and the NF and N+MD exports are off. A canvas takes no inserted pages.
+- **Pending:** growing to the left and up, an overview zoom, and a canvas from the MCP tools.
+
 ### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; iPad import check pending)
 - **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
 - **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts, design copy (`design_mockup`, `mockup_grid`, `design_page` with tracing), `noteful convert` with `--export pdf|png|svg`, the in-app converter (File → New from Markdown, Pages → Insert handwritten pages), and Help → Connect AI tools (the server ships with the desktop app).
@@ -83,7 +88,6 @@
 - [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles). Today `.notecomp` holds the note, notes, added recordings and the text of written handwriting ([layout](../spec/nfedit-v1.md#notecomp-archives)); `.notepart` is still written the same way; study material is not packed yet.
 - [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all).
 - [ ] **Library Sources:** Home switch for Recent · Google Drive · GitHub Repositories (with Git LFS support).
-- [ ] **Infinite Canvas:** Unbounded canvas mode that exports to Noteful by tiling into sheets.
 - [ ] **Ask AI on HTML Pages:** Extract text and run study/quiz generation on opened HTML documents.
 
 ---

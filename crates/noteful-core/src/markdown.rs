@@ -190,7 +190,7 @@ pub fn pack_notecomplete_with(
     title: &str,
     audio: &[(AddedAudio, &[u8])],
 ) -> Result<Vec<u8>> {
-    pack_notecomplete_text(note, markdown, title, audio, &[])
+    pack_notecomplete_text(note, markdown, title, audio, &[], false)
 }
 
 /// With the words of handwriting written from Markdown, by page in the note's
@@ -201,6 +201,7 @@ pub fn pack_notecomplete_text(
     title: &str,
     audio: &[(AddedAudio, &[u8])],
     ink_text: &[&[crate::InkWord]],
+    canvas: bool,
 ) -> Result<Vec<u8>> {
     if audio.len() > AUDIO_LIMIT {
         return Err(Error::new(0, "Too many recordings"));
@@ -227,6 +228,10 @@ pub fn pack_notecomplete_text(
         .then(|| serde_json::json!({ "pages": ink_text }).to_string());
     if text.is_some() {
         manifest["ink_text"] = INK_TEXT.into();
+    }
+    // An infinite canvas (canvas.rs): one page that grows; NoteComplete reopens it as one.
+    if canvas {
+        manifest["canvas"] = true.into();
     }
     let mut builder = tar::Builder::new(Vec::new());
     add(&mut builder, MANIFEST, manifest.to_string().as_bytes())?;
@@ -330,6 +335,23 @@ pub fn notecomplete_ink_text(data: &[u8]) -> Result<Vec<Vec<crate::InkWord>>> {
     Ok(Vec::new())
 }
 
+/// Whether a `.notecomp` file is an infinite canvas (its manifest says so).
+pub fn notecomplete_is_canvas(data: &[u8]) -> bool {
+    let mut archive = tar::Archive::new(data);
+    let Ok(entries) = archive.entries() else {
+        return false;
+    };
+    for mut entry in entries.flatten() {
+        if entry.path().is_ok_and(|p| p.to_string_lossy() == MANIFEST) {
+            let mut bytes = Vec::new();
+            return (&mut entry).take(64 * 1024).read_to_end(&mut bytes).is_ok()
+                && serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .is_ok_and(|m| m["format"] == "notecomplete" && m["canvas"] == true);
+        }
+    }
+    false
+}
+
 pub fn unpack_notecomplete(data: &[u8]) -> Result<(Vec<u8>, String)> {
     let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
     let mut archive = tar::Archive::new(data);
@@ -386,6 +408,9 @@ impl Editor {
         let (note, notes) = unpack_notecomplete(data)?;
         let mut editor = Self::open(&note)?;
         editor.markdown = notes;
+        if notecomplete_is_canvas(data) && editor.scene.pages.len() == 1 {
+            editor.canvas = true;
+        }
         // The note inside is flattened: its pages are in display order.
         for (slot, words) in notecomplete_ink_text(data)?.into_iter().enumerate() {
             if slot < editor.scene.pages.len() && crate::pages::words_valid(&words) {
@@ -402,11 +427,12 @@ impl Editor {
         let order = self.page_order();
         let text: Vec<&[crate::InkWord]> = order.iter().map(|s| self.ink_words(*s)).collect();
         pack_notecomplete_text(
-            &self.export_noteful()?,
+            &self.noteful_bytes()?,
             &self.markdown,
             &self.scene.title,
             audio,
             &text,
+            self.canvas,
         )
     }
 }

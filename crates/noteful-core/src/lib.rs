@@ -38,6 +38,7 @@ mod imports;
 pub use imports::{Image, TextBox};
 mod manipulation;
 pub use manipulation::Adjustment;
+pub mod canvas;
 mod export;
 mod layer;
 mod pages;

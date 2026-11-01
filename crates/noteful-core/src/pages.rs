@@ -180,6 +180,12 @@ impl Editor {
         pages: Vec<NewPage>,
         pdf: Option<NewPdf>,
     ) -> Result<()> {
+        if self.canvas {
+            return Err(Error::new(
+                0,
+                "An infinite canvas is one page; it grows instead of taking new pages",
+            ));
+        }
         if pages.is_empty()
             || pages.len() > 2000
             || at > self.page_order().len()

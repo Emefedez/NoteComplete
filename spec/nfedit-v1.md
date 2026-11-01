@@ -97,6 +97,10 @@ Handwriting the core writes from Markdown (New from Markdown, Insert handwritten
 
 The words describe the ink as written; erasing or moving that ink later does not change them (like recognized text).
 
+## Infinite canvas (project version 7)
+
+A project may have `"canvas": true`. Such a note has exactly one page, which grows through ordinary `ResizePage` edits: before ink, a picture or a text box is added, a host asks `canvas_growth(bounds)`, which says whether the page needs to grow. The page grows when the new content comes within 300 units of the right or bottom edge, in 800-unit steps. `grow_canvas_for` applies that growth. Because the growth is an edit of its own, made before the content, undo removes the content first. `view` returns `"canvas"`. A canvas refuses `InsertPages` and `export_noteful` (there is no Noteful form). It travels in `.notecomp`/`.notepart` with `"canvas": true` in the manifest. Its `note.noteful` holds the one large page, and readers that do not know the flag open it as an ordinary one-page note.
+
 ## Filled shapes
 
 A shape (`line.shape`) may have `fill`: an RGBA (0–1) inside colour, for rectangles, ellipses and triangles only. Resizing a shape keeps its fill. The app draws the inside under the outline. Native export writes the inside as highlighter bands under the outline (Noteful files have no filled shape for drawn ink); native filled-shape objects are not written yet.
@@ -105,7 +109,7 @@ A shape (`line.shape`) may have `fill`: an RGBA (0–1) inside colour, for recta
 
 A `.notecomp` file (readers also accept the longer `.notecomplete`; `.notepart` is currently written the same way) is a POSIX ustar archive with:
 
-- `manifest.json`: `{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`, plus `"audio":[…]` and `"ink_text":"ink-text.json"` when present;
+- `manifest.json`: `{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`, plus `"audio":[…]` and `"ink_text":"ink-text.json"` when present, and `"canvas":true` for an infinite canvas;
 - `note.noteful`: the native export of the note (inserted pages flattened into place);
 - `notes.md`: the Markdown notes, page markers kept;
 - `audio/N.ext`: recordings added in NoteComplete, listed in the manifest with `id`, `name`, `mime` and `created`;

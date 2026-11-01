@@ -65,9 +65,10 @@ impl EditorSession {
     }
     pub fn add_image(&mut self, page: usize, image: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
-        self.inner
-            .add_image(page, serde_json::from_str(image).map_err(js_error)?)
-            .map_err(js_error)
+        let image: noteful_core::Image = serde_json::from_str(image).map_err(js_error)?;
+        // An infinite canvas grows first, so the undo of the picture leaves the size.
+        self.inner.grow_canvas_for(image.bounds).map_err(js_error)?;
+        self.inner.add_image(page, image).map_err(js_error)
     }
     pub fn view(&self, page: usize) -> Result<String, JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
@@ -75,8 +76,30 @@ impl EditorSession {
     }
     pub fn draw(&mut self, page: usize, line: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
-        let line = serde_json::from_str(line).map_err(js_error)?;
+        let line: noteful_core::Line = serde_json::from_str(line).map_err(js_error)?;
+        if self.inner.is_canvas() {
+            let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+            for p in &line.points {
+                for i in 0..2 {
+                    lo[i] = lo[i].min(p[i]);
+                    hi[i] = hi[i].max(p[i]);
+                }
+            }
+            if lo[0] <= hi[0] {
+                let pad = line.width / 2.;
+                self.inner
+                    .grow_canvas_for([lo[0], lo[1], hi[0] - lo[0] + pad, hi[1] - lo[1] + pad])
+                    .map_err(js_error)?;
+            }
+        }
         self.inner.add_line(page, line).map_err(js_error)
+    }
+    /// Make this one-page note an infinite canvas (it grows as you write).
+    pub fn set_canvas(&mut self, on: bool) -> Result<(), JsValue> {
+        self.inner.set_canvas(on).map_err(js_error)
+    }
+    pub fn is_canvas(&self) -> bool {
+        self.inner.is_canvas()
     }
     pub fn pick_item(
         &self,

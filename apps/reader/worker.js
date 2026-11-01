@@ -26,6 +26,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
                 new TextDecoder("utf-8", { fatal: true }).decode(bytes),
               )
             : new EditorSession(bytes);
+        if (args.canvas) candidate.set_canvas(true);
         if (args.image) candidate.add_image(0, JSON.stringify(args.image));
         const result = JSON.parse(candidate.view(0));
         // Recordings added in NoteComplete travel inside .notecomp files.
