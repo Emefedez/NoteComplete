@@ -59,7 +59,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # The default also installs the SDK package "tools", which the runner's command-line
+      # tools (16.0) no longer have, failing the job. Gradle fetches the platform it needs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - run: npm ci
       - run: npm run check
