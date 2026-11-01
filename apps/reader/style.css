@@ -2520,3 +2520,7 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .agents-manual { grid-column: 1 / -1; font-size: 12px; }
 .agents-manual summary { cursor: pointer; color: var(--muted, #666); }
 .agents-manual pre { white-space: pre-wrap; word-break: break-all; margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--line); font-size: 12px; }
+/* Narrow screens: the handwriting dialog's buttons wrap instead of pushing "Insert where" off
+   the left edge; the place to insert gets its own line. */
+.handwriting-dialog .ocr-actions { flex-wrap: wrap; row-gap: 8px; }
+@media (max-width: 520px) { .handwriting-dialog .hw-where { flex: 1 0 100%; } .handwriting-dialog .hw-where select { flex: 1; min-width: 0; } }
