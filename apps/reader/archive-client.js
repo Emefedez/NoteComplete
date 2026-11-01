@@ -14,7 +14,11 @@ export function archiveId(input) {
   const id = link ? decodeURIComponent(link[1]) : text;
   return /^[A-Za-z0-9][A-Za-z0-9._-]{2,99}$/.test(id) ? id : null;
 }
-export const archiveUrl = (id, path = '') => `https://archive.org/download/${encodeURIComponent(id)}/${String(path).split('/').map(encodeURIComponent).join('/')}`;
+const itemPath = (id, path) => `${encodeURIComponent(id)}/${String(path).split('/').map(encodeURIComponent).join('/')}`;
+export const archiveUrl = (id, path = '') => `https://archive.org/download/${itemPath(id, path)}`;
+// The same file for a web page: /download/ redirects to a file server without CORS headers,
+// so browsers (the web reader, the Android app) refuse to read it; /cors/ serves it with them.
+export const archiveCorsUrl = (id, path = '') => `https://archive.org/cors/${itemPath(id, path)}`;
 // One level of an item's folder tree: its sub-folders and the documents NoteComplete can open.
 // Only uploaded originals are listed, not the files Internet Archive derives from them.
 export function archiveListing(files, prefix = []) {
@@ -48,7 +52,7 @@ export class ArchiveClient {
       });
       return new File([bytes], document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
     }
-    const response = await this.fetcher(url, { signal });
+    const response = await this.fetcher(archiveCorsUrl(id, document.path), { signal });
     if (!response.ok) throw Error(`Internet Archive answered ${response.status}.`);
     const total = Number(response.headers?.get?.('Content-Length')) || document.size || 0;
     if (!response.body?.getReader) {
