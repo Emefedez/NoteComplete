@@ -47,6 +47,9 @@ jobs:
           node-version: '22'
       - run: cargo install wasm-bindgen-cli --version 0.2.128 --locked --root work/wasm-tools
       - run: python tools/build_web.py
+      # The sharing server's packages (ws, yjs); Electron itself is not needed for the tests.
+      - run: npm ci --ignore-scripts
+        working-directory: apps/desktop
       - run: node apps/reader/test.mjs
       - run: node --test apps/reader/*.test.mjs apps/desktop/*.test.mjs
 
