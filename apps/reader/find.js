@@ -191,7 +191,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   // Handwriting NoteComplete wrote from Markdown comes with its text (the core keeps
   // the words and their boxes), so it is found without recognizing anything.
   // Text the note already knows: written from Markdown, or recognized earlier and saved with it.
-  const written = (view) => [...(view.ink_text || []), ...(view.recognized_text || [])].map((w) => ({ text: w.text, box: w.bounds }));
+  const written = (view) => [...(view.ink_text || []), ...(view.recognized_text || [])].map((w) => ({ text: w.text, box: w.bounds, link: w.link }));
   // Selectable PDF and recognized text over a rendered page (Pan tool).
   async function selectable(p) {
     const view = p?.view, token = generation;

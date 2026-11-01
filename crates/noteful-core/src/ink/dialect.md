@@ -6,7 +6,7 @@ Study look:
 - `_Meteorology · week 3_` subtitle line, then a thin rule.
 - `## Section` or `## **SMOOTH** muscle` coloured capitals on a rule to the margin; each section takes the next accent (three per page).
 - `### Label` small coloured capitals.
-- Body is mixed case: `**term**` accent colour, `==phrase==` highlighter (`=={pink}phrase==`), `[[tag]]` pill, `((detail))` grey.
+- Body is mixed case: `**term**` accent colour, `==phrase==` highlighter (`=={pink}phrase==`), `[[tag]]` pill, `((detail))` grey, `[label](https://…)` a link (underlined; NoteComplete opens it on click).
 - Items: `- dot`, `* star`, `-> hook arrow`, `1. circled number`, `[ ] open` / `[x] done`.
 - `> [sky] TITLE: text ((detail))` card with a pastel fill; `>> A: text || B: text` cards side by side.
 - `!columns 55` … `!col` … `!end` columns (the first 55 % wide); put a `!draw` on one side.

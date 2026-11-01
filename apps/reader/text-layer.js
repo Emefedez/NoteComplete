@@ -14,7 +14,7 @@ export function textLines({ pdf = [], ocr = [] }) {
   const valid = w => w?.text && Array.isArray(w.box) && w.box.length === 4 && w.box.every(Number.isFinite) && w.box[2] > 0 && w.box[3] > 0;
   const printed = pdf.filter(valid);
   const words = [...printed, ...ocr.filter(w => valid(w) && !printed.some(p => overlaps(p.box, w.box)))]
-    .map(w => ({ text: w.text, x: w.box[0], y: w.box[1], w: w.box[2], h: w.box[3], cy: w.box[1] + w.box[3] / 2 }))
+    .map(w => ({ text: w.text, x: w.box[0], y: w.box[1], w: w.box[2], h: w.box[3], cy: w.box[1] + w.box[3] / 2, link: w.link }))
     .sort((a, b) => a.cy - b.cy);
   const lines = [];
   for (const word of words) {
@@ -46,9 +46,25 @@ export function textLayer(size, sources) {
       text.append(span);
     });
     svg.append(text);
+    // Links written in the handwriting ([label](url) in Markdown): one target per word.
+    for (const word of line.words) {
+      if (!linkAllowed(word.link)) continue;
+      const a = document.createElementNS(ns, 'a');
+      a.classList.add('ink-link');
+      a.setAttribute('href', word.link);
+      if (/^https?:/.test(word.link)) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
+      const title = document.createElementNS(ns, 'title');
+      title.textContent = word.link.startsWith('notecomplete:') ? word.text : word.link;
+      const rect = document.createElementNS(ns, 'rect');
+      for (const [k, v] of Object.entries({ x: word.x, y: word.y, width: word.w, height: word.h })) rect.setAttribute(k, v);
+      a.append(title, rect);
+      svg.append(a);
+    }
   }
   return svg;
 }
+// Web links and the app's own actions (notecomplete:install); nothing that runs script.
+export const linkAllowed = (link) => typeof link === 'string' && link.length <= 500 && /^(https?:\/\/|notecomplete:)[^\s]*$/.test(link);
 
 // The selected part of a text layer as plain text, one line per row.
 export function selectedText(selection) {

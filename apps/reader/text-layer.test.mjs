@@ -18,3 +18,14 @@ test('side-by-side columns at one height stay separate words, bad boxes are skip
   const lines = textLines({ ocr: [word('a', 10, 100), word('b', 20, 100), { text: 'x', box: [0, 0, 0, 5] }, { text: '', box: [1, 1, 1, 1] }] });
   assert.equal(lines.length, 2);
 });
+
+test('links written in handwriting become link targets; only web links and app actions', async () => {
+  const { linkAllowed } = await import('./text-layer.js');
+  assert.equal(linkAllowed('https://github.com/x'), true);
+  assert.equal(linkAllowed('notecomplete:install'), true);
+  assert.equal(linkAllowed('javascript:alert(1)'), false);
+  assert.equal(linkAllowed('https://a b'), false);
+  assert.equal(linkAllowed(undefined), false);
+  const lines = textLines({ ocr: [{ text: 'GitHub', box: [10, 10, 50, 20], link: 'https://github.com/x' }] });
+  assert.equal(lines[0].words[0].link, 'https://github.com/x');
+});

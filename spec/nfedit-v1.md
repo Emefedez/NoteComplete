@@ -89,7 +89,7 @@ A project may carry the note's Markdown notes in a top-level `markdown` string (
 
 ## Text of handwriting written from Markdown (project version 6)
 
-Handwriting the core writes from Markdown (New from Markdown, Insert handwritten pages, the MCP ink tools) keeps its words, so hosts can search it without recognizing the ink. A word is `{"text": "…", "bounds": [x, y, width, height]}` in page units (at most 5000 per page, 200 bytes per word).
+Handwriting the core writes from Markdown (New from Markdown, Insert handwritten pages, the MCP ink tools) keeps its words, so hosts can search it without recognizing the ink. A word is `{"text": "…", "bounds": [x, y, width, height]}` in page units, plus `"link"` for a word written from a Markdown link `[label](url)` (an `http(s)://` address or a `notecomplete:` action such as `notecomplete:install`; hosts open it on click) (at most 5000 per page, 200 bytes per word).
 
 - Inserted pages carry theirs in the `InsertPages` edit: `pages[i].words` (omitted when empty), so undo and redo keep them with their page.
 - Original pages (a notebook made from Markdown) carry theirs in a top-level `ink_text` object: page slot → words (omitted when empty).
