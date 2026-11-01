@@ -298,3 +298,45 @@ test('the session ends when the host disappears', async () => {
   await until(() => ended && t.client.state === 'ended');
   assert.equal(ended.reason, 'The host left.');
 });
+
+test('online access: only notes guests with the online link join through the tunnel', async () => {
+  const { default: WebSocket } = await import('ws');
+  const { EventEmitter } = await import('node:events');
+  const server = await startServer({ root: await reader(), host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: 'edit' });
+  // As cloudflared does: a connection from this computer, naming the tunnel's host.
+  const hello = (message, headers = { Host: 'quiet-forest-1234.trycloudflare.com' }) => new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/sync`, { headers });
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', name: 'Ana', ...message })));
+    ws.on('message', (data, binary) => { if (binary) return; const m = JSON.parse(data.toString()); if (m.t !== 'closed') { resolve(m.t); ws.close(); } else resolve('refused: ' + m.reason); });
+    ws.on('unexpected-response', () => resolve('refused'));
+    ws.on('error', () => resolve('refused'));
+    ws.on('close', () => resolve('refused'));
+  });
+  const [, guest] = server.guestLink.split('#')[1].split('.');
+  try {
+    // Off: nothing from outside gets a session, not even with a valid invite.
+    assert.equal(await hello({ token: guest }), 'refused');
+    // On (a stand-in cloudflared that prints its address).
+    let child;
+    const spawn = () => { child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.kill = () => child.emit('exit', 0); setTimeout(() => child.stderr.emit('data', Buffer.from('INF |  https://quiet-forest-1234.trycloudflare.com  |')), 10); return child; };
+    const link = await server.goOnline({ binary: '/bin/cloudflared', spawn });
+    assert.match(link, /^https:\/\/quiet-forest-1234\.trycloudflare\.com\/join#[0-9a-f]{8}\.[\w-]{22}$/);
+    assert.equal(parseInvite(link).url, 'wss://quiet-forest-1234.trycloudflare.com/sync');
+    const online = parseInvite(link).token;
+    assert.notEqual(online, guest);
+    // Online: the online link works; the local invite, a tablet, the code and the host token do not.
+    assert.notEqual(await hello({ token: online }), 'refused');
+    assert.match(await hello({ token: guest }), /^refused/);
+    assert.match(await hello({ token: online, role: 'tablet' }), /^refused/);
+    assert.match(await hello({ code: server.code().code }), /^refused/);
+    assert.match(await hello({ token: server.hostToken }), /^refused/);
+    // A Cloudflare header makes even a local-looking request remote.
+    assert.match(await hello({ token: guest }, { Host: `127.0.0.1:${server.port}`, 'CF-Connecting-IP': '203.0.113.9' }), /^refused/);
+    // This network is unchanged: the local invite still works.
+    assert.notEqual(await hello({ token: guest }, { Host: `127.0.0.1:${server.port}` }), 'refused');
+    // Off again: the online link stops working.
+    server.stopOnline();
+    assert.equal(server.onlineLink, '');
+    assert.equal(await hello({ token: online }), 'refused');
+  } finally { await server.stop(); }
+});

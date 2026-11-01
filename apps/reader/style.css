@@ -2466,6 +2466,8 @@ body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
 #collabDialog button.accent { min-height: 30px; padding: 0 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 #collabDialog button.accent:hover { filter: brightness(0.97); }
 .collab-join-menu { display: grid; gap: 8px; margin: 8px 0 4px; }
+.collab-online-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+#collabOnline[hidden] { display: none; }
 /* Others' carets in the notes editor. */
 .notes-editor { position: relative; }
 .notes-cursors { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; pointer-events: none; z-index: 2; }
