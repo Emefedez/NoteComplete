@@ -1,7 +1,14 @@
-## What's new in 1.1.2
+## What's new in 1.1.3
 
-- **Infinite canvas**: one page that grows downward as you write, keeping all your thoughts in one continuous workspace without needing fixed-size page boundaries.
-- **Sharing and device join**: links use the reachable Wi-Fi address, a fixed port, and another address on request; Share stays visible in the top bar across window sizes and badges fit compact bars.
+- **Touch everywhere**: two fingers scroll and pinch-zoom, a two-finger tap undoes and three fingers redo, on phones, tablets and touchscreen computers. After a stylus has drawn, one finger scrolls. Stylus strokes keep the width they had while drawn. Long menus scroll on short screens.
+- **Groups move together**: the Grab rectangle selects everything inside it, the whole group moves, and one Undo brings it back.
+- **New page** below the last page adds a blank page the size of the last one.
+- **Links in handwriting**: `[label](url)` in Markdown is written underlined and opens on click.
+- **Online access** (sharing): a separate link through Cloudflare lets people on other networks join the notes. Drawing tablets stay on your network.
+- **Recognized text travels with the note** (.notecomp, .notepart, projects), so AI tools reading your notes see it too.
+- **Tabs in narrow windows**: a tab count opens the list of tabs.
+- **Website and web app**: the reader runs in any browser, with tabs and a welcome notebook. On iPhone and iPad, add it to the Home Screen.
+- **Fixes**: Internet Archive downloads in the Android app and the browser, undo of pages added at the end, tape drawn over everything, the keyboard focus ring, and an Android app icon.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 
