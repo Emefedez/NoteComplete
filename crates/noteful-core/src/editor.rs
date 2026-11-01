@@ -62,6 +62,9 @@ pub(crate) enum Edit {
         page: usize,
         id: String,
         adjustment: crate::Adjustment,
+        /// Undone and redone with the edit before it (a group moved as one).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        joined: bool,
     },
     Replace {
         page: usize,
@@ -114,6 +117,11 @@ struct Project {
     /// Text recognized in the handwriting (OCR in the reader), by page slot (project version 8).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     recognized_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
+}
+impl Edit {
+    fn joined(&self) -> bool {
+        matches!(self, Edit::Adjust { joined: true, .. })
+    }
 }
 pub struct Editor {
     pub(crate) source: Vec<u8>,
@@ -435,11 +443,22 @@ impl Editor {
         }
         Ok(count)
     }
+    /// Undo the last edit, and the edits joined to it (a group moved as one).
     pub fn undo(&mut self) {
-        self.cursor = self.cursor.saturating_sub(1);
+        while self.cursor > 0 {
+            self.cursor -= 1;
+            if !self.history[self.cursor].joined() {
+                break;
+            }
+        }
     }
     pub fn redo(&mut self) {
-        self.cursor = (self.cursor + 1).min(self.history.len());
+        if self.cursor < self.history.len() {
+            self.cursor += 1;
+            while self.cursor < self.history.len() && self.history[self.cursor].joined() {
+                self.cursor += 1;
+            }
+        }
     }
     pub fn view(&self, page: usize) -> Result<Value> {
         let p = self.page(page)?;
@@ -778,8 +797,12 @@ impl Editor {
                 Edit::Adjust {
                     page,
                     id,
-                    adjustment,
-                } => editor.adjust_item(page, &id, adjustment)?,
+                    mut adjustment,
+                    joined,
+                } => {
+                    adjustment.joined = joined;
+                    editor.adjust_item(page, &id, adjustment)?
+                }
                 Edit::Replace { page, id, line } => {
                     let previous = editor
                         .additions(page)

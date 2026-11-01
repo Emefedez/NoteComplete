@@ -3079,39 +3079,31 @@ async function grabImage() {
   return crop.toDataURL("image/jpeg", 0.88);
 }
 async function findItemsInGrab(p, rect) {
-  if (!p?.render) return [];
+  if (!p?.render || !p.el) return [];
   const [gx, gy, gw, gh] = rect;
-  const elements = p.render.querySelectorAll("[data-item]");
-  const matches = [];
-  for (const el of elements) {
+  // Boxes on screen, mapped to page units: getBBox() ignores the transforms of the page's
+  // own groups (imported ink sits in scaled groups), so most items looked elsewhere.
+  const pr = p.el.getBoundingClientRect();
+  if (!pr.width || !pr.height) return [];
+  const sx = p.size[0] / pr.width, sy = p.size[1] / pr.height;
+  const seen = new Set(), found = [];
+  for (const el of p.render.querySelectorAll("[data-item]")) {
     const id = el.getAttribute("data-item");
-    if (!id) continue;
-    let box = null;
+    // Nested items belong to the outermost one.
+    if (!id || seen.has(id) || el.parentElement?.closest("[data-item]")) continue;
+    const er = el.getBoundingClientRect();
+    if (!er.width && !er.height) continue;
+    const box = { x: (er.left - pr.left) * sx, y: (er.top - pr.top) * sy, width: er.width * sx, height: er.height * sy };
+    const overlapX = Math.min(gx + gw, box.x + box.width) - Math.max(gx, box.x);
+    const overlapY = Math.min(gy + gh, box.y + box.height) - Math.max(gy, box.y);
+    if (overlapX >= 0 && overlapY >= 0) { seen.add(id); found.push({ id, el, bbox: box }); }
+  }
+  const matches = [];
+  for (const { id, el, bbox } of found) {
     try {
-      box = el.getBBox();
+      const info = await call("selection", { page: p.index, itemId: id });
+      if (info) matches.push({ ...info, el, bbox });
     } catch {}
-    if (!box || (box.width === 0 && box.height === 0)) {
-      if (p.el && el.getBoundingClientRect) {
-        try {
-          const pr = p.el.getBoundingClientRect();
-          const er = el.getBoundingClientRect();
-          if (pr.width > 0 && pr.height > 0) {
-            const sx = p.size[0] / pr.width;
-            const sy = p.size[1] / pr.height;
-            box = { x: (er.left - pr.left) * sx, y: (er.top - pr.top) * sy, width: er.width * sx, height: er.height * sy };
-          }
-        } catch {}
-      }
-    }
-    if (!box) continue;
-    const overlapX = Math.max(0, Math.min(gx + gw, box.x + box.width) - Math.max(gx, box.x));
-    const overlapY = Math.max(0, Math.min(gy + gh, box.y + box.height) - Math.max(gy, box.y));
-    if (overlapX > 0 && overlapY > 0) {
-      try {
-        const info = await call("selection", { page: p.index, itemId: id });
-        if (info) matches.push({ ...info, el, bbox: box });
-      } catch {}
-    }
   }
   return matches;
 }
@@ -3145,7 +3137,7 @@ async function selectGrab(targetGrab = grabbed) {
         }
       }
       const bounds = isFinite(minX) ? [minX, minY, maxX - minX, maxY - minY] : currentGrab.rect;
-      selection.selectGroup(currentGrab.page, members, bounds);
+      selection.selectGroup(currentGrab.page, members.map(({ el, ...m }) => m), bounds);
       status(`Selected ${members.length} elements as a group. Drag to move or resize.`);
     }
     return;
