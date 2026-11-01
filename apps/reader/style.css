@@ -2434,10 +2434,29 @@ button.category-toggle:hover {
 @media (max-width: 520px) { .collab-pair, .collab-pair:has(.small) { grid-template-columns: minmax(0, 1fr); } .collab-qr { margin: 0 auto; } }
 /* People: a coloured chip per person beside the file name; a few, then "+3". */
 .collab-bar { display: flex; align-items: center; gap: 3px; flex: none; }
-.collab-chip { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; background: var(--who); color: #fff; font: 700 11px/24px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px var(--chrome); }
+.collab-chip { width: 22px; min-width: 22px; height: 22px; min-height: 22px; padding: 0; border-radius: 50%; background: var(--who); color: #fff; font: 700 11px/22px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 1.5px var(--chrome); }
 .collab-chip.me { opacity: 0.75; }
 .collab-more { font-size: 11px; color: var(--muted); padding: 0 3px; }
-.collab-share { min-height: 24px; padding: 0 8px; font-size: 12px; margin-left: 4px; }
+/* Share, always in the bar; the people in a session sit just before it. */
+.collab-slot { display: flex; align-items: center; gap: 6px; flex: none; min-width: 0; }
+.bar-share { padding: 2px 10px; gap: 6px; border: 1px solid var(--line); background: var(--surface); flex: none; }
+.bar-share svg { width: 15px; height: 15px; }
+.bar-share.active { border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+body.bar-compact .bar-share { min-height: 22px; padding: 0 8px; }
+body.bar-compact .collab-chip { width: 18px; min-width: 18px; height: 18px; min-height: 18px; font-size: 10px; line-height: 18px; }
+body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
+@media (max-width: 860px) { .bar-share span { display: none; } .bar-share { width: 32px; padding: 4px; border-color: transparent; } }
+@media (max-width: 700px) {
+  .collab-chip:not(.me) ~ .collab-chip:nth-child(n+3) { display: none; }
+  /* Phones: the update offer is its version and one button (Later and Skip stay in Help). */
+  .update-chip { padding-left: 8px; }
+  .update-chip #updateLater, .update-chip #updateSkip { display: none; }
+  .update-chip #updateText { font-size: 11px; }
+}
+/* Secondary actions in the sharing dialogs. */
+#collabDialog button.accent { min-height: 30px; padding: 0 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+#collabDialog button.accent:hover { filter: brightness(0.97); }
+.collab-join-menu { display: grid; gap: 8px; margin: 8px 0 4px; }
 /* Others' carets in the notes editor. */
 .notes-editor { position: relative; }
 .notes-cursors { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; pointer-events: none; z-index: 2; }

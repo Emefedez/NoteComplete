@@ -76,7 +76,7 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 ## Share notes and draw on a tablet
 
-In the desktop app, **File → Share and draw on a tablet…** starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
+In the desktop app, **Share** in the top bar (or **File → Share and draw on a tablet…**) starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
 
 - **Drawing tablet**: a QR code, the computer's address and a 6-digit code (valid 10 minutes; **New code** makes another).
 - **Notes invite**: a link (and its QR code) to send to people; **Copy link**.
@@ -89,6 +89,8 @@ The connection is meant for a trusted network (home, school): it is not encrypte
 - **From a prompt** (desktop app; **File → New note with AI…** opens here): describe the topic (“the cardiac cycle for a first-year exam”) or paste data, notes or a text, and press **Write the note** (Ctrl Enter). The Markdown and the preview fill in as it writes; **Stop** cancels.
 
 Choose the AI tool and model under the tabs. When the AI has written the note, the dialog shows it under **From Markdown**, ready to edit or make richer. **Undo** and **Redo** above the Markdown step through its versions: each AI write, opened file and pause in your typing. Handwriting written this way keeps its text: Find searches it at once (as OCR) without recognizing anything, also after saving as a project or `.notecomp` file. A `.noteful` export does not carry it, so run **Recognize text** on such a file.
+
+While a session runs, Share reads *Sharing* and opens it again, with the people's initials beside it (in every window size, phones included). In a browser or on a phone, Share offers the two ways to join.
 
 **Use a phone or tablet as a drawing tablet.** Scan the QR code with the device's camera (the note opens in its browser), or in NoteComplete on the device choose **File → Join as drawing tablet…** and type the address and code. The device shows only the note and a tool bar: pen, highlighter, shapes (with their kinds and fill while Shapes is chosen), eraser, move, colours, widths, undo, redo, fit, the ⇄ button that moves the bar to the other side, and disconnect. Zoom and scroll it as you like: the computer keeps its own view and tools. After the stylus has drawn once, fingers move the page and two fingers zoom. What you draw appears on the computer as you draw, and is saved there with the note: save or export on the computer. Undo on the tablet undoes the note's last edit, whoever made it. Opening another note on the computer opens it on the tablet too.
 
