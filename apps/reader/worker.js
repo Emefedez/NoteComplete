@@ -123,6 +123,10 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       session.erase(page, JSON.stringify(args.points), args.radius);
     if (op === "insertPages")
       session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
+    if (op === "digest") {
+      postMessage({ id, result: session.history_digest() });
+      return;
+    }
     if (op === "undo") session.undo();
     if (op === "redo") session.redo();
     if (op === "audio" || op === "pdf") {

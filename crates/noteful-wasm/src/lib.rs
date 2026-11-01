@@ -244,6 +244,9 @@ impl EditorSession {
     pub fn save_project(&self) -> Result<String, JsValue> {
         self.inner.save_project().map_err(js_error)
     }
+    pub fn history_digest(&self) -> Result<String, JsValue> {
+        self.inner.history_digest().map_err(js_error)
+    }
     pub fn pdf_bytes(&self, id: &str) -> Result<Vec<u8>, JsValue> {
         Ok(self.inner.pdf_bytes(id).map_err(js_error)?.to_vec())
     }

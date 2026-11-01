@@ -609,6 +609,18 @@ impl Editor {
         .map_err(|e| Error::new(0, e.to_string()))?;
         Ok(data)
     }
+    /// A short digest of the edit history and its undo position (not the source
+    /// or the notes). Replicas that applied the same edits in the same order (a
+    /// shared drawing session) have the same digest, so a copy that diverged can
+    /// be noticed and reloaded.
+    pub fn history_digest(&self) -> Result<String> {
+        let history =
+            serde_json::to_vec(&self.history).map_err(|e| Error::new(0, e.to_string()))?;
+        let mut data = Vec::with_capacity(history.len() + 8);
+        data.extend((self.cursor as u64).to_le_bytes());
+        data.extend(history);
+        Ok(crate::md5_hex(&data))
+    }
     pub fn pdf_bytes(&self, id: &str) -> Result<&[u8]> {
         if let Some(bytes) = self.added_pdf(id) {
             return Ok(bytes);
