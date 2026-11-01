@@ -26,14 +26,21 @@ test('one finger never undoes, and a slow or moving two-finger touch is not a ta
   assert.deepEqual(g.end([], 100), []);
 });
 
-test('two fingers pan when they move together and zoom when they spread', () => {
+test('two fingers scroll when they move together, even as their gap wobbles, and zoom when they spread', () => {
   const g = new TouchGesture();
   g.start(t([100, 100], [200, 100]), 0);
   assert.deepEqual(g.move(t([100, 130], [200, 130])), [{ type: 'pan', dx: 0, dy: 30 }]);
-  const [zoom] = g.move(t([50, 130], [250, 130]));
+  // The gap changes by 4%: still a scroll.
+  assert.deepEqual(g.move(t([100, 160], [204, 160])), [{ type: 'pan', dx: 2, dy: 30 }]);
+  g.end([], 500);
+  const z = new TouchGesture();
+  z.start(t([100, 100], [200, 100]), 0);
+  const [zoom] = z.move(t([50, 100], [250, 100]));
   assert.equal(zoom.type, 'zoom');
   assert.equal(zoom.step, 2);
   assert.equal(zoom.x, 150);
+  // Once zooming, it keeps zooming.
+  assert.equal(z.move(t([40, 120], [260, 120]))[0].type, 'zoom');
   // One finger: the tool or the browser handles it.
   const h = new TouchGesture();
   h.start(t([0, 0]), 0);

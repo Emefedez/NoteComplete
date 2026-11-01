@@ -158,7 +158,7 @@ async function join(host, invite) {
 
 class Session {
   constructor(host, { url, token, code, role, name, yjs, info = null }) {
-    Object.assign(this, { host, role, yjs, info, people: [], live: new Map(), penSeen: false });
+    Object.assign(this, { host, role, yjs, info, people: [], live: new Map() });
     this.client = new SyncClient({
       url, token, code, role, name, yjs,
       retries: role === 'host' ? [] : undefined,
@@ -625,7 +625,7 @@ class Session {
   // Fingers move and zoom the page once a stylus has drawn; before that they draw.
   touchPans(e) {
     if (this.role !== 'tablet' || e.pointerType !== 'touch') return false;
-    return this.host.tool === 'pan' || (this.penSeen && DRAWING.has(this.host.tool));
+    return this.host.tool === 'pan' || (this.host.penActive() && DRAWING.has(this.host.tool));
   }
   enterTablet() {
     if (this.dock) return;
@@ -671,8 +671,7 @@ class Session {
     document.body.dataset.dock = side;
     document.body.append(this.dock);
     this.markTool();
-    this.onPen = (e) => { if (e.pointerType === 'pen') this.penSeen = true; };
-    window.addEventListener('pointerdown', this.onPen, true);
+
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
@@ -753,7 +752,6 @@ class Session {
     if (this.onKey) $('notesEditor').removeEventListener('keydown', this.onKey, true);
     if (this.onSelection) document.removeEventListener('selectionchange', this.onSelection);
     if (this.onScroll) $('notesEditor').removeEventListener('scroll', this.onScroll);
-    if (this.onPen) window.removeEventListener('pointerdown', this.onPen, true);
     $('collabPeopleBar')?.remove();
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }

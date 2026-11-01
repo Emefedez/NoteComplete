@@ -98,7 +98,7 @@ Choose the AI tool and model under the tabs. When the AI has written the note, t
 
 While a session runs, Share reads *Sharing* and opens it again, with the people's initials beside it (in every window size, phones included). In a browser or on a phone, Share offers the two ways to join.
 
-**Use a phone or tablet as a drawing tablet.** Scan the QR code with the device's camera (the note opens in its browser), or in NoteComplete on the device choose **File → Join as drawing tablet…** and type the address and code. The device shows only the note and a tool bar: pen, highlighter, shapes (with their kinds and fill while Shapes is chosen), eraser, move, colours, widths, undo, redo, fit, the ⇄ button that moves the bar to the other side, and disconnect. Zoom and scroll it as you like: the computer keeps its own view and tools. After the stylus has drawn once, fingers move the page and two fingers zoom. What you draw appears on the computer as you draw, and is saved there with the note: save or export on the computer. Undo on the tablet undoes the note's last edit, whoever made it. Opening another note on the computer opens it on the tablet too.
+**Use a phone or tablet as a drawing tablet.** Scan the QR code with the device's camera (the note opens in its browser), or in NoteComplete on the device choose **File → Join as drawing tablet…** and type the address and code. The device shows only the note and a tool bar: pen, highlighter, shapes (with their kinds and fill while Shapes is chosen), eraser, move, colours, widths, undo, redo, fit, the ⇄ button that moves the bar to the other side, and disconnect. Zoom and scroll it as you like: the computer keeps its own view and tools. While the stylus is in use, fingers move the page; two fingers scroll or zoom. What you draw appears on the computer as you draw, and is saved there with the note: save or export on the computer. Undo on the tablet undoes the note's last edit, whoever made it. Opening another note on the computer opens it on the tablet too.
 
 **Write shared notes.** Open the invite link in a browser, or use **File → Join shared notes…** and paste it. Type your name (or keep *Guest N*) and press Enter or **OK**. Everyone's cursors show in the notes with their names; Ctrl Z undoes only your own typing. When the host ends the session, your copy of the notes is saved as a Markdown file and **Open my copy** opens it. If the connection drops, NoteComplete reconnects and your edits merge; if the host stays unreachable, your copy is saved the same way.
 
@@ -132,9 +132,11 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 
 **Touch** (phones, tablets and touchscreen computers):
 - One finger does what the tool does: it draws, selects and moves, or scrolls with Pan.
-- Two fingers move the page and pinch to zoom; a second finger cancels a stroke the first one had just begun.
+- Two fingers scroll the page, or zoom when you spread or pinch them; a second finger cancels a stroke the first one had just begun.
 - Tap with two fingers to undo, and with three fingers to redo.
-- Once a stylus has drawn on a device, one finger scrolls the page with drawing tools too, as in drawing apps. The stylus draws with its pressure, and the line keeps the width it had while you drew it.
+- While a stylus is in use (it touched the page in the last 30 seconds), one finger scrolls the page with drawing tools too, as in drawing apps; put the stylus away and a finger draws again. The stylus draws with its pressure, and the line keeps the width it had while you drew it. Strokes are smoothed as you draw.
+- Fingers and styluses never select the text on the pages; the mouse does.
+- **Shift + wheel** scrolls fast; **Shift + arrows** or Page Up/Down scroll three times as far.
 - Long menus scroll inside the window.
 
 | Tool | Behavior |

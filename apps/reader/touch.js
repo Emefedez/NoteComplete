@@ -2,7 +2,7 @@
 // two fingers move the pages and pinch to zoom; a quick tap with two fingers undoes and
 // with three fingers redoes. One finger keeps doing what the tool does (draws, selects,
 // or scrolls with Pan); a second finger cancels a stroke the first one had just begun.
-const TAP_MS = 300, TAP_SLOP = 12;
+const TAP_MS = 300, TAP_SLOP = 12, ZOOM_START = 0.08;
 
 export function measure(touches) {
   const list = [...touches];
@@ -22,7 +22,7 @@ export class TouchGesture {
     if (!this.active) this.active = { count: n, time, origin: m, last: m, moved: false, multi: n > 1 };
     else {
       // Another finger: measure from here (the centre jumps when a finger lands).
-      if (n > this.active.count) this.active.origin = m;
+      if (n > this.active.count) { this.active.origin = m; this.active.mode = null; }
       this.active.count = Math.max(this.active.count, n);
       this.active.multi ||= n > 1;
       this.active.last = m;
@@ -35,8 +35,14 @@ export class TouchGesture {
     const m = measure(touches), out = [];
     if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > TAP_SLOP || (a.origin.d && Math.abs(m.d - a.origin.d) > TAP_SLOP)) a.moved = true;
     if (touches.length >= 2) {
-      if (a.last.d && m.d && Math.abs(m.d / a.last.d - 1) > 0.01) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / a.last.d });
-      else out.push({ type: 'pan', dx: m.x - a.last.x, dy: m.y - a.last.y });
+      // Fingers moving together always change their gap a little: a gesture zooms only
+      // when they clearly spread or close, else it scrolls, and keeps that until lifted.
+      if (!a.mode && a.origin.d && m.d) {
+        if (Math.abs(m.d / a.origin.d - 1) > ZOOM_START) a.mode = 'zoom';
+        else if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > TAP_SLOP) a.mode = 'pan';
+      }
+      if (a.mode === 'zoom' && a.last.d && m.d && m.d !== a.last.d) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / a.last.d });
+      else if (a.mode === 'pan') out.push({ type: 'pan', dx: m.x - a.last.x, dy: m.y - a.last.y });
     }
     a.last = m;
     return out;

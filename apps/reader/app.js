@@ -1,4 +1,5 @@
 import { touchGestures } from "./touch.js";
+import { followPoint, smoothStroke } from "./stroke-smoothing.js";
 import {
   prepareDocument,
   readImage,
@@ -154,6 +155,13 @@ const selection = new SelectionController({
 let statusTimer = 0;
 function status(text, error = false) {
   $("status").textContent = text;
+  // Never over the tool bars: above the lowest bar that sits at the bottom (phones).
+  let bottom = 0;
+  for (const bar of document.querySelectorAll("#toolbar, .navigation, #tabletDock")) {
+    const r = bar.getBoundingClientRect();
+    if (r.height && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top);
+  }
+  $("status").style.setProperty("--above-bars", `${bottom}px`);
   $("status").className = (error ? "error " : "") + (text ? "show" : "");
   clearTimeout(statusTimer);
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
@@ -1129,10 +1137,11 @@ function jump(index, box) {
   viewport.scrollTop += rect.top - viewport.getBoundingClientRect().top + Math.max(-24, within);
   status(`Page ${index + 1}.`);
 }
-function scrollViewport(key) {
-  const viewport = $("viewport"),
-    vertical = Math.max(48, Math.round(viewport.clientHeight * 0.8)),
-    horizontal = Math.max(48, Math.round(viewport.clientWidth * 0.8));
+// Shift scrolls three times as far (fast scrolling with the keyboard).
+function scrollViewport(key, fast = false) {
+  const viewport = $("viewport"), times = fast ? 3 : 1,
+    vertical = Math.max(48, Math.round(viewport.clientHeight * 0.8)) * times,
+    horizontal = Math.max(48, Math.round(viewport.clientWidth * 0.8)) * times;
   if (key === "Home" || key === "End") {
     viewport.scrollTo({
       top: key === "Home" ? 0 : viewport.scrollHeight,
@@ -1249,13 +1258,8 @@ async function action(op, args = {}) {
       selection.selectId(selection.item.page, selection.item.id);
     }
     showEdit(op, args, result);
-    if (collab?.role !== "tablet") status(
-      op === "erase"
-        ? "Erased. You can undo this change."
-        : op === "lock"
-          ? args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked."
-          : "Unsaved changes. Save your project to keep them.",
-    );
+    // Ordinary edits say nothing: the save icon in the bar shows there are unsaved changes.
+    if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
   } catch (e) {
     if (token === epoch) status(e.message, true);
   } finally {
@@ -1424,7 +1428,21 @@ function point(e, p) {
     ),
   ];
 }
-let penSeen = (() => { try { return localStorage.getItem("notecomplete-pen-seen") === "1"; } catch { return false; } })();
+// A stylus counts as in use for half a minute after it last touched or hovered the page.
+const PEN_ACTIVE_MS = 30000;
+let lastPen = -Infinity;
+const notePen = (e) => {
+  if (e.pointerType === "pen") lastPen = performance.now();
+  // Fingers and pens never select the text over the pages (it would pick words while
+  // scrolling or drawing); the mouse still does.
+  if (e.type === "pointerdown") {
+    const touchy = e.pointerType !== "mouse";
+    document.body.classList.toggle("touch-pointer", touchy);
+    if (touchy && e.target.closest?.(".sheet")) window.getSelection()?.removeAllRanges();
+  }
+};
+for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
+const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 function pointerDown(e, p) {
   if (gesture) {
@@ -1435,10 +1453,9 @@ function pointerDown(e, p) {
   // A link written in the handwriting opens on click (Pan and Select); no drag starts.
   if (e.target.closest?.(".ink-link") && (tool === "pan" || tool === "select")) return;
   setPage(p.index);
-  // Once a stylus has been used on this device, fingers move the page instead of drawing
-  // (as in drawing apps); before that, a finger draws.
-  if (e.pointerType === "pen" && !penSeen) { penSeen = true; try { localStorage.setItem("notecomplete-pen-seen", "1"); } catch { /* Optional. */ } }
-  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penSeen && FINGER_PANS.has(tool));
+  // While a stylus is in use, fingers move the page instead of drawing (palm and finger
+  // rejection, as in drawing apps); with the stylus put away, a finger draws again.
+  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penActive() && FINGER_PANS.has(tool));
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan) {
     // On PDF or recognized words the mouse selects text instead of panning.
@@ -1529,6 +1546,8 @@ function pointerDown(e, p) {
     dot,
     // A stylus reports pressure (0–1); a mouse or finger does not.
     pen: e.pointerType === "pen",
+    // Strokes are smoothed: most for a stylus or a finger, a little for a mouse.
+    smooth: tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free") ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
     pressures: [e.pressure],
   };
   p.el.setPointerCapture(e.pointerId);
@@ -1569,8 +1588,10 @@ function appendPoint(e) {
   } else {
     const samples = e.getCoalescedEvents?.() || [];
     for (const sample of samples.length ? samples : [e]) {
-      const p = point(sample, g.panel),
+      const raw = point(sample, g.panel),
         last = g.points.at(-1);
+      g.raw = raw;
+      const p = followPoint(last, raw, g.smooth);
       if (
         Math.hypot(p[0] - last[0], p[1] - last[1]) >= 0.3 &&
         g.points.length < 8192
@@ -1686,6 +1707,15 @@ function pointerUp(e) {
       else status("Drag across what you want to cover with tape.");
       return;
     }
+  }
+  // A smoothed stroke ends where the pen lifted, and its corners are rounded once.
+  if (g.smooth && g.raw) {
+    const last = g.points.at(-1);
+    if (Math.hypot(g.raw[0] - last[0], g.raw[1] - last[1]) >= 0.3 && g.points.length < 8192) {
+      g.points.push(g.raw);
+      g.pressures.push(g.pressures.at(-1));
+    }
+    ({ points: g.points, pressures: g.pressures } = smoothStroke(g.points, g.pressures));
   }
   if (g.tool === "erase")
     action("erase", { page: g.panel.index, points: g.points, radius: eraserRadius() });
@@ -1881,6 +1911,14 @@ new ResizeObserver(resize).observe($("viewport"));
 // the visible PDFs, is applied when the gesture pauses.
 let pinch = null;
 $("viewport").addEventListener("wheel", (e) => {
+  // Shift + wheel: fast scrolling down the pages (four times a normal step).
+  if (e.shiftKey && !e.ctrlKey && !e.metaKey && doc) {
+    const delta = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? $("viewport").clientHeight : 1);
+    if (!delta) return;
+    e.preventDefault();
+    $("viewport").scrollTop += delta * 4;
+    return;
+  }
   if (!e.ctrlKey || !doc) return;
   e.preventDefault();
   // Trackpads send small deltas; a wheel notch is ~100 px, so each event is capped to about ×1.2.
@@ -1947,7 +1985,7 @@ $("redo").onclick = () => {
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -2126,7 +2164,7 @@ document.addEventListener("keydown", (e) => {
     !e.metaKey &&
     !e.ctrlKey &&
     !e.altKey &&
-    scrollViewport(e.key)
+    scrollViewport(e.key, e.shiftKey)
   ) {
     e.preventDefault();
     return;
@@ -3877,7 +3915,7 @@ document.addEventListener("click", (e) => {
 // drawing surfaces. Nothing of it loads until a session starts or an invite is opened.
 let collabLoading = null;
 const collabHost = {
-  call, applyShared, status, jump, cancelGesture, pinchBy, setZoom, notesApi, download, library,
+  call, applyShared, status, jump, cancelGesture, pinchBy, penActive, setZoom, notesApi, download, library,
   get ready() { return ready; },
   get busy() { return busy() || !!gesture; },
   get doc() { return doc; },
