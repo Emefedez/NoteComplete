@@ -1,10 +1,13 @@
-## What's new in 1.1.0
+## What's new in 1.1.1
 
-- **Share notes and draw on a tablet** (desktop): people on your network write the Markdown notes with you (names, cursors, a copy for everyone when it ends), and a phone or tablet becomes a drawing surface for the note on your computer: QR code or 6-digit code, a tool bar on either side, its own zoom, live strokes with pen pressure, highlighter, eraser and shared undo. Not yet tried on real devices.
-- **Handwriting from Markdown**: File → New from Markdown… and Pages → Insert handwritten pages…, with a live preview.
-- **Connect AI tools** (Help): registers the bundled note server (MCP) with Claude Code, Codex, Antigravity and OpenCode; the server now ships inside the desktop app.
-- **Narrow windows and phones**: every menu and tool stays reachable; dark pages and Fit in the phone page row; the page number fits its box.
-- Releases are now published automatically when the version changes.
+- **New note with AI** (File → New note with AI…, desktop): one dialog with two tabs.
+  - *From a prompt*: describe a topic or paste your data, and your AI tool (Claude Code, Codex…) writes the note as Markdown, then as handwriting.
+  - *From Markdown*: paste or open your own Markdown, and *Make it richer with AI* adds highlights, colors, boxes and drawings.
+  - What the AI writes lands in the Markdown tab, ready to edit, with Undo and Redo buttons.
+- **Handwriting from Markdown is searchable at once**: Find finds its words without running OCR. This works in .notecomp files and projects.
+- **Filled shapes**: rectangles, ellipses and triangles can be filled with a tint or solid color. Press F to switch.
+- **Shapes on a drawing tablet**: the tablet's tool bar has Shapes, with their kinds and fill.
+- **Update checks** find a new release within the hour and keep looking while the app stays open. Before, a check that found nothing silenced the next ones for six hours.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 
