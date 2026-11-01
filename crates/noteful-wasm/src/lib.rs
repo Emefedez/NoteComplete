@@ -1,5 +1,5 @@
 //! Browser adapter; decoding remains in the platform-independent core.
-use noteful_core::{Field, Package, WireValue};
+use noteful_core::{ink, Field, Package, WireValue};
 use serde_json::json;
 use wasm_bindgen::prelude::*;
 
@@ -37,6 +37,31 @@ impl EditorSession {
         Ok(Self {
             inner: noteful_core::Editor::create_document(title, &sizes, pdf).map_err(js_error)?,
         })
+    }
+    /// A new A4 notebook written in handwriting from Markdown (see the ink
+    /// dialect); `options` is JSON (paper, theme, look, accent, font, hand,
+    /// pen, size, seed).
+    pub fn create_handwritten(
+        title: &str,
+        markdown: &str,
+        options: &str,
+    ) -> Result<EditorSession, JsValue> {
+        let (pages, _) = compose_with(title, markdown, options)?;
+        Ok(Self {
+            inner: ink::new_notebook(title, &pages).map_err(js_error)?,
+        })
+    }
+    /// Handwritten pages inserted before display position `at`; returns
+    /// JSON {pages: [display positions], warnings}.
+    pub fn insert_handwritten(
+        &mut self,
+        at: usize,
+        markdown: &str,
+        options: &str,
+    ) -> Result<String, JsValue> {
+        let (pages, warnings) = compose_with(&self.inner.scene.title, markdown, options)?;
+        let shown = ink::insert_pages(&mut self.inner, at, &pages).map_err(js_error)?;
+        Ok(json!({"pages":shown,"warnings":warnings}).to_string())
     }
     pub fn add_image(&mut self, page: usize, image: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
@@ -304,6 +329,33 @@ fn summary(data: &[u8]) -> noteful_core::Result<String> {
 
 /// Versioned, JavaScript-safe summary. Input is a Uint8Array; result is JSON text.
 /// Preview HTML for Markdown notes (raw HTML shown as text; see markdown.rs).
+fn compose_with(
+    title: &str,
+    markdown: &str,
+    options: &str,
+) -> Result<(Vec<ink::InkPage>, Vec<String>), JsValue> {
+    let v: serde_json::Value = if options.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(options).map_err(js_error)?
+    };
+    let o = ink::ComposeOptions::from_json(&v, ink::seed_of(&format!("{title}\n{markdown}")))
+        .map_err(js_error)?;
+    ink::compose(markdown, &o).map_err(js_error)
+}
+/// How Markdown will look in handwriting: JSON {pages: [svg…] (at most
+/// `max_pages`), total, warnings}, each page an SVG with its paper.
+#[wasm_bindgen]
+pub fn compose_preview(markdown: &str, options: &str, max_pages: usize) -> Result<String, JsValue> {
+    let (pages, warnings) = compose_with("Preview", markdown, options)?;
+    let shown: Vec<ink::InkPage> = pages.iter().take(max_pages.max(1)).cloned().collect();
+    let editor = ink::new_notebook("Preview", &shown).map_err(js_error)?;
+    let svgs = (0..shown.len())
+        .map(|i| ink::page_svg(&editor, i).map(|(svg, _)| svg))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(js_error)?;
+    Ok(json!({"pages":svgs,"total":pages.len(),"warnings":warnings}).to_string())
+}
 #[wasm_bindgen]
 pub fn markdown_html(src: &str) -> String {
     noteful_core::markdown_html(src)

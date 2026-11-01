@@ -40,6 +40,7 @@ import { decorateIcons } from "./icons.js";
 import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
+import { handwritingConverter } from "./convert.js";
 import { AudioController } from "./audio.js";
 import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
 import { TranscriptController } from "./transcript.js";
@@ -272,7 +273,7 @@ async function load(file, preparedDocument = null) {
       result.layers.find((l) => l.visible && !l.locked)?.id ??
       result.layers[0]?.id ??
       0;
-    dirty = ["pdf", "image", "blank"].includes(prepared.kind);
+    dirty = ["pdf", "image", "blank", "handwritten"].includes(prepared.kind);
     changed = false;
     saveAs = prepared.saveAs || null;
     saveLabel();
@@ -2025,6 +2026,28 @@ $("newCreate").onclick = async () => {
   const seed = crypto.getRandomValues(new Uint8Array(16));
   await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format });
 };
+// Markdown written as handwriting ink (the MCP ink engine): a new note, or pages in this one.
+const converter = handwritingConverter({
+  call,
+  status,
+  hasDocument: () => !!doc,
+  sourceText: () => (!doc && textView?.visible && isMarkdownName($("title").textContent || "") ? textView.text : ""),
+  onCreate: async ({ title, markdown, options }) => {
+    if (!canReplace()) return;
+    let format = "notecomplete";
+    try { format = localStorage.getItem("notecomplete-new-format") || format; } catch { /* Optional. */ }
+    if (!SAVE_EXT[format] || format === "project" || format === "markdown") format = "notecomplete";
+    const seed = crypto.getRandomValues(new Uint8Array(16));
+    await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "handwritten", title, markdown, options, bytes: new ArrayBuffer(0), saveAs: format });
+  },
+  onInsert: async ({ markdown, options, where }) => {
+    if (!doc || busy()) return;
+    const at = insertAt(where, page, doc.pages);
+    await action("insertHandwritten", { at, markdown, options, focus: at });
+  },
+});
+$("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
+$("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");
@@ -2847,7 +2870,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])

@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -13,6 +13,8 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       try {
         candidate = args.notecomplete
           ? EditorSession.open_notecomplete(bytes)
+          : args.markdown != null
+          ? EditorSession.create_handwritten(args.title, args.markdown, JSON.stringify(args.options || {}))
           : args.sizes
           ? EditorSession.create_document(
               args.title,
@@ -45,6 +47,10 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       session?.free();
       session = undefined;
       postMessage({ id, result: true });
+      return;
+    } else if (op === "composePreview") {
+      // Handwriting preview of Markdown; needs no open document.
+      postMessage({ id, result: JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)) });
       return;
     } else if (op === "md5") {
       postMessage({ id, result: md5_hex(new Uint8Array(args.bytes)) });
@@ -121,6 +127,8 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (op === "image") session.add_image(page, JSON.stringify(args.image));
     if (op === "erase")
       session.erase(page, JSON.stringify(args.points), args.radius);
+    if (op === "insertHandwritten")
+      session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}));
     if (op === "insertPages")
       session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
     if (op === "undo") session.undo();

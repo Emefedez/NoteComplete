@@ -108,3 +108,18 @@ const reloadedImport=EditorSession.load_project(savedImport);
 assert.equal(JSON.parse(reloadedImport.view(1)).visible_added,1);
 reloadedImport.undo();assert.equal(JSON.parse(reloadedImport.view(1)).visible_added,0);reloadedImport.free();
 console.log('WASM imports: PDF pages, image undo/reload and failed document replacement preserve the session.');
+{
+ const {compose_preview}=await import('./pkg/noteful_wasm.js');
+ const md='# CELLS\n## Parts\n- nucleus ==DNA==\n> [sky] NOTE: text\n\\pagebreak\n## Two';
+ const preview=JSON.parse(compose_preview(md,JSON.stringify({paper:'grid'}),1));
+ assert.equal(preview.total,2);assert.equal(preview.pages.length,1);assert.deepEqual(preview.warnings,[]);assert.ok(preview.pages[0].includes('nc-paper-grid'));
+ assert.throws(()=>compose_preview('x',JSON.stringify({theme:'neon'}),1));
+ const hw=EditorSession.create_handwritten('Cells',md,'{}');const v=JSON.parse(hw.view(0));
+ assert.equal(v.pages,2);assert.equal(v.title,'Cells');assert.ok(v.visible_added>50);
+ const exam=new EditorSession(readFileSync(new URL('../../samples/Examen%20wuolah.noteful',import.meta.url)));
+ const added=JSON.parse(exam.insert_handwritten(1,'## Added\n- one',JSON.stringify({look:'classic'})));
+ assert.deepEqual(added.pages,[1]);assert.equal(JSON.parse(exam.view(1)).pages,4);
+ const reopened=new EditorSession(exam.export_noteful());assert.equal(JSON.parse(reopened.view(1)).pages,4);
+ hw.free();exam.free();reopened.free();
+ console.log('WASM handwriting: preview, new notebook and inserted pages passed.');
+}

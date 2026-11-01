@@ -7,6 +7,8 @@
 //! in place (keeping a `.bak`). Page images and PDF text use poppler
 //! (`pdftoppm`, `pdftotext`) and librsvg (`rsvg-convert`) when installed;
 //! generated paper is drawn without poppler.
+#[path = "design_tools.rs"]
+mod design_tools;
 #[path = "ink_tools.rs"]
 mod ink_tools;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -94,6 +96,7 @@ fn tools() -> Value {
     ]);
     if let Value::Array(list) = &mut tools {
         list.extend(ink_tools::tools());
+        list.extend(design_tools::tools());
     }
     tools
 }
@@ -152,7 +155,10 @@ impl Server {
     }
 
     fn call(&mut self, name: &str, args: &Value) -> Res<Value> {
-        if let Some(result) = self.call_ink(name, args) {
+        if let Some(result) = self
+            .call_ink(name, args)
+            .or_else(|| self.call_design(name, args))
+        {
             return result;
         }
         let text = |v: Value| -> Res<Value> {
@@ -835,7 +841,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 15);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 18);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
