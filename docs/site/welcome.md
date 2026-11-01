@@ -117,7 +117,7 @@ _Free and open source_
 
 ## Touch and stylus
 - Two fingers move and zoom; tap with ==two fingers to undo==, three to redo.
-- After a stylus has drawn, one finger scrolls.
+- While a stylus is in use, one finger scrolls; put it away and a finger draws.
 - Scroll past the last page for a **new page**.
 
 -> Click a link with Pan or Select. The user guide is in the **Notes** panel ((press N)).
