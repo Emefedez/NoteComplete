@@ -1009,6 +1009,8 @@ function updateTools(result) {
   $("redo").disabled = !doc.can_redo;
   $("pageNumber").value = page + 1;
   $("pageLabel").textContent = `of ${doc.pages}`;
+  // The box fits the longest page number (no clipped digits in narrow and compact bars).
+  $("pageNumber").style.setProperty("--digits", String(Math.max(2, String(doc.pages).length)));
   $("counts").textContent =
     `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
   $("warnings").textContent = result.warnings.join(" ");
@@ -1508,6 +1510,26 @@ function middlePan(el) {
   for (const type of ["mousedown", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) e.preventDefault(); }, true);
 }
 middlePan($("viewport"));
+// Rows that scroll sideways when the window is narrow (the menubar, the tools): a mouse
+// wheel scrolls them too, and a faded edge shows there is more on that side.
+function sideScroll(el) {
+  const mark = () => {
+    el.classList.toggle("more-left", el.scrollLeft > 1);
+    el.classList.toggle("more-right", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+  el.addEventListener("wheel", (e) => {
+    if (el.scrollWidth <= el.clientWidth || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    el.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+  el.addEventListener("scroll", mark, { passive: true });
+  new ResizeObserver(mark).observe(el);
+  mark();
+}
+sideScroll(document.querySelector(".bar-actions"));
+sideScroll(document.querySelector("#toolbar .segmented"));
+// On phones the page row holds undo, redo and the panel toggles (they move there in fitTools).
+for (const row of document.querySelectorAll(".toolbar-actions")) sideScroll(row);
 middlePan($("textBody"));
 function pointerMove(e) {
   if (selection.move(e)) return;

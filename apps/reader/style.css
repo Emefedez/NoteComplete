@@ -2466,3 +2466,19 @@ body.tablet-mode[data-dock="right"] #drop { padding-right: 60px; }
 .dock-status { width: 10px; height: 10px; border-radius: 50%; background: #2f9a4c; flex: none; }
 body.tablet-waiting .dock-status { background: #d9a400; }
 body.tablet-waiting #drop::after { content: "Waiting for the computer’s note…"; position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 16px; pointer-events: none; }
+
+/* Narrow windows: rows that scroll sideways fade at the edge that has more (sideScroll in
+   app.js; the wheel scrolls them too), and a mouse gets a thin scrollbar. */
+.bar-actions.more-right, .toolbar .segmented.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.bar-actions.more-left, .toolbar .segmented.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.bar-actions.more-left.more-right, .toolbar .segmented.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+@media (max-width: 700px) and (pointer: fine) { .bar-actions, .toolbar .segmented { scrollbar-width: thin; } }
+@media (max-width: 420px) { .bar-menu > summary { padding: 3px 5px; font-size: 12px; } }
+/* The page box fits its digits; no spin buttons inside it to clip them. */
+#pageNumber { width: calc(var(--digits, 2) * 1ch + 18px); min-width: calc(var(--digits, 2) * 1ch + 18px); box-sizing: border-box; -moz-appearance: textfield; appearance: textfield; }
+#pageNumber::-webkit-inner-spin-button, #pageNumber::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#pageLabel { white-space: nowrap; }
+/* Very narrow phones: the page row's buttons get a little narrower, and the row never pushes
+   the window wider (what does not fit scrolls, like the tools). */
+@media (max-width: 700px) { .navigation { min-width: 0; } .navigation .toolbar-actions { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; } }
+@media (max-width: 400px) { .navigation { gap: 2px; } .navigation .toolbar-actions button { width: 32px; min-width: 32px; padding: 7px 5px; } }
