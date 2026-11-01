@@ -37,6 +37,10 @@ if (DIR) mkdirSync(DIR, { recursive: true });
   assert.equal(await p.evaluate(() => document.getElementById('newWithAi').hidden), false);
   await p.evaluate(() => document.getElementById('newWithAi').click());
   await p.waitForSelector('.handwriting-dialog[open] #hwRequest:focus');
+  // With no Markdown yet, the preview is a short placeholder with its text, not a thin strip.
+  const empty = await p.locator('#hwPages').boundingBox();
+  assert.ok(empty.height >= 120 && empty.height <= 220 && empty.width > empty.height, `placeholder ${empty.width}×${empty.height}`);
+  if (DIR) await p.screenshot({ path: DIR + 'empty.png' });
   await p.fill('#hwRequest', 'the cardiac cycle for a first-year exam');
   await p.click('#hwWrite');
   await p.waitForFunction(() => document.getElementById('hwAiStatus').textContent.startsWith('Written'));

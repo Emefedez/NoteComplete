@@ -2559,3 +2559,6 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .hw-edit-bar { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .hw-edit-bar span { margin-right: auto; }
 .hw-edit-bar button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+/* No preview yet: a short placeholder with a line of text instead of an empty strip. */
+.hw-pages:empty { display: grid; place-items: center; height: 160px; padding: 0; background: var(--fill); border: 1px dashed var(--line); }
+.hw-pages:empty::before { content: "The preview appears here"; color: var(--muted); font-size: 13px; }
