@@ -37,7 +37,7 @@ import { SelectionController } from "./selection.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
-import { decorateIcons } from "./icons.js";
+import { decorateIcons, icon } from "./icons.js";
 import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
@@ -101,6 +101,12 @@ function savedState() {
 }
 $("saveState").onclick = () => $("save").click();
 
+// A tab of the web app (tabs.html, tab-host.js): the host gives this frame the same tab
+// bridge the desktop app does.
+const tabParams = new URLSearchParams(location.search);
+if (!window.notecompleteTabs && tabParams.has("tab") && window.parent !== window) {
+  try { window.notecompleteTabs = window.parent.notecompleteTabHost?.bridge(tabParams.get("tab")) || undefined; } catch { /* Another origin. */ }
+}
 // Desktop tabs: the strip in the top bar; title and unsaved state go to the window.
 const tabBar = tabStrip(window.notecompleteTabs || null, { dirty: () => !!doc && dirty, beforeClose: () => collab?.beforeClose?.() ?? true });
 if (window.notecompleteTabs) {
@@ -152,6 +158,66 @@ function status(text, error = false) {
   clearTimeout(statusTimer);
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
 }
+// The app's own links (notecomplete:install), e.g. in the website's welcome notebook.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest?.("a.ink-link, a[href^='notecomplete:']");
+  const href = link?.getAttribute("href") || "";
+  if (!href.startsWith("notecomplete:")) return;
+  event.preventDefault();
+  if (href === "notecomplete:install") installApp();
+}, true);
+// Add this site to the Home Screen / install it as an app. Browsers that offer an install
+// prompt (Chrome, Edge, Android) show it; elsewhere (Safari on iPhone and iPad) the steps.
+async function installApp() {
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone || window.notecompleteUpdates || window.ReactNativeWebView) return status("NoteComplete is already installed here.");
+  let host = null, offered = null;
+  try { host = window.parent !== window ? window.parent.notecompleteTabHost : null; } catch { /* Another origin. */ }
+  try { offered = await (host?.install ? host.install() : installPrompt()); } catch { /* Steps instead. */ }
+  if (offered === "accepted") return status("Installed. NoteComplete is on your Home Screen and in your apps.");
+  if (offered === "dismissed") return;
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  $("installSteps").textContent = ios
+    ? "In Safari, tap Share (the square with an arrow), then Add to Home Screen."
+    : /Android/.test(navigator.userAgent)
+      ? "Open the browser menu (⋮), then Install app or Add to Home screen."
+      : "Use the install button at the end of the address bar, or the browser menu → Install NoteComplete.";
+  $("installDialog").showModal();
+}
+$("installOk").onclick = () => $("installDialog").close();
+// Help → Add this site as an app…, in browsers only (the desktop and Android apps are installed).
+if ($("installApp")) {
+  $("installApp").hidden = !!(window.notecompleteUpdates || window.ReactNativeWebView);
+  $("installApp").onclick = () => installApp();
+}
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredInstall = event; });
+function installPrompt() {
+  if (!deferredInstall) return Promise.resolve(null);
+  const event = deferredInstall;
+  deferredInstall = null;
+  return event.prompt().then(() => event.userChoice).then((choice) => choice.outcome);
+}
+// ?open=<file on this site> opens it at start (the website's welcome notebook), and
+// notes=1 shows its Notes panel. Only files of this site, never another address.
+let openedFromAddress = false;
+async function openFromAddress() {
+  const wanted = tabParams.get("open");
+  if (openedFromAddress || !wanted) return;
+  openedFromAddress = true;
+  try {
+    const url = new URL(wanted, location.href);
+    if (url.origin !== location.origin) return;
+    const response = await fetch(url);
+    if (!response.ok) throw Error(`Could not open ${url.pathname.split("/").pop()} (${response.status}).`);
+    await load(new File([await response.blob()], decodeURIComponent(url.pathname.split("/").pop())));
+    // notes=1: the Notes panel open, formatted, so its links can be followed.
+    if (tabParams.get("notes") === "1") {
+      if ($("notesToggle").getAttribute("aria-expanded") !== "true") $("notesToggle").click();
+      setTimeout(() => { if ($("notesPreview")?.getAttribute("aria-pressed") === "false") $("notesPreview").click(); }, 300);
+    }
+  } catch (e) { status(e.message, true); }
+}
 function call(op, args = {}) {
   return engine.call({ op, page, ...args }, args.bytes ? [args.bytes] : []);
 }
@@ -170,6 +236,7 @@ const engine = new Engine({
     ready = true;
     $("open").disabled = $("emptyOpen").disabled = false;
     status("Ready. Everything is processed on your device.");
+    openFromAddress();
     window.ReactNativeWebView?.postMessage(
       JSON.stringify({ type: "noteful-ready" }),
     );
@@ -358,6 +425,24 @@ async function importImages(files) {
     editing = false;
   }
 }
+// Below the last page: scrolling past the end offers a new blank page of the same size
+// (one undoable edit). Not on an infinite canvas, which grows instead.
+function addPageButton() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "add-page-end";
+  button.hidden = !!doc?.canvas;
+  button.title = "Add a blank page at the end, the size of the last one";
+  button.append(icon("plus"), Object.assign(document.createElement("span"), { textContent: "New page" }));
+  button.onclick = async () => {
+    if (!doc || busy() || doc.canvas) return;
+    const at = doc.pages, size = panels.at(-1)?.size;
+    if (!size) return;
+    await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+    status("Page added. You can undo this change.");
+  };
+  return button;
+}
 function buildPages(sizes) {
   const fragment = document.createDocumentFragment();
   panels = sizes.map((size, index) => {
@@ -448,6 +533,7 @@ function buildPages(sizes) {
     return p;
   });
   $("pages").append(fragment);
+  $("pages").append(addPageButton());
   buildPageList();
   resize();
   $("viewport").scrollTop = 0;
@@ -1346,6 +1432,8 @@ function pointerDown(e, p) {
     return;
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
+  // A link written in the handwriting opens on click (Pan and Select); no drag starts.
+  if (e.target.closest?.(".ink-link") && (tool === "pan" || tool === "select")) return;
   setPage(p.index);
   // Once a stylus has been used on this device, fingers move the page instead of drawing
   // (as in drawing apps); before that, a finger draws.

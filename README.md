@@ -1,10 +1,14 @@
-<p align="center"><img src="docs/images/banner.svg" alt="NoteComplete: your Noteful notebooks on the desktop, no Mac required" width="100%"></p>
+<p align="center"><img src="docs/images/banner.svg" alt="NoteComplete: handwritten notes, PDFs and study, on every screen" width="100%"></p>
 
 # NoteComplete
 
-**Your Noteful notebooks on the desktop, no Mac required.**
+**Handwritten notes, PDFs and study, on every screen.**
 
-NoteComplete is an independent desktop and web companion for people who take notes in [Noteful](https://noteful.app) on an iPad. It opens `.noteful` notebooks on Linux (the main target today), Windows, macOS or in a browser, so you can read, review, search and study your notes from your computer while the iPad stays your notebook.
+NoteComplete is a notebook app for handwriting, PDFs and Markdown notes, with study tools and your own AI. It runs on Linux (the main target today), Windows, macOS, Android and in any browser, iPhone and iPad included, as a web app. Write with a pen or a finger, keep Markdown notes beside the pages, search everything (handwriting included), study with flashcards and quizzes, and share a note live with people or with a phone as a drawing tablet. Everything runs on your device.
+
+It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves them back, so notes taken on an iPad come along.
+
+**Try it in the browser:** [emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/). It opens with a welcome notebook written by the app itself ([its Markdown](docs/site/welcome.md)).
 
 > NoteComplete is not affiliated with or endorsed by Noteful. It reads the format through independent reverse engineering; see [How it reads Noteful files](#how-it-reads-noteful-files).
 
@@ -36,7 +40,7 @@ A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+
 <p align="center"><img src="docs/images/shared-notes.png" alt="Shared Markdown notes: a guest's named cursor in the notes beside the pages" width="100%"></p>
 
 ### Your library
-- **Google Drive on Home**: connect read-only and open your Noteful backup folder; notes appear as cards with their real covers, or as a quick list.
+- **Google Drive on Home**: connect read-only and open a folder of notes (a Noteful backup folder works too); notes appear as cards with their real covers, or as a quick list.
 - **Filters and sorting** by type, date, size, recordings and Noteful tags.
 - **Opens** `.noteful`, `.notepart`, `.notecomp`, `.nfedit` projects, PDFs and images, from Drive or your computer.
 - **Kept on this device** in a folder you choose; a note is never downloaded twice.
@@ -94,9 +98,9 @@ Screenshots use the sample notes in [`samples/`](samples/).
 
 **Installers.** The [Releases page](https://github.com/Emefedez/NoteComplete/releases) has Linux AppImages (x86-64 and ARM64), macOS DMG/ZIP (Apple Silicon and Intel), a Windows installer and an Android APK preview, with SHA-256 checksums. A release is published automatically whenever the version on `main` changes; the desktop app offers it as an update. Builds are unsigned previews; Linux is the tested platform for now. See [builds](docs/BUILDS.md).
 
-**Browser.** Build and serve the web app (below), then open it in any modern browser. It also installs as a PWA.
+**Browser, iPhone and iPad.** Open the [web app](https://emefedez.github.io/NoteComplete/), published from `main` on every push, and install it if you like: on iPhone and iPad, Safari's Share → *Add to Home Screen*; on Android and computers, the browser's *Install*. It works offline once loaded, with tabs like the desktop app. To host it yourself, build it (below) and serve `apps/reader/`.
 
-### Getting notes from the iPad
+### Notes from Noteful on an iPad
 
 1. In Noteful, back up or export your notebooks to a Google Drive folder (or copy `.noteful` files to your computer any other way).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.

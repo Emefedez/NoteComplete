@@ -28,6 +28,6 @@ test('drawing tablets can reach the computer on the local network', async () => 
  // Pairing is a WebSocket from the reader, not a navigation: the WebView still stays in the reader.
  assert.equal(allowsNavigation('http://192.168.1.20:41237/tablet','http://127.0.0.1:8768/'),false);
  const app=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./app.json',import.meta.url),'utf8'));
- assert.equal(app.expo.ios.infoPlist.NSAppTransportSecurity.NSAllowsLocalNetworking,true);
- assert.ok(app.expo.ios.infoPlist.NSLocalNetworkUsageDescription);
+ // iPhone and iPad use the web app: the native config is Android only.
+ assert.equal(app.expo.ios,undefined);
 });

@@ -1,6 +1,6 @@
 const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 export async function mobileDriveToken(sdk, config) {
-  sdk.configure({ webClientId: config.webClientId || undefined, iosClientId: config.iosClientId || undefined, scopes: [SCOPE], offlineAccess: false });
+  sdk.configure({ webClientId: config.webClientId || undefined, scopes: [SCOPE], offlineAccess: false });
   await sdk.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const result = await sdk.signIn();
   if (result.type !== 'success') throw Error('Google sign-in cancelled.');
