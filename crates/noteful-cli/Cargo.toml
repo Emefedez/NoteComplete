@@ -12,3 +12,4 @@ path = "src/main.rs"
 noteful-core = { path = "../noteful-core" }
 serde_json.workspace = true
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

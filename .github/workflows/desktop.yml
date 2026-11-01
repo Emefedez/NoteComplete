@@ -79,6 +79,21 @@ jobs:
           GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GOOGLE_DESKTOP_CLIENT_ID }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: node tools/configure_desktop_oauth.mjs
+      # The app ships the note server (noteful mcp) for the user's AI tools.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the bundled note server
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.platform }}" = mac ] && [ "${{ matrix.arch }}" = x64 ]; then
+            rustup target add x86_64-apple-darwin
+            cargo build --release --locked -p noteful-cli --target x86_64-apple-darwin
+            mkdir -p target/release
+            cp target/x86_64-apple-darwin/release/noteful target/release/noteful
+          else
+            cargo build --release --locked -p noteful-cli
+          fi
+          ls target/release/noteful*
       - run: npm ci
         working-directory: apps/desktop
       - run: npm run dist -- --${{ matrix.platform }} --${{ matrix.arch }}

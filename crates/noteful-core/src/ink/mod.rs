@@ -8,6 +8,7 @@
 //! OFL 1.1 (assets/fonts). See docs/INK-WRITING.md.
 mod annotate;
 mod compose;
+pub mod design;
 mod font;
 mod glyphs;
 mod hand;
@@ -15,6 +16,7 @@ mod layout;
 pub mod paper;
 mod rng;
 mod svg;
+pub mod trace;
 
 pub use annotate::{annotate, Annotation, Item};
 pub use compose::accent_index;
@@ -85,6 +87,83 @@ impl Default for ComposeOptions {
             dark: false,
             seed: 1,
         }
+    }
+}
+
+impl ComposeOptions {
+    /// Options from JSON as the app and tools send them: `paper`, `theme`
+    /// (light | dark), `look` (study | classic), `accent`, `ink`, `font`,
+    /// `hand`, `pen` (fineliner | ballpoint), `size`, `seed`. Unknown values
+    /// are errors that name the allowed ones.
+    pub fn from_json(v: &serde_json::Value, default_seed: u64) -> Result<Self> {
+        let s = |k: &str| {
+            v.get(k)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        };
+        let bad = |k: &str, got: &str, allowed: &str| {
+            Error::new(0, format!("{k} must be one of {allowed}, not '{got}'"))
+        };
+        let dark = match s("theme").unwrap_or("light") {
+            "light" => false,
+            "dark" => true,
+            t => return Err(bad("theme", t, "light, dark")),
+        };
+        let paper = match s("paper") {
+            None | Some("inherit") => Paper::DOT,
+            Some(p) => Paper::parse(p).ok_or_else(|| {
+                bad(
+                    "paper",
+                    p,
+                    "dot, grid, ruled, blank, dark-dot, dark-grid, dark-ruled, dark-blank",
+                )
+            })?,
+        };
+        let look = match s("look").unwrap_or("study") {
+            "study" => Look::Study,
+            "classic" => Look::Classic,
+            l => return Err(bad("look", l, "study, classic")),
+        };
+        let font = match s("font") {
+            None => FontName::Patrick,
+            Some(f) => FontName::parse(f).ok_or_else(|| bad("font", f, &FONT_NAMES.join(", ")))?,
+        };
+        let hand = match s("hand") {
+            None => None,
+            Some(h) => Some(Hand::parse(h).ok_or_else(|| bad("hand", h, "neat, natural, messy"))?),
+        };
+        let fineliner = match s("pen") {
+            None => None,
+            Some("fineliner") => Some(true),
+            Some("ballpoint") => Some(false),
+            Some(p) => return Err(bad("pen", p, "fineliner, ballpoint")),
+        };
+        let ink = match s("ink") {
+            None | Some("ink") | Some("theme") => None,
+            Some(c) => Some(color(c).ok_or_else(|| {
+                Error::new(0, format!("ink must be a colour name or #hex, not '{c}'"))
+            })?),
+        };
+        let accent = s("accent").unwrap_or("sky").to_owned();
+        Ok(Self {
+            paper: paper.with_dark(dark || paper.dark),
+            ink,
+            accent,
+            font,
+            size: v
+                .get("size")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(11.),
+            hand,
+            fineliner,
+            look,
+            dark,
+            seed: v
+                .get("seed")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(default_seed),
+        })
     }
 }
 
@@ -245,6 +324,49 @@ pub fn paper_styles(pdf: &[u8]) -> Option<Vec<Paper>> {
     let end = head[at..].iter().position(|b| *b == b')')?;
     let names = std::str::from_utf8(&head[at..at + end]).ok()?;
     names.split(',').map(Paper::parse).collect()
+}
+
+/// A page as standalone SVG, with generated paper drawn in. Pages whose
+/// background is another PDF come back without it (None for the paper).
+pub fn page_svg(editor: &Editor, display: usize) -> Result<(String, bool)> {
+    let v = editor.view(editor.slot(display)?)?;
+    let mut svg = v["svg"].as_str().unwrap_or_default().to_owned();
+    let Some(bg) = v["pdf_background"].as_object() else {
+        return Ok((svg, true));
+    };
+    let resource = bg["resource_id"].as_str().unwrap_or_default();
+    let index = bg["page_index"].as_u64().unwrap_or(0) as usize;
+    let rect: Vec<f64> = bg["rect"]
+        .as_array()
+        .map(|r| r.iter().filter_map(serde_json::Value::as_f64).collect())
+        .unwrap_or_default();
+    let size = [
+        v["size"][0].as_f64().unwrap_or(A4[0]),
+        v["size"][1].as_f64().unwrap_or(A4[1]),
+    ];
+    let [x, y, w, h] = <[f64; 4]>::try_from(rect).unwrap_or([0., 0., size[0], size[1]]);
+    let style = editor
+        .pdf_bytes(resource)
+        .ok()
+        .and_then(paper_styles)
+        .and_then(|s| s.get(index).copied());
+    let Some(style) = style else {
+        return Ok((svg, false));
+    };
+    let paper = format!(
+        "<svg x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {} {}\" preserveAspectRatio=\"none\">{}</svg>",
+        A4[0],
+        A4[1],
+        paper_svg(style, A4)
+    );
+    let marker = "<g data-background=\"true\">";
+    if let Some(at) = svg
+        .find(marker)
+        .and_then(|at| svg[at..].find("</g>").map(|end| at + end))
+    {
+        svg.insert_str(at, &paper);
+    }
+    Ok((svg, true))
 }
 
 /// The handwriting Markdown dialect, for agents and help text.

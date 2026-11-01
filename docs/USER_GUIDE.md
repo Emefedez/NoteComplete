@@ -15,6 +15,7 @@ Study and Ask AI use an AI tool already installed and signed in on your computer
 - **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
 - **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.
 - **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
+- **Help → Connect AI tools…** lets those tools work with your notes outside the app too (summary pages written in handwriting, clean copies, grading a quiz, flashcards). NoteComplete comes with the note server they use; **Connect** registers it with each installed tool, and *Run it yourself* shows the command instead. The desktop app offers this once by itself when it finds a tool that is not connected. Restart the tool afterwards. See [AI agents](MCP.md).
 
 ## Tape and locked items
 
@@ -23,6 +24,10 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 ## Insert pages
 
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
+
+## Handwriting from Markdown
+
+**File → New from Markdown…** writes Markdown as real handwriting: pen and highlighter strokes on dotted, squared, ruled or blank paper, that you can erase, recolour and move here and in Noteful. **Pages → Insert handwritten pages…** adds such pages to the open note. The dialog shows a live preview; choose *Study notes* (titles, coloured sections, cards, columns, colour zones, sticky notes, diagrams) or *Plain notebook*, an ivory or black page, the handwriting, how neat it is, and a fineliner or a ballpoint with pressure. Opening a Markdown file first fills the dialog with it. The syntax (titles with `#`, `**term**`, `==highlight==`, `> [sky] CARD: text`, `!columns`, `!zone`, `!sticky`, `!stat`, SVG drawings with `!draw`) is listed in the dialog and in [AI agents](MCP.md#handwriting-markdown). Export the result as usual (PDF, images, `.noteful`). From a terminal, `noteful convert notes.md -o notes.noteful` does the same, and `--export pdf|png|svg` writes the pages directly.
 
 ## Audio
 

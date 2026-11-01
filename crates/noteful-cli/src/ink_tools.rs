@@ -140,7 +140,7 @@ fn writable_ext(e: &str) -> Res<&'static str> {
     })
 }
 /// Where to write: (path, backup of the original when replacing it in place).
-fn destination(
+pub(super) fn destination(
     args: &Value,
     source: Option<&Path>,
     title: &str,
@@ -194,7 +194,12 @@ fn destination(
     }
     Ok((path, None))
 }
-fn save(editor: &Editor, path: &Path, source: Option<&[u8]>, backup: Option<&Path>) -> Res<()> {
+pub(super) fn save(
+    editor: &Editor,
+    path: &Path,
+    source: Option<&[u8]>,
+    backup: Option<&Path>,
+) -> Res<()> {
     let bytes = match writable_ext(&ext(path))? {
         "nfedit" => editor.save_project()?.into_bytes(),
         "notecomp" => {
@@ -310,7 +315,7 @@ impl Server {
     }
 
     /// A written note's page as an image, or why there is none.
-    fn preview(&mut self, path: &Path, display: usize, report: Value) -> Res<Value> {
+    pub(super) fn preview(&mut self, path: &Path, display: usize, report: Value) -> Res<Value> {
         let mut content =
             vec![json!({"type":"text","text":serde_json::to_string_pretty(&report)?})];
         let args = json!({"path":path});
@@ -570,6 +575,8 @@ pub(super) fn paper_background(pdf: &[u8], index: u64, rect: [f64; 4]) -> Option
 pub(crate) fn convert(args: &[String]) -> Res<String> {
     let mut input = None;
     let mut options = serde_json::Map::new();
+    let mut export: Option<String> = None;
+    let mut width = 1654u32;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -578,6 +585,23 @@ pub(crate) fn convert(args: &[String]) -> Res<String> {
             }
             "--overwrite" => {
                 options.insert("overwrite".into(), json!(true));
+            }
+            "--export" => {
+                let e = it
+                    .next()
+                    .ok_or("--export needs pdf, png or svg")?
+                    .to_ascii_lowercase();
+                if !["pdf", "png", "svg"].contains(&e.as_str()) {
+                    return Err(format!("--export must be pdf, png or svg, not {e}").into());
+                }
+                export = Some(e);
+            }
+            "--width" => {
+                width = it
+                    .next()
+                    .and_then(|w| w.parse().ok())
+                    .filter(|w| (200..=6000).contains(w))
+                    .ok_or("--width needs a pixel width from 200 to 6000")?;
             }
             flag if flag.starts_with("--") => {
                 let key = flag.trim_start_matches("--");
@@ -603,7 +627,7 @@ pub(crate) fn convert(args: &[String]) -> Res<String> {
             extra => return Err(format!("Unexpected argument {extra}").into()),
         }
     }
-    let input = input.ok_or("Usage: noteful convert <notes.md|-> -o <out.noteful|.notecomp|.nfedit> [--title T] [--paper dot|grid|ruled|blank] [--look study|classic] [--theme light|dark] [--font F] [--hand neat|natural|messy] [--pen fineliner|ballpoint] [--accent sky] [--size 11] [--seed N] [--overwrite]")?;
+    let input = input.ok_or("Usage: noteful convert <notes.md|-> -o <out.noteful|.notecomp|.nfedit> [--title T] [--paper dot|grid|ruled|blank] [--look study|classic] [--theme light|dark] [--font F] [--hand neat|natural|messy] [--pen fineliner|ballpoint] [--accent sky] [--size 11] [--seed N] [--overwrite]\n       noteful convert <notes.md> --export pdf|png|svg -o <out.pdf | folder or name.png/.svg> [--width 1654] […]")?;
     let markdown = if input == "-" {
         let mut s = String::new();
         std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
@@ -612,7 +636,7 @@ pub(crate) fn convert(args: &[String]) -> Res<String> {
         std::fs::read_to_string(&input)?
     };
     if !options.contains_key("out") {
-        return Err("Name the output with -o (a .noteful, .notecomp or .nfedit file)".into());
+        return Err("Name the output with -o (a .noteful, .notecomp or .nfedit file, or with --export a .pdf file or a folder)".into());
     }
     let title = options
         .get("title")
@@ -629,18 +653,139 @@ pub(crate) fn convert(args: &[String]) -> Res<String> {
     let o = options_for(&args, &title, &markdown)?;
     let (pages, warnings) = compose(&markdown, &o)?;
     let editor = new_notebook(&title, &pages)?;
-    let (out, _) = destination(&args, None, &title)?;
-    save(&editor, &out, None, None)?;
-    let mut report = format!(
-        "Wrote {} ({} page{})",
-        out.display(),
-        pages.len(),
-        if pages.len() == 1 { "" } else { "s" }
-    );
+    let mut report = match export {
+        Some(kind) => {
+            let out = PathBuf::from(args["out"].as_str().unwrap_or_default());
+            let written = export_pages(
+                &editor,
+                &kind,
+                &out,
+                width,
+                args["overwrite"].as_bool() == Some(true),
+            )?;
+            format!(
+                "Wrote {} ({} page{})",
+                written
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                pages.len(),
+                if pages.len() == 1 { "" } else { "s" }
+            )
+        }
+        None => {
+            let (out, _) = destination(&args, None, &title)?;
+            save(&editor, &out, None, None)?;
+            format!(
+                "Wrote {} ({} page{})",
+                out.display(),
+                pages.len(),
+                if pages.len() == 1 { "" } else { "s" }
+            )
+        }
+    };
     for w in warnings {
         report.push_str(&format!("\nWarning: {w}"));
     }
     Ok(report)
+}
+/// A note's pages as SVG (vector, paper included), PNG or one PDF. `out` is the
+/// PDF file, or for images a folder or a name whose stem gets -1, -2, ….
+pub(crate) fn export_pages(
+    editor: &Editor,
+    kind: &str,
+    out: &Path,
+    width: u32,
+    overwrite: bool,
+) -> Res<Vec<PathBuf>> {
+    let count = editor.page_order().len();
+    let mut svgs = Vec::new();
+    for i in 0..count {
+        let (svg, complete) = ink::page_svg(editor, i)?;
+        if !complete {
+            return Err(format!("Page {} has a PDF background that only NoteComplete can draw; export it from the app", i + 1).into());
+        }
+        svgs.push(svg);
+    }
+    let refuse = |p: &Path| -> Res<()> {
+        if p.exists() && !overwrite {
+            return Err(format!("{} exists; pass --overwrite to replace it", p.display()).into());
+        }
+        Ok(())
+    };
+    if kind == "pdf" {
+        if ext(out) != "pdf" {
+            return Err("With --export pdf, -o names a .pdf file".into());
+        }
+        refuse(out)?;
+        let dir = std::env::temp_dir().join(format!("notecomplete-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let mut files = Vec::new();
+        for (i, svg) in svgs.iter().enumerate() {
+            // Page units are 1.8333 per PDF point: size the page in points.
+            let size = editor.view(editor.slot(i)?)?["size"].clone();
+            let (w, h) = (
+                size[0].as_f64().unwrap_or(A4[0]) / ink::paper::PAGE_SCALE,
+                size[1].as_f64().unwrap_or(A4[1]) / ink::paper::PAGE_SCALE,
+            );
+            let sized = svg
+                .replacen(" width=\"", " data-w=\"", 1)
+                .replacen(" height=\"", " data-h=\"", 1)
+                .replacen(
+                    "<svg ",
+                    &format!("<svg width=\"{w}pt\" height=\"{h}pt\" "),
+                    1,
+                );
+            let file = dir.join(format!("{:04}.svg", i + 1));
+            std::fs::write(&file, sized)?;
+            files.push(file);
+        }
+        if let Some(parent) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        let status = Command::new("rsvg-convert")
+            .args(["-f", "pdf", "-o"])
+            .arg(out)
+            .args(&files)
+            .status()
+            .map_err(|_| "PDF export needs rsvg-convert (librsvg) installed")?;
+        let _ = std::fs::remove_dir_all(&dir);
+        if !status.success() {
+            return Err("rsvg-convert could not write the PDF".into());
+        }
+        return Ok(vec![out.to_path_buf()]);
+    }
+    let (dir, stem) = if ext(out) == kind {
+        (
+            out.parent().map(Path::to_path_buf).unwrap_or_default(),
+            out.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "page".into()),
+        )
+    } else {
+        (out.to_path_buf(), "page".to_owned())
+    };
+    if !dir.as_os_str().is_empty() {
+        std::fs::create_dir_all(&dir)?;
+    }
+    let mut written = Vec::new();
+    for (i, svg) in svgs.into_iter().enumerate() {
+        let file = if count == 1 && ext(out) == kind {
+            out.to_path_buf()
+        } else {
+            dir.join(format!("{stem}-{}.{kind}", i + 1))
+        };
+        refuse(&file)?;
+        let bytes = if kind == "svg" {
+            svg.into_bytes()
+        } else {
+            rasterize(svg, width)?
+        };
+        std::fs::write(&file, bytes)?;
+        written.push(file);
+    }
+    Ok(written)
 }
 fn options_for(args: &Value, title: &str, markdown: &str) -> Res<ComposeOptions> {
     options(
@@ -942,6 +1087,66 @@ mod tests {
             "no silent overwrite"
         );
         assert!(convert(&s(&[md.to_str().unwrap(), "--paper"])).is_err());
+        // Exports: vector SVG pages with their paper, and named PNGs.
+        let svg_dir = dir.join("svg");
+        let msg = convert(&s(&[
+            md.to_str().unwrap(),
+            "--export",
+            "svg",
+            "-o",
+            svg_dir.to_str().unwrap(),
+        ]))
+        .unwrap();
+        assert!(msg.contains("page-1.svg"), "{msg}");
+        let svg = std::fs::read_to_string(svg_dir.join("page-1.svg")).unwrap();
+        assert!(svg.starts_with("<svg") && svg.contains("nc-paper-dot"));
+        assert!(
+            convert(&s(&[
+                md.to_str().unwrap(),
+                "--export",
+                "svg",
+                "-o",
+                svg_dir.to_str().unwrap()
+            ]))
+            .is_err(),
+            "no silent overwrite"
+        );
+        assert!(convert(&s(&[
+            md.to_str().unwrap(),
+            "--export",
+            "pdf",
+            "-o",
+            dir.join("x.png").to_str().unwrap()
+        ]))
+        .is_err());
+        assert!(convert(&s(&[md.to_str().unwrap(), "--export", "gif", "-o", "x"])).is_err());
+        if Command::new("rsvg-convert")
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
+            let pdf = dir.join("out.pdf");
+            convert(&s(&[
+                md.to_str().unwrap(),
+                "--export",
+                "pdf",
+                "-o",
+                pdf.to_str().unwrap(),
+            ]))
+            .unwrap();
+            assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
+            convert(&s(&[
+                md.to_str().unwrap(),
+                "--export",
+                "png",
+                "-o",
+                dir.join("one.png").to_str().unwrap(),
+            ]))
+            .unwrap();
+            assert!(std::fs::read(dir.join("one.png"))
+                .unwrap()
+                .starts_with(b"\x89PNG"));
+        }
         assert!(convert(&s(&[
             md.to_str().unwrap(),
             "--colour",

@@ -21,7 +21,7 @@ import * as decoding from 'lib0/decoding';
 export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
 // Edits a peer may send, by role. Tablets draw, highlight, erase and undo; the host edits anything.
 export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo']);
-export const HOST_OPS = new Set([...TABLET_OPS, 'remove', 'adjust', 'crop', 'lock', 'layer', 'image', 'editText', 'resize', 'resizePage', 'insertPages']);
+export const HOST_OPS = new Set([...TABLET_OPS, 'remove', 'adjust', 'crop', 'lock', 'layer', 'image', 'editText', 'resize', 'resizePage', 'insertPages', 'insertHandwritten']);
 export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#ad7f58'];
 const LOG_LIMIT = 20000;
 

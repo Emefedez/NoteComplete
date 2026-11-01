@@ -125,6 +125,7 @@ test('refuses missing, wrong and expired invites; limits size and rate', async (
     await welcomed(g);
     await assert.rejects(g.submit('draw', { line: {} }), /Not allowed/);
     await assert.rejects(t.client.submit('insertPages', {}), /Not allowed/);
+    await assert.rejects(t.client.submit('insertHandwritten', {}), /Not allowed/);
     // Full: the host plus two others.
     assert.match(await closedWith(client(server, { token: server.hub.tokens.guest })), /full/);
     // Oversized messages close the connection.
@@ -147,6 +148,8 @@ test('a tablet joins from a snapshot; everyone applies edits in one order', asyn
     await welcomed(h);
     h.documentChanged({ open: true, title: 'Exam' });
     await h.submit('draw', { page: 0, line: 'host-1' });
+    // Handwritten pages from Markdown are the host's edits too.
+    await h.submit('insertHandwritten', { at: 0, markdown: '# Tema' });
     const t = tablet(server, { token: server.hub.tokens.tablet });
     await until(() => t.client.loaded, 'snapshot');
     assert.deepEqual(t.replica.visible(), ['host-1']);

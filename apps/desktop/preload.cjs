@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
     });
   },
 });
+// Connecting the user's AI tools to the bundled note server (agent-setup.js).
+contextBridge.exposeInMainWorld('notecompleteAgents', {
+  status: () => ipcRenderer.invoke('agents:status'),
+  connect: id => ipcRenderer.invoke('agents:connect', id),
+});
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),
   open: () => ipcRenderer.invoke('windows:new'),

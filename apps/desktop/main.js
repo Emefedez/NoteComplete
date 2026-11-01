@@ -6,6 +6,7 @@ import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { libraryFiles } from './library-files.js';
 import { aiRunner } from './ai-runner.js';
+import { agentSetup, stableBinary } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
@@ -339,8 +340,18 @@ app.whenReady().then(async () => {
     return chosen.filePaths.map(file => ({ path: file, name: path.basename(file) }));
   }));
   // Flashcards, quizzes and chat through the user's own AI CLIs; see ai-runner.js.
-  const bundled = app.isPackaged ? path.join(process.resourcesPath, 'noteful') : fileURLToPath(new URL('../../target/release/noteful', import.meta.url));
+  const serverName = process.platform === 'win32' ? 'noteful.exe' : 'noteful';
+  const bundled = app.isPackaged ? path.join(process.resourcesPath, serverName) : fileURLToPath(new URL(`../../target/release/${serverName}`, import.meta.url));
   const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
+  // The same server, at a path that survives updates and AppImage remounts, for the
+  // user's AI tools outside the app (see agent-setup.js).
+  let stableServer = null;
+  const serverReady = existsSync(bundled)
+    ? stableBinary({ bundled, folder: path.join(app.getPath('userData'), 'mcp') }).then(p => { stableServer = p; }, () => { stableServer = bundled; })
+    : Promise.resolve();
+  const agents = agentSetup({ tools: () => ai.tools(), server: () => stableServer });
+  ipcMain.handle('agents:status', guarded(async () => { await serverReady; return { server: stableServer, tools: await agents.status() }; }));
+  ipcMain.handle('agents:connect', guarded(async (_event, id) => { await serverReady; return agents.connect(String(id)); }));
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
   ipcMain.handle('ai:models', guarded((_event, provider, options) => ai.models(String(provider), { fresh: options?.fresh === true })));
   // A request with a stream id gets its answer's pieces as 'ai:delta' messages.

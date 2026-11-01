@@ -33,6 +33,7 @@
       "tabs.js",
       "updater.js",
       "app-menu.js",
+      "agent-setup.js",
       "collab-hub.js",
       "collab-server.js",
       "package.json",
@@ -68,8 +69,12 @@
     "icon": "build/icon.png",
     "extraResources": [
       {
-        "from": "../../target/release/noteful",
-        "to": "noteful"
+        "from": "../../target/release",
+        "to": ".",
+        "filter": [
+          "noteful",
+          "noteful.exe"
+        ]
       }
     ]
   },

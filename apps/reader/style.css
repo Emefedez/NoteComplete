@@ -2495,3 +2495,28 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 }
 @media (max-width: 700px) { .navigation .toolbar-actions { justify-content: safe flex-end; } }
 @media (max-width: 400px) { .navigation .pages-dark-toggle { width: 34px; min-width: 34px; padding: 6px; } .navigation #zoomFit { min-width: 36px; padding: 0 6px; } .navigation label { gap: 2px; } }
+
+/* Handwritten pages from Markdown (convert.js) */
+.handwriting-dialog { width: min(1040px, calc(100vw - 24px)); }
+.hw-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.hw-source { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.hw-source textarea { width: 100%; box-sizing: border-box; min-height: 260px; resize: vertical; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.hw-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+.hw-help summary { cursor: pointer; font-size: 13px; }
+.hw-help code { font-size: 12px; }
+.hw-preview { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.hw-pages { display: flex; flex-direction: column; gap: 10px; max-height: 62vh; overflow: auto; padding: 4px; background: var(--line); border-radius: 8px; }
+.hw-page { background: #fff; box-shadow: 0 1px 3px #0003; line-height: 0; }
+.hw-page svg { width: 100%; height: auto; display: block; }
+.hw-where { margin-right: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+@media (max-width: 720px) { .hw-layout { grid-template-columns: 1fr; } .hw-pages { max-height: 40vh; } }
+.hw-fields .ocr-languages, .hw-source > .ocr-languages { display: flex; flex-direction: column; align-items: stretch; gap: 3px; margin: 0; font-size: 12px; }
+.hw-fields .ocr-languages :is(select, input) { width: 100%; min-width: 0; box-sizing: border-box; }
+
+/* Help > Connect AI tools (agents.js) */
+.agents-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.agents-row { display: grid; grid-template-columns: 9em 1fr auto; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.agents-ok { color: #2a9d5f; font-weight: 600; }
+.agents-manual { grid-column: 1 / -1; font-size: 12px; }
+.agents-manual summary { cursor: pointer; color: var(--muted, #666); }
+.agents-manual pre { white-space: pre-wrap; word-break: break-all; margin: 6px 0; padding: 8px; border-radius: 6px; background: var(--line); font-size: 12px; }
