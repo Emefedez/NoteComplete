@@ -93,6 +93,9 @@ contextBridge.exposeInMainWorld('notecompleteCollab', {
   stop: () => ipcRenderer.invoke('collab:stop'),
   info: () => ipcRenderer.invoke('collab:info'),
   useAddress: address => ipcRenderer.invoke('collab:address', String(address)),
+  online: on => ipcRenderer.invoke('collab:online', on === true),
+  onOnlineProgress: callback => ipcRenderer.on('collab:online-progress', (_event, p) => callback(Number(p) || 0)),
+  onOnlineEnded: callback => ipcRenderer.on('collab:online-ended', () => callback()),
   minimize: () => ipcRenderer.invoke('collab:minimize'),
   onEnded: callback => ipcRenderer.on('collab:ended', (_event, detail) => callback(detail)),
 });

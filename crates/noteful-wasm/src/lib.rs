@@ -292,6 +292,18 @@ impl EditorSession {
     pub fn save_project(&self) -> Result<String, JsValue> {
         self.inner.save_project().map_err(js_error)
     }
+    /// Keeps text recognized in the handwriting (OCR) of page slots, so it is saved with
+    /// the note: `pages` is JSON {slot: [{text, bounds}]}.
+    pub fn set_recognized_text(&mut self, pages: &str) -> Result<(), JsValue> {
+        let pages: std::collections::BTreeMap<usize, Vec<noteful_core::InkWord>> =
+            serde_json::from_str(pages).map_err(js_error)?;
+        for (slot, words) in pages {
+            self.inner
+                .set_recognized_words(slot, words)
+                .map_err(js_error)?;
+        }
+        Ok(())
+    }
     pub fn history_digest(&self) -> Result<String, JsValue> {
         self.inner.history_digest().map_err(js_error)
     }

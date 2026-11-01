@@ -97,6 +97,10 @@ Handwriting the core writes from Markdown (New from Markdown, Insert handwritten
 
 The words describe the ink as written; erasing or moving that ink later does not change them (like recognized text).
 
+## Recognized text (project version 8)
+
+A project may have `recognized_text`: page slot → words (`{"text", "bounds"}`, as in version 6), the text a host recognized in the handwriting (OCR). It is not part of the edit history; hosts set it with `set_recognized_words(slot, words)`, and an empty list clears it. `view(page)` returns it as `recognized_text`. In `.notecomp` files it is `ocr-text.json` (`{"pages": [[word, …], …]}` in display order, `"ocr_text":"ocr-text.json"` in the manifest).
+
 ## Infinite canvas (project version 7)
 
 A project may have `"canvas": true`. Such a note has exactly one page, which grows through ordinary `ResizePage` edits: before ink, a picture or a text box is added, a host asks `canvas_growth(bounds)`, which says whether the page needs to grow. The page grows when the new content comes within 300 units of the right or bottom edge, in 800-unit steps. `grow_canvas_for` applies that growth. Because the growth is an edit of its own, made before the content, undo removes the content first. `view` returns `"canvas"`. A canvas refuses `InsertPages` and `export_noteful` (there is no Noteful form). It travels in `.notecomp`/`.notepart` with `"canvas": true` in the manifest. Its `note.noteful` holds the one large page, and readers that do not know the flag open it as an ordinary one-page note.

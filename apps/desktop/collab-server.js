@@ -10,6 +10,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { WebSocketServer } from 'ws';
 import { CollabHub } from './collab-hub.js';
+import { ensureCloudflared, startTunnel } from './tunnel.js';
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/json', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.traineddata': 'application/octet-stream' };
 // Pages that open the reader as a guest or as a drawing tablet; the invite is in the fragment.
@@ -77,8 +78,11 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 * 1024, perMessageDeflate: false });
   server.on('upgrade', (req, socket, head) => {
     if (new URL(req.url, 'http://x').pathname !== '/sync' || stopping) return socket.destroy();
+    const remote = cameFromTunnel(req);
+    // Online access off: nothing from outside this network gets a session.
+    if (remote && !tunnel) return socket.destroy();
     sockets.handleUpgrade(req, socket, head, (ws) => {
-      const peer = hub.connect({ send: (data) => ws.send(data), close: (code, reason) => ws.close(code, reason) });
+      const peer = hub.connect({ send: (data) => ws.send(data), close: (code, reason) => ws.close(code, reason) }, { remote });
       // A connection that never says hello is closed.
       const hello = setTimeout(() => { if (!hub.peers.get(peer.id)?.role) ws.close(1008, 'Say hello first'); }, 10000);
       ws.on('message', (data, binary) => peer.receive(binary ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : data.toString(), binary));
@@ -93,8 +97,31 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   // The usual port when it is free, so a firewall rule keeps working; else any.
   await listen(port).catch((error) => { if (port && error.code === 'EADDRINUSE') return listen(0); throw error; });
   const actualPort = server.address().port;
+  // A request is local only when it names this computer as it is known here (loopback or
+  // a LAN address) and did not come through Cloudflare; anything else is online.
+  const localHosts = new Set(['127.0.0.1', 'localhost', '[::1]', ...addresses].map((h) => `${h}:${actualPort}`));
+  const cameFromTunnel = (req) => !localHosts.has(String(req.headers.host || '').toLowerCase()) || 'cf-connecting-ip' in req.headers || 'cf-ray' in req.headers;
+  let tunnel = null, onlineLink = '';
   const origin = () => `http://${address}:${actualPort}`;
+  // Online access (tunnel.js): a Cloudflare quick tunnel and a separate guest invite.
+  async function goOnline({ dir, fetch, spawn, progress, onExit = () => {}, binary } = {}) {
+    if (tunnel) return onlineLink;
+    binary ||= await ensureCloudflared({ dir, fetch, progress });
+    if (stopping) throw Error('The session ended.');
+    const started = await startTunnel({ binary, port: actualPort, spawn, onExit: (code) => { tunnel = null; onlineLink = ''; hub.closeOnline(); onExit(code); } });
+    if (stopping) { started.stop(); throw Error('The session ended.'); }
+    tunnel = started;
+    onlineLink = `${started.url}/join#${hub.id}.${hub.allowOnline()}`;
+    return onlineLink;
+  }
+  function stopOnline() {
+    tunnel?.stop();
+    tunnel = null;
+    onlineLink = '';
+    hub.closeOnline();
+  }
   function stop() {
+    stopOnline();
     stopping ||= new Promise((resolve) => {
       hub.dispose();
       for (const ws of sockets.clients) ws.terminate();
@@ -115,6 +142,9 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     // The host's own reader connects over loopback with the host token.
     hostUrl: `ws://127.0.0.1:${actualPort}/sync`,
     hostToken: hub.tokens.host,
+    goOnline,
+    stopOnline,
+    get onlineLink() { return onlineLink; },
     get guestLink() { return notes ? `${origin()}/join#${hub.id}.${hub.tokens.guest}` : ''; },
     tabletLink: () => `${origin()}/tablet#${hub.id}.${hub.tokens.tablet}`,
     code: () => ({ code: hub.code.value, expires: hub.code.expires }),

@@ -2,7 +2,9 @@ import {matrix,point,inverse,multiply,corners,resizeAdjustment} from './selectio
 import {cropMode} from './crop.js';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
 const svg=(tag,attrs)=>{const el=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);return el;};
-const clone=value=>structuredClone(value);
+// Group members carry their page element while dragged; elements are not copied.
+const plain=m=>{const {element,original,el,...rest}=m;return structuredClone(rest);};
+const clone=value=>value?.members?{...structuredClone({...value,members:[]}),members:value.members.map(plain)}:structuredClone(value);
 export class SelectionController {
  constructor({call,patch,remove,panel,editable,changed,status}){
   Object.assign(this,{call,patch,remove,panel,editable,changed,status});this.token=0;this.item=null;this.active=null;
@@ -79,6 +81,8 @@ export class SelectionController {
   try{
    if(item.kind==='group'){
     const delta=multiply(matrix(item,adjustment),inverse(matrix(item)));
+    // One undo step for the whole group: every move after the first one made is joined to it.
+    let joined=false;
     for(const m of item.members){
      const mAdj=clone(m.adjustment);
      if(adjustment.scale[0]===1&&adjustment.scale[1]===1&&adjustment.rotation===0){
@@ -88,8 +92,8 @@ export class SelectionController {
       mAdj.scale=[mAdj.scale[0]*adjustment.scale[0],mAdj.scale[1]*adjustment.scale[1]];
       mAdj.rotation=(mAdj.rotation+adjustment.rotation);
      }
-     await this.patch(m,mAdj);
-     m.adjustment=mAdj;
+     const done=await this.patch(m,{...mAdj,joined});
+     if(done){joined=true;m.adjustment=mAdj;}
     }
     item.bounds=[item.bounds[0]+adjustment.translation[0],item.bounds[1]+adjustment.translation[1],item.bounds[2]*adjustment.scale[0],item.bounds[3]*adjustment.scale[1]];
     item.adjustment={translation:[0,0],scale:[1,1],rotation:0};

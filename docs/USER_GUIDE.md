@@ -60,7 +60,7 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 **Edit → Find…** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>F</kbd>, or type `find word` in the command palette) searches the open note's typed text, the text layer of its PDF pages, recognized text and recording transcripts. Matching ignores case and accents and accepts word beginnings (`memor` finds *memoria*). Recognized text and transcripts also accept one typing error in words of five letters or more, since recognition makes mistakes; for audio, try a couple of variants of the word. Enter/↓ and Shift+Enter/↑ step through matches, ☰ lists them by page with their source (Text, PDF, OCR, Audio), and highlights appear on the page. The source chips under the box limit the search to any combination of Text, PDF, OCR and Audio, with a count for each; the choice is remembered. Audio matches also seek the recording. The PDF text is indexed the first time you search a note and kept for next time.
 
-**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. Handwriting is read in a separate pass over the ink alone, so it is found on PDF pages too, even when their printed text is skipped. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. It then runs in the background with a chip in the bar (progress and **Stop**), so the dialog can close and you can keep reading. Results are kept with the note, and Stop keeps the pages finished so far. Recognition of handwriting is approximate.
+**Pages → Recognize text (OCR)…** reads handwriting and scanned pages so Find can search them. Handwriting is read in a separate pass over the ink alone, so it is found on PDF pages too, even when their printed text is skipped. It never runs on its own: choose the current page, a page range or the whole note, pick the languages (Spanish and English by default) and start it. It runs on this device, about 5–10 seconds per page; the language data (a few MB per language) downloads once on first use. Pages that already have a PDF text layer are skipped unless you untick that option. It then runs in the background with a chip in the bar (progress and **Stop**), so the dialog can close and you can keep reading. Results are kept with the note, and Stop keeps the pages finished so far. Saving as `.notecomp`, `.notepart` or a project also writes them into the file, so the text comes with it to other devices and to AI tools connected to the note server (`page_text`, `search_note`). Recognition of handwriting is approximate.
 
 **Tool row.** Drag the tool buttons to put them in the order you like; **View → Reset tool order** puts them back. The highlighter has three modes: straight, freehand and rectangle (drag a box).
 
@@ -100,6 +100,8 @@ While a session runs, Share reads *Sharing* and opens it again, with the people'
 
 **Write shared notes.** Open the invite link in a browser, or use **File → Join shared notes…** and paste it. Type your name (or keep *Guest N*) and press Enter or **OK**. Everyone's cursors show in the notes with their names; Ctrl Z undoes only your own typing. When the host ends the session, your copy of the notes is saved as a Markdown file and **Open my copy** opens it. If the connection drops, NoteComplete reconnects and your edits merge; if the host stays unreachable, your copy is saved the same way.
 
+**People on other networks.** In the sharing dialog, **Turn on online access** gives a second link that works from anywhere, through a temporary Cloudflare address. The first time, NoteComplete downloads Cloudflare's small `cloudflared` program (checked before it runs). The online link is for the notes only: drawing tablets stay on your network, and guests can edit or only view as you chose. **Turn off**, or stopping the session, ends it and disconnects the people who joined online. Cloudflare's free tunnels have no uptime guarantee.
+
 **The device does not connect?**
 - The device must be on the same Wi-Fi as the computer, and not on a guest network.
 - If the computer also has a VPN, Docker or virtual machines, choose another address under the QR code.
@@ -125,6 +127,13 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 **Apply** saves locally and redraws nearby PDF pages only when resolution changes. **Cancel** or Escape discards changes. Presets also restore their brightness and contrast. Original image detail cannot be recovered by increasing resolution. Exported colors and document edits are unaffected; these preferences are not saved inside projects. Thumbnails remain small bitmaps to keep long notes responsive. On a slow device, start with Performance and collapse the transcript when unused.
 
 ## Draw and edit
+
+**Touch** (phones, tablets and touchscreen computers):
+- One finger does what the tool does: it draws, selects and moves, or scrolls with Pan.
+- Two fingers move the page and pinch to zoom; a second finger cancels a stroke the first one had just begun.
+- Tap with two fingers to undo, and with three fingers to redo.
+- Once a stylus has drawn on a device, one finger scrolls the page with drawing tools too, as in drawing apps. The stylus draws with its pressure, and the line keeps the width it had while you drew it.
+- Long menus scroll inside the window.
 
 | Tool | Behavior |
 |---|---|

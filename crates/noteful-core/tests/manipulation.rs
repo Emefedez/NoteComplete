@@ -21,6 +21,7 @@ fn adjustment() -> Adjustment {
         rgba: Some([1., 0., 0., 1.]),
         locked: None,
         crop: None,
+        joined: false,
     }
 }
 #[test]
@@ -274,4 +275,43 @@ fn cropping_an_image_shows_part_of_it_and_survives_export() {
         .collect::<Vec<_>>();
     assert!((fb[2] * m[0] - b[2]).abs() < 1e-3 && (fb[3] * m[1] - b[3]).abs() < 1e-3);
     assert!(e.crop_item(0, "object:0", [5., 5., 5., 9.]).is_err());
+}
+
+#[test]
+fn a_group_moved_as_one_is_undone_as_one() {
+    let mut e = Editor::create_document_with("g", &[([800., 600.], None)], &[], "x", 1.).unwrap();
+    for y in [100., 200., 300.] {
+        e.add_line(
+            0,
+            Line::new(vec![[100., y], [200., y]], 3., [0., 0., 0., 1.]),
+        )
+        .unwrap();
+    }
+    let moved = |joined| Adjustment {
+        translation: [10., 0.],
+        joined,
+        ..Default::default()
+    };
+    e.adjust_item(0, "new:0", moved(false)).unwrap();
+    e.adjust_item(0, "new:1", moved(true)).unwrap();
+    e.adjust_item(0, "new:2", moved(true)).unwrap();
+    assert_eq!(e.view(0).unwrap()["edit_count"], 6);
+    e.undo();
+    assert_eq!(
+        e.view(0).unwrap()["edit_count"],
+        3,
+        "the three moves undo together"
+    );
+    e.redo();
+    assert_eq!(e.view(0).unwrap()["edit_count"], 6);
+    // Kept in projects.
+    let mut again = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    again.undo();
+    assert_eq!(again.view(0).unwrap()["edit_count"], 3);
+    again.undo();
+    assert_eq!(
+        again.view(0).unwrap()["edit_count"],
+        2,
+        "strokes undo one by one"
+    );
 }

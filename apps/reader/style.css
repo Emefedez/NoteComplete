@@ -81,6 +81,13 @@ a:focus-visible,
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* In the bars, rows scroll sideways and clip anything outside a button: the ring sits
+   inside it instead, following its corners, so it is never cut or doubled. */
+:is(header, .toolbar, .navigation, .tablet-dock) :is(button, summary, select, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+:is(header, .toolbar, .navigation) :is(div, nav, section):focus-visible { outline: none; }
 button svg,
 summary svg,
 .audio-icon svg {
@@ -1054,6 +1061,8 @@ header .brand p { font-size: 12px; font-weight: 600; max-width: 100%; }
 .bar-menu > summary { min-height: 26px; padding: 3px 9px; font-size: 13px; border-radius: 5px; }
 .bar-menu[open] > summary { background: var(--accent-soft); color: var(--accent); }
 .bar-menu .menu-content { left: 0; right: auto; top: calc(100% + 3px); width: 250px; padding: 4px; }
+/* Long menus scroll inside the window (short screens, phones in landscape) instead of running off it. */
+.bar-menu .menu-content { max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 16px; }
 .bar-menu .menu-content button kbd { margin-left: auto; border: 0; background: none; padding: 0; }
 .bar-menu .menu-content hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
@@ -1635,7 +1644,7 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
   header .brand { display: none; }
   .bar-actions { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .bar-menu > summary { padding: 3px 7px; }
-  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; }
+  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; max-height: calc(100dvh - 48px); }
   .bar-menu .menu-content button { min-height: 38px; }
   .palette { margin-top: 8px; }
   .note-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
@@ -2457,6 +2466,8 @@ body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
 #collabDialog button.accent { min-height: 30px; padding: 0 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 #collabDialog button.accent:hover { filter: brightness(0.97); }
 .collab-join-menu { display: grid; gap: 8px; margin: 8px 0 4px; }
+.collab-online-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+#collabOnline[hidden] { display: none; }
 /* Others' carets in the notes editor. */
 .notes-editor { position: relative; }
 .notes-cursors { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; pointer-events: none; z-index: 2; }
@@ -2578,7 +2589,8 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 @media (max-height: 760px) { .hw-source textarea#hwMarkdown { min-height: 160px; } .hw-pages { max-height: 48vh; } }
 .hw-edit-bar { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .hw-edit-bar span { margin-right: auto; }
-.hw-edit-bar button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+.hw-edit-bar button { min-height: 28px; width: 32px; padding: 0; display: inline-grid; place-items: center; }
+.hw-edit-bar button svg { width: 16px; height: 16px; }
 /* No preview yet: a short placeholder with a line of text instead of an empty strip. */
 .hw-pages:empty { display: grid; place-items: center; height: 160px; padding: 0; background: var(--fill); border: 1px dashed var(--line); }
 .hw-pages:empty::before { content: "The preview appears here"; color: var(--muted); font-size: 13px; }

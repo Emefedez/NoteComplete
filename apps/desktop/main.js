@@ -428,11 +428,24 @@ app.whenReady().then(async () => {
     }
     return sharingInfo(sharing.server);
   }));
-  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, addresses: server.addresses, port: server.port, ...server.code() });
+  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, addresses: server.addresses, port: server.port, onlineLink: server.onlineLink, ...server.code() });
   ipcMain.handle('collab:address', guarded((event, address) => {
     if (sharing?.owner !== event.sender.id) return null;
     sharing.server.useAddress(String(address));
     return sharingInfo(sharing.server);
+  }));
+  // Online access for notes guests (tunnel.js): the first time, cloudflared is downloaded
+  // into the app's data folder and checked before it runs.
+  ipcMain.handle('collab:online', guarded(async (event, on) => {
+    if (sharing?.owner !== event.sender.id) return null;
+    const { server } = sharing, sender = event.sender;
+    if (!on) { server.stopOnline(); return sharingInfo(server); }
+    await server.goOnline({
+      dir: path.join(app.getPath('userData'), 'bin'),
+      progress: (p) => { if (!sender.isDestroyed()) sender.send('collab:online-progress', p); },
+      onExit: () => { if (!sender.isDestroyed()) sender.send('collab:online-ended'); },
+    });
+    return sharingInfo(server);
   }));
   ipcMain.handle('collab:stop', guarded(async (event) => {
     if (sharing?.owner !== event.sender.id) return;

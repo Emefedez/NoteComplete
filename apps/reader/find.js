@@ -190,7 +190,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   }
   // Handwriting NoteComplete wrote from Markdown comes with its text (the core keeps
   // the words and their boxes), so it is found without recognizing anything.
-  const written = (view) => (view.ink_text || []).map((w) => ({ text: w.text, box: w.bounds }));
+  // Text the note already knows: written from Markdown, or recognized earlier and saved with it.
+  const written = (view) => [...(view.ink_text || []), ...(view.recognized_text || [])].map((w) => ({ text: w.text, box: w.bounds }));
   // Selectable PDF and recognized text over a rendered page (Pan tool).
   async function selectable(p) {
     const view = p?.view, token = generation;
@@ -405,6 +406,14 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   }
   return {
     reset, open, close, paint, selectable, openOcr, restructure, pageText, wordsIn,
+    // OCR results of this note by page slot, as the core keeps them ({text, bounds}).
+    recognizedText() {
+      const out = {};
+      for (const [slot, words] of Object.entries(stored.ocr || {}))
+        out[slot] = (words || []).filter((w) => w?.text && Array.isArray(w.box)).slice(0, 5000)
+          .map((w) => ({ text: String(w.text).slice(0, 100), bounds: w.box.map(Number) }));
+      return out;
+    },
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },

@@ -21,6 +21,10 @@ pub struct Adjustment {
     /// which also moves and scales the item so its box is the visible part.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<[f64; 4]>,
+    /// Undo and redo this edit together with the one before it (moving a group of
+    /// items is one adjustment per item, undone as one). Not part of the item's state.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub joined: bool,
 }
 impl Default for Adjustment {
     fn default() -> Self {
@@ -32,6 +36,7 @@ impl Default for Adjustment {
             rgba: None,
             locked: None,
             crop: None,
+            joined: false,
         }
     }
 }
@@ -280,6 +285,7 @@ impl Editor {
                 page: p,
                 id,
                 adjustment,
+                ..
             } = edit
             {
                 if *p == page {
@@ -367,6 +373,7 @@ impl Editor {
         self.adjust_item(page, id, a)
     }
     pub fn adjust_item(&mut self, page: usize, id: &str, mut adjustment: Adjustment) -> Result<()> {
+        let joined = std::mem::take(&mut adjustment.joined);
         let current = self
             .adjustments(page)
             .get(id)
@@ -418,6 +425,7 @@ impl Editor {
             page,
             id: id.to_owned(),
             adjustment,
+            joined,
         })
     }
     /// Show only part of an image: `rect` is `[x0, y0, x1, y1]` in the image's native size,

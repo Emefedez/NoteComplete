@@ -12,9 +12,15 @@
           "NSAllowsLocalNetworking": true
         },
         "NSLocalNetworkUsageDescription": "NoteComplete connects to a computer on this network when you use this device as its drawing tablet."
-      }
+      },
+      "icon": "./assets/icon.png"
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#087BFF"
+      },
       "package": "com.notecomplete.viewer",
       "intentFilters": [
         {
@@ -112,6 +118,7 @@
     "plugins": [
       "expo-sharing",
       "expo-status-bar"
-    ]
+    ],
+    "icon": "./assets/icon.png"
   }
 }

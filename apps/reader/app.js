@@ -1,3 +1,4 @@
+import { touchGestures } from "./touch.js";
 import {
   prepareDocument,
   readImage,
@@ -1337,6 +1338,8 @@ function point(e, p) {
     ),
   ];
 }
+let penSeen = (() => { try { return localStorage.getItem("notecomplete-pen-seen") === "1"; } catch { return false; } })();
+const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 function pointerDown(e, p) {
   if (gesture) {
     if (e.pointerId !== gesture.id) cancelGesture();
@@ -1344,8 +1347,10 @@ function pointerDown(e, p) {
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
   setPage(p.index);
-  // Drawing tablet: once a stylus has been used, fingers move the page instead of drawing.
-  const touchPan = collab?.touchPans(e);
+  // Once a stylus has been used on this device, fingers move the page instead of drawing
+  // (as in drawing apps); before that, a finger draws.
+  if (e.pointerType === "pen" && !penSeen) { penSeen = true; try { localStorage.setItem("notecomplete-pen-seen", "1"); } catch { /* Optional. */ } }
+  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penSeen && FINGER_PANS.has(tool));
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan) {
     // On PDF or recognized words the mouse selects text instead of panning.
@@ -1485,6 +1490,12 @@ function appendPoint(e) {
         g.points.push(p);
         g.pressures.push(sample.pressure);
       }
+    }
+    // A stylus stroke is saved with its pressure: the line drawn meanwhile takes the
+    // same average width, so it does not get thinner when it is finished.
+    if (g.pen && g.tool === "draw") {
+      const { pressure } = stylusPressure(g);
+      if (pressure?.length) g.el.setAttribute("stroke-width", (2 * pressure.reduce((s, r) => s + r, 0)) / pressure.length);
     }
   }
   preview();
@@ -1827,6 +1838,15 @@ function pinchBy(clientX, clientY, step) {
     }
   }, 160);
 }
+// Fingers on the pages: two move and pinch-zoom, a two-finger tap undoes, three redo.
+touchGestures({
+  viewport: $("viewport"),
+  pinchBy: (x, y, step) => pinchBy(x, y, step),
+  cancelGesture: () => cancelGesture(),
+  undo: () => { if (!$("undo").disabled) $("undo").click(); },
+  redo: () => { if (!$("redo").disabled) $("redo").click(); },
+  enabled: () => !!doc,
+});
 $("undo").onclick = () => {
   cancelGesture();
   action("undo");
@@ -2070,6 +2090,9 @@ async function save(native, as = native ? "noteful" : "project") {
   const token = epoch;
   try {
     await notes?.flush();
+    // Text recognized in the handwriting goes with the note, so other tools (the MCP
+    // server) and other copies find it. .noteful files have no place for it.
+    if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch(() => {});
     const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
     const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
     if (token !== epoch) return;
@@ -3076,39 +3099,31 @@ async function grabImage() {
   return crop.toDataURL("image/jpeg", 0.88);
 }
 async function findItemsInGrab(p, rect) {
-  if (!p?.render) return [];
+  if (!p?.render || !p.el) return [];
   const [gx, gy, gw, gh] = rect;
-  const elements = p.render.querySelectorAll("[data-item]");
-  const matches = [];
-  for (const el of elements) {
+  // Boxes on screen, mapped to page units: getBBox() ignores the transforms of the page's
+  // own groups (imported ink sits in scaled groups), so most items looked elsewhere.
+  const pr = p.el.getBoundingClientRect();
+  if (!pr.width || !pr.height) return [];
+  const sx = p.size[0] / pr.width, sy = p.size[1] / pr.height;
+  const seen = new Set(), found = [];
+  for (const el of p.render.querySelectorAll("[data-item]")) {
     const id = el.getAttribute("data-item");
-    if (!id) continue;
-    let box = null;
+    // Nested items belong to the outermost one.
+    if (!id || seen.has(id) || el.parentElement?.closest("[data-item]")) continue;
+    const er = el.getBoundingClientRect();
+    if (!er.width && !er.height) continue;
+    const box = { x: (er.left - pr.left) * sx, y: (er.top - pr.top) * sy, width: er.width * sx, height: er.height * sy };
+    const overlapX = Math.min(gx + gw, box.x + box.width) - Math.max(gx, box.x);
+    const overlapY = Math.min(gy + gh, box.y + box.height) - Math.max(gy, box.y);
+    if (overlapX >= 0 && overlapY >= 0) { seen.add(id); found.push({ id, el, bbox: box }); }
+  }
+  const matches = [];
+  for (const { id, el, bbox } of found) {
     try {
-      box = el.getBBox();
+      const info = await call("selection", { page: p.index, itemId: id });
+      if (info) matches.push({ ...info, el, bbox });
     } catch {}
-    if (!box || (box.width === 0 && box.height === 0)) {
-      if (p.el && el.getBoundingClientRect) {
-        try {
-          const pr = p.el.getBoundingClientRect();
-          const er = el.getBoundingClientRect();
-          if (pr.width > 0 && pr.height > 0) {
-            const sx = p.size[0] / pr.width;
-            const sy = p.size[1] / pr.height;
-            box = { x: (er.left - pr.left) * sx, y: (er.top - pr.top) * sy, width: er.width * sx, height: er.height * sy };
-          }
-        } catch {}
-      }
-    }
-    if (!box) continue;
-    const overlapX = Math.max(0, Math.min(gx + gw, box.x + box.width) - Math.max(gx, box.x));
-    const overlapY = Math.max(0, Math.min(gy + gh, box.y + box.height) - Math.max(gy, box.y));
-    if (overlapX > 0 && overlapY > 0) {
-      try {
-        const info = await call("selection", { page: p.index, itemId: id });
-        if (info) matches.push({ ...info, el, bbox: box });
-      } catch {}
-    }
   }
   return matches;
 }
@@ -3142,7 +3157,7 @@ async function selectGrab(targetGrab = grabbed) {
         }
       }
       const bounds = isFinite(minX) ? [minX, minY, maxX - minX, maxY - minY] : currentGrab.rect;
-      selection.selectGroup(currentGrab.page, members, bounds);
+      selection.selectGroup(currentGrab.page, members.map(({ el, ...m }) => m), bounds);
       status(`Selected ${members.length} elements as a group. Drag to move or resize.`);
     }
     return;

@@ -36,6 +36,7 @@
       "agent-setup.js",
       "collab-hub.js",
       "collab-server.js",
+      "tunnel.js",
       "package.json",
       "reader/**/*",
       "preload.cjs",

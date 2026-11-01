@@ -135,6 +135,11 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}));
     if (op === "insertPages")
       session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
+    if (op === "recognized") {
+      session.set_recognized_text(JSON.stringify(args.pages || {}));
+      postMessage({ id, result: true });
+      return;
+    }
     if (op === "digest") {
       postMessage({ id, result: session.history_digest() });
       return;

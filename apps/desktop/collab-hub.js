@@ -72,8 +72,9 @@ export class CollabHub {
     this.code = { value: pairingCode(), expires: this.now() + this.codeLife, failures: 0 };
   }
   // Called by the transport for each new connection; returns the peer it reports to.
-  connect(transport) {
-    const peer = { id: this.next++, transport, role: null, name: '', color: '', synced: false, clients: new Set(), tokens: this.rate.burst, refilled: this.now(), flushed: false };
+  // `remote`: the connection came through the online tunnel (tunnel.js), not this network.
+  connect(transport, { remote = false } = {}) {
+    const peer = { id: this.next++, transport, remote, role: null, name: '', color: '', synced: false, clients: new Set(), tokens: this.rate.burst, refilled: this.now(), flushed: false };
     this.peers.set(peer.id, peer);
     return {
       id: peer.id,
@@ -130,9 +131,25 @@ export class CollabHub {
     handler.call(this, peer, message);
   }
   // First message: a token (host, guest invite or tablet link) or a tablet pairing code.
+  // Online access: a separate guest invite that works through the tunnel. Turning it off
+  // revokes it and disconnects everyone who came in that way.
+  allowOnline() {
+    if (!this.notes) throw Error('Online access is for notes guests; this session shares no notes.');
+    this.tokens.online = token();
+    return this.tokens.online;
+  }
+  closeOnline() {
+    this.tokens.online = null;
+    for (const p of [...this.peers.values()]) if (p.remote) this.kick(p, 1008, 'Online access was turned off.');
+  }
   hello(peer, { token, code, name, role }) {
     let granted = null;
-    if (token && same(token, this.tokens.host) && !this.host) granted = 'host';
+    // Through the tunnel only notes guests with the online invite join: never the host,
+    // a drawing tablet or the 6-digit code.
+    if (peer.remote) {
+      if (token && this.notes && this.tokens.online && same(token, this.tokens.online) && role !== 'tablet') granted = 'guest';
+      else return this.kick(peer, 1008, 'This invite does not work from another network. Ask for the online link.');
+    } else if (token && same(token, this.tokens.host) && !this.host) granted = 'host';
     else if (token && same(token, this.tokens.tablet)) granted = 'tablet';
     else if (token && this.notes && same(token, this.tokens.guest)) granted = role === 'tablet' ? null : 'guest';
     else if (code != null) {

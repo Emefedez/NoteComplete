@@ -1,4 +1,5 @@
 import { modelPicker } from "./model-picker.js";
+import { icon } from "./icons.js";
 
 // Markdown into handwritten pages, with the same engine as the MCP ink tools:
 // a dialog with the Markdown, the look and a live preview, that creates a new
@@ -125,7 +126,7 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
           <div id="hwAiTools" class="hw-ai-row hw-tools"${ai ? "" : " hidden"}><select id="hwTool" data-native aria-label="AI tool"></select><select id="hwModel" data-native aria-label="Model"></select><input id="hwModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden /></div>
           <p id="hwAiStatus" class="muted hw-ai-status" role="status"></p>
           <label class="ocr-languages">Name<input id="hwName" type="text" spellcheck="false" /></label>
-          <div class="hw-edit-bar"><span class="muted">Markdown</span><button id="hwUndo" type="button" disabled title="Undo the last change to the Markdown (an AI write, an opened file or your typing)">Undo</button><button id="hwRedo" type="button" disabled title="Redo">Redo</button></div>
+          <div class="hw-edit-bar"><span class="muted">Markdown</span><button id="hwUndo" type="button" disabled aria-label="Undo" title="Undo the last change to the Markdown (an AI write, an opened file or your typing)"></button><button id="hwRedo" type="button" disabled aria-label="Redo" title="Redo the change"></button></div>
           <textarea id="hwMarkdown" spellcheck="false" aria-label="Markdown" rows="14"></textarea>
           <details class="hw-help"><summary>Markdown for handwriting</summary><p class="muted"><code># TITLE</code>, <code>## Section</code>, <code>**term**</code>, <code>==highlight==</code>, <code>[[tag]]</code>, <code>((grey detail))</code>, <code>- item</code>, <code>1. step</code>, <code>&gt; [sky] CARD: text</code>, <code>&gt;&gt; A: … || B: …</code>, <code>!columns 55</code> … <code>!col</code> … <code>!end</code>, <code>!zone [mint]</code> … <code>!end</code>, <code>!sticky [yellow] TITLE: text</code>, <code>!stat 42 label</code>, <code>!draw 480</code> &lt;svg…&gt; <code>!end</code>, <code>\\pagebreak</code>. Greek letters, <code>T^4</code> and <code>CO_2</code> are drawn by hand.</p></details>
           <div class="hw-fields">${selects}<label class="ocr-languages">Text size<input id="hwSize" type="number" min="4" max="60" step="0.5" value="11" /></label></div>
@@ -142,6 +143,8 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
     el("hwCancel").onclick = () => dialog.close();
     dialog.addEventListener("close", () => stopWriting());
     // Undo and redo for the Markdown: every AI write, opened file and pause in typing is a step.
+    el("hwUndo").replaceChildren(icon("undo"));
+    el("hwRedo").replaceChildren(icon("redo"));
     el("hwUndo").onclick = () => step(-1);
     el("hwRedo").onclick = () => step(1);
     el("hwMarkdown").addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(() => snapshot(), 800); });

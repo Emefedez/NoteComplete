@@ -12,6 +12,8 @@ const $ = (id) => document.getElementById(id);
 const LOCAL = Symbol('local notes edit');
 const NAME_KEY = 'notecomplete-collab-name';
 const SIDE_KEY = 'notecomplete-tablet-dock';
+// The desktop bridge's online-access events are listened to once for the whole tab.
+let onlineHooked = false;
 const DRAWING = new Set(['draw', 'highlight', 'erase', 'tape', 'shape']);
 let session = null;
 // The open session, for checks in the browser (tools/collab_e2e.mjs).
@@ -108,7 +110,7 @@ function hostDialog(host) {
     try {
       const info = await window.notecompleteCollab.start({ notes: notes === 'none' ? null : notes });
       const yjs = notes === 'none' ? null : await loadYjs();
-      session = new Session(host, { url: info.hostUrl, token: info.hostToken, role: 'host', name: remembered() || 'Host', yjs, info });
+      session = new Session(host, { url: info.hostUrl, token: info.hostToken, role: 'host', name: remembered() || 'Host', yjs, info: { ...info, notesMode: notes } });
       session.showShare();
     } catch (e) {
       start.disabled = false;
@@ -253,16 +255,67 @@ class Session {
     this.shareShown = true;
     const tablet = el('section', { id: 'collabTablet', className: 'collab-section' });
     const invite = el('section', { id: 'collabInvite', className: 'collab-section' });
+    const online = el('section', { id: 'collabOnline', className: 'collab-section' });
     const people = el('section', { className: 'collab-section' }, el('h3', { textContent: 'People' }), el('ul', { id: 'collabPeople', className: 'collab-people' }));
     const stop = el('button', { type: 'button', className: 'danger', textContent: 'Stop sharing', onclick: () => this.end() });
     const done = el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog });
-    const d = dialog('Sharing', tablet, invite, people, buttons(stop, done));
+    const d = dialog('Sharing', tablet, invite, online, people, buttons(stop, done));
     // Enter must never end the session by accident: focus starts on Done.
     done.focus();
     d.addEventListener('close', () => { this.shareShown = false; }, { once: true });
     await this.drawTablet();
     await this.drawInvite();
+    await this.drawOnline();
     this.drawShareList();
+  }
+  // People on other networks (online access, desktop tunnel.js): a separate link through
+  // Cloudflare, for the notes only; it stops when turned off or when sharing ends.
+  async drawOnline(state = {}) {
+    const section = $('collabOnline'), bridge = window.notecompleteCollab;
+    if (!section) return;
+    if (!this.info.guestLink || !bridge?.online) { section.hidden = true; return; }
+    section.hidden = false;
+    const title = el('h3', { textContent: 'Online access' });
+    if (state.busy) {
+      section.replaceChildren(title, el('p', { className: 'muted', id: 'collabOnlineStatus', textContent: state.busy }));
+      return;
+    }
+    if (!this.info.onlineLink) {
+      const on = el('button', { type: 'button', className: 'accent', textContent: 'Turn on online access' });
+      on.onclick = async () => {
+        if (!onlineHooked) {
+          onlineHooked = true;
+          bridge.onOnlineProgress?.((p) => { const s = $('collabOnlineStatus'); if (s) s.textContent = `Downloading Cloudflare’s tunnel (once)… ${Math.round(p * 100)}%`; });
+          bridge.onOnlineEnded?.(() => { if (!session?.info) return; session.info.onlineLink = ''; session.host.status('Online access stopped: the tunnel closed.', true); session.drawOnline(); });
+        }
+        await this.drawOnline({ busy: 'Connecting to Cloudflare…' });
+        try {
+          Object.assign(this.info, await bridge.online(true));
+          this.host.status('Online access is on. Send the online link to people on other networks.');
+        } catch (e) { this.host.status(e.message, true); }
+        await this.drawOnline();
+      };
+      section.replaceChildren(title,
+        el('p', { textContent: 'Let people on other networks join the notes, through a temporary internet address from Cloudflare. They get their own link; drawing tablets stay on this network. Anyone with the online link can join until you turn it off or stop sharing.' }),
+        el('p', { className: 'muted', textContent: this.info.notesMode === 'view' ? 'Guests can only view the notes.' : 'Guests can edit the notes, as on this network.' }),
+        on, state.error ? el('p', { className: 'collab-error', textContent: state.error }) : '');
+      return;
+    }
+    const link = this.info.onlineLink;
+    const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy online link' });
+    copy.onclick = () => navigator.clipboard.writeText(link).then(() => this.host.status('Online link copied.'), () => this.host.status('Select the link and copy it.', true));
+    const off = el('button', { type: 'button', className: 'danger', textContent: 'Turn off', onclick: async () => {
+      try { Object.assign(this.info, await bridge.online(false)); } catch (e) { this.host.status(e.message, true); }
+      this.info.onlineLink = '';
+      this.host.status('Online access is off; people who joined online were disconnected.');
+      this.drawOnline();
+    } });
+    const qr = el('div', { className: 'collab-qr small' });
+    qr.innerHTML = await qrSvg(link);
+    section.replaceChildren(title, el('div', { className: 'collab-pair' }, qr, el('div', {},
+      el('p', { textContent: 'Send this link to people anywhere. It works until you turn it off or stop sharing.' }),
+      el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', onfocus: (e) => e.target.select() }),
+      el('div', { className: 'collab-online-actions' }, copy, off))));
   }
   async drawInvite() {
     const invite = $('collabInvite');
@@ -620,7 +673,6 @@ class Session {
     this.markTool();
     this.onPen = (e) => { if (e.pointerType === 'pen') this.penSeen = true; };
     window.addEventListener('pointerdown', this.onPen, true);
-    this.pinch();
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
@@ -658,23 +710,6 @@ class Session {
     const side = this.dock.dataset.side === 'left' ? 'right' : 'left';
     this.dock.dataset.side = document.body.dataset.dock = side;
     try { localStorage.setItem(SIDE_KEY, side); } catch { /* Optional. */ }
-  }
-  // Two fingers zoom this device's view of the page (never the computer's).
-  pinch() {
-    const viewport = $('viewport');
-    let last = 0;
-    const measure = (t) => ({ d: Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY), x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
-    this.onTouch = (e) => {
-      if (e.touches.length !== 2) { last = 0; return; }
-      e.preventDefault();
-      const m = measure(e.touches);
-      if (e.type === 'touchstart' || !last) { this.host.cancelGesture(); last = m.d; return; }
-      if (m.d > 0 && Math.abs(m.d / last - 1) > 0.01) {
-        this.host.pinchBy(m.x, m.y, m.d / last);
-        last = m.d;
-      }
-    };
-    for (const type of ['touchstart', 'touchmove', 'touchend']) viewport.addEventListener(type, this.onTouch, { passive: false });
   }
   view() {
     const viewport = $('viewport');
@@ -719,7 +754,6 @@ class Session {
     if (this.onSelection) document.removeEventListener('selectionchange', this.onSelection);
     if (this.onScroll) $('notesEditor').removeEventListener('scroll', this.onScroll);
     if (this.onPen) window.removeEventListener('pointerdown', this.onPen, true);
-    if (this.onTouch) for (const type of ['touchstart', 'touchmove', 'touchend']) $('viewport').removeEventListener(type, this.onTouch);
     $('collabPeopleBar')?.remove();
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }

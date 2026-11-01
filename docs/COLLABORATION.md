@@ -244,6 +244,20 @@ A phone or tablet joins a desktop NoteComplete as a drawing surface for the note
   - a guest flooding the host is disconnected.
 - **What guests can never do**: read any file that was not linked, reach the host's Drive, MCP or AI tools, or change anything but the notes text. A guest's proposed version (Phase 7) is only an upload the host may look at; it never replaces anything without the host choosing pages in the comparison.
 
+## Online access (built)
+
+For notes guests on other networks, the host can turn on **online access** in the sharing dialog. It works like VS Code's port forwarding:
+- The desktop app starts a Cloudflare quick tunnel (`cloudflared tunnel --url http://127.0.0.1:<port>`). No account is needed.
+- Cloudflare gives a temporary `https://….trycloudflare.com` address. Guests use `wss://` through it, so the traffic is encrypted between them and Cloudflare.
+
+How it is limited (`apps/desktop/tunnel.js`, `collab-server.js`, `collab-hub.js`):
+- **Separate invite.** The online link carries its own guest token. It is renewed each time online access starts. Turning it off revokes it and disconnects everyone who joined that way. Stopping the session stops the tunnel.
+- **Notes guests only.** A connection counts as remote unless it names this computer by its loopback or LAN address and carries no Cloudflare headers. Remote connections may only join as notes guests, with the online token. The host token, drawing-tablet tokens and the 6-digit code are refused over the tunnel. While online access is off, remote connections are closed before any message. Guests keep the session's edit or view-only setting.
+- **Pinned binary.** `cloudflared` is downloaded once into the app's data folder. It is pinned to one release (2026.9.1), checked against SHA-256 hashes written in the code, and re-checked before every start.
+- **No uptime promise.** Quick tunnels are Cloudflare's free testing service, with no uptime guarantee. If the tunnel stops, the dialog says so and the link stops working.
+
+Tested with a stand-in `cloudflared` and simulated Cloudflare requests (`collab-server.test.mjs`, `tunnel.test.mjs`). Not yet verified with a real tunnel: the development container cannot reach Cloudflare.
+
 ## Guest experience
 
 - **In a browser**:
