@@ -99,7 +99,7 @@ function savedState() {
 $("saveState").onclick = () => $("save").click();
 
 // Desktop tabs: the strip in the top bar; title and unsaved state go to the window.
-const tabBar = tabStrip(window.notecompleteTabs || null, { dirty: () => !!doc && dirty });
+const tabBar = tabStrip(window.notecompleteTabs || null, { dirty: () => !!doc && dirty, beforeClose: () => collab?.beforeClose?.() ?? true });
 if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
@@ -151,6 +151,13 @@ function status(text, error = false) {
 }
 function call(op, args = {}) {
   return engine.call({ op, page, ...args }, args.bytes ? [args.bytes] : []);
+}
+// A sharing session (collab.js, loaded only when one starts). While it holds the open
+// note, edits go into the session's shared order and come back to be applied here
+// (applyShared), so every copy applies the same edits in the same order.
+let collab = null;
+function mutate(op, args = {}) {
+  return collab?.ink ? collab.submit(op, args) : call(op, args);
 }
 // Notes of 32 MB and more replace the engine's worker when they close (engine.js).
 const engine = new Engine({
@@ -217,7 +224,10 @@ function reset({ opening = false, keepSession = false } = {}) {
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
   documentControls();
-  if (!opening) home?.show(false);
+  if (!opening) {
+    home?.show(false);
+    collab?.documentChanged();
+  }
 }
 // The format Save writes for a document made with New document; null saves a project.
 let saveAs = null;
@@ -247,6 +257,7 @@ async function load(file, preparedDocument = null) {
       rememberDocument();
       documentControls();
       status(prepared.kind === "html" ? "HTML document opened." : "Text document opened.");
+      collab?.documentChanged();
       return;
     }
     // The bytes are transferred to the worker, so their size is read first.
@@ -296,6 +307,7 @@ async function load(file, preparedDocument = null) {
     rememberDocument();
     await renderPage(panels[0], result);
     status("Document opened.");
+    collab?.documentChanged();
   } catch (e) {
     status("Could not open: " + e.message, true);
     throw e;
@@ -325,7 +337,7 @@ async function importImages(files) {
         bounds: imageBounds(decoded.size, panels[targetPage].size),
         layer,
       };
-      const result = await call("image", { page: targetPage, image });
+      const result = await mutate("image", { page: targetPage, image });
       if (note !== epoch) return;
       dirty = changed = true;
       revision++;
@@ -1135,34 +1147,18 @@ async function action(op, args = {}) {
   mutationPending++;
   const token = epoch;
   try {
-    const result = await call(op, args);
+    const result = await mutate(op, args);
     if (token !== epoch) return;
-    dirty = changed = true;
-    revision++;
-    doc = result;
-    savedState();
-    // Inserted pages, or a page size changed (a resize, or its undo/redo).
-    if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
-      restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : undefined);
-      return;
-    }
+    if (edited(op, args, result)) return;
     if (op === "draw" && args.line.shape && !gesture) {
       document.querySelector("[data-tool=select]").click();
       selection.selectId(args.page ?? page, `new:${result.edit_count - 1}`);
     } else if (selection.item) {
       selection.selectId(selection.item.page, selection.item.id);
     }
-    updateTools(result);
-    layerPanel(result.layers);
-    // Ink edits change one page; undo, redo and layers may change any.
-    const only = ["draw", "erase", "remove", "lock", "image", "editText"].includes(op) ? args.page : null;
-    for (const p of panels) {
-      if (only != null && p.index !== only) continue;
-      p.token++;
-      if (p.near || p.index === page)
-        renderPage(p, p.index === result.page ? result : undefined);
-    }
-    status(
+    showEdit(op, args, result);
+    if (collab?.role === "tablet") status("");
+    else status(
       op === "erase"
         ? "Erased. You can undo this change."
         : op === "lock"
@@ -1182,6 +1178,39 @@ async function action(op, args = {}) {
       }
     }
   }
+}
+// The note changed by `op` (here, or in a sharing session on another screen). Returns
+// true when the pages were rebuilt (inserted pages, or a page size changed).
+function edited(op, args, result) {
+  // A tablet's copy is the computer's note: the computer saves it, not the tablet.
+  if (collab?.role !== "tablet") dirty = changed = true;
+  revision++;
+  doc = result;
+  savedState();
+  if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
+    restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : undefined);
+    return true;
+  }
+  return false;
+}
+function showEdit(op, args, result) {
+  updateTools(result);
+  layerPanel(result.layers);
+  // Ink edits change one page; undo, redo and layers may change any.
+  const only = ["draw", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  for (const p of panels) {
+    if (only != null && p.index !== only) continue;
+    p.token++;
+    if (p.near || p.index === page)
+      renderPage(p, p.index === result.page ? result : undefined);
+  }
+}
+// An edit in the session's shared order. This reader's own edits finish where they
+// were made (action, patchItem…); others' are shown here.
+async function applyShared({ op, args }, mine) {
+  const result = await call(op, args);
+  if (!mine && doc && !edited(op, args, result)) showEdit(op, args, result);
+  return result;
 }
 function syncInk() {
   const recording = audio.recording,
@@ -1271,6 +1300,7 @@ function cancelGesture() {
   const g = gesture;
   gesture = null;
   if (!g) return;
+  collab?.drawn(g, true);
   g.panel.overlay?.replaceChildren();
   if (g.hidden) g.hidden.style.visibility = "";
   shapeHandles(g.panel);
@@ -1301,15 +1331,17 @@ function pointerDown(e, p) {
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
   setPage(p.index);
-  if (selection.down(e, p, tool)) return;
-  if (tool === "pan") {
+  // Drawing tablet: once a stylus has been used, fingers move the page instead of drawing.
+  const touchPan = collab?.touchPans(e);
+  if (!touchPan && selection.down(e, p, tool)) return;
+  if (tool === "pan" || touchPan) {
     // On PDF or recognized words the mouse selects text instead of panning.
-    if (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan")) return;
+    if (!touchPan && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
     window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
       id: e.pointerId,
-      tool,
+      tool: "pan",
       panel: p,
       x: e.clientX,
       y: e.clientY,
@@ -1389,6 +1421,9 @@ function pointerDown(e, p) {
     layer: activeLayer,
     el,
     dot,
+    // A stylus reports pressure (0–1); a mouse or finger does not.
+    pen: e.pointerType === "pen",
+    pressures: [e.pressure],
   };
   p.el.setPointerCapture(e.pointerId);
   preview();
@@ -1427,11 +1462,22 @@ function appendPoint(e) {
       if (
         Math.hypot(p[0] - last[0], p[1] - last[1]) >= 0.3 &&
         g.points.length < 8192
-      )
+      ) {
         g.points.push(p);
+        g.pressures.push(sample.pressure);
+      }
     }
   }
   preview();
+  collab?.drawing(g);
+}
+// Pen pressure from a stylus, as the core stores it: the drawn radius at each point
+// (editor.rs). Light pressure draws about a third of the width, a firm press about 1.7×.
+function stylusPressure(g) {
+  if (!g.pen || g.pressures.length !== g.points.length) return {};
+  const half = g.width / 2;
+  const radii = g.pressures.map((p) => Math.min(50, Math.max(0.05, half * (0.3 + 1.4 * (Number.isFinite(p) ? Math.min(1, Math.max(0, p)) : 0.5)))));
+  return { pressure: radii.map((r) => Math.round(r * 1000) / 1000) };
 }
 // Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
 // documents scroll the same way. It never auto-scrolls or pastes the primary selection.
@@ -1482,6 +1528,7 @@ function pointerUp(e) {
   appendPoint(e);
   const g = gesture;
   gesture = null;
+  collab?.drawn(g);
   g.panel.stale = false;
   g.panel.el.releasePointerCapture(e.pointerId);
   if (g.tool === "grab") {
@@ -1517,6 +1564,7 @@ function pointerUp(e) {
         tool: g.tool === "highlight" ? 1 : g.tool === "tape" ? 2 : 0,
         layer: g.layer,
         ...(g.box && g.tool === "highlight" ? { square: true } : {}),
+        ...(g.tool === "draw" ? stylusPressure(g) : {}),
         ...(g.tool === "shape"
           ? {
               shape: {
@@ -1679,6 +1727,13 @@ let pinch = null;
 $("viewport").addEventListener("wheel", (e) => {
   if (!e.ctrlKey || !doc) return;
   e.preventDefault();
+  // Trackpads send small deltas; a wheel notch is ~100 px, so each event is capped to about ×1.2.
+  const delta = Math.max(-20, Math.min(20, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY));
+  pinchBy(e.clientX, e.clientY, Math.exp(-delta * 0.009));
+}, { passive: false });
+// Scales the pages by `step` around a screen point; also used by two-finger pinch (collab.js).
+function pinchBy(clientX, clientY, step) {
+  const e = { clientX, clientY };
   const viewport = $("viewport"), box = viewport.getBoundingClientRect();
   if (!pinch) {
     const base = currentZoom();
@@ -1695,9 +1750,6 @@ $("viewport").addEventListener("wheel", (e) => {
     $("pages").style.transformOrigin = `${pinch.cx}px ${pinch.cy}px`;
     $("pages").style.willChange = "transform";
   }
-  // Trackpads send small deltas; a wheel notch is ~100 px, so each event is capped to about ×1.2.
-  const delta = Math.max(-20, Math.min(20, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY));
-  const step = Math.exp(-delta * 0.009);
   pinch.scale = Math.max(0.1 / pinch.base, Math.min(4 / pinch.base, pinch.scale * step));
   $("pages").style.transform = `scale(${pinch.scale})`;
   $("zoomValue").value = Math.round(pinch.base * pinch.scale * 100) + "%";
@@ -1717,7 +1769,7 @@ $("viewport").addEventListener("wheel", (e) => {
       viewport.scrollTop = cy * scale - y;
     }
   }, 160);
-}, { passive: false });
+}
 $("undo").onclick = () => {
   cancelGesture();
   action("undo");
@@ -2116,8 +2168,8 @@ async function patchItem(item, adjustment, crop = null) {
   const token = epoch;
   try {
     const result = crop
-      ? await call("crop", { page: item.page, itemId: item.id, rect: crop })
-      : await call("adjust", { page: item.page, itemId: item.id, adjustment });
+      ? await mutate("crop", { page: item.page, itemId: item.id, rect: crop })
+      : await mutate("adjust", { page: item.page, itemId: item.id, adjustment });
     if (token !== epoch) return null;
     dirty = changed = true;
     savedState();
@@ -2474,6 +2526,7 @@ async function openFromLibrary(file, entry) {
 }
 // Which file a fingerprint belongs to, for All quizzes (`doc:<fingerprint>`).
 async function rememberDocument(entryKey = "") {
+  if (collab?.role === "tablet") return;
   const fp = (doc && find.fingerprint) || (sideView() && sideFp);
   if (!fp) return;
   const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
@@ -3006,7 +3059,7 @@ async function selectGrab(targetGrab = grabbed) {
       bounds: [gx, gy, gw, gh],
       layer: activeLayer,
     };
-    const result = await call("image", { page: currentGrab.page, image });
+    const result = await mutate("image", { page: currentGrab.page, image });
     dirty = changed = true;
     revision++;
     doc = result;
@@ -3602,3 +3655,45 @@ document.addEventListener("click", (e) => {
     viewer.showModal();
   }
 });
+
+// Sharing (docs/COLLABORATION.md): Markdown notes with guests, and phones or tablets as
+// drawing surfaces. Nothing of it loads until a session starts or an invite is opened.
+let collabLoading = null;
+const collabHost = {
+  call, applyShared, status, jump, cancelGesture, pinchBy, setZoom, notesApi, download, library,
+  get ready() { return ready; },
+  get busy() { return busy() || !!gesture; },
+  get doc() { return doc; },
+  get page() { return page; },
+  get panels() { return panels; },
+  get tool() { return tool; },
+  get fingerprint() { return (doc && find.fingerprint) || sideFp; },
+  get kind() { return doc ? "note" : sideView() ? "side" : null; },
+  title: () => $("title").textContent,
+  setCollab(value) { collab = value; },
+  setTool(name) { document.querySelector(`[data-tool="${name}"]`)?.click(); },
+  // A tablet's copy of the computer's note: opened like a project, never kept in Recent.
+  async openProject(project, title) {
+    cancelGesture();
+    await load(new File([project], `${(title || "Shared note").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.nfedit`, { type: "application/json" }));
+    dirty = changed = false;
+    savedState();
+  },
+  closeDocument: () => reset(),
+  openFile: (file) => load(file),
+};
+async function startCollab(mode) {
+  try {
+    const { openCollab } = await (collabLoading ||= import("./collab.js"));
+    await openCollab(collabHost, mode);
+  } catch (e) {
+    collabLoading = null;
+    status(e.message, true);
+  }
+}
+$("shareSession").hidden = !window.notecompleteCollab;
+$("shareSession").onclick = () => startCollab("host");
+$("joinTablet").onclick = () => startCollab("join-tablet");
+$("joinNotes").onclick = () => startCollab("join-notes");
+// Opened from an invite (/join#… or /tablet#…, served by the host's computer).
+if (/^\/(join|tablet)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");

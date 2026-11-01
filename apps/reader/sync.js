@@ -122,6 +122,8 @@ export class SyncClient {
       case 'closed':
         this.refusal = m.reason;
         return;
+      case 'code':
+        return this.on('code', m);
       case 'op':
         return this.enqueue(() => this.applyEntry(m));
       case 'nack': {
@@ -301,7 +303,7 @@ export class SyncClient {
 
 // Replaces `from` with `to` in a Y.Text with the smallest change (one delete and one
 // insert around the common start and end), so concurrent edits elsewhere are kept.
-export function applyTextDiff(ytext, to) {
+export function applyTextDiff(ytext, to, origin = null) {
   const from = ytext.toString();
   if (from === to) return;
   let start = 0;
@@ -315,5 +317,5 @@ export function applyTextDiff(ytext, to) {
   ytext.doc.transact(() => {
     if (from.length - start - end) ytext.delete(start, from.length - start - end);
     if (to.length - start - end) ytext.insert(start, to.slice(start, to.length - end));
-  });
+  }, origin);
 }

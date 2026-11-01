@@ -7,7 +7,7 @@ import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
 
-export function tabStrip(bridge, { dirty }) {
+export function tabStrip(bridge, { dirty, beforeClose = () => true }) {
   if (!bridge) return { update() {} };
   const strip = $('tabStrip');
   let tabs = [];
@@ -55,7 +55,9 @@ export function tabStrip(bridge, { dirty }) {
   }, { passive: false });
   bridge.onList(render);
   bridge.list().then(render).catch(() => {});
-  bridge.onCloseRequest(() => {
+  // beforeClose: a sharing session asks first (it may end the session or cancel).
+  bridge.onCloseRequest(async () => {
+    if (!(await beforeClose())) return;
     if (!dirty() || confirm('This tab has unsaved changes. Close it and discard them?')) bridge.closeSelf();
   });
   return { update: state => bridge.update(state).catch(() => {}) };

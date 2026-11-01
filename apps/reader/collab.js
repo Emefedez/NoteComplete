@@ -1,0 +1,668 @@
+// Sharing sessions in the reader (docs/COLLABORATION.md), loaded only when one starts:
+// - the host (desktop app) shares its notes and pairs drawing tablets: QR code, short code,
+//   invite link and the people list;
+// - a guest edits the shared notes, full width, with everyone's cursors;
+// - a drawing tablet (a phone or tablet, in the app or a browser) shows the host's note
+//   with only a tool dock, and draws on it: the edits are the host's own edits.
+// The protocol is in sync.js; the host's server in apps/desktop/collab-server.js.
+import { SyncClient, parseInvite, applyTextDiff } from './sync.js';
+import { icon } from './icons.js';
+
+const $ = (id) => document.getElementById(id);
+const LOCAL = Symbol('local notes edit');
+const NAME_KEY = 'notecomplete-collab-name';
+const SIDE_KEY = 'notecomplete-tablet-dock';
+const DRAWING = new Set(['draw', 'highlight', 'erase', 'tape', 'shape']);
+let session = null;
+// The open session, for checks in the browser (tools/collab_e2e.mjs).
+export const currentSession = () => session;
+let yjsLoading = null;
+let qrLoading = null;
+
+// Yjs, its sync and awareness protocols, vendored by tools/build_web.py.
+function loadYjs() {
+  return yjsLoading ||= Promise.all([
+    import('./vendor/yjs/yjs.mjs'),
+    import('./vendor/y-protocols/sync.js'),
+    import('./vendor/y-protocols/awareness.js'),
+    import('./vendor/lib0/encoding.js'),
+    import('./vendor/lib0/decoding.js'),
+  ]).then(([Y, sync, awareness, encoding, decoding]) => ({ Y, sync, awareness, encoding, decoding }))
+    .catch((e) => { yjsLoading = null; throw Error('Sharing could not be loaded: ' + e.message); });
+}
+async function qrSvg(text) {
+  const { default: qrcode } = await (qrLoading ||= import('./vendor/qrcode/qrcode.mjs'));
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+}
+const remembered = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
+const remember = (name) => { try { localStorage.setItem(NAME_KEY, name); } catch { /* Optional. */ } };
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key.includes('-')) node.setAttribute(key, value);
+    else node[key] = value;
+  }
+  node.append(...children.filter((c) => c != null));
+  return node;
+}
+// One dialog for every sharing step; its contents are replaced.
+function dialog(title, ...body) {
+  let d = $('collabDialog');
+  if (!d) {
+    d = el('dialog', { id: 'collabDialog', className: 'ocr-dialog collab-dialog' });
+    d.setAttribute('aria-labelledby', 'collabTitle');
+    document.body.append(d);
+  }
+  d.replaceChildren(el('h2', { id: 'collabTitle', textContent: title }), ...body.filter(Boolean));
+  if (!d.open) d.showModal();
+  return d;
+}
+function closeDialog() { $('collabDialog')?.close(); }
+function buttons(...list) { return el('div', { className: 'dialog-actions' }, ...list); }
+
+// Entry point (app.js): mode is host, join-tablet, join-notes or link (an invite URL).
+export async function openCollab(host, mode) {
+  if (session && mode !== 'host') throw Error('Leave the current session first.');
+  if (mode === 'host') return session?.role === 'host' ? session.showShare() : hostDialog(host);
+  if (mode === 'link') {
+    const invite = parseInvite(location.href);
+    history.replaceState(null, '', location.pathname);
+    return join(host, invite);
+  }
+  return joinDialog(host, mode === 'join-tablet' ? 'tablet' : 'guest');
+}
+
+// Host: choose what to share, then start the server and connect to it.
+function hostDialog(host) {
+  const choice = (value, label, detail, checked = false) => el('label', { className: 'collab-choice' },
+    el('input', { type: 'radio', name: 'collabNotes', value, checked }), el('span', {}, el('strong', { textContent: label }), el('small', { className: 'muted', textContent: detail })));
+  const start = el('button', { className: 'primary', type: 'button', textContent: 'Start sharing' });
+  const cancel = el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog });
+  dialog('Share and draw on a tablet',
+    el('p', { textContent: 'People and devices on this network join with a link, a QR code or a short code. Drawing tablets draw on the note open in this tab; notes guests write the Markdown notes with you.' }),
+    el('fieldset', { className: 'collab-choices' }, el('legend', { textContent: 'Notes' }),
+      choice('edit', 'Guests can edit', 'Everyone writes the notes together.', true),
+      choice('view', 'Guests can view', 'They follow the notes and cursors; edits are refused.'),
+      choice('none', 'Not shared', 'Only drawing tablets join.')),
+    el('p', { className: 'muted', textContent: 'Meant for a trusted network (home, school): the connection is not encrypted; the invite holds a secret.' }),
+    buttons(cancel, start));
+  start.onclick = async () => {
+    const notes = document.querySelector('input[name=collabNotes]:checked')?.value;
+    start.disabled = true;
+    try {
+      const info = await window.notecompleteCollab.start({ notes: notes === 'none' ? null : notes });
+      const yjs = notes === 'none' ? null : await loadYjs();
+      session = new Session(host, { url: info.hostUrl, token: info.hostToken, role: 'host', name: remembered() || 'Host', yjs, info });
+      session.showShare();
+    } catch (e) {
+      start.disabled = false;
+      host.status(e.message, true);
+    }
+  };
+}
+// Guest or tablet: a link, or the computer's address and code.
+function joinDialog(host, role) {
+  const link = el('input', { type: 'text', autocomplete: 'off', placeholder: role === 'tablet' ? '192.168.1.20:41237 or the link' : 'http://192.168.1.20:41237/join#…', spellcheck: false });
+  const code = el('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', placeholder: '123 456', maxLength: 7 });
+  const go = el('button', { className: 'primary', type: 'submit', textContent: 'Join' });
+  const error = el('p', { className: 'collab-error', hidden: true });
+  try { link.value = localStorage.getItem('notecomplete-collab-address') || ''; } catch { /* Optional. */ }
+  const form = el('form', { method: 'dialog', className: 'collab-join' },
+    el('label', {}, el('span', { textContent: role === 'tablet' ? 'Computer address or link' : 'Invite link' }), link),
+    role === 'tablet' ? el('label', {}, el('span', { textContent: 'Code' }), code) : null,
+    error,
+    buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), go));
+  dialog(role === 'tablet' ? 'Join as drawing tablet' : 'Join shared notes',
+    el('p', { textContent: role === 'tablet'
+      ? 'On the computer: File → Share and draw on a tablet. Scan its QR code with the camera, or enter the address and the 6-digit code it shows.'
+      : 'Paste the invite link the host gave you.' }),
+    form);
+  (link.value && role === 'tablet' ? code : link).focus();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const invite = parseInvite(link.value, code.value);
+      if (role === 'tablet' && invite.role !== 'tablet') throw Error('That is a notes invite; use File → Join shared notes.');
+      if (!/^[a-z]+:\/\//i.test(link.value.trim())) try { localStorage.setItem('notecomplete-collab-address', link.value.trim()); } catch { /* Optional. */ }
+      closeDialog();
+      await join(host, invite);
+    } catch (e) {
+      error.textContent = e.message;
+      error.hidden = false;
+    }
+  };
+}
+async function join(host, invite) {
+  const yjs = invite.role === 'guest' ? await loadYjs() : null;
+  session = new Session(host, { ...invite, name: remembered(), yjs });
+  host.status(invite.role === 'tablet' ? 'Connecting to the computer…' : 'Joining the shared notes…');
+}
+
+class Session {
+  constructor(host, { url, token, code, role, name, yjs, info = null }) {
+    Object.assign(this, { host, role, yjs, info, people: [], live: new Map(), penSeen: false });
+    this.client = new SyncClient({
+      url, token, code, role, name, yjs,
+      retries: role === 'host' ? [] : undefined,
+      apply: (entry, mine) => this.apply(entry, mine),
+      load: (snapshot) => this.load(snapshot),
+      snapshot: () => host.call('save'),
+      digest: () => host.call('digest'),
+      on: (type, detail) => this.event(type, detail),
+    });
+    host.setCollab(this);
+    this.client.connect();
+  }
+  // Ink goes through the shared order only while it matters: a tablet is connected (host),
+  // or this is the tablet. Otherwise the host edits exactly as without a session.
+  get ink() {
+    if (this.client.state !== 'open') return false;
+    if (this.role === 'tablet') return this.client.loaded;
+    return this.role === 'host' && this.host.kind === 'note' && this.people.some((p) => p.role === 'tablet');
+  }
+  submit(op, args) { return this.client.submit(op, args); }
+  async apply(entry, mine) {
+    const result = await this.host.applyShared(entry, mine);
+    // The stroke drawn live is now a real edit.
+    for (const [key, stroke] of this.live) if (stroke.from === entry.from && stroke.done) this.dropLive(key);
+    return result;
+  }
+  // Tablet: the host's note, as a project.
+  async load({ project, title }) {
+    for (let i = 0; i < 200 && (!this.host.ready || this.host.busy); i++) await new Promise((r) => setTimeout(r, 50));
+    const view = this.view();
+    await this.host.openProject(project, title);
+    this.restoreView(view);
+    this.waiting(false);
+    this.host.status(`Drawing on “${title || 'the note'}”.`);
+  }
+  event(type, detail) {
+    const host = this.host;
+    if (type === 'welcome' || type === 'doc') this.docTitle = detail.title || this.docTitle;
+    if (type === 'welcome') {
+      if (this.role === 'tablet') this.enterTablet();
+      if (this.role === 'guest') this.enterGuest();
+      if (this.role === 'host') this.documentChanged();
+      if (this.role === 'guest') {
+        this.askName(detail.name);
+        host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
+        this.showTitle();
+      }
+      if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); }
+    } else if (type === 'peers') {
+      this.people = detail;
+      this.drawPeople();
+      if (this.role === 'host' && $('collabDialog')?.open && this.shareShown) this.drawShareList();
+      for (const [key, stroke] of this.live) if (!detail.some((p) => p.id === stroke.from)) this.dropLive(key);
+    } else if (type === 'doc') {
+      if (this.role === 'guest') this.showTitle();
+      if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); }
+    } else if (type === 'live') {
+      this.showLive(detail);
+    } else if (type === 'notes-reset') {
+      this.bindNotes();
+    } else if (type === 'code') {
+      Object.assign(this.info, { code: detail.code, expires: detail.expires });
+      if (this.shareShown) this.drawTablet();
+    } else if (type === 'status') {
+      if (detail.state === 'reconnecting') host.status('Connection lost. Reconnecting…', true);
+      else if (detail.error) host.status(detail.error, true);
+    } else if (type === 'ending') {
+      this.keepCopy(detail.text);
+    } else if (type === 'ended') {
+      this.finish(this.role === 'host' ? 'Sharing ended. The notes were saved.' : this.role === 'tablet' ? 'The computer ended the session.' : 'The host ended the session; your copy of the notes was saved.', detail.text);
+    } else if (type === 'lost') {
+      if (this.role === 'guest') this.keepCopy(detail.text);
+      this.finish(this.role === 'guest' ? 'The session ended: the host could not be reached. Your copy of the notes was saved.' : 'The computer could not be reached.', detail.text);
+    } else if (type === 'closed') {
+      this.finish(detail.reason || 'Disconnected.', null, true);
+    } else if (type === 'nack') {
+      host.status(detail.error, true);
+    }
+  }
+
+  // Host --------------------------------------------------------------------------------
+  // The tab opened another note, or closed it: tablets reload; notes start from its text.
+  async documentChanged() {
+    if (this.role !== 'host' || this.client.state !== 'open') return;
+    const kind = this.host.kind;
+    let notes;
+    if (this.yjs) {
+      notes = kind === 'note' ? await this.host.call('getMarkdown').catch(() => '')
+        : kind === 'side' && this.host.fingerprint ? await this.host.library.store.get('settings', `notes:${this.host.fingerprint}`).catch(() => '') || '' : '';
+    }
+    this.client.documentChanged({ open: kind === 'note', title: this.host.title(), notes });
+  }
+  async showShare() {
+    this.shareShown = true;
+    const tablet = el('section', { id: 'collabTablet', className: 'collab-section' });
+    const invite = el('section', { id: 'collabInvite', className: 'collab-section' });
+    const people = el('section', { className: 'collab-section' }, el('h3', { textContent: 'People' }), el('ul', { id: 'collabPeople', className: 'collab-people' }));
+    const stop = el('button', { type: 'button', className: 'danger', textContent: 'Stop sharing', onclick: () => this.end() });
+    const d = dialog('Sharing', tablet, invite, people, buttons(stop, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog })));
+    d.addEventListener('close', () => { this.shareShown = false; }, { once: true });
+    await this.drawTablet();
+    if (this.info.guestLink) {
+      const copy = el('button', { type: 'button', textContent: 'Copy link' });
+      copy.onclick = () => navigator.clipboard.writeText(this.info.guestLink).then(() => this.host.status('Invite link copied.'), () => this.host.status('Select the link and copy it.', true));
+      const qr = el('div', { className: 'collab-qr small' });
+      qr.innerHTML = await qrSvg(this.info.guestLink);
+      invite.replaceChildren(el('h3', { textContent: 'Notes invite' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+        el('p', { textContent: 'Send this link to people on this network. They write the notes with you in a browser or in NoteComplete (File → Join shared notes).' }),
+        el('input', { type: 'text', readOnly: true, value: this.info.guestLink, className: 'collab-link', onfocus: (e) => e.target.select() }), copy)));
+    }
+    this.drawShareList();
+  }
+  async drawTablet() {
+    const section = $('collabTablet');
+    if (!section) return;
+    const fresh = await window.notecompleteCollab.info().catch(() => null);
+    if (fresh) Object.assign(this.info, fresh);
+    const qr = el('div', { className: 'collab-qr' });
+    qr.innerHTML = await qrSvg(this.info.tabletLink);
+    const code = String(this.info.code || '');
+    const renew = el('button', { type: 'button', textContent: 'New code', onclick: () => this.client.newCode() });
+    section.replaceChildren(el('h3', { textContent: 'Drawing tablet' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+      el('p', { textContent: 'Scan with the phone or tablet’s camera to draw in its browser, or in NoteComplete on the device choose File → Join as drawing tablet and enter:' }),
+      el('dl', { className: 'collab-code' },
+        el('dt', { textContent: 'Address' }), el('dd', { textContent: `${this.info.address}:${this.info.port}` }),
+        el('dt', { textContent: 'Code' }), el('dd', { className: 'code', textContent: `${code.slice(0, 3)} ${code.slice(3)}` })),
+      el('p', { className: 'muted', textContent: `The code works for 10 minutes. The device then reconnects by itself.` }), renew)));
+  }
+  drawShareList() {
+    const list = $('collabPeople');
+    if (!list) return;
+    const others = this.people.filter((p) => p.id !== this.client.id);
+    list.replaceChildren(...(others.length ? others.map((p) => el('li', {},
+      el('span', { className: 'collab-dot', style: `background:${p.color}` }),
+      el('span', { textContent: p.name }),
+      el('small', { className: 'muted', textContent: p.role === 'tablet' ? 'drawing tablet' : 'notes' }),
+      el('button', { type: 'button', textContent: 'Remove', onclick: () => this.client.removePeer(p.id) }))) : [el('li', { className: 'muted', textContent: 'No one has joined yet.' })]));
+  }
+  // Closing the tab while sharing (app.js asks this first): Minimize / End session and close / Cancel.
+  beforeClose() {
+    if (this.role !== 'host') { this.leave(); return true; }
+    if (!this.people.some((p) => p.id !== this.client.id)) { this.end(); return true; }
+    const others = this.people.length - 1;
+    return new Promise((resolve) => {
+      const answer = (value) => () => { closeDialog(); resolve(value); };
+      const minimize = el('button', { type: 'button', className: 'primary', textContent: 'Minimize', onclick: () => { window.notecompleteCollab?.minimize(); answer(false)(); } });
+      dialog('End the session?',
+        el('p', { textContent: `Notes are shared with ${others} ${others === 1 ? 'person' : 'people'}. Closing ends the session for everyone.` }),
+        buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: answer(false) }),
+          el('button', { type: 'button', className: 'danger', textContent: 'End session and close', onclick: async () => { closeDialog(); await this.end(); resolve(true); } }),
+          minimize));
+      minimize.focus();
+    });
+  }
+  // Everyone is told and saves first; resolves when the session is over (a few seconds at most).
+  end() {
+    if (this.role !== 'host') return this.leave();
+    closeDialog();
+    this.host.status('Ending the session: everyone is saving the notes…');
+    return new Promise((resolve) => {
+      this.ended = resolve;
+      this.client.end();
+      setTimeout(() => { window.notecompleteCollab?.stop().catch(() => {}); this.finish('Sharing ended.', null); }, 5000);
+    });
+  }
+
+  // Guests and tablets ------------------------------------------------------------------
+  askName(suggested) {
+    const input = el('input', { type: 'text', maxLength: 40, value: remembered() || suggested, 'aria-label': 'Your name' });
+    const ok = el('button', { className: 'primary', type: 'submit', textContent: 'OK' });
+    const form = el('form', { method: 'dialog', className: 'collab-name' }, input, ok);
+    const d = dialog('Your name', el('p', { textContent: 'Others see it beside your cursor and in the bar.' }), form);
+    d.classList.add('collab-name-dialog');
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      const name = input.value.trim() || suggested;
+      remember(name);
+      this.client.rename(name);
+      closeDialog();
+      d.classList.remove('collab-name-dialog');
+    };
+    input.focus();
+    input.select();
+  }
+  showTitle() {
+    const title = this.docTitle ? `${this.docTitle} · shared notes` : 'Shared notes';
+    $('title').textContent = title;
+    document.title = `${title} — NoteComplete`;
+  }
+  rename(current) {
+    const name = prompt('Your name', current)?.trim();
+    if (!name) return;
+    remember(name);
+    this.client.rename(name);
+  }
+  enterGuest() {
+    document.body.classList.add('guest-mode');
+    // The notes panel lives in the page editor, shown here without a note.
+    $('empty').hidden = true;
+    $('editor').hidden = false;
+    this.host.notesApi().then(async (notes) => {
+      await notes.load('', { core: false });
+      await notes.open();
+      $('notesToggle')?.setAttribute('aria-expanded', 'true');
+      this.bindNotes();
+    }).catch((e) => this.host.status(e.message, true));
+  }
+  // The guest's text is kept on this device as a Markdown file, and in the library.
+  keepCopy(text) {
+    if (this.copied || !text) return;
+    this.copied = text;
+    const name = `${(this.docTitle || 'Notes').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - shared notes.md`;
+    this.copyName = name;
+    this.host.library?.store.set('settings', `collab-copy:${this.client.id}:${Date.now()}`, { name, text, at: Date.now() }).catch(() => {});
+    this.host.download(text, name, 'text/markdown').catch(() => {});
+  }
+
+  // Notes -------------------------------------------------------------------------------
+  async bindNotes() {
+    if (!this.yjs || !this.client.text) return;
+    const notes = await this.host.notesApi();
+    const { Y } = this.yjs, ytext = this.client.text;
+    this.undo?.destroy();
+    this.undo = new Y.UndoManager(ytext, { trackedOrigins: new Set([LOCAL]) });
+    ytext.observe((event, transaction) => {
+      if (transaction.origin === LOCAL || ytext !== this.client.text) return;
+      notes.remote(ytext.toString(), event.delta);
+      this.drawCursors();
+    });
+    notes.share({
+      canEdit: this.client.canEdit,
+      persist: this.role === 'host',
+      text: () => ytext.toString(),
+      local: (text) => applyTextDiff(ytext, text, LOCAL),
+      // The editor appeared (the panel opened): show where everyone is.
+      mounted: () => requestAnimationFrame(() => this.drawCursors()),
+    });
+    this.notes = notes;
+    // Each notes reset brings a new awareness: listen to the current one.
+    this.client.awareness.on('change', () => { this.drawCursors(); this.drawPeople(); });
+    if (!this.listening) this.listenNotes();
+  }
+  listenNotes() {
+    this.listening = true;
+    const editor = $('notesEditor');
+    // Undo and redo are each person's own (Y.UndoManager), not the editor's.
+    this.onKey = (e) => {
+      if (!this.undo || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      e.preventDefault();
+      e.stopPropagation();
+      // The change comes back through the text's observer, like anyone else's.
+      if (key === 'y' || e.shiftKey) this.undo.redo();
+      else this.undo.undo();
+    };
+    editor.addEventListener('keydown', this.onKey, true);
+    let frame = 0;
+    this.onSelection = () => {
+      if (frame || !this.client.awareness) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const caret = this.notes?.caret();
+        if (!caret) return;
+        const { Y } = this.yjs, ytext = this.client.text;
+        const rel = (i) => Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(ytext, i));
+        this.client.awareness.setLocalStateField('cursor', { head: rel(caret.index), anchor: caret.anchor == null ? null : rel(caret.anchor) });
+      });
+    };
+    document.addEventListener('selectionchange', this.onSelection);
+    this.onScroll = () => this.drawCursors();
+    editor.addEventListener('scroll', this.onScroll, { passive: true });
+  }
+  // Others' carets in the notes editor, each in that person's colour with their name.
+  drawCursors() {
+    const editor = $('notesEditor');
+    if (!this.notes || !this.client.awareness || !editor) return;
+    let layer = $('notesCursors');
+    if (!layer || layer.parentElement !== editor) {
+      layer = el('div', { id: 'notesCursors', className: 'notes-cursors' });
+      layer.setAttribute('aria-hidden', 'true');
+      editor.append(layer);
+    }
+    const { Y } = this.yjs, carets = [];
+    for (const [client, state] of this.client.awareness.getStates()) {
+      if (client === this.client.doc.clientID || !state.cursor?.head || !state.user) continue;
+      const pos = Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(state.cursor.head), this.client.doc);
+      const box = pos && this.notes.caretBox(pos.index);
+      if (!box) continue;
+      const caret = el('div', { className: 'notes-caret', style: `left:${box.x}px;top:${box.y}px;height:${box.height}px;--who:${state.user.color}` }, el('span', { textContent: state.user.name }));
+      carets.push(caret);
+    }
+    layer.replaceChildren(...carets);
+  }
+  cursorOf(peer) {
+    if (!this.client.awareness) return null;
+    const { Y } = this.yjs;
+    for (const [, state] of this.client.awareness.getStates()) {
+      if (state.user?.name !== peer.name || !state.cursor?.head) continue;
+      return Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(state.cursor.head), this.client.doc)?.index ?? null;
+    }
+    return null;
+  }
+
+  // Presence in the bar -----------------------------------------------------------------
+  drawPeople() {
+    let bar = $('collabPeopleBar');
+    if (!bar) {
+      bar = el('div', { id: 'collabPeopleBar', className: 'collab-bar', role: 'group' });
+      bar.setAttribute('aria-label', 'People in this session');
+      $('title')?.after(bar);
+    }
+    const others = this.people.filter((p) => p.id !== this.client.id);
+    const shown = others.slice(0, 4);
+    const chip = (p) => {
+      const b = el('button', { type: 'button', className: 'collab-chip', title: `${p.name}${p.role === 'tablet' ? ' (drawing tablet)' : ''}`, style: `--who:${p.color}`, textContent: (p.name.trim()[0] || '?').toUpperCase() });
+      b.onclick = () => this.goTo(p);
+      return b;
+    };
+    const me = el('button', { type: 'button', className: 'collab-chip me', title: `You: ${this.client.name}. Click to change your name.`, style: `--who:${this.client.color}`, textContent: (this.client.name.trim()[0] || '?').toUpperCase(), onclick: () => this.rename(this.client.name) });
+    bar.replaceChildren(...[me, ...shown.map(chip), others.length > shown.length ? el('span', { className: 'collab-more', textContent: `+${others.length - shown.length}`, title: others.slice(shown.length).map((p) => p.name).join(', ') }) : null,
+      this.role === 'host' ? el('button', { type: 'button', className: 'collab-share', textContent: 'Sharing', onclick: () => this.showShare() }) : null].filter(Boolean));
+  }
+  // Clicking a name shows that person's cursor in the notes (opening them if closed).
+  async goTo(peer) {
+    if (peer.role === 'tablet') return this.host.status(`${peer.name} is a drawing tablet.`);
+    if (!this.yjs) return;
+    const notes = await this.host.notesApi();
+    if (!notes.visible) $('notesToggle')?.click();
+    const index = this.cursorOf(peer);
+    if (index == null) return this.host.status(`${peer.name} has not placed a cursor in the notes yet.`);
+    setTimeout(() => notes.scrollToIndex(index), 60);
+  }
+
+  // Live strokes ------------------------------------------------------------------------
+  // Called for each new point of this reader's stroke (app.js); sends at most once a frame.
+  drawing(g) {
+    if (!this.ink || !DRAWING.has(g.tool)) return;
+    g.liveId ||= Math.random().toString(36).slice(2, 10);
+    if (g.liveFrame) return;
+    g.liveFrame = requestAnimationFrame(() => {
+      g.liveFrame = 0;
+      const whole = g.tool === 'shape' || g.straight || g.box;
+      const from = whole ? 0 : g.liveSent || 0;
+      const points = g.points.slice(from).map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+      if (!points.length) return;
+      g.liveSent = g.points.length;
+      this.client.live({ id: g.liveId, page: g.panel.index, tool: g.tool, color: g.color, width: g.width, points, replace: whole || from === 0 });
+    });
+  }
+  drawn(g, cancelled = false) {
+    if (!g.liveId) return;
+    cancelAnimationFrame(g.liveFrame);
+    this.client.live({ id: g.liveId, page: g.panel.index, done: true, cancelled });
+  }
+  showLive(m) {
+    const key = `${m.from}:${m.id}`;
+    let stroke = this.live.get(key);
+    if (m.done) {
+      if (!stroke) return;
+      if (m.cancelled) return this.dropLive(key);
+      stroke.done = true;
+      stroke.timer = setTimeout(() => this.dropLive(key), 4000);
+      return;
+    }
+    const p = this.host.panels[m.page];
+    if (!p?.overlay) return;
+    if (!stroke) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.classList.add('remote-ink');
+      const erase = m.tool === 'erase';
+      for (const [k, v] of Object.entries({ fill: 'none', stroke: erase ? '#ed6b55' : /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#246bce', 'stroke-width': Math.min(200, Math.max(0.5, Number(m.width) || 2)), 'stroke-linecap': m.tool === 'tape' ? 'butt' : 'round', 'stroke-linejoin': 'round', opacity: erase ? 0.3 : m.tool === 'highlight' ? 0.5 : 1 }))
+        line.setAttribute(k, String(v));
+      stroke = { from: m.from, page: m.page, line, points: [] };
+      this.live.set(key, stroke);
+    }
+    const points = (Array.isArray(m.points) ? m.points : []).filter((pt) => Array.isArray(pt) && pt.every(Number.isFinite)).slice(0, 8192);
+    stroke.points = m.replace ? points : stroke.points.concat(points).slice(0, 8192);
+    stroke.line.setAttribute('points', stroke.points.map((pt) => pt.join(',')).join(' '));
+    // The overlay is rebuilt when the page redraws: put the stroke back on the current one.
+    if (stroke.line.parentNode !== p.overlay) p.overlay.append(stroke.line);
+  }
+  dropLive(key) {
+    const stroke = this.live.get(key);
+    if (!stroke) return;
+    clearTimeout(stroke.timer);
+    stroke.line.remove();
+    this.live.delete(key);
+  }
+
+  // Drawing tablet ----------------------------------------------------------------------
+  // Fingers move and zoom the page once a stylus has drawn; before that they draw.
+  touchPans(e) {
+    if (this.role !== 'tablet' || e.pointerType !== 'touch') return false;
+    return this.host.tool === 'pan' || (this.penSeen && DRAWING.has(this.host.tool));
+  }
+  enterTablet() {
+    if (this.dock) return;
+    document.body.classList.add('tablet-mode');
+    this.host.setTool('draw');
+    let side = 'left';
+    try { side = localStorage.getItem(SIDE_KEY) === 'right' ? 'right' : 'left'; } catch { /* Optional. */ }
+    const tool = (name, label, glyph) => {
+      const b = el('button', { type: 'button', className: 'dock-tool', title: label, 'aria-label': label });
+      b.append(icon(glyph));
+      b.dataset.dockTool = name;
+      b.onclick = () => { this.host.setTool(name); this.markTool(); };
+      return b;
+    };
+    const swatch = (color) => {
+      const b = el('button', { type: 'button', className: 'dock-swatch', title: color, style: `--swatch:${color}` });
+      b.setAttribute('aria-label', `Colour ${color}`);
+      b.onclick = () => { const input = $('color'); input.value = color; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); this.markTool(); };
+      return b;
+    };
+    const width = (value, label) => {
+      const b = el('button', { type: 'button', className: 'dock-width', title: label, 'aria-label': label }, el('span', { style: `--w:${Math.min(14, value + 2)}px` }));
+      b.dataset.width = value;
+      b.onclick = () => { const select = $('width'); select.value = String(value); select.dispatchEvent(new Event('change', { bubbles: true })); this.markTool(); };
+      return b;
+    };
+    const action = (label, glyph, onclick) => { const b = el('button', { type: 'button', className: 'dock-tool', title: label, 'aria-label': label, onclick }); b.append(icon(glyph)); return b; };
+    this.dot = el('span', { className: 'dock-status', title: 'Connected' });
+    this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
+      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+      el('hr'),
+      ...['#202d40', '#246bce', '#d13b30', '#2f9a4c', '#f2c500'].map(swatch),
+      el('hr'),
+      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'),
+      el('hr'),
+      action('Undo', 'undo', () => $('undo').click()), action('Redo', 'redo', () => $('redo').click()),
+      action('Fit the page width', 'fit', () => this.host.setZoom('fit')),
+      el('span', { className: 'dock-spacer' }),
+      action('Move this bar to the other side', 'swap', () => this.flipDock()),
+      action('Disconnect', 'close', () => this.leave()),
+      this.dot);
+    this.dock.dataset.side = side;
+    document.body.dataset.dock = side;
+    document.body.append(this.dock);
+    this.markTool();
+    this.onPen = (e) => { if (e.pointerType === 'pen') this.penSeen = true; };
+    window.addEventListener('pointerdown', this.onPen, true);
+    this.pinch();
+  }
+  markTool() {
+    for (const b of this.dock?.querySelectorAll('[data-dock-tool]') || []) b.setAttribute('aria-pressed', String(b.dataset.dockTool === this.host.tool));
+    for (const b of this.dock?.querySelectorAll('.dock-width') || []) b.setAttribute('aria-pressed', String(b.dataset.width === $('width').value));
+    for (const b of this.dock?.querySelectorAll('.dock-swatch') || []) b.setAttribute('aria-pressed', String(b.title.toLowerCase() === $('color').value.toLowerCase()));
+  }
+  flipDock() {
+    const side = this.dock.dataset.side === 'left' ? 'right' : 'left';
+    this.dock.dataset.side = document.body.dataset.dock = side;
+    try { localStorage.setItem(SIDE_KEY, side); } catch { /* Optional. */ }
+  }
+  // Two fingers zoom this device's view of the page (never the computer's).
+  pinch() {
+    const viewport = $('viewport');
+    let last = 0;
+    const measure = (t) => ({ d: Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY), x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+    this.onTouch = (e) => {
+      if (e.touches.length !== 2) { last = 0; return; }
+      e.preventDefault();
+      const m = measure(e.touches);
+      if (e.type === 'touchstart' || !last) { this.host.cancelGesture(); last = m.d; return; }
+      if (m.d > 0 && Math.abs(m.d / last - 1) > 0.01) {
+        this.host.pinchBy(m.x, m.y, m.d / last);
+        last = m.d;
+      }
+    };
+    for (const type of ['touchstart', 'touchmove', 'touchend']) viewport.addEventListener(type, this.onTouch, { passive: false });
+  }
+  view() {
+    const viewport = $('viewport');
+    return viewport ? { left: viewport.scrollLeft, top: viewport.scrollTop, page: this.host.page } : null;
+  }
+  restoreView(view) {
+    if (!view || !this.restored) { this.restored = true; return; }
+    // A reload (another edit order, reconnect) keeps where this device was looking.
+    this.host.jump(Math.min(view.page, (this.host.doc?.pages || 1) - 1));
+    requestAnimationFrame(() => { $('viewport').scrollLeft = view.left; $('viewport').scrollTop = view.top; });
+  }
+  waiting(on) {
+    document.body.classList.toggle('tablet-waiting', on);
+    if (this.dot) this.dot.title = on ? 'Waiting for the computer’s note' : 'Connected';
+  }
+
+  // Leaving -----------------------------------------------------------------------------
+  leave() {
+    this.client.close();
+    this.finish(this.role === 'tablet' ? 'Disconnected from the computer.' : 'You left the shared notes.', null);
+  }
+  finish(message, text, refused = false) {
+    if (this.finished) return;
+    this.finished = true;
+    const host = this.host;
+    if (this.role === 'host') window.notecompleteCollab?.stop().catch(() => {});
+    for (const key of [...this.live.keys()]) this.dropLive(key);
+    // The host writes the final notes where they live (project, notes:<fp>) before letting go.
+    if (this.role === 'host') this.notes?.flush();
+    this.notes?.unshare();
+    this.undo?.destroy();
+    if (this.onKey) $('notesEditor').removeEventListener('keydown', this.onKey, true);
+    if (this.onSelection) document.removeEventListener('selectionchange', this.onSelection);
+    if (this.onScroll) $('notesEditor').removeEventListener('scroll', this.onScroll);
+    if (this.onPen) window.removeEventListener('pointerdown', this.onPen, true);
+    if (this.onTouch) for (const type of ['touchstart', 'touchmove', 'touchend']) $('viewport').removeEventListener(type, this.onTouch);
+    $('collabPeopleBar')?.remove();
+    this.dock?.remove();
+    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode');
+    delete document.body.dataset.dock;
+    if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();
+    host.setCollab(null);
+    session = null;
+    if (this.role === 'tablet' && host.doc) host.closeDocument();
+    if (this.role === 'guest') host.notesApi().then((n) => n.close()).then(() => host.closeDocument()).catch(() => {});
+    closeDialog();
+    this.ended?.();
+    if (refused || this.role === 'host' || !this.copied) return host.status(message, refused);
+    const open = el('button', { type: 'button', className: 'primary', textContent: 'Open my copy', onclick: () => { closeDialog(); host.openFile?.(new File([this.copied], this.copyName, { type: 'text/markdown' })); } });
+    dialog('Session ended', el('p', { textContent: message }), buttons(el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }), open));
+  }
+}

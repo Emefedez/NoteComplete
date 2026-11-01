@@ -25,6 +25,7 @@ session.erase(0,JSON.stringify([[50,0],[50,20]]),1);
 assert.equal(view(0).visible_added,0);
 session.undo();assert.equal(view(0).visible_added,1);
 const saved=session.save_project();const loaded=EditorSession.load_project(saved);
+assert.equal(loaded.history_digest(),session.history_digest());
 assert.deepEqual(JSON.parse(loaded.view(0)),view(0));loaded.redo();assert.equal(JSON.parse(loaded.view(0)).visible_added,0);
 session.undo();assert.equal(view(0).svg,original);
 assert.throws(()=>session.draw(0,JSON.stringify({points:[],width:2,rgba:[0,0,1,1]})));

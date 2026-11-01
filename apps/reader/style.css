@@ -2399,3 +2399,70 @@ button.category-toggle:hover {
 .note-grid.queue-selecting .card-queue-btn {
   display: none !important;
 }
+
+/* Sharing (collab.js): dialogs, people in the bar, guests' full-width notes, tablet mode. */
+.collab-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
+.collab-dialog h3 { margin: 14px 0 8px; font-size: 13px; text-transform: none; }
+.collab-dialog .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.collab-section + .collab-section { border-top: 1px solid var(--line); }
+.collab-pair { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 16px; align-items: start; }
+.collab-qr { width: 168px; aspect-ratio: 1; padding: 6px; border-radius: var(--radius-box); background: #fff; }
+.collab-qr.small { width: 120px; }
+.collab-qr svg { display: block; width: 100%; height: 100%; }
+.collab-pair:has(.small) { grid-template-columns: 120px minmax(0, 1fr); }
+.collab-code { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 8px; font-size: 13px; }
+.collab-code dt { color: var(--muted); }
+.collab-code dd { margin: 0; font-weight: 600; user-select: all; }
+.collab-code dd.code { font: 700 26px/1.1 ui-monospace, monospace; letter-spacing: 0.08em; }
+.collab-link { width: 100%; min-height: var(--control); margin-bottom: 8px; padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--fill); color: var(--ink); font-size: 12px; }
+.collab-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.collab-people li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.collab-people li button { margin-left: auto; }
+.collab-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.collab-choices { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 6px; }
+.collab-choices legend { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.collab-choice { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius); background: var(--fill); cursor: pointer; }
+.collab-choice span { display: grid; gap: 2px; font-size: 13px; }
+.collab-choice:has(input:checked) { background: var(--accent-soft); }
+.collab-join { display: grid; gap: 10px; }
+.collab-join label { display: grid; gap: 4px; font-size: 13px; }
+.collab-join input, .collab-name input { min-height: 36px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 16px; }
+.collab-error { color: var(--danger); font-size: 13px; margin: 0; }
+.collab-name { display: flex; gap: 8px; }
+.collab-name input { flex: 1; min-width: 0; }
+@media (max-width: 520px) { .collab-pair, .collab-pair:has(.small) { grid-template-columns: minmax(0, 1fr); } .collab-qr { margin: 0 auto; } }
+/* People: a coloured chip per person beside the file name; a few, then "+3". */
+.collab-bar { display: flex; align-items: center; gap: 3px; flex: none; }
+.collab-chip { width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; background: var(--who); color: #fff; font: 700 11px/24px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px var(--chrome); }
+.collab-chip.me { opacity: 0.75; }
+.collab-more { font-size: 11px; color: var(--muted); padding: 0 3px; }
+.collab-share { min-height: 24px; padding: 0 8px; font-size: 12px; margin-left: 4px; }
+/* Others' carets in the notes editor. */
+.notes-editor { position: relative; }
+.notes-cursors { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; pointer-events: none; z-index: 2; }
+.notes-caret { position: absolute; width: 2px; background: var(--who); }
+.notes-caret span { position: absolute; left: 0; bottom: 100%; padding: 0 4px; border-radius: 3px 3px 3px 0; background: var(--who); color: #fff; font: 600 10px/15px system-ui, sans-serif; white-space: nowrap; }
+/* A notes guest: the notes, full width, and the people in the bar. */
+body.guest-mode #empty, body.guest-mode #editor > :not(.workspace), body.guest-mode .workspace > :not(#notesPanel), body.guest-mode .notes-resize, body.guest-mode #closeNotes, body.guest-mode #notesMarker, body.guest-mode .notes-follow { display: none !important; }
+body.guest-mode #editor { flex: 1; min-height: 0; flex-direction: column; }
+body.guest-mode #notesPanel { position: relative; inset: auto; flex: 1; width: auto !important; max-height: none; border-left: 0; }
+/* Drawing tablet: only the tool dock and the pages. */
+body.tablet-mode #commandBar, body.tablet-mode #editor > :not(.workspace), body.tablet-mode .workspace > :not(#viewport), body.tablet-mode #empty { display: none !important; }
+body.tablet-mode #viewport { touch-action: none; }
+body.tablet-mode #viewport .sheet { touch-action: none; }
+body.tablet-mode[data-dock="left"] #drop { padding-left: 60px; }
+body.tablet-mode[data-dock="right"] #drop { padding-right: 60px; }
+.tablet-dock { position: fixed; z-index: 40; top: 0; bottom: 0; width: 60px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: max(8px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; background: var(--chrome); box-shadow: 0 0 0 1px var(--line); }
+.tablet-dock[data-side="left"] { left: 0; padding-left: env(safe-area-inset-left); }
+.tablet-dock[data-side="right"] { right: 0; padding-right: env(safe-area-inset-right); }
+.tablet-dock hr { width: 32px; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.tablet-dock button { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; display: grid; place-items: center; border-radius: 10px; background: transparent; color: var(--ink); }
+.tablet-dock button svg { width: 22px; height: 22px; }
+.tablet-dock button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.tablet-dock .dock-swatch { width: 30px; min-width: 30px; height: 30px; min-height: 30px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 2px #fff6; }
+.tablet-dock .dock-swatch[aria-pressed="true"] { background: var(--swatch); box-shadow: 0 0 0 3px var(--accent); }
+.tablet-dock .dock-width span { display: block; width: 22px; height: var(--w); border-radius: 99px; background: currentColor; }
+.dock-spacer { flex: 1 0 8px; }
+.dock-status { width: 10px; height: 10px; border-radius: 50%; background: #2f9a4c; flex: none; }
+body.tablet-waiting .dock-status { background: #d9a400; }
+body.tablet-waiting #drop::after { content: "Waiting for the computer’s note…"; position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 16px; pointer-events: none; }
