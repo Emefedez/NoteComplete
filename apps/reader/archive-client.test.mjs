@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { archiveId, archiveListing, archiveUrl, supportedArchiveFile, PRELOADED_ARCHIVE, ArchiveClient } from './archive-client.js';
+import { archiveCorsUrl, archiveId, archiveListing, archiveUrl, supportedArchiveFile, PRELOADED_ARCHIVE, ArchiveClient } from './archive-client.js';
 
 test('item links and identifiers are recognised', () => {
   assert.equal(archiveId('https://archive.org/details/1GREIUvigo'), '1GREIUvigo');
@@ -29,5 +29,7 @@ test('downloads encode the path and the metadata call reports missing items', as
   const client = new ArchiveClient(async url => { seen.push(url); return { ok: true, json: async () => url.includes('missing') ? {} : { metadata: { title: 'T' }, files: [] }, blob: async () => new Blob(['x']), headers: new Map() }; });
   assert.equal((await client.item('real')).title, 'T');
   await assert.rejects(client.item('missing'), /No Internet Archive item/);
-  assert.equal((await client.download('id', { name: 'a.pdf', path: 'a.pdf' })).name, 'a.pdf');
+  assert.equal((await client.download('id', { name: 'a.pdf', path: 'A B/a.pdf' })).name, 'a.pdf');
+  // In a web page the file comes from /cors/, the path Internet Archive serves with CORS headers.
+  assert.equal(seen.at(-1), 'https://archive.org/cors/id/A%20B/a.pdf');
 });
