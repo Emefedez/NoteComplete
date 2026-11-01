@@ -146,6 +146,13 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     }
     if (op === "undo") session.undo();
     if (op === "redo") session.redo();
+    // Undoing inserted pages can take away the page in view: show the last one left.
+    if (op === "undo" || op === "redo") {
+      for (;;) {
+        try { postMessage({ id, result: JSON.parse(session.view(page)) }); return; }
+        catch (e) { if (page <= 0) throw e; page--; }
+      }
+    }
     if (op === "audio" || op === "pdf") {
       const bytes =
         op === "audio"
