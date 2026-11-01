@@ -1,13 +1,7 @@
-## What's new in 1.1.1
+## What's new in 1.1.2
 
-- **New note with AI** (File → New note with AI…, desktop): one dialog with two tabs.
-  - *From a prompt*: describe a topic or paste your data, and your AI tool (Claude Code, Codex…) writes the note as Markdown, then as handwriting.
-  - *From Markdown*: paste or open your own Markdown, and *Make it richer with AI* adds highlights, colors, boxes and drawings.
-  - What the AI writes lands in the Markdown tab, ready to edit, with Undo and Redo buttons.
-- **Handwriting from Markdown is searchable at once**: Find finds its words without running OCR. This works in .notecomp files and projects.
-- **Filled shapes**: rectangles, ellipses and triangles can be filled with a tint or solid color. Press F to switch.
-- **Shapes on a drawing tablet**: the tablet's tool bar has Shapes, with their kinds and fill.
-- **Update checks** find a new release within the hour and keep looking while the app stays open. Before, a check that found nothing silenced the next ones for six hours.
+- **Infinite canvas**: one page that grows downward as you write, keeping all your thoughts in one continuous workspace without needing fixed-size page boundaries.
+- **Sharing and device join**: links use the reachable Wi-Fi address, a fixed port, and another address on request; Share stays visible in the top bar across window sizes and badges fit compact bars.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 
