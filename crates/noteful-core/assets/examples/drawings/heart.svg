@@ -1,0 +1,18 @@
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <path d="M150 60 C150 30 175 20 185 40 L185 85" fill="#f4a3a3" stroke="#7a1f2b" stroke-width="2"/>
+  <path d="M215 85 C215 35 260 25 280 45 C292 58 270 70 250 68 L235 90" fill="#f4a3a3" stroke="#7a1f2b" stroke-width="2"/>
+  <path d="M120 120 C110 80 160 70 200 95 C240 70 300 85 290 130 C285 190 240 250 205 275 C160 245 120 190 120 120 Z" fill="#e5383b" stroke="#7a1f2b" stroke-width="2.5"/>
+  <path d="M135 125 C135 100 170 95 190 112 L190 160 C165 165 140 150 135 125 Z" fill="#a8c8f0" stroke="#7a1f2b" stroke-width="1.5"/>
+  <path d="M212 112 C235 95 275 100 275 128 C270 150 245 162 212 160 Z" fill="#f7b2b7" stroke="#7a1f2b" stroke-width="1.5"/>
+  <path d="M145 172 C165 172 190 175 196 182 L198 245 C172 225 150 200 145 172 Z" fill="#a8c8f0" stroke="#7a1f2b" stroke-width="1.5"/>
+  <path d="M214 182 C230 175 260 172 268 172 C262 205 240 232 214 248 Z" fill="#f7b2b7" stroke="#7a1f2b" stroke-width="1.5"/>
+  <line x1="160" y1="140" x2="60" y2="120" stroke="#333" stroke-width="1"/>
+  <text x="58" y="118" font-size="20" text-anchor="end">Right atrium</text>
+  <line x1="250" y1="130" x2="345" y2="110" stroke="#333" stroke-width="1"/>
+  <text x="348" y="108" font-size="20">Left atrium</text>
+  <line x1="170" y1="210" x2="70" y2="240" stroke="#333" stroke-width="1"/>
+  <text x="68" y="245" font-size="20" text-anchor="end">Right ventricle</text>
+  <line x1="245" y1="210" x2="340" y2="240" stroke="#333" stroke-width="1"/>
+  <text x="343" y="245" font-size="20">Left ventricle</text>
+  <text x="270" y="30" font-size="20" fill="#c0392b">Aorta</text>
+</svg>

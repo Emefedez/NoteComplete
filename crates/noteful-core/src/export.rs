@@ -88,6 +88,9 @@ fn style(out: &mut Vec<u8>, s: &Style) {
     out.extend(s.tool.to_be_bytes());
     out.extend(s.extra);
 }
+/// A new stroke record. With pressure (a ballpoint) the points carry a third
+/// value and tool flag bit 0 is set; `n <= 4` points are raw f32, longer
+/// strokes are quantised per value against its (min, range).
 fn new_stroke(out: &mut Vec<u8>, line: &Line, id: u64, time: u64, z: u64) {
     style(
         out,
@@ -97,9 +100,13 @@ fn new_stroke(out: &mut Vec<u8>, line: &Line, id: u64, time: u64, z: u64) {
             extra: [0; 8],
         },
     );
+    let pressure = line
+        .pressure
+        .as_deref()
+        .filter(|p| line.tool == 0 && p.len() == line.points.len());
     out.extend([0xf1, 1]);
     out.extend(id.to_be_bytes());
-    out.extend(0u16.to_be_bytes());
+    out.extend(u16::from(pressure.is_some()).to_be_bytes());
     out.extend(time.to_be_bytes());
     out.extend(time.to_be_bytes());
     out.extend(z.to_be_bytes());
@@ -107,37 +114,35 @@ fn new_stroke(out: &mut Vec<u8>, line: &Line, id: u64, time: u64, z: u64) {
     out.extend((line.width / 2.).to_be_bytes());
     out.extend(0u32.to_be_bytes());
     out.extend((line.points.len() as u32).to_be_bytes());
-    if line.points.len() <= 4 {
-        for p in &line.points {
-            for c in p {
-                out.extend((*c as f32).to_be_bytes());
+    let dims = if pressure.is_some() { 3 } else { 2 };
+    let value = |i: usize, axis: usize| match (axis, pressure) {
+        (2, Some(p)) => p[i],
+        _ => line.points[i][axis],
+    };
+    let n = line.points.len();
+    if n <= 4 {
+        for i in 0..n {
+            for axis in 0..dims {
+                out.extend((value(i, axis) as f32).to_be_bytes());
             }
         }
         return;
     }
-    let mut bounds = [[0f32; 2]; 2];
-    for (axis, b) in bounds.iter_mut().enumerate() {
-        b[0] = line
-            .points
-            .iter()
-            .map(|p| p[axis])
-            .fold(f64::INFINITY, f64::min) as f32;
-        b[1] = (line
-            .points
-            .iter()
-            .map(|p| p[axis])
-            .fold(f64::NEG_INFINITY, f64::max)
+    let mut bounds = [[0f32; 2]; 3];
+    for (axis, b) in bounds.iter_mut().enumerate().take(dims) {
+        b[0] = (0..n).map(|i| value(i, axis)).fold(f64::INFINITY, f64::min) as f32;
+        b[1] = ((0..n).map(|i| value(i, axis)).fold(f64::NEG_INFINITY, f64::max)
             - f64::from(b[0]))
         .max(0.) as f32;
         out.extend(b[0].to_be_bytes());
         out.extend(b[1].to_be_bytes());
     }
-    for p in &line.points {
-        for (axis, b) in bounds.iter().enumerate() {
+    for i in 0..n {
+        for (axis, b) in bounds.iter().enumerate().take(dims) {
             let q = if b[1] == 0. {
                 0
             } else {
-                ((p[axis] - f64::from(b[0])) / f64::from(b[1]) * 65535.)
+                ((value(i, axis) - f64::from(b[0])) / f64::from(b[1]) * 65535.)
                     .round()
                     .clamp(0., 65535.) as u16
             };
@@ -259,6 +264,21 @@ fn edit_object(
         }
     }
     Ok(())
+}
+/// Noteful draws highlighter ends round: pull a square band's ends in by half
+/// its width so it stays inside its rectangle.
+fn square_band(line: &Line) -> Line {
+    let mut l = line.clone();
+    if line.square && line.tool == 1 && line.points.len() == 2 {
+        let [a, b] = [l.points[0], l.points[1]];
+        let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+        let t = (l.width / 2. / len.max(1e-9)).min(0.5);
+        l.points = vec![
+            [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+            [b[0] - (b[0] - a[0]) * t, b[1] - (b[1] - a[1]) * t],
+        ];
+    }
+    l
 }
 impl Editor {
     /// Add records for inserted pages to the page collection (d:/2). Their tag-5
@@ -437,6 +457,24 @@ impl Editor {
                 .unwrap_or_default();
             let mut ink = Vec::new();
             let mut z = page.items.iter().map(|i| i.z).max().unwrap_or(0);
+            // Under-ink additions (highlighter fills) are written before the
+            // page's existing strokes, so they draw below its handwriting.
+            let (under, added): (Vec<_>, Vec<_>) = added.into_iter().partition(|(_, l)| l.under);
+            let mut new_id = |ids: &mut HashSet<u64>| -> Result<u64> {
+                while ids.contains(&next_id) {
+                    next_id = next_id
+                        .checked_add(1)
+                        .ok_or_else(|| Error::new(0, "Stroke ID overflow"))?;
+                }
+                ids.insert(next_id);
+                Ok(next_id)
+            };
+            for (_, line) in &under {
+                z = z
+                    .checked_add(1)
+                    .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                new_stroke(&mut ink, &square_band(line), new_id(&mut ids)?, time, z);
+            }
             if let Some(b) = existing {
                 for (i, s) in b.strokes.iter().flatten().enumerate() {
                     z = z.max(s.z_order);
@@ -495,31 +533,10 @@ impl Editor {
                 }
             }
             for (_, line) in added {
-                while ids.contains(&next_id) {
-                    next_id = next_id
-                        .checked_add(1)
-                        .ok_or_else(|| Error::new(0, "Stroke ID overflow"))?;
-                }
-                ids.insert(next_id);
                 z = z
                     .checked_add(1)
                     .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
-                // Noteful draws highlighter ends round: pull a square band's ends
-                // in by half its width so it stays inside its rectangle.
-                let line = if line.square && line.tool == 1 && line.points.len() == 2 {
-                    let mut l = line.clone();
-                    let [a, b] = [l.points[0], l.points[1]];
-                    let len = (b[0] - a[0]).hypot(b[1] - a[1]);
-                    let t = (l.width / 2. / len.max(1e-9)).min(0.5);
-                    l.points = vec![
-                        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
-                        [b[0] - (b[0] - a[0]) * t, b[1] - (b[1] - a[1]) * t],
-                    ];
-                    l
-                } else {
-                    line
-                };
-                new_stroke(&mut ink, &line, next_id, time, z);
+                new_stroke(&mut ink, &square_band(&line), new_id(&mut ids)?, time, z);
             }
             set(
                 &mut fields,

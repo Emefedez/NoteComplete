@@ -157,7 +157,7 @@ pub(crate) fn stroke_svg(s: &Stroke) -> Result<String> {
         .collect();
     composite(el, s.style.rgba[3], u64::from(s.style.tool))
 }
-fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> String {
+pub(crate) fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f64; 4]) -> String {
     if radii.is_empty() {
         line_svg(points, radius, rgba)
     } else {

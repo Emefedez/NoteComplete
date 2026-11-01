@@ -7,6 +7,8 @@ fn line(layer: u32, tool: u16) -> Line {
         layer,
         shape: None,
         square: false,
+        pressure: None,
+        under: false,
         tool,
     }
 }
@@ -184,12 +186,16 @@ fn square_highlight_bands_have_square_ends_and_stay_inside_their_box_in_noteful(
         layer: 0,
         shape: None,
         square: true,
+        pressure: None,
+        under: false,
     };
     assert!(
         e.add_line(
             0,
             Line {
                 square: false,
+                pressure: None,
+                under: false,
                 ..band.clone()
             }
         )

@@ -1,0 +1,14 @@
+<svg viewBox="0 0 520 330">
+  <path d="M40 270 C78 270 92 52 128 52 C166 52 190 236 238 266 L238 270 Z" fill="#ffb48a" stroke="#1f2233"/>
+  <path d="M232 270 C292 270 314 136 372 136 C432 136 476 244 512 264 L512 270 Z" fill="#8fc3ff" stroke="#1f2233"/>
+  <line x1="40" y1="270" x2="516" y2="270" stroke="#1f2233"/>
+  <line x1="40" y1="270" x2="40" y2="26" stroke="#1f2233"/>
+  <line x1="236" y1="40" x2="236" y2="270" stroke="#7a52c7"/>
+  <text x="64" y="20" font-size="21" fill="#e9573f">Sun ~ 5800 K</text>
+  <text x="330" y="124" font-size="21" fill="#2f7fd6">Earth ~ 288 K</text>
+  <text x="244" y="60" font-size="19" fill="#7a52c7">4 µm</text>
+  <text x="96" y="300" font-size="20" fill="#f39a1e">visible</text>
+  <text x="330" y="300" font-size="20" fill="#2f7fd6">infrared</text>
+  <text x="420" y="326" font-size="19" fill="#6b6f80">wavelength</text>
+  <text x="-2" y="150" font-size="19" fill="#6b6f80" text-anchor="end">energy</text>
+</svg>

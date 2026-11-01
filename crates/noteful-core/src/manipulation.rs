@@ -159,6 +159,13 @@ pub(crate) fn adjusted_line(line: &Line, a: &Adjustment) -> Line {
     let mut line = line.clone();
     line.points = line.points.iter().map(|p| point(m, *p)).collect();
     if let Some(w) = a.width {
+        // A ballpoint's pressure is its drawn radius: scale it with the width.
+        if let Some(pressure) = &mut line.pressure {
+            let factor = if line.width > 0. { w / line.width } else { 1. };
+            for p in pressure.iter_mut() {
+                *p = (*p * factor).clamp(0., 50.);
+            }
+        }
         line.width = w;
     }
     if let Some(c) = a.rgba {

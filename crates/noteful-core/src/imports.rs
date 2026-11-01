@@ -34,9 +34,19 @@ pub struct TextBox {
     /// Font family, as Noteful names it ("Helvetica", "Times New Roman", …).
     #[serde(default = "default_font")]
     pub font: String,
+    /// 0 left, 1 centre, 2 right.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub align: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub underline: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub strikethrough: bool,
 }
 fn default_font() -> String {
     "Helvetica".into()
+}
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 impl TextBox {
     fn valid(&self) -> bool {
@@ -48,6 +58,7 @@ impl TextBox {
                 .chars()
                 .all(|c| c.is_alphanumeric() || " -_.".contains(c))
             && self.text.len() <= 20_000
+            && self.align <= 2
             && self.font_size.is_finite()
             && (2.0..=400.).contains(&self.font_size)
             && self
@@ -59,8 +70,20 @@ impl TextBox {
     /// Layout follows texto.noteful: the run, then a zero-width space that
     /// carries the typing attributes; keys 13 family, 10 size, 6 color, 2 bold,
     /// 3 italic, 9 paragraph, with their values in pools 5, 10, 7, 6 and 9.
+    /// Underline, strikethrough and alignment (keys 4, 5, 8; pool 8) are added
+    /// only when set, so plain boxes keep the confirmed layout.
     fn rich_text(&self, clock: u64) -> Vec<crate::Field> {
         let floats = |v: &[f64]| V::Array(v.iter().map(|n| V::Float(*n)).collect());
+        let mut keys = vec![13, 10, 6, 2, 3];
+        let mut decorations = vec![];
+        for (key, value) in [(4, u64::from(self.underline)), (5, u64::from(self.strikethrough)), (8, self.align)] {
+            if value != 0 {
+                keys.push(key);
+                decorations.push(V::UInt(value));
+            }
+        }
+        keys.extend([9, 10]);
+        let first_run = keys.len() as u64 - 1;
         vec![
             f(1, 2, V::UInt(clock)),
             f(
@@ -68,12 +91,8 @@ impl TextBox {
                 0x405,
                 V::Array(vec![V::Text(self.text.clone()), V::Text("\u{200b}".into())]),
             ),
-            f(3, 0x402, V::Array(vec![V::UInt(6), V::UInt(1)])),
-            f(
-                4,
-                0x414,
-                V::Array([13, 10, 6, 2, 3, 9, 10].map(V::UInt).to_vec()),
-            ),
+            f(3, 0x402, V::Array(vec![V::UInt(first_run), V::UInt(1)])),
+            f(4, 0x414, V::Array(keys.into_iter().map(V::UInt).collect())),
             f(5, 0x405, V::Array(vec![V::Text(self.font.clone())])),
             f(
                 6,
@@ -88,7 +107,7 @@ impl TextBox {
                 0x407,
                 V::Array(vec![V::Fields(vec![f(0, 0x420, floats(&self.rgba))])]),
             ),
-            f(8, 0x402, V::Array(vec![])),
+            f(8, 0x402, V::Array(decorations)),
             f(
                 9,
                 0x407,
@@ -314,7 +333,32 @@ impl Editor {
     }
     /// A blank document, or a PDF whose dimensions were read by the host PDF parser.
     pub fn create_document(title: &str, sizes: &[[f64; 2]], pdf: &[u8]) -> Result<Self> {
+        let pages: Vec<([f64; 2], Option<u64>)> = sizes
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (*s, (!pdf.is_empty()).then_some(i as u64)))
+            .collect();
+        Self::create_document_with(title, &pages, pdf, "imported-pdf", 1.)
+    }
+    /// A new document whose pages each show a page of `pdf` (by index) or
+    /// Noteful's own white paper (None). `version` is the package format
+    /// written in the index (tag 1).
+    pub fn create_document_with(
+        title: &str,
+        pages: &[([f64; 2], Option<u64>)],
+        pdf: &[u8],
+        pdf_id: &str,
+        version: f64,
+    ) -> Result<Self> {
+        let sizes: Vec<[f64; 2]> = pages.iter().map(|p| p.0).collect();
+        let sizes = &sizes[..];
         if sizes.is_empty()
+            || sizes.len() > 2000
+            || title.len() > 512
+            || !(1.0..=9.).contains(&version)
+            || pdf_id.is_empty()
+            || !pdf_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            || pages.iter().any(|p| p.1.is_some()) && pdf.is_empty()
             || sizes
                 .iter()
                 .flatten()
@@ -326,21 +370,20 @@ impl Editor {
             return Err(Error::new(0, "Invalid PDF header"));
         }
         let mut records = collection(5);
-        let mut pages = vec![];
-        for (i, size) in sizes.iter().enumerate() {
+        let mut page_records: Vec<V> = vec![];
+        for (i, (size, pdf_page)) in pages.iter().enumerate() {
             let mut background = vec![
-                f(0, 1, V::UInt(u64::from(!pdf.is_empty()))),
+                f(0, 1, V::UInt(u64::from(pdf_page.is_some()))),
                 f(1, 0x21, V::Pair(*size)),
             ];
-            if pdf.is_empty() {
-                background.push(f(6, 5, V::Text("{\"pc\":16777215}".into())));
-            } else {
-                background.extend([
-                    f(3, 2, V::UInt(i as u64)),
-                    f(4, 5, V::Text("imported-pdf".into())),
-                ]);
+            match pdf_page {
+                None => background.push(f(6, 5, V::Text("{\"pc\":16777215}".into()))),
+                Some(index) => background.extend([
+                    f(3, 2, V::UInt(*index)),
+                    f(4, 5, V::Text(pdf_id.into())),
+                ]),
             }
-            pages.push(V::Fields(vec![
+            page_records.push(V::Fields(vec![
                 f(1, 5, V::Text(format!("page-{i}"))),
                 f(2, 7, V::Fields(vec![f(0, 5, V::Text(String::new()))])),
                 f(4, 7, V::Fields(background)),
@@ -349,7 +392,7 @@ impl Editor {
         }
         for field in &mut records {
             field.value = match field.tag {
-                0 => V::Array(pages.clone()),
+                0 => V::Array(page_records.clone()),
                 1 => V::Array(
                     (0..sizes.len())
                         .map(|i| V::Text(format!("page-{i}")))
@@ -373,7 +416,7 @@ impl Editor {
             ),
         ];
         if !pdf.is_empty() {
-            blocks.push(("imported-pdf".into(), pdf.to_vec()));
+            blocks.push((pdf_id.into(), pdf.to_vec()));
         }
         let mut out = crate::MAGIC.to_vec();
         let mut keys = vec![];
@@ -386,14 +429,14 @@ impl Editor {
             out.extend(bytes);
         }
         let index = crate::encode_fields(&[
-            f(1, 3, V::Float(1.)),
+            f(1, 3, V::Float(version)),
             f(
                 3,
                 0x405,
                 V::Array(if pdf.is_empty() {
                     vec![]
                 } else {
-                    vec![V::Text("imported-pdf".into())]
+                    vec![V::Text(pdf_id.into())]
                 }),
             ),
             f(4, 0x405, V::Array(vec![])),

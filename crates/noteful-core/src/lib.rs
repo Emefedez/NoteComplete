@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod editor;
+pub mod ink;
 mod markdown;
 mod page_pdf;
 pub use page_pdf::jpeg_pages_pdf;

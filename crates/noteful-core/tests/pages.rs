@@ -10,6 +10,8 @@ fn line() -> Line {
         layer: 0,
         shape: None,
         square: false,
+        pressure: None,
+        under: false,
     }
 }
 fn blank(w: f64, h: f64) -> NewPage {
