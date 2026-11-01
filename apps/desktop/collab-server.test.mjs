@@ -8,7 +8,7 @@ import * as sync from 'y-protocols/sync';
 import * as awareness from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import { startServer, lanAddress, readerFile } from './collab-server.js';
+import { startServer, lanAddress, lanAddresses, readerFile } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
 
 const yjs = { Y, sync, awareness, encoding, decoding };
@@ -88,6 +88,24 @@ test('serves reader files only, and finds a private LAN address', async () => {
     assert.match(server.tabletLink(), /^http:\/\/127\.0\.0\.1:\d+\/tablet#[0-9a-f]{8}\.[\w-]{22}$/);
     assert.match(server.guestLink, /\/join#/);
   } finally { await server.stop(); }
+});
+
+test('the links use the Wi-Fi address, not a virtual adapter, and can switch', async () => {
+  const v4 = (address) => [{ family: 'IPv4', address, internal: false }];
+  // libvirt's bridge sorts like a home network, but a phone cannot reach it.
+  const nets = { virbr0: v4('192.168.122.1'), docker0: v4('172.17.0.1'), wlp2s0: v4('10.0.0.23') };
+  assert.deepEqual(lanAddresses(nets), ['10.0.0.23', '192.168.122.1', '172.17.0.1']);
+  // The default route's address wins.
+  assert.equal(lanAddress({ eth0: v4('192.168.1.5'), wlan0: v4('192.168.0.40') }, '192.168.0.40'), '192.168.0.40');
+  const root = await reader();
+  const first = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1' });
+  // The usual port is taken: another free one.
+  const second = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: first.port });
+  try {
+    assert.notEqual(second.port, first.port);
+    assert.equal(second.useAddress('10.9.9.9'), '127.0.0.1');
+    assert.match(second.tabletLink(), /^http:\/\/127\.0\.0\.1:/);
+  } finally { await first.stop(); await second.stop(); }
 });
 
 test('parses invite links and address + code', () => {

@@ -94,6 +94,14 @@ Choose the AI tool and model under the tabs. When the AI has written the note, t
 
 **Write shared notes.** Open the invite link in a browser, or use **File → Join shared notes…** and paste it. Type your name (or keep *Guest N*) and press Enter or **OK**. Everyone's cursors show in the notes with their names; Ctrl Z undoes only your own typing. When the host ends the session, your copy of the notes is saved as a Markdown file and **Open my copy** opens it. If the connection drops, NoteComplete reconnects and your edits merge; if the host stays unreachable, your copy is saved the same way.
 
+**The device does not connect?**
+- The device must be on the same Wi-Fi as the computer, and not on a guest network.
+- If the computer also has a VPN, Docker or virtual machines, choose another address under the QR code.
+- The computer must accept connections on TCP port 41237. It changes only when that port is taken.
+  - On Windows, allow NoteComplete when the firewall asks.
+  - On Fedora and other firewalld systems: `sudo firewall-cmd --add-port=41237/tcp`.
+  - With ufw: `sudo ufw allow 41237/tcp`.
+
 Not yet tried on real phones, tablets or styluses: see [Collaboration](COLLABORATION.md#not-yet-verified).
 
 ## Open from Google Drive

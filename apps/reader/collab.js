@@ -248,7 +248,12 @@ class Session {
     done.focus();
     d.addEventListener('close', () => { this.shareShown = false; }, { once: true });
     await this.drawTablet();
-    if (this.info.guestLink) {
+    await this.drawInvite();
+    this.drawShareList();
+  }
+  async drawInvite() {
+    const invite = $('collabInvite');
+    if (invite && this.info.guestLink) {
       const copy = el('button', { type: 'button', textContent: 'Copy link' });
       copy.onclick = () => navigator.clipboard.writeText(this.info.guestLink).then(() => this.host.status('Invite link copied.'), () => this.host.status('Select the link and copy it.', true));
       const qr = el('div', { className: 'collab-qr small' });
@@ -257,7 +262,18 @@ class Session {
         el('p', { textContent: 'Send this link to people on this network. They write the notes with you in a browser or in NoteComplete (File → Join shared notes).' }),
         el('input', { type: 'text', readOnly: true, value: this.info.guestLink, className: 'collab-link', onfocus: (e) => e.target.select() }), copy)));
     }
-    this.drawShareList();
+  }
+  // This computer has several networks (Wi-Fi and a VPN, say): the links can use another.
+  networkPicker() {
+    const list = this.info.addresses || [];
+    if (list.length < 2 || !window.notecompleteCollab?.useAddress) return null;
+    const select = el('select', { 'aria-label': 'Network address for the links', onchange: async () => {
+      const fresh = await window.notecompleteCollab.useAddress(select.value).catch(() => null);
+      if (fresh) Object.assign(this.info, fresh);
+      await this.drawTablet();
+      await this.drawInvite();
+    } }, ...list.map((a) => el('option', { value: a, textContent: a, selected: a === this.info.address })));
+    return el('label', { className: 'collab-network' }, el('span', { textContent: 'The device does not connect? Try another address of this computer: ' }), select);
   }
   async drawTablet() {
     const section = $('collabTablet');
@@ -273,7 +289,7 @@ class Session {
       el('dl', { className: 'collab-code' },
         el('dt', { textContent: 'Address' }), el('dd', { textContent: `${this.info.address}:${this.info.port}` }),
         el('dt', { textContent: 'Code' }), el('dd', { className: 'code', textContent: `${code.slice(0, 3)} ${code.slice(3)}` })),
-      el('p', { className: 'muted', textContent: `The code works for 10 minutes. The device then reconnects by itself.` }), renew)));
+      el('p', { className: 'muted', textContent: `The code works for 10 minutes. The device then reconnects by itself. It must be on the same Wi-Fi as this computer.` }), renew)), this.networkPicker() || '');
   }
   drawShareList() {
     const list = $('collabPeople');

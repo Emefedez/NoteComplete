@@ -2410,6 +2410,7 @@ button.category-toggle:hover {
 .collab-qr.small { width: 120px; }
 .collab-qr svg { display: block; width: 100%; height: 100%; }
 .collab-pair:has(.small) { grid-template-columns: 120px minmax(0, 1fr); }
+.collab-network { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 13px; color: var(--muted); }
 .collab-code { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 8px; font-size: 13px; }
 .collab-code dt { color: var(--muted); }
 .collab-code dd { margin: 0; font-weight: 600; user-select: all; }
