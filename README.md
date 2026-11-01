@@ -31,6 +31,10 @@ A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+
 - **Your phone or tablet as a drawing tablet**: scan the QR code (or type the 6-digit code) and draw on the note open on your computer. The device shows just the note and a tool bar on the side you choose; it zooms on its own, and what you draw appears live on the computer and is saved there, with pen pressure, highlighter, eraser and undo.
 - Meant for a trusted local network; not yet tried on real phones and tablets ([details](docs/COLLABORATION.md)).
 
+<p align="center"><img src="docs/images/tablet.png" alt="A tablet drawing on the note: only the note and a tool bar on the left" width="31%"> <img src="docs/images/tablet-host.png" alt="The same strokes on the computer, saved as its own edits; chips for the people connected beside the title" width="67%"></p>
+<p align="center"><img src="docs/images/share.png" alt="The Sharing dialog: QR code and 6-digit code for a drawing tablet, the notes invite link, and the people connected" width="100%"></p>
+<p align="center"><img src="docs/images/shared-notes.png" alt="Shared Markdown notes: a guest's named cursor in the notes beside the pages" width="100%"></p>
+
 ### Your library
 - **Google Drive on Home**: connect read-only and open your Noteful backup folder; notes appear as cards with their real covers, or as a quick list.
 - **Filters and sorting** by type, date, size, recordings and Noteful tags.
@@ -63,6 +67,7 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Connect AI tools** (Help, desktop app) registers the bundled note server with Claude Code, Codex, Antigravity and OpenCode in one click.
 - The bundled MCP server lets agents read your notebooks, write Markdown notes into them, and write real editable handwriting: new notebooks, added pages, clean copies and marks such as ticks, highlights and text boxes ([AI agents](docs/MCP.md)).
 
+<p align="center"><img src="docs/images/handwriting.png" alt="Handwritten pages from Markdown, with a live preview of the ink" width="100%"></p>
 <p align="center"><img src="docs/images/quiz-clarify.png" alt="A quiz window grown to fit a streamed answer" width="49%"> <img src="docs/images/card-ask.png" alt="A flashcard window grown to fit an answer" width="49%"></p>
 <p align="center"><img src="docs/images/flashcards.png" alt="An example flashcard deck, question over answer" width="70%"></p>
 <p align="center"><img src="docs/images/quiz-clarify-light.png" alt="A hint appears!" width="70%"></p>
@@ -75,6 +80,8 @@ Flashcards and quizzes are generated in the background by the tool you already u
 - **Updates**: checked on open, installed only when you agree.
 - **Command search** (<kbd>Ctrl</kbd>+<kbd>K</kbd>), single-key shortcuts, and <kbd>?</kbd> to show each button's key.
 - **Interface size** with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>−</kbd> / <kbd>+</kbd> / <kbd>0</kbd>.
+
+<p align="center"><img src="docs/images/phone.png" alt="NoteComplete on a phone: the menus on top, the page row with dark pages and Fit, and the tools at the bottom" width="32%"></p>
 
 <p align="center"><img src="docs/images/keys.png" alt="Key badges on the toolbar buttons after pressing ?" width="100%"></p>
 

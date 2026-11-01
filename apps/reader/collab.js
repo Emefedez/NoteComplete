@@ -242,7 +242,10 @@ class Session {
     const invite = el('section', { id: 'collabInvite', className: 'collab-section' });
     const people = el('section', { className: 'collab-section' }, el('h3', { textContent: 'People' }), el('ul', { id: 'collabPeople', className: 'collab-people' }));
     const stop = el('button', { type: 'button', className: 'danger', textContent: 'Stop sharing', onclick: () => this.end() });
-    const d = dialog('Sharing', tablet, invite, people, buttons(stop, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog })));
+    const done = el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog });
+    const d = dialog('Sharing', tablet, invite, people, buttons(stop, done));
+    // Enter must never end the session by accident: focus starts on Done.
+    done.focus();
     d.addEventListener('close', () => { this.shareShown = false; }, { once: true });
     await this.drawTablet();
     if (this.info.guestLink) {
