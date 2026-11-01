@@ -45,8 +45,8 @@
 
 ### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; iPad import check pending)
 - **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
-- **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts and `noteful convert`.
-- **Pending:** open written files in Noteful on the iPad (Phase 0); design copy tools; the in-app converter.
+- **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts, design copy (`design_mockup`, `mockup_grid`, `design_page` with tracing), `noteful convert` with `--export pdf|png|svg`, the in-app converter (File → New from Markdown, Pages → Insert handwritten pages), and Help → Connect AI tools (the server ships with the desktop app).
+- **Pending:** open written files in Noteful on the iPad (Phase 0); `design_mockup` with a real Gemini key.
 - **Core Engine:**
   - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
   - True 3-value per-point pressure encoding (`new_stroke` flags = 1).
@@ -68,13 +68,15 @@
 - [!] **Drive Version Comparison:** Newer-version check on open and side-by-side comparison with study material migration.
 - [!] **Desktop Audio Recording:** Real microphone recording in Electron desktop app; type filter on live Google Drive.
 - [!] **Image Crop Export:** Validate imported image crops in physical iPad Noteful.
+- [!] **Sharing and drawing tablets:** shared Markdown notes (Yjs) with guest names, presence, cursors and ending; a phone or tablet as the computer's drawing surface (QR or 6-digit code, tool dock left/right, own zoom, live strokes with pen pressure, shared undo). Tested in Node and headless Chromium (`tools/collab_e2e.mjs`); still to try on real devices, a real stylus, a real Wi-Fi network and the packaged apps ([COLLABORATION.md](COLLABORATION.md#not-yet-verified)).
+- [!] **Narrow windows and phones:** the menubar, tools and page row scroll sideways with the mouse wheel and a faded edge instead of hiding buttons; dark pages and Fit stay in the phone page row; the page number box fits its digits; opened menus look as on the desktop. Checked in Chromium at 320–480 px, not yet on a phone.
 
 ---
 
 ## 3. Planned Future Roadmap (`[ ]`)
 
 - [ ] **Reorder Pages in Any Note:** Drag thumbnails in Pages panel, keyboard commands (*Move page up/down*), automatic reference renumbering (flashcards, quizzes, page markers, audio).
-- [ ] **Collaborative Notes:** Real-time Yjs CRDT notes sharing with linked documents ([COLLABORATION.md](COLLABORATION.md)).
+- [ ] **Collaborative Notes, remaining:** linked documents (download, changed copies, per-page merge, proposing versions) and resuming sessions ([COLLABORATION.md](COLLABORATION.md), Phases 1, 4–8).
 - [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles with notes and audio).
 - [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all).
 - [ ] **Library Sources:** Home switch for Recent · Google Drive · GitHub Repositories (with Git LFS support).

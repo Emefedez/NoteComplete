@@ -4,7 +4,7 @@
 
 Choose **Open document** in the hamburger menu or drop a `.noteful`, `.nfedit`, PDF, PNG, JPEG or WebP file into the reader. PDF pages scroll continuously; the Pages panel shows previews. The UI is English; note content, saved layer names and recording names retain their original text. Pages scroll continuously and only nearby pages render. **Page** jumps to a page. **Fit** adapts its width; **− / +** change zoom by ten percentage points, from 10% to 400%.
 
-The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls.
+The toolbar compacts when scrolling down and returns when scrolling up. Its arrow provides a manual override. On phones, compact mode keeps playback and seeking available while hiding secondary controls. In a narrow window or on a phone, the menus, the tools and the page row scroll sideways when they do not fit (swipe, or use the mouse wheel over them); a faded edge shows there is more. The phone page row keeps dark pages and **Fit**; the zoom steps are in **View**.
 
 Press **?** (outside a text box) to show each button's key on the button itself; press it again to hide them. **Help → Keyboard shortcuts** lists every key, Ctrl ones included. The moon next to **Pages** (**D**) is a night view: white paper turns black and dark ink light, colours keep their hue (red ink stays red), also in the page previews and while drawing. It only changes the display. The three buttons beside the zoom place the pages on the left, in the middle or on the right when they are narrower than the window; the button next to them leaves the pages wherever you scroll them. **Ctrl+F** opens Find and closes it again. Choosing a tool opens its settings under it; press the tool again to hide or show them. **View → Auto-open tool settings** turns the automatic opening off; the arrow at the end of the toolbar hides or shows the settings too. The floppy disk beside the note title shows whether the project is saved: a dot means unsaved changes, and clicking it saves (**Ctrl S**).
 
@@ -15,6 +15,7 @@ Study and Ask AI use an AI tool already installed and signed in on your computer
 - **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
 - **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.
 - **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
+- **Help → Connect AI tools…** lets those tools work with your notes outside the app too (summary pages written in handwriting, clean copies, grading a quiz, flashcards). NoteComplete comes with the note server they use; **Connect** registers it with each installed tool, and *Run it yourself* shows the command instead. The desktop app offers this once by itself when it finds a tool that is not connected. Restart the tool afterwards. See [AI agents](MCP.md).
 
 ## Tape and locked items
 
@@ -23,6 +24,10 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 ## Insert pages
 
 **Pages → Insert blank page…** adds white pages after or before the current page, or at the end: the same size as the current page, A4 or Letter in either orientation, 4:3 or 16:9 slides, or a custom size in millimetres. **Pages → Insert PDF pages…** adds a range of pages from another PDF at the note's own scale; *Extra writing space* makes those pages wider (or taller) with blank paper beside the PDF, like widened pages in Noteful. Each insertion is one undo step, and ink drawn earlier stays on its page. Inserted pages are kept in the project and in native `.noteful` exports (experimental, like all native export).
+
+## Handwriting from Markdown
+
+**File → New from Markdown…** writes Markdown as real handwriting: pen and highlighter strokes on dotted, squared, ruled or blank paper, that you can erase, recolour and move here and in Noteful. **Pages → Insert handwritten pages…** adds such pages to the open note. The dialog shows a live preview; choose *Study notes* (titles, coloured sections, cards, columns, colour zones, sticky notes, diagrams) or *Plain notebook*, an ivory or black page, the handwriting, how neat it is, and a fineliner or a ballpoint with pressure. Opening a Markdown file first fills the dialog with it. The syntax (titles with `#`, `**term**`, `==highlight==`, `> [sky] CARD: text`, `!columns`, `!zone`, `!sticky`, `!stat`, SVG drawings with `!draw`) is listed in the dialog and in [AI agents](MCP.md#handwriting-markdown). Export the result as usual (PDF, images, `.noteful`). From a terminal, `noteful convert notes.md -o notes.noteful` does the same, and `--export pdf|png|svg` writes the pages directly.
 
 ## Audio
 
@@ -69,6 +74,22 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 **Selecting text.** With the Pan tool, the cursor turns into a text cursor over printed PDF text and over recognized words; drag to select and press **Ctrl+C** to copy, line by line in reading order. Dragging anywhere else still moves the page.
 
+## Share notes and draw on a tablet
+
+In the desktop app, **File → Share and draw on a tablet…** starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
+
+- **Drawing tablet**: a QR code, the computer's address and a 6-digit code (valid 10 minutes; **New code** makes another).
+- **Notes invite**: a link (and its QR code) to send to people; **Copy link**.
+- **People**: who joined, with **Remove**.
+
+The connection is meant for a trusted network (home, school): it is not encrypted, and the invite holds a secret. Coloured chips beside the note's name show who is connected; the first one is you (click it to change your name), and clicking someone scrolls the notes to their cursor. **Sharing** next to them reopens the dialog; **Stop sharing** ends the session for everyone. Closing the window while people are connected asks first: **Minimize** keeps the session running, **End session and close** ends it after everyone has saved.
+
+**Use a phone or tablet as a drawing tablet.** Scan the QR code with the device's camera (the note opens in its browser), or in NoteComplete on the device choose **File → Join as drawing tablet…** and type the address and code. The device shows only the note and a tool bar: pen, highlighter, eraser, move, colours, widths, undo, redo, fit, the ⇄ button that moves the bar to the other side, and disconnect. Zoom and scroll it as you like: the computer keeps its own view and tools. After the stylus has drawn once, fingers move the page and two fingers zoom. What you draw appears on the computer as you draw, and is saved there with the note: save or export on the computer. Undo on the tablet undoes the note's last edit, whoever made it. Opening another note on the computer opens it on the tablet too.
+
+**Write shared notes.** Open the invite link in a browser, or use **File → Join shared notes…** and paste it. Type your name (or keep *Guest N*) and press Enter or **OK**. Everyone's cursors show in the notes with their names; Ctrl Z undoes only your own typing. When the host ends the session, your copy of the notes is saved as a Markdown file and **Open my copy** opens it. If the connection drops, NoteComplete reconnects and your edits merge; if the host stays unreachable, your copy is saved the same way.
+
+Not yet tried on real phones, tablets or styluses: see [Collaboration](COLLABORATION.md#not-yet-verified).
+
 ## Open from Google Drive
 
 Choose **☰ → Google Drive** in the browser or an installed NoteComplete build, connect your account, find the Noteful folder and select a file to download and open. Subfolders, Refresh and paginated listings are supported. Local edits are never uploaded to Drive. Unsaved edits are checked before opening a downloaded document. See [Google Drive setup and platform support](GOOGLE_DRIVE.md).
@@ -89,7 +110,7 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 |---|---|
 | Pan | Drag with a mouse or scroll with touch. |
 | Select | Select existing ink, supported shapes, images or text placement; drag to move, use four corners to resize, or the upper handle to rotate. The inspector changes dimensions/angle and ink/shape stroke color and width. |
-| Pen | Fixed-width freehand ink; no pressure input required. |
+| Pen | Freehand ink. With a stylus that reports pressure, pressing harder draws wider (about a third of the width when light, 1.7× when firm); a mouse or finger draws the chosen width. |
 | Highlight | Straight segment by default; choose Freehand for sampled ink. Multiply at 50% preserves the appearance over images. |
 | Erase | Remove whole strokes and supported line objects the eraser touches; choose its size (small to extra large) in the tool settings. Other selected objects can be deleted with Select. |
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |

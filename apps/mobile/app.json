@@ -6,7 +6,13 @@
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "NoteComplete connects to a computer on this network when you use this device as its drawing tablet."
+      }
     },
     "android": {
       "package": "com.notecomplete.viewer",

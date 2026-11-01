@@ -117,3 +117,11 @@ The codebase already employs several sound memory patterns that should be preser
 3. **DOM teardown (done):** `reset()` clears `thumbQueue` and `#pageList`.
 4. **Process teardown (done):** `main.js` calls `ai.cancel(id)` and `asr.cancel(id)` when a tab's page is destroyed (closing a tab or window); `ai-runner.js` removes an owner's entry when its last request ends.
 5. **Remaining:** IPC and WASM copy count when opening large notes (item 6); history checkpointing (item 5) if long sessions prove a problem.
+
+## Sharing and drawing tablets (2026-11-01)
+
+- Nothing of it loads until a session starts (`collab.js`, `sync.js`, Yjs, the desktop server). Without a connected tablet, edits take the same path as before (`mutate()` calls the engine directly).
+- With a tablet connected, each edit makes one loopback round trip on the computer before it is applied (milliseconds); live strokes send one message per animation frame with only the new points; others' edits redraw only the page they touch.
+- A tablet joins from a snapshot of the whole project, source included: for a 250 MB note about 330 MB is sent and held while the tablet loads it, and the computer's worker serializes it once per joining tablet. Streaming the source separately (or from a cached copy on the device) would avoid this; not done.
+- The history digest serializes the edit history (images included) every 100 edits, only while a tablet is connected.
+- Remote notes edits re-set the TinyMDE content (one rebuild per remote change); fine for notes, not for very long ones typed by many people at once.

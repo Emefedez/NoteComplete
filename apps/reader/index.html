@@ -28,8 +28,13 @@
           <button id="addDocuments" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
           <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
+          <button id="newHandwritten" data-palette="New handwritten note from Markdown…" title="Write Markdown as real handwriting ink: a new note">New from Markdown…</button>
           <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
           <button id="driveOpen">Google Drive</button>
+          <hr />
+          <button id="shareSession" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden>Share and draw on a tablet…</button>
+          <button id="joinTablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer">Join as drawing tablet…</button>
+          <button id="joinNotes" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)">Join shared notes…</button>
           <hr />
           <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
           <div class="menu-export" role="group" aria-label="Export">
@@ -119,6 +124,7 @@
           <hr />
           <button id="insertBlank" disabled>Insert blank page…</button>
           <button id="insertPdf" disabled>Insert PDF pages…</button>
+          <button id="insertHandwritten" disabled data-palette="Insert handwritten pages from Markdown…" title="Write Markdown as real handwriting ink on new pages">Insert handwritten pages…</button>
           <button id="resizePage" disabled>Page size…</button>
           <button id="resizeDrag" disabled>Resize by dragging the borders</button>
         </div>
@@ -142,6 +148,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
           <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
+          <button id="agentsOpen" data-palette="Connect AI tools to your notes…" title="Let Claude Code, Codex, Antigravity or OpenCode read and write your notes" hidden>Connect AI tools…</button>
           <div id="updateItems" class="menu-group" hidden>
             <hr />
             <button id="updateCheck">Check for updates…</button>

@@ -139,3 +139,37 @@ fn straight_line_object_can_be_erased_and_undone() {
     e.undo();
     assert_eq!(e.view(0).unwrap()["visible_imported"], 1);
 }
+/// A shared drawing session: replicas loaded from the same project that apply
+/// the same edits in the same order end with the same items, ids and digest.
+#[test]
+fn replicas_applying_the_same_edits_agree() {
+    let mut host = exam();
+    host.add_line(0, line()).unwrap();
+    let project = host.save_project().unwrap();
+    let mut tablet = Editor::open_project(&project).unwrap();
+    assert_eq!(
+        host.history_digest().unwrap(),
+        tablet.history_digest().unwrap()
+    );
+    let pressured = Line {
+        points: vec![[20., 40.], [60., 42.], [90., 45.]],
+        pressure: Some(vec![0.8, 1.4, 1.1]),
+        ..line()
+    };
+    for replica in [&mut host, &mut tablet] {
+        replica.add_line(0, pressured.clone()).unwrap();
+        replica.erase_path(0, &[[50., 0.], [50., 20.]], 1.).unwrap();
+        replica.undo();
+        replica.undo();
+        replica.redo();
+    }
+    assert_eq!(host.view(0).unwrap(), tablet.view(0).unwrap());
+    assert_eq!(
+        host.history_digest().unwrap(),
+        tablet.history_digest().unwrap()
+    );
+    // The digest follows the undo position, not only the stored edits.
+    let before = tablet.history_digest().unwrap();
+    tablet.undo();
+    assert_ne!(before, tablet.history_digest().unwrap());
+}
