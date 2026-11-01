@@ -2482,3 +2482,16 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
    the window wider (what does not fit scrolls, like the tools). */
 @media (max-width: 700px) { .navigation { min-width: 0; } .navigation .toolbar-actions { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; } }
 @media (max-width: 400px) { .navigation { gap: 2px; } .navigation .toolbar-actions button { width: 32px; min-width: 32px; padding: 7px 5px; } }
+/* Menus in the bar: the focus ring is drawn inside (the narrow bar scrolls and would clip it
+   to two side strokes), and a click or tap shows only the open state, as on the desktop. */
+.bar-menu > summary:focus-visible { outline-offset: -2px; }
+.bar-menu > summary:focus:not(:focus-visible) { outline: none; }
+/* Phones keep dark pages and Fit in the page row (zoom steps stay in View). */
+@media (max-width: 700px) {
+  .navigation .pages-dark-toggle { display: inline-flex; flex: none; }
+  .navigation .zoom-controls { display: flex; flex: none; }
+  .navigation .zoom-controls > :not(#zoomFit) { display: none; }
+  .navigation #zoomFit { min-width: 40px; min-height: 40px; padding: 0 8px; }
+}
+@media (max-width: 700px) { .navigation .toolbar-actions { justify-content: safe flex-end; } }
+@media (max-width: 400px) { .navigation .pages-dark-toggle { width: 34px; min-width: 34px; padding: 6px; } .navigation #zoomFit { min-width: 36px; padding: 0 6px; } .navigation label { gap: 2px; } }
