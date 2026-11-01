@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build browser bindings from the same Rust core. No publishing."""
 import json
+import re
 import os
 from pathlib import Path
 import shutil
@@ -85,11 +86,53 @@ def main():
     dr.mkdir(parents=True,exist_ok=True)
     darkreader=ROOT/'apps/reader/node_modules/darkreader'
     for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
+    vendor_modules()
     reader=ROOT/'apps/reader'
     assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.webmanifest'))
     assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
     assets.append('./')
     (reader/'precache.json').write_text(json.dumps(assets)+'\n')
     print('Built apps/reader/. Serve with any static HTTP server. No Python/Rust server required at runtime.')
+
+IMPORT=re.compile(r"""(^[ \t]*(?:(?:import|export)\b[^;'"]*?\bfrom\s*|import\s*))(['"])([^'"]+)\2""",re.M)
+def vendor_modules():
+    """Sharing (collab.js) loads Yjs, y-protocols and a QR encoder on first use. They are npm
+    ES modules with bare imports ('yjs', 'lib0/x'); the files they need are copied with each
+    import rewritten to a relative path, so the browser loads them without a bundler."""
+    modules=ROOT/'apps/reader/node_modules'
+    out=ROOT/'apps/reader/vendor'
+    def source(spec,base):
+        if spec=='yjs':return modules/'yjs/dist/yjs.mjs'
+        if spec.startswith('lib0/'):return modules/'lib0'/(spec[5:]+'.js')
+        if spec.startswith('.'):
+            path=(base.parent/spec).resolve()
+            return path if path.suffix in ('.js','.mjs') else path.with_name(path.name+'.js')
+        raise SystemExit(f'Unexpected import {spec} in {base}')
+    def target(path):
+        rel=path.relative_to(modules)
+        if rel.parts[0]=='yjs':return out/'yjs/yjs.mjs'
+        if rel.parts[0]=='qrcode-generator':return out/'qrcode/qrcode.mjs'
+        return out/rel.parts[0]/rel.name
+    for name in ('yjs','y-protocols','lib0','qrcode'):
+        if (out/name).exists():shutil.rmtree(out/name)
+    todo=[modules/'yjs/dist/yjs.mjs',modules/'y-protocols/sync.js',modules/'y-protocols/awareness.js',modules/'lib0/encoding.js',modules/'lib0/decoding.js',modules/'qrcode-generator/dist/qrcode.mjs']
+    done=set()
+    while todo:
+        path=todo.pop()
+        if path in done:continue
+        done.add(path)
+        text=path.read_text()
+        def rewrite(m):
+            dep=source(m.group(3),path)
+            todo.append(dep)
+            rel=os.path.relpath(target(dep),target(path).parent).replace(os.sep,'/')
+            return m.group(1)+m.group(2)+(rel if rel.startswith('.') else './'+rel)+m.group(2)
+        text=IMPORT.sub(rewrite,text)
+        dest=target(path)
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        dest.write_text(text)
+    for package,name in (('yjs','yjs'),('y-protocols','y-protocols'),('lib0','lib0'),('qrcode-generator','qrcode')):
+        licence=modules/package/'LICENSE'
+        if licence.exists():shutil.copy2(licence,out/name/'LICENSE')
 
 if __name__=='__main__':main()

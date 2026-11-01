@@ -11,6 +11,8 @@ import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
 import { menuTemplate } from './app-menu.js';
+// Loaded with the first sharing session only (docs/COLLABORATION.md).
+const collabServer = () => import('./collab-server.js');
 
 const home = 'notecomplete://reader/';
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
@@ -112,7 +114,11 @@ function openTab(win) {
     else return;
     event.preventDefault();
   });
-  contents.on('destroyed', () => { views.delete(id); tabGone(id); });
+  contents.on('destroyed', () => {
+    views.delete(id);
+    tabGone(id);
+    if (sharing?.owner === id) { sharing.server.stop(); sharing = null; }
+  });
   // The new tab is shown once it has drawn its page (or after a moment), so
   // switching never shows an empty frame; the old tab stays up until then.
   view.setVisible(false);
@@ -137,6 +143,28 @@ function detachTab(id) {
   activate(win, id);
   activate(from, result.active);
   return true;
+}
+// The sharing session (notes with guests, drawing tablets): one at a time, owned by the
+// tab that started it. Closing that tab's window asks first (Minimize / End session and close).
+let sharing = null;
+function sharingPrompt(win) {
+  if (!sharing || win.closing || tabs.windowOf(sharing.owner) !== win.id) return 'close';
+  const others = sharing.server.hub.members().filter((p) => p.role !== 'host').length;
+  if (!others) return 'end';
+  const answer = dialog.showMessageBoxSync(win, { type: 'question', buttons: ['Minimize', 'End session and close', 'Cancel'], defaultId: 0, cancelId: 2,
+    message: others === 1 ? 'Notes are shared with 1 person. Closing ends the session for everyone.' : `Notes are shared with ${others} people. Closing ends the session for everyone.`,
+    detail: 'Minimize keeps the session running.' });
+  return ['minimize', 'end', 'cancel'][answer];
+}
+// Ends the session, then closes once everyone has saved (at most a couple of seconds).
+function endSharing() {
+  if (!sharing) return Promise.resolve();
+  const { server } = sharing;
+  return new Promise((resolve) => {
+    sharing.closed = resolve;
+    server.hub.end();
+    setTimeout(resolve, 4000);
+  }).then(() => new Promise((resolve) => setTimeout(resolve, 300)));
 }
 // Closing asks the reader first (it confirms unsaved changes itself).
 function requestClose(id) {
@@ -167,6 +195,14 @@ function createWindow({ tab = true } = {}) {
   windows.set(id, win);
   win.on('resize', () => layout(win));
   win.on('close', event => {
+    const choice = sharingPrompt(win);
+    if (choice !== 'close') {
+      event.preventDefault();
+      if (choice === 'minimize') win.minimize();
+      // The owner's reader writes the final notes when the session ends, then the window closes.
+      if (choice === 'end') endSharing().then(() => { if (!win.isDestroyed()) win.close(); });
+      return;
+    }
     const unsaved = tabs.list(win.id).filter(t => t.dirty);
     if (win.closing || !unsaved.length) return;
     const answer = dialog.showMessageBoxSync(win, { type: 'warning', buttons: ['Cancel', 'Close without saving'], defaultId: 0, cancelId: 0,
@@ -356,6 +392,35 @@ app.whenReady().then(async () => {
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
   ipcMain.handle('tabs:close', guarded((event, id) => { if (tabs.windowOf(id) === tabs.windowOf(event.sender.id)) requestClose(id); }));
   ipcMain.handle('tabs:close-self', guarded(event => closeTab(event.sender.id)));
+  // Sharing: the server is started for this tab, which joins it as the host over loopback.
+  ipcMain.handle('collab:start', guarded(async (event, options = {}) => {
+    const owner = event.sender.id;
+    if (sharing && sharing.owner !== owner) throw Error('Another tab is already sharing. Stop sharing there first.');
+    if (!sharing) {
+      const notes = ['edit', 'view'].includes(options.notes) ? options.notes : null;
+      const server = await (await collabServer()).startServer({
+        root, notes,
+        onEnded: (result) => {
+          const contents = views.get(owner)?.webContents;
+          if (contents && !contents.isDestroyed()) contents.send('collab:ended', { reason: result.reason });
+          const done = sharing?.closed;
+          sharing = null;
+          done?.();
+        },
+      });
+      sharing = { owner, server };
+    }
+    const { server } = sharing;
+    return { hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, port: server.port, ...server.code() };
+  }));
+  ipcMain.handle('collab:stop', guarded(async (event) => {
+    if (sharing?.owner !== event.sender.id) return;
+    await endSharing();
+    await sharing?.server.stop();
+    sharing = null;
+  }));
+  ipcMain.handle('collab:info', guarded((event) => (sharing?.owner === event.sender.id ? { tabletLink: sharing.server.tabletLink(), ...sharing.server.code() } : null)));
+  ipcMain.handle('collab:minimize', guarded((event) => windowOf(event.sender)?.minimize()));
   ipcMain.handle('ui:zoom', guarded((_event, step) => setUiZoom([-1, 0, 1].includes(step) ? step : 0)));
   ipcMain.handle('tabs:detach', guarded((event, id) => tabs.windowOf(id) === tabs.windowOf(event.sender.id) && detachTab(id)));
   // Keep the backdrop in step with the system theme.

@@ -81,3 +81,12 @@ contextBridge.exposeInMainWorld('notecompleteDrive', {
   signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),
   cancel: () => ipcRenderer.send('drive:cancel'),
 });
+// Sharing notes and pairing drawing tablets (docs/COLLABORATION.md): the server runs in the
+// main process; the reader connects to it as the host.
+contextBridge.exposeInMainWorld('notecompleteCollab', {
+  start: (options = {}) => ipcRenderer.invoke('collab:start', { notes: ['edit', 'view'].includes(options.notes) ? options.notes : null }),
+  stop: () => ipcRenderer.invoke('collab:stop'),
+  info: () => ipcRenderer.invoke('collab:info'),
+  minimize: () => ipcRenderer.invoke('collab:minimize'),
+  onEnded: callback => ipcRenderer.on('collab:ended', (_event, detail) => callback(detail)),
+});
