@@ -400,6 +400,11 @@ impl Composer {
     }
 
     // -- plumbing -----------------------------------------------------------
+    /// The words of a line just written, for the page's text.
+    fn words(&mut self, text: &str, x: f64, y: f64, style: &TextStyle) {
+        let words = hand::word_boxes(text, x, y, style);
+        self.page().words.extend(words);
+    }
     fn page(&mut self) -> &mut InkPage {
         self.pages.last_mut().unwrap()
     }
@@ -408,6 +413,7 @@ impl Composer {
             lines: vec![],
             under: vec![],
             paper: self.paper,
+            words: vec![],
         });
         self.y = TOP;
         self.section = 0;
@@ -646,6 +652,7 @@ impl Composer {
         let (plain, spans) = parse_inline(text);
         self.highlight_spans(&plain, 0, &spans, self.x0, b, &st);
         let (s, x_end) = write_line(&mut pen, &plain, self.x0, b, &st);
+        self.words(&plain, self.x0, b, &st);
         self.add(s);
         if level <= 2 {
             let mut p = self.pen_for(Some(colour.unwrap_or(self.accent)), None);
@@ -677,6 +684,7 @@ impl Composer {
             pos += line.chars().count();
             let mut pen = self.pen_for(colour, None);
             let (s, _) = write_line(&mut pen, &line, self.x0 + indent, b, &st);
+            self.words(&line, self.x0 + indent, b, &st);
             self.add(s);
         }
     }
@@ -904,6 +912,7 @@ impl Composer {
             let lead = piece.chars().take_while(|c| c.is_whitespace()).count();
             let x_start = cx + text_width(&piece.chars().take(lead).collect::<String>(), &pst);
             let (s, end) = write_line(&mut pen, &piece, cx, b, &pst);
+            self.words(&piece, cx, b, &pst);
             self.add(s);
             cx = end;
             let trail = piece
@@ -1262,6 +1271,7 @@ impl Composer {
         let c = self.colour();
         let mut pen = self.pen_for(Some(c), Some(2.6));
         let (s, xe) = write_line(&mut pen, num, self.x0, b, &big);
+        self.words(num, self.x0, b, &big);
         self.add(s);
         let (plain, spans) = parse_inline(rest);
         let plain = self.body_text(&plain);
@@ -1562,6 +1572,7 @@ impl Composer {
         let cx = (self.x0 + self.x1) / 2.;
         let mut pen = self.pen_for(Some(self.ink), Some(3.));
         let (s, _) = write_line(&mut pen, text, cx - w / 2., b, &tst);
+        self.words(text, cx - w / 2., b, &tst);
         self.add(s);
         let mut top = b + 14.;
         let q = question.trim();
@@ -1570,6 +1581,7 @@ impl Composer {
             let qb = b + qst.size * 2.6;
             let mut pen = self.pen_for(Some(self.ink), Some(1.3));
             let (s, _) = write_line(&mut pen, q, cx - qw / 2., qb, &qst);
+            self.words(q, cx - qw / 2., qb, &qst);
             self.add(s);
             let mut pen = self.pen_for(Some(self.ink), Some(1.));
             let l = hand::line(
@@ -1599,6 +1611,7 @@ impl Composer {
             self.add(a);
             let mut pen = self.pen_for(Some(colour), Some(2.4));
             let (s, _) = write_line(&mut pen, &label, bx - lw / 2., by, &lab);
+            self.words(&label, bx - lw / 2., by, &lab);
             self.add(s);
             let mut y = by + bst.size * 0.8;
             let lx = bx - (colw * 0.42).min((lw / 2.).max(60.));
@@ -1622,6 +1635,7 @@ impl Composer {
                 self.add(a);
                 for ln in wrap(leaf, colw - (x - lx) - 30., &lst) {
                     let (s, _) = write_line(&mut pen, &ln, x + 18., y, &lst);
+                    self.words(&ln, x + 18., y, &lst);
                     self.add(s);
                     y += lst.size * lst.line_height;
                 }

@@ -68,7 +68,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
           }
           index.add({ page, source: 'pdf', words: stored.pdf[slot] });
         }
-        if (stored.ocr[slot]) index.add({ page, source: 'ocr', words: stored.ocr[slot] });
+        const recognized = stored.ocr[slot] || written(view);
+        if (recognized.length) index.add({ page, source: 'ocr', words: recognized });
         for (const t of view.timings || []) {
           if (!timings.has(t.recording_id)) timings.set(t.recording_id, []);
           timings.get(t.recording_id).push({ page, start: t.start });
@@ -187,6 +188,9 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     });
     layer.replaceChildren(...rects);
   }
+  // Handwriting NoteComplete wrote from Markdown comes with its text (the core keeps
+  // the words and their boxes), so it is found without recognizing anything.
+  const written = (view) => (view.ink_text || []).map((w) => ({ text: w.text, box: w.bounds }));
   // Selectable PDF and recognized text over a rendered page (Pan tool).
   async function selectable(p) {
     const view = p?.view, token = generation;
@@ -199,7 +203,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     }
     if (token !== generation || p.view !== view || !p.el) return;
     p.textLayer?.remove();
-    p.textLayer = textLayer(view.size, { pdf: stored.pdf[slot], ocr: stored.ocr[slot] });
+    const recognized = stored.ocr[slot] || written(view);
+    p.textLayer = textLayer(view.size, { pdf: stored.pdf[slot], ocr: recognized.length ? recognized : undefined });
     p.el.append(p.textLayer);
   }
   function go(i) {

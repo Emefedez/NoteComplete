@@ -37,6 +37,9 @@ pub struct InkPage {
     /// Drawn below the ink (written first); every line has `under` set.
     pub under: Vec<Line>,
     pub paper: Paper,
+    /// The words written on the page, with their boxes: the page's text without
+    /// recognizing the ink (kept with the note, see `Editor::ink_words`).
+    pub words: Vec<crate::InkWord>,
 }
 impl InkPage {
     /// Under-ink first, then ink: the order to add them to a page.
@@ -250,6 +253,7 @@ pub fn new_notebook(title: &str, pages: &[InkPage]) -> Result<Editor> {
     let mut editor = Editor::create_document_with(title, &records, &pdf, "paper-1", 1.)?;
     for (slot, page) in pages.iter().enumerate() {
         editor.add_lines(slot, page.strokes().cloned().collect())?;
+        editor.set_ink_words(slot, page.words.clone())?;
     }
     Ok(editor)
 }
@@ -271,8 +275,10 @@ pub fn insert_pages(editor: &mut Editor, at: usize, pages: &[InkPage]) -> Result
     };
     let new_pages = index
         .iter()
-        .map(|i| NewPage {
+        .zip(pages)
+        .map(|(i, page)| NewPage {
             size: A4,
+            words: page.words.clone(),
             pdf: Some(PdfPlacement {
                 resource: id.clone(),
                 page_index: *i,
@@ -303,6 +309,25 @@ pub fn insert_pages(editor: &mut Editor, at: usize, pages: &[InkPage]) -> Result
         shown.push(display);
     }
     Ok(shown)
+}
+
+/// The inside of a filled shape as highlighter bands, for Noteful files (which have
+/// no filled shape for drawn ink): the same colouring the engine gives its cards.
+pub(crate) fn shape_fill(line: &Line, fill: [f64; 4]) -> Vec<Line> {
+    let seed = line
+        .points
+        .iter()
+        .flatten()
+        .fold(7u64, |h, v| h.wrapping_mul(31).wrapping_add(v.to_bits()));
+    let mut rng = rng::Rng::new(seed);
+    svg::fill_shapes(&[(vec![line.points.clone()], fill)], 14., 0., &mut rng)
+        .into_iter()
+        .map(|l| Line {
+            layer: line.layer,
+            under: true,
+            ..l
+        })
+        .collect()
 }
 
 /// The layer new ink goes on: the first visible, unlocked one.

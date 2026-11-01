@@ -105,6 +105,9 @@ struct Project {
     /// Markdown notes kept with the note (project version 5).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     markdown: String,
+    /// Words of handwriting written from Markdown on original pages (project version 6).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    ink_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
 }
 pub struct Editor {
     pub(crate) source: Vec<u8>,
@@ -116,6 +119,10 @@ pub struct Editor {
     pub(crate) added_pdfs: Vec<(String, Vec<u8>)>,
     /// Markdown notes (see markdown.rs); not part of the edit history.
     pub(crate) markdown: String,
+    /// Words of handwriting written from Markdown: on original pages (by slot),
+    /// and on inserted pages (with their InsertPages edit, so undo keeps them in step).
+    pub(crate) base_words: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
+    pub(crate) inserted_words: Vec<Vec<crate::InkWord>>,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -180,6 +187,8 @@ impl Editor {
             inserted: Vec::new(),
             added_pdfs: Vec::new(),
             markdown: String::new(),
+            base_words: Default::default(),
+            inserted_words: Vec::new(),
         })
     }
     /// A page by slot (see pages.rs); hosts map display positions with `slot`.
@@ -293,6 +302,9 @@ impl Editor {
         Ok(())
     }
     fn check_line(line: &Line) -> Result<()> {
+        if line.shape.as_ref().is_some_and(|s| !s.fill_valid()) {
+            return Err(Error::new(0, "Invalid shape fill"));
+        }
         let pressure_ok = line.pressure.as_ref().is_none_or(|p| {
             line.tool == 0
                 && p.len() == line.points.len()
@@ -333,6 +345,12 @@ impl Editor {
         line.points = shape.points();
         if !points_valid(&line.points) {
             return Err(Error::new(0, "Invalid shape coordinates"));
+        }
+        // Resizing keeps the inside colour (the handles send only the geometry).
+        let mut shape = shape;
+        shape.fill = shape.fill.or(line.shape.as_ref().and_then(|s| s.fill));
+        if !shape.fill_valid() {
+            return Err(Error::new(0, "Invalid shape fill"));
         }
         line.shape = Some(shape);
         self.commit(Edit::Replace {
@@ -553,7 +571,7 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>0,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page)}),
         )
     }
     /// Items locked in place on a page, with their current bounds.
@@ -583,7 +601,12 @@ impl Editor {
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if !self.markdown.is_empty() {
+            version: if !self.base_words.is_empty()
+                || self.history.iter().any(|e| {
+                    matches!(e, Edit::InsertPages { pages, .. } if pages.iter().any(|p| !p.words.is_empty()))
+                }) {
+                6
+            } else if !self.markdown.is_empty() {
                 5
             } else if self.history.iter().any(|e| {
                 matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. })
@@ -605,6 +628,7 @@ impl Editor {
             history: self.history.clone(),
             cursor: self.cursor,
             markdown: self.markdown.clone(),
+            ink_text: self.base_words.clone(),
         })
         .map_err(|e| Error::new(0, e.to_string()))?;
         Ok(data)
@@ -620,6 +644,30 @@ impl Editor {
         data.extend((self.cursor as u64).to_le_bytes());
         data.extend(history);
         Ok(crate::md5_hex(&data))
+    }
+    /// The words of handwriting written from Markdown on page `slot` (empty for
+    /// other pages): hosts index them like recognized text.
+    pub fn ink_words(&self, slot: usize) -> &[crate::InkWord] {
+        let base = self.scene.pages.len();
+        if slot < base {
+            self.base_words.get(&slot).map_or(&[], Vec::as_slice)
+        } else {
+            self.inserted_words
+                .get(slot - base)
+                .map_or(&[], Vec::as_slice)
+        }
+    }
+    /// Keeps the words written on an original page (a notebook made from Markdown).
+    pub fn set_ink_words(&mut self, slot: usize, words: Vec<crate::InkWord>) -> Result<()> {
+        if slot >= self.scene.pages.len() || !crate::pages::words_valid(&words) {
+            return Err(Error::new(0, "Invalid page text"));
+        }
+        if words.is_empty() {
+            self.base_words.remove(&slot);
+        } else {
+            self.base_words.insert(slot, words);
+        }
+        Ok(())
     }
     pub fn pdf_bytes(&self, id: &str) -> Result<&[u8]> {
         if let Some(bytes) = self.added_pdf(id) {
@@ -646,7 +694,11 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=5)
+            || !matches!(project.version, 1..=6)
+            || project
+                .ink_text
+                .values()
+                .any(|w| !crate::pages::words_valid(w))
             || project.markdown.len() > crate::markdown::MARKDOWN_LIMIT
             || project.cursor > project.history.len()
         {
@@ -721,11 +773,41 @@ impl Editor {
         }
         editor.cursor = project.cursor;
         editor.markdown = project.markdown;
+        for (slot, words) in project.ink_text {
+            editor.set_ink_words(slot, words)?;
+        }
         Ok(editor)
     }
 }
 
 pub(crate) fn added_svg(line: &Line) -> String {
+    // A filled shape: its inside first, then the outline over it.
+    if let Some(fill) = line
+        .shape
+        .as_ref()
+        .filter(|s| s.closed())
+        .and_then(|s| s.fill)
+    {
+        let points: Vec<String> = line
+            .points
+            .iter()
+            .map(|[x, y]| format!("{x:.2},{y:.2}"))
+            .collect();
+        let rgb = |v: f64| (v.clamp(0., 1.) * 255.).round() as u8;
+        let mut outline = line.clone();
+        if let Some(s) = outline.shape.as_mut() {
+            s.fill = None;
+        }
+        return format!(
+            "<polygon points=\"{}\" fill=\"rgb({},{},{})\" fill-opacity=\"{}\" stroke=\"none\"/>{}",
+            points.join(" "),
+            rgb(fill[0]),
+            rgb(fill[1]),
+            rgb(fill[2]),
+            fill[3].clamp(0., 1.),
+            added_svg(&outline)
+        );
+    }
     // A ballpoint stroke draws its stored pressure as the radius, as decoded ink does.
     if let Some(pressure) = line.pressure.as_ref().filter(|_| line.tool == 0) {
         let mut rgba = line.rgba;

@@ -117,6 +117,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
     let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
     let mut l = line(0, 0);
     l.shape = Some(Shape {
+        fill: None,
         kind: ShapeKind::Rectangle,
         start: [100., 100.],
         end: [200., 200.],
@@ -127,6 +128,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
         0,
         "new:0",
         Shape {
+            fill: None,
             kind: ShapeKind::Rectangle,
             start: [80., 90.],
             end: [250., 280.],
@@ -154,6 +156,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
             0,
             "new:0",
             Shape {
+                fill: None,
                 kind: ShapeKind::Ellipse,
                 start: [0., 0.],
                 end: [1., 1.]
@@ -167,6 +170,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
             0,
             "new:0",
             Shape {
+                fill: None,
                 kind: ShapeKind::Rectangle,
                 start: [0., 0.],
                 end: [1., 1.]

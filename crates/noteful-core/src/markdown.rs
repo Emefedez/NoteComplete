@@ -121,6 +121,7 @@ pub fn markdown_export(src: &str, title: &str) -> String {
 const MANIFEST: &str = "manifest.json";
 const NOTE: &str = "note.noteful";
 const NOTES: &str = "notes.md";
+const INK_TEXT: &str = "ink-text.json";
 
 fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<()> {
     let mut header = tar::Header::new_ustar();
@@ -189,6 +190,18 @@ pub fn pack_notecomplete_with(
     title: &str,
     audio: &[(AddedAudio, &[u8])],
 ) -> Result<Vec<u8>> {
+    pack_notecomplete_text(note, markdown, title, audio, &[])
+}
+
+/// With the words of handwriting written from Markdown, by page in the note's
+/// order (`ink-text.json`), so the text stays searchable without recognition.
+pub fn pack_notecomplete_text(
+    note: &[u8],
+    markdown: &str,
+    title: &str,
+    audio: &[(AddedAudio, &[u8])],
+    ink_text: &[&[crate::InkWord]],
+) -> Result<Vec<u8>> {
     if audio.len() > AUDIO_LIMIT {
         return Err(Error::new(0, "Too many recordings"));
     }
@@ -208,10 +221,20 @@ pub fn pack_notecomplete_with(
     if !listed.is_empty() {
         manifest["audio"] = serde_json::Value::Array(listed);
     }
+    let text = ink_text
+        .iter()
+        .any(|w| !w.is_empty())
+        .then(|| serde_json::json!({ "pages": ink_text }).to_string());
+    if text.is_some() {
+        manifest["ink_text"] = INK_TEXT.into();
+    }
     let mut builder = tar::Builder::new(Vec::new());
     add(&mut builder, MANIFEST, manifest.to_string().as_bytes())?;
     add(&mut builder, NOTE, note)?;
     add(&mut builder, NOTES, markdown.as_bytes())?;
+    if let Some(text) = text {
+        add(&mut builder, INK_TEXT, text.as_bytes())?;
+    }
     for (file, data) in files {
         add(&mut builder, &file, data)?;
     }
@@ -280,6 +303,33 @@ pub fn is_notecomplete(data: &[u8]) -> bool {
 }
 
 /// The note and notes inside a `.notecomp` file.
+/// The words of handwriting written from Markdown in a `.notecomp` file, by page
+/// (empty when the file has none, as older files).
+pub fn notecomplete_ink_text(data: &[u8]) -> Result<Vec<Vec<crate::InkWord>>> {
+    let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
+    let mut archive = tar::Archive::new(data);
+    for entry in archive.entries().map_err(invalid)? {
+        let entry = entry.map_err(invalid)?;
+        if entry.path().map_err(invalid)?.to_string_lossy() != INK_TEXT {
+            continue;
+        }
+        let size = entry.header().size().map_err(invalid)?;
+        if size > MARKDOWN_LIMIT as u64 * 8 {
+            return Err(Error::new(0, "Page text too large"));
+        }
+        let mut bytes = Vec::with_capacity(size as usize);
+        entry.take(size).read_to_end(&mut bytes).map_err(invalid)?;
+        #[derive(serde::Deserialize)]
+        struct Text {
+            pages: Vec<Vec<crate::InkWord>>,
+        }
+        return serde_json::from_slice::<Text>(&bytes)
+            .map(|t| t.pages)
+            .map_err(|e| Error::new(0, e.to_string()));
+    }
+    Ok(Vec::new())
+}
+
 pub fn unpack_notecomplete(data: &[u8]) -> Result<(Vec<u8>, String)> {
     let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
     let mut archive = tar::Archive::new(data);
@@ -336,6 +386,12 @@ impl Editor {
         let (note, notes) = unpack_notecomplete(data)?;
         let mut editor = Self::open(&note)?;
         editor.markdown = notes;
+        // The note inside is flattened: its pages are in display order.
+        for (slot, words) in notecomplete_ink_text(data)?.into_iter().enumerate() {
+            if slot < editor.scene.pages.len() && crate::pages::words_valid(&words) {
+                editor.set_ink_words(slot, words)?;
+            }
+        }
         Ok(editor)
     }
     pub fn export_notecomplete(&self) -> Result<Vec<u8>> {
@@ -343,11 +399,14 @@ impl Editor {
     }
     /// With recordings added in NoteComplete, which the reader keeps per note.
     pub fn export_notecomplete_with(&self, audio: &[(AddedAudio, &[u8])]) -> Result<Vec<u8>> {
-        pack_notecomplete_with(
+        let order = self.page_order();
+        let text: Vec<&[crate::InkWord]> = order.iter().map(|s| self.ink_words(*s)).collect();
+        pack_notecomplete_text(
             &self.export_noteful()?,
             &self.markdown,
             &self.scene.title,
             audio,
+            &text,
         )
     }
 }

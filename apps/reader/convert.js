@@ -1,3 +1,5 @@
+import { modelPicker } from "./model-picker.js";
+
 // Markdown into handwritten pages, with the same engine as the MCP ink tools:
 // a dialog with the Markdown, the look and a live preview, that creates a new
 // note or inserts the pages into the open one. The dialog is built here so the
@@ -16,6 +18,30 @@ const LABELS = { look: "Look", theme: "Page", paper: "Paper", font: "Handwriting
 const STORE = "notecomplete-handwriting";
 export const SAMPLE = "# MY **TOPIC**\n_Subject · week 1_\n## First idea\nWrite **key terms** in colour and ==highlight== what matters.\n- a point\n- another point\n> [sky] DEFINITION: a card for the main idea ((a detail in grey))\n!stat 42 a number worth remembering";
 
+// What the AI tool is asked for: study notes about a topic (or from pasted material) in
+// the handwriting dialect, so the answer goes straight into the preview.
+export function aiPrompt({ request, dialect, look = "study" }) {
+  return [
+    "Write a note about the request below as Handwriting Markdown for NoteComplete, which writes it as real handwriting ink on A4 pages.",
+    "Answer with the Markdown only: no code fences, no comments before or after it.",
+    `Use the ${look === "classic" ? "classic (plain notebook)" : "study (composed study notes)"} look. Write in the language of the request.`,
+    "Keep it to one or two pages unless the material needs more (\\pagebreak starts a page). Prefer short lines, key terms in **bold**, ==highlights==, cards and lists over long paragraphs; add a !draw diagram only when it explains something.",
+    "If the request includes data or notes, use them faithfully and do not invent facts.",
+    "The dialect:\n" + dialect,
+    "The request:\n" + request.trim(),
+  ].join("\n\n");
+}
+// The Markdown in an answer: code fences some tools add anyway are taken off.
+export function answerMarkdown(text) {
+  const fenced = String(text).match(/^\s*```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/);
+  return (fenced ? fenced[1] : String(text)).trim();
+}
+// A name for the note from its first heading.
+export function titleOf(markdown) {
+  const line = String(markdown).split("\n").find((l) => /^#\s/.test(l));
+  return line ? line.replace(/^#\s+/, "").replace(/[*_=]+|\[\[|\]\]|:[a-z]+:/g, "").replace(/\s*\/\/\s*/, " ").trim().slice(0, 80) : "";
+}
+
 // The options the core expects, from the dialog's values (empty means default).
 export function optionsFrom(values) {
   const out = {};
@@ -28,8 +54,8 @@ export function optionsFrom(values) {
   return out;
 }
 
-export function handwritingConverter({ call, status, onCreate, onInsert, sourceText = () => "", hasDocument = () => false, store = globalThis.localStorage }) {
-  let dialog = null, timer = 0, ask = 0;
+export function handwritingConverter({ call, status, onCreate, onInsert, sourceText = () => "", hasDocument = () => false, store = globalThis.localStorage, ai = null }) {
+  let dialog = null, timer = 0, ask = 0, writing = null, model = null;
   const el = (id) => dialog.querySelector(`#${id}`);
   const remembered = () => { try { return JSON.parse(store?.getItem(STORE) || "{}"); } catch { return {}; } };
   const remember = (v) => { try { store?.setItem(STORE, JSON.stringify(v)); } catch { /* Optional. */ } };
@@ -49,6 +75,11 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       <p class="muted">Written as real pen and highlighter strokes you can erase, recolour and move, here and in Noteful.</p>
       <div class="hw-layout">
         <div class="hw-source">
+          <details id="hwAi" class="hw-ai"${ai ? "" : " hidden"}><summary>Write it with AI</summary>
+            <textarea id="hwRequest" rows="4" aria-label="What the note is about" placeholder="A topic (“the cardiac cycle for a first-year exam”), or paste data, notes or a text to turn into a note."></textarea>
+            <div class="hw-ai-row"><select id="hwTool" data-native aria-label="AI tool"></select><select id="hwModel" data-native aria-label="Model"></select><input id="hwModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden /><button id="hwWrite" type="button" class="primary">Write</button></div>
+            <p id="hwAiStatus" class="muted" role="status"></p>
+          </details>
           <label class="ocr-languages">Name<input id="hwName" type="text" spellcheck="false" /></label>
           <textarea id="hwMarkdown" spellcheck="false" aria-label="Markdown" rows="14"></textarea>
           <details class="hw-help"><summary>Markdown for handwriting</summary><p class="muted"><code># TITLE</code>, <code>## Section</code>, <code>**term**</code>, <code>==highlight==</code>, <code>[[tag]]</code>, <code>((grey detail))</code>, <code>- item</code>, <code>1. step</code>, <code>&gt; [sky] CARD: text</code>, <code>&gt;&gt; A: … || B: …</code>, <code>!columns 55</code> … <code>!col</code> … <code>!end</code>, <code>!zone [mint]</code> … <code>!end</code>, <code>!sticky [yellow] TITLE: text</code>, <code>!stat 42 label</code>, <code>!draw 480</code> &lt;svg…&gt; <code>!end</code>, <code>\\pagebreak</code>. Greek letters, <code>T^4</code> and <code>CO_2</code> are drawn by hand.</p></details>
@@ -64,6 +95,13 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       </div>`;
     document.body.append(dialog);
     el("hwCancel").onclick = () => dialog.close();
+    dialog.addEventListener("close", () => stopWriting());
+    if (ai) {
+      model = modelPicker(el("hwModel"), el("hwModelOther"), ai);
+      el("hwTool").onchange = () => { try { store?.setItem("notecomplete-ai-provider", el("hwTool").value); } catch { /* Optional. */ } model.load(el("hwTool").value); };
+      el("hwWrite").onclick = () => (writing ? stopWriting() : write());
+      el("hwRequest").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); write(); } });
+    }
     for (const input of dialog.querySelectorAll("textarea, select, input")) input.addEventListener("input", schedule);
     el("hwCreate").onclick = async () => {
       const job = read();
@@ -77,6 +115,67 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       dialog.close();
       await onInsert({ ...job, where: el("hwWhere").value });
     };
+  }
+  // The AI tools found on this computer, the last one used first.
+  async function tools() {
+    const select = el("hwTool");
+    if (select.options.length) return;
+    for (const p of await ai.providers()) {
+      const option = new Option(p.available ? p.label : `${p.label} (not installed)`, p.id);
+      option.disabled = !p.available;
+      select.add(option);
+    }
+    let saved = "";
+    try { saved = store?.getItem("notecomplete-ai-provider") || ""; } catch { /* Optional. */ }
+    if (saved && select.querySelector(`option[value="${saved}"]:not([disabled])`)) select.value = saved;
+    else select.value = select.querySelector("option:not([disabled])")?.value || "";
+    if (select.value) await model.load(select.value);
+    else el("hwAiStatus").textContent = "No AI tool found. Install Claude Code, Antigravity, Codex or OpenCode and sign in.";
+  }
+  // The tool writes the Markdown; it streams into the editor and the preview follows.
+  async function write() {
+    const request = el("hwRequest").value;
+    if (!request.trim()) { el("hwAiStatus").textContent = "Say what the note is about, or paste the material."; el("hwRequest").focus(); return; }
+    const provider = el("hwTool").value;
+    if (!provider) return;
+    const run = (writing = { stopped: false });
+    el("hwWrite").textContent = "Stop";
+    el("hwAiStatus").textContent = "Writing… (your AI tool can take a minute)";
+    const before = el("hwMarkdown").value;
+    let streamed = "";
+    try {
+      const dialect = await call("dialect");
+      const look = el("hw-look").value;
+      const { text } = await ai.run({ provider, model: model.value, prompt: aiPrompt({ request, dialect, look }), tag: "handwriting" }, (delta) => {
+        if (run.stopped) return;
+        streamed += delta;
+        el("hwMarkdown").value = answerMarkdown(streamed);
+        schedule();
+      });
+      if (run.stopped) return;
+      const markdown = answerMarkdown(text || streamed);
+      if (!markdown) throw Error("The AI tool gave no answer.");
+      el("hwMarkdown").value = markdown;
+      const name = el("hwName").value.trim();
+      if (!name || name === "Handwritten notes") el("hwName").value = titleOf(markdown) || name || "Handwritten notes";
+      el("hwAiStatus").textContent = "Written. Check the preview, change anything, then create the note.";
+      schedule();
+    } catch (e) {
+      if (!run.stopped) {
+        el("hwMarkdown").value = before;
+        el("hwAiStatus").textContent = e.message;
+        schedule();
+      }
+    } finally {
+      if (writing === run) { writing = null; el("hwWrite").textContent = "Write"; }
+    }
+  }
+  function stopWriting() {
+    if (!writing) return;
+    writing.stopped = true;
+    writing = null;
+    ai?.cancel?.("handwriting");
+    if (dialog) { el("hwWrite").textContent = "Write"; el("hwAiStatus").textContent = "Stopped."; }
   }
   function read() {
     const markdown = el("hwMarkdown").value;
@@ -110,20 +209,25 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
     }
   }
   return {
-    open({ insert = false } = {}) {
+    // withAi: open on "Write it with AI" (File → New note with AI…).
+    open({ insert = false, withAi = false } = {}) {
       if (!dialog) build();
       const saved = remembered();
       for (const key of Object.keys(LOOK_FIELDS)) el(`hw-${key}`).value = saved[key] ?? LOOK_FIELDS[key][0][0];
       el("hwSize").value = saved.size || 11;
       const source = sourceText();
-      if (source.trim() || !el("hwMarkdown").value.trim()) el("hwMarkdown").value = source.trim() ? source : SAMPLE;
+      if (source.trim() || !el("hwMarkdown").value.trim()) el("hwMarkdown").value = source.trim() ? source : withAi ? "" : SAMPLE;
       if (!el("hwName").value) el("hwName").value = "Handwritten notes";
       const canInsert = hasDocument();
       el("hwInsert").hidden = el("hwWhereLabel").hidden = !canInsert;
       el("hwCreate").classList.toggle("primary", !insert || !canInsert);
       el("hwInsert").classList.toggle("primary", insert && canInsert);
       dialog.showModal();
-      el("hwMarkdown").focus();
+      if (ai) {
+        el("hwAi").open = withAi || el("hwAi").open;
+        tools().catch((e) => { el("hwAiStatus").textContent = e.message; });
+      }
+      (withAi && ai ? el("hwRequest") : el("hwMarkdown")).focus();
       preview();
     },
     get visible() { return !!dialog?.open; },

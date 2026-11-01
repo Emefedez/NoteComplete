@@ -535,6 +535,20 @@ impl Editor {
                 }
             }
             for (_, line) in added {
+                // A filled shape: its inside as highlighter under the outline.
+                if let Some(fill) = line
+                    .shape
+                    .as_ref()
+                    .filter(|s| s.closed())
+                    .and_then(|s| s.fill)
+                {
+                    for band in crate::ink::shape_fill(&line, fill) {
+                        z = z
+                            .checked_add(1)
+                            .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                        new_stroke(&mut ink, &band, new_id(&mut ids)?, time, z);
+                    }
+                }
                 z = z
                     .checked_add(1)
                     .ok_or_else(|| Error::new(0, "Z-order overflow"))?;

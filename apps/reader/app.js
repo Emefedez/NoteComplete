@@ -1154,15 +1154,15 @@ async function action(op, args = {}) {
     const result = await mutate(op, args);
     if (token !== epoch) return;
     if (edited(op, args, result)) return;
-    if (op === "draw" && args.line.shape && !gesture) {
+    // A new shape is selected to adjust it, except on a drawing tablet (it keeps drawing shapes).
+    if (op === "draw" && args.line.shape && !gesture && collab?.role !== "tablet") {
       document.querySelector("[data-tool=select]").click();
       selection.selectId(args.page ?? page, `new:${result.edit_count - 1}`);
     } else if (selection.item) {
       selection.selectId(selection.item.page, selection.item.id);
     }
     showEdit(op, args, result);
-    if (collab?.role === "tablet") status("");
-    else status(
+    if (collab?.role !== "tablet") status(
       op === "erase"
         ? "Erased. You can undo this change."
         : op === "lock"
@@ -1441,6 +1441,12 @@ function preview() {
     return;
   }
   g.el.setAttribute("points", g.points.map((p) => p.join(",")).join(" "));
+  // A filled shape shows its inside while it is drawn.
+  if (g.tool === "shape") {
+    const { fill } = fillFor($("shape").value, g.color);
+    g.el.setAttribute("fill", fill ? g.color : "none");
+    g.el.setAttribute("fill-opacity", fill ? fill[3] : 0);
+  }
   g.dot.style.display = g.points.length > 1 ? "none" : "";
   g.dot.setAttribute("cx", g.points[0][0]);
   g.dot.setAttribute("cy", g.points[0][1]);
@@ -1592,6 +1598,7 @@ function pointerUp(e) {
         ...(g.tool === "shape"
           ? {
               shape: {
+                ...fillFor($("shape").value, g.color),
                 kind: $("shape").value,
                 start: g.start,
                 end: point(e, g.panel),
@@ -1726,6 +1733,23 @@ for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
     if (tool !== "shape") document.querySelector('[data-tool="shape"]').click();
   };
 syncShapePicker();
+// Fill of closed shapes: none, a tint of the pen colour, or solid. Remembered; F cycles it.
+let shapeFill = "none";
+try { shapeFill = ["none", "tint", "solid"].includes(localStorage.getItem("notecomplete-shape-fill")) ? localStorage.getItem("notecomplete-shape-fill") : "none"; } catch { /* Optional. */ }
+function setShapeFill(value) {
+  shapeFill = value;
+  try { localStorage.setItem("notecomplete-shape-fill", value); } catch { /* Optional. */ }
+  for (const b of document.querySelectorAll("#shapeFill [data-fill]")) b.setAttribute("aria-checked", String(b.dataset.fill === value));
+}
+for (const b of document.querySelectorAll("#shapeFill [data-fill]")) b.onclick = () => setShapeFill(b.dataset.fill);
+setShapeFill(shapeFill);
+const CLOSED_SHAPES = new Set(["rectangle", "ellipse", "triangle"]);
+// The fill for a new shape of `kind` in pen colour `hex`, or nothing.
+function fillFor(kind, hex) {
+  if (shapeFill === "none" || !CLOSED_SHAPES.has(kind)) return {};
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return { fill: [...rgb, shapeFill === "tint" ? 0.25 : 1] };
+}
 $("pageNumber").onchange = () => jump(Number($("pageNumber").value) - 1);
 $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
@@ -1804,7 +1828,7 @@ $("redo").onclick = () => {
 };
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
@@ -1860,8 +1884,9 @@ function shortcut(e) {
   if (studyKey) return studyKey(), true;
   if (!doc && htmlView.visible && k === "n") return $("htmlNotes").click(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
-  const tool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
-  if (tool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${tool}"]`)?.click(), true;
+  if (k === "f" && tool === "shape" && !$("editor").hidden) return setShapeFill({ none: "tint", tint: "solid", solid: "none" }[shapeFill]), status(`Shape fill: ${shapeFill === "none" ? "outline only" : shapeFill}.`), true;
+  const keyTool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
+  if (keyTool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
   if (k === "n") return $("notesToggle").click(), true;
@@ -2105,6 +2130,7 @@ $("newCreate").onclick = async () => {
 const converter = handwritingConverter({
   call,
   status,
+  ai: window.notecompleteAI || null,
   hasDocument: () => !!doc,
   sourceText: () => (!doc && textView?.visible && isMarkdownName($("title").textContent || "") ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
@@ -2122,6 +2148,8 @@ const converter = handwritingConverter({
   },
 });
 $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
+$("newWithAi").hidden = !window.notecompleteAI;
+$("newWithAi").onclick = () => { closeMenus(); converter.open({ withAi: true }); };
 $("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
@@ -2265,7 +2293,7 @@ $("insertShape").onclick = () => {
   );
   const start = [p.size[0] / 2 - 100, Math.min(p.size[1] - 160, cy - 60)],
     end = [p.size[0] / 2 + 100, Math.min(p.size[1] - 20, cy + 60)],
-    shape = { kind: $("shape").value, start, end },
+    shape = { kind: $("shape").value, start, end, ...fillFor($("shape").value, $("color").value) },
     rgba = [1, 3, 5].map(
       (i) => parseInt($("color").value.slice(i, i + 2), 16) / 255,
     );

@@ -2524,3 +2524,20 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
    the left edge; the place to insert gets its own line. */
 .handwriting-dialog .ocr-actions { flex-wrap: wrap; row-gap: 8px; }
 @media (max-width: 520px) { .handwriting-dialog .hw-where { flex: 1 0 100%; } .handwriting-dialog .hw-where select { flex: 1; min-width: 0; } }
+.collab-people .collab-remove { width: 28px; min-width: 28px; min-height: 28px; padding: 5px; display: grid; place-items: center; color: var(--muted); }
+.collab-people .collab-remove:hover { color: var(--danger); background: var(--danger-soft); }
+.collab-people .collab-remove svg { width: 16px; height: 16px; }
+/* Handwriting from Markdown: the AI writes the Markdown (convert.js). */
+.hw-ai { display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--radius); background: var(--accent-soft); }
+.hw-ai[open] { gap: 8px; }
+.hw-ai summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); }
+.hw-ai textarea { width: 100%; box-sizing: border-box; resize: vertical; font: 13px/1.45 system-ui, sans-serif; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.hw-ai-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hw-ai-row select, .hw-ai-row input { flex: 1 1 120px; min-width: 0; min-height: var(--control); }
+.hw-ai-row button { flex: none; }
+.hw-ai p { margin: 0; font-size: 12px; }
+.fill-picker { margin-left: 6px; }
+.tablet-dock .dock-shapes { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border-radius: 10px; background: var(--fill); }
+.tablet-dock .dock-shapes[hidden] { display: none; }
+.tablet-dock .dock-shapes button { width: 40px; min-width: 40px; height: 36px; min-height: 36px; }
+.tablet-dock .dock-shapes svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }

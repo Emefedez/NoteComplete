@@ -412,6 +412,26 @@ pub fn wrap(text: &str, width: f64, style: &TextStyle) -> Vec<String> {
     lines
 }
 
+/// The words of a line written by `write_line` at x with its baseline at y, each
+/// with a box from the font's advance widths (ascenders to descenders).
+pub fn word_boxes(text: &str, x: f64, y: f64, style: &TextStyle) -> Vec<crate::InkWord> {
+    let mut out = Vec::new();
+    let mut offset = 0;
+    for word in text.split_whitespace() {
+        let start = offset + text[offset..].find(word).unwrap_or(0);
+        offset = start + word.len();
+        let left = x + text_width(&text[..start], style);
+        let width = text_width(word, style);
+        if word.chars().any(char::is_alphanumeric) {
+            out.push(crate::InkWord {
+                text: word.chars().take(200).collect(),
+                bounds: [left, y - style.size * 1.25, width, style.size * 1.65],
+            });
+        }
+    }
+    out
+}
+
 /// A wrapped paragraph; y is the first baseline. Returns strokes and the next baseline.
 pub fn write_block(
     pen: &mut Pen,

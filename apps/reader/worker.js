@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -41,6 +41,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       }
     } else if (op === "markdownHtml") {
       postMessage({ id, result: markdown_html(args.text) });
+      return;
+    } else if (op === "dialect") {
+      postMessage({ id, result: handwriting_dialect() });
       return;
     } else if (op === "close") {
       // The document was closed in the reader: release its archive and scene now.

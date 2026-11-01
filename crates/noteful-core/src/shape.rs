@@ -14,8 +14,23 @@ pub struct Shape {
     pub kind: ShapeKind,
     pub start: [f64; 2],
     pub end: [f64; 2],
+    /// Inside colour of a rectangle, ellipse or triangle (RGBA 0–1); none is an outline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<[f64; 4]>,
 }
 impl Shape {
+    /// Shapes with an inside: only these take a fill.
+    pub fn closed(&self) -> bool {
+        matches!(
+            self.kind,
+            ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Triangle
+        )
+    }
+    pub(crate) fn fill_valid(&self) -> bool {
+        self.fill.is_none_or(|f| {
+            self.closed() && f.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+        })
+    }
     pub fn points(&self) -> Vec<[f64; 2]> {
         let [x, y] = self.start;
         let [u, v] = self.end;

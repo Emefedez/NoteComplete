@@ -19,6 +19,28 @@ pub struct NewPage {
     pub size: [f64; 2],
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pdf: Option<PdfPlacement>,
+    /// The text of handwriting written on the page from Markdown (see `InkWord`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub words: Vec<InkWord>,
+}
+/// A word of handwriting the core wrote itself (from Markdown), with its box in
+/// page units. Hosts search it like recognized text, without recognizing anything.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InkWord {
+    pub text: String,
+    /// x, y, width, height.
+    pub bounds: [f64; 4],
+}
+/// At most this many words per page are kept (a dense page has a few hundred).
+pub(crate) const PAGE_WORDS: usize = 5000;
+pub(crate) fn words_valid(words: &[InkWord]) -> bool {
+    words.len() <= PAGE_WORDS
+        && words.iter().all(|w| {
+            !w.text.is_empty()
+                && w.text.len() <= 200
+                && w.bounds.iter().all(|v| v.is_finite() && v.abs() <= 1e6)
+        })
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -121,6 +143,7 @@ impl Editor {
     /// included, so redo finds them), after any change to the history.
     pub(crate) fn sync_inserted(&mut self) -> Result<()> {
         let mut pages = Vec::new();
+        let mut words = Vec::new();
         let mut pdfs = Vec::new();
         let mut slot = self.original_pages();
         for edit in &self.history {
@@ -136,11 +159,13 @@ impl Editor {
                 }
                 for page in added {
                     pages.push(blank_page(slot, self.source.len(), page));
+                    words.push(page.words.clone());
                     slot += 1;
                 }
             }
         }
         self.inserted = pages;
+        self.inserted_words = words;
         self.added_pdfs = pdfs;
         Ok(())
     }
@@ -155,7 +180,11 @@ impl Editor {
         pages: Vec<NewPage>,
         pdf: Option<NewPdf>,
     ) -> Result<()> {
-        if pages.is_empty() || pages.len() > 2000 || at > self.page_order().len() {
+        if pages.is_empty()
+            || pages.len() > 2000
+            || at > self.page_order().len()
+            || pages.iter().any(|p| !words_valid(&p.words))
+        {
             return Err(Error::new(0, "Invalid page insertion"));
         }
         if let Some(pdf) = &pdf {

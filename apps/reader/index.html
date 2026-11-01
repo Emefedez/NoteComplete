@@ -29,6 +29,7 @@
           <button id="newTab" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newDocument">New document…<kbd>Ctrl N</kbd></button>
           <button id="newHandwritten" data-palette="New handwritten note from Markdown…" title="Write Markdown as real handwriting ink: a new note">New from Markdown…</button>
+          <button id="newWithAi" data-palette="New note with AI…" title="Your AI tool writes a note about a topic or from what you paste, as handwriting" hidden>New note with AI…</button>
           <button id="newWindow">New window<kbd>Ctrl Shift N</kbd></button>
           <button id="driveOpen">Google Drive</button>
           <hr />
@@ -506,6 +507,11 @@
                 ><button type="button" data-shape="ellipse" role="radio" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6"/></svg></button
                 ><button type="button" data-shape="triangle" role="radio" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 19H3Z"/></svg></button
                 ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button>
+              </div>
+              <div id="shapeFill" class="shape-picker fill-picker" role="radiogroup" aria-label="Fill (F)" title="Fill of rectangles, ellipses and triangles (F)">
+                <button type="button" data-fill="none" role="radio" title="Outline only"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1"/></svg></button
+                ><button type="button" data-fill="tint" role="radio" title="Tint: a pale fill in the pen colour"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1" fill="currentColor" fill-opacity=".25"/></svg></button
+                ><button type="button" data-fill="solid" role="radio" title="Solid: filled with the pen colour"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1" fill="currentColor"/></svg></button>
               </div>
               <select id="shape" data-native hidden aria-label="Shape">
                 <option value="line">Line</option>
