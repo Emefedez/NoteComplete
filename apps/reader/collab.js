@@ -620,7 +620,6 @@ class Session {
     this.markTool();
     this.onPen = (e) => { if (e.pointerType === 'pen') this.penSeen = true; };
     window.addEventListener('pointerdown', this.onPen, true);
-    this.pinch();
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
@@ -658,23 +657,6 @@ class Session {
     const side = this.dock.dataset.side === 'left' ? 'right' : 'left';
     this.dock.dataset.side = document.body.dataset.dock = side;
     try { localStorage.setItem(SIDE_KEY, side); } catch { /* Optional. */ }
-  }
-  // Two fingers zoom this device's view of the page (never the computer's).
-  pinch() {
-    const viewport = $('viewport');
-    let last = 0;
-    const measure = (t) => ({ d: Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY), x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
-    this.onTouch = (e) => {
-      if (e.touches.length !== 2) { last = 0; return; }
-      e.preventDefault();
-      const m = measure(e.touches);
-      if (e.type === 'touchstart' || !last) { this.host.cancelGesture(); last = m.d; return; }
-      if (m.d > 0 && Math.abs(m.d / last - 1) > 0.01) {
-        this.host.pinchBy(m.x, m.y, m.d / last);
-        last = m.d;
-      }
-    };
-    for (const type of ['touchstart', 'touchmove', 'touchend']) viewport.addEventListener(type, this.onTouch, { passive: false });
   }
   view() {
     const viewport = $('viewport');
@@ -719,7 +701,6 @@ class Session {
     if (this.onSelection) document.removeEventListener('selectionchange', this.onSelection);
     if (this.onScroll) $('notesEditor').removeEventListener('scroll', this.onScroll);
     if (this.onPen) window.removeEventListener('pointerdown', this.onPen, true);
-    if (this.onTouch) for (const type of ['touchstart', 'touchmove', 'touchend']) $('viewport').removeEventListener(type, this.onTouch);
     $('collabPeopleBar')?.remove();
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }

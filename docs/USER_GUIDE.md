@@ -126,6 +126,13 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 
 ## Draw and edit
 
+**Touch** (phones, tablets and touchscreen computers):
+- One finger does what the tool does: it draws, selects and moves, or scrolls with Pan.
+- Two fingers move the page and pinch to zoom; a second finger cancels a stroke the first one had just begun.
+- Tap with two fingers to undo, and with three fingers to redo.
+- Once a stylus has drawn on a device, one finger scrolls the page with drawing tools too, as in drawing apps. The stylus draws with its pressure, and the line keeps the width it had while you drew it.
+- Long menus scroll inside the window.
+
 | Tool | Behavior |
 |---|---|
 | Pan | Drag with a mouse or scroll with touch. |

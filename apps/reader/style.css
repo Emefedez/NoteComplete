@@ -1061,6 +1061,8 @@ header .brand p { font-size: 12px; font-weight: 600; max-width: 100%; }
 .bar-menu > summary { min-height: 26px; padding: 3px 9px; font-size: 13px; border-radius: 5px; }
 .bar-menu[open] > summary { background: var(--accent-soft); color: var(--accent); }
 .bar-menu .menu-content { left: 0; right: auto; top: calc(100% + 3px); width: 250px; padding: 4px; }
+/* Long menus scroll inside the window (short screens, phones in landscape) instead of running off it. */
+.bar-menu .menu-content { max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 16px; }
 .bar-menu .menu-content button kbd { margin-left: auto; border: 0; background: none; padding: 0; }
 .bar-menu .menu-content hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
@@ -1642,7 +1644,7 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
   header .brand { display: none; }
   .bar-actions { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .bar-menu > summary { padding: 3px 7px; }
-  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; }
+  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; max-height: calc(100dvh - 48px); }
   .bar-menu .menu-content button { min-height: 38px; }
   .palette { margin-top: 8px; }
   .note-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }

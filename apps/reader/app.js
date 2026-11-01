@@ -1,3 +1,4 @@
+import { touchGestures } from "./touch.js";
 import {
   prepareDocument,
   readImage,
@@ -1337,6 +1338,8 @@ function point(e, p) {
     ),
   ];
 }
+let penSeen = (() => { try { return localStorage.getItem("notecomplete-pen-seen") === "1"; } catch { return false; } })();
+const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 function pointerDown(e, p) {
   if (gesture) {
     if (e.pointerId !== gesture.id) cancelGesture();
@@ -1344,8 +1347,10 @@ function pointerDown(e, p) {
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
   setPage(p.index);
-  // Drawing tablet: once a stylus has been used, fingers move the page instead of drawing.
-  const touchPan = collab?.touchPans(e);
+  // Once a stylus has been used on this device, fingers move the page instead of drawing
+  // (as in drawing apps); before that, a finger draws.
+  if (e.pointerType === "pen" && !penSeen) { penSeen = true; try { localStorage.setItem("notecomplete-pen-seen", "1"); } catch { /* Optional. */ } }
+  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penSeen && FINGER_PANS.has(tool));
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan) {
     // On PDF or recognized words the mouse selects text instead of panning.
@@ -1485,6 +1490,12 @@ function appendPoint(e) {
         g.points.push(p);
         g.pressures.push(sample.pressure);
       }
+    }
+    // A stylus stroke is saved with its pressure: the line drawn meanwhile takes the
+    // same average width, so it does not get thinner when it is finished.
+    if (g.pen && g.tool === "draw") {
+      const { pressure } = stylusPressure(g);
+      if (pressure?.length) g.el.setAttribute("stroke-width", (2 * pressure.reduce((s, r) => s + r, 0)) / pressure.length);
     }
   }
   preview();
@@ -1827,6 +1838,15 @@ function pinchBy(clientX, clientY, step) {
     }
   }, 160);
 }
+// Fingers on the pages: two move and pinch-zoom, a two-finger tap undoes, three redo.
+touchGestures({
+  viewport: $("viewport"),
+  pinchBy: (x, y, step) => pinchBy(x, y, step),
+  cancelGesture: () => cancelGesture(),
+  undo: () => { if (!$("undo").disabled) $("undo").click(); },
+  redo: () => { if (!$("redo").disabled) $("redo").click(); },
+  enabled: () => !!doc,
+});
 $("undo").onclick = () => {
   cancelGesture();
   action("undo");
