@@ -580,14 +580,14 @@
                 aria-label="Custom color" /></label
             ><div class="choice-row" data-for="width" role="radiogroup" aria-label="Stroke width"></div
             ><select id="width" data-native hidden aria-label="Stroke width">
-              <option value="1">1 pt</option>
-              <option value="2" selected>2 pt</option>
-              <option value="4">4 pt</option>
-              <option value="8">8 pt</option>
-              <option value="16">16 pt</option>
-              <option value="24">24 pt</option>
-              <option value="40">40 pt</option>
-              <option value="64">64 pt</option>
+              <option value="1">1 px</option>
+              <option value="2" selected>2 px</option>
+              <option value="4">4 px</option>
+              <option value="8">8 px</option>
+              <option value="16">16 px</option>
+              <option value="24">24 px</option>
+              <option value="40">40 px</option>
+              <option value="64">64 px</option>
             </select>
           </div>
         </div>
@@ -1167,6 +1167,13 @@
   </table>
   <p><strong>Export</strong> (File menu): <b>NF</b> a .noteful copy · <b>N+MD</b> the .noteful and its notes as a .md file · <b>NC</b> one .notecomp file with the note, its notes and added recordings, to send to someone · pages as SVG, PDF or images · study decks for Anki. NoteComplete opens .notecomp and .notepart files as well.</p>
   <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
+</dialog>
+
+<dialog id="widthDialog" class="ocr-dialog width-dialog" aria-labelledby="widthTitle">
+  <h2 id="widthTitle">Width</h2>
+  <svg id="widthPreview" class="width-preview" viewBox="0 0 200 60" aria-hidden="true"><path d="M20 30 C70 0, 130 60, 180 30" fill="none" stroke="currentColor" stroke-linecap="round" /></svg>
+  <div class="width-inputs"><input id="widthRange" type="range" min="0.5" max="100" step="0.5" aria-label="Width" /><label><input id="widthValue" type="number" min="0.5" max="100" step="0.5" /> px</label></div>
+  <div class="ocr-actions"><button id="widthReset" type="button">Default widths</button><span class="spacer"></span><button id="widthCancel" type="button">Cancel</button><button id="widthSave" type="button" class="primary">Save</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

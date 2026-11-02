@@ -1956,8 +1956,106 @@ try { toolPrefs = JSON.parse(localStorage.getItem("notecomplete-tool-prefs") || 
 function restoreToolPrefs() {
   const pref = { ...TOOL_DEFAULTS[tool], ...toolPrefs[tool] };
   if (pref.color) $("color").value = pref.color;
-  if (pref.width && $("width").querySelector(`option[value="${pref.width}"]`)) $("width").value = pref.width;
+  if (pref.width) setWidthValue(pref.width);
+  buildWidthRow();
 }
+// Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
+// one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
+const WIDTH_DEFAULTS = {
+  draw: [1, 2, 4, 8],
+  highlight: [8, 16, 24, 40],
+  tape: [20, 40, 64],
+  shape: [1, 2, 4, 8],
+};
+const WIDTH_LADDER = [1, 2, 4, 8, 16, 24, 40, 64];
+let widthPresets = { ...WIDTH_DEFAULTS };
+try { widthPresets = { ...WIDTH_DEFAULTS, ...JSON.parse(localStorage.getItem("notecomplete-widths") || "{}") }; } catch { /* Optional. */ }
+const widthLabel = (v) => `${Number(v)} px`;
+// The width select holds every value in use; one typed in is added to it.
+function setWidthValue(value) {
+  const v = String(Number(value));
+  if (!$("width").querySelector(`option[value="${v}"]`)) $("width").append(new Option(widthLabel(v), v));
+  $("width").value = v;
+}
+function lineIcon(value) {
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(0.8, Number(value) / 3))}"/>`;
+  return svg;
+}
+// The tool bar's width row: this tool's presets, each held (or right-clicked) to change it.
+function buildWidthRow() {
+  const row = document.querySelector('.choice-row[data-for="width"]');
+  if (!row) return;
+  const presets = widthPresets[tool], values = presets || WIDTH_LADDER;
+  row.replaceChildren(...values.map((value, index) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.value = String(value);
+    b.setAttribute("role", "radio");
+    b.title = presets ? `${widthLabel(value)} (hold or right-click to change it)` : widthLabel(value);
+    b.setAttribute("aria-label", widthLabel(value));
+    b.append(lineIcon(value));
+    let held = false;
+    b.onclick = () => { if (held) { held = false; return; } setWidthValue(value); $("width").dispatchEvent(new Event("change")); syncChoices(); };
+    if (presets) {
+      b.oncontextmenu = (e) => { e.preventDefault(); editWidth(tool, index); };
+      b.addEventListener("pointerdown", (down) => {
+        if (down.button !== 0) return;
+        const timer = setTimeout(() => { held = true; editWidth(tool, index); }, 450);
+        const stop = () => { clearTimeout(timer); removeEventListener("pointerup", stop, true); removeEventListener("pointercancel", stop, true); };
+        addEventListener("pointerup", stop, true);
+        addEventListener("pointercancel", stop, true);
+      });
+    }
+    return b;
+  }));
+  syncChoices();
+}
+// The width editor: a number and a slider in px, with a preview of the line.
+let widthEditing = null;
+function editWidth(name, index) {
+  widthEditing = { name, index };
+  const value = widthPresets[name][index];
+  $("widthTitle").textContent = `${({ draw: "Pen", highlight: "Highlighter", tape: "Tape", shape: "Shapes" })[name] || "Tool"} width`;
+  $("widthValue").value = $("widthRange").value = value;
+  previewWidth();
+  $("widthDialog").showModal();
+  $("widthValue").select();
+}
+function previewWidth() {
+  const v = Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1));
+  const path = $("widthPreview").querySelector("path");
+  path.setAttribute("stroke-width", Math.min(56, v));
+  path.style.color = $("color").value;
+}
+$("widthRange").oninput = () => { $("widthValue").value = $("widthRange").value; previewWidth(); };
+$("widthValue").oninput = () => { $("widthRange").value = $("widthValue").value; previewWidth(); };
+$("widthValue").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("widthSave").click(); } };
+$("widthCancel").onclick = () => $("widthDialog").close();
+$("widthReset").onclick = () => {
+  const { name } = widthEditing || {};
+  if (!name) return;
+  widthPresets[name] = [...WIDTH_DEFAULTS[name]];
+  saveWidths();
+  $("widthDialog").close();
+};
+$("widthSave").onclick = () => {
+  const { name, index } = widthEditing || {};
+  const v = Math.round(Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1)) * 2) / 2;
+  if (!name) return;
+  widthPresets[name] = widthPresets[name].map((w, i) => (i === index ? v : w));
+  saveWidths();
+  if (tool === name) { setWidthValue(v); $("width").dispatchEvent(new Event("change")); }
+  $("widthDialog").close();
+};
+function saveWidths() {
+  try { localStorage.setItem("notecomplete-widths", JSON.stringify(widthPresets)); } catch { /* Optional. */ }
+  buildWidthRow();
+  try { quick.redraw(); } catch { /* The menu is not made yet. */ }
+}
+buildWidthRow();
 function saveToolPrefs() {
   if (!TOOL_DEFAULTS[tool]) return;
   toolPrefs[tool] = { color: $("color").value, width: $("width").value };
@@ -2187,15 +2285,25 @@ const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-
 const fromButtons = (selector, attr) => [...document.querySelectorAll(selector)].map((b) => ({
   key: b.dataset[attr], label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
 }));
+// A tool's width presets in the quick menu: each held (or right-clicked) to change it.
+const widthEntries = (name) => widthPresets[name].map((value, i) => ({
+  key: `w${i}`,
+  label: `${widthLabel(value)} (hold or right-click to change it)`,
+  icon: lineIcon(value),
+  active: () => Number($("width").value) === Number(value),
+  run: () => { setWidthValue(value); $("width").dispatchEvent(new Event("change")); syncChoices(); },
+  edit: () => editWidth(name, i),
+  stay: () => true,
+}));
 const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
 // Every tool's settings in the same places: colours on top, sizes along the bottom (small
 // to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
-  draw: () => ({ top: paletteEntries("draw"), bottom: fromRow("width", ["1", "2", "4", "8"]), left: [pressureEntry] }),
-  highlight: () => ({ top: paletteEntries("highlight"), bottom: fromRow("width", ["8", "16", "24", "40"]), left: fromRow("highlightMode") }),
+  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry] }),
+  highlight: () => ({ top: paletteEntries("highlight"), bottom: widthEntries("highlight"), left: fromRow("highlightMode") }),
   erase: () => ({ bottom: fromRow("eraserSize") }),
   shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill") }),
-  tape: () => ({ top: paletteEntries("tape"), left: fromRow("tapeMode") }),
+  tape: () => ({ top: paletteEntries("tape"), bottom: widthEntries("tape"), left: fromRow("tapeMode") }),
   text: () => ({ top: paletteEntries("text") }),
 };
 const quick = quickMenu({
@@ -2219,6 +2327,9 @@ const quick = quickMenu({
     if (section === "inner") {
       quickOrder = order;
       remember("notecomplete-quick-order", order);
+    } else if (section === "bottom" && widthPresets[tool] && order.every((k) => k.startsWith("w"))) {
+      widthPresets[tool] = order.map((k) => widthPresets[tool][Number(k.slice(1))]);
+      saveWidths();
     } else if (section === "top" && palettes[tool]) {
       palettes[tool] = order.map((i) => palettes[tool][Number(i)]);
       remember("notecomplete-palettes", palettes);

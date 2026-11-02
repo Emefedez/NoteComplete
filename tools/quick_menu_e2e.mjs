@@ -50,9 +50,9 @@ try {
   assert.ok(await p.locator('.quick-menu [aria-label="Pen pressure"]').count(), 'the pen\'s settings are shown');
   await p.click('.quick-menu .qm-swatch >> nth=2');
   assert.equal(await p.inputValue('#color'), '#d13b2f');
-  await p.click('.quick-menu .qm-outer[aria-label="4 pt"]');
+  await p.click('.quick-menu .qm-outer[aria-label^="4 px"]');
   assert.equal(await p.inputValue('#width'), '4');
-  assert.equal(await p.getAttribute('.quick-menu .qm-outer[aria-label="4 pt"]', 'aria-pressed'), 'true');
+  assert.equal(await p.getAttribute('.quick-menu .qm-outer[aria-label^="4 px"]', 'aria-pressed'), 'true');
   if (shots) await sleep(300), await p.screenshot({ path: `${shots}/quick-menu-pen.png`, clip: { x: s.x + 100, y: s.y + 100, width: 420, height: 420 } });
   // The eraser's settings are its sizes; Select has none and closes the menu.
   await p.click('.quick-menu .qm-inner[aria-label="Eraser"]');
@@ -67,8 +67,8 @@ try {
     const centre = document.querySelector('.quick-menu .qm-centre').getBoundingClientRect();
     const cy = centre.y + centre.height / 2;
     const ys = (sel) => [...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect().y + b.getBoundingClientRect().height / 2 - cy);
-    const xs = [...document.querySelectorAll('.quick-menu .qm-outer[aria-label$="pt"]')].map((b) => b.getBoundingClientRect().x);
-    return { colours: ys('.quick-menu .qm-swatch'), widths: ys('.quick-menu .qm-outer[aria-label$="pt"]'), xs };
+    const xs = [...document.querySelectorAll('.quick-menu .qm-outer[aria-label*=" px"]')].map((b) => b.getBoundingClientRect().x);
+    return { colours: ys('.quick-menu .qm-swatch'), widths: ys('.quick-menu .qm-outer[aria-label*=" px"]'), xs };
   });
   assert.ok(layout.colours.every((y) => y < 0), 'colours on top');
   assert.ok(layout.widths.every((y) => y > 0), 'widths along the bottom');
@@ -223,6 +223,28 @@ try {
   await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
   assert.equal(await p.inputValue('#color'), '#aa2200', 'remembered after a reload');
   console.log('· each tool keeps its own colour and width');
+  // Widths in px: right-click one in the tool bar (or hold it) to set its value; the quick
+  // menu shows the same presets and edits them the same way.
+  await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); });
+  if (!(await p.isVisible('.choice-row[data-for="width"]'))) await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '2 px', '4 px', '8 px']);
+  await p.click('.choice-row[data-for="width"] button >> nth=1', { button: 'right' });
+  await p.waitForSelector('#widthDialog[open]');
+  await p.fill('#widthValue', '3.5');
+  await p.click('#widthSave');
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '3.5 px', '4 px', '8 px']);
+  assert.equal(await p.inputValue('#width'), '3.5', 'the edited width is in use');
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu');
+  assert.ok(await p.locator('.quick-menu .qm-outer[aria-label^="3.5 px"]').count(), 'the quick menu shows it');
+  const w = await p.locator('.quick-menu .qm-outer[aria-label^="8 px"]').boundingBox();
+  await p.mouse.move(w.x + 18, w.y + 18); await p.mouse.down(); await sleep(450); await p.mouse.up();
+  await p.waitForSelector('#widthDialog[open]');
+  await p.fill('#widthValue', '12');
+  await p.click('#widthSave');
+  assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-widths'))).draw, [1, 3.5, 4, 12]);
+  await p.keyboard.press('Escape');
+  console.log('· widths in px: held or right-clicked in the bar or the menu to change them');
   // View → Tool bar (Shift + T) hides the tools; the quick menu still has them.
   await p.evaluate(() => { document.activeElement?.blur(); });
   await p.keyboard.press('Shift+T');

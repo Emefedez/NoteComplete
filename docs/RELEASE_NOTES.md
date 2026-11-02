@@ -4,6 +4,7 @@
   - Every tool's settings sit in the same places: colours across the top, from 12 o'clock and left to right; sizes along the bottom, from small on the left to large on the right; modes on the left; undo and redo on the right.
   - Hold a colour (or right-click it) to change it with the colour picker. Hold any colour or setting and drag it to reorder.
   - **Shift + right-click** opens the menu too.
+- **Widths in px, your own**: each tool's widths (pen, highlighter, tape, shapes) are presets in the tool bar and in the quick menu. Hold one (or right-click it) to set it to any width from 0.5 to 100 px, with a slider and a preview; **Default widths** puts them back.
 - **Tools remember their settings**: each tool comes back with the colour and width it was last used with, and the highlighter, tape and shape kinds are kept too.
 - **Text boxes**: **Esc** now keeps what you typed. **Shift + Esc**, or the **×** at the box's corner, discards it.
 - **View → Tool bar** (**Shift + T**) hides the row of tools for more room; the quick menu has them.
