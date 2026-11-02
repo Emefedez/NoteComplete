@@ -1,5 +1,6 @@
 // Browser check of the quick menu (Chromium): Z held over the pages, pointed at a tool
-// and let go chooses it; Z tapped leaves it open to click a colour; 1–8 choose tools;
+// and let go chooses it; Z tapped, a tool tapped shows its settings; a held tool moves on
+// the ring; 1–8 choose tools;
 // Esc closes; a pen's side button opens it without removing anything; two fingers held
 // still open it on a touch screen and do not undo.
 //   node tools/quick_menu_e2e.mjs [screenshot-dir]
@@ -39,15 +40,45 @@ try {
   assert.equal(await p.locator('.quick-menu').count(), 0, 'letting go closes it');
   assert.equal(await tool(p), 'highlight');
   console.log('· hold Z, point, let go: chooses the tool');
-  // Tap Z: it stays open to click; a colour switches to the pen when needed.
+  // Tap Z, tap the pen: it is chosen and its settings ring the tools; they apply at once
+  // and the menu stays open for more.
   await p.keyboard.press('z');
   await p.waitForSelector('.quick-menu');
+  await p.click('.quick-menu .qm-inner[aria-label="Pen"]');
+  assert.equal(await tool(p), 'draw');
+  assert.equal(await p.locator('.quick-menu').count(), 1, 'a tool with settings keeps the menu open');
+  assert.ok(await p.locator('.quick-menu [aria-label="Pen pressure"]').count(), 'the pen\'s settings are shown');
   await p.click('.quick-menu .qm-swatch >> nth=2');
-  assert.equal(await p.locator('.quick-menu').count(), 0);
   assert.equal(await p.inputValue('#color'), '#d13b2f');
-  console.log('· tap Z, click a colour');
-  await p.keyboard.press('z'); await p.keyboard.press('3');
-  assert.equal(await tool(p), 'erase', '3 chooses the third tool');
+  await p.click('.quick-menu .qm-outer[aria-label="4 pt"]');
+  assert.equal(await p.inputValue('#width'), '4');
+  assert.equal(await p.getAttribute('.quick-menu .qm-outer[aria-label="4 pt"]', 'aria-pressed'), 'true');
+  if (shots) await sleep(300), await p.screenshot({ path: `${shots}/quick-menu-pen.png`, clip: { x: s.x + 100, y: s.y + 100, width: 420, height: 420 } });
+  // The eraser's settings are its sizes; Select has none and closes the menu.
+  await p.click('.quick-menu .qm-inner[aria-label="Eraser"]');
+  assert.ok(await p.locator('.quick-menu .qm-outer[aria-label="Large"]').count(), 'eraser sizes');
+  await p.click('.quick-menu .qm-inner[aria-label="Select"]');
+  assert.equal(await p.locator('.quick-menu').count(), 0, 'a tool without settings closes it');
+  console.log('· tapping a tool shows its settings: colours, widths, pressure, eraser sizes');
+  // Holding a tool lifts it; dropped on another place, the ring keeps that order.
+  await p.keyboard.press('z');
+  await p.waitForSelector('.quick-menu');
+  const ringOrder = () => p.evaluate(() => [...document.querySelectorAll('.quick-menu .qm-inner')].map((b) => b.getAttribute('aria-label')));
+  const first = await ringOrder();
+  const pen = await p.locator('.quick-menu .qm-inner >> nth=0').boundingBox();
+  const target = await p.locator('.quick-menu .qm-inner >> nth=2').boundingBox();
+  await p.mouse.move(pen.x + 22, pen.y + 22); await p.mouse.down(); await sleep(600);
+  for (let i = 1; i <= 8; i++) await p.mouse.move(pen.x + 22 + (target.x - pen.x) * i / 8, pen.y + 22 + (target.y - pen.y) * i / 8);
+  await p.mouse.up(); await sleep(100);
+  const second = await ringOrder();
+  assert.equal(second[2], first[0], `the held tool moved (${second})`);
+  assert.equal(await tool(p), 'select', 'moving a tool does not choose it');
+  assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-quick-order'))).slice(0, 3), ['highlight', 'erase', 'draw']);
+  await p.keyboard.press('Escape');
+  console.log('· hold a tool to move it on the ring (remembered)');
+  await p.keyboard.press('z'); await p.keyboard.press('2');
+  assert.equal(await tool(p), 'erase', '2 chooses the second tool (after the move)');
+  await p.keyboard.press('Escape');
   await p.keyboard.press('z'); await p.keyboard.press('Escape');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'Esc closes it');
   // Typing in a text field never opens it.

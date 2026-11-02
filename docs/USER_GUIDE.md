@@ -156,7 +156,9 @@ Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-
 
 ### Quick menu
 
-A ring of tools around your pen, with colours, undo, redo and pen pressure around it. To open it:
+A ring of tools around your pen. Tap a tool to choose it, and its settings appear around it: colours, widths and pen pressure for the pen; modes, colours and widths for the highlighter; sizes for the eraser; shapes, fill and colours for shapes. Settings apply at once and the menu stays open; undo and redo are always there. To move a tool on the ring, hold it until it lifts and drag it. The order is remembered.
+
+To open it:
 
 - **Keyboard**: hold **Z**, point at an item and let go. Or tap **Z** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
 - **Pen side button**: press the S Pen button, or a Wacom pen's barrel button, on the page. This opens the menu instead of right-clicking.

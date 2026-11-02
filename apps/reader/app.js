@@ -2083,20 +2083,45 @@ touchGestures({
 // still on the page open it.
 const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"]];
 const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolbar [data-tool="${name}"]`)?.click(); };
-const chooseColor = (value) => {
-  if (!["draw", "highlight", "shape", "tape", "text"].includes(tool)) chooseTool("draw");
-  $("color").value = value;
-  $("color").dispatchEvent(new Event("input", { bubbles: true }));
-  $("color").dispatchEvent(new Event("change", { bubbles: true }));
+// The tools' order on the ring (held and dragged in the menu), remembered on this device.
+let quickOrder = QUICK_TOOLS.map(([name]) => name);
+try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
+// A tool's settings, from its own option rows, so the menu and the tool bar agree.
+const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-for="${id}"] button`)]
+  .filter((b) => !values || values.includes(b.dataset.value))
+  .map((b) => ({
+    label: id === "color" ? `Colour ${b.dataset.value}` : `${b.title}`,
+    swatch: id === "color" ? b.dataset.value : null,
+    icon: b.querySelector("svg"),
+    active: () => $(id).value.toLowerCase() === b.dataset.value.toLowerCase(),
+    run: () => b.click(),
+    stay: () => true,
+  }));
+const fromButtons = (selector) => [...document.querySelectorAll(selector)].map((b) => ({
+  label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
+}));
+const pressureEntry = { label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+const QUICK_SETTINGS = {
+  draw: () => [...fromRow("color", SWATCHES.slice(0, 5)), ...fromRow("width", ["1", "2", "4", "8"]), pressureEntry],
+  highlight: () => [...fromRow("highlightMode"), ...fromRow("color", ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"]), ...fromRow("width", ["8", "16", "24", "40"])],
+  erase: () => fromRow("eraserSize"),
+  shape: () => [...fromButtons("#shapePicker [data-shape]"), ...fromButtons("#shapeFill [data-fill]"), ...fromRow("color", SWATCHES.slice(0, 5))],
+  tape: () => [...fromRow("tapeMode"), ...fromRow("color", ["#e3c6e6", "#ffdf38", "#1f2328"])],
+  text: () => fromRow("color", SWATCHES.slice(0, 5)),
 };
 const quick = quickMenu({
-  inner: QUICK_TOOLS.map(([name, label]) => ({ label, icon: icon(name), active: () => tool === name, run: () => chooseTool(name) })),
-  outer: [
-    ...SWATCHES.slice(0, 5).map((value) => ({ label: `Colour ${value}`, swatch: value, active: () => $("color").value.toLowerCase() === value, run: () => chooseColor(value) })),
-    { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click() },
-    { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click() },
-    { label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } },
+  // Tapping a tool chooses it and shows its settings around it; one without settings closes.
+  inner: () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] })),
+  outer: () => [
+    ...(QUICK_SETTINGS[tool]?.() || []),
+    { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+    { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
   ],
+  onReorder: (order) => {
+    quickOrder = order;
+    try { localStorage.setItem("notecomplete-quick-order", JSON.stringify(order)); } catch { /* Optional. */ }
+    status("Quick menu order saved.");
+  },
   onOpen: () => cancelGesture(),
 });
 // Where the pointer last was over the pages: Z opens the menu there.
@@ -2155,7 +2180,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, colours, undo, pressure (hold, point and let go, or tap and click; 1–8 choose a tool). Also a pen's side button, or two fingers held still"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
