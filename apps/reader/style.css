@@ -367,6 +367,8 @@ main {
 #htmlView .html-bar, #textView .html-bar, #webView .html-bar { gap: 6px; }
 #htmlView .html-bar strong, #textView .html-bar strong, #webView .html-bar strong { margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .side-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+/* The panel toggles show when their panel is open, however it was opened (N, a link, a click). */
+#notesToggle[aria-expanded="true"], #layersToggle[aria-expanded="true"], #audioToggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Dark pages on a text document: the dark theme's colours, also in the light theme. */
 body.pages-dark #textBody { --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff; --line: #3b4048; --surface: #24272c; --chrome: #202328; --fill: #30343b; color: var(--ink); }
 .side-body .group-panel { width: 220px; flex: none; overflow: auto; padding: 12px; background: var(--chrome); border-right: 1px solid var(--line); }

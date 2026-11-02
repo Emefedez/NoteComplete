@@ -35,7 +35,10 @@ try {
     await f.waitForFunction(() => document.querySelectorAll('.sheet').length >= 3 && document.querySelector('.sheet [data-item]'), null, { timeout: 30000 });
     await f.waitForFunction(() => document.getElementById('notesPreview')?.getAttribute('aria-pressed') === 'true', null, { timeout: 5000 });
     assert.deepEqual(await f.evaluate(() => [...document.querySelectorAll('#tabStrip .tab')].map((t) => t.querySelector('.tab-label').textContent + (t.classList.contains('current') ? '*' : ''))), ['Welcome to NoteComplete*', 'Home']);
-    assert.ok(await f.evaluate(() => [...document.querySelectorAll('#notesPanel a')].some((a) => a.href.includes('/releases/latest'))), 'download links in the Notes panel');
+    // The formatted notes render a moment after Preview turns on.
+    await f.waitForFunction(() => [...document.querySelectorAll('#notesPanel a')].some((a) => a.href.includes('/releases/latest')), null, { timeout: 5000 });
+    assert.equal(await f.evaluate(() => document.getElementById('notesToggle').getAttribute('aria-expanded')), 'true');
+    assert.notEqual(await f.evaluate(() => getComputedStyle(document.getElementById('notesToggle')).backgroundColor), 'rgba(0, 0, 0, 0)', 'the Notes button shows it is on');
     assert.equal(await f.isVisible('#tabCount'), phone);
     if (phone) {
       await f.click('#tabCount');
