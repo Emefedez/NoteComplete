@@ -1,4 +1,9 @@
-## What's new in 1.1.12
+## What's new in 1.1.13
+
+- **Guests can draw**: someone who joins a shared note now sees its pages and the tool bar, and draws on it (in sessions that allow editing). The pages and tools were hidden, leaving only the notes panel.
+- **The ? beside Export and Save as** is a small blue circle right after the label, instead of a grey button below it.
+
+### In 1.1.12
 
 - **Long notes are much lighter and faster.** On a 193-page PDF, scrolling through every page:
   - peaks at 414 MB instead of 1.2 GB;
