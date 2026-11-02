@@ -1,4 +1,9 @@
-## What's new in 1.1.22
+## What's new in 1.1.23
+
+- **Strokes no longer disappear while you write.** A finished stroke stays on screen until the page's new drawing shows it, whatever redraws the page in the meantime (someone else's edit, a zoom, the PDF image arriving).
+- **Sharing: no more skipped strokes.** Someone else's stroke stays visible from its live line until it is drawn into the page, instead of vanishing for a moment, and their strokes that were still on the way are no longer dropped.
+
+### In 1.1.22
 
 - **Hold the quick menu's ×** to show or hide the tool bar, like View → Tool bar (Shift + T). The menu stays open; a tap on the × still closes it.
 
