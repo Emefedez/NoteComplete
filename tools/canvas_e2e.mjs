@@ -25,11 +25,17 @@ if (DIR) mkdirSync(DIR, { recursive: true });
   await p.evaluate(() => document.getElementById('newDocument').click());
   await p.waitForSelector('#newDialog[open]');
   await p.fill('#newName', 'Mapa');
+  // Two formats to save a new note in; the "?" says what each keeps.
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('[name="newFormat"]')].map((b) => b.value)), ['project', 'noteful']);
+  await p.click('#newDialog [data-format-help]');
+  await p.waitForSelector('#formatsDialog[open]');
+  assert.match(await p.textContent('#formatsDialog'), /\.nfedit[\s\S]*\.noteful[\s\S]*\.notecomp/);
+  await p.click('#formatsClose');
   await p.check('[name="newFormat"][value="noteful"]');
   await p.check('[name="newKind"][value="canvas"]');
   // Noteful has no infinite page: that format is off, and the choice moves to NoteComplete.
   assert.equal(await p.isDisabled('[name="newFormat"][value="noteful"]'), true);
-  assert.equal(await p.isChecked('[name="newFormat"][value="notecomplete"]'), true);
+  assert.equal(await p.isChecked('[name="newFormat"][value="project"]'), true);
   assert.equal(await p.isVisible('#newCount'), false);
   assert.equal(await p.isVisible('#newPreset'), false);
   if (DIR) await p.screenshot({ path: DIR + 'new.png' });

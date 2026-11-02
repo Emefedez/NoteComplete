@@ -44,6 +44,9 @@ export function penButtonDetector(getProfile = () => null) {
       penSeenAt = e.time;
       // Out of hover range: the next entry with the button held counts again.
       if (e.type === 'pointerleave') { if (!contact) hoverButtons = 0; return null; }
+      // A pen arriving already pressed against the screen (no hover before it) is the tip
+      // touching down, not the button: hovering reports no pressure.
+      if (e.type === 'pointerover' && e.buttons & 1 && e.pressure > 0) { hoverButtons = e.buttons; return null; }
       if (e.type === 'pointerdown') {
         contact = true;
         hoverButtons = e.buttons;

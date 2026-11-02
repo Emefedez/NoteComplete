@@ -31,13 +31,13 @@ A notebook app for **handwriting, PDFs and Markdown notes**, with study tools an
 
 \pagebreak
 
-# ONE NOTE // THREE FILES
-_Note files, and everything else it opens_
+# ONE NOTE // TWO FILES
+_Save in one of two formats; export the rest_
 
 !columns 50
-> [amber] .NOTECOMP: NoteComplete's own file: the note, Markdown notes, recordings and the text of your handwriting
-> [teal] .NOTEPART: the note and its Markdown notes
+> [amber] .NFEDIT: NoteComplete's own file: the original note, every edit with its undo history, the Markdown notes and the text of your handwriting
 > [sky] .NOTEFUL: for Noteful on the iPad ((pages, ink, PDF, images, text))
+> [teal] .NOTECOMP: an export: the note, its notes and recordings in one file, to send
 !col
 !draw 420
 <svg viewBox="0 0 420 300" xmlns="http://www.w3.org/2000/svg">
@@ -46,9 +46,9 @@ _Note files, and everything else it opens_
 <rect x="230" y="60" width="120" height="90" rx="10" fill="#c9f0dc" stroke="#1f2233" stroke-width="2"/>
 <rect x="70" y="170" width="120" height="80" rx="10" fill="#f6c6e0" stroke="#1f2233" stroke-width="2"/>
 <rect x="210" y="170" width="140" height="80" rx="10" fill="#e3d6ff" stroke="#1f2233" stroke-width="2"/>
-<text x="140" y="112" font-size="20" text-anchor="middle">note</text>
-<text x="290" y="112" font-size="20" text-anchor="middle">notes.md</text>
-<text x="130" y="217" font-size="20" text-anchor="middle">audio</text>
+<text x="140" y="112" font-size="20" text-anchor="middle">original</text>
+<text x="290" y="112" font-size="20" text-anchor="middle">every edit</text>
+<text x="130" y="217" font-size="20" text-anchor="middle">notes.md</text>
 <text x="280" y="217" font-size="20" text-anchor="middle">text</text>
 </svg>
 !end
@@ -57,7 +57,7 @@ _Note files, and everything else it opens_
 ## Also opens · exports
 >> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
 - A PDF or an image becomes a note to write on; HTML and Markdown open in their own views, with Markdown notes beside them.
-- Projects (`.nfedit`) keep your edits and their undo history.
+- The **?** beside **Save as** and **Export** explains each format. `.notecomp` and `.notepart` files open too.
 
 \pagebreak
 
@@ -112,7 +112,7 @@ _From the desktop app: Share in the top bar_
 # KEYS // AND GESTURES
 _The same on a computer, a tablet and a phone_
 
->> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Shift S== and let go on a tool, ==Shift + pen==, a pen's side button, or two fingers held still. Tap a tool for its settings
+>> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Shift S== and let go on a tool, ==Shift + right-click==, ==Shift + pen==, a pen's side button, or two fingers held still. ==Shift T== hides the tool bar
 >> [teal] THE NOTE: ==Ctrl Z== undo, ==Ctrl Shift Z== redo, ==Ctrl S== save, ==Ctrl F== find, ==N== notes, ==D== dark pages || [purple] MORE: ==Ctrl K== commands, ==Ctrl J== ask AI, ==A== audio, ==K== play, ==?== shows every key on its button
 
 ## Gestures

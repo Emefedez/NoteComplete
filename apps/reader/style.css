@@ -2694,3 +2694,9 @@ body.tablet-waiting #drop::after { content: "Waiting for the computer’s note�
 
 /* View → Tool bar off: no tool buttons or settings; undo, redo and panels stay. */
 body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tools-hidden #toolbarToggle { display: none !important; }
+
+/* "?" beside Save as and Export: what each format keeps (formatsDialog). */
+.format-help { width: 20px; height: 20px; min-width: 20px; min-height: 20px; padding: 0; margin-left: 6px; border-radius: 50%; border: 1px solid var(--line); font-size: 11px; font-weight: 700; color: var(--muted); vertical-align: middle; }
+.formats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.formats-table th, .formats-table td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.formats-table tbody th { white-space: nowrap; }

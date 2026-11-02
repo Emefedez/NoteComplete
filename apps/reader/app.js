@@ -2243,7 +2243,7 @@ let penProfile = loadPenProfile();
 const penBtn = penButtonDetector(() => penProfile);
 let penHover = null, penMenuAt = 0, penHold = null;
 const onPages = (e) => doc && $("viewport").contains(e.target);
-const fields = (e) => ({ type: e.type, pointerType: e.pointerType, button: e.button, buttons: e.buttons, time: e.timeStamp });
+const fields = (e) => ({ type: e.type, pointerType: e.pointerType, button: e.button, buttons: e.buttons, pressure: e.pressure, time: e.timeStamp });
 function penMenu(e) {
   penMenuAt = Date.now();
   clearTimeout(penHold?.timer);
@@ -2779,19 +2779,23 @@ const CANVAS_START = [3087, 2182.8];
 for (const [value, { label }] of Object.entries(PRESETS)) if (value !== "current") $("newPreset").add(new Option(label, value));
 $("newPreset").onchange = () => { $("newCustom").hidden = newKind() === "canvas" || $("newPreset").value !== "custom"; };
 const newKind = () => document.querySelector('[name="newKind"]:checked')?.value || "pages";
-// Noteful has no infinite page: a canvas is saved as .notecomp or .notepart only.
+// A new note is saved as a NoteComplete project (.nfedit) or a Noteful file; .notecomp
+// and Noteful + Markdown are exports (File → Export). Noteful has no infinite page: a
+// canvas is a project.
+const NEW_FORMATS = ["project", "noteful"];
+const newFormat = (value) => (NEW_FORMATS.includes(value) ? value : "project");
 function newKindChanged() {
   const canvas = newKind() === "canvas", noteful = document.querySelector('[name="newFormat"][value="noteful"]');
   for (const el of document.querySelectorAll("#newDialog .new-pages-only")) el.hidden = canvas;
   noteful.disabled = canvas;
   noteful.closest("label").title = canvas ? "An infinite canvas cannot be a .noteful file" : "";
-  if (canvas && noteful.checked) document.querySelector('[name="newFormat"][value="notecomplete"]').checked = true;
+  if (canvas && noteful.checked) document.querySelector('[name="newFormat"][value="project"]').checked = true;
   $("newPreset").onchange();
 }
 for (const box of document.querySelectorAll('[name="newKind"]')) box.onchange = newKindChanged;
 $("newDocument").onclick = () => {
   for (const m of document.querySelectorAll("details.menu")) m.open = false;
-  try { const f = localStorage.getItem("notecomplete-new-format"); const box = document.querySelector(`[name="newFormat"][value="${f}"]`); if (box) box.checked = true; } catch { /* Optional. */ }
+  try { const f = newFormat(localStorage.getItem("notecomplete-new-format")); document.querySelector(`[name="newFormat"][value="${f}"]`).checked = true; } catch { /* Optional. */ }
   newKindChanged();
   $("newDialog").showModal();
   $("newName").select();
@@ -2803,7 +2807,7 @@ $("newCreate").onclick = async () => {
   const preset = $("newPreset").value, count = canvas ? 1 : Math.max(1, Math.min(200, Math.round(Number($("newCount").value) || 1)));
   const size = canvas ? CANVAS_START : preset === "custom" ? [Number($("newWidth").value), Number($("newHeight").value)].map(mmToUnits) : PRESETS[preset].mm.map(mmToUnits);
   if (!size.every((n) => Number.isFinite(n) && n > 0)) return status("Choose a page size.", true);
-  const format = document.querySelector('[name="newFormat"]:checked')?.value || "notecomplete";
+  const format = newFormat(document.querySelector('[name="newFormat"]:checked')?.value);
   try { localStorage.setItem("notecomplete-new-format", format); } catch { /* Optional. */ }
   const title = $("newName").value.trim() || "Untitled";
   $("newDialog").close();
@@ -2820,9 +2824,8 @@ const converter = handwritingConverter({
   sourceText: () => (!doc && textView?.visible && isMarkdownName($("title").textContent || "") ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
     if (!canReplace()) return;
-    let format = "notecomplete";
-    try { format = localStorage.getItem("notecomplete-new-format") || format; } catch { /* Optional. */ }
-    if (!SAVE_EXT[format] || format === "project" || format === "markdown") format = "notecomplete";
+    let format = "project";
+    try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
     const seed = crypto.getRandomValues(new Uint8Array(16));
     await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "handwritten", title, markdown, options, bytes: new ArrayBuffer(0), saveAs: format });
   },
@@ -2836,6 +2839,9 @@ $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
 $("newWithAi").hidden = !window.notecompleteAI;
 $("newWithAi").onclick = () => { closeMenus(); converter.open({ withAi: true }); };
 $("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
+// The "?" beside Save as (New document) and Export: what each format keeps.
+for (const help of document.querySelectorAll("[data-format-help]")) help.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeMenus(); $("formatsDialog").showModal(); };
+$("formatsClose").onclick = () => $("formatsDialog").close();
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");

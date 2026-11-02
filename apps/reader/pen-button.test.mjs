@@ -106,3 +106,10 @@ test('Brave: the button shows only when the pen comes back into hover range with
   d.pointer({ type: 'pointerleave', pointerType: 'pen', buttons: 0, button: -1, time: 140 });
   assert.equal(d.pointer(pen('pointermove', 1, 160)), 'menu', 'held again on the next entry');
 });
+
+test('a pen touching down without hovering first is the tip, not the button', () => {
+  const d = penButtonDetector();
+  assert.equal(d.pointer({ type: 'pointerover', pointerType: 'pen', buttons: 1, button: 0, pressure: 0.3, time: 0 }), null);
+  assert.equal(d.pointer({ type: 'pointerdown', pointerType: 'pen', buttons: 1, button: 0, pressure: 0.3, time: 1 }), null);
+  assert.equal(d.pointer({ type: 'pointermove', pointerType: 'pen', buttons: 1, button: -1, pressure: 0.4, time: 20 }), null);
+});
