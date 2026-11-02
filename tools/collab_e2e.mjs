@@ -166,6 +166,56 @@ try {
   await host.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length > n, before, { timeout: 10000 });
   await guest.evaluate(() => document.querySelector('#toolbar [data-tool="pan"]').click());
   step('the guest sees the note with its tool bar and draws on it; the host gets the stroke');
+
+  // Typed text on the PDF page, which goes through the shared order: the host's box stays
+  // open while a guest's stroke redraws the page under it, its text stays on screen until
+  // the host's own render has it, and the guest sees it appear once.
+  const textShown = (words) => [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="image:"]')]
+    .some((i) => i.textContent.includes(words) && getComputedStyle(i).visibility !== 'hidden');
+  await host.evaluate(() => document.querySelector('#toolbar [data-tool="text"]').click());
+  await host.mouse.click(hostBox.x + 300, hostBox.y + 420);
+  await host.waitForSelector('.text-editor');
+  await host.keyboard.type('Host typing');
+  const inkNow = await hostInk();
+  await guest.evaluate(() => document.querySelector('#toolbar [data-tool="draw"]').click());
+  await guest.mouse.move(gs.x + 60, gs.y + 200); await guest.mouse.down();
+  for (let j = 1; j <= 12; j++) await guest.mouse.move(gs.x + 60 + j * 12, gs.y + 200 + j * 3);
+  await guest.mouse.up();
+  await host.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length > n, inkNow, { timeout: 10000 });
+  await guest.evaluate(() => document.querySelector('#toolbar [data-tool="pan"]').click());
+  assert.equal(await host.evaluate(() => document.activeElement?.matches('.text-editor') && document.activeElement.value), 'Host typing', 'the host’s open box stays, still typed in');
+  await guest.evaluate((shownSource) => {
+    const shown = new Function(`return (${shownSource})`)();
+    const w = window.guestWatch = { appeared: 0, was: false };
+    const frame = () => {
+      const now = shown('Host typing');
+      if (now && !w.was) w.appeared++;
+      w.was = now;
+      requestAnimationFrame(frame);
+    };
+    frame();
+  }, textShown.toString());
+  await host.evaluate((shownSource) => {
+    const shown = new Function(`return (${shownSource})`)();
+    const w = window.hostWatch = { gaps: 0, done: false };
+    const frame = () => {
+      const box = [...document.querySelectorAll('.sheet[data-page="0"] textarea')].some((a) => a.isConnected && a.value === 'Host typing');
+      const rendered = shown('Host typing');
+      if (!box && !rendered) w.gaps++;
+      if (rendered && !box) { w.done = true; return; }
+      requestAnimationFrame(frame);
+    };
+    frame();
+  }, textShown.toString());
+  await host.keyboard.press('Escape');
+  await host.waitForFunction(() => window.hostWatch.done, null, { timeout: 10000 });
+  assert.equal(await host.evaluate(() => window.hostWatch.gaps), 0, 'the host’s text stays on screen until its render has it');
+  assert.equal(await host.locator('.text-editor, .text-placeholder').count(), 0, 'no placeholder left over');
+  await guest.waitForFunction(textShown, 'Host typing', { timeout: 10000 });
+  await guest.waitForTimeout(500);
+  assert.equal(await guest.evaluate(() => window.guestWatch.appeared), 1, 'the text appears once on the guest');
+  await host.evaluate(() => document.querySelector('#toolbar [data-tool="pan"]').click());
+  step('typed text in a session: the box survives a guest’s stroke, stays until drawn, and shows once on the guest');
   await guest.click('#notesEditor .TinyMDE');
   await guest.keyboard.type('Hola desde Ana');
   await host.evaluate(() => document.getElementById('notesToggle').click());
@@ -188,7 +238,7 @@ try {
   await tablet.click('#tabletDock [aria-label=Disconnect]');
   await tablet.waitForFunction(() => !document.body.classList.contains('tablet-mode') && !document.querySelector('.sheet'));
   await host.waitForFunction(() => ![...document.querySelectorAll('#collabPeopleBar .collab-chip')].some((c) => c.title.includes('drawing tablet')));
-  assert.equal(await added(host), 4, 'the tablet’s strokes and the guest’s');
+  assert.equal(await added(host), 5, 'the tablet’s strokes and the guest’s two');
   step('the tablet disconnects; the computer keeps every edit');
 
   // Ending: the guest keeps a copy; the host keeps the notes.

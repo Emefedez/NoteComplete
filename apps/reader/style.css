@@ -1800,7 +1800,9 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 .sheet[data-tool="lock"] { cursor: pointer; }
 
 /* Text tool: the box being typed sits exactly where the text will be drawn. */
-.text-editor { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+/* Finished text, shown as typed until the page's render has it: no frame, no clicks. */
+.text-placeholder { border-color: transparent; background: none; pointer-events: none; }
 .sheet[data-tool="text"] { cursor: text; }
 
 /* Model choice: a dropdown; "Other…" reveals a box for a name typed by hand. */
