@@ -50,9 +50,9 @@ try {
   assert.ok(await p.locator('.quick-menu [aria-label="Pen pressure"]').count(), 'the pen\'s settings are shown');
   await p.click('.quick-menu .qm-swatch >> nth=2');
   assert.equal(await p.inputValue('#color'), '#d13b2f');
-  await p.click('.quick-menu .qm-outer[aria-label="4 pt"]');
+  await p.click('.quick-menu .qm-outer[aria-label^="4 px"]');
   assert.equal(await p.inputValue('#width'), '4');
-  assert.equal(await p.getAttribute('.quick-menu .qm-outer[aria-label="4 pt"]', 'aria-pressed'), 'true');
+  assert.equal(await p.getAttribute('.quick-menu .qm-outer[aria-label^="4 px"]', 'aria-pressed'), 'true');
   if (shots) await sleep(300), await p.screenshot({ path: `${shots}/quick-menu-pen.png`, clip: { x: s.x + 100, y: s.y + 100, width: 420, height: 420 } });
   // The eraser's settings are its sizes; Select has none and closes the menu.
   await p.click('.quick-menu .qm-inner[aria-label="Eraser"]');
@@ -60,6 +60,45 @@ try {
   await p.click('.quick-menu .qm-inner[aria-label="Select"]');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'a tool without settings closes it');
   console.log('· tapping a tool shows its settings: colours, widths, pressure, eraser sizes');
+  // Every tool's colours across the top, sizes along the bottom: the highlighter like the pen.
+  await p.keyboard.press('Shift+S');
+  await p.click('.quick-menu .qm-inner[aria-label="Highlighter"]');
+  const layout = await p.evaluate(() => {
+    const centre = document.querySelector('.quick-menu .qm-centre').getBoundingClientRect();
+    const cy = centre.y + centre.height / 2;
+    const ys = (sel) => [...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect().y + b.getBoundingClientRect().height / 2 - cy);
+    const xs = [...document.querySelectorAll('.quick-menu .qm-outer[aria-label*=" px"]')].map((b) => b.getBoundingClientRect().x);
+    return { colours: ys('.quick-menu .qm-swatch'), widths: ys('.quick-menu .qm-outer[aria-label*=" px"]'), xs };
+  });
+  assert.ok(layout.colours.every((y) => y < 0), 'colours on top');
+  assert.ok(layout.widths.every((y) => y > 0), 'widths along the bottom');
+  assert.deepEqual(layout.xs, [...layout.xs].sort((a, b) => a - b), 'widths small to large, left to right');
+  // A colour dragged to another place keeps it; right-click opens the colour picker.
+  const sw = async (i) => p.locator(`.quick-menu .qm-swatch >> nth=${i}`).boundingBox();
+  const c0 = await sw(0), c2 = await sw(2);
+  const firstColour = await p.getAttribute('.quick-menu .qm-swatch >> nth=0', 'aria-label');
+  await p.mouse.move(c0.x + 18, c0.y + 18); await p.mouse.down(); await sleep(450);
+  for (let i = 1; i <= 8; i++) await p.mouse.move(c0.x + 18 + (c2.x - c0.x) * i / 8, c0.y + 18 + (c2.y - c0.y) * i / 8);
+  await p.mouse.up(); await sleep(150);
+  assert.equal(await p.getAttribute('.quick-menu .qm-swatch >> nth=2', 'aria-label'), firstColour, 'the colour moved');
+  assert.equal(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-palettes'))).highlight[2], firstColour.match(/#[0-9a-f]+/i)[0]);
+  await p.click('.quick-menu .qm-swatch >> nth=1', { button: 'right' });
+  assert.equal(await p.evaluate(() => !!document.querySelector('body > input[type=color]')), true, 'right-click opens the colour picker');
+  await p.evaluate(() => { const input = document.querySelector('body > input[type=color]'); input.value = '#123456'; input.dispatchEvent(new Event('change')); });
+  assert.match(await p.getAttribute('.quick-menu .qm-swatch >> nth=1', 'aria-label'), /#123456/, 'the palette colour changed');
+  assert.equal(await p.inputValue('#color'), '#123456');
+  await p.keyboard.press('Escape');
+  console.log('· every tool’s colours on top and sizes below; colours can be moved and changed');
+  // Shift + right-click opens it too, and removes nothing.
+  const kept = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
+  await p.keyboard.down('Shift');
+  await p.mouse.click(s.x + 300, s.y + 300, { button: 'right' });
+  await p.keyboard.up('Shift');
+  await p.waitForSelector('.quick-menu');
+  await p.keyboard.press('Escape');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length), kept);
+  console.log('· Shift + right-click opens it');
+  await p.evaluate(() => document.querySelector('[data-tool=select]').click());
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
   await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
@@ -169,6 +208,54 @@ try {
   assert.match(await p.textContent('#penTestLog'), /pointerdown · pen · button 2 · buttons 2/);
   await p.click('#penTestClose');
   console.log('· Help → Test pen and stylus shows what the pen reports');
+  // Each tool keeps its own colour and width, also after a reload.
+  await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+  await p.evaluate(() => { const c = document.getElementById('color'); c.value = '#aa2200'; c.dispatchEvent(new Event('change')); const w = document.getElementById('width'); w.value = '8'; w.dispatchEvent(new Event('change')); });
+  await p.evaluate(() => document.querySelector('[data-tool=highlight]').click());
+  assert.notEqual(await p.inputValue('#color'), '#aa2200', 'the highlighter has its own colour');
+  await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+  assert.equal(await p.inputValue('#color'), '#aa2200');
+  assert.equal(await p.inputValue('#width'), '8');
+  await p.reload();
+  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await p.setInputFiles('#file', sample);
+  await p.waitForFunction(() => document.querySelectorAll('.sheet [data-item]').length > 10);
+  await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+  assert.equal(await p.inputValue('#color'), '#aa2200', 'remembered after a reload');
+  console.log('· each tool keeps its own colour and width');
+  // Widths in px: right-click one in the tool bar (or hold it) to set its value; the quick
+  // menu shows the same presets and edits them the same way.
+  await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); });
+  if (!(await p.isVisible('.choice-row[data-for="width"]'))) await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '2 px', '4 px', '8 px']);
+  await p.click('.choice-row[data-for="width"] button >> nth=1', { button: 'right' });
+  await p.waitForSelector('#widthDialog[open]');
+  await p.fill('#widthValue', '3.5');
+  await p.click('#widthSave');
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '3.5 px', '4 px', '8 px']);
+  assert.equal(await p.inputValue('#width'), '3.5', 'the edited width is in use');
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu');
+  assert.ok(await p.locator('.quick-menu .qm-outer[aria-label^="3.5 px"]').count(), 'the quick menu shows it');
+  const w = await p.locator('.quick-menu .qm-outer[aria-label^="8 px"]').boundingBox();
+  await p.mouse.move(w.x + 18, w.y + 18); await p.mouse.down(); await sleep(450); await p.mouse.up();
+  await p.waitForSelector('#widthDialog[open]');
+  await p.fill('#widthValue', '12');
+  await p.click('#widthSave');
+  assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-widths'))).draw, [1, 3.5, 4, 12]);
+  await p.keyboard.press('Escape');
+  console.log('· widths in px: held or right-clicked in the bar or the menu to change them');
+  // View → Tool bar (Shift + T) hides the tools; the quick menu still has them.
+  await p.evaluate(() => { document.activeElement?.blur(); });
+  await p.keyboard.press('Shift+T');
+  assert.equal(await p.isVisible('#toolbar .segmented'), false, 'tool bar hidden');
+  assert.equal(await p.getAttribute('#toolsToggle', 'aria-checked'), 'false');
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Shift+T');
+  assert.equal(await p.isVisible('#toolbar .segmented'), true, 'shown again');
+  console.log('· Shift + T hides and shows the tool bar');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.

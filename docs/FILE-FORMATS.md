@@ -29,4 +29,6 @@ Carrying the edit history inside `.notecomp` (the original note plus `edits.json
 
 ## Decision
 
+**Update (1.1.11):** new notes are created as `.nfedit` (or `.noteful`); `.notecomp` and Noteful + Markdown are exports, and `.notepart` is no longer offered (it was written like `.notecomp`). Both keep opening. The New document dialog and File → Export have a **?** that explains the formats.
+
 `.nfedit` stays as it is: offered by **File → Save project**, opened everywhere, and unchanged in format. `.notecomp` remains the everyday format. This page should be revisited if the native writer is verified against Noteful, since that removes the main reason a lossless copy is needed.

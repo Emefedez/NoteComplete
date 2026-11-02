@@ -46,7 +46,7 @@
           <button id="autosaveToggle" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <div class="menu-export" role="group" aria-label="Export">
-            <span>Export</span>
+            <span>Export <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></span>
             <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
             <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
             <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note and its notes; NoteComplete opens it with both.">NC</button>
@@ -93,6 +93,7 @@
           <button data-proxy="pagesToggle">Page list</button>
           <button data-proxy="layersToggle">Layers</button>
           <button data-proxy="notesToggle">Notes<kbd>N</kbd></button>
+          <button id="toolsToggle" role="menuitemcheckbox" aria-checked="true" data-palette="Show or hide the tool bar" title="The row of tools and their settings; with it hidden, use the quick menu (Shift + S, a pen's button or two fingers held still)">Tool bar<kbd>Shift T</kbd></button>
           <button id="scratchOpen" disabled title="AI conversations kept with this note">Scratchpad…</button>
           <div class="menu-export" role="group" aria-label="Page position">
             <span>Pages</span>
@@ -579,14 +580,14 @@
                 aria-label="Custom color" /></label
             ><div class="choice-row" data-for="width" role="radiogroup" aria-label="Stroke width"></div
             ><select id="width" data-native hidden aria-label="Stroke width">
-              <option value="1">1 pt</option>
-              <option value="2" selected>2 pt</option>
-              <option value="4">4 pt</option>
-              <option value="8">8 pt</option>
-              <option value="16">16 pt</option>
-              <option value="24">24 pt</option>
-              <option value="40">40 pt</option>
-              <option value="64">64 pt</option>
+              <option value="1">1 px</option>
+              <option value="2" selected>2 px</option>
+              <option value="4">4 px</option>
+              <option value="8">8 px</option>
+              <option value="16">16 px</option>
+              <option value="24">24 px</option>
+              <option value="40">40 px</option>
+              <option value="64">64 px</option>
             </select>
           </div>
         </div>
@@ -846,16 +847,15 @@
   <fieldset class="new-format new-kind">
     <legend>Kind</legend>
     <label><input type="radio" name="newKind" value="pages" checked /> <strong>Pages</strong> <span class="muted">sheets of a fixed size</span></label>
-    <label><input type="radio" name="newKind" value="canvas" /> <strong>Canvas</strong> <span class="muted">one infinite page that grows as you write; .notecomp or .notepart only</span></label>
+    <label><input type="radio" name="newKind" value="canvas" /> <strong>Canvas</strong> <span class="muted">one infinite page that grows as you write; saved as a NoteComplete project</span></label>
   </fieldset>
   <label class="ocr-languages new-pages-only">Page size<select id="newPreset" data-native></select></label>
   <div id="newCustom" class="insert-custom" hidden><label>Width <input id="newWidth" type="number" min="20" max="5000" step="1" value="210" /> mm</label><label>Height <input id="newHeight" type="number" min="20" max="5000" step="1" value="297" /> mm</label></div>
   <label class="ocr-languages new-pages-only">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
   <fieldset class="new-format">
-    <legend>Save as</legend>
-    <label><input type="radio" name="newFormat" value="notecomplete" checked /> <strong>NoteComplete</strong> <span class="muted">.notecomp · the note, Markdown notes and recordings in one file</span></label>
-    <label><input type="radio" name="newFormat" value="notepart" /> <strong>NotePart</strong> <span class="muted">.notepart · the note and its Markdown notes</span></label>
-    <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful; notes and recordings stay in NoteComplete</span></label>
+    <legend>Save as <button type="button" class="format-help" data-format-help aria-label="What is the difference?" title="What is the difference?">?</button></legend>
+    <label><input type="radio" name="newFormat" value="project" checked /> <strong>NoteComplete</strong> <span class="muted">.nfedit · every edit with its undo history, and the Markdown notes</span></label>
+    <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful on the iPad; notes stay in NoteComplete</span></label>
   </fieldset>
   <div class="ocr-actions"><button id="newCancel" type="button">Cancel</button><button id="newCreate" type="button" class="primary">Create</button></div>
 </dialog>
@@ -1153,6 +1153,27 @@
   <p class="muted">Kept on this device, never over your files: the last five of each note. Opening one opens a copy; save it to keep it.</p>
   <ul id="autosavesAll" class="autosave-all"></ul>
   <div class="ocr-actions"><button id="autosavesClear" type="button" class="danger">Delete all</button><span class="spacer"></span><button id="autosavesClose" type="button" class="primary">Close</button></div>
+</dialog>
+
+<dialog id="formatsDialog" class="ocr-dialog" aria-labelledby="formatsTitle">
+  <h2 id="formatsTitle">File formats</h2>
+  <p>A note is saved in one of two formats. Export makes other files from it.</p>
+  <table class="formats-table">
+    <thead><tr><th></th><th>Keeps</th><th>Use it for</th></tr></thead>
+    <tbody>
+      <tr><th>NoteComplete<br><span class="muted">.nfedit</span></th><td>The original note untouched, every edit with its undo history, the Markdown notes and the text of the handwriting. Recordings added here stay on this device.</td><td>Your notes in NoteComplete: nothing is ever lost.</td></tr>
+      <tr><th>Noteful<br><span class="muted">.noteful</span></th><td>Pages, ink, PDFs, images and text, as Noteful stores them. No undo history; notes stay in NoteComplete.</td><td>Notes you also open in Noteful on the iPad.</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Export</strong> (File menu): <b>NF</b> a .noteful copy · <b>N+MD</b> the .noteful and its notes as a .md file · <b>NC</b> one .notecomp file with the note, its notes and added recordings, to send to someone · pages as SVG, PDF or images · study decks for Anki. NoteComplete opens .notecomp and .notepart files as well.</p>
+  <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
+</dialog>
+
+<dialog id="widthDialog" class="ocr-dialog width-dialog" aria-labelledby="widthTitle">
+  <h2 id="widthTitle">Width</h2>
+  <svg id="widthPreview" class="width-preview" viewBox="0 0 200 60" aria-hidden="true"><path d="M20 30 C70 0, 130 60, 180 30" fill="none" stroke="currentColor" stroke-linecap="round" /></svg>
+  <div class="width-inputs"><input id="widthRange" type="range" min="0.5" max="100" step="0.5" aria-label="Width" /><label><input id="widthValue" type="number" min="0.5" max="100" step="0.5" /> px</label></div>
+  <div class="ocr-actions"><button id="widthReset" type="button">Default widths</button><span class="spacer"></span><button id="widthCancel" type="button">Cancel</button><button id="widthSave" type="button" class="primary">Save</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

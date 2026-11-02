@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TouchGesture } from './touch.js';
+import { TouchGesture, deliberate } from './touch.js';
 
 const t = (...xy) => xy.map(([clientX, clientY]) => ({ clientX, clientY }));
 
@@ -82,4 +82,12 @@ test('a two-finger scroll moves the pages by the whole finger movement, the firs
   let total = 0;
   for (let y = 495; y >= 400; y -= 5) for (const a of g.move(two(y), 500 - y)) if (a.type === 'pan') total += a.dy;
   assert.equal(total, -100);
+});
+
+test('only deliberate two-finger holds count: together, and not a palm', () => {
+  const finger = { radiusX: 10, radiusY: 12 }, palm = { radiusX: 45, radiusY: 40 };
+  assert.equal(deliberate([finger, finger], 80), true);
+  assert.equal(deliberate([finger, finger], 600), false, 'a second finger long after the first');
+  assert.equal(deliberate([finger, palm], 50), false, 'a resting palm');
+  assert.equal(deliberate([{}, {}], 50), true, 'no radius reported');
 });

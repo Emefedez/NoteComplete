@@ -36,25 +36,56 @@ const INNER = 50, OUTER = 94, SIZE = 36, GAP = 6, HOLD_MS = 260, SLOP = 8;
 // The outer ring grows when it holds many settings, so its items never touch.
 export const outerRadius = (count) => Math.max(OUTER, Math.ceil((count * (SIZE + GAP)) / (2 * Math.PI)));
 
-// `inner()` and `outer()` return [{ key?, label, icon (Node), swatch?, active?(), run(),
-// stay?() }]; they are asked again after each choice, so the outer ring follows the tool.
-// A choice whose stay() is true keeps the menu open (a setting, or a tool that has some).
+// The outer ring in four fixed places, the same for every tool: `top` (colours) left to
+// right across the top, `bottom` (widths, sizes, kinds) left to right along the bottom,
+// small to large, `left` (modes, fill, pressure) top to bottom on the left, `right`
+// (undo, redo) top to bottom on the right. Returns the radius (grown until neighbouring
+// sections cannot meet) and, per section, the positions of its items.
+const CENTRE = { top: -Math.PI / 2, right: 0, bottom: Math.PI / 2, left: Math.PI };
+export function layoutSections(sections, base = OUTER, size = SIZE, gap = GAP) {
+  const n = (k) => sections[k]?.length || 0;
+  const pairs = [['top', 'right'], ['right', 'bottom'], ['bottom', 'left'], ['left', 'top']];
+  const crowd = Math.max(1, ...pairs.map(([a, b]) => n(a) + n(b)));
+  // The angle between neighbours: the item size + gap at the base radius, or less, so two
+  // sections that meet at a corner (a quarter turn apart) fit in it.
+  const step = Math.min((size + gap) / base, Math.PI / crowd);
+  const radius = Math.max(base, Math.ceil((size + gap) / step));
+  const at = (angle) => ({ x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) });
+  const out = {};
+  for (const key of Object.keys(CENTRE)) {
+    const count = n(key);
+    // Left to right on top and bottom, top to bottom at the sides.
+    const dir = key === 'bottom' || key === 'left' ? -1 : 1;
+    out[key] = Array.from({ length: count }, (_, i) => at(CENTRE[key] + dir * (i - (count - 1) / 2) * step));
+  }
+  return { radius, positions: out };
+}
+const SECTIONS = ['top', 'right', 'bottom', 'left'];
+const count = (sections) => SECTIONS.reduce((n, k) => n + (sections[k]?.length || 0), 0);
+
+// `inner()` returns the tools and `outer()` the chosen tool's settings as { top, right,
+// bottom, left } (see layoutSections), each [{ key?, label, icon (Node), swatch?, active?(),
+// run(), stay?(), edit?() }]; both are asked again after each choice, so the outer ring
+// follows the tool. A choice whose stay() is true keeps the menu open. Any item can be held
+// and dragged to another place in its own ring or section (onReorder(section, keys)); an
+// item with edit() (a colour) opens it when held without moving, or on a right-click.
 export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {}, onClose = () => {} }) {
   let root = null, hovered = null, centre = null, lift = null;
   const list = (source) => (typeof source === 'function' ? source() : source);
   function draw() {
     const { x, y } = centre;
     root.replaceChildren();
-    const tools = list(inner), settings = list(outer);
+    const tools = list(inner), settings = list(outer) || {};
+    const full = count(settings) > 0;
+    const layout = layoutSections(settings);
     // Only as large as it needs: the outer ring appears when there are settings to show.
-    const outerR = outerRadius(settings.length);
-    const radius = (settings.length ? outerR : INNER) + SIZE / 2 + 6;
+    const radius = (full ? layout.radius : INNER) + SIZE / 2 + 6;
     const disc = document.createElement('div');
-    disc.className = `qm-disc${settings.length ? ' qm-full' : ''}`;
+    disc.className = `qm-disc${full ? ' qm-full' : ''}`;
     Object.assign(disc.style, { left: `${x}px`, top: `${y}px`, width: `${radius * 2}px`, height: `${radius * 2}px`, margin: `${-radius}px 0 0 ${-radius}px` });
+    disc.style.setProperty('--inner-ring', `${radius - (INNER + (full ? layout.radius : INNER)) / 2}px`);
     root.append(disc);
-    const place = (entries, radius, name) => ring(entries.length, radius).forEach((at, i) => {
-      const entry = entries[i];
+    const button = (entry, at, name, index, group, positions) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `qm-item qm-${name}${entry.swatch ? ' qm-swatch' : ''}`;
@@ -64,17 +95,19 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       if (entry.swatch) b.style.setProperty('--swatch', entry.swatch);
       else if (entry.icon) b.append(entry.icon.cloneNode(true));
       if (entry.active?.()) b.setAttribute('aria-pressed', 'true');
-      if (name === 'inner') b.dataset.key = String(i + 1);
+      if (name === 'inner') b.dataset.key = String(index + 1);
       b.style.left = `${x + at.x - SIZE / 2}px`;
       b.style.top = `${y + at.y - SIZE / 2}px`;
       b.onpointerenter = () => { hovered = entry; };
       b.onpointerleave = () => { if (hovered === entry) hovered = null; };
       b.onclick = (e) => { e.stopPropagation(); if (b.dataset.lifted) return; pick(entry); };
-      if (name === 'inner') b.addEventListener('pointerdown', (e) => holdToMove(e, b, i, tools));
+      if (entry.edit) b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); entry.edit(); });
+      b.addEventListener('pointerdown', (e) => holdToMove(e, b, entry, index, group, positions));
       root.append(b);
-    });
-    place(tools, INNER, 'inner');
-    place(settings, outerR, 'outer');
+    };
+    const ringAt = ring(tools.length, INNER);
+    tools.forEach((entry, i) => button(entry, ringAt[i], 'inner', i, { key: 'inner', items: tools }, ringAt));
+    for (const key of SECTIONS) (settings[key] || []).forEach((entry, i) => button(entry, layout.positions[key][i], 'outer', i, { key, items: settings[key] }, layout.positions[key]));
     const close_ = document.createElement('button');
     close_.type = 'button';
     close_.className = 'qm-item qm-centre';
@@ -86,18 +119,22 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     close_.onclick = (e) => { e.stopPropagation(); close(); };
     root.append(close_);
   }
-  // Holding a tool lifts it; it follows the pointer and drops into the nearest place.
-  function holdToMove(down, button, index, tools) {
+  // Holding an item lifts it; dragged, it drops into the nearest place of its own ring or
+  // section; let go without moving, an editable item (a colour) opens its editor.
+  function holdToMove(down, button, entry, index, group, positions) {
     if (down.button !== 0) return;
     const start = [down.clientX, down.clientY];
+    let dragged = false;
     const timer = setTimeout(() => {
-      lift = { button, index };
+      lift = { button };
       button.dataset.lifted = '1';
       button.classList.add('qm-lifted');
       navigator.vibrate?.(8);
     }, HOLD_MS);
     const move = (e) => {
-      if (!lift) { if (Math.hypot(e.clientX - start[0], e.clientY - start[1]) > SLOP) clearTimeout(timer); return; }
+      const far = Math.hypot(e.clientX - start[0], e.clientY - start[1]) > SLOP;
+      if (!lift) { if (far) clearTimeout(timer); return; }
+      dragged ||= far;
       e.preventDefault();
       button.style.left = `${e.clientX - SIZE / 2}px`;
       button.style.top = `${e.clientY - SIZE / 2}px`;
@@ -108,11 +145,17 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       removeEventListener('pointerup', up, true);
       removeEventListener('pointercancel', up, true);
       if (!lift) return;
-      const to = slotAt(e.clientX - centre.x, e.clientY - centre.y, tools.length);
       lift = null;
-      // The click that ends the hold does not also choose the tool.
+      // The click that ends the hold does not also choose the item.
       setTimeout(() => { delete button.dataset.lifted; }, 0);
-      if (to !== index) onReorder(moved(tools, index, to).map((t) => t.key));
+      if (!dragged) {
+        if (root) draw();
+        if (e.type === 'pointerup') entry.edit?.();
+        return;
+      }
+      const dx = e.clientX - centre.x, dy = e.clientY - centre.y;
+      const to = group.key === 'inner' ? slotAt(dx, dy, group.items.length) : nearest(positions, dx, dy);
+      if (to !== index && group.items.every((item) => item.key != null)) onReorder(group.key, moved(group.items, index, to).map((item) => item.key));
       if (root) draw();
     };
     addEventListener('pointermove', move, true);
@@ -121,7 +164,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
   }
   function open(x, y) {
     close();
-    centre = fitCentre(x, y, outerRadius(16) + SIZE / 2, { width: innerWidth, height: innerHeight });
+    centre = fitCentre(x, y, 140 + SIZE / 2, { width: innerWidth, height: innerHeight });
     hovered = null;
     root = document.createElement('div');
     // Only opening animates; a redraw after a choice does not flash.
@@ -155,6 +198,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
   return {
     open,
     close,
+    redraw() { if (root) draw(); },
     get isOpen() { return !!root; },
     // Letting go of the key over an item chooses it and closes the menu; elsewhere the
     // menu stays open to click. Returns whether one was chosen.
@@ -168,4 +212,11 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       return false;
     },
   };
+}
+
+// The index of the position nearest to (dx, dy).
+export function nearest(positions, dx, dy) {
+  let best = 0;
+  positions.forEach((p, i) => { if (Math.hypot(p.x - dx, p.y - dy) < Math.hypot(positions[best].x - dx, positions[best].y - dy)) best = i; });
+  return best;
 }

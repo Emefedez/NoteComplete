@@ -22,7 +22,7 @@ It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves th
 - **Auto-save** (File menu, on by default): a copy every minute into automatic slots on this device, never over your file; reopening a note offers the newer automatic save. In a shared session the host decides for everyone, and a guest who gets disconnected keeps the note.
 - **Quick menu** (<kbd>Shift</kbd> + <kbd>S</kbd>, <kbd>Shift</kbd> + pen, a pen's side button, or two fingers held still): a ring of tools around the pen; tap one and its colours, widths and modes appear around it. Hold a tool to move it on the ring.
 - **Touch and stylus**: two fingers scroll (with momentum) or pinch-zoom, a two-finger tap undoes and three redo; while a stylus is in use a finger scrolls, without one a finger draws. Strokes are smoothed, and quick strokes never wait for the page to redraw. Hold a tool in the bar to rearrange it.
-- **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size, saved as `.notecomp`, `.notepart` or `.noteful`.
+- **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size or an infinite canvas, saved as a NoteComplete project (`.nfedit`) or a Noteful file (`.noteful`); a **?** beside the choice explains the difference.
 - **Pages**: add blank pages or pages from another PDF; resize a page from a menu or by dragging its borders.
 - **Select and copy text** from PDFs and recognized handwriting.
 - **Night view** (<kbd>D</kbd>) inverts the page colours. A **light/dark theme** switch is in View.
@@ -107,19 +107,22 @@ Screenshots use the sample notes in [`samples/`](samples/).
 
 1. In Noteful, back up or export your notebooks to a Google Drive folder (or copy `.noteful` files to your computer any other way).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.
-3. Save your work as one `.notecomp` file (the note, its Markdown notes, added recordings and the text of your handwriting), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Save project** (`.nfedit`) keeps the untouched original and every edit with its undo history; see [file formats](#file-formats) and [why there are two NoteComplete formats](docs/FILE-FORMATS.md).
+3. Save your work as a NoteComplete project (`.nfedit`: the untouched original and every edit with its undo history), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Export** makes a `.notecomp` (the note, its notes and added recordings in one file, to send) or Noteful + Markdown; see [file formats](#file-formats).
 
 AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
 
 ## File formats
 
+A note is **saved** in one of two formats; the others are **exports**.
+
 | Format | What it holds | Use it for |
 | --- | --- | --- |
-| `.notecomp` | A tar archive: the note as a Noteful file, its Markdown notes, recordings added in NoteComplete, and the text of handwriting (written from Markdown or recognized) ([layout](spec/nfedit-v1.md#notecomp-archives)) | Everyday saving and sharing: one file with everything |
-| `.notepart` | Written like `.notecomp` today; planned as a partial patch for another copy of a note | |
-| `.noteful` | Noteful's own format: pages, ink, PDFs, images, text | Taking notes back to Noteful on the iPad (experimental after editing) |
-| `.nfedit` | A JSON project: the untouched original file plus every edit, with undo and redo ([spec](spec/nfedit-v1.md)) | Keeping the full edit history |
+| `.nfedit` (NoteComplete project) | The untouched original, every edit with undo and redo, the Markdown notes and the text of the handwriting ([spec](spec/nfedit-v1.md)) | Saving your notes in NoteComplete; new notes and canvases default to it |
+| `.noteful` | Noteful's own format: pages, ink, PDFs, images, text | Notes you also open in Noteful on the iPad (experimental after editing) |
+| `.notecomp` (export) | A tar archive: the note as a Noteful file, its Markdown notes, recordings added in NoteComplete, and the text of handwriting ([layout](spec/nfedit-v1.md#notecomp-archives)) | Sending a note with everything in one file |
+| Noteful + Markdown (export) | The `.noteful` and its notes as a `.md` file, page breaks marked | Reading the notes anywhere |
 
+`.notecomp` and `.notepart` files keep opening. Why the project and the package both exist: [docs/FILE-FORMATS.md](docs/FILE-FORMATS.md).
 
 ## Known issues
 

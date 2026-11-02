@@ -2657,7 +2657,7 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 /* Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around them. */
 .quick-menu { position: fixed; inset: 0; z-index: 80; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .quick-menu .qm-disc { position: absolute; border-radius: 50%; background: color-mix(in srgb, var(--menu) 82%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 12px 40px #0004, 0 0 0 1px var(--line); }
-.quick-menu .qm-disc.qm-full::after { content: ""; position: absolute; inset: 46px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
+.quick-menu .qm-disc.qm-full::after { content: ""; position: absolute; inset: var(--inner-ring, 46px); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
 .quick-menu .qm-item { position: absolute; width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink); }
 .quick-menu.qm-opening .qm-disc, .quick-menu.qm-opening .qm-item { animation: qm-in .06s ease-out; }
 .quick-menu .qm-item svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -2687,3 +2687,21 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .autosave-all { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
 .autosave-all li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .autosave-all li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Discard a text box being typed (Shift + Esc does the same; Esc keeps it). */
+.text-discard { position: absolute; z-index: 7; width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; margin: -11px 0 0 -11px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--menu); color: var(--muted); font-size: 15px; line-height: 1; box-shadow: 0 2px 6px #0002; }
+.text-discard:hover { color: var(--danger, #c0392b); background: var(--menu); }
+
+/* View â†’ Tool bar off: no tool buttons or settings; undo, redo and panels stay. */
+body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tools-hidden #toolbarToggle { display: none !important; }
+
+/* "?" beside Save as and Export: what each format keeps (formatsDialog). */
+.format-help { width: 20px; height: 20px; min-width: 20px; min-height: 20px; padding: 0; margin-left: 6px; border-radius: 50%; border: 1px solid var(--line); font-size: 11px; font-weight: 700; color: var(--muted); vertical-align: middle; }
+.formats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.formats-table th, .formats-table td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.formats-table tbody th { white-space: nowrap; }
+/* The width editor (hold or right-click a width): a preview, a slider and a number in px. */
+.width-preview { display: block; width: 100%; height: 72px; margin: 4px 0 8px; color: var(--ink); }
+.width-inputs { display: flex; align-items: center; gap: 12px; }
+.width-inputs input[type=range] { flex: 1; }
+.width-inputs input[type=number] { width: 5.5em; }

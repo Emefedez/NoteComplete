@@ -23,7 +23,7 @@ Tape (Noteful's *Cinta*) hides parts of a page, typically answers. In Pan mode, 
 
 ## Infinite canvas
 
-**File → New document… → Canvas** makes one page that grows as you write. When ink, a picture or a text box comes near its right or bottom edge, the page gets bigger, and the view stays where it is. Undo removes the stroke first and then the growth. A canvas is saved as `.notecomp` or `.notepart` (or a project). It is never a `.noteful` file, because Noteful has no infinite page: the Noteful format and the NF exports are off for it. Pages cannot be inserted into a canvas. PDF, SVG and image exports show it as one large page.
+**File → New document… → Canvas** makes one page that grows as you write. When ink, a picture or a text box comes near its right or bottom edge, the page gets bigger, and the view stays where it is. Undo removes the stroke first and then the growth. A canvas is saved as a NoteComplete project (`.nfedit`), and can be exported as `.notecomp`. It is never a `.noteful` file, because Noteful has no infinite page: the Noteful format and the NF exports are off for it. Pages cannot be inserted into a canvas. PDF, SVG and image exports show it as one large page.
 
 ## Insert pages
 
@@ -74,7 +74,7 @@ In the Drive section, **Back** returns to the view you had before the last searc
 
 **Page size.** **Pages → Page size…** changes the current page: extra writing space on the right or below, a standard size, the original size or a custom size in millimetres. Writing stays in place and the PDF keeps its size unless you choose to scale it to the new page. Undo restores the previous size. **Pages → Resize by dragging the borders** does the same by hand: drag the handle on the right edge, the bottom edge or the corner; the size in millimetres follows the pointer. **Done** or **Esc** hides the handles.
 
-**Text boxes.** The Text tool (**W**) types a text box where you click; Enter starts a new line, **Ctrl+Enter** or a click outside finishes, **Esc** cancels. A format bar above the box sets the font, size, bold, italic and colour while you type; select a typed box with Select to change them later, or double-click it to type. Click a box you typed to edit it (emptying it removes it); move or resize it with Select. Text boxes are searchable and are exported as Noteful text.
+**Text boxes.** The Text tool (**W**) types a text box where you click; Enter starts a new line, **Esc**, **Ctrl+Enter** or a click outside finishes; **Shift+Esc** or the **×** at the box's top-right corner discards it. A format bar above the box sets the font, size, bold, italic and colour while you type; select a typed box with Select to change them later, or double-click it to type. Click a box you typed to edit it (emptying it removes it); move or resize it with Select. Text boxes are searchable and are exported as Noteful text.
 
 **Lock in place.** The Lock tool (**O**) locks or unlocks the item you click. Locked items show a dashed outline and a padlock while the tool is chosen, and cannot be selected, moved or erased. Locks are undoable and saved in the project; on export an image's lock becomes Noteful's own (strokes and shapes keep theirs in the project only).
 
@@ -149,18 +149,20 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |
 | Shapes | Draw a bounding box or use Insert for a line, rectangle, ellipse, triangle or arrow. Rectangles, ellipses and triangles can be filled: choose outline, tint (a pale fill in the pen colour) or solid in the shape settings, or press **F** to cycle. Resizing keeps the fill. In `.noteful` exports the fill becomes highlighter colouring under the outline. |
 
-Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-click an element on the page to remove it directly; Ctrl/Cmd Z restores it. Undo/redo are global across pages (Ctrl/Cmd Z and Shift Z). Escape or a cancelled pointer gesture discards its unfinished preview. Text-content/font editing and separate shape fill-color editing are not currently provided.
+Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-click an element on the page to remove it directly (a mouse only: a long press with a finger or pen never removes); Ctrl/Cmd Z restores it. **Shift + right-click** opens the quick menu instead. Undo/redo are global across pages (Ctrl/Cmd Z and Shift Z). Escape or a cancelled pointer gesture discards its unfinished preview. Text-content/font editing and separate shape fill-color editing are not currently provided.
 
 **Layers** selects where to draw, creates/renames layers, controls visibility/opacity and locks them. Hidden or locked layers cannot be edited. New strokes inherit the selected layer.
 
 
 ### Quick menu
 
-A ring of tools around your pen. Tap a tool to choose it, and its settings appear around it: colours, widths and pen pressure for the pen; modes, colours and widths for the highlighter; sizes for the eraser; shapes, fill and colours for shapes. Settings apply at once and the menu stays open; undo and redo are always there. To move a tool on the ring, hold it until it lifts and drag it. The order is remembered.
+**View → Tool bar** (**Shift + T**) hides the row of tools and their settings for more room; the quick menu has the same tools.
+
+A ring of tools around your pen. Tap a tool to choose it, and its settings appear around it, always in the same places: colours across the top, left to right; sizes along the bottom, small to large; modes (highlighter, tape, shape fill, pen pressure) on the left; undo and redo on the right. Settings apply at once and the menu stays open. Hold a tool, a colour or a setting until it lifts and drag it to reorder; hold a colour without moving it, or right-click it, to change it with the colour picker. Widths work the same way, in the menu and in the tool bar: hold one (or right-click it) to set it in px, from 0.5 to 100. Everything is remembered, and each tool keeps the colour and width it was last used with.
 
 To open it:
 
-- **Keyboard**: hold **Shift + S**, point at an item and let go. Or press **Shift + S** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
+- **Keyboard and mouse**: hold **Shift + S**, point at an item and let go, or press **Shift + S** and click an item; or **Shift + right-click** on the page. **1–8** choose a tool, and **Esc** closes the menu.
 - **Shift + pen**: hold Shift as the pen touches the page, or press Shift while the pen hovers over it. The menu opens at the pen, and nothing is drawn.
 - **Pen side button**: on a computer, press a Wacom or Surface pen's barrel button on the page. On Android (Chrome, Brave), press the S Pen button while the pen **hovers** just above the page (if nothing happens, keep it held, lift the pen away and bring it back: Brave and Chrome often report the button only then), or **hold it and tap**; a press while the pen touches the screen does not reach web pages. **View → Pen button…** learns what your pen sends in this browser, can let a pen held still open the menu instead, or turns the button off. On Samsung devices, turn off *Open Air command with pen button* (Settings → Advanced features → S Pen → Air command). **Help → Test pen and stylus** shows what the pen reports. [Details](S-PEN-BUTTON.md).
 - **Touch screens and iPad**: hold two fingers still on the page for half a second.

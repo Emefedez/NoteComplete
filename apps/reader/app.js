@@ -490,7 +490,7 @@ function buildPages(sizes) {
     placeholder(p);
     fragment.append(el);
     el.onpointerdown = (e) => {
-      if (e.target.closest(".text-editor, .text-format, .page-resize-frame")) return;
+      if (e.target.closest(".text-editor, .text-discard, .text-format, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
       pointerDown(e, p);
     };
@@ -762,16 +762,24 @@ async function openTextEditor(p, [x, y], known = null) {
       color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
     });
   };
+  // The × at the box's top-right corner discards the typing.
+  const discard = Object.assign(document.createElement("button"), { type: "button", className: "text-discard", textContent: "×", title: "Discard (Shift + Esc)" });
+  discard.setAttribute("aria-label", "Discard this text");
+  discard.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); });
+  discard.onclick = (e) => { e.stopPropagation(); closeText(); };
+  const placeDiscard = () => Object.assign(discard.style, { left: `calc(${area.style.left} + ${area.style.width})`, top: area.style.top });
   fit();
-  area.oninput = fit;
+  placeDiscard();
+  area.oninput = () => { fit(); placeDiscard(); };
   const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
   hidden?.setAttribute("visibility", "hidden");
-  p.el.append(area);
+  p.el.append(area, discard);
   selection.clear();
-  textEditor = { p, area, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
-  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); area.focus(); });
+  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
+  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); placeDiscard(); area.focus(); });
   area.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); closeText(); }
+    // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
+    if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) closeText(); else commitText(); }
     else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitText(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { commitText(); return; }
     // Typing stays in the box: no tool or study shortcuts while editing.
@@ -783,12 +791,13 @@ async function openTextEditor(p, [x, y], known = null) {
     commitText();
   }, 0));
   requestAnimationFrame(() => area.focus());
-  status(existing ? "Editing text. Ctrl+Enter or a click outside finishes; Esc cancels." : "Type your text. Ctrl+Enter or a click outside finishes; Esc cancels.");
+  status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
 }
 function closeText() {
   if (!textEditor) return;
   textEditor.hidden?.removeAttribute("visibility");
   textEditor.area.remove();
+  textEditor.discard?.remove();
   textEditor = null;
   hideTextFormat();
 }
@@ -1851,16 +1860,8 @@ for (const button of document.querySelectorAll("[data-tool]"))
     for (const b of document.querySelectorAll("button[data-tool]"))
       b.setAttribute("aria-pressed", String(b === button));
     for (const p of panels) shapeHandles(p);
-    if (tool === "highlight") {
-      $("color").value = "#ffdf38";
-      $("width").value = "16";
-    } else if (tool === "draw") {
-      $("color").value = "#246bce";
-      $("width").value = "2";
-    } else if (tool === "tape") {
-      $("color").value = "#e3c6e6";
-      $("width").value = "40";
-    }
+    // Each tool comes back with the colour and width it was last used with.
+    restoreToolPrefs();
     toolOptions();
     refreshSelects();
     status(
@@ -1942,6 +1943,130 @@ try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved 
 $("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
 $("color").addEventListener("input", syncChoices);
+// Each drawing tool keeps its own colour and width (remembered on this device), and the
+// highlighter, tape and shape kinds keep theirs.
+const TOOL_DEFAULTS = {
+  draw: { color: "#246bce", width: "2" },
+  highlight: { color: "#ffdf38", width: "16" },
+  tape: { color: "#e3c6e6", width: "40" },
+  shape: { color: "#246bce", width: "2" },
+};
+let toolPrefs = {};
+try { toolPrefs = JSON.parse(localStorage.getItem("notecomplete-tool-prefs") || "{}") || {}; } catch { /* Optional. */ }
+function restoreToolPrefs() {
+  const pref = { ...TOOL_DEFAULTS[tool], ...toolPrefs[tool] };
+  if (pref.color) $("color").value = pref.color;
+  if (pref.width) setWidthValue(pref.width);
+  buildWidthRow();
+}
+// Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
+// one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
+const WIDTH_DEFAULTS = {
+  draw: [1, 2, 4, 8],
+  highlight: [8, 16, 24, 40],
+  tape: [20, 40, 64],
+  shape: [1, 2, 4, 8],
+};
+const WIDTH_LADDER = [1, 2, 4, 8, 16, 24, 40, 64];
+let widthPresets = { ...WIDTH_DEFAULTS };
+try { widthPresets = { ...WIDTH_DEFAULTS, ...JSON.parse(localStorage.getItem("notecomplete-widths") || "{}") }; } catch { /* Optional. */ }
+const widthLabel = (v) => `${Number(v)} px`;
+// The width select holds every value in use; one typed in is added to it.
+function setWidthValue(value) {
+  const v = String(Number(value));
+  if (!$("width").querySelector(`option[value="${v}"]`)) $("width").append(new Option(widthLabel(v), v));
+  $("width").value = v;
+}
+function lineIcon(value) {
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(0.8, Number(value) / 3))}"/>`;
+  return svg;
+}
+// The tool bar's width row: this tool's presets, each held (or right-clicked) to change it.
+function buildWidthRow() {
+  const row = document.querySelector('.choice-row[data-for="width"]');
+  if (!row) return;
+  const presets = widthPresets[tool], values = presets || WIDTH_LADDER;
+  row.replaceChildren(...values.map((value, index) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.value = String(value);
+    b.setAttribute("role", "radio");
+    b.title = presets ? `${widthLabel(value)} (hold or right-click to change it)` : widthLabel(value);
+    b.setAttribute("aria-label", widthLabel(value));
+    b.append(lineIcon(value));
+    let held = false;
+    b.onclick = () => { if (held) { held = false; return; } setWidthValue(value); $("width").dispatchEvent(new Event("change")); syncChoices(); };
+    if (presets) {
+      b.oncontextmenu = (e) => { e.preventDefault(); editWidth(tool, index); };
+      b.addEventListener("pointerdown", (down) => {
+        if (down.button !== 0) return;
+        const timer = setTimeout(() => { held = true; editWidth(tool, index); }, 450);
+        const stop = () => { clearTimeout(timer); removeEventListener("pointerup", stop, true); removeEventListener("pointercancel", stop, true); };
+        addEventListener("pointerup", stop, true);
+        addEventListener("pointercancel", stop, true);
+      });
+    }
+    return b;
+  }));
+  syncChoices();
+}
+// The width editor: a number and a slider in px, with a preview of the line.
+let widthEditing = null;
+function editWidth(name, index) {
+  widthEditing = { name, index };
+  const value = widthPresets[name][index];
+  $("widthTitle").textContent = `${({ draw: "Pen", highlight: "Highlighter", tape: "Tape", shape: "Shapes" })[name] || "Tool"} width`;
+  $("widthValue").value = $("widthRange").value = value;
+  previewWidth();
+  $("widthDialog").showModal();
+  $("widthValue").select();
+}
+function previewWidth() {
+  const v = Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1));
+  const path = $("widthPreview").querySelector("path");
+  path.setAttribute("stroke-width", Math.min(56, v));
+  path.style.color = $("color").value;
+}
+$("widthRange").oninput = () => { $("widthValue").value = $("widthRange").value; previewWidth(); };
+$("widthValue").oninput = () => { $("widthRange").value = $("widthValue").value; previewWidth(); };
+$("widthValue").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("widthSave").click(); } };
+$("widthCancel").onclick = () => $("widthDialog").close();
+$("widthReset").onclick = () => {
+  const { name } = widthEditing || {};
+  if (!name) return;
+  widthPresets[name] = [...WIDTH_DEFAULTS[name]];
+  saveWidths();
+  $("widthDialog").close();
+};
+$("widthSave").onclick = () => {
+  const { name, index } = widthEditing || {};
+  const v = Math.round(Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1)) * 2) / 2;
+  if (!name) return;
+  widthPresets[name] = widthPresets[name].map((w, i) => (i === index ? v : w));
+  saveWidths();
+  if (tool === name) { setWidthValue(v); $("width").dispatchEvent(new Event("change")); }
+  $("widthDialog").close();
+};
+function saveWidths() {
+  try { localStorage.setItem("notecomplete-widths", JSON.stringify(widthPresets)); } catch { /* Optional. */ }
+  buildWidthRow();
+  try { quick.redraw(); } catch { /* The menu is not made yet. */ }
+}
+buildWidthRow();
+function saveToolPrefs() {
+  if (!TOOL_DEFAULTS[tool]) return;
+  toolPrefs[tool] = { color: $("color").value, width: $("width").value };
+  try { localStorage.setItem("notecomplete-tool-prefs", JSON.stringify(toolPrefs)); } catch { /* Optional. */ }
+}
+for (const id of ["color", "width"]) $(id).addEventListener("change", saveToolPrefs);
+$("color").addEventListener("input", saveToolPrefs);
+for (const id of ["highlightMode", "tapeMode", "shape"]) {
+  try { const saved = localStorage.getItem(`notecomplete-${id}`); if (saved && $(id).querySelector(`option[value="${saved}"]`)) $(id).value = saved; } catch { /* Optional. */ }
+  $(id).addEventListener("change", () => { try { localStorage.setItem(`notecomplete-${id}`, $(id).value); } catch { /* Optional. */ } });
+}
 // The visible shape row drives the (hidden) select that the drawing code reads.
 function syncShapePicker() {
   for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
@@ -2083,6 +2208,8 @@ touchGestures({
   undo: () => { if (!$("undo").disabled) $("undo").click(); },
   redo: () => { if (!$("redo").disabled) $("redo").click(); },
   menu: (x, y) => quick.open(x, y),
+  // Not while a stylus was just writing: a palm resting beside it is not a gesture.
+  penBusy: () => performance.now() - lastPen < 1500,
   enabled: () => !!doc,
 });
 // Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
@@ -2093,28 +2220,91 @@ const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolb
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
 let quickOrder = QUICK_TOOLS.map(([name]) => name);
 try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
-// A tool's settings, from its own option rows, so the menu and the tool bar agree.
+// Remembered on this device: JSON in localStorage, defaults when missing or unreadable.
+const remembered = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } };
+const remember = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Optional. */ } };
+// Each tool's colours in the quick menu: editable (hold a colour, or right-click it) and
+// in the order the user dragged them.
+const DEFAULT_PALETTES = {
+  draw: SWATCHES.slice(0, 5),
+  highlight: ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"],
+  shape: SWATCHES.slice(0, 5),
+  tape: ["#e3c6e6", "#ffdf38", "#1f2328"],
+  text: SWATCHES.slice(0, 5),
+};
+const palettes = { ...DEFAULT_PALETTES, ...remembered("notecomplete-palettes", {}) };
+// The order of each tool's other settings (sizes, modes, undo/redo), as dragged.
+const sectionOrder = remembered("notecomplete-quick-sections", {});
+const ordered = (name, section, entries) => {
+  const order = sectionOrder[name]?.[section];
+  if (!order) return entries;
+  const rank = (e) => { const i = order.indexOf(e.key); return i < 0 ? order.length : i; };
+  return [...entries].sort((a, b) => rank(a) - rank(b));
+};
+function setColor(value) {
+  $("color").value = value;
+  $("color").dispatchEvent(new Event("input", { bubbles: true }));
+  $("color").dispatchEvent(new Event("change", { bubbles: true }));
+}
+// A colour of the palette, chosen again with the system's colour picker.
+function editPaletteColor(name, index) {
+  const input = Object.assign(document.createElement("input"), { type: "color", value: palettes[name][index] });
+  input.style.cssText = "position:fixed;opacity:0;pointer-events:none;left:50%;top:50%";
+  document.body.append(input);
+  const done = () => {
+    palettes[name] = palettes[name].map((c, i) => (i === index ? input.value : c));
+    remember("notecomplete-palettes", palettes);
+    setColor(input.value);
+    quick.redraw();
+  };
+  input.addEventListener("input", done);
+  input.addEventListener("change", () => { done(); input.remove(); });
+  input.addEventListener("blur", () => setTimeout(() => input.remove(), 1000));
+  input.click();
+}
+const paletteEntries = (name) => palettes[name].map((value, i) => ({
+  key: String(i),
+  label: `Colour ${value} (hold or right-click to change it)`,
+  swatch: value,
+  active: () => $("color").value.toLowerCase() === value.toLowerCase(),
+  run: () => setColor(value),
+  edit: () => editPaletteColor(name, i),
+  stay: () => true,
+}));
+// A tool's other settings, from its own option rows, so the menu and the tool bar agree.
 const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-for="${id}"] button`)]
   .filter((b) => !values || values.includes(b.dataset.value))
   .map((b) => ({
-    label: id === "color" ? `Colour ${b.dataset.value}` : `${b.title}`,
-    swatch: id === "color" ? b.dataset.value : null,
+    key: b.dataset.value,
+    label: `${b.title}`,
     icon: b.querySelector("svg"),
     active: () => $(id).value.toLowerCase() === b.dataset.value.toLowerCase(),
     run: () => b.click(),
     stay: () => true,
   }));
-const fromButtons = (selector) => [...document.querySelectorAll(selector)].map((b) => ({
-  label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
+const fromButtons = (selector, attr) => [...document.querySelectorAll(selector)].map((b) => ({
+  key: b.dataset[attr], label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
 }));
-const pressureEntry = { label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+// A tool's width presets in the quick menu: each held (or right-clicked) to change it.
+const widthEntries = (name) => widthPresets[name].map((value, i) => ({
+  key: `w${i}`,
+  label: `${widthLabel(value)} (hold or right-click to change it)`,
+  icon: lineIcon(value),
+  active: () => Number($("width").value) === Number(value),
+  run: () => { setWidthValue(value); $("width").dispatchEvent(new Event("change")); syncChoices(); },
+  edit: () => editWidth(name, i),
+  stay: () => true,
+}));
+const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+// Every tool's settings in the same places: colours on top, sizes along the bottom (small
+// to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
-  draw: () => [...fromRow("color", SWATCHES.slice(0, 5)), ...fromRow("width", ["1", "2", "4", "8"]), pressureEntry],
-  highlight: () => [...fromRow("highlightMode"), ...fromRow("color", ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"]), ...fromRow("width", ["8", "16", "24", "40"])],
-  erase: () => fromRow("eraserSize"),
-  shape: () => [...fromButtons("#shapePicker [data-shape]"), ...fromButtons("#shapeFill [data-fill]"), ...fromRow("color", SWATCHES.slice(0, 5))],
-  tape: () => [...fromRow("tapeMode"), ...fromRow("color", ["#e3c6e6", "#ffdf38", "#1f2328"])],
-  text: () => fromRow("color", SWATCHES.slice(0, 5)),
+  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry] }),
+  highlight: () => ({ top: paletteEntries("highlight"), bottom: widthEntries("highlight"), left: fromRow("highlightMode") }),
+  erase: () => ({ bottom: fromRow("eraserSize") }),
+  shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill") }),
+  tape: () => ({ top: paletteEntries("tape"), bottom: widthEntries("tape"), left: fromRow("tapeMode") }),
+  text: () => ({ top: paletteEntries("text") }),
 };
 const quick = quickMenu({
   // Tapping a tool chooses it and shows its settings around it; one without settings closes.
@@ -2122,16 +2312,31 @@ const quick = quickMenu({
   // The outer ring only for a tool with settings (with undo and redo beside them); Pan,
   // Select and the like get the small menu.
   outer: () => {
-    const settings = QUICK_SETTINGS[tool]?.() || [];
-    return settings.length ? [
-      ...settings,
-      { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
-      { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
-    ] : [];
+    const settings = QUICK_SETTINGS[tool]?.();
+    if (!settings) return {};
+    const out = {};
+    for (const [section, entries] of Object.entries(settings)) out[section] = section === "top" ? entries : ordered(tool, section, entries);
+    out.right = ordered(tool, "right", [
+      { key: "undo", label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+      { key: "redo", label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
+    ]);
+    return out;
   },
-  onReorder: (order) => {
-    quickOrder = order;
-    try { localStorage.setItem("notecomplete-quick-order", JSON.stringify(order)); } catch { /* Optional. */ }
+  // A tool, a colour or a setting dragged to another place: remembered.
+  onReorder: (section, order) => {
+    if (section === "inner") {
+      quickOrder = order;
+      remember("notecomplete-quick-order", order);
+    } else if (section === "bottom" && widthPresets[tool] && order.every((k) => k.startsWith("w"))) {
+      widthPresets[tool] = order.map((k) => widthPresets[tool][Number(k.slice(1))]);
+      saveWidths();
+    } else if (section === "top" && palettes[tool]) {
+      palettes[tool] = order.map((i) => palettes[tool][Number(i)]);
+      remember("notecomplete-palettes", palettes);
+    } else {
+      (sectionOrder[tool] ||= {})[section] = order;
+      remember("notecomplete-quick-sections", sectionOrder);
+    }
     status("Quick menu order saved.");
   },
   onOpen: () => cancelGesture(),
@@ -2149,7 +2354,7 @@ let penProfile = loadPenProfile();
 const penBtn = penButtonDetector(() => penProfile);
 let penHover = null, penMenuAt = 0, penHold = null;
 const onPages = (e) => doc && $("viewport").contains(e.target);
-const fields = (e) => ({ type: e.type, pointerType: e.pointerType, button: e.button, buttons: e.buttons, time: e.timeStamp });
+const fields = (e) => ({ type: e.type, pointerType: e.pointerType, button: e.button, buttons: e.buttons, pressure: e.pressure, time: e.timeStamp });
 function penMenu(e) {
   penMenuAt = Date.now();
   clearTimeout(penHold?.timer);
@@ -2201,16 +2406,25 @@ document.addEventListener("pointerover", (e) => {
 document.addEventListener("pointerout", (e) => {
   if (e.pointerType === "pen" && !e.relatedTarget) penBtn.pointer({ ...fields(e), type: "pointerleave" });
 }, true);
+const android = /Android/i.test(navigator.userAgent);
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
-  const button = penBtn.contextmenu({ pointerType: e.pointerType || "", time: e.timeStamp }) === "menu";
-  // Our menu just opened from the pen: the browser's own menu must not follow it.
-  if (!button && Date.now() - penMenuAt > 800) return;
-  e.preventDefault();
-  e.stopPropagation();
-  // The button held and a tap: Chromium also selected a word there.
-  window.getSelection()?.removeAllRanges();
-  penMenu(e);
+  const type = e.pointerType || "";
+  const button = penBtn.contextmenu({ pointerType: type, time: e.timeStamp, android, last: lastPointerType }) === "menu";
+  const mouse = type === "mouse" || (!type && lastPointerType === "mouse");
+  if (button || (mouse && e.shiftKey) || Date.now() - penMenuAt <= 800) {
+    // The pen's button (or Shift + right-click): the menu. Our menu just opened from the
+    // pen: the browser's own menu must not follow it.
+    e.preventDefault();
+    e.stopPropagation();
+    // The button held and a tap: Chromium also selected a word there.
+    window.getSelection()?.removeAllRanges();
+    if (button || mouse) penMenu(e);
+    return;
+  }
+  // Only a mouse right-click removes what is under it; a long press of a finger or a pen
+  // (Samsung's button + touch included) never does.
+  if (!mouse) { e.preventDefault(); e.stopPropagation(); }
 }, true);
 document.addEventListener("keydown", (e) => {
   if (penBtn.key(e) !== "menu" || !doc || quick.isOpen) return;
@@ -2377,10 +2591,21 @@ $("autosavesClear").onclick = async () => {
   $("autosavesDialog").close();
   status("Automatic saves deleted.");
 };
+// View → Tool bar (Shift + T): hides the row of tools and their settings, for more room
+// when the quick menu is used instead. Undo, redo and the panel buttons stay. Remembered.
+function setToolsHidden(hidden, announce = true) {
+  document.body.classList.toggle("tools-hidden", hidden);
+  $("toolsToggle").setAttribute("aria-checked", String(!hidden));
+  try { localStorage.setItem("notecomplete-tools-hidden", hidden ? "1" : "0"); } catch { /* Optional. */ }
+  if (doc) resize();
+  if (announce) status(hidden ? "Tool bar hidden: Shift + S, a pen's button or two fingers held still open the tools. Shift + T shows the bar." : "Tool bar shown.");
+}
+$("toolsToggle").onclick = () => { closeMenus(); setToolsHidden(!document.body.classList.contains("tools-hidden")); };
+try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHidden(true, false); } catch { /* Optional. */ }
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -2440,6 +2665,7 @@ function shortcut(e) {
   if (keyTool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
+  if (k === "T") return $("toolsToggle").click(), true;
   if (k === "n") return $("notesToggle").click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
   if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
@@ -2664,19 +2890,23 @@ const CANVAS_START = [3087, 2182.8];
 for (const [value, { label }] of Object.entries(PRESETS)) if (value !== "current") $("newPreset").add(new Option(label, value));
 $("newPreset").onchange = () => { $("newCustom").hidden = newKind() === "canvas" || $("newPreset").value !== "custom"; };
 const newKind = () => document.querySelector('[name="newKind"]:checked')?.value || "pages";
-// Noteful has no infinite page: a canvas is saved as .notecomp or .notepart only.
+// A new note is saved as a NoteComplete project (.nfedit) or a Noteful file; .notecomp
+// and Noteful + Markdown are exports (File → Export). Noteful has no infinite page: a
+// canvas is a project.
+const NEW_FORMATS = ["project", "noteful"];
+const newFormat = (value) => (NEW_FORMATS.includes(value) ? value : "project");
 function newKindChanged() {
   const canvas = newKind() === "canvas", noteful = document.querySelector('[name="newFormat"][value="noteful"]');
   for (const el of document.querySelectorAll("#newDialog .new-pages-only")) el.hidden = canvas;
   noteful.disabled = canvas;
   noteful.closest("label").title = canvas ? "An infinite canvas cannot be a .noteful file" : "";
-  if (canvas && noteful.checked) document.querySelector('[name="newFormat"][value="notecomplete"]').checked = true;
+  if (canvas && noteful.checked) document.querySelector('[name="newFormat"][value="project"]').checked = true;
   $("newPreset").onchange();
 }
 for (const box of document.querySelectorAll('[name="newKind"]')) box.onchange = newKindChanged;
 $("newDocument").onclick = () => {
   for (const m of document.querySelectorAll("details.menu")) m.open = false;
-  try { const f = localStorage.getItem("notecomplete-new-format"); const box = document.querySelector(`[name="newFormat"][value="${f}"]`); if (box) box.checked = true; } catch { /* Optional. */ }
+  try { const f = newFormat(localStorage.getItem("notecomplete-new-format")); document.querySelector(`[name="newFormat"][value="${f}"]`).checked = true; } catch { /* Optional. */ }
   newKindChanged();
   $("newDialog").showModal();
   $("newName").select();
@@ -2688,7 +2918,7 @@ $("newCreate").onclick = async () => {
   const preset = $("newPreset").value, count = canvas ? 1 : Math.max(1, Math.min(200, Math.round(Number($("newCount").value) || 1)));
   const size = canvas ? CANVAS_START : preset === "custom" ? [Number($("newWidth").value), Number($("newHeight").value)].map(mmToUnits) : PRESETS[preset].mm.map(mmToUnits);
   if (!size.every((n) => Number.isFinite(n) && n > 0)) return status("Choose a page size.", true);
-  const format = document.querySelector('[name="newFormat"]:checked')?.value || "notecomplete";
+  const format = newFormat(document.querySelector('[name="newFormat"]:checked')?.value);
   try { localStorage.setItem("notecomplete-new-format", format); } catch { /* Optional. */ }
   const title = $("newName").value.trim() || "Untitled";
   $("newDialog").close();
@@ -2705,9 +2935,8 @@ const converter = handwritingConverter({
   sourceText: () => (!doc && textView?.visible && isMarkdownName($("title").textContent || "") ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
     if (!canReplace()) return;
-    let format = "notecomplete";
-    try { format = localStorage.getItem("notecomplete-new-format") || format; } catch { /* Optional. */ }
-    if (!SAVE_EXT[format] || format === "project" || format === "markdown") format = "notecomplete";
+    let format = "project";
+    try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
     const seed = crypto.getRandomValues(new Uint8Array(16));
     await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "handwritten", title, markdown, options, bytes: new ArrayBuffer(0), saveAs: format });
   },
@@ -2721,6 +2950,9 @@ $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
 $("newWithAi").hidden = !window.notecompleteAI;
 $("newWithAi").onclick = () => { closeMenus(); converter.open({ withAi: true }); };
 $("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
+// The "?" beside Save as (New document) and Export: what each format keeps.
+for (const help of document.querySelectorAll("[data-format-help]")) help.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeMenus(); $("formatsDialog").showModal(); };
+$("formatsClose").onclick = () => $("formatsDialog").close();
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");
@@ -4246,7 +4478,15 @@ $("penSetupStart").onclick = async () => {
   // Presses as the app will see them: a hover rising edge, or an entry with the button held.
   const probe = penButtonDetector();
   seen.presses = [];
-  const feed = (e, type = e.type) => { if (e.pointerType === "pen" && probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons }); };
+  // What the pen sends, live, so a step that seems to do nothing says why.
+  const live = (e, type) => {
+    if (phase === "baseline" || phase === "press") $("penSetupResult").textContent = `Pen ${type === "pointerleave" ? "out of range" : touching ? "touching" : "hovering"} · buttons ${e.buttons} · presses seen: ${seen.presses.length}`;
+  };
+  const feed = (e, type = e.type) => {
+    if (e.pointerType !== "pen") return;
+    if (probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons });
+    live(e, type);
+  };
   const move = (e) => {
     if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure });
     feed(e);

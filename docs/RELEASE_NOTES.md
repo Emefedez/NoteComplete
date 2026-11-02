@@ -1,4 +1,20 @@
-## What's new in 1.1.10
+## What's new in 1.1.11
+
+- **Quick menu, the same everywhere**:
+  - Every tool's settings sit in the same places: colours across the top, from 12 o'clock and left to right; sizes along the bottom, from small on the left to large on the right; modes on the left; undo and redo on the right.
+  - Hold a colour (or right-click it) to change it with the colour picker. Hold any colour or setting and drag it to reorder.
+  - **Shift + right-click** opens the menu too.
+- **Widths in px, your own**: each tool's widths (pen, highlighter, tape, shapes) are presets in the tool bar and in the quick menu. Hold one (or right-click it) to set it to any width from 0.5 to 100 px, with a slider and a preview; **Default widths** puts them back.
+- **Tools remember their settings**: each tool comes back with the colour and width it was last used with, and the highlighter, tape and shape kinds are kept too.
+- **Text boxes**: **Esc** now keeps what you typed. **Shift + Esc**, or the **×** at the box's corner, discards it.
+- **View → Tool bar** (**Shift + T**) hides the row of tools for more room; the quick menu has them.
+- **Two formats to save in**: a new note is a NoteComplete project (`.nfedit`, the default, also for canvases) or a Noteful file. `.notecomp` and Noteful + Markdown are exports, and a **?** beside *Save as* and *Export* explains each format. `.notecomp` and `.notepart` files keep opening.
+- **S Pen**:
+  - Holding the button and tapping never erases; it opens the menu every time a pen is in use on Android.
+  - On iPad, the menu no longer opens by accident: a long press never opens it, and the two-finger hold ignores palms and the moment right after the Pencil.
+  - Pen calibration shows live what the pen sends.
+
+### In 1.1.10
 
 - **Auto-save** (File menu, on by default): every minute while a note has changed, and when you leave the app, a copy goes into automatic slots on this device, never over your file. Each note keeps its last five, listed in File; **All automatic saves…** opens or deletes any of them. Opening a note with a newer automatic save asks whether to open the **automatic** or the **manual** save.
 - **Auto-save when sharing**: the host's switch applies to everyone. A guest or tablet that is disconnected, or whose session ends, keeps an automatic save of the note and is offered to open it.
