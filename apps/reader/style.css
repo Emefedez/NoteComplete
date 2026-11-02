@@ -546,7 +546,7 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
 }
 .sheet > .render {
   position: relative;
-  /* Ink blends (highlighter) with the PDF canvas beneath it, and nothing outside the page. */
+  /* Ink blends (highlighter) with a PDF canvas beneath it, and nothing outside the page. */
   isolation: isolate;
 }
 .sheet .render > svg {
@@ -555,7 +555,7 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   width: 100%;
   height: auto;
 }
-/* The PDF page, drawn straight into a canvas under the ink (app.js placeRaster). */
+/* A PDF page drawn into a canvas under the ink (app.js placeRaster). */
 .sheet .render > .pdf-raster {
   position: absolute;
   display: block;

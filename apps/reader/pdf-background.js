@@ -29,7 +29,11 @@ export async function openPdf(data) {
 // higher-resolution image without reusing a blurry fit-width raster.
 export function rasterTarget(original, cssWidth, pixelRatio = globalThis.devicePixelRatio || 1, settings) {
   const prefs = settings ? normalizeQuality(settings) : null;
-  const quality = prefs?.scale ?? Math.max(2, Math.min(Number(pixelRatio) || 1, 3));
+  const ratio = Math.max(1, Math.min(Number(pixelRatio) || 1, 3));
+  // The quality setting's scale is for a 2× screen (tablets, phones, most laptops); a 1×
+  // screen gets half as many pixels per side, never fewer than it shows (Balanced 2× → 1×,
+  // Sharp 3× → 1.5×). Drawing at 2× for a 1× screen took four times the memory and time.
+  const quality = prefs ? Math.min(prefs.scale, Math.max(1, (ratio * prefs.scale) / 2)) : Math.max(2, ratio);
   const maxPixels = 8192;
   const requestedWidth = Math.max(1, Math.ceil(cssWidth * quality));
   const scale = Math.min(
@@ -81,11 +85,21 @@ export function backgroundPlacement(background, size) {
   return { x, y, width, height, share: width / size[0] };
 }
 
-// How many page rasters (canvases) stay ready for scrolling back. Each is a few tens of
-// megabytes at 2× on a large page, so only a few.
-export const RASTERS_KEPT = 2;
+// How many page rasters stay ready for scrolling back.
+export const RASTERS_KEPT = 3;
 
-// A copy of a canvas, for a second place on screen (a canvas can only be in one).
+// PDF pages are drawn by pdf.js into a canvas and shown in one of two ways (app.js chooses
+// per page, by how much ink is on it):
+// - "canvas": the canvas itself, under the page's SVG. Its memory is freed the moment the
+//   page leaves the screen. But a canvas is a compositing layer of its own, and while ink
+//   changes over it (a stroke being drawn) Chromium checks every ink element against that
+//   layer each frame: about 0.013 ms per element, 10 ms a frame with a few hundred strokes.
+// - "url": a PNG (blob: URL) in an <image> inside the SVG, a plain picture to the browser
+//   whatever the ink. The browser keeps decoded pictures in a cache it empties only when
+//   memory runs short, so this is for pages with much ink. The PNG is encoded in a worker
+//   (raster-encoder.js), not with toDataURL here: that took 60–100 ms per page.
+
+// A canvas for a second place on screen (one canvas can be in only one place).
 export function copyCanvas(source) {
   const canvas = document.createElement("canvas");
   canvas.width = source.width;
@@ -93,19 +107,10 @@ export function copyCanvas(source) {
   canvas.getContext("2d").drawImage(source, 0, 0);
   return canvas;
 }
-
-// A drawn canvas as a still picture: a "bitmaprenderer" canvas holding an ImageBitmap of
-// it. A 2D canvas is live, and the browser may hand its pixels to the compositor again on
-// every frame (Chromium copies a whole page raster per frame while ink is drawn over it);
-// a bitmap is uploaded once. Where that is unsupported, the 2D canvas itself.
-// Frees a raster's pixels now instead of at the next garbage collection.
-// A 2D canvas gives its pixels back when it shrinks to nothing. A bitmap canvas is left to the
-// garbage collector, which frees it promptly once nothing refers to it: replacing its bitmap
-// (transferFromImageBitmap) makes the browser keep both for seconds.
-function wipe(canvas) {
-  if (canvas.getContext("bitmaprenderer")) return;
-  canvas.width = canvas.height = 0;
-}
+// A drawn canvas as a still picture: a "bitmaprenderer" canvas holding an ImageBitmap of it.
+// The browser may hand a 2D canvas's pixels to the compositor again on every frame (Chromium
+// copied a whole page per frame while ink was drawn over it); a bitmap goes once. Where that
+// is unsupported, the 2D canvas itself.
 async function settled(canvas) {
   try {
     const still = document.createElement("canvas");
@@ -120,6 +125,52 @@ async function settled(canvas) {
     return canvas;
   }
 }
+// A 2D canvas gives its pixels back when it shrinks to nothing. A bitmap canvas is left to the
+// garbage collector, which frees it promptly once nothing refers to it: replacing its bitmap
+// (transferFromImageBitmap) makes the browser keep both for seconds.
+function wipe(canvas) {
+  if (canvas.getContext("bitmaprenderer")) return;
+  canvas.width = canvas.height = 0;
+}
+let encoder = null, encodes = 0;
+const waiting = new Map();
+function encoderWorker() {
+  if (encoder !== null) return encoder;
+  try {
+    if (typeof OffscreenCanvas !== "function" || typeof Worker !== "function" || typeof createImageBitmap !== "function") throw Error("unsupported");
+    encoder = new Worker(new URL("./raster-encoder.js", import.meta.url));
+    encoder.onmessage = ({ data: { id, blob, error } }) => {
+      const job = waiting.get(id);
+      waiting.delete(id);
+      if (job) blob ? job.resolve(blob) : job.reject(Error(error));
+    };
+    encoder.onerror = () => {
+      for (const job of waiting.values()) job.reject(Error("The page encoder stopped."));
+      waiting.clear();
+      encoder = false;
+    };
+  } catch {
+    encoder = false;
+  }
+  return encoder;
+}
+const onMainThread = (canvas) => new Promise((resolve, reject) =>
+  canvas.toBlob((blob) => (blob ? resolve(blob) : reject(Error("Could not draw the PDF page."))), "image/png"));
+// The canvas as a PNG Blob; in the worker where browsers have one (Safari 16.4+), else here.
+export async function pngOf(canvas) {
+  const worker = encoderWorker();
+  if (!worker) return onMainThread(canvas);
+  try {
+    const bitmap = await createImageBitmap(canvas);
+    const id = ++encodes;
+    return await new Promise((resolve, reject) => {
+      waiting.set(id, { resolve, reject });
+      worker.postMessage({ id, bitmap }, [bitmap]);
+    });
+  } catch {
+    return onMainThread(canvas);
+  }
+}
 
 export class PdfBackgrounds {
   constructor(read) {
@@ -130,11 +181,10 @@ export class PdfBackgrounds {
     this.drawing = new Map();
     this.closed = false;
   }
-  // The PDF page drawn into a canvas for the page view: shown as it is, never encoded to an
-  // image (a PNG of a full page takes hundreds of milliseconds and stays in memory twice:
-  // as text and decoded). The last RASTERS_KEPT stay, for scrolling back.
-  async raster(background, size, displayWidth = size[0], settings) {
-    const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings]);
+  // The PDF page for the page view, as a canvas or a blob: URL (`kind`, see above). The last
+  // RASTERS_KEPT stay, for scrolling back; release() lets go of one no longer shown.
+  async raster(background, size, displayWidth = size[0], settings, kind = "canvas") {
+    const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings, globalThis.devicePixelRatio || 1, kind]);
     const kept = this.rasters.get(key);
     if (kept) {
       this.rasters.delete(key);
@@ -148,42 +198,49 @@ export class PdfBackgrounds {
       const original = page.getViewport({ scale: 1 });
       const target = rasterTarget(original, displayWidth, undefined, settings);
       const viewport = page.getViewport({ scale: target.scale });
-      let canvas = document.createElement("canvas");
+      const canvas = document.createElement("canvas");
       canvas.width = target.width;
       canvas.height = target.height;
+      let shown;
       try {
         await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
-      } catch (error) {
-        canvas.width = canvas.height = 0;
-        throw error;
+        shown = kind === "url" ? URL.createObjectURL(await pngOf(canvas)) : await settled(canvas);
       } finally {
+        if (shown !== canvas) canvas.width = canvas.height = 0;
         page.cleanup();
       }
-      canvas = await settled(canvas);
-      if (this.closed) return canvas;
-      this.rasters.set(key, canvas);
+      if (this.closed) {
+        this.release(shown);
+        throw Error("Document closed");
+      }
+      this.rasters.set(key, shown);
       while (this.rasters.size > RASTERS_KEPT) {
         const [oldest, old] = this.rasters.entries().next().value;
         this.rasters.delete(oldest);
         this.release(old);
       }
-      return canvas;
+      return shown;
     })();
     this.drawing.set(key, job);
     try { return await job; } finally { this.drawing.delete(key); }
   }
-  // A raster no longer shown: its memory goes now unless it is kept for scrolling back.
-  release(canvas) {
-    if (!canvas || canvas.isConnected) return;
-    for (const kept of this.rasters.values()) if (kept === canvas) return;
-    wipe(canvas);
+  // A raster no longer shown: freed, unless it is kept or still on a page.
+  release(raster) {
+    if (!raster) return;
+    for (const kept of this.rasters.values()) if (kept === raster) return;
+    if (typeof raster === "string") {
+      if (!raster.startsWith("blob:") || globalThis.document?.querySelector?.(`image[href="${raster}"]`)) return;
+      URL.revokeObjectURL(raster);
+    } else if (!raster.isConnected) {
+      wipe(raster);
+    }
   }
-  // Quality changed: every raster is redrawn.
+  // Quality changed: every raster is drawn again.
   clear() {
     this.images.clear();
     const old = [...this.rasters.values()];
     this.rasters.clear();
-    for (const canvas of old) this.release(canvas);
+    for (const raster of old) this.release(raster);
   }
   async document(id) {
     if (!this.documents.has(id))

@@ -134,13 +134,23 @@ qualitySettings((value, rasterChanged) => {
   // identity filter still makes every page a filtered layer, redrawn whole on each change.
   if (value.contrast === 100 && value.brightness === 100) document.documentElement.style.removeProperty("--page-filter");
   else document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
-  if (!rasterChanged) return;
+  if (rasterChanged) redrawPdfPages();
+});
+// PDF pages drawn again: another quality, or a screen with another pixel density (the window
+// moved to another screen, or the browser zoom changed; see rasterTarget).
+function redrawPdfPages() {
   backgrounds?.clear();
   for (const panel of panels) {
     panel.token++;
     if (panel.near) renderPage(panel, panel.view);
   }
-});
+}
+(function watchPixelRatio() {
+  matchMedia(`(resolution: ${globalThis.devicePixelRatio || 1}dppx)`).addEventListener("change", () => {
+    redrawPdfPages();
+    watchPixelRatio();
+  }, { once: true });
+})();
 const audio = new AudioController(
   (resource) => call("audio", { resource }),
   jump,
@@ -838,7 +848,15 @@ function lockMarks(view) {
   }
   return svg;
 }
-// The PDF page under the ink: a canvas placed over the PDF's rectangle on the page.
+// A PDF page's raster is a canvas under the page's SVG, or a picture inside it on pages with
+// much ink (pdf-background.js explains why). Past this many ink elements, a picture.
+const INK_HEAVY = 100;
+function inkCount(svg) {
+  let count = 0;
+  for (let at = svg.indexOf('data-item="'); at >= 0; at = svg.indexOf('data-item="', at + 1)) count++;
+  return count;
+}
+// The canvas over the PDF's rectangle on the page.
 function placeRaster(canvas, place, size) {
   canvas.className = "pdf-raster";
   Object.assign(canvas.style, {
@@ -849,18 +867,18 @@ function placeRaster(canvas, place, size) {
   });
   return canvas;
 }
-// A page with a PDF draws it as a canvas under the page's SVG: the paper colour moves to
-// the render behind it, and blending (highlighter) happens in the render, not the SVG alone.
+// With the PDF as a canvas beneath the SVG, the paper colour moves from the SVG to the render
+// behind both, and blending (highlighter) happens in the render (style.css), not the SVG alone.
 function underPaper(render) {
   const svg = render.firstElementChild, paper = svg?.querySelector("[data-background] > rect");
-  if (!paper) return;
+  if (!paper || render.dataset.paper) return;
   render.dataset.paper = paper.getAttribute("fill") || "#ffffff";
   render.style.backgroundColor = render.dataset.paper;
   paper.setAttribute("fill", "none");
   svg.style.isolation = "auto";
 }
-// The page's SVG as it is in the note: paper and the PDF back inside it (for export).
-function pageSvg(p) {
+// The page's SVG to save as a file, as it is in the note: the paper and the PDF inside it.
+async function pageSvg(p) {
   const svg = p.render.firstElementChild.cloneNode(true);
   if (p.render.dataset.paper) {
     svg.querySelector("[data-background] > rect")?.setAttribute("fill", p.render.dataset.paper);
@@ -869,8 +887,20 @@ function pageSvg(p) {
   const raster = p.render.querySelector(":scope > canvas.pdf-raster");
   if (raster && p.view?.pdf_background)
     svg.querySelector("[data-background]")?.append(pdfImage(raster.toDataURL("image/png"), backgroundPlacement(p.view.pdf_background, p.size)));
+  // A blob: URL means nothing outside this window.
+  for (const image of svg.querySelectorAll('image[href^="blob:"]')) {
+    const blob = await (await fetch(image.getAttribute("href"))).blob();
+    image.setAttribute("href", await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    }));
+  }
   return svg;
 }
+// The raster a page shows (a canvas, or a picture's URL), to release.
+const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raster") || render?.querySelector("[data-background] > image")?.getAttribute("href");
 function pdfImage(href, place) {
   const el = document.createElementNS(ns, "image");
   for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
@@ -1058,7 +1088,7 @@ addEventListener("resize", fitTools);
 placeToolbarActions();
 syncPagePanel();
 function placeholder(p) {
-  const raster = p.render?.querySelector(":scope > canvas.pdf-raster");
+  const raster = shownRaster(p.render);
   p.render = null;
   p.overlay = null;
   p.ink = null;
@@ -1131,11 +1161,15 @@ async function renderPage(p, provided) {
     const displayWidth = p.el.clientWidth || p.size[0];
     // At another width the old raster (placed in page units) stays as a
     // placeholder until the sharper one arrives.
-    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality]);
+    const kind = result.pdf_background && (inkCount(result.svg) > INK_HEAVY ? "url" : "canvas");
+    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality, globalThis.devicePixelRatio || 1, kind]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
-      ? p.render?.querySelector(":scope > canvas.pdf-raster") : null;
-    if (result.pdf_background) underPaper(render);
-    if (previous) render.prepend(previous);
+      ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image") : null;
+    // A canvas (this page's, or the previous one kept until the new raster is ready) lies
+    // beneath the SVG, so the SVG's paper must let it through.
+    if (kind === "canvas" || previous?.localName === "canvas") underPaper(render);
+    if (previous?.localName === "canvas") render.prepend(previous);
+    else if (previous) render.querySelector("[data-background]")?.append(previous);
     const kept = pdfKey === p.pdfKey ? previous : null;
     applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
@@ -1167,12 +1201,19 @@ async function renderPage(p, provided) {
         p.size,
         displayWidth * place.share,
         displayQuality,
+        kind,
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
-      // The same PDF page on two pages of the note: each shows its own copy.
-      if (raster.isConnected && raster.parentNode !== render) raster = copyCanvas(raster);
-      if (previous && previous !== raster) { previous.remove(); backgrounds.release(previous); }
-      render.prepend(placeRaster(raster, place, p.size));
+      if (kind === "url") render.querySelector("[data-background]").append(pdfImage(raster, place));
+      else {
+        // The same PDF page on two pages of the note: each shows its own copy.
+        if (raster.isConnected && raster.parentNode !== render) raster = copyCanvas(raster);
+        render.prepend(placeRaster(raster, place, p.size));
+      }
+      if (previous && previous !== raster) {
+        previous.remove();
+        backgrounds.release(previous.localName === "canvas" ? previous : previous.getAttribute("href"));
+      }
       p.pdfKey = pdfKey;
       p.pdfReady = true;
       p.rasterWidth = displayWidth;
@@ -3072,11 +3113,11 @@ $("notesResize").onpointerdown = (down) => {
 $("svg").onclick = async () => {
   const p = panels[page];
   if (p?.pdfReady && !busy()) {
-    await download(
-      new XMLSerializer().serializeToString(pageSvg(p)),
-      `${filename()}-p${page + 1}.svg`,
-      "image/svg+xml",
-    ).catch((e) => status(e.message, true));
+    try {
+      await download(new XMLSerializer().serializeToString(await pageSvg(p)), `${filename()}-p${page + 1}.svg`, "image/svg+xml");
+    } catch (e) {
+      status(e.message, true);
+    }
   }
 };
 window.addEventListener("beforeunload", (e) => {

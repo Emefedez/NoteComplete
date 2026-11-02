@@ -109,7 +109,7 @@ Screenshots use the sample notes in [`samples/`](samples/).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.
 3. Save your work as a NoteComplete project (`.nfedit`: the untouched original and every edit with its undo history), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Export** makes a `.notecomp` (the note, its notes and added recordings in one file, to send) or Noteful + Markdown; see [file formats](#file-formats).
 
-AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
+AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md). How long notes stay light, and the benchmark (`tools/perf_bench.mjs`): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## File formats
 

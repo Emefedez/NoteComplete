@@ -1,8 +1,9 @@
 // Performance and memory benchmark of the web reader (Chromium, after a web build).
 // Opens a note, scrolls through every page, draws strokes, and reports time, main-thread
 // work (CDP TaskDuration), the JS heap, DOM nodes and the memory of the whole browser
-// (PSS of every Chromium process, so the engine's worker and WebAssembly are counted).
-//   node tools/perf_bench.mjs [file ...] [--runs N] [--json out.json]
+// (PSS of every Chromium process, so the engine's worker and WebAssembly are counted), also
+// after a simulated memory-pressure signal (what stays once the browser drops its caches).
+//   node tools/perf_bench.mjs [file ...] [--runs N] [--dpr 1|2] [--json out.json]
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -15,6 +16,7 @@ const { chromium } = require('playwright');
 const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); if (i < 0) return fallback; const v = args[i + 1]; args.splice(i, 2); return v; };
 const runs = Number(flag('--runs', 3));
+const dpr = Number(flag('--dpr', 1)); // the screen's pixel density (2 for tablets, phones, most laptops)
 const jsonOut = flag('--json', '');
 const root = new URL('../', import.meta.url);
 const files = args.length ? args : ['samples/Practice book (vol. 1).noteful', 'samples/Examen wuolah.noteful', 'tests/fixtures/multi-audio-synthetic.noteful'];
@@ -49,7 +51,7 @@ async function once(file) {
   const server = await startServer({ root: fileURLToPath(new URL('apps/reader/', root)), host: '127.0.0.1', address: '127.0.0.1', notes: null });
   const b = await chromium.launch({ args: ['--enable-precise-memory-info', '--js-flags=--expose-gc'] });
   const pid = browserPid(b);
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr, serviceWorkers: 'block' });
   const p = await ctx.newPage();
   const cdp = await ctx.newCDPSession(p);
   await cdp.send('Performance.enable');
@@ -113,6 +115,12 @@ async function once(file) {
   await gc();
   r.afterScrollPssMB = pss(pid) - idle;
   r.afterScrollHeapMB = (await metric()).JSHeapUsedSize / 1048576;
+  // What the system cannot take back: the browser drops its caches of decoded pictures when
+  // memory runs short (as a phone or tablet does), so this is the note's lasting footprint.
+  await cdp.send('Memory.simulatePressureNotification', { level: 'critical' });
+  await p.waitForTimeout(1500);
+  await gc();
+  r.afterPressurePssMB = pss(pid) - idle;
   // Draw: 20 strokes on the page in view, then wait for the page to settle.
   await p.evaluate(() => { const v = document.getElementById('viewport'); v.scrollTop = 0; });
   await p.waitForFunction(() => document.querySelector('.sheet[data-page="0"] .render svg'));
