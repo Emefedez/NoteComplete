@@ -167,6 +167,25 @@ try {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 74, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
   }
   console.log('· a pen button pressed while hovering opens it (Android buttons 1, right or middle bit)');
+  // Pressed again while hovering, it closes the menu; still held, it does not open it again.
+  {
+    const mv = (x, buttons) => cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: at[1] + 30, button: 'none', buttons, pointerType: 'pen' });
+    await mv(at[0] + 70, 0); await mv(at[0] + 72, 1);
+    await p.waitForSelector('.quick-menu', { timeout: 3000 });
+    await mv(at[0] + 74, 1); await mv(at[0] + 76, 0);
+    await sleep(350);
+    await mv(at[0] + 78, 1);
+    await p.waitForFunction(() => !document.querySelector('.quick-menu'), null, { timeout: 3000 });
+    await mv(at[0] + 80, 1); await mv(at[0] + 84, 1);
+    await sleep(200);
+    assert.equal(await p.locator('.quick-menu').count(), 0, 'held button does not reopen it');
+    await mv(at[0] + 86, 0);
+    await mv(at[0] + 88, 1);
+    await p.waitForSelector('.quick-menu', { timeout: 3000 });
+    await p.keyboard.press('Escape');
+    await mv(at[0] + 90, 0);
+  }
+  console.log('· pressing the pen button again while hovering closes it');
   // Button held, then a tap: Chromium sends only a contextmenu with no pointer type.
   const removed = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 80, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
