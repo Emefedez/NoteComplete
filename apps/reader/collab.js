@@ -155,6 +155,8 @@ async function join(host, invite) {
   session = new Session(host, { ...invite, name: remembered(), yjs });
   host.status(invite.role === 'tablet' ? 'Connecting to the computer…' : 'Joining the shared notes…');
   if (invite.role === 'tablet') session.loading('Connecting to the computer…');
+  // A guest sees each step in a small bar that leaves the notes usable.
+  else session.loading('Connecting…', { inline: true });
 }
 
 class Session {
@@ -193,7 +195,18 @@ class Session {
   async load({ project, title }) {
     for (let i = 0; i < 200 && (!this.host.ready || this.host.busy); i++) await new Promise((r) => setTimeout(r, 50));
     const view = this.view();
-    await this.host.openProject(project, title);
+    // A guest sees the pages as they are made (the first one's PDF can take a moment) and the
+    // notes beside them, not the notes alone until the whole first page is drawn.
+    if (this.role === 'guest') {
+      document.body.classList.remove('guest-mode');
+      this.loading('Loading the note…', { inline: true });
+    }
+    try {
+      await this.host.openProject(project, title);
+    } catch (e) {
+      if (this.role === 'guest') { this.loading(null); this.enterGuest(); }
+      throw e;
+    }
     this.restoreView(view);
     this.waiting(false);
     if (this.role === 'guest') {
@@ -207,6 +220,7 @@ class Session {
       if (!notes.visible) $('notesToggle')?.click();
       this.bindNotes();
       this.showTitle();
+      this.loading(null);
       this.host.status(this.client.canEdit ? `You can draw on “${title || 'the note'}” and write its notes.` : `Viewing “${title || 'the note'}”.`);
       return;
     }
@@ -214,11 +228,14 @@ class Session {
     this.host.status(`Drawing on “${title || 'the note'}”.`);
   }
   // A full-screen "Connecting… / Loading the note…" with a moving bar; null hides it.
-  loading(text) {
+  // `inline` (guests): a small bar at the top that leaves the page and the notes usable.
+  loading(text, { inline = false } = {}) {
     if (!text) { this.loader?.remove(); this.loader = null; return; }
+    if (this.loader && this.loader.classList.contains('inline') !== inline) { this.loader.remove(); this.loader = null; }
     if (!this.loader) {
       this.loader = el('div', { className: 'tablet-loader', role: 'status' }, el('div', { className: 'loader-bar' }), el('p'),
         el('button', { type: 'button', textContent: 'Cancel', onclick: () => this.leave() }));
+      this.loader.classList.toggle('inline', inline);
       document.body.append(this.loader);
     }
     this.loader.querySelector('p').textContent = text;
@@ -232,6 +249,7 @@ class Session {
       if (this.role === 'host') { this.documentChanged(); this.settingsChanged(); }
       else this.host.setSharedAutosave?.(detail.autosave);
       if (this.role === 'guest') {
+        this.loading(detail.open ? 'Loading the note…' : null, { inline: true });
         this.askName(detail.name);
         host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
         this.showTitle();
@@ -246,6 +264,7 @@ class Session {
       if (this.role === 'guest') this.showTitle();
       // The host closed the note (or opened something that is not a note): notes only.
       if (this.role === 'guest' && !detail.open && host.doc) { host.closeDocument(); this.enterGuest(); }
+      if (this.role === 'guest') this.loading(detail.open && !host.doc ? 'Loading the note…' : null, { inline: true });
       if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); this.loading(null); }
       else if (this.role === 'tablet' && detail.open) this.loading('Loading the note…');
     } else if (type === 'settings') {
@@ -482,6 +501,8 @@ class Session {
     this.client.rename(name);
   }
   enterGuest() {
+    // The notes stay open for a guest, the whole session (style.css hides their close button).
+    document.body.classList.add('guest-session');
     // Notes only, while no note is open (the note may arrive before or after this).
     if (!this.host.doc) {
       document.body.classList.add('guest-mode');
@@ -826,7 +847,7 @@ class Session {
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }
     this.dock?.remove();
     this.loading(null);
-    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
+    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly', 'guest-session');
     delete document.body.dataset.dock;
     if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();
     // A guest or tablet keeps an automatic save of the shared note (when the host has
