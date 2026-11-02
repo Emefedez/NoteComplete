@@ -63,6 +63,9 @@ try {
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
   await p.keyboard.press('z');
   await p.waitForSelector('.quick-menu');
+  // Select has no settings: the small menu, tools only.
+  assert.equal(await p.locator('.quick-menu .qm-outer').count(), 0, 'no outer ring without settings');
+  assert.ok((await p.locator('.quick-menu .qm-disc').boundingBox()).width < 170, 'the small menu');
   const ringOrder = () => p.evaluate(() => [...document.querySelectorAll('.quick-menu .qm-inner')].map((b) => b.getAttribute('aria-label')));
   const first = await ringOrder();
   const pen = await p.locator('.quick-menu .qm-inner >> nth=0').boundingBox();

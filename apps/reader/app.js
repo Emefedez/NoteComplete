@@ -2113,17 +2113,25 @@ const QUICK_SETTINGS = {
 const quick = quickMenu({
   // Tapping a tool chooses it and shows its settings around it; one without settings closes.
   inner: () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] })),
-  outer: () => [
-    ...(QUICK_SETTINGS[tool]?.() || []),
-    { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
-    { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
-  ],
+  // The outer ring only for a tool with settings (with undo and redo beside them); Pan,
+  // Select and the like get the small menu.
+  outer: () => {
+    const settings = QUICK_SETTINGS[tool]?.() || [];
+    return settings.length ? [
+      ...settings,
+      { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+      { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
+    ] : [];
+  },
   onReorder: (order) => {
     quickOrder = order;
     try { localStorage.setItem("notecomplete-quick-order", JSON.stringify(order)); } catch { /* Optional. */ }
     status("Quick menu order saved.");
   },
   onOpen: () => cancelGesture(),
+  // The pen's button counts as released once the menu closes, so the next press opens it
+  // again even if its release was never reported (it happened over the menu, or not at all).
+  onClose: () => { lastPenButtons = 0; },
 });
 // Where the pointer last was over the pages: Z opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
@@ -2157,7 +2165,7 @@ document.addEventListener("pointerdown", (e) => {
     penMenu(e);
   }
 }, true);
-document.addEventListener("pointerup", (e) => { if (e.pointerType === "pen") lastPenButtons = e.buttons; }, true);
+for (const type of ["pointerup", "pointercancel", "pointerleave"]) document.addEventListener(type, (e) => { if (e.pointerType === "pen") lastPenButtons = e.buttons; }, true);
 // Some Android browsers turn the S Pen button into a long press: its contextmenu.
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
@@ -2187,7 +2195,7 @@ document.addEventListener("keydown", (e) => {
 }, true);
 document.addEventListener("keyup", (e) => {
   // Held, then let go over an item: that item. A quick tap leaves the menu open to click.
-  if (e.key.toLowerCase() === "z" && quick.isOpen && Date.now() - quickKeyAt > 250) quick.release();
+  if (e.key.toLowerCase() === "z" && quick.isOpen && Date.now() - quickKeyAt > 150) quick.release();
 }, true);
 $("undo").onclick = () => {
   cancelGesture();
