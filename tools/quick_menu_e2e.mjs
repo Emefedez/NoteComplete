@@ -223,6 +223,17 @@ try {
   await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
   assert.equal(await p.inputValue('#color'), '#aa2200', 'remembered after a reload');
   console.log('· each tool keeps its own colour and width');
+  // View → Tool bar (Shift + T) hides the tools; the quick menu still has them.
+  await p.evaluate(() => { document.activeElement?.blur(); });
+  await p.keyboard.press('Shift+T');
+  assert.equal(await p.isVisible('#toolbar .segmented'), false, 'tool bar hidden');
+  assert.equal(await p.getAttribute('#toolsToggle', 'aria-checked'), 'false');
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Shift+T');
+  assert.equal(await p.isVisible('#toolbar .segmented'), true, 'shown again');
+  console.log('· Shift + T hides and shows the tool bar');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.

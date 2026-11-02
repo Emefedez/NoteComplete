@@ -2691,3 +2691,6 @@ body.tablet-waiting #drop::after { content: "Waiting for the computer’s note�
 /* Discard a text box being typed (Shift + Esc does the same; Esc keeps it). */
 .text-discard { position: absolute; z-index: 7; width: 22px; height: 22px; min-width: 22px; min-height: 22px; padding: 0; margin: -11px 0 0 -11px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--menu); color: var(--muted); font-size: 15px; line-height: 1; box-shadow: 0 2px 6px #0002; }
 .text-discard:hover { color: var(--danger, #c0392b); background: var(--menu); }
+
+/* View → Tool bar off: no tool buttons or settings; undo, redo and panels stay. */
+body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tools-hidden #toolbarToggle { display: none !important; }
