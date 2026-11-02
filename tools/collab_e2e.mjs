@@ -152,6 +152,20 @@ try {
   await guest.waitForSelector('#notesEditor .TinyMDE');
   // The guest sees the note itself too, live, not only its notes.
   await guest.waitForFunction(() => document.querySelectorAll('.sheet').length === 3 && document.querySelector('.sheet [data-item]'), null, { timeout: 20000 });
+  // ...shown with its tools, and draws on it: the stroke reaches the host.
+  await guest.waitForFunction(() => !document.body.classList.contains('guest-mode'));
+  assert.equal(await guest.isVisible('#viewport'), true, 'the guest sees the pages');
+  assert.equal(await guest.isVisible('#toolbar [data-tool="draw"]'), true, 'the guest has the tool bar');
+  const hostInk = () => host.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length);
+  const before = await hostInk();
+  await guest.evaluate(() => document.querySelector('#toolbar [data-tool="draw"]').click());
+  const gs = await guest.locator('.sheet').first().boundingBox();
+  await guest.mouse.move(gs.x + 60, gs.y + 90); await guest.mouse.down();
+  for (let j = 1; j <= 12; j++) await guest.mouse.move(gs.x + 60 + j * 12, gs.y + 90 + j * 4);
+  await guest.mouse.up();
+  await host.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length > n, before, { timeout: 10000 });
+  await guest.evaluate(() => document.querySelector('#toolbar [data-tool="pan"]').click());
+  step('the guest sees the note with its tool bar and draws on it; the host gets the stroke');
   await guest.click('#notesEditor .TinyMDE');
   await guest.keyboard.type('Hola desde Ana');
   await host.evaluate(() => document.getElementById('notesToggle').click());
@@ -174,7 +188,7 @@ try {
   await tablet.click('#tabletDock [aria-label=Disconnect]');
   await tablet.waitForFunction(() => !document.body.classList.contains('tablet-mode') && !document.querySelector('.sheet'));
   await host.waitForFunction(() => ![...document.querySelectorAll('#collabPeopleBar .collab-chip')].some((c) => c.title.includes('drawing tablet')));
-  assert.equal(await added(host), 3);
+  assert.equal(await added(host), 4, 'the tablet’s strokes and the guest’s');
   step('the tablet disconnects; the computer keeps every edit');
 
   // Ending: the guest keeps a copy; the host keeps the notes.
