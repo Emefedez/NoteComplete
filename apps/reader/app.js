@@ -2127,34 +2127,44 @@ const quick = quickMenu({
 });
 // Where the pointer last was over the pages: Z opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
-let penHover = null;
+let penHover = null, lastPenButtons = 0, penMenuAt = 0;
+// A pen's button, however the browser reports it: Android gives the S Pen button as the
+// right button (2), some pens as the eraser bit (32) or the middle one (4); the tip is 1.
+const penButton = (buttons) => (buttons & ~1) !== 0;
+const onPages = (e) => doc && $("viewport").contains(e.target);
+function penMenu(e) {
+  penMenuAt = Date.now();
+  if (!quick.isOpen) quick.open(e.clientX, e.clientY);
+}
 document.addEventListener("pointermove", (e) => {
   lastPointer = [e.clientX, e.clientY];
+  if (e.pointerType !== "pen") return;
   // A pen hovering over the pages (no contact): Shift opens the menu where it points.
-  if (e.pointerType === "pen" && !e.buttons && $("viewport").contains(e.target)) penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
-  // A pen's side button pressed while it hovers.
-  if (e.pointerType === "pen" && e.buttons & 2 && !(lastPenButtons & 2) && doc && !quick.isOpen && $("viewport").contains(e.target)) quick.open(e.clientX, e.clientY);
-  if (e.pointerType === "pen") lastPenButtons = e.buttons;
+  if (!e.buttons && onPages(e)) penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
+  // Its button pressed while it hovers, or in the middle of a stroke: the menu.
+  if (penButton(e.buttons) && !penButton(lastPenButtons) && onPages(e)) penMenu(e);
+  lastPenButtons = e.buttons;
 }, { passive: true, capture: true });
-let lastPenButtons = 0, penMenuAt = 0;
 document.addEventListener("pointerdown", (e) => {
   lastPointerType = e.pointerType;
-  // A pen's side button (the S Pen button, a Wacom barrel button) on the page: the menu,
-  // never a right-click that removes what is under it.
-  // …and Shift + pen, for pens without a button: Shift held as the pen touches the page.
-  if (e.pointerType === "pen" && (e.button === 2 || (e.buttons & 2 && e.button !== 0) || (e.shiftKey && e.button === 0)) && doc && $("viewport").contains(e.target)) {
+  if (e.pointerType !== "pen" || !onPages(e)) return;
+  lastPenButtons = e.buttons;
+  // The pen's button as it touches the page (never the right-click that removes what is
+  // under it), or Shift + pen for pens without a button.
+  if (e.button > 0 || penButton(e.buttons) || e.shiftKey) {
     e.preventDefault();
     e.stopPropagation();
-    penMenuAt = Date.now();
-    quick.open(e.clientX, e.clientY);
+    penMenu(e);
   }
 }, true);
+document.addEventListener("pointerup", (e) => { if (e.pointerType === "pen") lastPenButtons = e.buttons; }, true);
+// Some Android browsers turn the S Pen button into a long press: its contextmenu.
 document.addEventListener("contextmenu", (e) => {
-  if (!doc || !$("viewport").contains(e.target)) return;
+  if (!onPages(e)) return;
   if ((e.pointerType || lastPointerType) !== "pen" && Date.now() - penMenuAt > 800) return;
   e.preventDefault();
   e.stopPropagation();
-  if (!quick.isOpen) quick.open(e.clientX, e.clientY);
+  penMenu(e);
 }, true);
 let quickKeyAt = 0;
 const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
@@ -4023,6 +4033,27 @@ $("shortcutsOpen").onclick = () => {
   $("shortcutsDialog").showModal();
 };
 $("shortcutsClose").onclick = () => $("shortcutsDialog").close();
+// Help → Test pen and stylus: what the browser reports for a pen (its type, buttons and
+// pressure), so a pen button that does not open the quick menu can be told apart.
+{
+  const pad = $("penTestPad"), log = $("penTestLog"), lines = [];
+  const note = (text) => {
+    if (lines.at(-1)?.text === text) { lines.at(-1).count++; } else lines.push({ text, count: 1 });
+    while (lines.length > 14) lines.shift();
+    log.replaceChildren(...lines.map((l) => { const li = document.createElement("li"); li.textContent = l.count > 1 ? `${l.text} ×${l.count}` : l.text; return li; }));
+  };
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"])
+    pad.addEventListener(type, (e) => {
+      e.preventDefault();
+      note(`${type} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
+    });
+  pad.addEventListener("contextmenu", (e) => { e.preventDefault(); note(`contextmenu · ${e.pointerType || "?"} · button ${e.button}`); });
+  pad.addEventListener("touchstart", (e) => note(`touchstart · ${[...e.changedTouches].map((t) => t.touchType || "direct").join(", ")}`), { passive: true });
+  $("penTestDialog").addEventListener("keydown", (e) => { if (e.key !== "Escape") note(`key · ${e.key} (${e.code})`); });
+  $("penTestOpen").onclick = () => { closeMenus(); lines.length = 0; log.replaceChildren(); $("penTestDialog").showModal(); };
+  $("penTestClose").onclick = () => $("penTestDialog").close();
+  $("penTestCopy").onclick = () => navigator.clipboard.writeText(lines.map((l) => l.text + (l.count > 1 ? ` ×${l.count}` : "")).join("\n")).then(() => status("Copied."), () => status("Select the lines and copy them.", true));
+}
 $("studyCards").onclick = () => study.cards();
 $("studyQuiz").onclick = () => study.quiz();
 $("studyOpenDeck").onclick = () => study.saved();

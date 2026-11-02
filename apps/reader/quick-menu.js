@@ -32,7 +32,7 @@ export function moved(list, from, to) {
   return out;
 }
 
-const INNER = 66, OUTER = 124, SIZE = 44, HOLD_MS = 450, SLOP = 8;
+const INNER = 50, OUTER = 94, SIZE = 36, HOLD_MS = 450, SLOP = 8;
 
 // `inner()` and `outer()` return [{ key?, label, icon (Node), swatch?, active?(), run(),
 // stay?() }]; they are asked again after each choice, so the outer ring follows the tool.

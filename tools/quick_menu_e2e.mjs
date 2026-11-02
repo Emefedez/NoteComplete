@@ -111,6 +111,24 @@ try {
   await p.waitForSelector('.quick-menu');
   await p.keyboard.press('Escape');
   console.log('· Shift + pen opens it at the pen (touching or hovering)');
+  // The button however it is reported: pressed while hovering (right button, eraser bit),
+  // or in the middle of a stroke.
+  for (const buttons of [2, 4]) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 70, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 72, y: at[1] + 30, button: 'none', buttons, pointerType: 'pen' });
+    await p.waitForSelector('.quick-menu', { timeout: 3000 });
+    await p.keyboard.press('Escape');
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 74, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
+  }
+  console.log('· a pen button pressed while hovering opens it (right or middle button bit)');
+  // Help → Test pen and stylus lists what the pen reports.
+  await p.evaluate(() => document.getElementById('penTestOpen').click());
+  const padBox = await p.locator('#penTestPad').boundingBox();
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: padBox.x + 40, y: padBox.y + 40, button: 'right', buttons: 2, clickCount: 1, pointerType: 'pen' });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: padBox.x + 40, y: padBox.y + 40, button: 'right', buttons: 0, clickCount: 1, pointerType: 'pen' });
+  assert.match(await p.textContent('#penTestLog'), /pointerdown · pen · button 2 · buttons 2/);
+  await p.click('#penTestClose');
+  console.log('· Help → Test pen and stylus shows what the pen reports');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.
@@ -131,6 +149,9 @@ try {
   assert.equal(await tool(t), 'shape');
   console.log('· two fingers held still open it on a touch screen');
   console.log('Quick menu end to end: passed.');
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
 } finally {
   await b.close();
   await server.close?.();

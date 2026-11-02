@@ -1,4 +1,9 @@
-## What's new in 1.1.6
+## What's new in 1.1.7
+
+- **Quick menu**: about a quarter smaller. The S Pen button opens it however Android reports it: pressed while hovering, while touching, or in the middle of a stroke.
+- **Help → Test pen and stylus**: shows what your pen reports (its type, buttons and pressure), to check its button and pressure.
+
+### In 1.1.6
 
 - **Quick menu**: a ring of tools around your pen. Tap a tool to choose it, and its settings appear around it (colours, widths, pressure, modes, sizes, shapes and fill). Hold a tool to move it on the ring. Hold **Z** and point, **Shift + pen**, press a pen's side button (S Pen, Wacom), or hold two fingers still on the page (iPad and touch screens). Safari does not give web pages the Apple Pencil Pro squeeze.
 - **Keys and gestures page** in the welcome notebook, and two-finger hold, two- and three-finger taps listed in Help → Keyboard shortcuts.
