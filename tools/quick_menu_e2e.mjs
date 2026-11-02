@@ -258,6 +258,26 @@ try {
   await p.keyboard.press('Shift+T');
   assert.equal(await p.isVisible('#toolbar .segmented'), true, 'shown again');
   console.log('· Shift + T hides and shows the tool bar');
+  // Holding the menu's × does the same, and the menu stays; a tap on it closes the menu.
+  { const sh = await p.locator('.sheet').first().boundingBox(); await p.mouse.move(sh.x + 300, sh.y + 300); }
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu .qm-centre');
+  const holdCentre = async () => {
+    const c = await p.locator('.quick-menu .qm-centre').boundingBox();
+    await p.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
+    await p.mouse.down(); await sleep(450); await p.mouse.up();
+    await sleep(100);
+  };
+  await holdCentre();
+  assert.equal(await p.isVisible('#toolbar .segmented'), false, 'held ×: tool bar hidden');
+  assert.equal(await p.locator('.quick-menu').count(), 1, 'the menu stays open');
+  await holdCentre();
+  assert.equal(await p.isVisible('#toolbar .segmented'), true, 'held again: shown');
+  assert.equal(await p.locator('.quick-menu').count(), 1, 'still open');
+  await sleep(450);
+  await p.click('.quick-menu .qm-centre');
+  await p.waitForFunction(() => !document.querySelector('.quick-menu'));
+  console.log('· holding the menu’s × shows or hides the tool bar; a tap closes the menu');
   // Grab is on the ring with the tool bar's icon, added at the end of an order saved before it.
   await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');

@@ -69,7 +69,8 @@ const count = (sections) => SECTIONS.reduce((n, k) => n + (sections[k]?.length |
 // follows the tool. A choice whose stay() is true keeps the menu open. Any item can be held
 // and dragged to another place in its own ring or section (onReorder(section, keys)); an
 // item with edit() (a colour) opens it when held without moving, or on a right-click.
-export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {}, onClose = () => {} }) {
+// onCentreHold(): the × held (the tool bar shown or hidden, app.js).
+export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {}, onClose = () => {}, onCentreHold = null }) {
   let root = null, hovered = null, centre = null, lift = null;
   const list = (source) => (typeof source === 'function' ? source() : source);
   function draw() {
@@ -116,7 +117,42 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     close_.textContent = '×';
     close_.style.left = `${x - SIZE / 2}px`;
     close_.style.top = `${y - SIZE / 2}px`;
-    close_.onclick = (e) => { e.stopPropagation(); close(); };
+    close_.onclick = (e) => {
+      e.stopPropagation();
+      if (close_.dataset.held) { delete close_.dataset.held; return; }
+      close();
+    };
+    // Held: the tool bar is shown or hidden (the menu stays, so a second hold undoes it).
+    if (onCentreHold) {
+      close_.title = 'Close (Esc) · hold to show or hide the tool bar';
+      let forget = 0;
+      close_.addEventListener('pointerdown', (down) => {
+        if (down.button !== 0) return;
+        down.stopPropagation();
+        // A new press: the last one's flag must not be cleared in the middle of this one.
+        clearTimeout(forget);
+        delete close_.dataset.held;
+        const start = [down.clientX, down.clientY];
+        const timer = setTimeout(() => {
+          close_.dataset.held = '1';
+          navigator.vibrate?.(8);
+          onCentreHold();
+        }, HOLD_MS);
+        const move = (e) => { if (Math.hypot(e.clientX - start[0], e.clientY - start[1]) > SLOP) end(); };
+        const end = () => {
+          clearTimeout(timer);
+          removeEventListener('pointermove', move, true);
+          removeEventListener('pointerup', end, true);
+          removeEventListener('pointercancel', end, true);
+          // A touch lift sends no click on some browsers: forget the hold after it.
+          forget = setTimeout(() => { delete close_.dataset.held; }, 400);
+        };
+        addEventListener('pointermove', move, true);
+        addEventListener('pointerup', end, true);
+        addEventListener('pointercancel', end, true);
+      });
+      close_.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
     root.append(close_);
   }
   // Holding an item lifts it; dragged, it drops into the nearest place of its own ring or
