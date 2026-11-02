@@ -54,7 +54,9 @@ export class TouchGesture {
       // the pages start moving with the fingers instead of after a dead zone.
       let from = a.last;
       if (!a.mode && a.origin.d && m.d) {
-        if (Math.abs(m.d / a.origin.d - 1) > ZOOM_START) { a.mode = 'zoom'; from = a.origin; }
+        // A zoom also needs the gap to change by a few px: fingers held close together shift
+        // that much as they settle on the glass (iPad), and that is still a hold.
+        if (Math.abs(m.d / a.origin.d - 1) > ZOOM_START && Math.abs(m.d - a.origin.d) > PAN_START) { a.mode = 'zoom'; from = a.origin; }
         else if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > PAN_START) { a.mode = 'pan'; from = a.origin; }
       }
       if (a.mode === 'zoom' && from.d && m.d && m.d !== from.d) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / from.d });
@@ -84,11 +86,15 @@ export class TouchGesture {
   }
 }
 
-// Two fingers that mean it: they land within 250 ms of each other and neither is as large
-// as a palm resting on the screen (radius over 30 CSS px, where the browser reports it).
+// Two fingers that mean it: they land within 250 ms of each other and neither is clearly a
+// palm resting on the screen. Safari on iPad reports a fingertip's radius in coarse steps
+// (about 21, 31 or 42 px, larger when pressed flat), so only a radius well past that is a
+// palm. A radius that is missing or 0 (not reported) counts as a finger.
+export const PALM_RADIUS = 55;
 export function deliberate(touches, gapMs) {
   if (gapMs > 250) return false;
-  return [...touches].every((t) => !(t.radiusX > 30 || t.radiusY > 30));
+  const radius = (t) => Math.max(Number(t.radiusX) || 0, Number(t.radiusY) || 0);
+  return [...touches].every((t) => radius(t) <= PALM_RADIUS);
 }
 
 // Fingers only: an Apple Pencil's touches (touchType "stylus") are left to the pointer events.
@@ -116,9 +122,15 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
     if (!enabled()) { g.reset(); return; }
     if (!touches.length) return;
     if (touches.length > 1) e.preventDefault();
+    // Every finger down is new: a new gesture. Fingers that land together come in one event
+    // (often on iPad), and the last gesture may never have heard its fingers lift (its
+    // touchend went to a part of the page redrawn meanwhile); neither must spoil this one.
+    if (touches.length === fingers(e.changedTouches).length) {
+      g.reset();
+      firstAt = e.timeStamp;
+    }
     apply(g.start(touches, e.timeStamp));
     clearTimeout(holdTimer);
-    if (touches.length === 1) firstAt = e.timeStamp;
     // Two fingers held still open the quick menu, if they look deliberate: both landed
     // together, neither is a resting palm, and no stylus was just writing (palm rejection
     // on iPad with the Pencil).
@@ -136,6 +148,9 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
   });
   const end = (e) => { clearTimeout(holdTimer); if (g.active) apply(g.end(fingers(e.touches), e.timeStamp)); };
   on('touchend', end);
-  on('touchcancel', () => g.reset());
+  on('touchcancel', () => { clearTimeout(holdTimer); g.reset(); });
+  // Safari's own pinch (its gesture events) would zoom the whole page and can cancel the
+  // touches; two fingers are handled above.
+  on('gesturestart', (e) => e.preventDefault());
   return g;
 }

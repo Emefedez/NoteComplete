@@ -203,7 +203,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     // Letting go of the key over an item chooses it and closes the menu; elsewhere the
     // menu stays open to click. Returns whether one was chosen.
     release() { if (!root || !hovered) return false; pick(hovered, true); return true; },
-    // Keys while open: Esc closes, 1–8 choose an inner item.
+    // Keys while open: Esc closes, 1–9 choose an inner item.
     key(e) {
       if (!root) return false;
       if (e.key === 'Escape') { close(); return true; }
