@@ -32,3 +32,18 @@ Carrying the edit history inside `.notecomp` (the original note plus `edits.json
 **Update (1.1.11):** new notes are created as `.nfedit` (or `.noteful`); `.notecomp` and Noteful + Markdown are exports, and `.notepart` is no longer offered (it was written like `.notecomp`). Both keep opening. The New document dialog and File → Export have a **?** that explains the formats.
 
 `.nfedit` stays as it is: offered by **File → Save project**, opened everywhere, and unchanged in format. `.notecomp` remains the everyday format. This page should be revisited if the native writer is verified against Noteful, since that removes the main reason a lossless copy is needed.
+
+## Other files NoteComplete opens
+
+These are read, never written back over.
+
+| File | Opens as |
+| --- | --- |
+| PDF, PNG, JPEG, WebP | A new note with the file as its pages, to write on |
+| `.html`, `.htm` | The page itself, in its own view |
+| `.md`, `.txt` and other text (source code, `.json`, `.log`…) | A text document: Markdown formatted, other text as written; **Edit** saves it back |
+| `.docx` (Word), `.odt` (OpenDocument text) | Markdown, read-only: headings, paragraphs, lists, tables, links, bold, italic, footnotes. Layout, pictures (named only) and comments are left out |
+| `.xlsx` (Excel), `.ods` (OpenDocument spreadsheet) | Markdown, read-only: a `##` heading per sheet and its cells as a table, as formatted in the file (dates, decimals). Formulas show their last result. Up to 1000 rows and 50 columns a sheet, with a note when a sheet is cut |
+| `.csv`, `.tsv` | Markdown, read-only: one table, the first row as its header. Quoted fields may hold commas, quotes and line breaks; `;` is used when the first line has more of them than commas |
+
+The converted files behave like an opened `.md` file (Find, study tools, MD on or off, **File → New from Markdown…** starts from them), except that there is no **Edit**: **Save** writes a `.md` copy instead. `.odt` and CSV are read by the app itself; `.docx` goes through [mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause) and `.xlsx`/`.ods` through [SheetJS](https://sheetjs.com) Community Edition (Apache-2.0). Both are fetched the first time such a file is opened, then kept for offline use.

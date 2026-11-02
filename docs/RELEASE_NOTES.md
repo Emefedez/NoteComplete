@@ -1,4 +1,13 @@
-## What's new in 1.1.17
+## What's new in 1.1.18
+
+- **Open Word, OpenDocument, Excel and CSV files**:
+  - Formats: `.docx`, `.odt`, `.xlsx`, `.ods`, `.csv` and `.tsv` open as Markdown, read-only, to read, search and study.
+  - What comes through: headings, lists, tables, links, bold, italic and footnotes; pictures show as a placeholder.
+  - Spreadsheets: each sheet becomes a table, the first 1000 rows and 50 columns.
+  - Saving: *Save* downloads the Markdown and never touches the original. *File → New from Markdown…* turns it into a note.
+  - The readers load only when such a file is opened.
+
+### In 1.1.17
 
 - **Text no longer disappears when you finish it.** The typed text stays where it is, as typed, until the page's new drawing shows it. On PDF pages this used to leave a visible gap. It also holds for everyone in a sharing session, and an edited box no longer flashes its old text.
 - **Sharing:** someone else's stroke on the same page no longer closes the text box you are typing in.
