@@ -98,6 +98,15 @@ export const RASTERS_KEPT = 3;
 //   whatever the ink. The browser keeps decoded pictures in a cache it empties only when
 //   memory runs short, so this is for pages with much ink. The PNG is encoded in a worker
 //   (raster-encoder.js), not with toDataURL here: that took 60–100 ms per page.
+// A canvas reaches the screen as one GPU texture, and many Android tablets (Xiaomi Pad 5) take
+// none larger than 4096 px a side: a larger canvas is not drawn at all. A picture is drawn in
+// tiles, so a raster that large (a page zoomed in) is shown as a picture whatever the ink.
+export const CANVAS_MAX_SIDE = 4096;
+export const CANVAS_MAX_PIXELS = 16_000_000;
+export function rasterKind(kind, target) {
+  const large = Math.max(target.width, target.height) > CANVAS_MAX_SIDE || target.width * target.height > CANVAS_MAX_PIXELS;
+  return kind === "canvas" && large ? "url" : kind;
+}
 
 // A canvas for a second place on screen (one canvas can be in only one place).
 export function copyCanvas(source) {
@@ -181,8 +190,9 @@ export class PdfBackgrounds {
     this.drawing = new Map();
     this.closed = false;
   }
-  // The PDF page for the page view, as a canvas or a blob: URL (`kind`, see above). The last
-  // RASTERS_KEPT stay, for scrolling back; release() lets go of one no longer shown.
+  // The PDF page for the page view, as a canvas or a blob: URL (`kind`, see above; a canvas
+  // too large for some screens comes as a URL). The last RASTERS_KEPT stay, for scrolling
+  // back; release() lets go of one no longer shown.
   async raster(background, size, displayWidth = size[0], settings, kind = "canvas") {
     const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings, globalThis.devicePixelRatio || 1, kind]);
     const kept = this.rasters.get(key);
@@ -204,7 +214,7 @@ export class PdfBackgrounds {
       let shown;
       try {
         await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
-        shown = kind === "url" ? URL.createObjectURL(await pngOf(canvas)) : await settled(canvas);
+        shown = rasterKind(kind, target) === "url" ? URL.createObjectURL(await pngOf(canvas)) : await settled(canvas);
       } finally {
         if (shown !== canvas) canvas.width = canvas.height = 0;
         page.cleanup();
