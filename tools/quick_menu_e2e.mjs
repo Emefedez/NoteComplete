@@ -120,14 +120,47 @@ try {
   console.log('· Shift + pen opens it at the pen (touching or hovering)');
   // The button however it is reported: pressed while hovering (right button, eraser bit),
   // or in the middle of a stroke.
-  for (const buttons of [2, 4]) {
+  for (const buttons of [1, 2, 4]) {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 70, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 72, y: at[1] + 30, button: 'none', buttons, pointerType: 'pen' });
     await p.waitForSelector('.quick-menu', { timeout: 3000 });
     await p.keyboard.press('Escape');
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 74, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
   }
-  console.log('· a pen button pressed while hovering opens it (right or middle button bit)');
+  console.log('· a pen button pressed while hovering opens it (Android buttons 1, right or middle bit)');
+  // Button held, then a tap: Chromium sends only a contextmenu with no pointer type.
+  const removed = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 80, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
+  await p.evaluate(([x, y]) => document.elementFromPoint(x, y).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y })), [at[0] + 80, at[1] + 30]);
+  await p.waitForSelector('.quick-menu', { timeout: 3000 });
+  await p.keyboard.press('Escape');
+  await sleep(300);
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length), removed, 'the hold-and-tap removes nothing');
+  console.log('· the button held and a tap (contextmenu with no pointer type) opens it');
+  // View → Pen button…: hover, press twice, tap with it held; then saved for this browser.
+  await p.evaluate(() => document.getElementById('penSetupOpen').click());
+  const pad2 = await p.locator('#penSetupPad').boundingBox();
+  const hover = (buttons) => cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pad2.x + 50 + Math.random() * 20, y: pad2.y + 50, button: 'none', buttons, pointerType: 'pen' });
+  await p.click('#penSetupStart');
+  for (let i = 0; i < 6; i++) { await hover(0); await sleep(150); }
+  await p.waitForFunction(() => document.getElementById('penSetupStep').textContent.startsWith('2 of 3'), null, { timeout: 4000 });
+  for (const b of [1, 1, 0, 1, 0]) { await hover(b); await sleep(120); }
+  await p.waitForFunction(() => document.getElementById('penSetupStep').textContent.startsWith('3 of 3'), null, { timeout: 8000 });
+  await p.evaluate(() => document.getElementById('penSetupPad').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  await p.waitForFunction(() => document.getElementById('penSetupStep').textContent.startsWith('Done'), null, { timeout: 8000 });
+  assert.match(await p.textContent('#penSetupResult'), /hovers \(reported as buttons 1\) and when you tap/);
+  await p.click('#penSetupLongPress');
+  await p.click('#penSetupSave');
+  const saved = JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-pen-button')));
+  assert.equal(saved.hoverMask, 1);
+  assert.equal(saved.longPress, true);
+  console.log('· View → Pen button… learns the button and saves it');
+  // The opt-in long-press: the pen held still on the page opens the menu.
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at[0] + 90, y: at[1] + 60, button: 'left', buttons: 1, clickCount: 1, pointerType: 'pen' });
+  await p.waitForSelector('.quick-menu', { timeout: 2000 });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at[0] + 90, y: at[1] + 60, button: 'left', buttons: 0, clickCount: 1, pointerType: 'pen' });
+  await p.keyboard.press('Escape');
+  console.log('· with the long-press on, holding the pen still opens it');
   // Help → Test pen and stylus lists what the pen reports.
   await p.evaluate(() => document.getElementById('penTestOpen').click());
   const padBox = await p.locator('#penTestPad').boundingBox();

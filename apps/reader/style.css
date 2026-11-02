@@ -2677,3 +2677,5 @@ body.tablet-waiting #drop::after { content: "Waiting for the computer’s note�
 /* Help → Test pen and stylus */
 .pen-test-pad { height: 160px; display: grid; place-items: center; border: 2px dashed var(--line); border-radius: var(--radius); color: var(--muted); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .pen-test-log { min-height: 8em; max-height: 14em; overflow: auto; margin: 8px 0 0; padding-left: 1.6em; font: 12px/1.5 ui-monospace, monospace; }
+.pen-setup-step { font-weight: 600; }
+#penSetupDialog .check-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }

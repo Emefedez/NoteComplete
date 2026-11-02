@@ -55,6 +55,7 @@ import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
+import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -2131,48 +2132,77 @@ const quick = quickMenu({
   onOpen: () => cancelGesture(),
   // The pen's button counts as released once the menu closes, so the next press opens it
   // again even if its release was never reported (it happened over the menu, or not at all).
-  onClose: () => { lastPenButtons = 0; },
+  onClose: () => penBtn.reset(),
 });
 // Where the pointer last was over the pages: Shift + S opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
-let penHover = null, lastPenButtons = 0, penMenuAt = 0;
-// A pen's button, however the browser reports it: Android gives the S Pen button as the
-// right button (2), some pens as the eraser bit (32) or the middle one (4); the tip is 1.
-const penButton = (buttons) => (buttons & ~1) !== 0;
+// A pen's side button (pen-button.js, docs/S-PEN-BUTTON.md): on Android the S Pen button
+// only shows while the pen hovers (pointermove buttons 0 → nonzero) or as a contextmenu
+// with no pointer type when the user holds it and taps; desktop pens report button 2 or 5.
+// The "Pen button" dialog can calibrate it on this device.
+let penProfile = loadPenProfile();
+const penBtn = penButtonDetector(() => penProfile);
+let penHover = null, penMenuAt = 0, penHold = null;
 const onPages = (e) => doc && $("viewport").contains(e.target);
+const fields = (e) => ({ type: e.type, pointerType: e.pointerType, button: e.button, buttons: e.buttons, time: e.timeStamp });
 function penMenu(e) {
   penMenuAt = Date.now();
+  clearTimeout(penHold?.timer);
+  penHold = null;
   if (!quick.isOpen) quick.open(e.clientX, e.clientY);
 }
 document.addEventListener("pointermove", (e) => {
   lastPointer = [e.clientX, e.clientY];
   if (e.pointerType !== "pen") return;
-  // A pen hovering over the pages (no contact): Shift opens the menu where it points.
-  if (!e.buttons && onPages(e)) penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
-  // Its button pressed while it hovers, or in the middle of a stroke: the menu.
-  if (penButton(e.buttons) && !penButton(lastPenButtons) && onPages(e)) penMenu(e);
-  lastPenButtons = e.buttons;
+  if (!e.buttons && onPages(e)) {
+    // A pen hovering over the pages: Shift opens the menu where it points, and the pages
+    // stop selecting text (the button's hold-and-tap would otherwise pick a word).
+    penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
+    document.body.classList.add("touch-pointer");
+  }
+  if (penHold && Math.hypot(e.clientX - penHold.x, e.clientY - penHold.y) > 4) { clearTimeout(penHold.timer); penHold = null; }
+  if (penBtn.pointer(fields(e)) === "menu" && onPages(e)) penMenu(e);
 }, { passive: true, capture: true });
 document.addEventListener("pointerdown", (e) => {
   lastPointerType = e.pointerType;
-  if (e.pointerType !== "pen" || !onPages(e)) return;
-  lastPenButtons = e.buttons;
+  if (e.pointerType !== "pen") return;
+  const button = penBtn.pointer(fields(e)) === "menu";
+  if (!onPages(e)) return;
   // The pen's button as it touches the page (never the right-click that removes what is
   // under it), or Shift + pen for pens without a button.
-  if (e.button > 0 || penButton(e.buttons) || e.shiftKey) {
+  if (button || e.shiftKey) {
     e.preventDefault();
     e.stopPropagation();
     penMenu(e);
+    return;
+  }
+  // Opt-in: the pen held still on the page opens the menu.
+  if (penProfile?.longPress) {
+    const at = { x: e.clientX, y: e.clientY, clientX: e.clientX, clientY: e.clientY };
+    penHold = { x: e.clientX, y: e.clientY, timer: setTimeout(() => { penHold = null; cancelGesture(); penMenu(at); }, 550) };
   }
 }, true);
-for (const type of ["pointerup", "pointercancel", "pointerleave"]) document.addEventListener(type, (e) => { if (e.pointerType === "pen") lastPenButtons = e.buttons; }, true);
-// Some Android browsers turn the S Pen button into a long press: its contextmenu.
+for (const type of ["pointerup", "pointercancel"]) document.addEventListener(type, (e) => {
+  if (e.pointerType !== "pen") return;
+  penBtn.pointer(fields(e));
+  if (penHold) { clearTimeout(penHold.timer); penHold = null; }
+}, true);
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
-  if ((e.pointerType || lastPointerType) !== "pen" && Date.now() - penMenuAt > 800) return;
+  const button = penBtn.contextmenu({ pointerType: e.pointerType || "", time: e.timeStamp }) === "menu";
+  // Our menu just opened from the pen: the browser's own menu must not follow it.
+  if (!button && Date.now() - penMenuAt > 800) return;
   e.preventDefault();
   e.stopPropagation();
+  // The button held and a tap: Chromium also selected a word there.
+  window.getSelection()?.removeAllRanges();
   penMenu(e);
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (penBtn.key(e) !== "menu" || !doc || quick.isOpen) return;
+  e.preventDefault();
+  const at = penHover && Date.now() - penHover.at < 1500 ? penHover : { x: innerWidth / 2, y: innerHeight / 2 };
+  penMenu({ clientX: at.x, clientY: at.y });
 }, true);
 let quickKeyAt = 0;
 const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
@@ -4044,6 +4074,77 @@ $("shortcutsOpen").onclick = () => {
   $("shortcutsDialog").showModal();
 };
 $("shortcutsClose").onclick = () => $("shortcutsDialog").close();
+// View → Pen button…: learns what this pen's side button sends in this browser
+// (pen-button.js profileFrom), plus the opt-in long-press and an off switch.
+let penSetupRun = 0, penSetupFound = null;
+function openPenSetup() {
+  closeMenus();
+  penSetupFound = null;
+  $("penSetupResult").textContent = penProfile?.v ? describeProfile(penProfile) : "";
+  $("penSetupLongPress").checked = !!penProfile?.longPress;
+  $("penSetupOff").checked = !!penProfile?.off;
+  $("penSetupStart").textContent = "Start";
+  $("penSetupDialog").showModal();
+}
+$("penSetupOpen").onclick = openPenSetup;
+$("penSetupClose").onclick = () => { penSetupRun++; $("penSetupDialog").close(); };
+$("penSetupDialog").addEventListener("close", () => { penSetupRun++; });
+$("penSetupStart").onclick = async () => {
+  const run = ++penSetupRun, pad = $("penSetupPad"), step = $("penSetupStep");
+  const seen = { hover: [], taps: [], keys: [] };
+  let phase = "baseline";
+  const wait = (ms, until = () => false) => new Promise((done) => {
+    const started = Date.now();
+    const tick = () => (run !== penSetupRun || until() || Date.now() - started > ms ? done() : setTimeout(tick, 50));
+    tick();
+  });
+  // Hovering means no pointerdown since the last pointerup (Android reports the button as
+  // buttons 1 while hovering, the same as a touching tip).
+  let touching = false;
+  const down = (e) => { if (e.pointerType === "pen") touching = true; };
+  const up = (e) => { if (e.pointerType === "pen") touching = false; };
+  const move = (e) => { if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure }); };
+  const menu = (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); seen.taps.push({ phase, pointerType: e.pointerType || "", button: e.button }); };
+  const key = (e) => seen.keys.push({ phase, key: e.key, code: e.code });
+  pad.addEventListener("pointermove", move);
+  pad.addEventListener("pointerdown", down);
+  addEventListener("pointerup", up, true);
+  addEventListener("pointercancel", up, true);
+  pad.addEventListener("contextmenu", menu);
+  addEventListener("keydown", key, true);
+  try {
+    $("penSetupStart").textContent = "Try again";
+    $("penSetupResult").textContent = "";
+    step.textContent = "1 of 3 · Hold your pen just above the box, without touching it.";
+    await wait(2500);
+    phase = "press";
+    step.textContent = "2 of 3 · Still without touching, press and release the side button, twice.";
+    const presses = () => seen.hover.filter((m) => m.phase === "press" && m.buttons).length;
+    await wait(6000, () => presses() >= 2);
+    await wait(400);
+    phase = "tap";
+    step.textContent = "3 of 3 · Hold the side button and tap the box once.";
+    await wait(6000, () => seen.taps.some((t) => t.phase === "tap"));
+    if (run !== penSetupRun) return;
+    penSetupFound = profileFrom({ hover: seen.hover, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
+    step.textContent = "Done. Save to use it, or Try again.";
+    $("penSetupResult").textContent = describeProfile(penSetupFound);
+  } finally {
+    pad.removeEventListener("pointermove", move);
+    pad.removeEventListener("pointerdown", down);
+    removeEventListener("pointerup", up, true);
+    removeEventListener("pointercancel", up, true);
+    pad.removeEventListener("contextmenu", menu);
+    removeEventListener("keydown", key, true);
+  }
+};
+$("penSetupSave").onclick = () => {
+  const profile = { ...(penSetupFound || penProfile || { v: 1 }), v: 1, longPress: $("penSetupLongPress").checked, off: $("penSetupOff").checked };
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* Kept for this session only. */ }
+  penProfile = profile;
+  $("penSetupDialog").close();
+  status(profile.off ? "Pen button off." : "Pen button saved.");
+};
 // Help → Test pen and stylus: what the browser reports for a pen (its type, buttons and
 // pressure), so a pen button that does not open the quick menu can be told apart.
 {
@@ -4063,6 +4164,7 @@ $("shortcutsClose").onclick = () => $("shortcutsDialog").close();
   $("penTestDialog").addEventListener("keydown", (e) => { if (e.key !== "Escape") note(`key · ${e.key} (${e.code})`); });
   $("penTestOpen").onclick = () => { closeMenus(); lines.length = 0; log.replaceChildren(); $("penTestDialog").showModal(); };
   $("penTestClose").onclick = () => $("penTestDialog").close();
+  $("penTestSetup").onclick = () => { $("penTestDialog").close(); openPenSetup(); };
   $("penTestCopy").onclick = () => navigator.clipboard.writeText(lines.map((l) => l.text + (l.count > 1 ? ` ×${l.count}` : "")).join("\n")).then(() => status("Copied."), () => status("Select the lines and copy them.", true));
 }
 $("studyCards").onclick = () => study.cards();
