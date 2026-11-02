@@ -380,7 +380,8 @@ async function load(file, preparedDocument = null) {
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);
-    notes?.load(find.fingerprint);
+    // A guest keeps the session's shared notes (collab.js binds them), not the note's own.
+    if (collab?.role !== "guest") notes?.load(find.fingerprint);
     const token = ++epoch;
     revision++;
     doc = result;
@@ -1611,7 +1612,16 @@ const notePen = (e) => {
 for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
+let viewOnlyToldAt = -Infinity;
 function pointerDown(e, p) {
+  // A view-only guest: say why nothing is drawn (at most every few seconds), and keep Pan.
+  if (collab?.readOnly && (e.pointerType === "pen" || tool !== "pan")) {
+    if (e.timeStamp - viewOnlyToldAt > 4000) {
+      viewOnlyToldAt = e.timeStamp;
+      status("This note is shared view-only: you can read it and its notes, and follow along. To draw, ask the host to share it for editing.", true);
+    }
+    if (tool !== "pan") { chooseTool("pan"); return; }
+  }
   if (thumbsDue.size) { clearTimeout(thumbsTimer); thumbsTimer = setTimeout(refreshThumbnails, 1200); }
   if (gesture) {
     if (e.pointerId === gesture.id) return;
