@@ -103,6 +103,7 @@
           <button id="themeSystem" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
           <button id="resetToolOrder" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
+          <button id="penSetupOpen" title="Teach NoteComplete your pen's side button, or choose another way to open the quick menu">Pen button…</button>
           <hr />
           <button data-proxy="zoomIn">Zoom in<kbd>Ctrl +</kbd></button>
           <button data-proxy="zoomOut">Zoom out<kbd>Ctrl −</kbd></button>
@@ -1125,7 +1126,18 @@
   <p class="muted">Touch, hover and press your pen's button over the box. Each line is what this browser reports; a pen button should open the quick menu on the pages. If it does not, these lines say why.</p>
   <div id="penTestPad" class="pen-test-pad">Pen here</div>
   <ol id="penTestLog" class="pen-test-log"></ol>
-  <div class="ocr-actions"><button id="penTestCopy" type="button">Copy</button><button id="penTestClose" type="button" class="primary">Close</button></div>
+  <div class="ocr-actions"><button id="penTestSetup" type="button">Set up the pen button…</button><button id="penTestCopy" type="button">Copy</button><button id="penTestClose" type="button" class="primary">Close</button></div>
+</dialog>
+
+<dialog id="penSetupDialog" class="deck-dialog" aria-labelledby="penSetupTitle">
+  <h2 id="penSetupTitle">Pen button</h2>
+  <p id="penSetupStep" class="pen-setup-step">The pen's side button opens the quick menu. Press <b>Start</b> and follow the steps over the box, so NoteComplete learns what your pen sends in this browser.</p>
+  <div id="penSetupPad" class="pen-test-pad">Pen here</div>
+  <p id="penSetupResult" class="muted" aria-live="polite"></p>
+  <label class="check-row"><input id="penSetupLongPress" type="checkbox" /> Holding the pen still on the page also opens the menu</label>
+  <label class="check-row"><input id="penSetupOff" type="checkbox" /> Turn the pen button off (Shift + pen, Shift + S and two fingers still work)</label>
+  <p class="muted">On Samsung devices, turn off <i>Open Air command with pen button</i> (Settings → Advanced features → S Pen → Air command), or Samsung takes the button while the pen hovers. Press the button while the pen hovers, or hold it and tap; a press while the pen touches the screen does not reach web pages.</p>
+  <div class="ocr-actions"><button id="penSetupStart" type="button">Start</button><button id="penSetupSave" type="button" class="primary">Save</button><button id="penSetupClose" type="button">Close</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

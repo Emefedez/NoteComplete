@@ -162,7 +162,7 @@ To open it:
 
 - **Keyboard**: hold **Shift + S**, point at an item and let go. Or press **Shift + S** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
 - **Shift + pen**: hold Shift as the pen touches the page, or press Shift while the pen hovers over it. The menu opens at the pen, and nothing is drawn.
-- **Pen side button**: press the S Pen button, or a Wacom pen's barrel button, while the pen touches or hovers over the page. This opens the menu instead of right-clicking. If yours does not, **Help → Test pen and stylus** shows what the pen reports. On Samsung devices, Air command may take the button for itself while the pen hovers; turn it off in Settings → Advanced features → S Pen.
+- **Pen side button**: on a computer, press a Wacom or Surface pen's barrel button on the page. On Android (Chrome, Brave), press the S Pen button while the pen **hovers** just above the page, or **hold it and tap**; a press while the pen touches the screen does not reach web pages. **View → Pen button…** learns what your pen sends in this browser, can let a pen held still open the menu instead, or turns the button off. On Samsung devices, turn off *Open Air command with pen button* (Settings → Advanced features → S Pen → Air command). **Help → Test pen and stylus** shows what the pen reports. [Details](S-PEN-BUTTON.md).
 - **Touch screens and iPad**: hold two fingers still on the page for half a second.
 
 The Apple Pencil Pro squeeze and the Pencil double-tap are not available to web pages in Safari, so on iPad use the two-finger hold.
