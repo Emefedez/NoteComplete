@@ -18,7 +18,9 @@ It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves th
 
 ### Read and annotate
 - **Everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images (crops included), typed text, tape, locked items, tags and recordings, up to notebooks of hundreds of pages.
-- **Edit**: pen (with stylus pressure), highlighter, eraser, shapes (outline, tint or solid fill), tape, text boxes, crop, layers, undo/redo; move, resize and lock items. The original file is never changed.
+- **Edit**: pen (stylus pressure, on or off), highlighter, eraser, shapes (outline, tint or solid fill), tape, text boxes, crop, layers, undo/redo; move, resize and lock items. The original file is never changed.
+- **Quick menu** (hold <kbd>Z</kbd>, <kbd>Shift</kbd> + pen, a pen's side button, or two fingers held still): a ring of tools around the pen; tap one and its colours, widths and modes appear around it. Hold a tool to move it on the ring.
+- **Touch and stylus**: two fingers scroll (with momentum) or pinch-zoom, a two-finger tap undoes and three redo; while a stylus is in use a finger scrolls, without one a finger draws. Strokes are smoothed, and quick strokes never wait for the page to redraw. Hold a tool in the bar to rearrange it.
 - **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size, saved as `.notecomp`, `.notepart` or `.noteful`.
 - **Pages**: add blank pages or pages from another PDF; resize a page from a menu or by dragging its borders.
 - **Select and copy text** from PDFs and recognized handwriting.
@@ -31,9 +33,9 @@ It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves th
 A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+ Page** ties a section to a page; the notes follow you as you turn pages, and Ask AI can read them. The **Scratchpad** (View → Scratchpad…) keeps AI conversations you want with the note. Saved with the note, or as one `.notecomp` file.
 
 ### Share notes and draw on a tablet
-- **Shared notes**: *Share* in the top bar (desktop) invites people on your network to write the Markdown notes with you, in a browser or in NoteComplete. Names and coloured cursors show who is where; when you end the session everyone keeps a copy.
-- **Your phone or tablet as a drawing tablet**: scan the QR code (or type the 6-digit code) and draw on the note open on your computer. The device shows just the note and a tool bar on the side you choose; it zooms on its own, and what you draw appears live on the computer and is saved there, with pen pressure, highlighter, eraser and undo.
-- Meant for a trusted local network; not yet tried on real phones and tablets ([details](docs/COLLABORATION.md)).
+- **Shared notes**: *Share* in the top bar (desktop) invites people to follow the note live and write its Markdown notes with you, in a browser or in NoteComplete; they draw on it too if you allow editing. Names and coloured cursors show who is where; when you end the session everyone keeps a copy.
+- **Your phone or tablet as a drawing tablet**: scan the QR code (or type the 6-digit code) and draw on the note open on your computer. The device shows just the note and a tool bar (along the top or bottom when held upright, at a side when held sideways); it zooms on its own, and what you draw appears live on the computer and is saved there, with pen pressure, highlighter, eraser and undo.
+- **Online access**: the local network by default; turn on online access for a temporary link through Cloudflare that works from other networks, for people and for a drawing tablet alike. On Linux the sharing panel shows the firewall command if phones cannot reach the local link ([details](docs/COLLABORATION.md)).
 
 <p align="center"><img src="docs/images/tablet.png" alt="A tablet drawing on the note: only the note and a tool bar on the left" width="31%"> <img src="docs/images/tablet-host.png" alt="The same strokes on the computer, saved as its own edits; chips for the people connected beside the title" width="67%"></p>
 <p align="center"><img src="docs/images/share.png" alt="The Sharing dialog: QR code and 6-digit code for a drawing tablet, the notes invite link, and the people connected" width="100%"></p>
@@ -104,15 +106,25 @@ Screenshots use the sample notes in [`samples/`](samples/).
 
 1. In Noteful, back up or export your notebooks to a Google Drive folder (or copy `.noteful` files to your computer any other way).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.
-3. Save your work with **File → Save project** (`.nfedit`, keeps the original plus your edits), or export from **File → Export**: `.noteful` (experimental: modified exports have not yet been verified in Noteful itself), the note with its Markdown, or one `.notecomp` file with the note, its notes and added recordings.
+3. Save your work as one `.notecomp` file (the note, its Markdown notes, added recordings and the text of your handwriting), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Save project** (`.nfedit`) keeps the untouched original and every edit with its undo history; see [file formats](#file-formats) and [why there are two NoteComplete formats](docs/FILE-FORMATS.md).
 
 AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
+
+## File formats
+
+| Format | What it holds | Use it for |
+| --- | --- | --- |
+| `.notecomp` | A tar archive: the note as a Noteful file, its Markdown notes, recordings added in NoteComplete, and the text of handwriting (written from Markdown or recognized) ([layout](spec/nfedit-v1.md#notecomp-archives)) | Everyday saving and sharing: one file with everything |
+| `.notepart` | Written like `.notecomp` today; planned as a partial patch for another copy of a note | |
+| `.noteful` | Noteful's own format: pages, ink, PDFs, images, text | Taking notes back to Noteful on the iPad (experimental after editing) |
+| `.nfedit` | A JSON project: the untouched original file plus every edit, with undo and redo ([spec](spec/nfedit-v1.md)) | Keeping the full edit history |
+
 
 ## Known issues
 
 - Exports to `.noteful` after editing, crops made in NoteComplete included, have not yet been verified in Noteful itself.
 - Releases are published automatically from 1.1.0 on; earlier local builds (1.0.x) find them as updates (Help → Check for updates… checks at once).
-- Sharing and the drawing tablet have been tested in Node and headless Chromium only, not yet on real devices, styluses or networks.
+- Sharing and the drawing tablet are tested in Node and headless Chromium; real phones, tablets and styluses are being tried now. Safari does not give web pages the Apple Pencil Pro squeeze or double-tap, so on iPad the quick menu opens with two fingers held still.
 - Uploading a change to Google Drive and deleting a note there are tested against a fake server only.
 - A tab dragged out of the tab strip opens in its own window, but cannot be dropped onto another window's strip: Wayland does not tell the app where the pointer is outside its own windows.
 - The Google Drive sign-in is not remembered between sessions, so Recent can only check Drive for newer versions after you connect (or for a public folder with an API key).

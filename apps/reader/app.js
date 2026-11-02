@@ -54,6 +54,7 @@ import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
+import { quickMenu } from "./quick-menu.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -227,8 +228,9 @@ async function openFromAddress() {
     await load(new File([await response.blob()], decodeURIComponent(url.pathname.split("/").pop())));
     // notes=1: the Notes panel open, formatted, so its links can be followed.
     if (tabParams.get("notes") === "1") {
-      if ($("notesToggle").getAttribute("aria-expanded") !== "true") $("notesToggle").click();
-      setTimeout(() => { if ($("notesPreview")?.getAttribute("aria-pressed") === "false") $("notesPreview").click(); }, 300);
+      // Once the panel is open (its notes loaded), not after a guessed delay.
+      if ($("notesToggle").getAttribute("aria-expanded") !== "true") await $("notesToggle").onclick();
+      if ($("notesPreview")?.getAttribute("aria-pressed") === "false") $("notesPreview").click();
     }
   } catch (e) { status(e.message, true); }
 }
@@ -2074,8 +2076,109 @@ touchGestures({
   cancelGesture: () => cancelGesture(),
   undo: () => { if (!$("undo").disabled) $("undo").click(); },
   redo: () => { if (!$("redo").disabled) $("redo").click(); },
+  menu: (x, y) => quick.open(x, y),
   enabled: () => !!doc,
 });
+// Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
+// them. Z (hold, point, let go; or tap and click), a pen's side button, or two fingers held
+// still on the page open it.
+const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"]];
+const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolbar [data-tool="${name}"]`)?.click(); };
+// The tools' order on the ring (held and dragged in the menu), remembered on this device.
+let quickOrder = QUICK_TOOLS.map(([name]) => name);
+try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
+// A tool's settings, from its own option rows, so the menu and the tool bar agree.
+const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-for="${id}"] button`)]
+  .filter((b) => !values || values.includes(b.dataset.value))
+  .map((b) => ({
+    label: id === "color" ? `Colour ${b.dataset.value}` : `${b.title}`,
+    swatch: id === "color" ? b.dataset.value : null,
+    icon: b.querySelector("svg"),
+    active: () => $(id).value.toLowerCase() === b.dataset.value.toLowerCase(),
+    run: () => b.click(),
+    stay: () => true,
+  }));
+const fromButtons = (selector) => [...document.querySelectorAll(selector)].map((b) => ({
+  label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
+}));
+const pressureEntry = { label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+const QUICK_SETTINGS = {
+  draw: () => [...fromRow("color", SWATCHES.slice(0, 5)), ...fromRow("width", ["1", "2", "4", "8"]), pressureEntry],
+  highlight: () => [...fromRow("highlightMode"), ...fromRow("color", ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"]), ...fromRow("width", ["8", "16", "24", "40"])],
+  erase: () => fromRow("eraserSize"),
+  shape: () => [...fromButtons("#shapePicker [data-shape]"), ...fromButtons("#shapeFill [data-fill]"), ...fromRow("color", SWATCHES.slice(0, 5))],
+  tape: () => [...fromRow("tapeMode"), ...fromRow("color", ["#e3c6e6", "#ffdf38", "#1f2328"])],
+  text: () => fromRow("color", SWATCHES.slice(0, 5)),
+};
+const quick = quickMenu({
+  // Tapping a tool chooses it and shows its settings around it; one without settings closes.
+  inner: () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] })),
+  outer: () => [
+    ...(QUICK_SETTINGS[tool]?.() || []),
+    { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+    { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
+  ],
+  onReorder: (order) => {
+    quickOrder = order;
+    try { localStorage.setItem("notecomplete-quick-order", JSON.stringify(order)); } catch { /* Optional. */ }
+    status("Quick menu order saved.");
+  },
+  onOpen: () => cancelGesture(),
+});
+// Where the pointer last was over the pages: Z opens the menu there.
+let lastPointer = null, lastPointerType = "mouse";
+let penHover = null;
+document.addEventListener("pointermove", (e) => {
+  lastPointer = [e.clientX, e.clientY];
+  // A pen hovering over the pages (no contact): Shift opens the menu where it points.
+  if (e.pointerType === "pen" && !e.buttons && $("viewport").contains(e.target)) penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
+  // A pen's side button pressed while it hovers.
+  if (e.pointerType === "pen" && e.buttons & 2 && !(lastPenButtons & 2) && doc && !quick.isOpen && $("viewport").contains(e.target)) quick.open(e.clientX, e.clientY);
+  if (e.pointerType === "pen") lastPenButtons = e.buttons;
+}, { passive: true, capture: true });
+let lastPenButtons = 0, penMenuAt = 0;
+document.addEventListener("pointerdown", (e) => {
+  lastPointerType = e.pointerType;
+  // A pen's side button (the S Pen button, a Wacom barrel button) on the page: the menu,
+  // never a right-click that removes what is under it.
+  // …and Shift + pen, for pens without a button: Shift held as the pen touches the page.
+  if (e.pointerType === "pen" && (e.button === 2 || (e.buttons & 2 && e.button !== 0) || (e.shiftKey && e.button === 0)) && doc && $("viewport").contains(e.target)) {
+    e.preventDefault();
+    e.stopPropagation();
+    penMenuAt = Date.now();
+    quick.open(e.clientX, e.clientY);
+  }
+}, true);
+document.addEventListener("contextmenu", (e) => {
+  if (!doc || !$("viewport").contains(e.target)) return;
+  if ((e.pointerType || lastPointerType) !== "pen" && Date.now() - penMenuAt > 800) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (!quick.isOpen) quick.open(e.clientX, e.clientY);
+}, true);
+let quickKeyAt = 0;
+const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
+document.addEventListener("keydown", (e) => {
+  if (quick.isOpen && quick.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  // Shift pressed while a pen hovers over the pages: the menu at the pen.
+  if (e.key === "Shift" && !e.repeat && penHover && Date.now() - penHover.at < 1500 && !quick.isOpen && quickKeyAllowed(e)) {
+    quick.open(penHover.x, penHover.y);
+    return;
+  }
+  if (e.key.toLowerCase() !== "z" || e.shiftKey || !quickKeyAllowed(e)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (e.repeat) return;
+  if (quick.isOpen) { quick.close(); return; }
+  quickKeyAt = Date.now();
+  const box = $("viewport").getBoundingClientRect();
+  const [x, y] = lastPointer && lastPointer[0] >= box.left && lastPointer[0] <= box.right && lastPointer[1] >= box.top && lastPointer[1] <= box.bottom ? lastPointer : [box.left + box.width / 2, box.top + box.height / 2];
+  quick.open(x, y);
+}, true);
+document.addEventListener("keyup", (e) => {
+  // Held, then let go over an item: that item. A quick tap leaves the menu open to click.
+  if (e.key.toLowerCase() === "z" && quick.isOpen && Date.now() - quickKeyAt > 250) quick.release();
+}, true);
 $("undo").onclick = () => {
   cancelGesture();
   action("undo");
@@ -2087,8 +2190,8 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];

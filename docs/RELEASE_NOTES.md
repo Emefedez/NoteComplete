@@ -1,12 +1,11 @@
-## What's new in 1.1.5
+## What's new in 1.1.6
 
-- **No more waiting between strokes**: after each stroke the page used to be rebuilt (and its thumbnail redrawn) before the next stroke could start, which on iPad made quick handwriting wait. Now strokes stay on screen as drawn and the page is redrawn once the pen pauses; thumbnails follow a moment later. Pages with a PDF behind them no longer re-render it for the thumbnail. A new stroke starts in a few milliseconds instead of up to a second on slower devices.
-- **iPad**: a drawing tool never starts a text selection or the press-and-hold callout, and Pencil movement is kept from iPadOS Scribble for the whole stroke.
-- **Drawing tablet mode**:
-  - A loading screen shows "Connecting…" and "Loading the note…" with a moving bar, and has a Cancel button.
-  - The dock is a row at the top or bottom when the device is held upright, and a column at the left or right when it is held sideways.
-  - The dock has the pen pressure switch.
-  - Messages appear above the dock, also after the screen turns.
+- **Quick menu**: a ring of tools around your pen. Tap a tool to choose it, and its settings appear around it (colours, widths, pressure, modes, sizes, shapes and fill). Hold a tool to move it on the ring. Hold **Z** and point, **Shift + pen**, press a pen's side button (S Pen, Wacom), or hold two fingers still on the page (iPad and touch screens). Safari does not give web pages the Apple Pencil Pro squeeze.
+- **Keys and gestures page** in the welcome notebook, and two-finger hold, two- and three-finger taps listed in Help → Keyboard shortcuts.
+- **Two-finger scrolling starts at once**: the movement made while it tells a scroll from a zoom now counts, so the pages move with the fingers from the start, as they do with Pan.
+- **Rearranging the tools with a finger**: hold a tool until it lifts, then drag it along the bar; the bar scrolls when you reach its edge. A quick swipe still scrolls the bar. (Before, the bar's own scrolling took over the drag and stopped it.) Tabs work the same way.
+
+Since 1.1.5: no waiting between Pencil strokes on iPad, the drawing tablet's loading screen, its dock along the long edge of the screen, and the pressure switch in the dock.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 

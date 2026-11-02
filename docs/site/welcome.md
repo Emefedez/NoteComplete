@@ -103,9 +103,25 @@ _From the desktop app: Share in the top bar_
 </svg>
 !end
 
-- **Drawing tablet**: scan the QR code with a phone or tablet on the same Wi-Fi. Its strokes appear on the computer as you draw, with pen pressure, shapes and shared undo.
-- **Shared notes**: guests write the Markdown notes with you, with names and cursors.
-- **Online access**: a separate link through Cloudflare for people on other networks. Notes only, and it stops when you turn it off.
+- **Drawing tablet**: scan the QR code with a phone or tablet. Its strokes appear on the computer as you draw, with pen pressure, shapes and shared undo.
+- **Shared notes**: guests follow the whole note live and write its Markdown notes with you; they draw too if you allow editing.
+- **Online access**: links through Cloudflare for people and tablets on other networks. It stops when you turn it off.
+
+\pagebreak
+
+# KEYS // AND GESTURES
+_The same on a computer, a tablet and a phone_
+
+>> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Z== and let go on a tool, ==Shift + pen==, a pen's side button, or two fingers held still. Tap a tool for its settings
+>> [teal] THE NOTE: ==Ctrl Z== undo, ==Ctrl Shift Z== redo, ==Ctrl S== save, ==Ctrl F== find, ==N== notes, ==D== dark pages || [purple] MORE: ==Ctrl K== commands, ==Ctrl J== ask AI, ==A== audio, ==K== play, ==?== shows every key on its button
+
+## Gestures
+- **Two fingers**: scroll or pinch to zoom; tap to undo, three fingers to redo; hold still for the quick menu.
+- **One finger**: draws with the Pen, or scrolls while a stylus is in use.
+- **Hold and drag** a tool in the bar, or in the quick menu, to rearrange it.
+- **Shift** with the wheel or the arrows scrolls faster; **Ctrl** with the wheel zooms.
+
+-> All the keys are in Help → Keyboard shortcuts.
 
 \pagebreak
 
@@ -115,10 +131,10 @@ _Free and open source_
 >> [sky] COMPUTER & ANDROID: installers for Linux, Windows and macOS, and the Android APK, on the [Releases page](https://github.com/Emefedez/NoteComplete/releases/latest) || [amber] PHONE & TABLET: iPhone, iPad and Android: [Add this site as an app](notecomplete:install)
 >> [teal] SOURCE CODE: the app, the docs and this notebook's Markdown on [GitHub](https://github.com/Emefedez/NoteComplete) || [purple] ANY BROWSER: you are using it now, offline once loaded
 
-## Touch and stylus
-- Two fingers move and zoom; tap with ==two fingers to undo==, three to redo.
-- While a stylus is in use, one finger scrolls; put it away and a finger draws.
-- Scroll past the last page for a **new page**.
+## Writing on a tablet
+- Strokes follow the pen smoothly, with its pressure ((on or off in the Pen's settings)), and quick strokes never wait.
+- A flick keeps the pages gliding. Scroll past the last page for a **new page**.
+- Keys and gestures are on the page before this one.
 
 -> Click a link with Pan or Select. The user guide is in the **Notes** panel ((press N)).
 

@@ -68,6 +68,28 @@ try {
   await p.evaluate(() => document.querySelector('.choice-row[data-for="pressure"] [data-value="off"]').click());
   assert.equal(await p.evaluate(() => localStorage.getItem('notecomplete-pressure')), 'off');
   console.log('· pen pressure can be turned off');
+  // The tools reorder with a finger: hold one until it lifts, then drag it along the row.
+  const order0 = await p.evaluate(() => [...document.querySelectorAll('#toolbar .segmented [data-tool]')].map((b) => b.dataset.tool));
+  const at0 = await p.evaluate(() => { const r = document.querySelector('#toolbar .segmented [data-tool]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, r.width]; });
+  await touch('touchStart', [[at0[0], at0[1]]]); await sleep(450);
+  assert.ok(await p.evaluate(() => !!document.querySelector('#toolbar .lifted')), 'a held tool lifts');
+  for (let i = 1; i <= 12; i++) { await touch('touchMove', [[at0[0] + i * at0[2] * 0.25, at0[1]]]); await sleep(20); }
+  await touch('touchEnd', []); await sleep(300);
+  const order1 = await p.evaluate(() => [...document.querySelectorAll('#toolbar .segmented [data-tool]')].map((b) => b.dataset.tool));
+  assert.notDeepEqual(order1, order0, 'the held tool moved');
+  assert.equal(order1.indexOf(order0[0]) > 0, true);
+  assert.ok(await p.evaluate(() => localStorage.getItem('notecomplete-tool-order')), 'the order is saved');
+  // A quick swipe along the row scrolls it and moves nothing.
+  const row = await p.evaluate(() => { const r = document.querySelector('#toolbar .segmented'); return { scroll: r.scrollWidth > r.clientWidth, y: r.getBoundingClientRect().y + r.getBoundingClientRect().height / 2, right: r.getBoundingClientRect().right }; });
+  if (row.scroll) {
+    await p.evaluate(() => { document.querySelector('#toolbar .segmented').scrollLeft = 0; });
+    await touch('touchStart', [[row.right - 30, row.y]]);
+    for (let i = 1; i <= 8; i++) { await touch('touchMove', [[row.right - 30 - i * 25, row.y]]); await sleep(16); }
+    await touch('touchEnd', []); await sleep(400);
+    assert.ok(await p.evaluate(() => document.querySelector('#toolbar .segmented').scrollLeft) > 20, 'a swipe scrolls the tools');
+    assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#toolbar .segmented [data-tool]')].map((b) => b.dataset.tool)), order1, 'a swipe moves no tool');
+  }
+  console.log(`· a held tool drags to a new place${row.scroll ? '; a swipe scrolls the row' : ''}`);
   // A long menu scrolls on a short screen.
   await p.evaluate(() => document.querySelector('details.bar-menu')?.setAttribute('open', ''));
   const m = await p.evaluate(() => { const e = document.querySelector('details.bar-menu[open] .menu-content'); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, bottom: Math.min(r.bottom, innerHeight) - 20, top: r.y + 20, overflow: e.scrollHeight - e.clientHeight, fits: r.bottom <= innerHeight }; });
