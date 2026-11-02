@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TouchGesture, deliberate } from './touch.js';
+import { TouchGesture, deliberate, touchGestures } from './touch.js';
 
 const t = (...xy) => xy.map(([clientX, clientY]) => ({ clientX, clientY }));
 
@@ -85,9 +85,96 @@ test('a two-finger scroll moves the pages by the whole finger movement, the firs
 });
 
 test('only deliberate two-finger holds count: together, and not a palm', () => {
-  const finger = { radiusX: 10, radiusY: 12 }, palm = { radiusX: 45, radiusY: 40 };
+  const finger = { radiusX: 10, radiusY: 12 }, palm = { radiusX: 80, radiusY: 70 };
   assert.equal(deliberate([finger, finger], 80), true);
   assert.equal(deliberate([finger, finger], 600), false, 'a second finger long after the first');
   assert.equal(deliberate([finger, palm], 50), false, 'a resting palm');
   assert.equal(deliberate([{}, {}], 50), true, 'no radius reported');
+});
+
+test('iPad fingers count: Safari\'s coarse radii, 0 or missing, and only a clear palm is not', () => {
+  // Safari on iPad: radiusX and radiusY both the touch's major radius, in steps of about 10.4.
+  const ipad = (r) => ({ radiusX: r, radiusY: r, force: 0, touchType: 'direct' });
+  assert.equal(deliberate([ipad(20.83), ipad(31.25)], 40), true, 'light fingertips');
+  assert.equal(deliberate([ipad(41.67), ipad(41.67)], 40), true, 'fingertips pressed a little');
+  assert.equal(deliberate([ipad(52.08), ipad(31.25)], 40), true, 'a thumb pressed flat');
+  assert.equal(deliberate([ipad(0), ipad(0)], 40), true, 'radius 0: not reported');
+  assert.equal(deliberate([{ radiusX: undefined, radiusY: undefined }, { radiusX: NaN }], 40), true, 'missing');
+  assert.equal(deliberate([ipad(31.25), ipad(72.92)], 40), false, 'a palm');
+  assert.equal(deliberate([ipad(31.25), { radiusX: 0, radiusY: 93.75 }], 40), false, 'a palm reported on one axis');
+});
+
+test('fingers held close together settle without turning the hold into a zoom', () => {
+  const g = new TouchGesture();
+  // Two fingertips side by side, 50 px apart; their gap shrinks by 5 px (10 %) as they settle.
+  g.start(t([200, 300], [250, 300]), 0);
+  assert.deepEqual(g.move(t([202, 300], [247, 301]), 60), []);
+  assert.deepEqual(g.hold(400), [{ type: 'menu', x: 224.5, y: 300.5 }]);
+  // A real pinch still zooms.
+  const z = new TouchGesture();
+  z.start(t([200, 300], [250, 300]), 0);
+  assert.equal(z.move(t([190, 300], [262, 300]), 60)[0].type, 'zoom');
+});
+
+// touchGestures on a stand-in for the pages, fed iPad-like touch events.
+function pages() {
+  const handlers = {};
+  return {
+    scrollLeft: 0, scrollTop: 0,
+    addEventListener(type, fn) { handlers[type] = fn; },
+    fire(type, touches, changed, timeStamp) {
+      const e = { type, touches, changedTouches: changed, timeStamp, prevented: false, preventDefault() { this.prevented = true; } };
+      handlers[type]?.(e);
+      return e;
+    },
+    has: (type) => !!handlers[type],
+  };
+}
+const ipadFinger = (x, y, r = 31.25) => ({ clientX: x, clientY: y, radiusX: r, radiusY: r, force: 0, touchType: 'direct' });
+
+test('iPad: two fingers that land in one event, held still, open the quick menu', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const view = pages(), menus = [];
+  touchGestures({ viewport: view, pinchBy() {}, cancelGesture() {}, undo() {}, redo() {}, menu: (x, y) => menus.push([x, y]) });
+  // An earlier one-finger touch, long ago: the gap is measured from this gesture's start.
+  view.fire('touchstart', [ipadFinger(50, 50)], [ipadFinger(50, 50)], 1000);
+  view.fire('touchend', [], [ipadFinger(50, 50)], 1100);
+  const a = ipadFinger(300, 400), b = ipadFinger(380, 400, 41.67);
+  assert.equal(view.fire('touchstart', [a, b], [a, b], 9000).prevented, true);
+  t.mock.timers.tick(400);
+  assert.deepEqual(menus, [[340, 400]]);
+  view.fire('touchend', [], [a, b], 9500);
+});
+
+test('iPad: a hold whose fingers were never heard lifting does not spoil the next one', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const view = pages(), menus = [];
+  touchGestures({ viewport: view, pinchBy() {}, cancelGesture() {}, undo() {}, redo() {}, menu: (x, y) => menus.push([x, y]) });
+  const a = ipadFinger(300, 400), b = ipadFinger(380, 400);
+  view.fire('touchstart', [a], [a], 0);
+  view.fire('touchstart', [a, b], [b], 60);
+  t.mock.timers.tick(400);
+  assert.equal(menus.length, 1);
+  // No touchend arrives (it went to a part of the page that was redrawn). The next hold:
+  view.fire('touchstart', [a], [a], 5000);
+  view.fire('touchstart', [a, b], [b], 5050);
+  t.mock.timers.tick(400);
+  assert.equal(menus.length, 2, 'the second hold opens it too');
+  // A palm beside a finger, or a hold right after the Pencil wrote, does not.
+  view.fire('touchend', [], [a, b], 6000);
+  const palm = ipadFinger(380, 420, 83.33);
+  view.fire('touchstart', [a, palm], [a, palm], 7000);
+  t.mock.timers.tick(400);
+  assert.equal(menus.length, 2, 'a palm');
+  assert.ok(view.has('gesturestart'), 'Safari\'s own pinch is turned off');
+});
+
+test('iPad: no hold right after the Pencil wrote', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const view = pages(), menus = [];
+  touchGestures({ viewport: view, pinchBy() {}, cancelGesture() {}, undo() {}, redo() {}, menu: (x, y) => menus.push([x, y]), penBusy: () => true });
+  const a = ipadFinger(300, 400), b = ipadFinger(380, 400);
+  view.fire('touchstart', [a, b], [a, b], 0);
+  t.mock.timers.tick(400);
+  assert.deepEqual(menus, []);
 });

@@ -5,6 +5,12 @@ export const TEXT_EXTENSIONS = ['txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'j
   'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'sv', 'mk', 'awk', 'sed', 'diff', 'patch'];
 const EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join('|')})$`, 'i');
 
+// Word, OpenDocument and Excel files, opened as Markdown (office.js); so are .csv and .tsv.
+export const OFFICE_EXTENSIONS = ['docx', 'odt', 'xlsx', 'ods'];
+export const OFFICE_NAME = new RegExp(`\\.(${OFFICE_EXTENSIONS.join('|')})$`, 'i');
+export const isOfficeName = (name) => OFFICE_NAME.test(name || '');
+export const isTableName = (name) => /\.(csv|tsv)$/i.test(name || '');
+
 export const hasExtension = (name) => /[^/\\]\.[^./\\]+$/.test(String(name || ''));
 export const isMarkdownName = (name) => /\.(md|markdown)$/i.test(name || '');
 // By name alone: a text extension, or no extension at all (the content decides then).

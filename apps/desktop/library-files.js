@@ -4,10 +4,10 @@
 import { chmod, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Notes, PDFs, HTML, images, text formats (as in the reader's text-types.js), and names
-// without an extension, which open as text when their content is.
+// Notes, PDFs, HTML, images, Word/OpenDocument/Excel files, text formats (as in the
+// reader's text-types.js), and names without an extension, which open as text when their content is.
 const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch';
-const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp|${TEXT})$)|^[^.]+$`, 'i');
+const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp|docx|odt|xlsx|ods|${TEXT})$)|^[^.]+$`, 'i');
 // A file without an extension is listed only when its start has no NUL bytes (text).
 async function textStart(file) {
   const handle = await openFile(file, 'r');
