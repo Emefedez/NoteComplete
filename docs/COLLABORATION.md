@@ -316,12 +316,45 @@ Tested with a stand-in `cloudflared` and simulated Cloudflare requests (`collab-
 - `apps/reader/sync.js`: the client (reconnects with back-off, ordered ink queue, snapshots, notes CRDT, digest check). `apps/reader/collab.js`: dialogs, presence, guest mode, tablet mode, live strokes. Both load only when a session starts; Yjs (vendored by `tools/build_web.py`) only for notes, never on tablets.
 - `app.js`: every edit goes through `mutate()` (the engine directly, or the shared order while a tablet is connected); `applyShared` applies others' edits and redraws only the page they touch.
 - Core: `Editor::history_digest` (`history_digest` in WASM, `digest` in the worker).
-- Wire: JSON text frames `{t: …}`; binary frames `0` y-sync, `1` awareness, `2` snapshot (header length, JSON header, project).
+- Wire: JSON text frames `{t: …}`; binary frames `0` y-sync, `1` awareness, `2` snapshot (header length, JSON header, project). A joiner that can unzip (`DecompressionStream`) says `accept: ['gzip']` in its hello and gets the project gzipped (`enc: 'gzip'` in the header); others get it plain. A joiner back after a dropped connection sends `have: {session, gen, seq}`; when the hub's log still holds every edit since, the welcome says `resumed` and only those edits follow, not the whole note.
+
+## Joining speed
+
+A device joining from the QR code, the code or a link loads the whole app from the computer, then the note. On a busy Wi-Fi this took from 15 to 30 seconds per join, and a minute or more of downloading in the background. The causes, all measured with `node tools/join_bench.mjs`:
+
+- **The app was downloaded again on every join.** The sharing server sent `Cache-Control: no-store`, and the service worker fetched every file from the network first: about 8 MB for each visit (the 2.6 MB engine, 3 MB of pdf.js, the app).
+- **Nothing was compressed**, though the engine, pdf.js, the app and the note's snapshot (JSON, with its PDF in base64) shrink to a quarter or a third.
+- **The service worker downloaded 52 MB at install** (speech and text recognition engines, Office readers, PDF fonts and character maps) on secure origins (the online link, the website), while the note was loading.
+- Not causes: the snapshot was asked for once, the host answered in about 0.1 s, there were no resync loops and no waits from `RETRIES`; `ws` turns Nagle off. The port was already the same in every session (41237) unless it was taken.
+
+What changed:
+
+- `collab-server.js` sends the reader's files with an `ETag`, `Last-Modified` and `Cache-Control: no-cache`: the browser keeps them and asks each time (a 304, no bytes), so a rebuilt app still arrives. Text and WebAssembly go gzipped (brotli where the browser offers it, which Chromium does only over https), compressed once and kept in memory; the app shell is compressed when sharing starts. When 41237 is taken, one of the next nine ports, so the address (and the browser's cache for it) usually stays the same.
+- `sw.js`: `precache.json` (`tools/build_web.py`) lists every file with a hash of its contents and the *shell* to cache at install (the app, the engine, pdf.js, the sharing and notes libraries: 7.6 MB). A cached file is used while its hash is current; the manifest is read again on each page load. Engines a feature loads when used (speech, text recognition, Word and spreadsheet readers, math, Dark Reader, PDF fonts, character maps and decoders) are cached the first time. On `/join` and `/tablet` the service worker registers once the note is open. `tools/serve_web.mjs` rewrites the hashes as files change, so edits show without a rebuild.
+- The hub gzips the snapshot once for every joiner that can unzip it; a reconnecting joiner gets only the edits it missed.
+
+Measured with Playwright and Chromium: a host with the note open, a tablet joining in a fresh browser (cold) and again in the same browser (warm), through a throttled link in the bench (both directions, 20 ms round trip, flow control like TCP; it slows the page's files and the WebSocket alike). Chromium's own throttling (`Network.emulateNetworkConditions`, `--cdp`) also slows WebSocket frames in this version. *LAN* is `http://<address>:<port>` (not a secure context: no service worker), as a phone that scans the QR code sees it; *secure* is a loopback alias, so the service worker runs as behind the online link. Time until the first page is drawn, and MB downloaded until the device is idle (the service worker's install included):
+
+| Link | Note | Origin | Cold: drawn | Cold: MB | Warm: drawn | Warm: MB |
+|---|---|---|---|---|---|---|
+| 20 Mbit/s | Practice book (3.5 MB) | LAN (http) | 5.0 s → 3.0 s | 10.5 → 4.1 | 5.1 s → 2.6 s | 10.5 → 2.2 |
+| 20 Mbit/s | Practice book (3.5 MB) | secure | 6.4 s → 3.2 s | 62.7 → 4.2 | 5.2 s → 2.2 s | 10.5 → 2.2 |
+| 20 Mbit/s | Examen (1.1 MB) | LAN (http) | 4.3 s → 2.1 s | 8.2 → 2.6 | 4.3 s → 1.6 s | 8.2 → 0.8 |
+| 20 Mbit/s | Examen (1.1 MB) | secure | 5.0 s → 2.7 s | 60.4 → 2.8 | 4.2 s → 1.4 s | 8.2 → 0.7 |
+| 5 Mbit/s | Practice book (3.5 MB) | LAN (http) | 17.6 s → 7.3 s | 10.5 → 4.1 | 17.4 s → 4.9 s | 10.5 → 2.2 |
+| 5 Mbit/s | Practice book (3.5 MB) | secure | 20.2 s → 7.0 s | 62.7 → 4.2 | 17.5 s → 4.7 s | 10.5 → 2.2 |
+| 5 Mbit/s | Examen (1.1 MB) | LAN (http) | 13.8 s → 5.0 s | 8.2 → 2.6 | 13.8 s → 2.4 s | 8.2 → 0.8 |
+| 5 Mbit/s | Examen (1.1 MB) | secure | 15.9 s → 4.6 s | 60.4 → 2.8 | 13.8 s → 2.2 s | 8.2 → 0.7 |
+
+Before, a cold join on a secure origin kept downloading for 26 s (20 Mbit/s) or 100 s (5 Mbit/s) after the page was drawn. Snapshots: 3.51 → 2.17 MB (Practice book), 1.10 → 0.72 MB (Examen). Guests take up to a second longer than tablets (they also load the notes editor). A warm join is now mostly the snapshot itself.
 
 ## Tests
 
 - `cargo test`: replicas loaded from one project that apply the same edits (pressure, erase, undo, redo) agree on views and digest.
 - `node --test apps/desktop/collab-server.test.mjs`: the real server with host, guests and tablets: refused/expired invites and codes, second host, full session, oversized messages and floods; snapshot join; concurrent edits from host and tablet in one order; refused edits; live strokes; the digest check (asked in the edit stream, so it holds while edits keep coming) repairing a drifted copy; a new note reloading the tablet; removed tablets; three people typing at once; presence and cursors; a guest offline and back; view-only edits dropped; ending with the guests' last text; the host disappearing.
+- The same file: the reader's files gzipped or brotli-compressed by what the browser accepts, kept with an `ETag` and answered with 304; snapshots gzipped for joiners that can unzip them and plain for others; a joiner back after a dropped connection gets only the edits it missed, and the whole note when the host opened another meanwhile.
+- `node tools/site_e2e.mjs`: also the service worker: the shell cached at install, the engines not; a second visit takes the app from the cache; offline it still opens.
+- `node tools/join_bench.mjs`: join timings and bytes (see Joining speed).
 - `node --test apps/reader/sync.test.mjs`: minimal text diffs, emoji, caret mapping through remote edits, snapshot framing.
 - `node tools/collab_e2e.mjs` (after a web build, with Playwright): host, tablet (touch + pen with pressure via CDP) and guest in Chromium: code pairing, live stroke, pressure stroke saved on the host, highlighter, eraser, undo, host strokes on the tablet, tape (its colour and width, laid on the host, a tap lifting it on the tablet only), text typed with a finger tap (kept above a stand-in keyboard, committed to the host), a new page (on both, the same size), pinch zoom on the tablet only, loading screen gone once loaded, dock side and orientation (row upright, column sideways), pressure switch, phone width, guest name prompt, typing, chips and cursors, disconnect, ending with the guest's copy.
 

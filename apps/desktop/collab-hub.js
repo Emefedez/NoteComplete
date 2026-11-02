@@ -12,6 +12,8 @@
 //   A snapshot (binary frame, first byte 2) brings a joining tablet to the current state.
 // Everything else is a JSON text frame `{ t: type, ... }`.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
+import { gzip as gzipCallback } from 'node:zlib';
 import * as Y from 'yjs';
 import * as sync from 'y-protocols/sync';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -36,6 +38,7 @@ export function tabletMay(op, args) {
 }
 export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#ad7f58'];
 const LOG_LIMIT = 20000;
+const gzip = promisify(gzipCallback);
 
 const token = () => randomBytes(16).toString('base64url');
 const pairingCode = () => String(randomBytes(4).readUInt32BE() % 1e6).padStart(6, '0');
@@ -158,7 +161,7 @@ export class CollabHub {
     this.tokens.onlineTablet = null;
     for (const p of [...this.peers.values()]) if (p.remote) this.kick(p, 1008, 'Online access was turned off.');
   }
-  hello(peer, { token, code, name, role }) {
+  hello(peer, { token, code, name, role, accept, have }) {
     let granted = null;
     // Through the tunnel only the online invites work: never the host's token, the local
     // invites or the 6-digit code.
@@ -181,6 +184,9 @@ export class CollabHub {
     if (this.state !== 'open') return this.kick(peer, 1008, 'The session is ending.');
     if (granted !== 'host' && this.members().filter((p) => p.role !== 'host').length >= this.maxPeers) return this.kick(peer, 1008, 'The session is full.');
     peer.role = granted;
+    // A joiner that can unzip gets the note's snapshot gzipped (a third smaller or more).
+    peer.gzip = Array.isArray(accept) && accept.includes('gzip');
+    const resumed = this.follows(peer) && this.open && !!this.host && this.canResume(have);
     const taken = new Set(this.members().map((p) => p.color));
     peer.color = COLORS.find((c) => !taken.has(c)) || COLORS[peer.id % COLORS.length];
     peer.name = clean(name) || (granted === 'host' ? 'Host' : granted === 'tablet' ? 'Tablet' : this.guestName());
@@ -190,7 +196,7 @@ export class CollabHub {
       notes: granted !== 'tablet' && !!this.notes,
       // A tablet paired with a code reconnects with the full token.
       token: granted === 'tablet' ? (peer.remote ? this.tokens.onlineTablet : this.tokens.tablet) : undefined,
-      gen: this.gen, open: this.open, title: this.title, autosave: this.autosave,
+      gen: this.gen, open: this.open, title: this.title, autosave: this.autosave, resumed,
     });
     this.sendPeers();
     if (granted === 'host') {
@@ -198,8 +204,20 @@ export class CollabHub {
       // Tablets and guests that came first wait for the host's document.
       for (const p of this.members()) if (this.follows(p) && !p.synced && this.open) this.requestSnapshot(p);
     }
-    if (this.follows(peer) && this.open && this.host) this.requestSnapshot(peer);
+    if (resumed) this.catchUp(peer, have.seq);
+    else if (this.follows(peer) && this.open && this.host) this.requestSnapshot(peer);
     if (peer.role !== 'tablet' && this.notes) this.startNotes(peer);
+  }
+  // A tablet or guest back after a dropped connection, with this note as it was at edit `seq`:
+  // the edits since then are enough when the log still has them, so it does not download
+  // the whole note again.
+  canResume(have) {
+    if (!have || have.session !== this.id || have.gen !== this.gen || !Number.isInteger(have.seq) || have.seq < 0 || have.seq > this.seq) return false;
+    return have.seq === this.seq || (this.log.length > 0 && this.log[0].seq <= have.seq + 1);
+  }
+  catchUp(peer, seq) {
+    for (const entry of this.log) if (entry.seq > seq) this.send(peer, JSON.stringify(entry));
+    peer.synced = true;
   }
   // Who follows the note itself: drawing tablets and notes guests (both get its snapshot
   // and every edit). Who may change it: the host, tablets, and guests when notes are 'edit'.
@@ -311,21 +329,27 @@ export class CollabHub {
     this.send(host, { t: 'snapshot', req: id, gen: this.gen });
   }
   // The host's project at its edit `seq`: sent to the waiting tablets with the edits after it.
-  snapshot(peer, frame) {
+  // Gzipped once for those that can unzip it (zlib works off the main thread); edits made
+  // meanwhile are in the log and follow the snapshot, so the order holds.
+  async snapshot(peer, frame) {
     if (peer.role !== 'host') return;
     const { header, payload } = unpackSnapshot(frame);
     const waiting = this.requests.get(header.req);
+    if (!waiting || header.gen !== this.gen) { this.requests.delete(header.req); return; }
+    // Still listed as waiting while it is compressed, so nobody asks the host for another.
+    const zipped = [...waiting].some((id) => this.peers.get(id)?.gzip) ? await gzip(payload, { level: 6 }).catch(() => null) : null;
+    // The note changed or the session ended meanwhile: this snapshot is stale.
+    if (this.requests.get(header.req) !== waiting || header.gen !== this.gen || this.state === 'ended') return;
     this.requests.delete(header.req);
-    if (!waiting || header.gen !== this.gen) return;
     const missing = this.log.length && this.log[0].seq > header.seq + 1;
-    const out = packSnapshot({ gen: this.gen, seq: header.seq, title: this.title }, payload);
+    const plain = packSnapshot({ gen: this.gen, seq: header.seq, title: this.title }, payload);
+    const packed = zipped && packSnapshot({ gen: this.gen, seq: header.seq, title: this.title, enc: 'gzip' }, zipped);
     for (const id of waiting) {
       const p = this.peers.get(id);
       if (!p) continue;
       if (missing) { this.requestSnapshot(p); continue; }
-      this.send(p, out);
-      for (const entry of this.log) if (entry.seq > header.seq) this.send(p, JSON.stringify(entry));
-      p.synced = true;
+      this.send(p, p.gzip && packed ? packed : plain);
+      this.catchUp(p, header.seq);
     }
   }
   // A tablet whose copy disagrees with the host's (see the core's history digest) reloads.
@@ -385,7 +409,7 @@ export class CollabHub {
   }
   binary(peer, data) {
     const kind = data[0];
-    if (kind === FRAME.snapshot) return this.snapshot(peer, data);
+    if (kind === FRAME.snapshot) return this.snapshot(peer, data).catch(() => { /* A malformed frame: nobody is sent it. */ });
     if (peer.role === 'tablet' || !this.notes) return;
     const decoder = decoding.createDecoder(data);
     decoding.readVarUint(decoder);

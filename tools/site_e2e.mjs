@@ -5,7 +5,7 @@
 // It opens with the welcome notebook in front (Notes panel open, formatted) and Home
 // beside it; on a phone the tab count opens the list of tabs and switches to Home.
 import http from 'node:http';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, statSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -15,8 +15,11 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const root = fileURLToPath(new URL('../apps/desktop/reader/', import.meta.url));
 const TYPES = { js: 'text/javascript', wasm: 'application/wasm', json: 'application/json', svg: 'image/svg+xml', html: 'text/html', css: 'text/css', png: 'image/png', webmanifest: 'application/manifest+json' };
+// What the browser asked the server for (not what its service worker answered).
+const asked = [];
 const server = http.createServer((q, r) => {
   let p = decodeURIComponent(new URL(q.url, 'http://x').pathname).replace(/^\/NoteComplete\/?/, '');
+  asked.push(p);
   if (!p || p.endsWith('/')) p += 'index.html';
   const file = path.join(root, p);
   try { if (!statSync(file).isFile()) throw 0; } catch { r.writeHead(404); return r.end(); }
@@ -48,5 +51,31 @@ try {
     assert.deepEqual(errors, []);
     console.log(`· ${phone ? 'phone: the tab count switches to Home' : 'desktop: welcome notebook and Home tabs, notes formatted'}`);
   }
+  // The service worker caches the app shell, not the engines a feature loads when used; the
+  // next visit takes the app from it, and the site opens offline.
+  const context = await b.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await context.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  const welcome = () => p.waitForFunction(() => [...document.querySelectorAll('#tabs iframe')].some((f) => f.contentDocument?.querySelector('.sheet [data-item]')), null, { timeout: 30000 });
+  await p.goto(`http://127.0.0.1:${server.address().port}/NoteComplete/`);
+  await welcome();
+  const cached = await p.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    const names = new Set();
+    for (const key of await caches.keys()) for (const r of await (await caches.open(key)).keys()) names.add(new URL(r.url).pathname.replace('/NoteComplete/', ''));
+    return [...names];
+  });
+  const { shell } = JSON.parse(readFileSync(path.join(root, 'precache.json'), 'utf8'));
+  for (const name of shell) assert.ok(cached.includes(name), `${name} cached at install`);
+  assert.ok(!cached.some((name) => /vendor\/(transformers|tesseract|mammoth|sheetjs|katex)\//.test(name)), 'the engines wait until they are used');
+  asked.length = 0;
+  await p.reload();
+  await welcome();
+  assert.ok(!asked.includes('app.js') && !asked.includes('pkg/noteful_wasm_bg.wasm'), `the second visit takes the app from the cache (asked: ${asked.join(', ')})`);
+  await context.setOffline(true);
+  await p.reload();
+  await welcome();
+  assert.deepEqual(errors, []);
+  console.log('· offline: the shell is cached at install, the engines are not; a second visit and an offline one load from the cache');
   console.log('Website end to end: passed.');
 } finally { await b.close(); server.close(); }

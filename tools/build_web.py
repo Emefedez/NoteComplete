@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Build browser bindings from the same Rust core. No publishing."""
+import hashlib
 import json
 import re
+import sys
 import os
 from pathlib import Path
 import shutil
@@ -96,12 +98,24 @@ def main():
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/name,out/Path(name).name)
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/'LICENSE',out/'LICENSE')
     vendor_modules()
-    reader=ROOT/'apps/reader'
-    assets=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
-    assets+=sorted(str(p.relative_to(reader)) for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
-    assets.append('./')
-    (reader/'precache.json').write_text(json.dumps(assets)+'\n')
+    write_manifest()
     print('Built apps/reader/. Serve with any static HTTP server. No Python/Rust server required at runtime.')
+
+# Fetched only when a feature needs them: the service worker (sw.js) caches them the first time
+# instead of at install, so a first visit (a tablet joining a session) downloads the app and
+# not 40 MB of engines. Speech, text recognition, Word and spreadsheet readers, math, Dark
+# Reader, and the fonts, character maps and image decoders only some PDFs use.
+LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/')
+def write_manifest():
+    """precache.json: every file the app ships, with a hash of its contents (the service worker
+    downloads a file again only when its hash changes; the desktop and Android apps ship
+    exactly these files), and the shell the service worker caches at install."""
+    reader=ROOT/'apps/reader'
+    names=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
+    names+=sorted(p.relative_to(reader).as_posix() for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
+    files={name:hashlib.sha256((reader/name).read_bytes()).hexdigest()[:16] for name in names}
+    shell=[name for name in names if not name.startswith(LAZY) and 'LICENSE' not in name and name!='sw.js']
+    (reader/'precache.json').write_text(json.dumps({'files':files,'shell':shell})+'\n')
 
 IMPORT=re.compile(r"""(^[ \t]*(?:(?:import|export)\b[^;'"]*?\bfrom\s*|import\s*))(['"])([^'"]+)\2""",re.M)
 def vendor_modules():
@@ -144,4 +158,5 @@ def vendor_modules():
         licence=modules/package/'LICENSE'
         if licence.exists():shutil.copy2(licence,out/name/'LICENSE')
 
-if __name__=='__main__':main()
+# --manifest: only rewrite precache.json for the files already built.
+if __name__=='__main__':write_manifest() if sys.argv[1:]==['--manifest'] else main()

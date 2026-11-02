@@ -6,6 +6,7 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import init, { EditorSession } from '../apps/reader/pkg/noteful_wasm.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -24,8 +25,11 @@ const built = await readFile(path.join(out, 'app.html')).then(() => true, () => 
 if (!built) await rename(path.join(out, 'index.html'), path.join(out, 'app.html'));
 const tabs = (await readFile(path.join(root, 'apps/reader/tabs.html'), 'utf8')).replace('content="./index.html"', 'content="./app.html"');
 await writeFile(path.join(out, 'index.html'), tabs);
-// Offline: the service worker caches these too.
+// The service worker keys each file by its hash (tools/build_web.py); index.html changed.
 const precache = JSON.parse(await readFile(path.join(out, 'precache.json'), 'utf8'));
-for (const name of ['app.html', 'welcome.notecomp', 'site.json']) if (!precache.includes(name)) precache.push(name);
+for (const name of ['index.html', 'app.html', 'welcome.notecomp', 'site.json']) {
+  precache.files[name] = createHash('sha256').update(await readFile(path.join(out, name))).digest('hex').slice(0, 16);
+  if (!precache.shell.includes(name)) precache.shell.push(name);
+}
 await writeFile(path.join(out, 'precache.json'), JSON.stringify(precache) + '\n');
 console.log(`Website built in ${path.relative(root, out) || '.'}: welcome notebook of ${pages} pages, tabs at index.html.`);

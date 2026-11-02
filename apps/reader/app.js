@@ -3286,8 +3286,15 @@ window.addEventListener("beforeunload", (e) => {
     e.returnValue = "";
   }
 });
-if ("serviceWorker" in navigator)
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+// A device opening an invite (/join, /tablet) loads the shared note first: the offline copy of
+// the app (sw.js) is made once the note is open, or after a minute, not while it downloads.
+if ("serviceWorker" in navigator) {
+  const register = () => navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if (/^\/(join|tablet)$/.test(location.pathname)) {
+    const later = setTimeout(register, 60000);
+    addEventListener("notecomplete:joined", () => { clearTimeout(later); setTimeout(register, 2000); }, { once: true });
+  } else register();
+}
 
 function shapeHandles(p) {
   selection.render(p);
