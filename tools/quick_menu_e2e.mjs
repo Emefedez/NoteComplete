@@ -98,6 +98,19 @@ try {
   assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length), items, 'nothing removed');
   await p.keyboard.press('Escape');
   console.log('· a pen side button opens it and removes nothing');
+  // Shift + pen: Shift held as the pen touches, or pressed while the pen hovers.
+  const shiftBefore = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at[0] + 40, y: at[1] + 40, button: 'left', buttons: 1, clickCount: 1, pointerType: 'pen', modifiers: 8 });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at[0] + 40, y: at[1] + 40, button: 'left', buttons: 0, clickCount: 1, pointerType: 'pen', modifiers: 8 });
+  await p.waitForSelector('.quick-menu');
+  await sleep(400);
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length), shiftBefore, 'Shift + pen draws nothing');
+  await p.keyboard.press('Escape');
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 60, y: at[1] + 20, button: 'none', buttons: 0, pointerType: 'pen' });
+  await p.keyboard.press('Shift');
+  await p.waitForSelector('.quick-menu');
+  await p.keyboard.press('Escape');
+  console.log('· Shift + pen opens it at the pen (touching or hovering)');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.

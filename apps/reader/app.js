@@ -2127,8 +2127,11 @@ const quick = quickMenu({
 });
 // Where the pointer last was over the pages: Z opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
+let penHover = null;
 document.addEventListener("pointermove", (e) => {
   lastPointer = [e.clientX, e.clientY];
+  // A pen hovering over the pages (no contact): Shift opens the menu where it points.
+  if (e.pointerType === "pen" && !e.buttons && $("viewport").contains(e.target)) penHover = { x: e.clientX, y: e.clientY, at: Date.now() };
   // A pen's side button pressed while it hovers.
   if (e.pointerType === "pen" && e.buttons & 2 && !(lastPenButtons & 2) && doc && !quick.isOpen && $("viewport").contains(e.target)) quick.open(e.clientX, e.clientY);
   if (e.pointerType === "pen") lastPenButtons = e.buttons;
@@ -2138,7 +2141,8 @@ document.addEventListener("pointerdown", (e) => {
   lastPointerType = e.pointerType;
   // A pen's side button (the S Pen button, a Wacom barrel button) on the page: the menu,
   // never a right-click that removes what is under it.
-  if (e.pointerType === "pen" && (e.button === 2 || (e.buttons & 2 && e.button !== 0)) && doc && $("viewport").contains(e.target)) {
+  // …and Shift + pen, for pens without a button: Shift held as the pen touches the page.
+  if (e.pointerType === "pen" && (e.button === 2 || (e.buttons & 2 && e.button !== 0) || (e.shiftKey && e.button === 0)) && doc && $("viewport").contains(e.target)) {
     e.preventDefault();
     e.stopPropagation();
     penMenuAt = Date.now();
@@ -2156,6 +2160,11 @@ let quickKeyAt = 0;
 const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
 document.addEventListener("keydown", (e) => {
   if (quick.isOpen && quick.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  // Shift pressed while a pen hovers over the pages: the menu at the pen.
+  if (e.key === "Shift" && !e.repeat && penHover && Date.now() - penHover.at < 1500 && !quick.isOpen && quickKeyAllowed(e)) {
+    quick.open(penHover.x, penHover.y);
+    return;
+  }
   if (e.key.toLowerCase() !== "z" || e.shiftKey || !quickKeyAllowed(e)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -2181,7 +2190,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],

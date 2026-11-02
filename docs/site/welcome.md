@@ -57,7 +57,7 @@ _Note files, and everything else it opens_
 ## Also opens · exports
 >> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
 - A PDF or an image becomes a note to write on; HTML and Markdown open in their own views, with Markdown notes beside them.
-- Projects (`.nfedit`) keep the untouched original and every edit with its undo history: the lossless copy while saving to Noteful is still experimental.
+- Projects (`.nfedit`) keep your edits and their undo history.
 
 \pagebreak
 
@@ -112,7 +112,7 @@ _From the desktop app: Share in the top bar_
 # KEYS // AND GESTURES
 _The same on a computer, a tablet and a phone_
 
->> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Z== and let go on a tool, press a pen's side button, or hold two fingers still. Tap a tool for its settings
+>> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Z== and let go on a tool, ==Shift + pen==, a pen's side button, or two fingers held still. Tap a tool for its settings
 >> [teal] THE NOTE: ==Ctrl Z== undo, ==Ctrl Shift Z== redo, ==Ctrl S== save, ==Ctrl F== find, ==N== notes, ==D== dark pages || [purple] MORE: ==Ctrl K== commands, ==Ctrl J== ask AI, ==A== audio, ==K== play, ==?== shows every key on its button
 
 ## Gestures

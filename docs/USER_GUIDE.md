@@ -161,6 +161,7 @@ A ring of tools around your pen. Tap a tool to choose it, and its settings appea
 To open it:
 
 - **Keyboard**: hold **Z**, point at an item and let go. Or tap **Z** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
+- **Shift + pen**: hold Shift as the pen touches the page, or press Shift while the pen hovers over it. The menu opens at the pen, and nothing is drawn.
 - **Pen side button**: press the S Pen button, or a Wacom pen's barrel button, on the page. This opens the menu instead of right-clicking.
 - **Touch screens and iPad**: hold two fingers still on the page for half a second.
 

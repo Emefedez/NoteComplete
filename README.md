@@ -19,7 +19,7 @@ It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves th
 ### Read and annotate
 - **Everything in a notebook**: PDF and paper backgrounds, handwriting, highlighter, shapes, images (crops included), typed text, tape, locked items, tags and recordings, up to notebooks of hundreds of pages.
 - **Edit**: pen (stylus pressure, on or off), highlighter, eraser, shapes (outline, tint or solid fill), tape, text boxes, crop, layers, undo/redo; move, resize and lock items. The original file is never changed.
-- **Quick menu** (hold <kbd>Z</kbd>, a pen's side button, or two fingers held still): a ring of tools around the pen; tap one and its colours, widths and modes appear around it. Hold a tool to move it on the ring.
+- **Quick menu** (hold <kbd>Z</kbd>, <kbd>Shift</kbd> + pen, a pen's side button, or two fingers held still): a ring of tools around the pen; tap one and its colours, widths and modes appear around it. Hold a tool to move it on the ring.
 - **Touch and stylus**: two fingers scroll (with momentum) or pinch-zoom, a two-finger tap undoes and three redo; while a stylus is in use a finger scrolls, without one a finger draws. Strokes are smoothed, and quick strokes never wait for the page to redraw. Hold a tool in the bar to rearrange it.
 - **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size, saved as `.notecomp`, `.notepart` or `.noteful`.
 - **Pages**: add blank pages or pages from another PDF; resize a page from a menu or by dragging its borders.
@@ -106,7 +106,7 @@ Screenshots use the sample notes in [`samples/`](samples/).
 
 1. In Noteful, back up or export your notebooks to a Google Drive folder (or copy `.noteful` files to your computer any other way).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.
-3. Save your work as one `.notecomp` file (the note, its Markdown notes, added recordings and the text of your handwriting), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Save project** (`.nfedit`) keeps the untouched original and every edit with its undo history; see [file formats](#file-formats).
+3. Save your work as one `.notecomp` file (the note, its Markdown notes, added recordings and the text of your handwriting), or as `.noteful` to take it back to the iPad (experimental: modified exports have not yet been verified in Noteful itself). **File → Save project** (`.nfedit`) keeps the untouched original and every edit with its undo history; see [file formats](#file-formats) and [why there are two NoteComplete formats](docs/FILE-FORMATS.md).
 
 AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md).
 
@@ -117,9 +117,8 @@ AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds 
 | `.notecomp` | A tar archive: the note as a Noteful file, its Markdown notes, recordings added in NoteComplete, and the text of handwriting (written from Markdown or recognized) ([layout](spec/nfedit-v1.md#notecomp-archives)) | Everyday saving and sharing: one file with everything |
 | `.notepart` | Written like `.notecomp` today; planned as a partial patch for another copy of a note | |
 | `.noteful` | Noteful's own format: pages, ink, PDFs, images, text | Taking notes back to Noteful on the iPad (experimental after editing) |
-| `.nfedit` | A JSON project: the untouched original file plus every edit, with undo and redo ([spec](spec/nfedit-v1.md)) | Keeping the full edit history, and a lossless copy while Noteful export is experimental |
+| `.nfedit` | A JSON project: the untouched original file plus every edit, with undo and redo ([spec](spec/nfedit-v1.md)) | Keeping the full edit history |
 
-**Is `.nfedit` still needed?** For now, yes. `.notecomp` stores the note *flattened* through the Noteful writer, which is still experimental. It also drops the undo history and the corners that keep a drawn shape resizable as a shape. `.nfedit` is the one format that never re-encodes the original. The plan is to carry the edit history inside `.notecomp`, so one file is both shareable and lossless; `.nfedit` would then only need to open, not be offered for saving.
 
 ## Known issues
 
