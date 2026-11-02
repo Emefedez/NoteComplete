@@ -1,5 +1,5 @@
 // Package the same audited asset list used by the reader's offline cache.
-import { readFile, rm, mkdir, copyFile } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdir, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const source = fileURLToPath(new URL('../reader/', import.meta.url));
@@ -12,4 +12,12 @@ for (const relative of new Set([...manifest.filter(name => name !== './'), 'prec
   await mkdir(path.dirname(output), { recursive: true });
   await copyFile(path.join(source, relative), output);
 }
+// The version on Home: the app's own (package.json), not the one written into index.html by
+// hand, which only the desktop app corrected at runtime (the website kept showing it).
+const { version } = JSON.parse(await readFile(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'));
+const page = path.join(destination, 'index.html');
+const html = await readFile(page, 'utf8');
+const stamped = html.replace(/(id="homeVersion"[^>]*>)v[^<]*</, `$1v${version}<`);
+if (stamped === html && !html.includes(`>v${version}<`)) throw Error('Home version badge not found in index.html');
+await writeFile(page, stamped);
 console.log('Staged reader assets; original notes and development dependencies excluded.');
