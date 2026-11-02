@@ -392,7 +392,8 @@ async function load(file, preparedDocument = null) {
     tapeMode = "note";
     tapeTaps.clear();
     find.reset(await fingerprint);
-    notes?.load(find.fingerprint);
+    // A guest keeps the session's shared notes (collab.js binds them), not the note's own.
+    if (collab?.role !== "guest") notes?.load(find.fingerprint);
     const token = ++epoch;
     revision++;
     doc = result;
@@ -475,8 +476,17 @@ async function importImages(files) {
     editing = false;
   }
 }
-// Below the last page: scrolling past the end offers a new blank page of the same size
-// (one undoable edit). Not on an infinite canvas, which grows instead.
+// A blank page after page `after`, the size of that page (one undoable edit). Not on an
+// infinite canvas, which grows instead. Used by the button below the last page and by a
+// drawing tablet's dock (collab.js).
+async function addBlankPage(after) {
+  if (!doc || busy() || doc.canvas) return;
+  const size = panels[after]?.size;
+  if (!size) return;
+  const at = after + 1;
+  await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+}
+// Below the last page: scrolling past the end offers a new blank page of the same size.
 function addPageButton() {
   const button = document.createElement("button");
   button.type = "button";
@@ -486,9 +496,7 @@ function addPageButton() {
   button.append(icon("plus"), Object.assign(document.createElement("span"), { textContent: "New page" }));
   button.onclick = async () => {
     if (!doc || busy() || doc.canvas) return;
-    const at = doc.pages, size = panels.at(-1)?.size;
-    if (!size) return;
-    await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+    await addBlankPage(panels.length - 1);
     status("Page added. You can undo this change.");
   };
   return button;
@@ -757,6 +765,41 @@ function syncTextFormat() {
   });
 }
 let textEditor = null;
+// Phones and tablets open the on-screen keyboard only for a focus made during a tap, and the
+// box opens after an await: a hidden field takes the focus at the tap and hands it on.
+let keyboardPrimer = null;
+function primeKeyboard() {
+  if (!keyboardPrimer) {
+    keyboardPrimer = Object.assign(document.createElement("textarea"), { className: "keyboard-primer", tabIndex: -1 });
+    keyboardPrimer.setAttribute("aria-hidden", "true");
+  }
+  document.body.append(keyboardPrimer);
+  keyboardPrimer.focus({ preventScroll: true });
+}
+function unprime() {
+  if (!keyboardPrimer?.isConnected) return;
+  if (document.activeElement === keyboardPrimer) keyboardPrimer.blur();
+  keyboardPrimer.remove();
+}
+// A tap with Text (finger or stylus, pointerUp): finish the open box, or start one there.
+async function typeAt(p, at) {
+  if (textEditor) return commitText();
+  primeKeyboard();
+  try { await openTextEditor(p, at); } finally { if (!textEditor) unprime(); }
+}
+// The on-screen keyboard covers the bottom of the screen (the visual viewport shrinks): the
+// box being typed scrolls above it, with room added below the pages to scroll that far.
+function keepTextVisible() {
+  const vv = window.visualViewport;
+  if (!textEditor || !vv) return;
+  const covered = Math.max(0, Math.round(innerHeight - vv.offsetTop - vv.height));
+  $("pages").style.marginBottom = covered ? `${covered}px` : "";
+  // Up by what is hidden, but never past the box's top (and the format bar above it).
+  const box = textEditor.area.getBoundingClientRect(), bottom = vv.offsetTop + vv.height - 16;
+  const by = Math.min(box.bottom - bottom, box.top - vv.offsetTop - 56);
+  if (by > 0) $("viewport").scrollTop += by;
+}
+window.visualViewport?.addEventListener("resize", keepTextVisible);
 async function openTextEditor(p, [x, y], known = null) {
   if (textEditor) return commitText();
   if (!doc || editing || busy() || !p.view) return;
@@ -797,11 +840,10 @@ async function openTextEditor(p, [x, y], known = null) {
   fit();
   placeDiscard();
   area.oninput = () => { fit(); placeDiscard(); };
-  const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
-  hidden?.setAttribute("visibility", "hidden");
+  hideText(p, existing?.id);
   p.el.append(area, discard);
   selection.clear();
-  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
+  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: () => { fit(); placeDiscard(); } };
   showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); placeDiscard(); area.focus(); });
   area.addEventListener("keydown", (e) => {
     // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
@@ -811,37 +853,78 @@ async function openTextEditor(p, [x, y], known = null) {
     // Typing stays in the box: no tool or study shortcuts while editing.
     e.stopPropagation();
   });
-  // Leaving the box finishes it, unless the focus went to its format bar.
+  // Leaving the box finishes it, unless the focus went to its format bar (or came back,
+  // as when the page is redrawn under it: renderPage).
   area.addEventListener("blur", () => setTimeout(() => {
-    if (textEditor?.area !== area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
+    if (textEditor?.area !== area || document.activeElement === area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
     commitText();
   }, 0));
-  requestAnimationFrame(() => area.focus());
+  requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
   status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
 }
-function closeText() {
-  if (!textEditor) return;
-  textEditor.hidden?.removeAttribute("visibility");
-  textEditor.area.remove();
-  textEditor.discard?.remove();
+// A typed text box's drawn copy, hidden while the box over it shows its text instead.
+function hideText(p, id, hidden = true) {
+  const item = id != null && p.render?.querySelector(`[data-item="${id}"]`);
+  if (item) hidden ? item.setAttribute("visibility", "hidden") : item.removeAttribute("visibility");
+}
+function endText() {
+  const t = textEditor;
   textEditor = null;
+  t?.discard.remove();
+  $("pages").style.marginBottom = "";
   hideTextFormat();
+  return t;
+}
+function closeText() {
+  const t = endText();
+  if (!t) return;
+  hideText(t.p, t.existing?.id, false);
+  t.area.remove();
+}
+// Finished text stays on screen as typed, in the box without its frame, until a render of
+// its page with the edit is in place (renderPage): removing the box at once left the text
+// gone while the edit was saved and the page redrawn. action() sets `revision` once the
+// edit is in the note, or lets the box go if it never gets there.
+function holdText() {
+  const t = endText();
+  t.area.readOnly = true;
+  t.area.tabIndex = -1;
+  t.area.setAttribute("aria-hidden", "true");
+  t.area.className = "text-placeholder";
+  t.area.blur();
+  const hold = { p: t.p, el: t.area, item: t.existing?.id, revision: Infinity };
+  (t.p.held ||= []).push(hold);
+  return hold;
+}
+// The edit was refused, or the note changed: the box goes, and the text it covered shows.
+function letGo(hold) {
+  if (!hold || hold.revision !== Infinity) return;
+  hold.p.held = hold.p.held.filter((h) => h !== hold);
+  hold.el.remove();
+  hideText(hold.p, hold.item, false);
+}
+// After a render of the page at `version`: boxes whose edit it has go; the others stay.
+function keepHeld(p, version) {
+  p.held = (p.held || []).filter((h) => {
+    if (h.revision <= version) h.el.remove();
+    else { p.el.append(h.el); hideText(p, h.item); }
+    return h.revision > version;
+  });
 }
 async function commitText() {
   const t = textEditor;
   if (!t) return;
   const value = t.area.value.replace(/\s+$/, "");
-  closeText();
   const text = textPayload(value, t.style);
   const [w, h] = textBoxSize(value || " ", t.style);
+  const same = t.existing && value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
+  if (same || (!t.existing && !value.trim())) return closeText();
+  const hold = holdText();
   if (t.existing) {
-    const same = value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
-    if (same) return;
-    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id });
-    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
+    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
+    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
   }
-  if (!value.trim()) return;
-  await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } });
+  await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } }, hold);
 }
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
 function lockMarks(view) {
@@ -1189,8 +1272,18 @@ async function renderPage(p, provided) {
     overlay.setAttribute("viewBox", `0 0 ${p.size.join(" ")}`);
     p.render = render;
     p.overlay = overlay;
+    const typing = textEditor?.p === p && document.activeElement === textEditor.area;
     p.el.replaceChildren(render, overlay, lockMarks(result));
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
+    // Typed text is not lost to a redraw (another screen's edit, a zoom): finished text
+    // waiting for its own render stays, and so does the box being typed in.
+    keepHeld(p, version);
+    if (textEditor?.p === p) {
+      p.el.append(textEditor.area, textEditor.discard);
+      hideText(p, textEditor.existing?.id);
+      textEditor.fit();
+      if (typing) textEditor.area.focus({ preventScroll: true });
+    }
     if (textFormatTarget?.p === p) p.el.append(textFormatBar);
     find.paint(p);
     find.selectable(p);
@@ -1237,6 +1330,9 @@ async function renderPage(p, provided) {
       error.className = "page-error";
       error.textContent = "Could not display this page: " + e.message;
       p.el.append(error);
+      // No text left waiting over a page that could not be drawn.
+      for (const h of p.held || []) if (h.revision <= version) h.el.remove();
+      p.held = (p.held || []).filter((h) => h.revision > version);
     }
   } finally {
     p.loading = false;
@@ -1390,8 +1486,9 @@ $("toolbarToggle").onclick = () => {
   cancelGesture();
   setCompact(chromeState.toggle($("viewport").scrollTop));
 };
-async function action(op, args = {}) {
-  if (!doc || editing) return;
+// `hold`: typed text kept on screen until the page's render with this edit (holdText).
+async function action(op, args = {}, hold = null) {
+  if (!doc || editing) return letGo(hold);
   mutationPending++;
   const token = epoch;
   try {
@@ -1405,6 +1502,7 @@ async function action(op, args = {}) {
     } else if (selection.item) {
       selection.selectId(selection.item.page, selection.item.id);
     }
+    if (hold) hold.revision = revision;
     showEdit(op, args, result);
     // Ordinary edits say nothing: the save icon in the bar shows there are unsaved changes.
     if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
@@ -1414,6 +1512,7 @@ async function action(op, args = {}) {
     if (op === "draw") for (const p of panels) for (const el of [...(p.overlay?.querySelectorAll(".pending-ink") || [])]) if (gesture?.panel !== p || !gesture.el?.isSameNode(el)) el.remove();
   } finally {
     mutationPending--;
+    letGo(hold);
     if (token === epoch) {
       for (const p of panels) {
         if (gesture?.panel !== p) {
@@ -1575,7 +1674,11 @@ function cancelGesture() {
   gesture = null;
   if (!g) return;
   collab?.drawn(g, true);
-  g.panel.overlay?.replaceChildren();
+  // A cancelled grab takes only its own box away: a region grabbed before keeps its menu.
+  if (g.tool === "grab") {
+    g.el.remove();
+    if (g.hidMenu && grabbed) $("grabMenu").hidden = false;
+  } else g.panel.overlay?.replaceChildren();
   if (g.hidden) g.hidden.style.visibility = "";
   shapeHandles(g.panel);
   if (g.panel.el.hasPointerCapture(g.id))
@@ -1600,9 +1703,14 @@ function point(e, p) {
 }
 // A stylus counts as in use for half a minute after it last touched or hovered the page.
 const PEN_ACTIVE_MS = 30000;
-let lastPen = -Infinity;
+let lastPen = -Infinity, lastPenWrote = -Infinity;
 const notePen = (e) => {
-  if (e.pointerType === "pen") lastPen = performance.now();
+  if (e.pointerType === "pen") {
+    lastPen = performance.now();
+    // Touching the page, not hovering: an Apple Pencil that hovers (held near the screen
+    // while two fingers open the quick menu) sends moves all the time.
+    if (e.buttons || e.type !== "pointermove") lastPenWrote = lastPen;
+  }
   // Fingers and pens never select the text over the pages (it would pick words while
   // scrolling or drawing); the mouse still does.
   if (e.type === "pointerdown") {
@@ -1614,7 +1722,16 @@ const notePen = (e) => {
 for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
+let viewOnlyToldAt = -Infinity;
 function pointerDown(e, p) {
+  // A view-only guest: say why nothing is drawn (at most every few seconds), and keep Pan.
+  if (collab?.readOnly && (e.pointerType === "pen" || tool !== "pan")) {
+    if (e.timeStamp - viewOnlyToldAt > 4000) {
+      viewOnlyToldAt = e.timeStamp;
+      status("This note is shared view-only: you can read it and its notes, and follow along. To draw, ask the host to share it for editing.", true);
+    }
+    if (tool !== "pan") { chooseTool("pan"); return; }
+  }
   if (thumbsDue.size) { clearTimeout(thumbsTimer); thumbsTimer = setTimeout(refreshThumbnails, 1200); }
   if (gesture) {
     if (e.pointerId === gesture.id) return;
@@ -1635,10 +1752,13 @@ function pointerDown(e, p) {
   // While a stylus is in use, fingers move the page instead of drawing (palm and finger
   // rejection, as in drawing apps); with the stylus put away, a finger draws again.
   const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penActive() && FINGER_PANS.has(tool));
+  // Text with a finger or stylus: the box opens when the tap lifts, since phones open the
+  // keyboard only for a focus made then (not when the tap starts); a drag moves the page.
+  const textTap = tool === "text" && e.pointerType !== "mouse" && !textEditor;
   if (!touchPan && selection.down(e, p, tool)) return;
-  if (tool === "pan" || touchPan) {
+  if (tool === "pan" || touchPan || textTap) {
     // On PDF or recognized words the mouse selects text instead of panning.
-    if (!touchPan && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
+    if (!touchPan && !textTap && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
     window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
@@ -1651,6 +1771,7 @@ function pointerDown(e, p) {
       y: e.clientY,
       left: $("viewport").scrollLeft,
       top: $("viewport").scrollTop,
+      text: textTap ? point(e, p) : null,
     };
     p.el.setPointerCapture(e.pointerId);
     return;
@@ -1676,9 +1797,11 @@ function pointerDown(e, p) {
     e.preventDefault();
     const start = point(e, p), el = document.createElementNS(ns, "rect");
     el.setAttribute("class", "grab-rect");
-    p.overlay.append(el);
-    $("grabMenu").hidden = true;
-    gesture = { id: e.pointerId, tool, panel: p, start, points: [start], el, dot: document.createElementNS(ns, "g") };
+    // The box shows once the pointer moves (appendPoint). The first finger of a two-finger
+    // hold, or a pen held still, opens the quick menu instead: that cancels this before
+    // anything is drawn or the last grab's menu is hidden.
+    const slop = e.pointerType === "touch" ? 12 : e.pointerType === "pen" ? 4 : 0;
+    gesture = { id: e.pointerId, tool, panel: p, start, points: [start], el, dot: document.createElementNS(ns, "g"), from: [e.clientX, e.clientY], slop };
     p.el.setPointerCapture(e.pointerId);
     return;
   }
@@ -1759,6 +1882,11 @@ function appendPoint(e) {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
   } else if (g.tool === "grab") {
     g.points = [g.start, point(e, g.panel)];
+    if (!g.el.isConnected && Math.hypot(e.clientX - g.from[0], e.clientY - g.from[1]) > g.slop) {
+      g.panel.overlay.append(g.el);
+      g.hidMenu ||= !$("grabMenu").hidden;
+      $("grabMenu").hidden = true;
+    }
   } else if (g.box) {
     const end = point(e, g.panel), y = (g.start[1] + end[1]) / 2;
     g.width = Math.max(4, Math.abs(end[1] - g.start[1]));
@@ -1864,27 +1992,31 @@ function pointerUp(e) {
   if (selection.up(e)) return;
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.tool === "pan") {
-    const v = gesture.speed?.velocity(e.timeStamp);
+    const g = gesture, v = g.speed?.velocity(e.timeStamp);
     cancelGesture();
+    if (g.text && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 10) return typeAt(g.panel, g.text);
     if (v) glide.fling(-v.vx, -v.vy);
     return;
   }
   appendPoint(e);
   const g = gesture;
   gesture = null;
-  collab?.drawn(g);
+  // A tap with tape lifts or covers it here only: the others drop the line drawn meanwhile.
+  const lift = point(e, g.panel), tapeTap = g.tool === "tape" && Math.hypot(lift[0] - g.start[0], lift[1] - g.start[1]) < 8;
+  collab?.drawn(g, tapeTap);
   g.panel.stale = false;
   if (g.panel.el.hasPointerCapture(e.pointerId)) g.panel.el.releasePointerCapture(e.pointerId);
   if (g.tool === "grab") {
     const rect = grabRect(g);
-    if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); return; }
+    // A tap with Grab hides the last grab's menu, as a press always did.
+    if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); $("grabMenu").hidden = true; return; }
     showGrabMenu(g.panel, rect, g.el);
     return;
   }
   // Tape tool: a tap lifts or covers the tape under it; a drag lays new tape.
   if (g.tool === "tape") {
-    const [a, b] = [g.start, point(e, g.panel)];
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 8) {
+    const a = g.start;
+    if (tapeTap) {
       g.el.remove();
       g.dot.remove();
       const tape = [...(g.panel.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => a[0] >= x && a[0] <= x + w && a[1] >= y && a[1] <= y + h);
@@ -1939,53 +2071,63 @@ function pointerUp(e) {
     });
   }
 }
-for (const button of document.querySelectorAll("[data-tool]"))
-  button.onclick = () => {
-    cancelGesture();
-    // Pressing the selected tool again shows or hides its settings.
-    if (tool === button.dataset.tool) {
-      optionsOpen = chromeState.compact || !optionsOpen;
-      setCompact(false);
-      return;
+// Switches tool. The tool bar's buttons and the quick menu both come here; only a press in
+// the tool bar opens (or toggles) the tool's settings there, since the menu shows its own.
+function selectTool(name, { fromMenu = false } = {}) {
+  if (fromMenu && tool === name) return;
+  cancelGesture();
+  // Pressing the selected tool again shows or hides its settings.
+  if (tool === name) {
+    optionsOpen = chromeState.compact || !optionsOpen;
+    setCompact(false);
+    return;
+  }
+  const prevGrab = grabbed;
+  tool = name;
+  endResizeDrag();
+  // From the menu the bar's settings stay closed: the menu shows them. Select's panel
+  // belongs to what is selected, so it still opens as usual.
+  optionsOpen = fromMenu && tool !== "select" ? false : toolSettingsAuto;
+  if (tool !== "select") selection.clear();
+  if (tool !== "grab") {
+    // A grabbed region becomes the selection, as its Select button does.
+    if (tool === "select" && prevGrab) {
+      selectGrab(prevGrab);
+    } else {
+      clearGrab();
     }
-    const prevGrab = grabbed;
-    tool = button.dataset.tool;
-    endResizeDrag();
-    optionsOpen = toolSettingsAuto;
-    if (tool !== "select") selection.clear();
-    if (tool !== "grab") {
-      if (tool === "select" && prevGrab) {
-        selectGrab(prevGrab);
-      } else {
-        clearGrab();
-      }
-    }
+  }
+  // The menu leaves the tool bar as it was (collapsed stays collapsed).
+  if (!fromMenu) {
     chromeState.reset($("viewport").scrollTop);
     setCompact(false);
-    for (const p of panels) p.el.dataset.tool = tool;
-    for (const b of document.querySelectorAll("button[data-tool]"))
-      b.setAttribute("aria-pressed", String(b === button));
-    for (const p of panels) shapeHandles(p);
-    // Each tool comes back with the colour and width it was last used with.
-    restoreToolPrefs();
-    toolOptions();
-    refreshSelects();
-    status(
-      tool === "select"
-        ? "Tap an item to move or edit it."
-        : tool === "highlight"
-          ? highlightHint()
-          : tool === "grab"
-            ? "Grab: drag a box to copy its text or ask AI about it."
-          : tool === "tape"
-            ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
-          : tool === "erase"
-            ? "Drag to erase whole strokes."
-            : tool === "pan"
-              ? "Scroll through the pages."
-              : "Draw on the selected layer.",
-    );
-  };
+  }
+  for (const p of panels) p.el.dataset.tool = tool;
+  for (const b of document.querySelectorAll("button[data-tool]"))
+    b.setAttribute("aria-pressed", String(b.dataset.tool === tool));
+  for (const p of panels) shapeHandles(p);
+  // Each tool comes back with the colour and width it was last used with.
+  restoreToolPrefs();
+  toolOptions();
+  refreshSelects();
+  status(
+    tool === "select"
+      ? "Tap an item to move or edit it."
+      : tool === "highlight"
+        ? highlightHint()
+        : tool === "grab"
+          ? "Grab: drag a box to copy its text or ask AI about it."
+        : tool === "tape"
+          ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
+        : tool === "erase"
+          ? "Drag to erase whole strokes."
+          : tool === "pan"
+            ? "Scroll through the pages."
+            : "Draw on the selected layer.",
+  );
+}
+for (const button of document.querySelectorAll("[data-tool]"))
+  button.onclick = () => selectTool(button.dataset.tool);
 function highlightHint() {
   return { straight: "Straight highlight: drag between the endpoints.", free: "Freehand highlight: draw on the page.", box: "Rectangle highlight: drag a box over what to highlight." }[$("highlightMode").value];
 }
@@ -2315,15 +2457,17 @@ touchGestures({
   redo: () => { if (!$("redo").disabled) $("redo").click(); },
   menu: (x, y) => quick.open(x, y),
   // Not while a stylus was just writing: a palm resting beside it is not a gesture.
-  penBusy: () => performance.now() - lastPen < 1500,
+  penBusy: () => performance.now() - lastPenWrote < 1500,
   enabled: () => !!doc,
 });
 // Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
 // them. Shift + S (hold, point, let go; or tap and click), Shift + pen, a pen's side
 // button, or two fingers held still on the page open it.
-const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"]];
-const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolbar [data-tool="${name}"]`)?.click(); };
+// Grab is last, so the other tools keep their number keys.
+const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"], ["grab", "Grab"]];
+const chooseTool = (name) => selectTool(name, { fromMenu: true });
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
+// Tools missing from a saved order (added since) go at the end.
 let quickOrder = QUICK_TOOLS.map(([name]) => name);
 try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
 // Remembered on this device: JSON in localStorage, defaults when missing or unreadable.
@@ -2711,7 +2855,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -4788,6 +4932,10 @@ const collabHost = {
   title: () => $("title").textContent,
   setCollab(value) { collab = value; },
   setTool(name) { document.querySelector(`[data-tool="${name}"]`)?.click(); },
+  // A drawing tablet's New page: a blank page after the one in view, the same size.
+  addPage: () => addBlankPage(page),
+  // A tool's colours, as in its quick menu (the tablet's dock shows the tape's).
+  palette: (name) => [...(palettes[name] || [])],
   // A tablet's copy of the computer's note: opened like a project, never kept in Recent.
   async openProject(project, title) {
     cancelGesture();

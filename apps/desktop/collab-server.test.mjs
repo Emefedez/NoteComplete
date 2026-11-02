@@ -139,12 +139,18 @@ test('refuses missing, wrong and expired invites; limits size and rate', async (
     assert.equal(t.client.role, 'tablet');
     assert.equal(t.client.token, server.hub.tokens.tablet);
     // Guests of an editable session may draw (refused here only because no note is open);
-    // tablets cannot edit pages.
+    // tablets add blank pages and typed text, but no PDF, picture or handwritten Markdown.
     const g = client(server, { token: server.hub.tokens.guest });
     await welcomed(g);
     await assert.rejects(g.submit('draw', { line: {} }), /The note changed/);
+    await assert.rejects(t.client.submit('insertPages', { at: 1, pages: [{ size: [600, 800] }] }), /The note changed/);
+    await assert.rejects(t.client.submit('image', { page: 0, image: { base64: '', mime: '', bounds: [0, 0, 10, 10], layer: 0, text: { runs: [] } } }), /The note changed/);
+    await assert.rejects(t.client.submit('editText', { page: 0, itemId: 'image:0', text: {} }), /The note changed/);
     await assert.rejects(t.client.submit('insertPages', {}), /Not allowed/);
+    await assert.rejects(t.client.submit('insertPages', { at: 1, pages: [{ size: [600, 800], pdf: { resource: 'x', page_index: 0 } }], pdf: { id: 'x', base64: '' } }), /Not allowed/);
+    await assert.rejects(t.client.submit('image', { page: 0, image: { base64: 'AAAA', mime: 'image/png', bounds: [0, 0, 10, 10], layer: 0 } }), /Not allowed/);
     await assert.rejects(t.client.submit('insertHandwritten', {}), /Not allowed/);
+    await assert.rejects(t.client.submit('resizePage', { size: [10, 10] }), /Not allowed/);
     // Full: the host plus two others.
     assert.match(await closedWith(client(server, { token: server.hub.tokens.guest })), /full/);
     // Oversized messages close the connection.
