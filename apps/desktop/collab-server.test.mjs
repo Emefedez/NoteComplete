@@ -8,7 +8,7 @@ import * as sync from 'y-protocols/sync';
 import * as awareness from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import { startServer, lanAddress, lanAddresses, readerFile } from './collab-server.js';
+import { startServer, lanAddress, lanAddresses, readerFile, firewallHint } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
 
 const yjs = { Y, sync, awareness, encoding, decoding };
@@ -138,10 +138,11 @@ test('refuses missing, wrong and expired invites; limits size and rate', async (
     await welcomed(t.client);
     assert.equal(t.client.role, 'tablet');
     assert.equal(t.client.token, server.hub.tokens.tablet);
-    // Guests cannot draw, and the tablet cannot edit pages.
+    // Guests of an editable session may draw (refused here only because no note is open);
+    // tablets cannot edit pages.
     const g = client(server, { token: server.hub.tokens.guest });
     await welcomed(g);
-    await assert.rejects(g.submit('draw', { line: {} }), /Not allowed/);
+    await assert.rejects(g.submit('draw', { line: {} }), /The note changed/);
     await assert.rejects(t.client.submit('insertPages', {}), /Not allowed/);
     await assert.rejects(t.client.submit('insertHandwritten', {}), /Not allowed/);
     // Full: the host plus two others.
@@ -211,6 +212,62 @@ test('a tablet joins from a snapshot; everyone applies edits in one order', asyn
     assert.notEqual(server.hub.tokens.tablet, old);
     assert.match(await closedWith(client(server, { token: old, role: 'tablet' })), /not valid/);
     h.close();
+  } finally { await server.stop(); }
+});
+
+test('guests see the note live; they draw only when the notes are editable', async () => {
+  const root = await reader();
+  for (const notes of ['view', 'edit']) {
+    const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes, hubOptions: { rate: { burst: 2000, perSecond: 2000 } } });
+    try {
+      const mine = new Replica();
+      const h = host(server, mine, { yjs });
+      await welcomed(h);
+      h.documentChanged({ open: true, title: 'Exam' });
+      await h.submit('draw', { page: 0, line: 'host-1' });
+      // A guest is loaded like a tablet and follows every edit.
+      const g = tablet(server, { token: server.hub.tokens.guest, role: 'guest', yjs });
+      await until(() => g.client.loaded, 'snapshot');
+      assert.deepEqual(g.replica.visible(), ['host-1']);
+      await h.submit('draw', { line: 'host-2' });
+      await until(() => g.client.seq === h.seq, 'follows');
+      assert.deepEqual(g.replica.visible(), ['host-1', 'host-2']);
+      if (notes === 'view') await assert.rejects(g.client.submit('draw', { line: 'guest' }), /Not allowed/);
+      else {
+        await g.client.submit('draw', { line: 'guest' });
+        assert.deepEqual(mine.visible(), ['host-1', 'host-2', 'guest']);
+      }
+      assert.equal(g.client.canEdit, notes === 'edit');
+      g.client.close(); h.close();
+    } finally { await server.stop(); }
+  }
+});
+
+test('online tablets join with their own link through the tunnel, never with the local one', async () => {
+  const { default: WebSocket } = await import('ws');
+  const { EventEmitter } = await import('node:events');
+  const server = await startServer({ root: await reader(), host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  const hello = (message) => new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/sync`, { headers: { Host: 'quiet-forest-1234.trycloudflare.com' } });
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', name: 'iPad', ...message })));
+    ws.on('message', (data, binary) => { if (binary) return; const m = JSON.parse(data.toString()); resolve(m.t === 'closed' ? 'refused' : m.t === 'welcome' ? `welcome ${m.role} ${m.token === message.token}` : m.t); ws.close(); });
+    ws.on('error', () => resolve('refused'));
+    ws.on('close', () => resolve('refused'));
+  });
+  try {
+    const spawn = () => { const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter(); c.kill = () => c.emit('exit', 0); setTimeout(() => c.stderr.emit('data', Buffer.from('https://quiet-forest-1234.trycloudflare.com')), 5); return c; };
+    // A session without notes: online access is for tablets only.
+    assert.equal(await server.goOnline({ binary: 'x', spawn }), '');
+    const link = server.onlineTabletLink;
+    assert.match(link, /^https:\/\/quiet-forest-1234\.trycloudflare\.com\/tablet#[0-9a-f]{8}\.[\w-]{22}$/);
+    const online = link.split('.').pop();
+    // The tablet gets its online token back to reconnect with.
+    assert.equal(await hello({ token: online, role: 'tablet' }), 'welcome tablet true');
+    assert.equal(await hello({ token: server.hub.tokens.tablet, role: 'tablet' }), 'refused');
+    assert.equal(await hello({ code: server.code().code }), 'refused');
+    server.stopOnline();
+    assert.equal(server.onlineTabletLink, '');
+    assert.equal(await hello({ token: online, role: 'tablet' }), 'refused');
   } finally { await server.stop(); }
 });
 
@@ -339,4 +396,12 @@ test('online access: only notes guests with the online link join through the tun
     assert.equal(server.onlineLink, '');
     assert.equal(await hello({ token: online }), 'refused');
   } finally { await server.stop(); }
+});
+
+test('the firewall hint names the running Linux firewall and the port to open', async () => {
+  const active = (name) => async (_f, args) => (args[1] === name ? 'active\n' : 'inactive\n');
+  assert.equal(await firewallHint(41237, { platform: 'darwin', run: active('firewalld') }), null);
+  assert.deepEqual(await firewallHint(41237, { platform: 'linux', run: active('ufw') }), { name: 'ufw', command: 'sudo ufw allow 41237/tcp' });
+  assert.match((await firewallHint(41237, { platform: 'linux', run: active('firewalld') })).command, /--permanent --add-port=41237\/tcp/);
+  assert.equal(await firewallHint(41237, { platform: 'linux', run: async () => '' }), null);
 });

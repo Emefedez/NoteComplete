@@ -63,6 +63,8 @@ try {
   await p.evaluate(() => document.querySelector('details.bar-menu')?.setAttribute('open', ''));
   const m = await p.evaluate(() => { const e = document.querySelector('details.bar-menu[open] .menu-content'); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, bottom: Math.min(r.bottom, innerHeight) - 20, top: r.y + 20, overflow: e.scrollHeight - e.clientHeight, fits: r.bottom <= innerHeight }; });
   assert.ok(m.fits, 'the menu stays inside the window');
+  // It is really seen: nothing (the menu row's faded edges, a mask) hides it.
+  assert.ok(await p.evaluate(() => { const menu = document.querySelector('details.bar-menu[open] .menu-content'); const r = menu.getBoundingClientRect(); return menu.contains(document.elementFromPoint(r.left + 20, r.top + 20)); }), 'the open menu is visible');
   if (m.overflow > 0) {
     await drag([m.x, m.bottom], [m.x, m.top], 12); await sleep(400);
     assert.ok(await p.evaluate(() => document.querySelector('details.bar-menu[open] .menu-content').scrollTop) > 0, 'the menu scrolls');

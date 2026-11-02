@@ -234,6 +234,7 @@ function call(op, args = {}) {
 // (applyShared), so every copy applies the same edits in the same order.
 let collab = null;
 function mutate(op, args = {}) {
+  if (collab?.readOnly) return Promise.reject(Error("This note is shared view-only: you can read it and follow along."));
   return collab?.ink ? collab.submit(op, args) : call(op, args);
 }
 // Notes of 32 MB and more replace the engine's worker when they close (engine.js).

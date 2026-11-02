@@ -171,13 +171,16 @@ class Session {
     host.setCollab(this);
     this.client.connect();
   }
-  // Ink goes through the shared order only while it matters: a tablet is connected (host),
-  // or this is the tablet. Otherwise the host edits exactly as without a session.
+  // Ink goes through the shared order only while it matters: someone follows the note (a
+  // tablet or a guest, for the host), or this is a tablet or a guest. Otherwise the host
+  // edits exactly as without a session.
   get ink() {
     if (this.client.state !== 'open') return false;
-    if (this.role === 'tablet') return this.client.loaded;
-    return this.role === 'host' && this.host.kind === 'note' && this.people.some((p) => p.role === 'tablet');
+    if (this.role === 'tablet' || this.role === 'guest') return this.client.loaded;
+    return this.role === 'host' && this.host.kind === 'note' && this.people.some((p) => p.role === 'tablet' || p.role === 'guest');
   }
+  // A guest of a view-only session sees the note but cannot change it.
+  get readOnly() { return this.role === 'guest' && this.client.loaded && !this.client.canEdit; }
   submit(op, args) { return this.client.submit(op, args); }
   async apply(entry, mine) {
     const result = await this.host.applyShared(entry, mine);
@@ -185,13 +188,24 @@ class Session {
     for (const [key, stroke] of this.live) if (stroke.from === entry.from && stroke.done) this.dropLive(key);
     return result;
   }
-  // Tablet: the host's note, as a project.
+  // Tablets and guests: the host's note, as a project.
   async load({ project, title }) {
     for (let i = 0; i < 200 && (!this.host.ready || this.host.busy); i++) await new Promise((r) => setTimeout(r, 50));
     const view = this.view();
     await this.host.openProject(project, title);
     this.restoreView(view);
     this.waiting(false);
+    if (this.role === 'guest') {
+      // Opening a note loads its own notes: the panel goes back to the shared ones.
+      document.body.classList.toggle('guest-readonly', !this.client.canEdit);
+      if (!this.client.canEdit) this.host.setTool?.('pan');
+      const notes = await this.host.notesApi();
+      if (!notes.visible) $('notesToggle')?.click();
+      this.bindNotes();
+      this.showTitle();
+      this.host.status(this.client.canEdit ? `You can draw on “${title || 'the note'}” and write its notes.` : `Viewing “${title || 'the note'}”.`);
+      return;
+    }
     this.host.status(`Drawing on “${title || 'the note'}”.`);
   }
   event(type, detail) {
@@ -214,6 +228,8 @@ class Session {
       for (const [key, stroke] of this.live) if (!detail.some((p) => p.id === stroke.from)) this.dropLive(key);
     } else if (type === 'doc') {
       if (this.role === 'guest') this.showTitle();
+      // The host closed the note (or opened something that is not a note): notes only.
+      if (this.role === 'guest' && !detail.open && host.doc) host.closeDocument();
       if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); }
     } else if (type === 'live') {
       this.showLive(detail);
@@ -273,50 +289,55 @@ class Session {
   async drawOnline(state = {}) {
     const section = $('collabOnline'), bridge = window.notecompleteCollab;
     if (!section) return;
-    if (!this.info.guestLink || !bridge?.online) { section.hidden = true; return; }
+    if (!bridge?.online) { section.hidden = true; return; }
     section.hidden = false;
     const title = el('h3', { textContent: 'Online access' });
     if (state.busy) {
       section.replaceChildren(title, el('p', { className: 'muted', id: 'collabOnlineStatus', textContent: state.busy }));
       return;
     }
-    if (!this.info.onlineLink) {
+    if (!this.info.online) {
       const on = el('button', { type: 'button', className: 'accent', textContent: 'Turn on online access' });
       on.onclick = async () => {
         if (!onlineHooked) {
           onlineHooked = true;
           bridge.onOnlineProgress?.((p) => { const s = $('collabOnlineStatus'); if (s) s.textContent = `Downloading Cloudflare’s tunnel (once)… ${Math.round(p * 100)}%`; });
-          bridge.onOnlineEnded?.(() => { if (!session?.info) return; session.info.onlineLink = ''; session.host.status('Online access stopped: the tunnel closed.', true); session.drawOnline(); });
+          bridge.onOnlineEnded?.(() => { if (!session?.info) return; Object.assign(session.info, { online: false, onlineLink: '', onlineTabletLink: '' }); session.host.status('Online access stopped: the tunnel closed.', true); session.drawOnline(); });
         }
         await this.drawOnline({ busy: 'Connecting to Cloudflare…' });
         try {
           Object.assign(this.info, await bridge.online(true));
-          this.host.status('Online access is on. Send the online link to people on other networks.');
+          this.host.status('Online access is on. Send the online links to people and devices on other networks.');
         } catch (e) { this.host.status(e.message, true); }
         await this.drawOnline();
       };
       section.replaceChildren(title,
-        el('p', { textContent: 'Let people on other networks join the notes, through a temporary internet address from Cloudflare. They get their own link; drawing tablets stay on this network. Anyone with the online link can join until you turn it off or stop sharing.' }),
-        el('p', { className: 'muted', textContent: this.info.notesMode === 'view' ? 'Guests can only view the notes.' : 'Guests can edit the notes, as on this network.' }),
-        on, state.error ? el('p', { className: 'collab-error', textContent: state.error }) : '');
+        el('p', { textContent: 'Reach people and devices on other networks through a temporary internet address from Cloudflare. They get their own links, which work until you turn this off or stop sharing.' }),
+        el('p', { className: 'muted', textContent: !this.info.guestLink ? 'Drawing tablets only: this session shares no notes.' : this.info.notesMode === 'view' ? 'Guests see the note and can only read the notes.' : 'Guests see the note, draw on it and write the notes, as on this network.' }),
+        on);
       return;
     }
-    const link = this.info.onlineLink;
-    const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy online link' });
-    copy.onclick = () => navigator.clipboard.writeText(link).then(() => this.host.status('Online link copied.'), () => this.host.status('Select the link and copy it.', true));
     const off = el('button', { type: 'button', className: 'danger', textContent: 'Turn off', onclick: async () => {
       try { Object.assign(this.info, await bridge.online(false)); } catch (e) { this.host.status(e.message, true); }
-      this.info.onlineLink = '';
-      this.host.status('Online access is off; people who joined online were disconnected.');
+      Object.assign(this.info, { online: false, onlineLink: '', onlineTabletLink: '' });
+      this.host.status('Online access is off; people and devices that joined online were disconnected.');
       this.drawOnline();
     } });
-    const qr = el('div', { className: 'collab-qr small' });
-    qr.innerHTML = await qrSvg(link);
-    section.replaceChildren(title, el('div', { className: 'collab-pair' }, qr, el('div', {},
-      el('p', { textContent: 'Send this link to people anywhere. It works until you turn it off or stop sharing.' }),
-      el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', onfocus: (e) => e.target.select() }),
-      el('div', { className: 'collab-online-actions' }, copy, off))));
+    const block = async (label, link, text) => {
+      const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy' });
+      copy.onclick = () => navigator.clipboard.writeText(link).then(() => this.host.status('Link copied.'), () => this.host.status('Select the link and copy it.', true));
+      const qr = el('div', { className: 'collab-qr small' });
+      qr.innerHTML = await qrSvg(link);
+      return el('div', { className: 'collab-pair' }, qr, el('div', {},
+        el('p', {}, el('strong', { textContent: label }), ` ${text}`),
+        el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', onfocus: (e) => e.target.select() }), copy));
+    };
+    const blocks = [];
+    if (this.info.onlineLink) blocks.push(await block('People:', this.info.onlineLink, 'the note and its notes, in a browser anywhere.'));
+    if (this.info.onlineTabletLink) blocks.push(await block('Drawing tablet:', this.info.onlineTabletLink, 'a phone or tablet on any network.'));
+    section.replaceChildren(title, ...blocks, el('div', { className: 'collab-online-actions' }, off));
   }
+
   async drawInvite() {
     const invite = $('collabInvite');
     if (invite && this.info.guestLink) {
@@ -328,6 +349,19 @@ class Session {
         el('p', { textContent: 'Send this link to people on this network. They write the notes with you in a browser or in NoteComplete (File → Join shared notes).' }),
         el('input', { type: 'text', readOnly: true, value: this.info.guestLink, className: 'collab-link', onfocus: (e) => e.target.select() }), copy)));
     }
+  }
+  // Phones never load the page: on Linux, firewalld or ufw blocks the port. The command to
+  // allow it, to copy into a terminal; or the online link, which needs no firewall change.
+  firewallHint() {
+    const hint = this.info.firewall;
+    if (!hint?.command) return null;
+    const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy command' });
+    copy.onclick = () => navigator.clipboard.writeText(hint.command).then(() => this.host.status('Command copied. Run it in a terminal.'), () => this.host.status('Select the command and copy it.', true));
+    return el('div', { className: 'collab-firewall' },
+      el('p', { textContent: `The page never loads on the device? This computer's firewall (${hint.name}) blocks it. Allow NoteComplete's port once with:` }),
+      el('input', { type: 'text', readOnly: true, value: hint.command, className: 'collab-link', onfocus: (e) => e.target.select() }),
+      copy,
+      el('p', { className: 'muted', textContent: 'Or turn on online access below: it works without changing the firewall.' }));
   }
   // This computer has several networks (Wi-Fi and a VPN, say): the links can use another.
   networkPicker() {
@@ -355,7 +389,7 @@ class Session {
       el('dl', { className: 'collab-code' },
         el('dt', { textContent: 'Address' }), el('dd', { textContent: `${this.info.address}:${this.info.port}` }),
         el('dt', { textContent: 'Code' }), el('dd', { className: 'code', textContent: `${code.slice(0, 3)} ${code.slice(3)}` })),
-      el('p', { className: 'muted', textContent: `The code works for 10 minutes. The device then reconnects by itself. It must be on the same Wi-Fi as this computer.` }), renew)), this.networkPicker() || '');
+      el('p', { className: 'muted', textContent: `The code works for 10 minutes. The device then reconnects by itself. It must be on the same Wi-Fi as this computer.` }), renew)), this.networkPicker() || '', this.firewallHint() || '');
   }
   drawShareList() {
     const list = $('collabPeople');
@@ -756,7 +790,7 @@ class Session {
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }
     this.dock?.remove();
-    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode');
+    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
     delete document.body.dataset.dock;
     if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();
     host.setCollab(null);
