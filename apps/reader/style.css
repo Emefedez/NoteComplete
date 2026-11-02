@@ -1864,6 +1864,8 @@ body.bar-compact .tab { height: 22px; }
 /* Drag to reorder (tools, tabs): the dragged item lifts and follows the
    pointer; the others slide out of its way. */
 .reordering > * { transition: transform .16s ease; }
+/* Held on a touch screen: lifted, ready to be dragged to another place in the row. */
+.lifted { transform: scale(1.08); box-shadow: 0 6px 18px #0003; background: var(--surface); transition: transform .12s ease, box-shadow .12s ease; -webkit-touch-callout: none; }
 .reordering > .dragging { position: relative; z-index: 2; transition: none; box-shadow: 0 6px 18px #0003; background: var(--surface); cursor: grabbing; opacity: .96; }
 
 /* Notes: a Markdown panel beside the pages, like Layers; the left edge resizes it. */
