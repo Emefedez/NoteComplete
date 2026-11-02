@@ -38,7 +38,9 @@ The default notes are:
   - **Pages with little ink** show the canvas itself, as a still bitmap (`bitmaprenderer`). Its memory goes the moment the page leaves the view.
   - **Pages with more than 100 ink elements** show a PNG inside the page's SVG. A canvas is a compositing layer of its own, and while a stroke is drawn over it Chromium checks every ink element against that layer each frame: about 10 ms a frame with a few hundred strokes, against 2 ms for a picture. The PNG is encoded in a worker (`raster-encoder.js`); `toDataURL` on the main thread took 60–100 ms per page.
 
-  Either way, the last 3 rasters are kept for scrolling back.
+  - **Rasters larger than 4096 px a side (or 16 MP)**, as on a page zoomed in, are also a PNG, whatever the ink. A canvas reaches the screen as one GPU texture, and many Android tablets (Xiaomi Pad 5) take none that large: the canvas was not drawn at all. A picture is drawn in tiles.
+
+  Either way, the last 3 rasters are kept for scrolling back. When pages are added or removed and the page list is rebuilt, the old pages let go of their rasters as pages leaving the view do, and stop drawing: the new pages take the kept rasters.
 - **Rasters as large as the screen needs.** The quality setting's scale is for a 2× screen. A 1× screen gets half as many pixels per side (Balanced 2× becomes 1×), never fewer than it shows. Moving the window to another screen, or changing the browser zoom, draws the PDF again.
 - **Thumbnails** are drawn when they come into view in the pages panel, and again only when their own page changes, once the pen pauses. Before 1.1.12, every page scrolled past drew its thumbnail, and after any edit every page drew it again. The thumbnails' small PDF images are kept least-recently-used, so the page being written on keeps its own.
 - **Search words** read while scrolling are saved once scrolling settles. They used to be written for every page shown, each write copying every page read so far.

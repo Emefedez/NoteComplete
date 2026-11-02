@@ -1,4 +1,9 @@
-## What's new in 1.1.19
+## What's new in 1.1.20
+
+- **PDF pages stay visible when zoomed in.** Past a size many tablets cannot show (4096 px a side or 16 MP; the Xiaomi Pad 5, for example), a page's PDF was drawn on a canvas the browser left blank. Pages that large now show the PDF as a picture, which is shown in tiles.
+- **Adding pages to a PDF note keeps the PDF on its pages.** Rebuilding the pages could let the old ones, still drawing, take a PDF picture away from the new ones.
+
+### In 1.1.19
 
 - **The website shows its real version on Home.** The badge said v1.0.1 on the web; the version is now written in when the app is built, so the website, the desktop app and the pages a computer shares with guests and tablets all show the right one.
 

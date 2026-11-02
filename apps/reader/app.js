@@ -1226,6 +1226,8 @@ function resize() {
 }
 async function renderPage(p, provided) {
   clearTimeout(p.renderTimer);
+  // A page from before the pages were rebuilt (restructure) draws nothing more.
+  if (panels[p.index] !== p) return;
   if (gesture?.panel === p) {
     p.stale = true;
     return;
@@ -1309,13 +1311,15 @@ async function renderPage(p, provided) {
         kind,
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
-      if (kind === "url") render.querySelector("[data-background]").append(pdfImage(raster, place));
+      // A URL also for a canvas too large for some screens (pdf-background.js rasterKind).
+      if (typeof raster === "string") render.querySelector("[data-background]").append(pdfImage(raster, place));
       else {
         // The same PDF page on two pages of the note: each shows its own copy.
         if (raster.isConnected && raster.parentNode !== render) raster = copyCanvas(raster);
         render.prepend(placeRaster(raster, place, p.size));
       }
-      if (previous && previous !== raster) {
+      // Unless another page has taken it from the cache meanwhile: then it is that page's.
+      if (previous && previous !== raster && render.contains(previous)) {
         previous.remove();
         backgrounds.release(previous.localName === "canvas" ? previous : previous.getAttribute("href"));
       }
@@ -1336,7 +1340,7 @@ async function renderPage(p, provided) {
     }
   } finally {
     p.loading = false;
-    if (note === epoch) {
+    if (note === epoch && panels[p.index] === p) {
       if (p.near && (p.retry || version !== revision || token !== p.token))
         renderPage(p);
       if (p.index === page) $("svg").disabled = !p.pdfReady;
@@ -4243,6 +4247,13 @@ function restructure(result, focus, message) {
   observer?.disconnect();
   thumbnailObserver?.disconnect();
   selection.clear();
+  // The old pages go as pages leaving the view do: their PDF rasters back to the cache, for the
+  // new pages to take, and no drawing of theirs still on its way.
+  for (const p of panels) {
+    p.token++;
+    p.near = false;
+    placeholder(p);
+  }
   $("pages").replaceChildren();
   buildPages(result.page_sizes);
   $("pageNumber").max = result.pages;

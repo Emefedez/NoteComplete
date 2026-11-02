@@ -24,6 +24,19 @@ test("PDF raster quality: the setting is for a 2× screen, and a 1× screen gets
   assert.equal(rasterTarget(page, 600, 1, fast).width, 600, "never below the screen");
   assert.equal(rasterTarget(page, 600, 1.5, balanced).width, 900);
 });
+import { rasterKind, CANVAS_MAX_SIDE } from "./pdf-background.js";
+test("PDF raster kind: a canvas larger than some tablets can show becomes a picture", () => {
+  const a4 = { width: 595, height: 842 }, balanced = { scale: 2, megapixels: 12 };
+  // Fit width on a 2× tablet: a canvas.
+  assert.equal(rasterKind("canvas", rasterTarget(a4, 1230, 2, balanced)), "canvas");
+  // Zoomed in, the 12 MP budget still gives an A4 page 4120 px of height: a picture.
+  const zoomed = rasterTarget(a4, 4800, 2, balanced);
+  assert.ok(zoomed.height > CANVAS_MAX_SIDE);
+  assert.equal(rasterKind("canvas", zoomed), "url");
+  assert.equal(rasterKind("canvas", { width: 4096, height: 4096 }), "url", "16.8 MP: past the pixel limit");
+  assert.equal(rasterKind("canvas", { width: 4096, height: 3800 }), "canvas");
+  assert.equal(rasterKind("url", { width: 100, height: 100 }), "url", "a page with much ink stays a picture");
+});
 import { textWords } from "./pdf-background.js";
 test("PDF text words land in the page's PDF rect, including rotated pages", () => {
   // 720x540 pt slide drawn at [0,0,1320,990] on a 2242.6-wide page (Temas1+2).
@@ -96,6 +109,9 @@ test("page rasters: one render per page and size, the last few kept, URLs revoke
     assert.ok(canvas.width > 0);
     for (let i = 1; i <= RASTERS_KEPT; i++) await backgrounds.raster(page(i), [100, 150], 100);
     assert.equal(canvas.width, 0, "pushed out of the cache and on no page: freed");
+    // A canvas asked for at a size some tablets cannot show comes as a picture's URL.
+    assert.match(await backgrounds.raster(page(9), [100, 150], 3000), /^blob:/);
+    assert.equal(typeof await backgrounds.raster(page(9), [100, 150], 1300), "object");
   } finally {
     if (own) delete globalThis.document;
     else Object.assign(globalThis.document, { createElement: saved.create, querySelector: saved.query });
