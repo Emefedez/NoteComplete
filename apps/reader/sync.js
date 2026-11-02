@@ -121,6 +121,9 @@ export class SyncClient {
         Object.assign(this, { id: m.id, role: m.role, canEdit: m.canEdit, color: m.color, name: m.name, notesShared: m.notes, session: m.session });
         if (m.token) this.token = m.token;
         if (this.role !== 'host') this.gen = m.gen;
+        // Not resumed (a first join, or back after the log moved on or another note opened):
+        // this copy is stale until the snapshot on its way is loaded.
+        if (this.role !== 'host' && !m.resumed) this.loaded = false;
         this.state = 'open';
         this.on('welcome', m);
         if (this.yjs && m.notes) this.startNotes();
