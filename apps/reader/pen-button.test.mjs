@@ -89,3 +89,18 @@ test('a saved profile applies only to the browser version it was made in', () =>
   assert.equal(other.hoverMask, undefined);
   assert.equal(other.longPress, true, 'choices (off, long-press) carry over');
 });
+
+test('Brave: the button shows only when the pen comes back into hover range with it held', () => {
+  const d = penButtonDetector();
+  d.pointer(pen('pointermove', 0, 0));
+  // The press itself is dropped while hovering: nothing changes until the pen leaves...
+  assert.equal(d.pointer(pen('pointermove', 0, 20)), null);
+  d.pointer({ type: 'pointerleave', pointerType: 'pen', buttons: 0, button: -1, time: 40 });
+  // ...and comes back with the button held.
+  assert.equal(d.pointer(pen('pointerover', 1, 60)), 'menu');
+  assert.equal(d.pointer(pen('pointermove', 1, 80)), null, 'once per entry');
+  d.pointer({ type: 'pointerleave', pointerType: 'pen', buttons: 1, button: -1, time: 100 });
+  assert.equal(d.pointer(pen('pointerover', 0, 120)), null, 'entering without the button: nothing');
+  d.pointer({ type: 'pointerleave', pointerType: 'pen', buttons: 0, button: -1, time: 140 });
+  assert.equal(d.pointer(pen('pointermove', 1, 160)), 'menu', 'held again on the next entry');
+});

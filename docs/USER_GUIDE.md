@@ -162,7 +162,7 @@ To open it:
 
 - **Keyboard**: hold **Shift + S**, point at an item and let go. Or press **Shift + S** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
 - **Shift + pen**: hold Shift as the pen touches the page, or press Shift while the pen hovers over it. The menu opens at the pen, and nothing is drawn.
-- **Pen side button**: on a computer, press a Wacom or Surface pen's barrel button on the page. On Android (Chrome, Brave), press the S Pen button while the pen **hovers** just above the page, or **hold it and tap**; a press while the pen touches the screen does not reach web pages. **View → Pen button…** learns what your pen sends in this browser, can let a pen held still open the menu instead, or turns the button off. On Samsung devices, turn off *Open Air command with pen button* (Settings → Advanced features → S Pen → Air command). **Help → Test pen and stylus** shows what the pen reports. [Details](S-PEN-BUTTON.md).
+- **Pen side button**: on a computer, press a Wacom or Surface pen's barrel button on the page. On Android (Chrome, Brave), press the S Pen button while the pen **hovers** just above the page (if nothing happens, keep it held, lift the pen away and bring it back: Brave and Chrome often report the button only then), or **hold it and tap**; a press while the pen touches the screen does not reach web pages. **View → Pen button…** learns what your pen sends in this browser, can let a pen held still open the menu instead, or turns the button off. On Samsung devices, turn off *Open Air command with pen button* (Settings → Advanced features → S Pen → Air command). **Help → Test pen and stylus** shows what the pen reports. [Details](S-PEN-BUTTON.md).
 - **Touch screens and iPad**: hold two fingers still on the page for half a second.
 
 The Apple Pencil Pro squeeze and the Pencil double-tap are not available to web pages in Safari, so on iPad use the two-finger hold.
@@ -208,6 +208,16 @@ completion or cancellation; page thumbnails retain small bitmaps only.
 - **Export page SVG** includes the rendered PDF background and current layers/audio appearance. Wait for the PDF page to finish rendering.
 
 Files download as new files; originals are not overwritten. Replacing a dirty document prompts before discarding edits. Native export does not mark the richer project as saved. Fonts resolve from the device; Apple fonts are not bundled. Exact native ink smoothing, advanced text layout and some object variants remain incomplete.
+
+
+### Auto-save
+
+**File → Auto-save** (on by default) copies the open note every minute, while it has changed, into automatic slots on this device. It also makes a copy when you switch away from the app or close it. Copies never go over the file you saved, and each note keeps its last five.
+
+- **File** lists this note's automatic saves; **All automatic saves…** lists every note's, to open or delete them.
+- Opening a note with an automatic save newer than your last save asks which to open: the **automatic save** or the **manual save** (the file). An automatic save opens as an unsaved copy; save it to keep it.
+- In a sharing session the **host's** switch applies to everyone: guests and tablets show it, locked. A guest or tablet that loses the session, or sees it end, keeps an automatic save of the note and is offered to open it.
+- Automatic saves are complete projects (the original note plus every edit, with undo history and the Markdown notes). They live in this browser's storage, so clearing site data removes them.
 
 ## Mobile and Android file opening
 

@@ -2679,3 +2679,11 @@ body.tablet-waiting #drop::after { content: "Waiting for the computer’s note�
 .pen-test-log { min-height: 8em; max-height: 14em; overflow: auto; margin: 8px 0 0; padding-left: 1.6em; font: 12px/1.5 ui-monospace, monospace; }
 .pen-setup-step { font-weight: 600; }
 #penSetupDialog .check-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+/* File → automatic saves of this note (autosave.js) */
+.autosave-list { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 8px 6px; }
+.autosave-list[hidden] { display: none; }
+.autosave-list .autosave-label { width: 100%; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.autosave-list button { min-height: 26px; padding: 2px 8px; border-radius: 99px; background: var(--fill); font-size: 12px; }
+.autosave-all { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+.autosave-all li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.autosave-all li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

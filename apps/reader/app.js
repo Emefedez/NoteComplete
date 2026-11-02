@@ -55,6 +55,7 @@ import { shapePoints } from "./shapes.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
+import { autosaveStore, offerRecovery, when, EVERY_MS } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
@@ -330,7 +331,10 @@ async function load(file, preparedDocument = null) {
   editing = true;
   status("Opening document…");
   try {
-    const fingerprint = noteFingerprint(file).catch(() => "");
+    // A recovered automatic save keeps the note it belongs to (its notes, recordings, slots).
+    const recovering = recoveringKey;
+    recoveringKey = null;
+    const fingerprint = recovering ? Promise.resolve(recovering) : noteFingerprint(file).catch(() => "");
     const prepared = preparedDocument || await prepareDocument(file);
     // HTML pages and text/Markdown files have their own views instead of the page editor.
     if (prepared.kind === "html" || prepared.kind === "text") {
@@ -397,6 +401,7 @@ async function load(file, preparedDocument = null) {
     await renderPage(panels[0], result);
     status("Document opened.");
     collab?.documentChanged();
+    autosaveOpened(recovering);
   } catch (e) {
     status("Could not open: " + e.message, true);
     throw e;
@@ -2187,6 +2192,15 @@ for (const type of ["pointerup", "pointercancel"]) document.addEventListener(typ
   penBtn.pointer(fields(e));
   if (penHold) { clearTimeout(penHold.timer); penHold = null; }
 }, true);
+// The pen coming into hover range (with the button held, in Brave and Chrome on Android the
+// only way the press shows) and leaving it (the next entry counts again).
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType !== "pen" || e.relatedTarget) return;
+  if (penBtn.pointer(fields(e)) === "menu" && onPages(e)) penMenu(e);
+}, true);
+document.addEventListener("pointerout", (e) => {
+  if (e.pointerType === "pen" && !e.relatedTarget) penBtn.pointer({ ...fields(e), type: "pointerleave" });
+}, true);
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
   const button = penBtn.contextmenu({ pointerType: e.pointerType || "", time: e.timeStamp }) === "menu";
@@ -2237,6 +2251,131 @@ $("undo").onclick = () => {
 $("redo").onclick = () => {
   cancelGesture();
   action("redo");
+};
+// Auto-save (autosave.js): every minute, while the note has changed, a lossless copy goes
+// into automatic slots on this device, never over the saved file. File lists this note's
+// slots; opening a note with a newer automatic save than the last manual one asks which to
+// keep. In a sharing session the host's switch decides for everyone (collab.js).
+const autosaves = autosaveStore();
+let autosavePref = true, sharedAutosave = null, recoveringKey = null, autosavedRevision = -1, openedRevision = 0, autosaving = false;
+try { autosavePref = localStorage.getItem("notecomplete-autosave") !== "0"; } catch { /* Optional. */ }
+const following = () => !!collab && collab.role !== "host";
+const autosaveOn = () => (following() ? !!sharedAutosave : autosavePref);
+// A note's slots belong to its file; a shared note's to the session's note title.
+const autosaveKey = () => (following() ? `shared:${collab.docTitle || $("title").textContent}` : find.fingerprint || `title:${$("title").textContent}`);
+function autosaveSwitch() {
+  const b = $("autosaveToggle");
+  b.setAttribute("aria-checked", String(autosaveOn()));
+  b.disabled = following();
+  b.title = following() ? "Set by the person sharing this note" : "Copies the note every minute into automatic slots on this device, never over your file";
+}
+$("autosaveToggle").onclick = () => {
+  if (following()) return;
+  autosavePref = !autosavePref;
+  try { localStorage.setItem("notecomplete-autosave", autosavePref ? "1" : "0"); } catch { /* Optional. */ }
+  autosaveSwitch();
+  collab?.settingsChanged?.();
+  status(autosavePref ? "Auto-save on: a copy every minute, in File → automatic saves." : "Auto-save off.");
+  if (autosavePref) autosaveNow();
+};
+autosaveSwitch();
+// A copy now, if auto-save is on and the note changed since the last one.
+async function autosaveNow({ force = false } = {}) {
+  if (!doc || autosaving || editing || !autosaveOn()) return null;
+  if (!force && (revision === autosavedRevision || revision === openedRevision)) return null;
+  autosaving = true;
+  // Read now: a session may end while the copy is being made.
+  const at = revision, note = epoch, key = autosaveKey(), title = $("title").textContent, shared = following();
+  try {
+    await notes?.flush?.();
+    const project = await call("save");
+    if (note !== epoch) return null;
+    const slot = await autosaves.save({ key, title, project, shared });
+    autosavedRevision = at;
+    return slot;
+  } catch (e) {
+    console.warn("Auto-save:", e);
+    return null;
+  } finally { autosaving = false; }
+}
+setInterval(() => { autosaveNow(); }, EVERY_MS);
+// Leaving the page or switching away: one more copy (best effort; the browser may not wait).
+addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") autosaveNow(); });
+addEventListener("pagehide", () => { autosaveNow(); });
+// A note just opened: offer its newer automatic save, unless this is that save.
+async function autosaveOpened(recovered) {
+  openedRevision = revision;
+  autosavedRevision = -1;
+  if (recovered || following() || !doc) return;
+  const key = autosaveKey(), note = epoch;
+  try {
+    const [latest] = await autosaves.list(key);
+    const manual = await autosaves.manualAt(key);
+    if (note !== epoch || !offerRecovery(latest, manual)) return;
+    $("recoverText").textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : "the file you opened"}. Which do you want to open?`;
+    $("recoverAuto").textContent = `Automatic save (${when(latest.time)})`;
+    $("recoverManual").textContent = manual ? `Manual save (${when(manual)})` : "The file";
+    $("recoverAuto").onclick = () => { $("recoverDialog").close(); openAutosave(latest); };
+    $("recoverManual").onclick = () => { $("recoverDialog").close(); autosaves.markManual(key).catch(() => {}); };
+    $("recoverDialog").showModal();
+  } catch { /* No storage: nothing to offer. */ }
+}
+// Opens an automatic save as a copy of its note: unsaved until the user saves it.
+async function openAutosave(slot) {
+  closeMenus();
+  if (!canReplace()) return;
+  const bytes = await autosaves.load(slot.id);
+  if (!bytes) return status("That automatic save is gone.", true);
+  const keepSaveAs = slot.key === autosaveKey() ? saveAs : null;
+  recoveringKey = slot.key.startsWith("shared:") || slot.key.startsWith("title:") ? null : slot.key;
+  await load(new File([bytes], `${slot.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.nfedit`, { type: "application/json" }));
+  if (!doc) return;
+  saveAs = keepSaveAs;
+  saveLabel();
+  dirty = changed = true;
+  savedState();
+  status(`Opened the automatic save from ${when(slot.time)}. Save it to keep it.`);
+}
+// File menu: this note's automatic saves, newest first, and all of them.
+async function drawAutosaveList() {
+  const list = $("autosaveList");
+  const slots = doc ? await autosaves.list(autosaveKey()).catch(() => []) : [];
+  const all = await autosaves.list().catch(() => []);
+  list.hidden = !all.length;
+  if (!all.length) return list.replaceChildren();
+  const label = document.createElement("span");
+  label.className = "autosave-label";
+  label.textContent = slots.length ? "Automatic saves" : "No automatic saves of this note";
+  list.replaceChildren(label, ...slots.map((slot) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = when(slot.time);
+    b.title = `Open the automatic save of “${slot.title}” from ${when(slot.time)}`;
+    b.onclick = () => openAutosave(slot);
+    return b;
+  }), Object.assign(document.createElement("button"), { type: "button", textContent: "All automatic saves…", onclick: openAutosaves }));
+}
+$("fileMenu").addEventListener("toggle", () => { if ($("fileMenu").open) { autosaveSwitch(); drawAutosaveList(); } });
+async function openAutosaves() {
+  closeMenus();
+  const slots = await autosaves.list().catch(() => []);
+  $("autosavesAll").replaceChildren(...(slots.length ? slots.map((slot) => {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = `${slot.shared ? "Shared · " : ""}${slot.title} · ${when(slot.time)} · ${(slot.size / 1048576).toFixed(1)} MB`;
+    const open = Object.assign(document.createElement("button"), { type: "button", textContent: "Open", onclick: () => { $("autosavesDialog").close(); openAutosave(slot); } });
+    const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "Delete", onclick: async () => { await autosaves.remove(slot.id); li.remove(); } });
+    li.append(name, open, remove);
+    return li;
+  }) : [Object.assign(document.createElement("li"), { className: "muted", textContent: "None yet." })]));
+  $("autosavesDialog").showModal();
+}
+$("autosavesClose").onclick = () => $("autosavesDialog").close();
+$("autosavesClear").onclick = async () => {
+  if (!confirm("Delete every automatic save on this device?")) return;
+  await autosaves.clear();
+  $("autosavesDialog").close();
+  status("Automatic saves deleted.");
 };
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
@@ -2489,6 +2628,7 @@ async function save(native, as = native ? "noteful" : "project") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
+    if (!delivery.shared) autosaves.markManual(autosaveKey()).catch(() => {});
     if (as === saveAs && !delivery.shared) {
       dirty = changed = false;
       savedState();
@@ -4103,10 +4243,21 @@ $("penSetupStart").onclick = async () => {
   let touching = false;
   const down = (e) => { if (e.pointerType === "pen") touching = true; };
   const up = (e) => { if (e.pointerType === "pen") touching = false; };
-  const move = (e) => { if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure }); };
+  // Presses as the app will see them: a hover rising edge, or an entry with the button held.
+  const probe = penButtonDetector();
+  seen.presses = [];
+  const feed = (e, type = e.type) => { if (e.pointerType === "pen" && probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons }); };
+  const move = (e) => {
+    if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure });
+    feed(e);
+  };
+  const over = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e); };
+  const out = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e, "pointerleave"); };
   const menu = (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); seen.taps.push({ phase, pointerType: e.pointerType || "", button: e.button }); };
   const key = (e) => seen.keys.push({ phase, key: e.key, code: e.code });
   pad.addEventListener("pointermove", move);
+  pad.addEventListener("pointerover", over);
+  pad.addEventListener("pointerout", out);
   pad.addEventListener("pointerdown", down);
   addEventListener("pointerup", up, true);
   addEventListener("pointercancel", up, true);
@@ -4118,19 +4269,21 @@ $("penSetupStart").onclick = async () => {
     step.textContent = "1 of 3 · Hold your pen just above the box, without touching it.";
     await wait(2500);
     phase = "press";
-    step.textContent = "2 of 3 · Still without touching, press and release the side button, twice.";
-    const presses = () => seen.hover.filter((m) => m.phase === "press" && m.buttons).length;
+    step.textContent = "2 of 3 · Press the side button while hovering, twice. If nothing happens, hold the button, lift the pen away and bring it back over the box.";
+    const presses = () => seen.presses.length;
     await wait(6000, () => presses() >= 2);
     await wait(400);
     phase = "tap";
     step.textContent = "3 of 3 · Hold the side button and tap the box once.";
     await wait(6000, () => seen.taps.some((t) => t.phase === "tap"));
     if (run !== penSetupRun) return;
-    penSetupFound = profileFrom({ hover: seen.hover, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
+    penSetupFound = profileFrom({ hover: seen.hover, presses: seen.presses, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
     step.textContent = "Done. Save to use it, or Try again.";
     $("penSetupResult").textContent = describeProfile(penSetupFound);
   } finally {
     pad.removeEventListener("pointermove", move);
+    pad.removeEventListener("pointerover", over);
+    pad.removeEventListener("pointerout", out);
     pad.removeEventListener("pointerdown", down);
     removeEventListener("pointerup", up, true);
     removeEventListener("pointercancel", up, true);
@@ -4154,8 +4307,10 @@ $("penSetupSave").onclick = () => {
     while (lines.length > 14) lines.shift();
     log.replaceChildren(...lines.map((l) => { const li = document.createElement("li"); li.textContent = l.count > 1 ? `${l.text} ×${l.count}` : l.text; return li; }));
   };
-  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"])
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "pointerover", "pointerout"])
     pad.addEventListener(type, (e) => {
+      // Entering and leaving between the box's own children are not the pen coming or going.
+      if ((type === "pointerover" || type === "pointerout") && e.relatedTarget && pad.contains(e.relatedTarget)) return;
       e.preventDefault();
       note(`${type} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
     });
@@ -4286,6 +4441,16 @@ const collabHost = {
   },
   closeDocument: () => reset(),
   openFile: (file) => load(file),
+  // Auto-save in a session: the host's switch, followed by everyone else.
+  autosaveOn: () => autosavePref,
+  setSharedAutosave(on) { sharedAutosave = !!on; autosaveSwitch(); },
+  // A copy of the shared note before it closes (a guest or tablet losing the session).
+  async keepCopy() {
+    const slot = await autosaveNow({ force: true });
+    sharedAutosave = null;
+    autosaveSwitch();
+    return slot && { ...slot, open: () => openAutosave(slot), label: when(slot.time) };
+  },
 };
 async function startCollab(mode) {
   try {

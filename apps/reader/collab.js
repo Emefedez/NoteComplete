@@ -226,7 +226,8 @@ class Session {
     if (type === 'welcome') {
       if (this.role === 'tablet') this.enterTablet();
       if (this.role === 'guest') this.enterGuest();
-      if (this.role === 'host') this.documentChanged();
+      if (this.role === 'host') { this.documentChanged(); this.settingsChanged(); }
+      else this.host.setSharedAutosave?.(detail.autosave);
       if (this.role === 'guest') {
         this.askName(detail.name);
         host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
@@ -244,6 +245,8 @@ class Session {
       if (this.role === 'guest' && !detail.open && host.doc) host.closeDocument();
       if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); this.loading(null); }
       else if (this.role === 'tablet' && detail.open) this.loading('Loading the note…');
+    } else if (type === 'settings') {
+      if (this.role !== 'host') this.host.setSharedAutosave?.(detail.autosave);
     } else if (type === 'live') {
       this.showLive(detail);
     } else if (type === 'notes-reset') {
@@ -270,6 +273,10 @@ class Session {
 
   // Host --------------------------------------------------------------------------------
   // The tab opened another note, or closed it: tablets reload; notes start from its text.
+  // Host: the auto-save switch, which everyone in the session follows.
+  settingsChanged() {
+    if (this.role === 'host' && this.client.state === 'open') this.client.settings({ autosave: this.host.autosaveOn?.() });
+  }
   async documentChanged() {
     if (this.role !== 'host' || this.client.state !== 'open') return;
     const kind = this.host.kind;
@@ -816,14 +823,21 @@ class Session {
     document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
     delete document.body.dataset.dock;
     if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();
+    // A guest or tablet keeps an automatic save of the shared note (when the host has
+    // auto-save on) before it closes, so a lost connection loses nothing.
+    const kept = this.role !== 'host' && host.doc ? host.keepCopy?.().catch(() => null) ?? Promise.resolve(null) : Promise.resolve(null);
     host.setCollab(null);
     session = null;
-    if (this.role === 'tablet' && host.doc) host.closeDocument();
-    if (this.role === 'guest') host.notesApi().then((n) => n.close()).then(() => host.closeDocument()).catch(() => {});
-    closeDialog();
-    this.ended?.();
-    if (refused || this.role === 'host' || !this.copied) return host.status(message, refused);
-    const open = el('button', { type: 'button', className: 'primary', textContent: 'Open my copy', onclick: () => { closeDialog(); host.openFile?.(new File([this.copied], this.copyName, { type: 'text/markdown' })); } });
-    dialog('Session ended', el('p', { textContent: message }), buttons(el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }), open));
+    kept.then((copy) => {
+      if (this.role === 'tablet' && host.doc) host.closeDocument();
+      if (this.role === 'guest') host.notesApi().then((n) => n.close()).then(() => host.closeDocument()).catch(() => {});
+      closeDialog();
+      this.ended?.();
+      if (refused || this.role === 'host' || (!this.copied && !copy)) return host.status(message, refused);
+      const actions = [el('button', { type: 'button', textContent: 'Close', onclick: closeDialog })];
+      if (copy) actions.push(el('button', { type: 'button', className: this.copied ? '' : 'primary', textContent: `Open the automatic save (${copy.label})`, onclick: () => { closeDialog(); copy.open(); } }));
+      if (this.copied) actions.push(el('button', { type: 'button', className: 'primary', textContent: 'Open my copy of the notes', onclick: () => { closeDialog(); host.openFile?.(new File([this.copied], this.copyName, { type: 'text/markdown' })); } }));
+      dialog('Session ended', el('p', { textContent: copy ? `${message} The note as it was is in File → automatic saves.` : message }), buttons(...actions));
+    });
   }
 }

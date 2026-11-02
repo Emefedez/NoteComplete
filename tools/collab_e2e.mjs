@@ -162,6 +162,14 @@ try {
   await shot(guest, 'guest');
   step('a guest named Ana writes the notes; the host sees the text, her chip and her cursor');
 
+  // Auto-save follows the host: the guest's switch shows the host's choice and is locked.
+  await guest.waitForFunction(() => document.getElementById('autosaveToggle').disabled && document.getElementById('autosaveToggle').getAttribute('aria-checked') === 'true');
+  await host.evaluate(() => document.getElementById('autosaveToggle').click());
+  await guest.waitForFunction(() => document.getElementById('autosaveToggle').getAttribute('aria-checked') === 'false');
+  await host.evaluate(() => document.getElementById('autosaveToggle').click());
+  await guest.waitForFunction(() => document.getElementById('autosaveToggle').getAttribute('aria-checked') === 'true');
+  step('auto-save follows the host’s switch on the guest');
+
   // Disconnecting the tablet is clean on both sides.
   await tablet.click('#tabletDock [aria-label=Disconnect]');
   await tablet.waitForFunction(() => !document.body.classList.contains('tablet-mode') && !document.querySelector('.sheet'));
@@ -177,8 +185,9 @@ try {
   await host.click('#collabDialog button.danger');
   assert.match((await download).suggestedFilename(), /shared notes\.md$/);
   await guest.waitForSelector('#collabDialog h2:text("Session ended")');
+  assert.match(await guest.textContent('#collabDialog'), /Open the automatic save/, 'the guest keeps an automatic save of the note');
   await host.waitForFunction(() => !document.getElementById('collabPeopleBar') && document.getElementById('shareButton').textContent.trim() === 'Share');
-  step('ending the session saves a copy for the guest');
+  step('ending the session saves a copy of the notes and an automatic save of the note for the guest');
   console.log('Sharing end to end: passed.');
 } finally {
   await browser.close();

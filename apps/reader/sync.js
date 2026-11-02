@@ -160,6 +160,8 @@ export class SyncClient {
         });
       case 'live':
         return this.on('live', m);
+      case 'settings':
+        return this.on('settings', m);
       case 'notes-reset':
         if (!this.yjs) return;
         this.newNotes();
@@ -251,6 +253,8 @@ export class SyncClient {
     this.send({ t: 'doc', open, title });
     if (typeof notes === 'string' && this.notesShared) this.send({ t: 'notes', text: notes });
   }
+  // Host: the session's settings (auto-save), which everyone follows.
+  settings({ autosave }) { this.send({ t: 'settings', autosave: !!autosave }); }
   rename(name) {
     this.name = name;
     this.send({ t: 'rename', name });

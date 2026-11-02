@@ -215,6 +215,7 @@ A phone or tablet joins a desktop NoteComplete as a drawing surface for the note
 - **On the computer**: the strokes appear while they are drawn (live preview, one message per animation frame with only the new points), then as ordinary edits in its history: saved, exported and undone like its own. Its own view and tools are unchanged; its strokes appear on the tablet.
 - **Pen pressure**: a stylus's pressure (0–1) becomes the core's per-point radius (`Line.pressure`, about 0.3–1.7 × half the width). This applies to any stylus in the reader, not only tablets. The Pen's settings can turn it off (*Even width*, remembered per device); strokes are then saved without pressure.
 - **Opening another note** on the computer reloads the tablet with it; closing it shows *Waiting for the computer's note*.
+- **Auto-save** follows the host: the host's switch travels as a `settings` message (and in `welcome`), only the host can send it, and guests and tablets show it locked. A guest or tablet keeps an automatic save of the shared note when the session ends or the connection is lost (key `shared:<title>`).
 - **Disconnecting** (dock button, closing the page, or *Remove* on the computer) leaves the computer's note as it is; the tablet goes back to Home.
 - **Online later**: the client connects to any `ws(s)://…/sync`; a link with `https` becomes `wss`. Running the hub behind a relay or tunnel needs no protocol change.
 
