@@ -1,4 +1,10 @@
-## What's new in 1.1.14
+## What's new in 1.1.15
+
+- **Grab in the quick menu**, last on the ring (key 9). With Grab on, opening the menu (Shift + S, Shift + right-click, Shift + pen, the pen button, two fingers or a pen held still) never starts a grab, and a grabbed region and its menu stay as they were. **Select** from the menu turns a grabbed region into a selection, as the tool bar's Select does.
+- **Choosing a tool in the quick menu no longer opens its settings in the tool bar**: the menu shows them itself.
+- **iPad: two fingers held open the quick menu again.** Safari reports fingertips in sizes the app took for palms; fingers landing together, a lost touch end, and a Pencil hovering nearby also stopped it. Safari's own pinch is kept off the pages.
+
+### In 1.1.14
 
 - **Guests: notes first, then the note, with each step shown.**
   - A guest's notes now stay the shared ones while the note loads (they were briefly replaced by the note's own).
