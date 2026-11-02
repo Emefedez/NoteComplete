@@ -122,7 +122,7 @@ export class PdfBackgrounds {
       const url = canvas.toDataURL("image/png");
       if (!this.closed) {
         this.images.set(key, url);
-        if (this.images.size > 3)
+        if (this.images.size > 6)
           this.images.delete(this.images.keys().next().value);
       }
       return url;

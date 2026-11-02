@@ -154,15 +154,20 @@ const selection = new SelectionController({
 });
 // Status is a transient toast, not a permanent strip; errors stay up longer.
 let statusTimer = 0;
-function status(text, error = false) {
-  $("status").textContent = text;
-  // Never over the tool bars: above the lowest bar that sits at the bottom (phones).
+// Never over the tool bars: above the lowest bar that sits at the bottom (phones, a
+// tablet's dock held upright), also after the screen turns.
+function placeStatus() {
   let bottom = 0;
   for (const bar of document.querySelectorAll("#toolbar, .navigation, #tabletDock")) {
     const r = bar.getBoundingClientRect();
     if (r.height && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top);
   }
   $("status").style.setProperty("--above-bars", `${bottom}px`);
+}
+addEventListener("resize", () => { if ($("status").classList.contains("show")) placeStatus(); });
+function status(text, error = false) {
+  $("status").textContent = text;
+  placeStatus();
   $("status").className = (error ? "error " : "") + (text ? "show" : "");
   clearTimeout(statusTimer);
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
@@ -281,6 +286,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   observer?.disconnect();
   thumbnailObserver?.disconnect();
   thumbQueue.clear();
+  thumbsDue.clear();
   backgrounds?.close();
   stopRecording();
   audio.reset();
@@ -906,10 +912,26 @@ async function renderThumbnail(panel) {
     if (note === epoch && version !== revision) renderThumbnail(panel);
   }
 }
+// A page's thumbnail is redrawn once the pen has paused, not after every stroke: drawing it
+// (the page as an image, its PDF background) holds the main thread, and the next stroke's
+// pen events would wait behind it.
+const thumbsDue = new Set();
+let thumbsTimer = 0;
 function updatePagePreview(panel) {
   if (panel.thumbnailRevision === revision) return;
-  panel.thumbnailReady = false;
-  renderThumbnail(panel);
+  thumbsDue.add(panel);
+  clearTimeout(thumbsTimer);
+  thumbsTimer = setTimeout(refreshThumbnails, 1200);
+}
+function refreshThumbnails() {
+  if (gesture || mutationPending > 0) { thumbsTimer = setTimeout(refreshThumbnails, 600); return; }
+  const due = [...thumbsDue];
+  thumbsDue.clear();
+  for (const panel of due) {
+    if (!panels.includes(panel) || panel.thumbnailRevision === revision) continue;
+    panel.thumbnailReady = false;
+    queueThumbnail(panel);
+  }
 }
 function markPage() {
   for (const panel of panels) {
@@ -1012,6 +1034,7 @@ function resize() {
   for (const p of reraster) renderPage(p, p.view);
 }
 async function renderPage(p, provided) {
+  clearTimeout(p.renderTimer);
   if (gesture?.panel === p) {
     p.stale = true;
     return;
@@ -1265,12 +1288,15 @@ async function action(op, args = {}) {
     if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
   } catch (e) {
     if (token === epoch) status(e.message, true);
+    // A stroke that was not saved does not stay on screen.
+    if (op === "draw") for (const p of panels) for (const el of [...(p.overlay?.querySelectorAll(".pending-ink") || [])]) if (gesture?.panel !== p || !gesture.el?.isSameNode(el)) el.remove();
   } finally {
     mutationPending--;
     if (token === epoch) {
       for (const p of panels) {
         if (gesture?.panel !== p) {
-          p.overlay?.replaceChildren();
+          // Finished strokes waiting for the page to be redrawn stay (laterRender).
+          for (const child of [...(p.overlay?.children || [])]) if (!child.classList.contains("pending-ink")) child.remove();
           shapeHandles(p);
         }
       }
@@ -1308,9 +1334,27 @@ function showEdit(op, args, result) {
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
     p.token++;
-    if (p.near || p.index === page)
-      renderPage(p, p.index === result.page ? result : undefined);
+    if (!(p.near || p.index === page)) continue;
+    // Strokes in quick succession: the page is redrawn once the pen pauses. Until then the
+    // strokes stay on screen as drawn, and the next one starts at once instead of waiting
+    // for the whole page to be rebuilt.
+    if (op === "draw" && !args.line?.shape && p.index === result.page) laterRender(p, result);
+    else renderPage(p, p.index === result.page ? result : undefined);
   }
+}
+const RENDER_PAUSE = 300;
+function laterRender(p, result) {
+  clearTimeout(p.renderTimer);
+  p.pendingView = result;
+  p.pendingRevision = revision;
+  const due = () => {
+    if (p.pendingRevision !== revision) return; // A later edit draws it.
+    if (gesture?.panel === p) { p.renderTimer = setTimeout(due, RENDER_PAUSE); return; }
+    const view = p.pendingView;
+    p.pendingView = null;
+    renderPage(p, view);
+  };
+  p.renderTimer = setTimeout(due, RENDER_PAUSE);
 }
 // An edit in the session's shared order. This reader's own edits finish where they
 // were made (action, patchItem…); others' are shown here.
@@ -1448,6 +1492,7 @@ for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventL
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 function pointerDown(e, p) {
+  if (thumbsDue.size) { clearTimeout(thumbsTimer); thumbsTimer = setTimeout(refreshThumbnails, 1200); }
   if (gesture) {
     if (e.pointerId === gesture.id) return;
     // A stylus has one tip: a new pen-down means the last stroke's lift never arrived
@@ -1740,6 +1785,13 @@ function pointerUp(e) {
     const rgba = [1, 3, 5].map(
       (i) => parseInt(g.color.slice(i, i + 2), 16) / 255,
     );
+    // The stroke stays on screen as drawn until the page is redrawn (laterRender); the
+    // smoothed line replaces the one drawn meanwhile.
+    if (g.tool !== "shape") {
+      g.el.setAttribute("points", g.points.map((q) => q.join(",")).join(" "));
+      g.el.classList.add("pending-ink");
+      g.dot.classList.add("pending-ink");
+    }
     action("draw", {
       page: g.panel.index,
       line: {
@@ -2010,6 +2062,9 @@ $("viewport").addEventListener("touchstart", (e) => {
   e.preventDefault();
   const typing = document.activeElement;
   if (typing && typing !== document.body && typing.matches?.("input, textarea, select, [contenteditable]") && !typing.closest(".text-editor")) typing.blur();
+}, { passive: false, capture: true });
+$("viewport").addEventListener("touchmove", (e) => {
+  if (doc && gesture && gesture.tool !== "pan" && [...e.changedTouches].some((t) => t.touchType === "stylus")) e.preventDefault();
 }, { passive: false, capture: true });
 touchGestures({
   fling: (vx, vy) => glide.fling(vx, vy),

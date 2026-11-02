@@ -154,6 +154,7 @@ async function join(host, invite) {
   const yjs = invite.role === 'guest' ? await loadYjs() : null;
   session = new Session(host, { ...invite, name: remembered(), yjs });
   host.status(invite.role === 'tablet' ? 'Connecting to the computer…' : 'Joining the shared notes…');
+  if (invite.role === 'tablet') session.loading('Connecting to the computer…');
 }
 
 class Session {
@@ -206,7 +207,18 @@ class Session {
       this.host.status(this.client.canEdit ? `You can draw on “${title || 'the note'}” and write its notes.` : `Viewing “${title || 'the note'}”.`);
       return;
     }
+    this.loading(null);
     this.host.status(`Drawing on “${title || 'the note'}”.`);
+  }
+  // A full-screen "Connecting… / Loading the note…" with a moving bar; null hides it.
+  loading(text) {
+    if (!text) { this.loader?.remove(); this.loader = null; return; }
+    if (!this.loader) {
+      this.loader = el('div', { className: 'tablet-loader', role: 'status' }, el('div', { className: 'loader-bar' }), el('p'),
+        el('button', { type: 'button', textContent: 'Cancel', onclick: () => this.leave() }));
+      document.body.append(this.loader);
+    }
+    this.loader.querySelector('p').textContent = text;
   }
   event(type, detail) {
     const host = this.host;
@@ -220,7 +232,7 @@ class Session {
         host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
         this.showTitle();
       }
-      if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); }
+      if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); this.loading(detail.open ? 'Loading the note…' : null); }
     } else if (type === 'peers') {
       this.people = detail;
       this.drawPeople();
@@ -230,7 +242,8 @@ class Session {
       if (this.role === 'guest') this.showTitle();
       // The host closed the note (or opened something that is not a note): notes only.
       if (this.role === 'guest' && !detail.open && host.doc) host.closeDocument();
-      if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); }
+      if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); this.loading(null); }
+      else if (this.role === 'tablet' && detail.open) this.loading('Loading the note…');
     } else if (type === 'live') {
       this.showLive(detail);
     } else if (type === 'notes-reset') {
@@ -693,7 +706,7 @@ class Session {
       el('hr'),
       ...['#202d40', '#246bce', '#d13b30', '#2f9a4c', '#f2c500'].map(swatch),
       el('hr'),
-      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'),
+      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'), this.pressureButton(),
       el('hr'),
       action('Undo', 'undo', () => $('undo').click()), action('Redo', 'redo', () => $('redo').click()),
       action('Fit the page width', 'fit', () => this.host.setZoom('fit')),
@@ -706,6 +719,13 @@ class Session {
     document.body.append(this.dock);
     this.markTool();
 
+  }
+  // Pen pressure on or off, the same setting as in the Pen's options (remembered).
+  pressureButton() {
+    const b = el('button', { type: 'button', className: 'dock-tool dock-pressure', title: 'Pen pressure changes the width', 'aria-label': 'Pen pressure' });
+    b.append(icon('pressure'));
+    b.onclick = () => { const select = $('pressure'); select.value = select.value === 'off' ? 'on' : 'off'; select.dispatchEvent(new Event('change', { bubbles: true })); this.markTool(); };
+    return b;
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
@@ -736,6 +756,8 @@ class Session {
       }
     }
     for (const b of this.dock?.querySelectorAll('[data-dock-tool]') || []) b.setAttribute('aria-pressed', String(b.dataset.dockTool === this.host.tool));
+    const pressure = this.dock?.querySelector('.dock-pressure');
+    if (pressure) pressure.setAttribute('aria-pressed', String($('pressure')?.value !== 'off'));
     for (const b of this.dock?.querySelectorAll('.dock-width') || []) b.setAttribute('aria-pressed', String(b.dataset.width === $('width').value));
     for (const b of this.dock?.querySelectorAll('.dock-swatch') || []) b.setAttribute('aria-pressed', String(b.title.toLowerCase() === $('color').value.toLowerCase()));
   }
@@ -790,6 +812,7 @@ class Session {
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }
     this.dock?.remove();
+    this.loading(null);
     document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
     delete document.body.dataset.dock;
     if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();

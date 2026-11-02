@@ -119,14 +119,26 @@ try {
   assert.equal(await host.inputValue('#zoomValue'), hostZoom);
   step('pinch zooms the tablet only');
 
+  assert.equal(await tablet.locator('.tablet-loader').count(), 0, 'the loading screen is gone once the note is on the tablet');
   await tablet.click('#tabletDock [aria-label="Move this bar to the other side"]');
   assert.equal(await tablet.getAttribute('#tabletDock', 'data-side'), 'right');
   await shot(tablet, 'tablet-right');
   await tablet.setViewportSize({ width: 390, height: 844 });
   await shot(tablet, 'phone');
+  // Held upright the dock is a row: "the other side" is the bottom edge.
   const dock = await tablet.locator('#tabletDock').boundingBox();
-  assert.ok(dock.x + dock.width <= 391 && dock.x > 300, 'dock on the right edge of a phone');
-  step('the dock moves to the other side and fits a phone');
+  assert.ok(dock.y + dock.height <= 845 && dock.y > 700 && dock.width > 380, `dock along the bottom of an upright phone (${JSON.stringify(dock)})`);
+  // Sideways it is a column on the right.
+  await tablet.setViewportSize({ width: 844, height: 390 });
+  const side = await tablet.locator('#tabletDock').boundingBox();
+  assert.ok(side.x + side.width <= 845 && side.x > 700 && side.height > 380, `dock on the right of a sideways phone (${JSON.stringify(side)})`);
+  // The pressure switch is in the dock and follows the Pen's setting.
+  await tablet.click('#tabletDock .dock-pressure');
+  assert.equal(await tablet.inputValue('#pressure'), 'off');
+  assert.equal(await tablet.getAttribute('#tabletDock .dock-pressure', 'aria-pressed'), 'false');
+  await tablet.click('#tabletDock .dock-pressure');
+  await tablet.setViewportSize({ width: 390, height: 844 });
+  step('the dock moves to the other side, lies along the long edge, and switches pressure');
 
   // A notes guest: name prompt, typing together, presence.
   const guestContext = await browser.newContext({ viewport: { width: 900, height: 700 } });
