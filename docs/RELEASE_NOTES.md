@@ -1,4 +1,8 @@
-## What's new in 1.1.18
+## What's new in 1.1.19
+
+- **The website shows its real version on Home.** The badge said v1.0.1 on the web; the version is now written in when the app is built, so the website, the desktop app and the pages a computer shares with guests and tablets all show the right one.
+
+### In 1.1.18
 
 - **Open Word, OpenDocument, Excel and CSV files**:
   - Formats: `.docx`, `.odt`, `.xlsx`, `.ods`, `.csv` and `.tsv` open as Markdown, read-only, to read, search and study.
