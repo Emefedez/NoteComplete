@@ -74,3 +74,12 @@ test('two fingers held still open the quick menu, and lifting them does not undo
   g.move([{ clientX: 100, clientY: 260 }, { clientX: 180, clientY: 260 }], 2050);
   assert.deepEqual(g.hold(2600), []);
 });
+
+test('a two-finger scroll moves the pages by the whole finger movement, the first pixels included', () => {
+  const g = new TouchGesture();
+  const two = (y) => [{ clientX: 100, clientY: y }, { clientX: 200, clientY: y }];
+  g.start(two(500), 0);
+  let total = 0;
+  for (let y = 495; y >= 400; y -= 5) for (const a of g.move(two(y), 500 - y)) if (a.type === 'pan') total += a.dy;
+  assert.equal(total, -100);
+});

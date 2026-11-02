@@ -7,7 +7,7 @@
 // cancel its stroke.
 import { VelocityTracker } from './momentum.js';
 
-const TAP_MS = 300, TAP_SLOP = 12, ZOOM_START = 0.08, HOLD_MS = 550;
+const TAP_MS = 300, TAP_SLOP = 12, PAN_START = 8, ZOOM_START = 0.08, HOLD_MS = 550;
 
 export function measure(touches) {
   const list = [...touches];
@@ -50,13 +50,16 @@ export class TouchGesture {
     if (touches.length >= 2) {
       // Fingers moving together always change their gap a little: a gesture zooms only
       // when they clearly spread or close, else it scrolls, and keeps that until lifted.
+      // Once decided, the movement made while deciding counts too (from the origin), so
+      // the pages start moving with the fingers instead of after a dead zone.
+      let from = a.last;
       if (!a.mode && a.origin.d && m.d) {
-        if (Math.abs(m.d / a.origin.d - 1) > ZOOM_START) a.mode = 'zoom';
-        else if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > TAP_SLOP) a.mode = 'pan';
+        if (Math.abs(m.d / a.origin.d - 1) > ZOOM_START) { a.mode = 'zoom'; from = a.origin; }
+        else if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > PAN_START) { a.mode = 'pan'; from = a.origin; }
       }
-      if (a.mode === 'zoom' && a.last.d && m.d && m.d !== a.last.d) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / a.last.d });
+      if (a.mode === 'zoom' && from.d && m.d && m.d !== from.d) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / from.d });
       else if (a.mode === 'pan') {
-        out.push({ type: 'pan', dx: m.x - a.last.x, dy: m.y - a.last.y });
+        out.push({ type: 'pan', dx: m.x - from.x, dy: m.y - from.y });
         a.speed.add(m.x, m.y, time);
       }
     }
