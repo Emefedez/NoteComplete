@@ -2192,6 +2192,15 @@ for (const type of ["pointerup", "pointercancel"]) document.addEventListener(typ
   penBtn.pointer(fields(e));
   if (penHold) { clearTimeout(penHold.timer); penHold = null; }
 }, true);
+// The pen coming into hover range (with the button held, in Brave and Chrome on Android the
+// only way the press shows) and leaving it (the next entry counts again).
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType !== "pen" || e.relatedTarget) return;
+  if (penBtn.pointer(fields(e)) === "menu" && onPages(e)) penMenu(e);
+}, true);
+document.addEventListener("pointerout", (e) => {
+  if (e.pointerType === "pen" && !e.relatedTarget) penBtn.pointer({ ...fields(e), type: "pointerleave" });
+}, true);
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
   const button = penBtn.contextmenu({ pointerType: e.pointerType || "", time: e.timeStamp }) === "menu";
@@ -4234,10 +4243,21 @@ $("penSetupStart").onclick = async () => {
   let touching = false;
   const down = (e) => { if (e.pointerType === "pen") touching = true; };
   const up = (e) => { if (e.pointerType === "pen") touching = false; };
-  const move = (e) => { if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure }); };
+  // Presses as the app will see them: a hover rising edge, or an entry with the button held.
+  const probe = penButtonDetector();
+  seen.presses = [];
+  const feed = (e, type = e.type) => { if (e.pointerType === "pen" && probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons }); };
+  const move = (e) => {
+    if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure });
+    feed(e);
+  };
+  const over = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e); };
+  const out = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e, "pointerleave"); };
   const menu = (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); seen.taps.push({ phase, pointerType: e.pointerType || "", button: e.button }); };
   const key = (e) => seen.keys.push({ phase, key: e.key, code: e.code });
   pad.addEventListener("pointermove", move);
+  pad.addEventListener("pointerover", over);
+  pad.addEventListener("pointerout", out);
   pad.addEventListener("pointerdown", down);
   addEventListener("pointerup", up, true);
   addEventListener("pointercancel", up, true);
@@ -4249,19 +4269,21 @@ $("penSetupStart").onclick = async () => {
     step.textContent = "1 of 3 · Hold your pen just above the box, without touching it.";
     await wait(2500);
     phase = "press";
-    step.textContent = "2 of 3 · Still without touching, press and release the side button, twice.";
-    const presses = () => seen.hover.filter((m) => m.phase === "press" && m.buttons).length;
+    step.textContent = "2 of 3 · Press the side button while hovering, twice. If nothing happens, hold the button, lift the pen away and bring it back over the box.";
+    const presses = () => seen.presses.length;
     await wait(6000, () => presses() >= 2);
     await wait(400);
     phase = "tap";
     step.textContent = "3 of 3 · Hold the side button and tap the box once.";
     await wait(6000, () => seen.taps.some((t) => t.phase === "tap"));
     if (run !== penSetupRun) return;
-    penSetupFound = profileFrom({ hover: seen.hover, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
+    penSetupFound = profileFrom({ hover: seen.hover, presses: seen.presses, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
     step.textContent = "Done. Save to use it, or Try again.";
     $("penSetupResult").textContent = describeProfile(penSetupFound);
   } finally {
     pad.removeEventListener("pointermove", move);
+    pad.removeEventListener("pointerover", over);
+    pad.removeEventListener("pointerout", out);
     pad.removeEventListener("pointerdown", down);
     removeEventListener("pointerup", up, true);
     removeEventListener("pointercancel", up, true);
@@ -4285,8 +4307,10 @@ $("penSetupSave").onclick = () => {
     while (lines.length > 14) lines.shift();
     log.replaceChildren(...lines.map((l) => { const li = document.createElement("li"); li.textContent = l.count > 1 ? `${l.text} ×${l.count}` : l.text; return li; }));
   };
-  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"])
+  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "pointerover", "pointerout"])
     pad.addEventListener(type, (e) => {
+      // Entering and leaving between the box's own children are not the pen coming or going.
+      if ((type === "pointerover" || type === "pointerout") && e.relatedTarget && pad.contains(e.relatedTarget)) return;
       e.preventDefault();
       note(`${type} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
     });

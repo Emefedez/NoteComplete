@@ -8,6 +8,10 @@
 // - button held, then a tap: no pointer events, only a contextmenu whose pointerType is ""
 //   (Chromium's stylus text selection), right after the pen hovered (signal B);
 // - pen touching, button pressed: nothing (buttons stays 1), so it cannot be detected.
+// Brave (and Chrome) drop the press itself while the pen hovers (ACTION_BUTTON_PRESS), so
+// the new state often shows only when the pen comes back into hover range with the button
+// held: entering hover with a nonzero `buttons` counts as a press, and leaving hover range
+// resets, so each entry with the button counts once.
 // Desktop pens (Wacom, Surface) report the barrel as button 2 or the eraser as 5 / 32.
 
 export const PROFILE_KEY = 'notecomplete-pen-button';
@@ -31,12 +35,15 @@ export function browserTag(ua) {
 export function penButtonDetector(getProfile = () => null) {
   let contact = false, hoverButtons = 0, penSeenAt = -Infinity;
   return {
-    // pointerdown / pointermove / pointerup / pointercancel, as
-    // { type, pointerType, button, buttons, time }.
+    // pointerdown / pointermove / pointerover / pointerup / pointercancel, and
+    // 'pointerleave' for the pen leaving hover range, as { type, pointerType, button,
+    // buttons, time }.
     pointer(e) {
       if (e.pointerType !== 'pen') return null;
       const profile = getProfile();
       penSeenAt = e.time;
+      // Out of hover range: the next entry with the button held counts again.
+      if (e.type === 'pointerleave') { if (!contact) hoverButtons = 0; return null; }
       if (e.type === 'pointerdown') {
         contact = true;
         hoverButtons = e.buttons;
@@ -74,9 +81,11 @@ export function penButtonDetector(getProfile = () => null) {
 
 // Calibration: from what was recorded while the user pressed the button, the profile to
 // keep. `hover` are pen pointermoves with no contact; `taps` contextmenus; `keys` keydowns.
-export function profileFrom({ hover = [], taps = [], keys = [] }, ua = '') {
+// `presses` are the presses the detector itself saw (a hover rising edge or an entry with
+// the button held); without them, hover moves whose buttons differ from the baseline.
+export function profileFrom({ hover = [], presses = null, taps = [], keys = [] }, ua = '') {
   const baseline = hover.find((m) => m.phase === 'baseline')?.buttons ?? 0;
-  const pressed = hover.filter((m) => m.phase === 'press' && m.buttons !== baseline);
+  const pressed = presses ?? hover.filter((m) => m.phase === 'press' && m.buttons !== baseline);
   const hoverMask = pressed.reduce((mask, m) => mask | (m.buttons & ~baseline), 0);
   const tap = taps.find((t) => t.pointerType === '' || t.pointerType === 'pen');
   const key = keys.find((k) => k.key && !['Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(k.key));
