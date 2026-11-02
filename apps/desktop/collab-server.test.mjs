@@ -8,7 +8,8 @@ import * as sync from 'y-protocols/sync';
 import * as awareness from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import { startServer, lanAddress, lanAddresses, readerFile, firewallHint } from './collab-server.js';
+import { gunzipSync, brotliDecompressSync } from 'node:zlib';
+import { startServer, lanAddress, lanAddresses, readerFile, firewallHint, pickEncoding } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
 
 const yjs = { Y, sync, awareness, encoding, decoding };
@@ -432,5 +433,135 @@ test('the host’s auto-save switch reaches everyone, joiners included; others c
     await wait(200);
     assert.equal(server.hub.autosave, true);
     first.client.close(); g.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('reader files are compressed and kept by the browser, checked on each use', async () => {
+  const root = await reader();
+  const big = `export const text = ${JSON.stringify('note '.repeat(5000))};\n`;
+  await writeFile(path.join(root, 'pkg', 'big.js'), big);
+  assert.equal(pickEncoding('gzip, deflate'), 'gzip');
+  assert.equal(pickEncoding('gzip, deflate, br, zstd'), 'br');
+  assert.equal(pickEncoding('br;q=0, gzip;q=0.5'), 'gzip');
+  assert.equal(pickEncoding(''), '');
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0 });
+  try {
+    const url = `${server.origin}/pkg/big.js`;
+    // fetch unzips on its own: read the raw bytes with node:http instead.
+    const raw = (encoding, extra = {}) => new Promise((resolve, reject) => {
+      import('node:http').then(({ get }) => get(url, { headers: { 'Accept-Encoding': encoding, ...extra } }, (res) => {
+        const parts = [];
+        res.on('data', (d) => parts.push(d));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(parts) }));
+      }).on('error', reject));
+    });
+    const zipped = await raw('gzip, deflate');
+    assert.equal(zipped.status, 200);
+    assert.equal(zipped.headers['content-encoding'], 'gzip');
+    assert.equal(zipped.headers.vary, 'Accept-Encoding');
+    assert.ok(zipped.body.length < big.length / 10, 'much smaller');
+    assert.equal(gunzipSync(zipped.body).toString(), big);
+    const br = await raw('gzip, br');
+    assert.equal(br.headers['content-encoding'], 'br');
+    assert.equal(brotliDecompressSync(br.body).toString(), big);
+    const plain = await raw('identity');
+    assert.equal(plain.headers['content-encoding'], undefined);
+    assert.equal(plain.body.toString(), big);
+    // Kept, but checked each time: the same version is a 304 with no body.
+    assert.equal(zipped.headers['cache-control'], 'no-cache');
+    assert.ok(zipped.headers['last-modified']);
+    assert.notEqual(zipped.headers.etag, plain.headers.etag, 'each encoding its own validator');
+    const again = await raw('gzip', { 'If-None-Match': zipped.headers.etag });
+    assert.equal(again.status, 304);
+    assert.equal(again.body.length, 0);
+    // A changed file is sent again.
+    await wait(20);
+    await writeFile(path.join(root, 'pkg', 'big.js'), big + '// changed\n');
+    const changed = await raw('gzip', { 'If-None-Match': zipped.headers.etag });
+    assert.equal(changed.status, 200);
+    assert.match(gunzipSync(changed.body).toString(), /changed/);
+    // Small files go as they are.
+    const small = await fetch(`${server.origin}/pkg/a.js`, { headers: { 'Accept-Encoding': 'gzip' } });
+    assert.equal(small.headers.get('content-encoding'), null);
+    assert.equal(small.headers.get('cache-control'), 'no-cache');
+    assert.equal((await fetch(`${server.origin}/nothing.js`)).headers.get('cache-control'), 'no-store');
+  } finally { await server.stop(); }
+});
+
+test('snapshots go gzipped to joiners that can unzip them, plain to others', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  // The snapshot frames each joiner receives: their header.
+  const headers = [];
+  class Spy extends WebSocket {
+    set onmessage(fn) {
+      super.onmessage = (event) => {
+        if (typeof event.data !== 'string' && new Uint8Array(event.data)[0] === 2) {
+          const bytes = new Uint8Array(event.data), length = new DataView(event.data).getUint32(1);
+          headers.push({ ...JSON.parse(new TextDecoder().decode(bytes.subarray(5, 5 + length))), bytes: bytes.length });
+        }
+        fn(event);
+      };
+    }
+  }
+  try {
+    const mine = new Replica();
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Exam' });
+    for (let i = 0; i < 50; i++) await h.submit('draw', { line: `a long enough line to compress ${i}` });
+    const zipped = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Spy });
+    await until(() => zipped.client.loaded, 'gzipped snapshot');
+    const plain = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Spy, gzip: false });
+    await until(() => plain.client.loaded, 'plain snapshot');
+    assert.equal(headers[0].enc, 'gzip');
+    assert.equal(headers[1].enc, undefined);
+    assert.ok(headers[0].bytes < headers[1].bytes / 2, `${headers[0].bytes} < ${headers[1].bytes} / 2`);
+    assert.equal(zipped.replica.digest(), mine.digest());
+    assert.equal(plain.replica.digest(), mine.digest());
+    zipped.client.close(); plain.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('a joiner back after a dropped connection gets only the edits it missed', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null, hubOptions: { rate: { burst: 2000, perSecond: 2000 } } });
+  let asked = 0;
+  const request = server.hub.requestSnapshot.bind(server.hub);
+  server.hub.requestSnapshot = (peer) => { asked++; return request(peer); };
+  try {
+    const mine = new Replica();
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Exam' });
+    await h.submit('draw', { line: 'one' });
+    const t = tablet(server, { token: server.hub.tokens.tablet, retries: [200, 200, 200] });
+    await until(() => t.client.loaded, 'snapshot');
+    assert.equal(asked, 1);
+    const drop = async () => {
+      const welcomes = t.client.events.filter(([e]) => e === 'welcome').length;
+      t.client.ws.close();
+      await until(() => t.client.state !== 'open', 'dropped');
+      return () => t.client.events.filter(([e]) => e === 'welcome').length > welcomes;
+    };
+    // Edits made while it was away (it retries after 200 ms) arrive once it is back; no new snapshot.
+    let back = await drop();
+    await h.submit('draw', { line: 'two' });
+    await until(back, 'reconnected');
+    assert.equal(t.client.events.findLast(([e]) => e === 'welcome')[1].resumed, true);
+    await until(() => t.client.seq === h.seq, 'caught up');
+    assert.deepEqual(t.replica.visible(), ['one', 'two']);
+    assert.equal(asked, 1);
+    await t.client.submit('draw', { line: 'three' });
+    assert.deepEqual(mine.visible(), ['one', 'two', 'three']);
+    // The host opened another note meanwhile: that one is loaded whole.
+    back = await drop();
+    mine.history = []; mine.cursor = 0;
+    h.documentChanged({ open: true, title: 'Other' });
+    await until(back, 'reconnected');
+    assert.equal(t.client.events.findLast(([e]) => e === 'welcome')[1].resumed, false);
+    await until(() => t.client.loaded && t.client.gen === h.gen && asked === 2, 'reloaded');
+    assert.deepEqual(t.replica.visible(), []);
+    t.client.close(); h.close();
   } finally { await server.stop(); }
 });

@@ -8,7 +8,9 @@ import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { stat, readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { CollabHub } from './collab-hub.js';
 import { ensureCloudflared, startTunnel } from './tunnel.js';
@@ -16,6 +18,9 @@ import { ensureCloudflared, startTunnel } from './tunnel.js';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/json', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.traineddata': 'application/octet-stream' };
 // Pages that open the reader as a guest or as a drawing tablet; the invite is in the fragment.
 const PAGES = new Set(['/join', '/tablet']);
+// Text and WebAssembly shrink to a quarter or a third compressed; images and fonts do not.
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.webmanifest', '.wasm', '.svg']);
+const gzip = promisify(zlib.gzip), brotli = promisify(zlib.brotliCompress);
 
 export const DEFAULT_PORT = 41237;
 // Adapters a phone on the Wi-Fi cannot reach: containers, virtual machines, VPNs.
@@ -68,24 +73,91 @@ export function readerFile(root, pathname) {
   return file.startsWith(path.resolve(root) + path.sep) ? file : null;
 }
 
+// The encoding to send a file in: brotli where the browser offers it (Chromium offers it only
+// over https, so behind the online link), else gzip (a plain-http page on the LAN), else none.
+export function pickEncoding(accept = '') {
+  const offered = new Map(String(accept).toLowerCase().split(',').map((part) => {
+    const [name, ...params] = part.trim().split(';');
+    const q = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
+    return [name.trim(), q ? Number(q.slice(2)) : 1];
+  }));
+  for (const name of ['br', 'gzip']) if (offered.get(name) > 0) return name;
+  return '';
+}
+// Compressed copies of the reader's files, made once per file version (size and time) and kept
+// in memory while the session runs. zlib works off the main thread, so the session does not
+// stall while a large file is compressed.
+export function compressedFiles() {
+  const copies = new Map();
+  return function compressed(file, info, encoding) {
+    const key = `${file}\0${encoding}`, version = `${info.size}-${info.mtimeMs}`;
+    const kept = copies.get(key);
+    if (kept?.version === version) return kept.bytes;
+    const bytes = readFile(file).then((data) => encoding === 'br'
+      ? brotli(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } })
+      : gzip(data, { level: 6 }));
+    copies.set(key, { version, bytes });
+    bytes.catch(() => copies.delete(key));
+    return bytes;
+  };
+}
+// The app shell (precache.json, tools/build_web.py), compressed one file at a time as soon as
+// sharing starts, so the first device that joins does not wait for it.
+async function warm(root, compressed, stopped) {
+  try {
+    const { shell = [] } = JSON.parse(await readFile(path.join(root, 'precache.json'), 'utf8'));
+    for (const name of shell) {
+      const file = readerFile(root, '/' + name);
+      if (stopped()) return;
+      if (!file || !COMPRESSIBLE.has(path.extname(file))) continue;
+      const info = await stat(file).catch(() => null);
+      if (info?.isFile() && info.size > 1024) await compressed(file, info, 'gzip').catch(() => {});
+    }
+  } catch { /* No manifest (a development tree): files are compressed when first asked for. */ }
+}
+// A file's validator: a browser that has it sends it back and gets 304 Not Modified.
+const etag = (info, encoding) => `"${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}${encoding ? '-' + encoding : ''}"`;
+const matches = (header, tag) => !!header && String(header).split(',').some((t) => t.trim().replace(/^W\//, '') === tag);
+
 // Starts a session. Returns its links and tokens, `stop()`, and the hub.
 export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port = DEFAULT_PORT, address, maxPeers = 10, onEnded = () => {}, hubOptions = {} }) {
   const addresses = address ? [address] : lanAddresses(undefined, await routeAddress());
   address = addresses[0] || '127.0.0.1';
   let stopping = null;
   const hub = new CollabHub({ notes, maxPeers, ...hubOptions, onEnded: (result) => { onEnded(result); stop(); } });
+  const compressed = compressedFiles();
   const server = http.createServer(async (req, res) => {
     const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Referrer-Policy': 'no-referrer' };
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, headers); return res.end(); }
     const file = readerFile(root, new URL(req.url, 'http://x').pathname);
+    let info;
     try {
-      if (!file || !(await stat(file)).isFile()) throw Error('missing');
-      res.writeHead(200, { ...headers, 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
+      if (!file || !(info = await stat(file)).isFile()) throw Error('missing');
+    } catch {
+      res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' });
+      return res.end('Not found');
+    }
+    // Kept by the browser but checked on every use (a 304 costs a round trip, no bytes): a
+    // device that joined before loads the app again from its cache, and a rebuilt app still
+    // arrives. Without this, every join downloaded the whole app again.
+    const ext = path.extname(file);
+    const encoding = COMPRESSIBLE.has(ext) && info.size > 1024 ? pickEncoding(req.headers['accept-encoding']) : '';
+    const tag = etag(info, encoding);
+    Object.assign(headers, { 'Cache-Control': 'no-cache', ETag: tag, 'Last-Modified': info.mtime.toUTCString(), 'Content-Type': TYPES[ext] || 'application/octet-stream' });
+    if (COMPRESSIBLE.has(ext)) headers.Vary = 'Accept-Encoding';
+    if (matches(req.headers['if-none-match'], tag)) { res.writeHead(304, headers); return res.end(); }
+    try {
+      if (encoding) {
+        const body = await compressed(file, info, encoding);
+        res.writeHead(200, { ...headers, 'Content-Encoding': encoding, 'Content-Length': body.length });
+        return res.end(req.method === 'HEAD' ? undefined : body);
+      }
+      res.writeHead(200, { ...headers, 'Content-Length': info.size });
       if (req.method === 'HEAD') return res.end();
       createReadStream(file).on('error', () => res.destroy()).pipe(res);
     } catch {
-      res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' });
-      res.end('Not found');
+      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end();
     }
   });
   // Only the host sends big messages; the hub enforces the guests' limit (maxMessage).
@@ -108,9 +180,18 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     server.once('error', reject);
     server.listen(at, host, () => { server.off('error', reject); resolve(); });
   });
-  // The usual port when it is free, so a firewall rule keeps working; else any.
-  await listen(port).catch((error) => { if (port && error.code === 'EADDRINUSE') return listen(0); throw error; });
+  // The usual port when it is free, so a firewall rule keeps working and the address stays the
+  // same from one session to the next (a browser keeps its cache, and its service worker, per
+  // address and port); else one of the next few, else any.
+  await listen(port).catch(async (error) => {
+    if (!port || error.code !== 'EADDRINUSE') throw error;
+    for (let next = port + 1; next < port + 10; next++) {
+      try { return await listen(next); } catch (e) { if (e.code !== 'EADDRINUSE') throw e; }
+    }
+    return listen(0);
+  });
   const actualPort = server.address().port;
+  warm(root, compressed, () => !!stopping);
   // A request is local only when it names this computer as it is known here (loopback or
   // a LAN address) and did not come through Cloudflare; anything else is online.
   const localHosts = new Set(['127.0.0.1', 'localhost', '[::1]', ...addresses].map((h) => `${h}:${actualPort}`));

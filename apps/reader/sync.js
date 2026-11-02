@@ -8,6 +8,11 @@
 //   (`yjs`) and only by readers that show the notes; tablets never load it.
 export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
 const RETRIES = [500, 1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
+// A gzipped snapshot (the hub compresses it for joiners that say they can unzip it).
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
 
 // A pasted or scanned invite: a link (http://host:port/tablet#session.token or /join#…),
 // or a computer address plus the short pairing code shown on it.
@@ -48,8 +53,9 @@ export class SyncClient {
   // digest() returns the core's history digest (tablets and host, for the agreement check).
   // on(type, detail) reports: welcome, peers, doc, live, notes-reset, ending, ended, lost,
   // closed, status, nack.
-  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES }) {
-    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries });
+  // gzip: this reader can unzip snapshots (DecompressionStream; old browsers get them plain).
+  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES, gzip = typeof DecompressionStream === 'function' }) {
+    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries, gzip });
     this.queue = Promise.resolve();
     this.pending = new Map();
     this.ref = 0;
@@ -66,7 +72,10 @@ export class SyncClient {
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       this.attempt = 0;
-      this.send({ t: 'hello', token: this.token, code: this.token ? undefined : this.code, name: this.name, role: this.role });
+      // Back after a dropped connection with the note loaded: the hub sends only the edits
+      // made since, when it still has them, instead of the whole note again.
+      const have = this.role !== 'host' && this.loaded && this.session ? { session: this.session, gen: this.gen, seq: this.seq } : undefined;
+      this.send({ t: 'hello', token: this.token, code: this.token ? undefined : this.code, name: this.name, role: this.role, accept: this.gzip ? ['gzip'] : undefined, have });
     };
     ws.onmessage = ({ data }) => {
       if (ws !== this.ws) return;
@@ -109,9 +118,12 @@ export class SyncClient {
     switch (m.t) {
       case 'welcome':
         this.welcomed = true;
-        Object.assign(this, { id: m.id, role: m.role, canEdit: m.canEdit, color: m.color, name: m.name, notesShared: m.notes });
+        Object.assign(this, { id: m.id, role: m.role, canEdit: m.canEdit, color: m.color, name: m.name, notesShared: m.notes, session: m.session });
         if (m.token) this.token = m.token;
         if (this.role !== 'host') this.gen = m.gen;
+        // Not resumed (a first join, or back after the log moved on or another note opened):
+        // this copy is stale until the snapshot on its way is loaded.
+        if (this.role !== 'host' && !m.resumed) this.loaded = false;
         this.state = 'open';
         this.on('welcome', m);
         if (this.yjs && m.notes) this.startNotes();
@@ -207,7 +219,8 @@ export class SyncClient {
       const { header, payload } = unpackSnapshot(bytes);
       return this.enqueue(async () => {
         if (header.gen !== this.gen) return;
-        await this.load({ project: new TextDecoder().decode(payload), seq: header.seq, gen: header.gen, title: header.title });
+        const project = header.enc === 'gzip' ? await gunzip(payload) : payload;
+        await this.load({ project: new TextDecoder().decode(project), seq: header.seq, gen: header.gen, title: header.title });
         this.seq = header.seq;
         this.loaded = true;
       });

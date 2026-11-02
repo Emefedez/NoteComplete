@@ -1,4 +1,12 @@
-## What's new in 1.1.20
+## What's new in 1.1.21
+
+- **Joining a shared note is several times faster.** In tests on a 5 Mbit/s link, a tablet's first join of a 3-page PDF note went from 15.9 s to 4.6 s and from 60 MB to 2.8 MB; joining again takes about 2 s.
+  - The computer now compresses what it sends (the app and the note) and lets the device keep the app between sessions instead of downloading it again every time.
+  - A device joining over the internet no longer downloads the speech and text-recognition engines (52 MB) while it joins; they come on first use.
+  - The sharing address keeps the same port between sessions when it can.
+  - A tablet or guest that loses the connection for a moment gets only the edits it missed, not the whole note again.
+
+### In 1.1.20
 
 - **PDF pages stay visible when zoomed in.** Past a size many tablets cannot show (4096 px a side or 16 MP; the Xiaomi Pad 5, for example), a page's PDF was drawn on a canvas the browser left blank. Pages that large now show the PDF as a picture, which is shown in tiles.
 - **Adding pages to a PDF note keeps the PDF on its pages.** Rebuilding the pages could let the old ones, still drawing, take a PDF picture away from the new ones.

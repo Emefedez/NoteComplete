@@ -209,6 +209,8 @@ class Session {
     }
     this.restoreView(view);
     this.waiting(false);
+    // The note is open: the app may now cache itself for offline use (app.js).
+    dispatchEvent(new Event('notecomplete:joined'));
     if (this.role === 'guest') {
       // The note itself, its pages and tools, not only the notes: guest-mode is the layout
       // for a session with no note open (enterGuest), and it hid the pages and the tool bar.
@@ -248,13 +250,15 @@ class Session {
       if (this.role === 'guest') this.enterGuest();
       if (this.role === 'host') { this.documentChanged(); this.settingsChanged(); }
       else this.host.setSharedAutosave?.(detail.autosave);
+      // resumed: back after a dropped connection, with the note still open here.
       if (this.role === 'guest') {
-        this.loading(detail.open ? 'Loading the note…' : null, { inline: true });
-        this.askName(detail.name);
+        this.loading(detail.open && !detail.resumed ? 'Loading the note…' : null, { inline: true });
+        if (!detail.resumed) this.askName(detail.name);
         host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
         this.showTitle();
       }
-      if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); this.loading(detail.open ? 'Loading the note…' : null); }
+      if (this.role === 'tablet' && detail.resumed) host.status('Connected again.');
+      else if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); this.loading(detail.open ? 'Loading the note…' : null); }
     } else if (type === 'peers') {
       this.people = detail;
       this.drawPeople();
