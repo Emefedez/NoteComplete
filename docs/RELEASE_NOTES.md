@@ -1,4 +1,9 @@
-## What's new in 1.1.16
+## What's new in 1.1.17
+
+- **Text no longer disappears when you finish it.** The typed text stays where it is, as typed, until the page's new drawing shows it. On PDF pages this used to leave a visible gap. It also holds for everyone in a sharing session, and an edited box no longer flashes its old text.
+- **Sharing:** someone else's stroke on the same page no longer closes the text box you are typing in.
+
+### In 1.1.16
 
 - **Drawing tablet: new page, tape and text.**
   - The tablet's dock gains **New page** (a blank page after the current one, the same size), **Tape** (with its colours, widths and strip or rectangle) and **Text**.
