@@ -7,7 +7,7 @@
 // cancel its stroke.
 import { VelocityTracker } from './momentum.js';
 
-const TAP_MS = 300, TAP_SLOP = 12, ZOOM_START = 0.08;
+const TAP_MS = 300, TAP_SLOP = 12, ZOOM_START = 0.08, HOLD_MS = 550;
 
 export function measure(touches) {
   const list = [...touches];
@@ -21,6 +21,14 @@ export function measure(touches) {
 export class TouchGesture {
   constructor() { this.reset(); }
   reset() { this.active = null; }
+  // Two fingers held still (not moved, not zooming or scrolling) for HOLD_MS: the quick
+  // menu at their centre. Asked by a timer, since nothing else happens meanwhile.
+  hold(time) {
+    const a = this.active;
+    if (!a || a.held || a.moved || a.mode || a.count !== 2 || time - a.time < HOLD_MS) return [];
+    a.held = true;
+    return [{ type: 'menu', x: a.last.x, y: a.last.y }];
+  }
   // `touches`: [{clientX, clientY}], `time`: ms. Returns actions to apply.
   start(touches, time) {
     const n = touches.length, m = measure(touches);
@@ -67,6 +75,7 @@ export class TouchGesture {
     }
     if (remaining.length) { a.last = measure(remaining); return out; }
     this.active = null;
+    if (a.held) return out;
     if (a.multi && !a.moved && time - a.time < TAP_MS) return [{ type: a.count >= 3 ? 'redo' : 'undo' }];
     return out;
   }
@@ -75,8 +84,9 @@ export class TouchGesture {
 // Fingers only: an Apple Pencil's touches (touchType "stylus") are left to the pointer events.
 const fingers = (list) => [...list].filter((t) => t.touchType !== 'stylus');
 
-export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fling = () => {}, stop = () => {}, enabled = () => true }) {
+export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fling = () => {}, stop = () => {}, menu = () => {}, enabled = () => true }) {
   const g = new TouchGesture();
+  let holdTimer = 0;
   const apply = (actions) => {
     for (const a of actions) {
       if (a.type === 'cancel') cancelGesture();
@@ -85,6 +95,7 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
       else if (a.type === 'undo') undo();
       else if (a.type === 'redo') redo();
       else if (a.type === 'fling') fling(a.vx, a.vy);
+      else if (a.type === 'menu') menu(a.x, a.y);
     }
   };
   const on = (type, handler) => viewport.addEventListener(type, handler, { passive: false });
@@ -96,6 +107,8 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
     if (!touches.length) return;
     if (touches.length > 1) e.preventDefault();
     apply(g.start(touches, e.timeStamp));
+    clearTimeout(holdTimer);
+    if (touches.length === 2) { const at = e.timeStamp; holdTimer = setTimeout(() => apply(g.hold(at + HOLD_MS + 10)), HOLD_MS + 10); }
   });
   on('touchmove', (e) => {
     if (!g.active) return;
@@ -104,7 +117,7 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
     if (touches.length > 1) e.preventDefault();
     apply(g.move(touches, e.timeStamp));
   });
-  const end = (e) => { if (g.active) apply(g.end(fingers(e.touches), e.timeStamp)); };
+  const end = (e) => { clearTimeout(holdTimer); if (g.active) apply(g.end(fingers(e.touches), e.timeStamp)); };
   on('touchend', end);
   on('touchcancel', () => g.reset());
   return g;

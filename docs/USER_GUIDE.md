@@ -153,6 +153,17 @@ Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-
 
 **Layers** selects where to draw, creates/renames layers, controls visibility/opacity and locks them. Hidden or locked layers cannot be edited. New strokes inherit the selected layer.
 
+
+### Quick menu
+
+A ring of tools around your pen, with colours, undo, redo and pen pressure around it. To open it:
+
+- **Keyboard**: hold **Z**, point at an item and let go. Or tap **Z** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
+- **Pen side button**: press the S Pen button, or a Wacom pen's barrel button, on the page. This opens the menu instead of right-clicking.
+- **Touch screens and iPad**: hold two fingers still on the page for half a second.
+
+The Apple Pencil Pro squeeze and the Pencil double-tap are not available to web pages in Safari, so on iPad use the two-finger hold.
+
 ## Audio details
 
 Nonempty recording names are shown unchanged; otherwise the UI generates a recording number and date. Dimming shows strokes at 20% opacity before they were written and normally afterwards; seeking backwards restores dimming. This is whole-stroke timing, not point-by-point replay, and untimed ink remains visible. Each recording keeps its own playback position. Codec support varies by browser and device; **Download** remains available when playback is unsupported.

@@ -60,3 +60,17 @@ test('a two-finger scroll glides on when the fingers lift', () => {
   for (let t = 1016, y = 480; t <= 1100; t += 16, y -= 20) g.move(two(y), t);
   assert.deepEqual(g.end([], 1400), []);
 });
+
+test('two fingers held still open the quick menu, and lifting them does not undo', () => {
+  const g = new TouchGesture();
+  const two = [{ clientX: 100, clientY: 300 }, { clientX: 180, clientY: 300 }];
+  g.start(two, 0);
+  assert.deepEqual(g.hold(300), []);
+  assert.deepEqual(g.hold(600), [{ type: 'menu', x: 140, y: 300 }]);
+  assert.deepEqual(g.hold(900), []);
+  assert.deepEqual(g.end([], 950), []);
+  // Moved fingers are a scroll, not a hold.
+  g.start(two, 2000);
+  g.move([{ clientX: 100, clientY: 260 }, { clientX: 180, clientY: 260 }], 2050);
+  assert.deepEqual(g.hold(2600), []);
+});
