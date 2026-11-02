@@ -81,12 +81,109 @@ export function backgroundPlacement(background, size) {
   return { x, y, width, height, share: width / size[0] };
 }
 
+// How many page rasters (canvases) stay ready for scrolling back. Each is a few tens of
+// megabytes at 2× on a large page, so only a few.
+export const RASTERS_KEPT = 2;
+
+// A copy of a canvas, for a second place on screen (a canvas can only be in one).
+export function copyCanvas(source) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  canvas.getContext("2d").drawImage(source, 0, 0);
+  return canvas;
+}
+
+// A drawn canvas as a still picture: a "bitmaprenderer" canvas holding an ImageBitmap of
+// it. A 2D canvas is live, and the browser may hand its pixels to the compositor again on
+// every frame (Chromium copies a whole page raster per frame while ink is drawn over it);
+// a bitmap is uploaded once. Where that is unsupported, the 2D canvas itself.
+// Frees a raster's pixels now instead of at the next garbage collection.
+// A 2D canvas gives its pixels back when it shrinks to nothing. A bitmap canvas is left to the
+// garbage collector, which frees it promptly once nothing refers to it: replacing its bitmap
+// (transferFromImageBitmap) makes the browser keep both for seconds.
+function wipe(canvas) {
+  if (canvas.getContext("bitmaprenderer")) return;
+  canvas.width = canvas.height = 0;
+}
+async function settled(canvas) {
+  try {
+    const still = document.createElement("canvas");
+    const context = still.getContext("bitmaprenderer");
+    if (!context || typeof createImageBitmap !== "function") return canvas;
+    still.width = canvas.width;
+    still.height = canvas.height;
+    context.transferFromImageBitmap(await createImageBitmap(canvas));
+    canvas.width = canvas.height = 0;
+    return still;
+  } catch {
+    return canvas;
+  }
+}
+
 export class PdfBackgrounds {
   constructor(read) {
     this.read = read;
     this.documents = new Map();
     this.images = new Map();
+    this.rasters = new Map();
+    this.drawing = new Map();
     this.closed = false;
+  }
+  // The PDF page drawn into a canvas for the page view: shown as it is, never encoded to an
+  // image (a PNG of a full page takes hundreds of milliseconds and stays in memory twice:
+  // as text and decoded). The last RASTERS_KEPT stay, for scrolling back.
+  async raster(background, size, displayWidth = size[0], settings) {
+    const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings]);
+    const kept = this.rasters.get(key);
+    if (kept) {
+      this.rasters.delete(key);
+      this.rasters.set(key, kept);
+      return kept;
+    }
+    if (this.drawing.has(key)) return this.drawing.get(key);
+    const job = (async () => {
+      const doc = await this.document(background.resource_id);
+      const page = await doc.getPage(background.page_index + 1);
+      const original = page.getViewport({ scale: 1 });
+      const target = rasterTarget(original, displayWidth, undefined, settings);
+      const viewport = page.getViewport({ scale: target.scale });
+      let canvas = document.createElement("canvas");
+      canvas.width = target.width;
+      canvas.height = target.height;
+      try {
+        await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
+      } catch (error) {
+        canvas.width = canvas.height = 0;
+        throw error;
+      } finally {
+        page.cleanup();
+      }
+      canvas = await settled(canvas);
+      if (this.closed) return canvas;
+      this.rasters.set(key, canvas);
+      while (this.rasters.size > RASTERS_KEPT) {
+        const [oldest, old] = this.rasters.entries().next().value;
+        this.rasters.delete(oldest);
+        this.release(old);
+      }
+      return canvas;
+    })();
+    this.drawing.set(key, job);
+    try { return await job; } finally { this.drawing.delete(key); }
+  }
+  // A raster no longer shown: its memory goes now unless it is kept for scrolling back.
+  release(canvas) {
+    if (!canvas || canvas.isConnected) return;
+    for (const kept of this.rasters.values()) if (kept === canvas) return;
+    wipe(canvas);
+  }
+  // Quality changed: every raster is redrawn.
+  clear() {
+    this.images.clear();
+    const old = [...this.rasters.values()];
+    this.rasters.clear();
+    for (const canvas of old) this.release(canvas);
   }
   async document(id) {
     if (!this.documents.has(id))
@@ -107,7 +204,14 @@ export class PdfBackgrounds {
   }
   async image(background, size, displayWidth = size[0], settings) {
     const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings]);
-    if (this.images.has(key)) return this.images.get(key);
+    // Least recently used goes first: the page being written on asks for its thumbnail's
+    // PDF again after every pause and stays, however many thumbnails scrolling has made.
+    if (this.images.has(key)) {
+      const url = this.images.get(key);
+      this.images.delete(key);
+      this.images.set(key, url);
+      return url;
+    }
     const doc = await this.document(background.resource_id);
     const page = await doc.getPage(background.page_index + 1);
     const original = page.getViewport({ scale: 1 });
@@ -143,7 +247,7 @@ export class PdfBackgrounds {
   }
   close() {
     this.closed = true;
-    this.images.clear();
+    this.clear();
     for (const task of this.documents.values())
       task.then((d) => d.loadingTask.destroy()).catch(() => {});
     this.documents.clear();

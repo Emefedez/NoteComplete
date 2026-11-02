@@ -41,7 +41,7 @@ import { download } from "./download.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
 import { qualitySettings } from "./quality.js";
-import { PdfBackgrounds, backgroundPlacement, openPdf } from "./pdf-background.js";
+import { PdfBackgrounds, backgroundPlacement, openPdf, copyCanvas } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
 import { handwritingConverter } from "./convert.js";
 import { agentConnector } from "./agents.js";
@@ -129,10 +129,13 @@ let panels = [],
 let displayQuality;
 qualitySettings((value, rasterChanged) => {
   displayQuality = value;
-  // Always a filter list (never "none"): dark pages append invert() to it, and "none invert()" is invalid CSS.
-  document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
+  // A filter list (never "none"): dark pages append invert() to it, and "none invert()" is
+  // invalid CSS. At 100 % there is none at all (dark pages fall back to contrast(100%)): an
+  // identity filter still makes every page a filtered layer, redrawn whole on each change.
+  if (value.contrast === 100 && value.brightness === 100) document.documentElement.style.removeProperty("--page-filter");
+  else document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
   if (!rasterChanged) return;
-  backgrounds?.images.clear();
+  backgrounds?.clear();
   for (const panel of panels) {
     panel.token++;
     if (panel.near) renderPage(panel, panel.view);
@@ -435,6 +438,7 @@ async function importImages(files) {
       if (note !== epoch) return;
       dirty = changed = true;
       revision++;
+      panels[targetPage].edits = pageEdits(panels[targetPage]) + 1;
       doc = result;
       updateTools(result);
       savedState();
@@ -834,6 +838,39 @@ function lockMarks(view) {
   }
   return svg;
 }
+// The PDF page under the ink: a canvas placed over the PDF's rectangle on the page.
+function placeRaster(canvas, place, size) {
+  canvas.className = "pdf-raster";
+  Object.assign(canvas.style, {
+    left: `${(place.x / size[0]) * 100}%`,
+    top: `${(place.y / size[1]) * 100}%`,
+    width: `${(place.width / size[0]) * 100}%`,
+    height: `${(place.height / size[1]) * 100}%`,
+  });
+  return canvas;
+}
+// A page with a PDF draws it as a canvas under the page's SVG: the paper colour moves to
+// the render behind it, and blending (highlighter) happens in the render, not the SVG alone.
+function underPaper(render) {
+  const svg = render.firstElementChild, paper = svg?.querySelector("[data-background] > rect");
+  if (!paper) return;
+  render.dataset.paper = paper.getAttribute("fill") || "#ffffff";
+  render.style.backgroundColor = render.dataset.paper;
+  paper.setAttribute("fill", "none");
+  svg.style.isolation = "auto";
+}
+// The page's SVG as it is in the note: paper and the PDF back inside it (for export).
+function pageSvg(p) {
+  const svg = p.render.firstElementChild.cloneNode(true);
+  if (p.render.dataset.paper) {
+    svg.querySelector("[data-background] > rect")?.setAttribute("fill", p.render.dataset.paper);
+    svg.style.isolation = "isolate";
+  }
+  const raster = p.render.querySelector(":scope > canvas.pdf-raster");
+  if (raster && p.view?.pdf_background)
+    svg.querySelector("[data-background]")?.append(pdfImage(raster.toDataURL("image/png"), backgroundPlacement(p.view.pdf_background, p.size)));
+  return svg;
+}
 function pdfImage(href, place) {
   const el = document.createElementNS(ns, "image");
   for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
@@ -884,7 +921,7 @@ async function pumpThumbnails() {
 async function renderThumbnail(panel) {
   if (panel.thumbnailLoading || panel.thumbnailReady || !doc) return;
   panel.thumbnailLoading = true;
-  const note = epoch, version = revision, cache = backgrounds;
+  const note = epoch, edits = pageEdits(panel), cache = backgrounds;
   try {
     const result = panel.view || (await call("view", { page: panel.index }));
     if (note !== epoch) return;
@@ -909,7 +946,7 @@ async function renderThumbnail(panel) {
       try {
         image.src = url;
         await image.decode();
-        if (note !== epoch || version !== revision) return;
+        if (note !== epoch || edits !== pageEdits(panel)) return;
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d").drawImage(image, 0, 0, width, height);
@@ -920,13 +957,15 @@ async function renderThumbnail(panel) {
         target.replaceChildren(preview);
       } finally { URL.revokeObjectURL(url); }
       panel.thumbnailReady = true;
-      panel.thumbnailRevision = version;
+      panel.thumbnailEdits = edits;
     }
   } catch {
     // The numbered fallback remains useful if a thumbnail cannot be decoded.
   } finally {
     panel.thumbnailLoading = false;
-    if (note === epoch && version !== revision) renderThumbnail(panel);
+    // Edited while it was drawn: again once the pen pauses, not at once (it would redraw
+    // continuously while writing).
+    if (note === epoch && edits !== pageEdits(panel)) updatePagePreview(panel, true);
   }
 }
 // A page's thumbnail is redrawn once the pen has paused, not after every stroke: drawing it
@@ -934,8 +973,13 @@ async function renderThumbnail(panel) {
 // pen events would wait behind it.
 const thumbsDue = new Set();
 let thumbsTimer = 0;
-function updatePagePreview(panel) {
-  if (panel.thumbnailRevision === revision) return;
+// Edits made to each page (showEdit), so a thumbnail is redrawn when its own page changed,
+// not because the note did: an edit anywhere used to redraw every page's thumbnail as it
+// was scrolled past, and pages never shown in the panel got one drawn too.
+const pageEdits = (panel) => panel.edits || 0;
+function updatePagePreview(panel, drawing = false) {
+  // Thumbnails not drawn yet are drawn when they come into view in the panel.
+  if (!(panel.thumbnailReady || drawing) || panel.thumbnailEdits === pageEdits(panel)) return;
   thumbsDue.add(panel);
   clearTimeout(thumbsTimer);
   thumbsTimer = setTimeout(refreshThumbnails, 1200);
@@ -945,7 +989,7 @@ function refreshThumbnails() {
   const due = [...thumbsDue];
   thumbsDue.clear();
   for (const panel of due) {
-    if (!panels.includes(panel) || panel.thumbnailRevision === revision) continue;
+    if (!panels.includes(panel) || panel.thumbnailEdits === pageEdits(panel)) continue;
     panel.thumbnailReady = false;
     queueThumbnail(panel);
   }
@@ -1014,13 +1058,18 @@ addEventListener("resize", fitTools);
 placeToolbarActions();
 syncPagePanel();
 function placeholder(p) {
+  const raster = p.render?.querySelector(":scope > canvas.pdf-raster");
   p.render = null;
   p.overlay = null;
   p.ink = null;
+  // Its text and search layers go with it (find.js makes them again when it is back).
+  p.textLayer = null;
+  p.findLayer = null;
   const span = document.createElement("span");
   span.className = "page-placeholder";
   span.textContent = `Page ${p.index + 1}`;
   p.el.replaceChildren(span);
+  backgrounds?.release(raster);
 }
 function resize() {
   if (!doc) return;
@@ -1084,8 +1133,9 @@ async function renderPage(p, provided) {
     // placeholder until the sharper one arrives.
     const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
-      ? p.render?.querySelector("[data-background] > image") : null;
-    if (previous) render.querySelector("[data-background]")?.append(previous);
+      ? p.render?.querySelector(":scope > canvas.pdf-raster") : null;
+    if (result.pdf_background) underPaper(render);
+    if (previous) render.prepend(previous);
     const kept = pdfKey === p.pdfKey ? previous : null;
     applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
@@ -1112,15 +1162,17 @@ async function renderPage(p, provided) {
     updatePagePreview(p);
     if (result.pdf_background && !kept) {
       const place = backgroundPlacement(result.pdf_background, p.size);
-      const image = await backgrounds.image(
+      let raster = await backgrounds.raster(
         result.pdf_background,
         p.size,
         displayWidth * place.share,
         displayQuality,
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
-      render.querySelector("[data-background]").append(pdfImage(image, place));
-      previous?.remove();
+      // The same PDF page on two pages of the note: each shows its own copy.
+      if (raster.isConnected && raster.parentNode !== render) raster = copyCanvas(raster);
+      if (previous && previous !== raster) { previous.remove(); backgrounds.release(previous); }
+      render.prepend(placeRaster(raster, place, p.size));
       p.pdfKey = pdfKey;
       p.pdfReady = true;
       p.rasterWidth = displayWidth;
@@ -1350,6 +1402,7 @@ function showEdit(op, args, result) {
   const only = ["draw", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
+    p.edits = pageEdits(p) + 1;
     p.token++;
     if (!(p.near || p.index === page)) continue;
     // Strokes in quick succession: the page is redrawn once the pen pauses. Until then the
@@ -3020,7 +3073,7 @@ $("svg").onclick = async () => {
   const p = panels[page];
   if (p?.pdfReady && !busy()) {
     await download(
-      new XMLSerializer().serializeToString(p.render.firstElementChild),
+      new XMLSerializer().serializeToString(pageSvg(p)),
       `${filename()}-p${page + 1}.svg`,
       "image/svg+xml",
     ).catch((e) => status(e.message, true));
@@ -3938,6 +3991,7 @@ async function selectGrab(targetGrab = grabbed) {
     const result = await mutate("image", { page: currentGrab.page, image });
     dirty = changed = true;
     revision++;
+    p.edits = pageEdits(p) + 1;
     doc = result;
     updateTools(result);
     savedState();

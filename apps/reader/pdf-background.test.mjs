@@ -32,3 +32,55 @@ test("PDF text words land in the page's PDF rect, including rotated pages", () =
   assert.ok(word.box[3] > word.box[2]);
   assert.deepEqual(textWords([{ str: "  ", transform: [1, 0, 0, 1, 0, 0], width: 1 }], viewport, place), []);
 });
+
+import { PdfBackgrounds, RASTERS_KEPT } from "./pdf-background.js";
+test("page rasters: one render per page and size, only the last few kept, released when dropped", async () => {
+  const made = [];
+  const own = !globalThis.document;
+  globalThis.document ??= {};
+  const saved = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    const canvas = { width: 0, height: 0, isConnected: false, getContext: (type) => (type === "2d" ? {} : null) };
+    made.push(canvas);
+    return canvas;
+  };
+  try {
+    let renders = 0;
+    const pdf = {
+      getPage: async () => ({
+        getViewport: ({ scale }) => ({ width: 100 * scale, height: 150 * scale }),
+        render: () => { renders++; return { promise: Promise.resolve() }; },
+        cleanup() {},
+      }),
+    };
+    const backgrounds = new PdfBackgrounds(async () => new Uint8Array());
+    backgrounds.document = async () => pdf;
+    const page = (i) => ({ resource_id: "r", page_index: i });
+    // Two pages asking for the same raster at once share one render.
+    const [a, b] = await Promise.all([backgrounds.raster(page(0), [100, 150], 100), backgrounds.raster(page(0), [100, 150], 100)]);
+    assert.equal(a, b);
+    assert.equal(renders, 1);
+    assert.ok(a.width > 0);
+    // Shown on screen, it survives being pushed out of the cache; the others are wiped.
+    a.isConnected = true;
+    const others = [];
+    for (let i = 1; i <= RASTERS_KEPT + 1; i++) others.push(await backgrounds.raster(page(i), [100, 150], 100));
+    assert.equal(backgrounds.rasters.size, RASTERS_KEPT);
+    assert.ok(a.width > 0, "a raster on screen is not wiped");
+    assert.equal(others[0].width, 0, "the oldest off-screen raster is freed");
+    assert.equal(await backgrounds.raster(page(RASTERS_KEPT + 1), [100, 150], 100), others.at(-1), "a kept raster is reused");
+    assert.equal(renders, RASTERS_KEPT + 2);
+    // Leaving the screen: released only when no longer kept.
+    a.isConnected = false;
+    backgrounds.release(a);
+    assert.equal(a.width, 0);
+    backgrounds.release(others.at(-1));
+    assert.ok(others.at(-1).width > 0, "kept for scrolling back");
+    backgrounds.clear();
+    assert.equal(others.at(-1).width, 0);
+    assert.equal(backgrounds.rasters.size, 0);
+  } finally {
+    if (own) delete globalThis.document;
+    else globalThis.document.createElement = saved;
+  }
+});
