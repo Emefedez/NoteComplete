@@ -1,11 +1,12 @@
-## What's new in 1.1.4
+## What's new in 1.1.5
 
-- **Apple Pencil draws reliably**: iPadOS no longer takes the Pencil for Scribble (writing into a text box) and cancels the stroke, and a new stroke starts at once, without waiting for the last one to finish.
-- **Pen pressure on or off**: the Pen's settings have a pressure switch, *Pressure changes the width* or *Even width*. It is remembered on each device.
-- **Smoother handwriting**: strokes are smoothed while drawn and once more when the pen lifts. With no stylus out, a finger draws.
-- **Scrolling that glides**: a two-finger flick (or a finger flick while a stylus is in use) keeps scrolling and slows down like native apps. Two fingers scroll or zoom, whichever the gesture starts as. Shift with the wheel or arrow keys scrolls faster.
-- **Sharing**: online guests see the whole note live, not only the Markdown notes, and draw on it when the session allows editing. Drawing tablets can join through the online link too. On Linux, the sharing panel names the firewall command when the local link cannot be reached.
-- **Fixes**: dropdown menus in the compact layout on Android, the toast no longer covers the toolbars, the Notes, Layers and Audio buttons light up whenever their panel is open (also when the website opens with its notes), and touch or stylus no longer selects text by accident.
+- **No more waiting between strokes**: after each stroke the page used to be rebuilt (and its thumbnail redrawn) before the next stroke could start, which on iPad made quick handwriting wait. Now strokes stay on screen as drawn and the page is redrawn once the pen pauses; thumbnails follow a moment later. Pages with a PDF behind them no longer re-render it for the thumbnail. A new stroke starts in a few milliseconds instead of up to a second on slower devices.
+- **iPad**: a drawing tool never starts a text selection or the press-and-hold callout, and Pencil movement is kept from iPadOS Scribble for the whole stroke.
+- **Drawing tablet mode**:
+  - A loading screen shows "Connecting…" and "Loading the note…" with a moving bar, and has a Cancel button.
+  - The dock is a row at the top or bottom when the device is held upright, and a column at the left or right when it is held sideways.
+  - The dock has the pen pressure switch.
+  - Messages appear above the dock, also after the screen turns.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 
