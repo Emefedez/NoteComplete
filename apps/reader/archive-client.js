@@ -1,11 +1,11 @@
 // Internet Archive as a notes source: an item (https://archive.org/details/ID) is a repo whose
 // files, with their folder paths, are listed by the metadata API. No sign-in; reads only.
-import { isTextName } from './text-types.js';
+import { isTextName, isOfficeName } from './text-types.js';
 
 // Sources every install starts with; more can be added from an item link or identifier.
 export const PRELOADED_ARCHIVE = [{ id: '1GREIUvigo', title: '1 GREI ESEI UVIGO - Personal' }];
 const SUPPORTED = /\.(noteful|nfedit|notepart|notecomp|notecomplete|html?|pdf|png|jpe?g|webp)$/i;
-export const supportedArchiveFile = name => SUPPORTED.test(name || '') || isTextName(name || '');
+export const supportedArchiveFile = name => SUPPORTED.test(name || '') || isTextName(name || '') || isOfficeName(name);
 
 // "https://archive.org/details/ID", ".../download/ID/..." or a bare identifier; null otherwise.
 export function archiveId(input) {

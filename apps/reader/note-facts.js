@@ -1,5 +1,5 @@
 // Filterable facts about a note, read with byte ranges like its cover:
-import { TEXT_NAME } from './text-types.js';
+import { TEXT_NAME, OFFICE_NAME } from './text-types.js';
 // title and recordings from the n: and d: blocks (d:/7/0: recordings with a
 // duration in tag 6), and Noteful tags from the editable sets (object kind 19,
 // names in payload tag 14) when those sets are small enough to fetch.
@@ -63,6 +63,7 @@ export const TYPES = {
   html: ['HTML', /\.html?$/i],
   text: ['Text', TEXT_NAME],
   image: ['Image', /\.(png|jpe?g|webp)$/i],
+  office: ['Office', OFFICE_NAME],
   noteful: ['Noteful', /\.noteful$/i],
   notepart: ['NotePart', /\.notepart$/i],
   notecomp: ['NoteComp', /\.notecomp(lete)?$/i],

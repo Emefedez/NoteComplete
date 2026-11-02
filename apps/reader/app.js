@@ -326,6 +326,9 @@ function reset({ opening = false, keepSession = false } = {}) {
   tabBar.update({ title: "Home", dirty: false });
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
+  converted = false;
+  $("textEdit").hidden = false;
+  $("textSave").title = SAVE_TEXT_TITLE;
   documentControls();
   if (!opening) {
     home?.show(false);
@@ -334,6 +337,9 @@ function reset({ opening = false, keepSession = false } = {}) {
 }
 // The format Save writes for a document made with New document; null saves a project.
 let saveAs = null;
+// A Word, OpenDocument, Excel or CSV file shown as Markdown: read-only, Save writes a .md.
+let converted = false;
+const SAVE_TEXT_TITLE = $("textSave").title;
 const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
 function saveLabel() { $("save").firstChild.textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
 async function load(file, preparedDocument = null) {
@@ -358,11 +364,17 @@ async function load(file, preparedDocument = null) {
       document.title = `${sideTitle} — NoteComplete`;
       tabBar.update({ title: sideTitle, dirty: false });
       if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
-      else { await textView.open({ text: prepared.text, name: sideTitle, markdown: isMarkdownName(file.name), key: file.name }); textSource.forget(); }
+      else { await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? isMarkdownName(file.name), key: file.name }); textSource.forget(); }
+      if (prepared.converted) {
+        converted = true;
+        $("textEdit").hidden = true;
+        $("textSave").hidden = false;
+        $("textSave").title = "Save as Markdown: a .md copy of what is shown (Ctrl S)";
+      }
       showDocument();
       rememberDocument();
       documentControls();
-      status(prepared.kind === "html" ? "HTML document opened." : "Text document opened.");
+      status(prepared.kind === "html" ? "HTML document opened." : prepared.converted ? "Opened as Markdown, read-only. Save keeps a .md copy." : "Text document opened.");
       collab?.documentChanged();
       return;
     }
@@ -3026,7 +3038,7 @@ const converter = handwritingConverter({
   status,
   ai: window.notecompleteAI || null,
   hasDocument: () => !!doc,
-  sourceText: () => (!doc && textView?.visible && isMarkdownName($("title").textContent || "") ? textView.text : ""),
+  sourceText: () => (!doc && textView?.visible && (converted || isMarkdownName(textView.key)) ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
     if (!canReplace()) return;
     let format = "project";
@@ -3596,6 +3608,15 @@ const htmlZoom = zoomControl({ key: "notecomplete-html-zoom", out: $("htmlZoomOu
 // Saves the edited text or HTML document over its file (a download when it has none here).
 async function saveText() {
   const view = textView.hasDocument ? textView : htmlView.hasDocument ? htmlView : null;
+  if (view === textView && converted) {
+    // Never over the .docx/.xlsx/.csv it came from.
+    try {
+      const name = `${textView.name}.md`;
+      await download(textView.text, name, "text/markdown");
+      status(`${name} saved.`);
+    } catch (error) { status(error.message, true); }
+    return;
+  }
   if (!view || !changed) return;
   const html = view === htmlView, name = docMember?.name || `${view.name}${html ? ".html" : ".txt"}`;
   try {

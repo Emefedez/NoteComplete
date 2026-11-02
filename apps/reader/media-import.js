@@ -1,5 +1,5 @@
 import { openPdf } from "./pdf-background.js";
-import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText } from "./text-types.js";
+import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName } from "./text-types.js";
 const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
 export function fileKind(name, bytes) {
@@ -27,6 +27,7 @@ export function fileKind(name, bytes) {
     return "image";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
+  if (isOfficeName(name)) return "office";
   if (TEXT_EXT.test(name)) return "text";
   const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
   if (!/\.[a-z0-9]+$/i.test(name) && (head.startsWith("<!doctype html") || head.startsWith("<html")))
@@ -41,7 +42,7 @@ export function fileKind(name, bytes) {
   // No extension (data files, README, Makefile…): text when the content is.
   if (!hasExtension(name) && looksLikeText(bytes)) return "text";
   throw Error(
-    "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, PNG, JPEG or WebP image.",
+    "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
   );
 }
 
@@ -118,6 +119,12 @@ export async function prepareDocument(file) {
         layer: 0,
       },
     };
+  }
+  // Word, OpenDocument, Excel and CSV/TSV files are shown as Markdown, read-only
+  // (converted: Save writes a new .md file, never over the original).
+  if (kind === "office" || (kind === "text" && isTableName(file.name))) {
+    const { officeMarkdown } = await import("./office.js");
+    return { kind: "text", title, text: await officeMarkdown(file.name, new Uint8Array(bytes)), bytes, markdown: true, converted: true };
   }
   if (kind === "html" || kind === "text") {
     const text = kind === "text" ? decodeText(new Uint8Array(bytes)) : new TextDecoder().decode(bytes);
