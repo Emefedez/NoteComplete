@@ -11,7 +11,8 @@ test('quality preferences reject invalid storage and bound memory controls', () 
 test('presets change actual raster resolution and respect page budgets', () => {
   const page = { width: 612, height: 792 };
   assert.equal(rasterTarget(page, 900, 3, presets.performance).width, 900);
-  assert.equal(rasterTarget(page, 900, 1, presets.sharp).width, 2700);
+  assert.equal(rasterTarget(page, 900, 2, presets.sharp).width, 2700);
+  assert.equal(rasterTarget(page, 900, 1, presets.sharp).width, 1350, 'a 1× screen: half per side');
   for (const settings of Object.values(presets)) {
     const target = rasterTarget(page, 24000, 3, settings);
     assert.ok(target.width * target.height < settings.megapixels * 1e6 + 15000);
