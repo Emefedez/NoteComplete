@@ -160,7 +160,7 @@ A ring of tools around your pen. Tap a tool to choose it, and its settings appea
 
 To open it:
 
-- **Keyboard**: hold **Z**, point at an item and let go. Or tap **Z** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
+- **Keyboard**: hold **Shift + S**, point at an item and let go. Or press **Shift + S** and click an item. **1–8** choose a tool, and **Esc** closes the menu.
 - **Shift + pen**: hold Shift as the pen touches the page, or press Shift while the pen hovers over it. The menu opens at the pen, and nothing is drawn.
 - **Pen side button**: press the S Pen button, or a Wacom pen's barrel button, while the pen touches or hovers over the page. This opens the menu instead of right-clicking. If yours does not, **Help → Test pen and stylus** shows what the pen reports. On Samsung devices, Air command may take the button for itself while the pen hovers; turn it off in Settings → Advanced features → S Pen.
 - **Touch screens and iPad**: hold two fingers still on the page for half a second.

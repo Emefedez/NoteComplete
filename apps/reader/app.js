@@ -2080,8 +2080,8 @@ touchGestures({
   enabled: () => !!doc,
 });
 // Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
-// them. Z (hold, point, let go; or tap and click), a pen's side button, or two fingers held
-// still on the page open it.
+// them. Shift + S (hold, point, let go; or tap and click), Shift + pen, a pen's side
+// button, or two fingers held still on the page open it.
 const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"]];
 const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolbar [data-tool="${name}"]`)?.click(); };
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
@@ -2133,7 +2133,7 @@ const quick = quickMenu({
   // again even if its release was never reported (it happened over the menu, or not at all).
   onClose: () => { lastPenButtons = 0; },
 });
-// Where the pointer last was over the pages: Z opens the menu there.
+// Where the pointer last was over the pages: Shift + S opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
 let penHover = null, lastPenButtons = 0, penMenuAt = 0;
 // A pen's button, however the browser reports it: Android gives the S Pen button as the
@@ -2181,13 +2181,16 @@ document.addEventListener("keydown", (e) => {
   // Shift pressed while a pen hovers over the pages: the menu at the pen.
   if (e.key === "Shift" && !e.repeat && penHover && Date.now() - penHover.at < 1500 && !quick.isOpen && quickKeyAllowed(e)) {
     quick.open(penHover.x, penHover.y);
+    quickKeyAt = Date.now();
     return;
   }
-  if (e.key.toLowerCase() !== "z" || e.shiftKey || !quickKeyAllowed(e)) return;
+  // Shift + S (S being Select): the menu where the pointer is.
+  if (e.key.toLowerCase() !== "s" || !e.shiftKey || !quickKeyAllowed(e)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
   if (e.repeat) return;
-  if (quick.isOpen) { quick.close(); return; }
+  // Just opened by the Shift of this same Shift + S (a pen hovering): it stays open.
+  if (quick.isOpen) { if (Date.now() - quickKeyAt > 400) quick.close(); return; }
   quickKeyAt = Date.now();
   const box = $("viewport").getBoundingClientRect();
   const [x, y] = lastPointer && lastPointer[0] >= box.left && lastPointer[0] <= box.right && lastPointer[1] >= box.top && lastPointer[1] <= box.bottom ? lastPointer : [box.left + box.width / 2, box.top + box.height / 2];
@@ -2195,7 +2198,7 @@ document.addEventListener("keydown", (e) => {
 }, true);
 document.addEventListener("keyup", (e) => {
   // Held, then let go over an item: that item. A quick tap leaves the menu open to click.
-  if (e.key.toLowerCase() === "z" && quick.isOpen && Date.now() - quickKeyAt > 150) quick.release();
+  if (e.key.toLowerCase() === "s" && quick.isOpen && Date.now() - quickKeyAt > 150) quick.release();
 }, true);
 $("undo").onclick = () => {
   cancelGesture();
@@ -2208,7 +2211,7 @@ $("redo").onclick = () => {
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Z", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],

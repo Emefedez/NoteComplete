@@ -1,5 +1,5 @@
-// Browser check of the quick menu (Chromium): Z held over the pages, pointed at a tool
-// and let go chooses it; Z tapped, a tool tapped shows its settings; a held tool moves on
+// Browser check of the quick menu (Chromium): Shift + S held over the pages, pointed at a tool
+// and let go chooses it; Shift + S pressed, a tool tapped shows its settings; a held tool moves on
 // the ring; 1–8 choose tools;
 // Esc closes; a pen's side button opens it without removing anything; two fingers held
 // still open it on a touch screen and do not undo.
@@ -29,20 +29,20 @@ try {
   await openNote(p);
   const s = await p.locator('.sheet').first().boundingBox();
   await p.mouse.move(s.x + 300, s.y + 300);
-  // Hold Z, point at the highlighter, let go.
-  await p.keyboard.down('z');
+  // Hold Shift + S, point at the highlighter, let go.
+  await p.keyboard.down('Shift'); await p.keyboard.down('S');
   await p.waitForSelector('.quick-menu');
   if (shots) { await sleep(400); await p.screenshot({ path: `${shots}/quick-menu.png`, clip: { x: s.x + 100, y: s.y + 100, width: 420, height: 420 } }); }
   const hl = await p.locator('.quick-menu [aria-label="Highlighter"]').boundingBox();
   await sleep(300);
   await p.mouse.move(hl.x + 22, hl.y + 22);
-  await p.keyboard.up('z');
+  await p.keyboard.up('S'); await p.keyboard.up('Shift');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'letting go closes it');
   assert.equal(await tool(p), 'highlight');
-  console.log('· hold Z, point, let go: chooses the tool');
-  // Tap Z, tap the pen: it is chosen and its settings ring the tools; they apply at once
+  console.log('· hold Shift + S, point, let go: chooses the tool');
+  // Press Shift + S, tap the pen: it is chosen and its settings ring the tools; they apply at once
   // and the menu stays open for more.
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
   await p.click('.quick-menu .qm-inner[aria-label="Pen"]');
   assert.equal(await tool(p), 'draw');
@@ -61,7 +61,7 @@ try {
   assert.equal(await p.locator('.quick-menu').count(), 0, 'a tool without settings closes it');
   console.log('· tapping a tool shows its settings: colours, widths, pressure, eraser sizes');
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
   // Select has no settings: the small menu, tools only.
   assert.equal(await p.locator('.quick-menu .qm-outer').count(), 0, 'no outer ring without settings');
@@ -79,17 +79,21 @@ try {
   assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-quick-order'))).slice(0, 3), ['highlight', 'erase', 'draw']);
   await p.keyboard.press('Escape');
   console.log('· hold a tool to move it on the ring (remembered)');
-  await p.keyboard.press('z'); await p.keyboard.press('2');
+  await p.keyboard.press('Shift+S'); await p.keyboard.press('2');
   assert.equal(await tool(p), 'erase', '2 chooses the second tool (after the move)');
   await p.keyboard.press('Escape');
-  await p.keyboard.press('z'); await p.keyboard.press('Escape');
+  await p.keyboard.press('Shift+S'); await p.keyboard.press('Escape');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'Esc closes it');
   // Typing in a text field never opens it.
   await p.evaluate(() => { const i = document.createElement('input'); i.id = 'probe'; document.body.append(i); i.focus(); });
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'not while typing');
   await p.evaluate(() => document.getElementById('probe').remove());
-  console.log('· number keys, Esc, not while typing');
+  // S alone is still the Select tool.
+  await p.keyboard.press('p'); await p.keyboard.press('s');
+  assert.equal(await p.locator('.quick-menu').count(), 0, 'S alone does not open it');
+  assert.equal(await tool(p), 'select');
+  console.log('· number keys, Esc, not while typing; S alone still selects');
   // A pen's side button: the menu, and nothing under it is removed.
   const cdp = await p.context().newCDPSession(p);
   const items = await p.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length);
