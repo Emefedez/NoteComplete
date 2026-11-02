@@ -1,4 +1,13 @@
-## What's new in 1.1.13
+## What's new in 1.1.14
+
+- **Guests: notes first, then the note, with each step shown.**
+  - A guest's notes now stay the shared ones while the note loads (they were briefly replaced by the note's own).
+  - The pages appear as soon as they are made, instead of after the first page's PDF is drawn.
+  - A small bar shows *Connecting…* and *Loading the note…*.
+- **The notes stay visible for guests** all session long, also when they can only read them.
+- **View-only sessions**: a guest who tries to draw is told the note is shared view-only.
+
+### In 1.1.13
 
 - **Guests can draw**: someone who joins a shared note now sees its pages and the tool bar, and draws on it (in sessions that allow editing). The pages and tools were hidden, leaving only the notes panel.
 - **The ? beside Export and Save as** is a small blue circle right after the label, instead of a grey button below it.
