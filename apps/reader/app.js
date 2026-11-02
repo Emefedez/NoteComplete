@@ -1851,16 +1851,8 @@ for (const button of document.querySelectorAll("[data-tool]"))
     for (const b of document.querySelectorAll("button[data-tool]"))
       b.setAttribute("aria-pressed", String(b === button));
     for (const p of panels) shapeHandles(p);
-    if (tool === "highlight") {
-      $("color").value = "#ffdf38";
-      $("width").value = "16";
-    } else if (tool === "draw") {
-      $("color").value = "#246bce";
-      $("width").value = "2";
-    } else if (tool === "tape") {
-      $("color").value = "#e3c6e6";
-      $("width").value = "40";
-    }
+    // Each tool comes back with the colour and width it was last used with.
+    restoreToolPrefs();
     toolOptions();
     refreshSelects();
     status(
@@ -1942,6 +1934,32 @@ try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved 
 $("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
 $("color").addEventListener("input", syncChoices);
+// Each drawing tool keeps its own colour and width (remembered on this device), and the
+// highlighter, tape and shape kinds keep theirs.
+const TOOL_DEFAULTS = {
+  draw: { color: "#246bce", width: "2" },
+  highlight: { color: "#ffdf38", width: "16" },
+  tape: { color: "#e3c6e6", width: "40" },
+  shape: { color: "#246bce", width: "2" },
+};
+let toolPrefs = {};
+try { toolPrefs = JSON.parse(localStorage.getItem("notecomplete-tool-prefs") || "{}") || {}; } catch { /* Optional. */ }
+function restoreToolPrefs() {
+  const pref = { ...TOOL_DEFAULTS[tool], ...toolPrefs[tool] };
+  if (pref.color) $("color").value = pref.color;
+  if (pref.width && $("width").querySelector(`option[value="${pref.width}"]`)) $("width").value = pref.width;
+}
+function saveToolPrefs() {
+  if (!TOOL_DEFAULTS[tool]) return;
+  toolPrefs[tool] = { color: $("color").value, width: $("width").value };
+  try { localStorage.setItem("notecomplete-tool-prefs", JSON.stringify(toolPrefs)); } catch { /* Optional. */ }
+}
+for (const id of ["color", "width"]) $(id).addEventListener("change", saveToolPrefs);
+$("color").addEventListener("input", saveToolPrefs);
+for (const id of ["highlightMode", "tapeMode", "shape"]) {
+  try { const saved = localStorage.getItem(`notecomplete-${id}`); if (saved && $(id).querySelector(`option[value="${saved}"]`)) $(id).value = saved; } catch { /* Optional. */ }
+  $(id).addEventListener("change", () => { try { localStorage.setItem(`notecomplete-${id}`, $(id).value); } catch { /* Optional. */ } });
+}
 // The visible shape row drives the (hidden) select that the drawing code reads.
 function syncShapePicker() {
   for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
@@ -2095,28 +2113,81 @@ const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolb
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
 let quickOrder = QUICK_TOOLS.map(([name]) => name);
 try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
-// A tool's settings, from its own option rows, so the menu and the tool bar agree.
+// Remembered on this device: JSON in localStorage, defaults when missing or unreadable.
+const remembered = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } };
+const remember = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Optional. */ } };
+// Each tool's colours in the quick menu: editable (hold a colour, or right-click it) and
+// in the order the user dragged them.
+const DEFAULT_PALETTES = {
+  draw: SWATCHES.slice(0, 5),
+  highlight: ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"],
+  shape: SWATCHES.slice(0, 5),
+  tape: ["#e3c6e6", "#ffdf38", "#1f2328"],
+  text: SWATCHES.slice(0, 5),
+};
+const palettes = { ...DEFAULT_PALETTES, ...remembered("notecomplete-palettes", {}) };
+// The order of each tool's other settings (sizes, modes, undo/redo), as dragged.
+const sectionOrder = remembered("notecomplete-quick-sections", {});
+const ordered = (name, section, entries) => {
+  const order = sectionOrder[name]?.[section];
+  if (!order) return entries;
+  const rank = (e) => { const i = order.indexOf(e.key); return i < 0 ? order.length : i; };
+  return [...entries].sort((a, b) => rank(a) - rank(b));
+};
+function setColor(value) {
+  $("color").value = value;
+  $("color").dispatchEvent(new Event("input", { bubbles: true }));
+  $("color").dispatchEvent(new Event("change", { bubbles: true }));
+}
+// A colour of the palette, chosen again with the system's colour picker.
+function editPaletteColor(name, index) {
+  const input = Object.assign(document.createElement("input"), { type: "color", value: palettes[name][index] });
+  input.style.cssText = "position:fixed;opacity:0;pointer-events:none;left:50%;top:50%";
+  document.body.append(input);
+  const done = () => {
+    palettes[name] = palettes[name].map((c, i) => (i === index ? input.value : c));
+    remember("notecomplete-palettes", palettes);
+    setColor(input.value);
+    quick.redraw();
+  };
+  input.addEventListener("input", done);
+  input.addEventListener("change", () => { done(); input.remove(); });
+  input.addEventListener("blur", () => setTimeout(() => input.remove(), 1000));
+  input.click();
+}
+const paletteEntries = (name) => palettes[name].map((value, i) => ({
+  key: String(i),
+  label: `Colour ${value} (hold or right-click to change it)`,
+  swatch: value,
+  active: () => $("color").value.toLowerCase() === value.toLowerCase(),
+  run: () => setColor(value),
+  edit: () => editPaletteColor(name, i),
+  stay: () => true,
+}));
+// A tool's other settings, from its own option rows, so the menu and the tool bar agree.
 const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-for="${id}"] button`)]
   .filter((b) => !values || values.includes(b.dataset.value))
   .map((b) => ({
-    label: id === "color" ? `Colour ${b.dataset.value}` : `${b.title}`,
-    swatch: id === "color" ? b.dataset.value : null,
+    key: b.dataset.value,
+    label: `${b.title}`,
     icon: b.querySelector("svg"),
     active: () => $(id).value.toLowerCase() === b.dataset.value.toLowerCase(),
     run: () => b.click(),
     stay: () => true,
   }));
-const fromButtons = (selector) => [...document.querySelectorAll(selector)].map((b) => ({
-  label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
+const fromButtons = (selector, attr) => [...document.querySelectorAll(selector)].map((b) => ({
+  key: b.dataset[attr], label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
 }));
-const pressureEntry = { label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+// Every tool's settings in the same places: colours on top, sizes along the bottom (small
+// to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
-  draw: () => [...fromRow("color", SWATCHES.slice(0, 5)), ...fromRow("width", ["1", "2", "4", "8"]), pressureEntry],
-  highlight: () => [...fromRow("highlightMode"), ...fromRow("color", ["#ffdf38", "#ff9f1c", "#2a9d63", "#246bce", "#e3c6e6"]), ...fromRow("width", ["8", "16", "24", "40"])],
-  erase: () => fromRow("eraserSize"),
-  shape: () => [...fromButtons("#shapePicker [data-shape]"), ...fromButtons("#shapeFill [data-fill]"), ...fromRow("color", SWATCHES.slice(0, 5))],
-  tape: () => [...fromRow("tapeMode"), ...fromRow("color", ["#e3c6e6", "#ffdf38", "#1f2328"])],
-  text: () => fromRow("color", SWATCHES.slice(0, 5)),
+  draw: () => ({ top: paletteEntries("draw"), bottom: fromRow("width", ["1", "2", "4", "8"]), left: [pressureEntry] }),
+  highlight: () => ({ top: paletteEntries("highlight"), bottom: fromRow("width", ["8", "16", "24", "40"]), left: fromRow("highlightMode") }),
+  erase: () => ({ bottom: fromRow("eraserSize") }),
+  shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill") }),
+  tape: () => ({ top: paletteEntries("tape"), left: fromRow("tapeMode") }),
+  text: () => ({ top: paletteEntries("text") }),
 };
 const quick = quickMenu({
   // Tapping a tool chooses it and shows its settings around it; one without settings closes.
@@ -2124,16 +2195,28 @@ const quick = quickMenu({
   // The outer ring only for a tool with settings (with undo and redo beside them); Pan,
   // Select and the like get the small menu.
   outer: () => {
-    const settings = QUICK_SETTINGS[tool]?.() || [];
-    return settings.length ? [
-      ...settings,
-      { label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
-      { label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
-    ] : [];
+    const settings = QUICK_SETTINGS[tool]?.();
+    if (!settings) return {};
+    const out = {};
+    for (const [section, entries] of Object.entries(settings)) out[section] = section === "top" ? entries : ordered(tool, section, entries);
+    out.right = ordered(tool, "right", [
+      { key: "undo", label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+      { key: "redo", label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
+    ]);
+    return out;
   },
-  onReorder: (order) => {
-    quickOrder = order;
-    try { localStorage.setItem("notecomplete-quick-order", JSON.stringify(order)); } catch { /* Optional. */ }
+  // A tool, a colour or a setting dragged to another place: remembered.
+  onReorder: (section, order) => {
+    if (section === "inner") {
+      quickOrder = order;
+      remember("notecomplete-quick-order", order);
+    } else if (section === "top" && palettes[tool]) {
+      palettes[tool] = order.map((i) => palettes[tool][Number(i)]);
+      remember("notecomplete-palettes", palettes);
+    } else {
+      (sectionOrder[tool] ||= {})[section] = order;
+      remember("notecomplete-quick-sections", sectionOrder);
+    }
     status("Quick menu order saved.");
   },
   onOpen: () => cancelGesture(),

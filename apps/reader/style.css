@@ -2657,7 +2657,7 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 /* Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around them. */
 .quick-menu { position: fixed; inset: 0; z-index: 80; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .quick-menu .qm-disc { position: absolute; border-radius: 50%; background: color-mix(in srgb, var(--menu) 82%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 12px 40px #0004, 0 0 0 1px var(--line); }
-.quick-menu .qm-disc.qm-full::after { content: ""; position: absolute; inset: 46px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
+.quick-menu .qm-disc.qm-full::after { content: ""; position: absolute; inset: var(--inner-ring, 46px); border-radius: 50%; box-shadow: 0 0 0 1px var(--line); }
 .quick-menu .qm-item { position: absolute; width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink); }
 .quick-menu.qm-opening .qm-disc, .quick-menu.qm-opening .qm-item { animation: qm-in .06s ease-out; }
 .quick-menu .qm-item svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
