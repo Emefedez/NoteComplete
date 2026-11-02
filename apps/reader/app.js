@@ -1563,7 +1563,11 @@ function cancelGesture() {
   gesture = null;
   if (!g) return;
   collab?.drawn(g, true);
-  g.panel.overlay?.replaceChildren();
+  // A cancelled grab takes only its own box away: a region grabbed before keeps its menu.
+  if (g.tool === "grab") {
+    g.el.remove();
+    if (g.hidMenu && grabbed) $("grabMenu").hidden = false;
+  } else g.panel.overlay?.replaceChildren();
   if (g.hidden) g.hidden.style.visibility = "";
   shapeHandles(g.panel);
   if (g.panel.el.hasPointerCapture(g.id))
@@ -1588,9 +1592,14 @@ function point(e, p) {
 }
 // A stylus counts as in use for half a minute after it last touched or hovered the page.
 const PEN_ACTIVE_MS = 30000;
-let lastPen = -Infinity;
+let lastPen = -Infinity, lastPenWrote = -Infinity;
 const notePen = (e) => {
-  if (e.pointerType === "pen") lastPen = performance.now();
+  if (e.pointerType === "pen") {
+    lastPen = performance.now();
+    // Touching the page, not hovering: an Apple Pencil that hovers (held near the screen
+    // while two fingers open the quick menu) sends moves all the time.
+    if (e.buttons || e.type !== "pointermove") lastPenWrote = lastPen;
+  }
   // Fingers and pens never select the text over the pages (it would pick words while
   // scrolling or drawing); the mouse still does.
   if (e.type === "pointerdown") {
@@ -1664,9 +1673,11 @@ function pointerDown(e, p) {
     e.preventDefault();
     const start = point(e, p), el = document.createElementNS(ns, "rect");
     el.setAttribute("class", "grab-rect");
-    p.overlay.append(el);
-    $("grabMenu").hidden = true;
-    gesture = { id: e.pointerId, tool, panel: p, start, points: [start], el, dot: document.createElementNS(ns, "g") };
+    // The box shows once the pointer moves (appendPoint). The first finger of a two-finger
+    // hold, or a pen held still, opens the quick menu instead: that cancels this before
+    // anything is drawn or the last grab's menu is hidden.
+    const slop = e.pointerType === "touch" ? 12 : e.pointerType === "pen" ? 4 : 0;
+    gesture = { id: e.pointerId, tool, panel: p, start, points: [start], el, dot: document.createElementNS(ns, "g"), from: [e.clientX, e.clientY], slop };
     p.el.setPointerCapture(e.pointerId);
     return;
   }
@@ -1747,6 +1758,11 @@ function appendPoint(e) {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
   } else if (g.tool === "grab") {
     g.points = [g.start, point(e, g.panel)];
+    if (!g.el.isConnected && Math.hypot(e.clientX - g.from[0], e.clientY - g.from[1]) > g.slop) {
+      g.panel.overlay.append(g.el);
+      g.hidMenu ||= !$("grabMenu").hidden;
+      $("grabMenu").hidden = true;
+    }
   } else if (g.box) {
     const end = point(e, g.panel), y = (g.start[1] + end[1]) / 2;
     g.width = Math.max(4, Math.abs(end[1] - g.start[1]));
@@ -1865,7 +1881,8 @@ function pointerUp(e) {
   if (g.panel.el.hasPointerCapture(e.pointerId)) g.panel.el.releasePointerCapture(e.pointerId);
   if (g.tool === "grab") {
     const rect = grabRect(g);
-    if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); return; }
+    // A tap with Grab hides the last grab's menu, as a press always did.
+    if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); $("grabMenu").hidden = true; return; }
     showGrabMenu(g.panel, rect, g.el);
     return;
   }
@@ -1927,53 +1944,63 @@ function pointerUp(e) {
     });
   }
 }
-for (const button of document.querySelectorAll("[data-tool]"))
-  button.onclick = () => {
-    cancelGesture();
-    // Pressing the selected tool again shows or hides its settings.
-    if (tool === button.dataset.tool) {
-      optionsOpen = chromeState.compact || !optionsOpen;
-      setCompact(false);
-      return;
+// Switches tool. The tool bar's buttons and the quick menu both come here; only a press in
+// the tool bar opens (or toggles) the tool's settings there, since the menu shows its own.
+function selectTool(name, { fromMenu = false } = {}) {
+  if (fromMenu && tool === name) return;
+  cancelGesture();
+  // Pressing the selected tool again shows or hides its settings.
+  if (tool === name) {
+    optionsOpen = chromeState.compact || !optionsOpen;
+    setCompact(false);
+    return;
+  }
+  const prevGrab = grabbed;
+  tool = name;
+  endResizeDrag();
+  // From the menu the bar's settings stay closed: the menu shows them. Select's panel
+  // belongs to what is selected, so it still opens as usual.
+  optionsOpen = fromMenu && tool !== "select" ? false : toolSettingsAuto;
+  if (tool !== "select") selection.clear();
+  if (tool !== "grab") {
+    // A grabbed region becomes the selection, as its Select button does.
+    if (tool === "select" && prevGrab) {
+      selectGrab(prevGrab);
+    } else {
+      clearGrab();
     }
-    const prevGrab = grabbed;
-    tool = button.dataset.tool;
-    endResizeDrag();
-    optionsOpen = toolSettingsAuto;
-    if (tool !== "select") selection.clear();
-    if (tool !== "grab") {
-      if (tool === "select" && prevGrab) {
-        selectGrab(prevGrab);
-      } else {
-        clearGrab();
-      }
-    }
+  }
+  // The menu leaves the tool bar as it was (collapsed stays collapsed).
+  if (!fromMenu) {
     chromeState.reset($("viewport").scrollTop);
     setCompact(false);
-    for (const p of panels) p.el.dataset.tool = tool;
-    for (const b of document.querySelectorAll("button[data-tool]"))
-      b.setAttribute("aria-pressed", String(b === button));
-    for (const p of panels) shapeHandles(p);
-    // Each tool comes back with the colour and width it was last used with.
-    restoreToolPrefs();
-    toolOptions();
-    refreshSelects();
-    status(
-      tool === "select"
-        ? "Tap an item to move or edit it."
-        : tool === "highlight"
-          ? highlightHint()
-          : tool === "grab"
-            ? "Grab: drag a box to copy its text or ask AI about it."
-          : tool === "tape"
-            ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
-          : tool === "erase"
-            ? "Drag to erase whole strokes."
-            : tool === "pan"
-              ? "Scroll through the pages."
-              : "Draw on the selected layer.",
-    );
-  };
+  }
+  for (const p of panels) p.el.dataset.tool = tool;
+  for (const b of document.querySelectorAll("button[data-tool]"))
+    b.setAttribute("aria-pressed", String(b.dataset.tool === tool));
+  for (const p of panels) shapeHandles(p);
+  // Each tool comes back with the colour and width it was last used with.
+  restoreToolPrefs();
+  toolOptions();
+  refreshSelects();
+  status(
+    tool === "select"
+      ? "Tap an item to move or edit it."
+      : tool === "highlight"
+        ? highlightHint()
+        : tool === "grab"
+          ? "Grab: drag a box to copy its text or ask AI about it."
+        : tool === "tape"
+          ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
+        : tool === "erase"
+          ? "Drag to erase whole strokes."
+          : tool === "pan"
+            ? "Scroll through the pages."
+            : "Draw on the selected layer.",
+  );
+}
+for (const button of document.querySelectorAll("[data-tool]"))
+  button.onclick = () => selectTool(button.dataset.tool);
 function highlightHint() {
   return { straight: "Straight highlight: drag between the endpoints.", free: "Freehand highlight: draw on the page.", box: "Rectangle highlight: drag a box over what to highlight." }[$("highlightMode").value];
 }
@@ -2303,15 +2330,17 @@ touchGestures({
   redo: () => { if (!$("redo").disabled) $("redo").click(); },
   menu: (x, y) => quick.open(x, y),
   // Not while a stylus was just writing: a palm resting beside it is not a gesture.
-  penBusy: () => performance.now() - lastPen < 1500,
+  penBusy: () => performance.now() - lastPenWrote < 1500,
   enabled: () => !!doc,
 });
 // Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
 // them. Shift + S (hold, point, let go; or tap and click), Shift + pen, a pen's side
 // button, or two fingers held still on the page open it.
-const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"]];
-const chooseTool = (name) => { if (tool !== name) document.querySelector(`#toolbar [data-tool="${name}"]`)?.click(); };
+// Grab is last, so the other tools keep their number keys.
+const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"], ["grab", "Grab"]];
+const chooseTool = (name) => selectTool(name, { fromMenu: true });
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
+// Tools missing from a saved order (added since) go at the end.
 let quickOrder = QUICK_TOOLS.map(([name]) => name);
 try { const saved = JSON.parse(localStorage.getItem("notecomplete-quick-order") || "null"); if (Array.isArray(saved)) quickOrder = [...saved.filter((k) => quickOrder.includes(k)), ...quickOrder.filter((k) => !saved.includes(k))]; } catch { /* Optional. */ }
 // Remembered on this device: JSON in localStorage, defaults when missing or unreadable.
@@ -2699,7 +2728,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],

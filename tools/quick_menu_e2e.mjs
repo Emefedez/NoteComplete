@@ -1,6 +1,6 @@
 // Browser check of the quick menu (Chromium): Shift + S held over the pages, pointed at a tool
 // and let go chooses it; Shift + S pressed, a tool tapped shows its settings; a held tool moves on
-// the ring; 1–8 choose tools;
+// the ring; 1–9 choose tools;
 // Esc closes; a pen's side button opens it without removing anything; two fingers held
 // still open it on a touch screen and do not undo.
 //   node tools/quick_menu_e2e.mjs [screenshot-dir]
@@ -216,6 +216,8 @@ try {
   await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
   assert.equal(await p.inputValue('#color'), '#aa2200');
   assert.equal(await p.inputValue('#width'), '8');
+  // An order saved before Grab was on the ring (checked after the reload).
+  await p.evaluate(() => localStorage.setItem('notecomplete-quick-order', JSON.stringify(['pan', 'select', 'draw', 'highlight', 'erase', 'shape', 'text', 'tape'])));
   await p.reload();
   await p.waitForFunction(() => !document.getElementById('open').disabled);
   await p.setInputFiles('#file', sample);
@@ -256,6 +258,94 @@ try {
   await p.keyboard.press('Shift+T');
   assert.equal(await p.isVisible('#toolbar .segmented'), true, 'shown again');
   console.log('· Shift + T hides and shows the tool bar');
+  // Grab is on the ring with the tool bar's icon, added at the end of an order saved before it.
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu');
+  assert.deepEqual(await ringOrder(), ['Pan', 'Select', 'Pen', 'Highlighter', 'Eraser', 'Shapes', 'Text', 'Tape', 'Grab']);
+  assert.equal(await p.getAttribute('.quick-menu .qm-inner[aria-label="Grab"] svg path', 'd'), await p.getAttribute('#toolbar [data-tool="grab"] svg path', 'd'), 'the tool bar\'s icon');
+  await p.click('.quick-menu .qm-inner[aria-label="Grab"]');
+  assert.equal(await tool(p), 'grab');
+  assert.equal(await p.locator('.quick-menu').count(), 0, 'Grab has no settings: the menu closes');
+  assert.equal(await p.locator('.grab-rect').count(), 0, 'choosing Grab starts no grab');
+  await p.keyboard.press('Shift+S'); await p.keyboard.press('1'); await p.keyboard.press('Shift+S'); await p.keyboard.press('9');
+  assert.equal(await tool(p), 'grab', '9 chooses the ninth tool');
+  console.log('· Grab is on the ring (also added to an order saved before it), 9 chooses it');
+  // A region grabbed; then the menu opened every way with Grab on: no new box and no new
+  // grab, and the grabbed region keeps its box and its menu.
+  const page0 = await p.locator('.sheet[data-page="0"]').boundingBox();
+  const region = { x: page0.x + page0.width * 0.05, y: page0.y + page0.height * 0.1, w: page0.width * 0.4, h: page0.height * 0.12 };
+  await p.mouse.move(region.x, region.y); await p.mouse.down(); await p.mouse.move(region.x + region.w, region.y + region.h, { steps: 8 }); await p.mouse.up();
+  await p.waitForSelector('#grabMenu:not([hidden])');
+  await p.evaluate(() => {
+    window.grabProbe = { rect: document.querySelector('.grab-rect'), added: 0 };
+    new MutationObserver((list) => { for (const m of list) for (const n of m.addedNodes) if (n.classList?.contains('grab-rect')) window.grabProbe.added++; }).observe(document.body, { childList: true, subtree: true });
+  });
+  const grabKept = async (how) => {
+    await p.waitForSelector('.quick-menu', { timeout: 3000 });
+    await sleep(150);
+    const state = () => p.evaluate(() => ({ added: window.grabProbe.added, boxes: document.querySelectorAll('.grab-rect').length, same: window.grabProbe.rect.isConnected, menu: !document.getElementById('grabMenu').hidden }));
+    assert.deepEqual(await state(), { added: 0, boxes: 1, same: true, menu: true }, how);
+    assert.equal(await tool(p), 'grab', how);
+    await p.keyboard.press('Escape');
+    await sleep(100);
+    assert.deepEqual(await state(), { added: 0, boxes: 1, same: true, menu: true }, `${how}, closed`);
+  };
+  const free = [page0.x + page0.width * 0.6, Math.min(page0.y + page0.height * 0.5, 600)];
+  const penAt = (type, x, y, extra) => cdp.send('Input.dispatchMouseEvent', { type, x, y, clickCount: 1, pointerType: 'pen', ...extra });
+  await p.mouse.move(...free);
+  await p.keyboard.press('Shift+S'); await grabKept('Shift + S');
+  await p.keyboard.down('Shift'); await p.mouse.click(...free, { button: 'right' }); await p.keyboard.up('Shift'); await grabKept('Shift + right-click');
+  await penAt('mousePressed', ...free, { button: 'left', buttons: 1, modifiers: 8 }); await penAt('mouseReleased', ...free, { button: 'left', buttons: 0, modifiers: 8 }); await grabKept('Shift + pen');
+  await penAt('mousePressed', ...free, { button: 'right', buttons: 2 }); await penAt('mouseReleased', ...free, { button: 'right', buttons: 0 }); await grabKept('the pen\'s button on the page');
+  await penAt('mouseMoved', free[0] + 10, free[1], { button: 'none', buttons: 0 }); await penAt('mouseMoved', free[0] + 12, free[1], { button: 'none', buttons: 1 }); await grabKept('the pen\'s button while hovering');
+  await penAt('mouseMoved', free[0] + 14, free[1], { button: 'none', buttons: 0 });
+  // The long-press saved above: a pen held still on the page.
+  await penAt('mousePressed', ...free, { button: 'left', buttons: 1 }); await p.waitForSelector('.quick-menu', { timeout: 2000 }); await penAt('mouseReleased', ...free, { button: 'left', buttons: 0 }); await grabKept('the pen held still');
+  // A second box being dragged when the menu opens goes away; the first grab stays.
+  await p.mouse.move(...free); await p.mouse.down(); await p.mouse.move(free[0] + 80, free[1] + 60, { steps: 4 });
+  assert.equal(await p.isVisible('#grabMenu'), false, 'a new box hides the last grab\'s menu');
+  await p.keyboard.press('Shift+S');
+  await p.evaluate(() => { window.grabProbe.added = 0; });
+  await grabKept('Shift + S while dragging a box');
+  await p.mouse.up();
+  console.log('· with Grab on, every way of opening the menu starts no grab and keeps the grabbed region');
+  // Select from the menu turns the grabbed region into the selection, as the tool bar's does.
+  await p.keyboard.press('Shift+S');
+  await p.click('.quick-menu .qm-inner[aria-label="Select"]');
+  assert.equal(await tool(p), 'select');
+  await p.waitForFunction(() => document.querySelector('.selection-overlay'), null, { timeout: 15000 });
+  assert.match(await p.textContent('#selectionKind'), /^Group/);
+  assert.equal(await p.locator('.grab-rect').count(), 0, 'no grab box left');
+  assert.equal(await p.isVisible('#grabMenu'), false, 'no grab menu left');
+  // And back to Grab: ready to grab again.
+  await p.keyboard.press('Shift+S');
+  await p.click('.quick-menu .qm-inner[aria-label="Grab"]');
+  assert.equal(await p.locator('.selection-overlay').count(), 0, 'the selection is let go');
+  await p.mouse.move(region.x, region.y); await p.mouse.down(); await p.mouse.move(region.x + 150, region.y + 80, { steps: 6 }); await p.mouse.up();
+  await p.waitForSelector('#grabMenu:not([hidden])');
+  // Select from the menu with nothing grabbed: the tool, and no stale grab.
+  await p.click('#grabCancel');
+  await p.keyboard.press('Shift+S');
+  await p.click('.quick-menu .qm-inner[aria-label="Select"]');
+  assert.equal(await tool(p), 'select');
+  assert.equal(await p.locator('.selection-overlay').count(), 0, 'nothing selected');
+  console.log('· Select from the menu while in Grab: the grabbed region is selected, as with the tool bar');
+  // A tool chosen in the menu leaves the tool bar's settings closed, chosen twice too; the
+  // tool bar's own button still opens them.
+  await p.evaluate(() => document.querySelector('#toolbar [data-tool=pan]').click());
+  for (const [label, name] of [['Pen', 'draw'], ['Pen', 'draw'], ['Highlighter', 'highlight']]) {
+    await p.keyboard.press('Shift+S');
+    await p.click(`.quick-menu .qm-inner[aria-label="${label}"]`);
+    assert.equal(await tool(p), name);
+    assert.equal(await p.isVisible('#toolOptions'), false, `${label} chosen in the menu`);
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isVisible('#toolOptions'), false, `${label} chosen in the menu, menu closed`);
+  }
+  await p.evaluate(() => document.querySelector('#toolbar [data-tool=highlight]').click());
+  assert.equal(await p.isVisible('#toolOptions'), true, 'pressing the selected tool in the tool bar shows its settings');
+  await p.evaluate(() => document.querySelector('#toolbar [data-tool=draw]').click());
+  assert.equal(await p.isVisible('#pressureOptions'), true, 'a tool chosen in the tool bar shows its settings');
+  console.log('· choosing a tool in the menu does not open its settings in the tool bar');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.
@@ -275,6 +365,38 @@ try {
   await t.locator('.quick-menu [aria-label="Shapes"]').tap();
   assert.equal(await tool(t), 'shape');
   console.log('· two fingers held still open it on a touch screen');
+  // With Grab on: a region grabbed with a finger, then two fingers held (the first one
+  // moving a little before the second lands) open the menu and start no grab; Select from
+  // the menu selects the region.
+  const touchErrors = []; t.on('pageerror', (e) => touchErrors.push(e.message));
+  await t.keyboard.press('Escape');
+  await t.evaluate(() => document.querySelector('[data-tool=grab]').click());
+  const tp = await t.locator('.sheet[data-page="0"]').boundingBox();
+  const from = [Math.round(tp.x + tp.width * 0.05), Math.round(tp.y + tp.height * 0.1)], to = [Math.round(tp.x + tp.width * 0.45), Math.round(tp.y + tp.height * 0.22)];
+  await touch('touchStart', [from]);
+  for (let i = 1; i <= 8; i++) await touch('touchMove', [[from[0] + (to[0] - from[0]) * i / 8, from[1] + (to[1] - from[1]) * i / 8]]);
+  await touch('touchEnd', []);
+  await t.waitForSelector('#grabMenu:not([hidden])');
+  await t.evaluate(() => {
+    window.grabProbe = { rect: document.querySelector('.grab-rect'), added: 0 };
+    new MutationObserver((list) => { for (const m of list) for (const n of m.addedNodes) if (n.classList?.contains('grab-rect')) window.grabProbe.added++; }).observe(document.body, { childList: true, subtree: true });
+  });
+  const touchState = () => t.evaluate(() => ({ added: window.grabProbe.added, boxes: document.querySelectorAll('.grab-rect').length, same: window.grabProbe.rect.isConnected, menu: !document.getElementById('grabMenu').hidden }));
+  const hold = [Math.round(tp.x + tp.width * 0.4), Math.round(tp.y + tp.height * 0.4)];
+  await touch('touchStart', [hold]); await touch('touchMove', [[hold[0] + 5, hold[1] + 3]]);
+  await touch('touchStart', [[hold[0] + 5, hold[1] + 3], [hold[0] + 100, hold[1]]]);
+  await sleep(800);
+  assert.equal(await t.locator('.quick-menu').count(), 1, 'two fingers held open it with Grab on');
+  await touch('touchEnd', []); await sleep(300);
+  assert.deepEqual(await touchState(), { added: 0, boxes: 1, same: true, menu: true }, 'two fingers start no grab');
+  assert.equal(await tool(t), 'grab');
+  await t.locator('.quick-menu [aria-label="Select"]').tap();
+  assert.equal(await tool(t), 'select');
+  await t.waitForFunction(() => document.querySelector('.selection-overlay'), null, { timeout: 15000 });
+  assert.equal(await t.locator('.grab-rect').count(), 0, 'no grab box left');
+  assert.equal(await t.isVisible('#grabMenu'), false, 'no grab menu left');
+  assert.deepEqual(touchErrors, []);
+  console.log('· with Grab on, two fingers held open it and start no grab; Select from the menu selects the region');
   console.log('Quick menu end to end: passed.');
 } catch (error) {
   console.error(error);
