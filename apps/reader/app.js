@@ -490,7 +490,7 @@ function buildPages(sizes) {
     placeholder(p);
     fragment.append(el);
     el.onpointerdown = (e) => {
-      if (e.target.closest(".text-editor, .text-format, .page-resize-frame")) return;
+      if (e.target.closest(".text-editor, .text-discard, .text-format, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
       pointerDown(e, p);
     };
@@ -762,16 +762,24 @@ async function openTextEditor(p, [x, y], known = null) {
       color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
     });
   };
+  // The × at the box's top-right corner discards the typing.
+  const discard = Object.assign(document.createElement("button"), { type: "button", className: "text-discard", textContent: "×", title: "Discard (Shift + Esc)" });
+  discard.setAttribute("aria-label", "Discard this text");
+  discard.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); });
+  discard.onclick = (e) => { e.stopPropagation(); closeText(); };
+  const placeDiscard = () => Object.assign(discard.style, { left: `calc(${area.style.left} + ${area.style.width})`, top: area.style.top });
   fit();
-  area.oninput = fit;
+  placeDiscard();
+  area.oninput = () => { fit(); placeDiscard(); };
   const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
   hidden?.setAttribute("visibility", "hidden");
-  p.el.append(area);
+  p.el.append(area, discard);
   selection.clear();
-  textEditor = { p, area, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
-  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); area.focus(); });
+  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
+  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); placeDiscard(); area.focus(); });
   area.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { e.preventDefault(); closeText(); }
+    // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
+    if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) closeText(); else commitText(); }
     else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitText(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { commitText(); return; }
     // Typing stays in the box: no tool or study shortcuts while editing.
@@ -783,12 +791,13 @@ async function openTextEditor(p, [x, y], known = null) {
     commitText();
   }, 0));
   requestAnimationFrame(() => area.focus());
-  status(existing ? "Editing text. Ctrl+Enter or a click outside finishes; Esc cancels." : "Type your text. Ctrl+Enter or a click outside finishes; Esc cancels.");
+  status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
 }
 function closeText() {
   if (!textEditor) return;
   textEditor.hidden?.removeAttribute("visibility");
   textEditor.area.remove();
+  textEditor.discard?.remove();
   textEditor = null;
   hideTextFormat();
 }
@@ -2473,7 +2482,7 @@ $("autosavesClear").onclick = async () => {
 };
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it"], ["O", "Lock: click an item to lock or unlock it in place"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–8 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
