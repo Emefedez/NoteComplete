@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ring, fitCentre, slotAt, moved } from './quick-menu.js';
+import { ring, fitCentre, slotAt, moved, outerRadius } from './quick-menu.js';
 
 test('items sit on a ring, the first at the top, clockwise', () => {
   assert.deepEqual(ring(4, 10), [{ x: 0, y: -10 }, { x: 10, y: 0 }, { x: 0, y: 10 }, { x: -10, y: 0 }]);
@@ -21,4 +21,11 @@ test('a lifted tool drops into the nearest place on the ring', () => {
   assert.equal(slotAt(-50, -45, 8), 7);
   assert.deepEqual(moved(['a', 'b', 'c', 'd'], 0, 2), ['b', 'c', 'a', 'd']);
   assert.deepEqual(moved(['a', 'b', 'c', 'd'], 3, 0), ['d', 'a', 'b', 'c']);
+});
+
+test('a crowded outer ring grows so its items keep a gap', () => {
+  assert.equal(outerRadius(12), 94);
+  assert.ok(outerRadius(15) > 94);
+  const r = outerRadius(16), [a, b] = ring(16, r);
+  assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= 41, 'neighbours at least item size + gap apart');
 });

@@ -1,4 +1,8 @@
-## What's new in 1.1.7
+## What's new in 1.1.8
+
+- **Quick menu**: hovered and selected items no longer overlap their neighbours. The highlight stays inside each item, and a ring with many settings (Shapes) grows a little so its items keep a gap.
+
+### In 1.1.7
 
 - **Quick menu**: smaller, and only as large as it needs to be. Tools without settings (Pan, Select…) get a small menu with no outer ring. It opens with **Shift + S** (instead of Z), opens and lifts much faster, and holding a tool to move it, or two fingers to open it, takes less time. The S Pen button opens it however Android reports it: pressed while hovering, while touching, or in the middle of a stroke, every time.
 - **Help → Test pen and stylus**: shows what your pen reports (its type, buttons and pressure), to check its button and pressure.

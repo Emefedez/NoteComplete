@@ -32,7 +32,9 @@ export function moved(list, from, to) {
   return out;
 }
 
-const INNER = 50, OUTER = 94, SIZE = 36, HOLD_MS = 260, SLOP = 8;
+const INNER = 50, OUTER = 94, SIZE = 36, GAP = 6, HOLD_MS = 260, SLOP = 8;
+// The outer ring grows when it holds many settings, so its items never touch.
+export const outerRadius = (count) => Math.max(OUTER, Math.ceil((count * (SIZE + GAP)) / (2 * Math.PI)));
 
 // `inner()` and `outer()` return [{ key?, label, icon (Node), swatch?, active?(), run(),
 // stay?() }]; they are asked again after each choice, so the outer ring follows the tool.
@@ -45,7 +47,8 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     root.replaceChildren();
     const tools = list(inner), settings = list(outer);
     // Only as large as it needs: the outer ring appears when there are settings to show.
-    const radius = (settings.length ? OUTER : INNER) + SIZE / 2 + 6;
+    const outerR = outerRadius(settings.length);
+    const radius = (settings.length ? outerR : INNER) + SIZE / 2 + 6;
     const disc = document.createElement('div');
     disc.className = `qm-disc${settings.length ? ' qm-full' : ''}`;
     Object.assign(disc.style, { left: `${x}px`, top: `${y}px`, width: `${radius * 2}px`, height: `${radius * 2}px`, margin: `${-radius}px 0 0 ${-radius}px` });
@@ -71,7 +74,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       root.append(b);
     });
     place(tools, INNER, 'inner');
-    place(settings, OUTER, 'outer');
+    place(settings, outerR, 'outer');
     const close_ = document.createElement('button');
     close_.type = 'button';
     close_.className = 'qm-item qm-centre';
@@ -118,7 +121,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
   }
   function open(x, y) {
     close();
-    centre = fitCentre(x, y, OUTER + SIZE / 2, { width: innerWidth, height: innerHeight });
+    centre = fitCentre(x, y, outerRadius(16) + SIZE / 2, { width: innerWidth, height: innerHeight });
     hovered = null;
     root = document.createElement('div');
     // Only opening animates; a redraw after a choice does not flash.
