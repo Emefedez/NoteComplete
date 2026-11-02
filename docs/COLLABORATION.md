@@ -209,7 +209,10 @@ A phone or tablet joins a desktop NoteComplete as a drawing surface for the note
 - **Pairing**: File → *Share and draw on a tablet…* shows a QR code (the tablet link, `http://<LAN address>:<port>/tablet#<session>.<token>`) and a 6-digit code with the address. The device scans the QR with its camera (opens the reader in its browser, served by the computer), or in NoteComplete (app or browser) uses File → *Join as drawing tablet…* and types the address and code.
   - The code lasts 10 minutes and is used up after 5 wrong tries (*New code* makes another). A device that paired with the code receives the tablet token and reconnects with it.
   - Removing a tablet replaces the tablet link and code, so it cannot come back with the old ones.
-- **On the device**: the note and a tool dock, nothing else. The dock: pen, highlighter, eraser, move, five colours, three widths, pen pressure on/off, undo, redo, fit width, *move the bar to the other side* (remembered), disconnect, and a status dot. Held sideways the dock is a column at the left or right; held upright it is a row at the top or bottom. Until the note is on screen, a loading screen says what it is waiting for (connecting, loading the note) and can cancel.
+- **On the device**: the note and a tool dock, nothing else. The dock: pen, highlighter, shapes (their kinds and fill while chosen), tape, text, eraser, move, five colours, three widths, pen pressure on/off, undo, redo, fit width, *new page*, *move the bar to the other side* (remembered), disconnect, and a status dot.
+  - **Tape**: while chosen, the pen's colours, widths and pressure give way to the tape's own: strip or rectangle, the tape's colours (its quick-menu palette) and its widths from the tool bar. A drag lays tape on the computer's note; a tap lifts or covers it on the tablet only (a view choice, as on the computer), and the live line drawn meanwhile is dropped on the other screens.
+  - **Text**: a tap opens a text box with its format bar. With a finger or stylus the box opens when the tap lifts: phones open the on-screen keyboard only for a focus made during a tap, so a hidden field takes the focus then and hands it to the box. While typing, the box scrolls above the keyboard (the visual viewport), with room added below the pages; tablet mode stops the browser zooming into small text. Tapping elsewhere commits the text to the computer, as on the computer.
+  - **New page**: a blank page after the one in view, the same size (the *+* below the last page does the same). The computer and the tablet both rebuild their pages and show the new one. Not on an infinite canvas. Held sideways the dock is a column at the left or right; held upright it is a row at the top or bottom. Until the note is on screen, a loading screen says what it is waiting for (connecting, loading the note) and can cancel.
   - The device zooms and scrolls its own view. Once a stylus has drawn, fingers move the page and two fingers zoom; before that (a phone without a stylus) a finger draws.
   - The device's copy is never kept in its Recent and never marked unsaved: the computer saves the note.
 - **On the computer**: the strokes appear while they are drawn (live preview, one message per animation frame with only the new points), then as ordinary edits in its history: saved, exported and undone like its own. Its own view and tools are unchanged; its strokes appear on the tablet.
@@ -243,6 +246,7 @@ A phone or tablet joins a desktop NoteComplete as a drawing surface for the note
   - message size and update-rate limits;
   - downloads with HTTP range requests, at most a few at a time per guest. There is no file size limit (owner's decision): big notes download in resumable parts, and an interrupted download continues where it stopped;
   - a guest flooding the host is disconnected.
+- **Edits from tablets and guests who draw** (`TABLET_OPS` in `collab-hub.js`): draw (pen, highlighter, shapes, tape), erase, undo, redo, typed text (`image` holding text only, `editText`, `remove`) and blank pages (`insertPages` without a PDF). Pictures, PDFs, handwritten Markdown, page sizes, layers and locks stay the host's; the hub refuses them with *Not allowed*.
 - **What guests can never do**: read any file that was not linked, reach the host's Drive, MCP or AI tools, or change anything but the notes text. A guest's proposed version (Phase 7) is only an upload the host may look at; it never replaces anything without the host choosing pages in the comparison.
 
 ## Online access (built)
@@ -319,11 +323,12 @@ Tested with a stand-in `cloudflared` and simulated Cloudflare requests (`collab-
 - `cargo test`: replicas loaded from one project that apply the same edits (pressure, erase, undo, redo) agree on views and digest.
 - `node --test apps/desktop/collab-server.test.mjs`: the real server with host, guests and tablets: refused/expired invites and codes, second host, full session, oversized messages and floods; snapshot join; concurrent edits from host and tablet in one order; refused edits; live strokes; the digest check (asked in the edit stream, so it holds while edits keep coming) repairing a drifted copy; a new note reloading the tablet; removed tablets; three people typing at once; presence and cursors; a guest offline and back; view-only edits dropped; ending with the guests' last text; the host disappearing.
 - `node --test apps/reader/sync.test.mjs`: minimal text diffs, emoji, caret mapping through remote edits, snapshot framing.
-- `node tools/collab_e2e.mjs` (after a web build, with Playwright): host, tablet (touch + pen with pressure via CDP) and guest in Chromium: code pairing, live stroke, pressure stroke saved on the host, highlighter, eraser, undo, host strokes on the tablet, pinch zoom on the tablet only, loading screen gone once loaded, dock side and orientation (row upright, column sideways), pressure switch, phone width, guest name prompt, typing, chips and cursors, disconnect, ending with the guest's copy.
+- `node tools/collab_e2e.mjs` (after a web build, with Playwright): host, tablet (touch + pen with pressure via CDP) and guest in Chromium: code pairing, live stroke, pressure stroke saved on the host, highlighter, eraser, undo, host strokes on the tablet, tape (its colour and width, laid on the host, a tap lifting it on the tablet only), text typed with a finger tap (kept above a stand-in keyboard, committed to the host), a new page (on both, the same size), pinch zoom on the tablet only, loading screen gone once loaded, dock side and orientation (row upright, column sideways), pressure switch, phone width, guest name prompt, typing, chips and cursors, disconnect, ending with the guest's copy.
 
 ## Not yet verified
 
 - [!] Real devices: an Android or iOS phone/tablet in the installed app and in its browser, with a real stylus (pressure range, palm/finger handling), on a real Wi-Fi network; a second computer as a notes guest.
+- [!] Text on a real tablet: that the keyboard opens from a tap (iOS Safari and Android Chrome) and that the box stays above it. Tested only with a stand-in for the visual viewport in headless Chromium.
 - [!] The installed apps' network settings: Android now allows cleartext (needed for `ws://<LAN address>`), iOS allows local networking and asks for the local network permission. Neither has been built and tried.
 - [!] The packaged desktop app: the server serves the staged reader from inside the package; the window close prompt; firewalls prompting on first listen (Windows, macOS).
 - [!] Very large notes on a tablet: the snapshot is the whole project (source included), so a 250 MB note sends ~330 MB and needs that much memory on the device while it loads.
@@ -388,7 +393,7 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 ### Drawing tablets (built alongside Phase 3)
 
 - [D] Ink edits through the hub's order; snapshot join; digest check; live strokes; stylus pressure.
-- [D] Pairing by QR link or address + 6-digit code; tablet dock (sides, tools, colours, widths, undo/redo, fit, disconnect); own zoom and scroll; finger pan and pinch after a stylus.
+- [D] Pairing by QR link or address + 6-digit code; tablet dock (sides, tools including tape and text, colours, widths, undo/redo, fit, new page, disconnect); own zoom and scroll; finger pan and pinch after a stylus.
 - [!] On real devices and networks (see *Not yet verified*).
 
 ### Phase 4: downloading linked documents

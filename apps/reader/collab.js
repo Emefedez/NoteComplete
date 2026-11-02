@@ -713,16 +713,24 @@ class Session {
       return b;
     };
     const action = (label, glyph, onclick) => { const b = el('button', { type: 'button', className: 'dock-tool', title: label, 'aria-label': label, onclick }); b.append(icon(glyph)); return b; };
-    this.dot = el('span', { className: 'dock-status', title: 'Connected' });
-    this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
-      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('shape', 'Shapes', 'shape'), this.shapeGroup(), tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+    this.swatch = swatch;
+    // The pen's colours and widths; tape and text have their own (the tape group, the
+    // text's format bar), so these hide for them.
+    const ink = el('div', { className: 'dock-ink' },
       el('hr'),
       ...['#202d40', '#246bce', '#d13b30', '#2f9a4c', '#f2c500'].map(swatch),
       el('hr'),
-      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'), this.pressureButton(),
+      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'), this.pressureButton());
+    this.dot = el('span', { className: 'dock-status', title: 'Connected' });
+    this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
+      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('shape', 'Shapes', 'shape'), this.shapeGroup(),
+      tool('tape', 'Tape', 'tape'), this.tapeGroup(), tool('text', 'Text', 'text'),
+      tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+      ink,
       el('hr'),
       action('Undo', 'undo', () => $('undo').click()), action('Redo', 'redo', () => $('redo').click()),
       action('Fit the page width', 'fit', () => this.host.setZoom('fit')),
+      action('New page after this one', 'plus', () => this.host.doc?.canvas ? this.host.status('An infinite canvas grows as you draw; it has no pages to add.') : this.host.addPage()),
       el('span', { className: 'dock-spacer' }),
       action('Move this bar to the other side', 'swap', () => this.flipDock()),
       action('Disconnect', 'close', () => this.leave()),
@@ -730,8 +738,11 @@ class Session {
     this.dock.dataset.side = side;
     document.body.dataset.dock = side;
     document.body.append(this.dock);
+    // No zooming into a text box as the keyboard opens (iOS does it for small text): the
+    // pages zoom with two fingers and the dock instead.
+    const meta = document.querySelector('meta[name=viewport]');
+    if (meta && !/maximum-scale/.test(meta.content)) { this.viewportMeta = meta.content; meta.content += ',maximum-scale=1'; }
     this.markTool();
-
   }
   // Pen pressure on or off, the same setting as in the Pen's options (remembered).
   pressureButton() {
@@ -742,7 +753,7 @@ class Session {
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
-    const group = el('div', { className: 'dock-shapes', hidden: true });
+    const group = el('div', { className: 'dock-group dock-shapes', hidden: true });
     const mirror = (source, attr) => {
       for (const original of document.querySelectorAll(source)) {
         const b = original.cloneNode(true);
@@ -758,16 +769,51 @@ class Session {
     mirror('#shapeFill [data-fill]', 'fill');
     return group;
   }
+  // While Tape is chosen: strip or rectangle, its colours and its widths, as in the tool bar.
+  tapeGroup() {
+    const group = el('div', { className: 'dock-group dock-tape', hidden: true });
+    for (const original of document.querySelectorAll('.choice-row[data-for="tapeMode"] [data-value]')) {
+      const b = el('button', { type: 'button', title: original.title, 'aria-label': `Tape: ${original.title}` });
+      b.innerHTML = original.innerHTML;
+      b.dataset.tapeMode = original.dataset.value;
+      b.onclick = () => { original.click(); this.markTool(); };
+      group.append(b);
+    }
+    group.append(el('hr'), ...(this.host.palette?.('tape') || []).map(this.swatch), el('hr'), el('div', { className: 'dock-tape-widths' }));
+    return group;
+  }
+  // The tape's widths are the tool bar's (they can be changed there), so they are read again
+  // each time: the bar's width row shows the chosen tool's.
+  tapeWidths(row) {
+    const values = [...document.querySelectorAll('.choice-row[data-for="width"] [data-value]')].map((b) => b.dataset.value);
+    if (row.dataset.values === values.join()) return;
+    row.dataset.values = values.join();
+    row.replaceChildren(...values.map((value) => {
+      const b = el('button', { type: 'button', className: 'dock-width', title: `Tape ${value} px`, 'aria-label': `Tape width ${value} px` }, el('span', { style: `--w:${Math.min(14, Math.max(3, Number(value) / 4.5))}px` }));
+      b.dataset.width = value;
+      b.onclick = () => { document.querySelector(`.choice-row[data-for="width"] [data-value="${value}"]`)?.click(); this.markTool(); };
+      return b;
+    }));
+  }
   markTool() {
+    const tool = this.host.tool;
     const group = this.dock?.querySelector('.dock-shapes');
     if (group) {
-      group.hidden = this.host.tool !== 'shape';
+      group.hidden = tool !== 'shape';
       for (const b of group.querySelectorAll('[data-mirror]')) {
         const [attr, value] = b.dataset.mirror.split(':');
         const original = document.querySelector(attr === 'shape' ? `#shapePicker [data-shape="${value}"]` : `#shapeFill [data-fill="${value}"]`);
         b.setAttribute('aria-pressed', String(original?.getAttribute('aria-checked') === 'true'));
       }
     }
+    const tape = this.dock?.querySelector('.dock-tape');
+    if (tape) {
+      tape.hidden = tool !== 'tape';
+      if (tool === 'tape') this.tapeWidths(tape.querySelector('.dock-tape-widths'));
+      for (const b of tape.querySelectorAll('[data-tape-mode]')) b.setAttribute('aria-pressed', String(b.dataset.tapeMode === $('tapeMode').value));
+    }
+    const ink = this.dock?.querySelector('.dock-ink');
+    if (ink) ink.hidden = tool === 'tape' || tool === 'text';
     for (const b of this.dock?.querySelectorAll('[data-dock-tool]') || []) b.setAttribute('aria-pressed', String(b.dataset.dockTool === this.host.tool));
     const pressure = this.dock?.querySelector('.dock-pressure');
     if (pressure) pressure.setAttribute('aria-pressed', String($('pressure')?.value !== 'off'));
@@ -825,6 +871,7 @@ class Session {
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }
     this.dock?.remove();
+    if (this.viewportMeta) document.querySelector('meta[name=viewport]').content = this.viewportMeta;
     this.loading(null);
     document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
     delete document.body.dataset.dock;
