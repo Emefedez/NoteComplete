@@ -1,4 +1,27 @@
-## What's new in 1.1.13
+## What's new in 1.1.16
+
+- **Drawing tablet: new page, tape and text.**
+  - The tablet's dock gains **New page** (a blank page after the current one, the same size), **Tape** (with its colours, widths and strip or rectangle) and **Text**.
+  - Tapping tape on the tablet lifts it there.
+  - Each edit reaches the computer.
+- **Text with a finger or pen** opens the box when you lift, and on phones and tablets the keyboard opens with it. The box scrolls above the keyboard while you type. Dragging with the Text tool moves the page.
+
+### In 1.1.15
+
+- **Grab in the quick menu**, last on the ring (key 9). With Grab on, opening the menu (Shift + S, Shift + right-click, Shift + pen, the pen button, two fingers or a pen held still) never starts a grab, and a grabbed region and its menu stay as they were. **Select** from the menu turns a grabbed region into a selection, as the tool bar's Select does.
+- **Choosing a tool in the quick menu no longer opens its settings in the tool bar**: the menu shows them itself.
+- **iPad: two fingers held open the quick menu again.** Safari reports fingertips in sizes the app took for palms; fingers landing together, a lost touch end, and a Pencil hovering nearby also stopped it. Safari's own pinch is kept off the pages.
+
+### In 1.1.14
+
+- **Guests: notes first, then the note, with each step shown.**
+  - A guest's notes now stay the shared ones while the note loads (they were briefly replaced by the note's own).
+  - The pages appear as soon as they are made, instead of after the first page's PDF is drawn.
+  - A small bar shows *Connecting…* and *Loading the note…*.
+- **The notes stay visible for guests** all session long, also when they can only read them.
+- **View-only sessions**: a guest who tries to draw is told the note is shared view-only.
+
+### In 1.1.13
 
 - **Guests can draw**: someone who joins a shared note now sees its pages and the tool bar, and draws on it (in sessions that allow editing). The pages and tools were hidden, leaving only the notes panel.
 - **The ? beside Export and Save as** is a small blue circle right after the label, instead of a grey button below it.

@@ -155,6 +155,8 @@ async function join(host, invite) {
   session = new Session(host, { ...invite, name: remembered(), yjs });
   host.status(invite.role === 'tablet' ? 'Connecting to the computer…' : 'Joining the shared notes…');
   if (invite.role === 'tablet') session.loading('Connecting to the computer…');
+  // A guest sees each step in a small bar that leaves the notes usable.
+  else session.loading('Connecting…', { inline: true });
 }
 
 class Session {
@@ -193,7 +195,18 @@ class Session {
   async load({ project, title }) {
     for (let i = 0; i < 200 && (!this.host.ready || this.host.busy); i++) await new Promise((r) => setTimeout(r, 50));
     const view = this.view();
-    await this.host.openProject(project, title);
+    // A guest sees the pages as they are made (the first one's PDF can take a moment) and the
+    // notes beside them, not the notes alone until the whole first page is drawn.
+    if (this.role === 'guest') {
+      document.body.classList.remove('guest-mode');
+      this.loading('Loading the note…', { inline: true });
+    }
+    try {
+      await this.host.openProject(project, title);
+    } catch (e) {
+      if (this.role === 'guest') { this.loading(null); this.enterGuest(); }
+      throw e;
+    }
     this.restoreView(view);
     this.waiting(false);
     if (this.role === 'guest') {
@@ -207,6 +220,7 @@ class Session {
       if (!notes.visible) $('notesToggle')?.click();
       this.bindNotes();
       this.showTitle();
+      this.loading(null);
       this.host.status(this.client.canEdit ? `You can draw on “${title || 'the note'}” and write its notes.` : `Viewing “${title || 'the note'}”.`);
       return;
     }
@@ -214,11 +228,14 @@ class Session {
     this.host.status(`Drawing on “${title || 'the note'}”.`);
   }
   // A full-screen "Connecting… / Loading the note…" with a moving bar; null hides it.
-  loading(text) {
+  // `inline` (guests): a small bar at the top that leaves the page and the notes usable.
+  loading(text, { inline = false } = {}) {
     if (!text) { this.loader?.remove(); this.loader = null; return; }
+    if (this.loader && this.loader.classList.contains('inline') !== inline) { this.loader.remove(); this.loader = null; }
     if (!this.loader) {
       this.loader = el('div', { className: 'tablet-loader', role: 'status' }, el('div', { className: 'loader-bar' }), el('p'),
         el('button', { type: 'button', textContent: 'Cancel', onclick: () => this.leave() }));
+      this.loader.classList.toggle('inline', inline);
       document.body.append(this.loader);
     }
     this.loader.querySelector('p').textContent = text;
@@ -232,6 +249,7 @@ class Session {
       if (this.role === 'host') { this.documentChanged(); this.settingsChanged(); }
       else this.host.setSharedAutosave?.(detail.autosave);
       if (this.role === 'guest') {
+        this.loading(detail.open ? 'Loading the note…' : null, { inline: true });
         this.askName(detail.name);
         host.status(`Joined the notes${detail.title ? ` of “${detail.title}”` : ''}.`);
         this.showTitle();
@@ -246,6 +264,7 @@ class Session {
       if (this.role === 'guest') this.showTitle();
       // The host closed the note (or opened something that is not a note): notes only.
       if (this.role === 'guest' && !detail.open && host.doc) { host.closeDocument(); this.enterGuest(); }
+      if (this.role === 'guest') this.loading(detail.open && !host.doc ? 'Loading the note…' : null, { inline: true });
       if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); this.loading(null); }
       else if (this.role === 'tablet' && detail.open) this.loading('Loading the note…');
     } else if (type === 'settings') {
@@ -482,6 +501,8 @@ class Session {
     this.client.rename(name);
   }
   enterGuest() {
+    // The notes stay open for a guest, the whole session (style.css hides their close button).
+    document.body.classList.add('guest-session');
     // Notes only, while no note is open (the note may arrive before or after this).
     if (!this.host.doc) {
       document.body.classList.add('guest-mode');
@@ -713,16 +734,24 @@ class Session {
       return b;
     };
     const action = (label, glyph, onclick) => { const b = el('button', { type: 'button', className: 'dock-tool', title: label, 'aria-label': label, onclick }); b.append(icon(glyph)); return b; };
-    this.dot = el('span', { className: 'dock-status', title: 'Connected' });
-    this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
-      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('shape', 'Shapes', 'shape'), this.shapeGroup(), tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+    this.swatch = swatch;
+    // The pen's colours and widths; tape and text have their own (the tape group, the
+    // text's format bar), so these hide for them.
+    const ink = el('div', { className: 'dock-ink' },
       el('hr'),
       ...['#202d40', '#246bce', '#d13b30', '#2f9a4c', '#f2c500'].map(swatch),
       el('hr'),
-      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'), this.pressureButton(),
+      width(1, 'Fine'), width(2, 'Medium'), width(4, 'Thick'), this.pressureButton());
+    this.dot = el('span', { className: 'dock-status', title: 'Connected' });
+    this.dock = el('aside', { id: 'tabletDock', className: 'tablet-dock' },
+      tool('draw', 'Pen', 'draw'), tool('highlight', 'Highlighter', 'highlight'), tool('shape', 'Shapes', 'shape'), this.shapeGroup(),
+      tool('tape', 'Tape', 'tape'), this.tapeGroup(), tool('text', 'Text', 'text'),
+      tool('erase', 'Eraser', 'erase'), tool('pan', 'Move the page', 'pan'),
+      ink,
       el('hr'),
       action('Undo', 'undo', () => $('undo').click()), action('Redo', 'redo', () => $('redo').click()),
       action('Fit the page width', 'fit', () => this.host.setZoom('fit')),
+      action('New page after this one', 'plus', () => this.host.doc?.canvas ? this.host.status('An infinite canvas grows as you draw; it has no pages to add.') : this.host.addPage()),
       el('span', { className: 'dock-spacer' }),
       action('Move this bar to the other side', 'swap', () => this.flipDock()),
       action('Disconnect', 'close', () => this.leave()),
@@ -730,8 +759,11 @@ class Session {
     this.dock.dataset.side = side;
     document.body.dataset.dock = side;
     document.body.append(this.dock);
+    // No zooming into a text box as the keyboard opens (iOS does it for small text): the
+    // pages zoom with two fingers and the dock instead.
+    const meta = document.querySelector('meta[name=viewport]');
+    if (meta && !/maximum-scale/.test(meta.content)) { this.viewportMeta = meta.content; meta.content += ',maximum-scale=1'; }
     this.markTool();
-
   }
   // Pen pressure on or off, the same setting as in the Pen's options (remembered).
   pressureButton() {
@@ -742,7 +774,7 @@ class Session {
   }
   // While Shapes is chosen: its kinds and fill, mirroring the main tool settings.
   shapeGroup() {
-    const group = el('div', { className: 'dock-shapes', hidden: true });
+    const group = el('div', { className: 'dock-group dock-shapes', hidden: true });
     const mirror = (source, attr) => {
       for (const original of document.querySelectorAll(source)) {
         const b = original.cloneNode(true);
@@ -758,16 +790,51 @@ class Session {
     mirror('#shapeFill [data-fill]', 'fill');
     return group;
   }
+  // While Tape is chosen: strip or rectangle, its colours and its widths, as in the tool bar.
+  tapeGroup() {
+    const group = el('div', { className: 'dock-group dock-tape', hidden: true });
+    for (const original of document.querySelectorAll('.choice-row[data-for="tapeMode"] [data-value]')) {
+      const b = el('button', { type: 'button', title: original.title, 'aria-label': `Tape: ${original.title}` });
+      b.innerHTML = original.innerHTML;
+      b.dataset.tapeMode = original.dataset.value;
+      b.onclick = () => { original.click(); this.markTool(); };
+      group.append(b);
+    }
+    group.append(el('hr'), ...(this.host.palette?.('tape') || []).map(this.swatch), el('hr'), el('div', { className: 'dock-tape-widths' }));
+    return group;
+  }
+  // The tape's widths are the tool bar's (they can be changed there), so they are read again
+  // each time: the bar's width row shows the chosen tool's.
+  tapeWidths(row) {
+    const values = [...document.querySelectorAll('.choice-row[data-for="width"] [data-value]')].map((b) => b.dataset.value);
+    if (row.dataset.values === values.join()) return;
+    row.dataset.values = values.join();
+    row.replaceChildren(...values.map((value) => {
+      const b = el('button', { type: 'button', className: 'dock-width', title: `Tape ${value} px`, 'aria-label': `Tape width ${value} px` }, el('span', { style: `--w:${Math.min(14, Math.max(3, Number(value) / 4.5))}px` }));
+      b.dataset.width = value;
+      b.onclick = () => { document.querySelector(`.choice-row[data-for="width"] [data-value="${value}"]`)?.click(); this.markTool(); };
+      return b;
+    }));
+  }
   markTool() {
+    const tool = this.host.tool;
     const group = this.dock?.querySelector('.dock-shapes');
     if (group) {
-      group.hidden = this.host.tool !== 'shape';
+      group.hidden = tool !== 'shape';
       for (const b of group.querySelectorAll('[data-mirror]')) {
         const [attr, value] = b.dataset.mirror.split(':');
         const original = document.querySelector(attr === 'shape' ? `#shapePicker [data-shape="${value}"]` : `#shapeFill [data-fill="${value}"]`);
         b.setAttribute('aria-pressed', String(original?.getAttribute('aria-checked') === 'true'));
       }
     }
+    const tape = this.dock?.querySelector('.dock-tape');
+    if (tape) {
+      tape.hidden = tool !== 'tape';
+      if (tool === 'tape') this.tapeWidths(tape.querySelector('.dock-tape-widths'));
+      for (const b of tape.querySelectorAll('[data-tape-mode]')) b.setAttribute('aria-pressed', String(b.dataset.tapeMode === $('tapeMode').value));
+    }
+    const ink = this.dock?.querySelector('.dock-ink');
+    if (ink) ink.hidden = tool === 'tape' || tool === 'text';
     for (const b of this.dock?.querySelectorAll('[data-dock-tool]') || []) b.setAttribute('aria-pressed', String(b.dataset.dockTool === this.host.tool));
     const pressure = this.dock?.querySelector('.dock-pressure');
     if (pressure) pressure.setAttribute('aria-pressed', String($('pressure')?.value !== 'off'));
@@ -825,8 +892,9 @@ class Session {
     const share = $('shareButton');
     if (share) { share.classList.remove('active'); share.querySelector('span').textContent = 'Share'; }
     this.dock?.remove();
+    if (this.viewportMeta) document.querySelector('meta[name=viewport]').content = this.viewportMeta;
     this.loading(null);
-    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly');
+    document.body.classList.remove('tablet-mode', 'tablet-waiting', 'guest-mode', 'guest-readonly', 'guest-session');
     delete document.body.dataset.dock;
     if (this.client.state !== 'closed' && this.client.state !== 'ended') this.client.close();
     // A guest or tablet keeps an automatic save of the shared note (when the host has

@@ -45,6 +45,19 @@ try {
 
   // The tablet: joins with the address and code, like the app does.
   const tabletContext = await browser.newContext({ viewport: { width: 820, height: 1180 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  // A stand-in for the on-screen keyboard: keyboardOpens(px) takes px off the bottom of the
+  // visual viewport, as a phone's keyboard does (headless Chromium shows none).
+  await tabletContext.addInitScript(() => {
+    const real = window.visualViewport;
+    if (!real) return;
+    let cut = 0;
+    const fake = new EventTarget();
+    for (const key of ['width', 'offsetLeft', 'offsetTop', 'pageLeft', 'pageTop', 'scale']) Object.defineProperty(fake, key, { get: () => real[key] });
+    Object.defineProperty(fake, 'height', { get: () => real.height - cut });
+    real.addEventListener('resize', () => fake.dispatchEvent(new Event('resize')));
+    Object.defineProperty(window, 'visualViewport', { get: () => fake, configurable: true });
+    window.keyboardOpens = (px) => { cut = px; fake.dispatchEvent(new Event('resize')); };
+  });
   const tablet = await tabletContext.newPage();
   tablet.on('pageerror', (e) => console.error('tablet error:', e.message));
   await tablet.goto(server.origin + '/');
@@ -105,6 +118,75 @@ try {
   await tablet.waitForFunction(() => document.querySelectorAll('.sheet [data-item^="new:"]').length === 3);
   step('a stroke drawn on the computer appears on the tablet');
 
+  // Tape from the dock: the tape's colours and widths replace the pen's while it is chosen.
+  await tablet.click('#tabletDock [data-dock-tool=tape]');
+  assert.equal(await tablet.isVisible('#tabletDock .dock-tape'), true, 'tape settings show');
+  assert.equal(await tablet.locator('#tabletDock .dock-ink .dock-swatch').first().isHidden(), true, 'the pen colours hide for tape');
+  await tablet.click('#tabletDock .dock-tape .dock-width[data-width="64"]');
+  assert.equal(await tablet.inputValue('#width'), '64');
+  await tablet.locator('#tabletDock .dock-tape .dock-swatch').nth(1).click();
+  assert.equal(await tablet.inputValue('#color'), '#ffdf38');
+  await tablet.click('#tabletDock .dock-tape [data-tape-mode=band]');
+  await shot(tablet, 'tablet-tape');
+  const tapes = (page) => page.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-tape^="new:"]').length);
+  const ty = y0 + 320;
+  await pen('mousePressed', x0, ty, 0.5);
+  for (let i = 1; i <= 10; i++) await pen('mouseMoved', x0 + i * 20, ty, 0.5);
+  await pen('mouseReleased', x0 + 200, ty, 0.5);
+  await host.waitForFunction(() => document.querySelectorAll('.sheet[data-page="0"] [data-tape^="new:"]').length === 1);
+  await tablet.waitForFunction(() => document.querySelector('.sheet[data-page="0"] [data-tape^="new:"]'));
+  assert.equal(await tapes(tablet), 1);
+  // A tap lifts it on the tablet only (a view choice, as on the computer), and draws nothing.
+  await pen('mousePressed', x0 + 100, ty, 0.5);
+  await pen('mouseReleased', x0 + 100, ty, 0.5);
+  await tablet.waitForFunction(() => document.querySelector('.sheet[data-page="0"] [data-tape^="new:"]').getAttribute('opacity') === '0.18');
+  await tablet.waitForTimeout(300);
+  assert.equal(await host.evaluate(() => document.querySelector('.sheet[data-page="0"] [data-tape^="new:"]').getAttribute('opacity')), '1');
+  assert.equal(await host.evaluate(() => document.querySelectorAll('.remote-ink').length), 0, 'a tap leaves no live line on the computer');
+  assert.equal(await tapes(host), 1);
+  await pen('mousePressed', x0 + 100, ty, 0.5);
+  await pen('mouseReleased', x0 + 100, ty, 0.5);
+  await tablet.waitForFunction(() => document.querySelector('.sheet[data-page="0"] [data-tape^="new:"]').getAttribute('opacity') === '1');
+  step('tape from the dock, with its colour and width, reaches the computer; a tap lifts and covers it');
+
+  // Text: a finger tap opens a box and the keyboard; the box stays above the keyboard.
+  await tablet.click('#tabletDock [data-dock-tool=text]');
+  assert.equal(await tablet.locator('#tabletDock .dock-ink .dock-swatch').first().isHidden(), true, 'the pen colours hide for text');
+  const sheet = await tablet.locator('.sheet').first().boundingBox();
+  const tx = sheet.x + sheet.width * 0.4, textY = Math.min(1180 - 120, sheet.y + sheet.height - 80);
+  await tablet.touchscreen.tap(tx, textY);
+  await tablet.waitForFunction(() => document.activeElement?.classList.contains('text-editor'));
+  await tablet.evaluate(() => window.keyboardOpens(520));
+  await tablet.waitForFunction(() => {
+    const box = document.querySelector('.text-editor').getBoundingClientRect();
+    return box.bottom <= visualViewport.offsetTop + visualViewport.height && box.top >= 0;
+  });
+  await tablet.keyboard.type('Hola tablet');
+  await shot(tablet, 'tablet-text');
+  // Tapping elsewhere finishes the box, as on the computer; the keyboard closes.
+  await tablet.touchscreen.tap(tx, textY - 260);
+  await tablet.evaluate(() => window.keyboardOpens(0));
+  await host.waitForFunction(() => document.querySelector('.sheet[data-page="0"] svg')?.textContent.includes('Hola tablet'), null, { timeout: 10000 });
+  await tablet.waitForFunction(() => !document.querySelector('.text-editor') && document.querySelector('.sheet[data-page="0"] svg')?.textContent.includes('Hola tablet'));
+  assert.equal(await tablet.evaluate(() => document.getElementById('pages').style.marginBottom), '');
+  step('text typed on the tablet stays above its keyboard and reaches the computer');
+
+  // A new page after the one in view, the same size: the computer and the tablet both get it.
+  const firstSize = await host.evaluate(() => getComputedStyle(document.querySelector('.sheet[data-page="0"]')).aspectRatio);
+  await tablet.click('#tabletDock [aria-label="New page after this one"]');
+  await host.waitForFunction(() => document.querySelectorAll('.sheet').length === 4);
+  await tablet.waitForFunction(() => document.querySelectorAll('.sheet').length === 4 && document.querySelector('#tabletDock'));
+  assert.equal(await host.evaluate(() => getComputedStyle(document.querySelector('.sheet[data-page="1"]')).aspectRatio), firstSize);
+  assert.equal(await tablet.evaluate(() => getComputedStyle(document.querySelector('.sheet[data-page="1"]')).aspectRatio), firstSize);
+  await tablet.waitForFunction(() => document.querySelector('.sheet[data-page="1"]').getBoundingClientRect().top < innerHeight / 2);
+  // The computer shows the new page too (every copy goes to an inserted page); back to the first.
+  await host.waitForFunction(() => document.querySelector('.sheet[data-page="1"]').getBoundingClientRect().top < innerHeight / 2);
+  await host.evaluate(() => document.querySelector('.sheet[data-page="0"]').scrollIntoView());
+  await host.waitForFunction(() => document.querySelector('.sheet[data-page="0"] [data-item]'));
+  step('a new page from the tablet: the computer gets it, and the tablet shows it');
+  await tablet.click('#tabletDock [data-dock-tool=draw]');
+  assert.equal(await tablet.isVisible('#tabletDock .dock-ink .dock-swatch >> nth=0'), true, 'the pen colours are back');
+
   // The tablet zooms its own view; the computer's stays where it was.
   const hostZoom = await host.inputValue('#zoomValue');
   await tablet.evaluate(() => {
@@ -151,7 +233,7 @@ try {
   await guest.press('.collab-name input', 'Enter');
   await guest.waitForSelector('#notesEditor .TinyMDE');
   // The guest sees the note itself too, live, not only its notes.
-  await guest.waitForFunction(() => document.querySelectorAll('.sheet').length === 3 && document.querySelector('.sheet [data-item]'), null, { timeout: 20000 });
+  await guest.waitForFunction(() => document.querySelectorAll('.sheet').length === 4 && document.querySelector('.sheet [data-item]'), null, { timeout: 20000 });
   // ...shown with its tools, and draws on it: the stroke reaches the host.
   await guest.waitForFunction(() => !document.body.classList.contains('guest-mode'));
   assert.equal(await guest.isVisible('#viewport'), true, 'the guest sees the pages');
@@ -238,7 +320,7 @@ try {
   await tablet.click('#tabletDock [aria-label=Disconnect]');
   await tablet.waitForFunction(() => !document.body.classList.contains('tablet-mode') && !document.querySelector('.sheet'));
   await host.waitForFunction(() => ![...document.querySelectorAll('#collabPeopleBar .collab-chip')].some((c) => c.title.includes('drawing tablet')));
-  assert.equal(await added(host), 5, 'the tablet’s strokes and the guest’s two');
+  assert.equal(await added(host), 6, 'the tablet’s strokes and tape, and the guest’s two strokes');
   step('the tablet disconnects; the computer keeps every edit');
 
   // Ending: the guest keeps a copy; the host keeps the notes.
