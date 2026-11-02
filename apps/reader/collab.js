@@ -197,6 +197,9 @@ class Session {
     this.restoreView(view);
     this.waiting(false);
     if (this.role === 'guest') {
+      // The note itself, its pages and tools, not only the notes: guest-mode is the layout
+      // for a session with no note open (enterGuest), and it hid the pages and the tool bar.
+      document.body.classList.remove('guest-mode');
       // Opening a note loads its own notes: the panel goes back to the shared ones.
       document.body.classList.toggle('guest-readonly', !this.client.canEdit);
       if (!this.client.canEdit) this.host.setTool?.('pan');
@@ -242,7 +245,7 @@ class Session {
     } else if (type === 'doc') {
       if (this.role === 'guest') this.showTitle();
       // The host closed the note (or opened something that is not a note): notes only.
-      if (this.role === 'guest' && !detail.open && host.doc) host.closeDocument();
+      if (this.role === 'guest' && !detail.open && host.doc) { host.closeDocument(); this.enterGuest(); }
       if (this.role === 'tablet' && !detail.open) { host.closeDocument(); this.waiting(true); this.loading(null); }
       else if (this.role === 'tablet' && detail.open) this.loading('Loading the note…');
     } else if (type === 'settings') {
@@ -479,10 +482,13 @@ class Session {
     this.client.rename(name);
   }
   enterGuest() {
-    document.body.classList.add('guest-mode');
-    // The notes panel lives in the page editor, shown here without a note.
-    $('empty').hidden = true;
-    $('editor').hidden = false;
+    // Notes only, while no note is open (the note may arrive before or after this).
+    if (!this.host.doc) {
+      document.body.classList.add('guest-mode');
+      // The notes panel lives in the page editor, shown here without a note.
+      $('empty').hidden = true;
+      $('editor').hidden = false;
+    }
     this.host.notesApi().then(async (notes) => {
       await notes.load('', { core: false });
       await notes.open();
