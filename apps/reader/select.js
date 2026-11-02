@@ -51,7 +51,7 @@ export function enhanceSelects() {
       menu.style.maxHeight = `${Math.min(380, Math.max(below, above))}px`;
       menu.style.left = `${Math.max(margin, Math.min(rect.left, innerWidth - menu.offsetWidth - margin))}px`;
       menu.style.top = `${below >= menu.offsetHeight || below >= above ? rect.bottom + 6 : rect.top - menu.offsetHeight - 6}px`;
-      active = {button, close};
+      active = {button, close, openedAt: performance.now()};
       const rows = [...menu.querySelectorAll('[role=option]:not(:disabled)')];
       (rows.find(row => row.getAttribute('aria-selected') === 'true') || (last ? rows.at(-1) : rows[0]))?.focus();
       let search = '', searchedAt = 0;
@@ -79,5 +79,13 @@ export function enhanceSelects() {
   }
 }
 document.addEventListener('pointerdown', event => { if (active && !event.target.closest('.select-menu') && !active.button.contains(event.target)) active.close(); });
-window.addEventListener('resize', () => active?.close());
-document.addEventListener('scroll', event => { if (!event.target.closest?.('.select-menu')) active?.close(); }, true);
+// Scrolling that moves the trigger closes its menu. Not right after opening: on phones the
+// compact bar expands when touched and the page shifts to make up for it, and momentum
+// scrolling can still be running; those would close the menu as it appears.
+const settled = () => active && performance.now() - active.openedAt > 400;
+window.addEventListener('resize', () => { if (settled()) active.close(); });
+document.addEventListener('scroll', event => {
+  const target = event.target === document ? document.documentElement : event.target;
+  if (!settled() || target.closest?.('.select-menu') || !target.contains?.(active.button)) return;
+  active.close();
+}, true);

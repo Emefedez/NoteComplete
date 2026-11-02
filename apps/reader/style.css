@@ -367,6 +367,8 @@ main {
 #htmlView .html-bar, #textView .html-bar, #webView .html-bar { gap: 6px; }
 #htmlView .html-bar strong, #textView .html-bar strong, #webView .html-bar strong { margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .side-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+/* The panel toggles show when their panel is open, however it was opened (N, a link, a click). */
+#notesToggle[aria-expanded="true"], #layersToggle[aria-expanded="true"], #audioToggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Dark pages on a text document: the dark theme's colours, also in the light theme. */
 body.pages-dark #textBody { --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff; --line: #3b4048; --surface: #24272c; --chrome: #202328; --fill: #30343b; color: var(--ink); }
 .side-body .group-panel { width: 220px; flex: none; overflow: auto; padding: 12px; background: var(--chrome); border-right: 1px solid var(--line); }
@@ -531,7 +533,9 @@ input[type="color"]::-webkit-color-swatch {
 /* After the last page: add a blank page. */
 .add-page-end { display: flex; align-items: center; justify-content: center; gap: 8px; width: min(100%, 420px); min-height: 56px; margin: 8px auto 48px; border: 2px dashed var(--line); border-radius: 14px; background: transparent; color: var(--muted); font-size: 14px; }
 .add-page-end:hover, .add-page-end:focus-visible { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.add-page-end[hidden], body.tablet-mode .add-page-end, body.guest-mode .add-page-end { display: none; }
+.add-page-end[hidden], body.tablet-mode .add-page-end, body.guest-readonly .add-page-end { display: none; }
+/* A guest of a view-only session: only moving around the note. */
+body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-readonly .tool-options { display: none !important; }
 .sheet {
   position: relative;
   flex-shrink: 0;
@@ -2492,6 +2496,8 @@ body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
 #collabDialog button.accent:hover { filter: brightness(0.97); }
 .collab-join-menu { display: grid; gap: 8px; margin: 8px 0 4px; }
 .collab-online-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.collab-firewall { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: 13px; }
+.collab-firewall p { margin: 0 0 6px; }
 #collabOnline[hidden] { display: none; }
 /* Others' carets in the notes editor. */
 .notes-editor { position: relative; }
@@ -2528,6 +2534,8 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .bar-actions.more-right, .toolbar .segmented.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .bar-actions.more-left, .toolbar .segmented.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
 .bar-actions.more-left.more-right, .toolbar .segmented.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+/* A mask hides everything inside, open menus included: no fade while a menu is open. */
+.bar-actions:has(details[open]) { -webkit-mask-image: none; mask-image: none; }
 @media (max-width: 700px) and (pointer: fine) { .bar-actions, .toolbar .segmented { scrollbar-width: thin; } }
 @media (max-width: 420px) { .bar-menu > summary { padding: 3px 5px; font-size: 12px; } }
 /* The page box fits its digits; no spin buttons inside it to clip them. */

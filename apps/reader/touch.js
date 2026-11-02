@@ -2,6 +2,11 @@
 // two fingers move the pages and pinch to zoom; a quick tap with two fingers undoes and
 // with three fingers redoes. One finger keeps doing what the tool does (draws, selects,
 // or scrolls with Pan); a second finger cancels a stroke the first one had just begun.
+// A two-finger scroll keeps gliding after the fingers lift (momentum.js). A stylus (Apple
+// Pencil) is never one of the fingers: it draws, and a palm or finger beside it does not
+// cancel its stroke.
+import { VelocityTracker } from './momentum.js';
+
 const TAP_MS = 300, TAP_SLOP = 12, ZOOM_START = 0.08;
 
 export function measure(touches) {
@@ -19,7 +24,7 @@ export class TouchGesture {
   // `touches`: [{clientX, clientY}], `time`: ms. Returns actions to apply.
   start(touches, time) {
     const n = touches.length, m = measure(touches);
-    if (!this.active) this.active = { count: n, time, origin: m, last: m, moved: false, multi: n > 1 };
+    if (!this.active) this.active = { count: n, time, origin: m, last: m, moved: false, multi: n > 1, speed: new VelocityTracker() };
     else {
       // Another finger: measure from here (the centre jumps when a finger lands).
       if (n > this.active.count) { this.active.origin = m; this.active.mode = null; }
@@ -29,7 +34,7 @@ export class TouchGesture {
     }
     return n > 1 ? [{ type: 'cancel' }] : [];
   }
-  move(touches) {
+  move(touches, time = 0) {
     const a = this.active;
     if (!a) return [];
     const m = measure(touches), out = [];
@@ -42,7 +47,10 @@ export class TouchGesture {
         else if (Math.hypot(m.x - a.origin.x, m.y - a.origin.y) > TAP_SLOP) a.mode = 'pan';
       }
       if (a.mode === 'zoom' && a.last.d && m.d && m.d !== a.last.d) out.push({ type: 'zoom', x: m.x, y: m.y, step: m.d / a.last.d });
-      else if (a.mode === 'pan') out.push({ type: 'pan', dx: m.x - a.last.x, dy: m.y - a.last.y });
+      else if (a.mode === 'pan') {
+        out.push({ type: 'pan', dx: m.x - a.last.x, dy: m.y - a.last.y });
+        a.speed.add(m.x, m.y, time);
+      }
     }
     a.last = m;
     return out;
@@ -50,14 +58,24 @@ export class TouchGesture {
   end(remaining, time) {
     const a = this.active;
     if (!a) return [];
-    if (remaining.length) { a.last = measure(remaining); return []; }
+    // The scroll ends when fewer than two fingers are left: it glides on from there.
+    const out = [];
+    if (a.mode === 'pan' && remaining.length < 2) {
+      const { vx, vy } = a.speed.velocity(time);
+      a.mode = 'done';
+      if (vx || vy) out.push({ type: 'fling', vx: -vx, vy: -vy });
+    }
+    if (remaining.length) { a.last = measure(remaining); return out; }
     this.active = null;
     if (a.multi && !a.moved && time - a.time < TAP_MS) return [{ type: a.count >= 3 ? 'redo' : 'undo' }];
-    return [];
+    return out;
   }
 }
 
-export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, enabled = () => true }) {
+// Fingers only: an Apple Pencil's touches (touchType "stylus") are left to the pointer events.
+const fingers = (list) => [...list].filter((t) => t.touchType !== 'stylus');
+
+export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fling = () => {}, stop = () => {}, enabled = () => true }) {
   const g = new TouchGesture();
   const apply = (actions) => {
     for (const a of actions) {
@@ -66,21 +84,27 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, en
       else if (a.type === 'pan') { viewport.scrollLeft -= a.dx; viewport.scrollTop -= a.dy; }
       else if (a.type === 'undo') undo();
       else if (a.type === 'redo') redo();
+      else if (a.type === 'fling') fling(a.vx, a.vy);
     }
   };
   const on = (type, handler) => viewport.addEventListener(type, handler, { passive: false });
   on('touchstart', (e) => {
-    if (!enabled()) return g.reset();
-    if (e.touches.length > 1) e.preventDefault();
-    apply(g.start(e.touches, e.timeStamp));
+    // A touch catches the pages that were still gliding.
+    stop();
+    const touches = fingers(e.touches);
+    if (!enabled()) { g.reset(); return; }
+    if (!touches.length) return;
+    if (touches.length > 1) e.preventDefault();
+    apply(g.start(touches, e.timeStamp));
   });
   on('touchmove', (e) => {
     if (!g.active) return;
+    const touches = fingers(e.touches);
     // One finger: the browser scrolls (Pan) or the tool draws; two or more are ours.
-    if (e.touches.length > 1) e.preventDefault();
-    apply(g.move(e.touches));
+    if (touches.length > 1) e.preventDefault();
+    apply(g.move(touches, e.timeStamp));
   });
-  const end = (e) => apply(g.end(e.touches, e.timeStamp));
+  const end = (e) => { if (g.active) apply(g.end(fingers(e.touches), e.timeStamp)); };
   on('touchend', end);
   on('touchcancel', () => g.reset());
   return g;

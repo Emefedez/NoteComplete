@@ -131,23 +131,26 @@ export class CollabHub {
     handler.call(this, peer, message);
   }
   // First message: a token (host, guest invite or tablet link) or a tablet pairing code.
-  // Online access: a separate guest invite that works through the tunnel. Turning it off
-  // revokes it and disconnects everyone who came in that way.
+  // Online access: separate invites that work through the tunnel, one for notes guests (when
+  // notes are shared) and one for drawing tablets. Turning it off revokes both and
+  // disconnects everyone who came in that way.
   allowOnline() {
-    if (!this.notes) throw Error('Online access is for notes guests; this session shares no notes.');
-    this.tokens.online = token();
-    return this.tokens.online;
+    this.tokens.online = this.notes ? token() : null;
+    this.tokens.onlineTablet = token();
+    return { guest: this.tokens.online, tablet: this.tokens.onlineTablet };
   }
   closeOnline() {
     this.tokens.online = null;
+    this.tokens.onlineTablet = null;
     for (const p of [...this.peers.values()]) if (p.remote) this.kick(p, 1008, 'Online access was turned off.');
   }
   hello(peer, { token, code, name, role }) {
     let granted = null;
-    // Through the tunnel only notes guests with the online invite join: never the host,
-    // a drawing tablet or the 6-digit code.
+    // Through the tunnel only the online invites work: never the host's token, the local
+    // invites or the 6-digit code.
     if (peer.remote) {
       if (token && this.notes && this.tokens.online && same(token, this.tokens.online) && role !== 'tablet') granted = 'guest';
+      else if (token && this.tokens.onlineTablet && same(token, this.tokens.onlineTablet)) granted = 'tablet';
       else return this.kick(peer, 1008, 'This invite does not work from another network. Ask for the online link.');
     } else if (token && same(token, this.tokens.host) && !this.host) granted = 'host';
     else if (token && same(token, this.tokens.tablet)) granted = 'tablet';
@@ -172,18 +175,22 @@ export class CollabHub {
       canEdit: granted === 'host' || (granted === 'guest' && this.notes === 'edit'),
       notes: granted !== 'tablet' && !!this.notes,
       // A tablet paired with a code reconnects with the full token.
-      token: granted === 'tablet' ? this.tokens.tablet : undefined,
+      token: granted === 'tablet' ? (peer.remote ? this.tokens.onlineTablet : this.tokens.tablet) : undefined,
       gen: this.gen, open: this.open, title: this.title,
     });
     this.sendPeers();
     if (granted === 'host') {
       peer.synced = true;
-      // Tablets that came first wait for the host's document.
-      for (const p of this.members()) if (p.role === 'tablet' && !p.synced && this.open) this.requestSnapshot(p);
+      // Tablets and guests that came first wait for the host's document.
+      for (const p of this.members()) if (this.follows(p) && !p.synced && this.open) this.requestSnapshot(p);
     }
-    if (granted === 'tablet' && this.open) this.requestSnapshot(peer);
+    if (this.follows(peer) && this.open && this.host) this.requestSnapshot(peer);
     if (peer.role !== 'tablet' && this.notes) this.startNotes(peer);
   }
+  // Who follows the note itself: drawing tablets and notes guests (both get its snapshot
+  // and every edit). Who may change it: the host, tablets, and guests when notes are 'edit'.
+  follows(p) { return p.role === 'tablet' || p.role === 'guest'; }
+  draws(p) { return p.role === 'host' || p.role === 'tablet' || (p.role === 'guest' && this.notes === 'edit'); }
   guestName() {
     const used = new Set(this.members().map((p) => p.name));
     for (let n = 1; ; n++) if (!used.has(`Guest ${n}`)) return `Guest ${n}`;
@@ -221,13 +228,13 @@ export class CollabHub {
     this.requests.clear();
     this.broadcast({ t: 'doc', gen: this.gen, open: this.open, title: this.title });
     for (const p of this.members()) {
-      if (p.role !== 'tablet') continue;
+      if (!this.follows(p)) continue;
       p.synced = false;
       if (this.open) this.requestSnapshot(p);
     }
   }
   on_op(peer, { gen, ref, op, args }) {
-    const allowed = peer.role === 'host' ? HOST_OPS : peer.role === 'tablet' ? TABLET_OPS : null;
+    const allowed = peer.role === 'host' ? HOST_OPS : this.draws(peer) ? TABLET_OPS : null;
     const nack = (error) => this.send(peer, { t: 'nack', ref, error });
     if (!allowed?.has(op)) return nack('Not allowed.');
     if (!this.open || gen !== this.gen) return nack('The note changed.');
@@ -237,23 +244,23 @@ export class CollabHub {
     this.log.push(entry);
     if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);
     const data = JSON.stringify(entry);
-    for (const p of this.members()) if (p.synced && p.role !== 'guest') this.send(p, data);
+    for (const p of this.members()) if (p.synced) this.send(p, data);
     // Now and then every copy reports its history digest right after this edit (in the same
     // stream, so all at the same point); a tablet that differs from the host reloads.
-    if (this.checkEvery && entry.seq % this.checkEvery === 0 && this.members().some((p) => p.role === 'tablet' && p.synced)) {
+    if (this.checkEvery && entry.seq % this.checkEvery === 0 && this.members().some((p) => this.follows(p) && p.synced)) {
       const check = JSON.stringify({ t: 'check', gen: this.gen, seq: entry.seq });
-      for (const p of this.members()) if (p.synced && p.role !== 'guest') this.send(p, check);
+      for (const p of this.members()) if (p.synced) this.send(p, check);
     }
   }
   // A stroke being drawn: shown live on the other screens, never stored.
   on_live(peer, message) {
-    if (peer.role === 'guest' || message.gen !== this.gen) return;
+    if (!this.draws(peer) || message.gen !== this.gen) return;
     const data = JSON.stringify({ ...message, from: peer.id, color: peer.color });
-    for (const p of this.members()) if (p !== peer && p.synced && p.role !== 'guest') this.send(p, data);
+    for (const p of this.members()) if (p !== peer && p.synced) this.send(p, data);
   }
   // Digests at a check: kept until the host's arrives, then each tablet's is compared with it.
   on_digest(peer, { gen, seq, digest }) {
-    if (gen !== this.gen || typeof digest !== 'string' || (peer.role !== 'host' && peer.role !== 'tablet')) return;
+    if (gen !== this.gen || typeof digest !== 'string' || (peer.role !== 'host' && !this.follows(peer))) return;
     let round = this.digests.get(seq);
     if (!round) {
       round = { host: null, tablets: new Map() };
@@ -301,7 +308,7 @@ export class CollabHub {
   }
   // A tablet whose copy disagrees with the host's (see the core's history digest) reloads.
   on_resync(peer) {
-    if (peer.role !== 'tablet') return;
+    if (!this.follows(peer)) return;
     peer.synced = false;
     if (this.open) this.requestSnapshot(peer);
   }
@@ -386,7 +393,10 @@ export class CollabHub {
     const target = this.peers.get(id);
     if (peer.role !== 'host' || !target || target === peer) return;
     // A removed tablet cannot come back with its link or code: both are replaced.
-    if (target.role === 'tablet') { this.tokens.tablet = token(); this.newCode(); }
+    if (target.role === 'tablet') {
+      if (target.remote) this.tokens.onlineTablet = token();
+      else { this.tokens.tablet = token(); this.newCode(); }
+    }
     this.kick(target, 4001, 'The host removed you from the session.');
   }
   on_code(peer) {

@@ -4,6 +4,7 @@
 // it is free (one port to allow in a firewall), else on any free port.
 import http from 'node:http';
 import dgram from 'node:dgram';
+import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { createReadStream } from 'node:fs';
@@ -31,6 +32,19 @@ export function lanAddresses(interfaces = os.networkInterfaces(), preferred = ''
 }
 export function lanAddress(interfaces = os.networkInterfaces(), preferred = '') {
   return lanAddresses(interfaces, preferred)[0] || '127.0.0.1';
+}
+// Linux firewalls that block incoming connections by default: which one runs (checked without
+// root), and the command that lets phones reach `port`. null when none is found.
+export async function firewallHint(port, { platform = process.platform, run = runQuiet } = {}) {
+  if (platform !== 'linux') return null;
+  if ((await run('systemctl', ['is-active', 'firewalld'])).trim() === 'active')
+    return { name: 'firewalld', command: `sudo firewall-cmd --add-port=${port}/tcp && sudo firewall-cmd --permanent --add-port=${port}/tcp` };
+  if ((await run('systemctl', ['is-active', 'ufw'])).trim() === 'active')
+    return { name: 'ufw', command: `sudo ufw allow ${port}/tcp` };
+  return null;
+}
+function runQuiet(file, args) {
+  return new Promise((resolve) => execFile(file, args, { timeout: 2000 }, (error, stdout) => resolve(error && !stdout ? '' : String(stdout))));
 }
 // The local address of the default route (a UDP "connect" sends nothing); '' offline.
 export function routeAddress() {
@@ -101,23 +115,26 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   // a LAN address) and did not come through Cloudflare; anything else is online.
   const localHosts = new Set(['127.0.0.1', 'localhost', '[::1]', ...addresses].map((h) => `${h}:${actualPort}`));
   const cameFromTunnel = (req) => !localHosts.has(String(req.headers.host || '').toLowerCase()) || 'cf-connecting-ip' in req.headers || 'cf-ray' in req.headers;
-  let tunnel = null, onlineLink = '';
+  let tunnel = null, onlineLink = '', onlineUrl = '';
   const origin = () => `http://${address}:${actualPort}`;
   // Online access (tunnel.js): a Cloudflare quick tunnel and a separate guest invite.
   async function goOnline({ dir, fetch, spawn, progress, onExit = () => {}, binary } = {}) {
     if (tunnel) return onlineLink;
     binary ||= await ensureCloudflared({ dir, fetch, progress });
     if (stopping) throw Error('The session ended.');
-    const started = await startTunnel({ binary, port: actualPort, spawn, onExit: (code) => { tunnel = null; onlineLink = ''; hub.closeOnline(); onExit(code); } });
+    const started = await startTunnel({ binary, port: actualPort, spawn, onExit: (code) => { tunnel = null; onlineLink = ''; onlineUrl = ''; hub.closeOnline(); onExit(code); } });
     if (stopping) { started.stop(); throw Error('The session ended.'); }
     tunnel = started;
-    onlineLink = `${started.url}/join#${hub.id}.${hub.allowOnline()}`;
+    const tokens = hub.allowOnline();
+    onlineUrl = started.url;
+    onlineLink = tokens.guest ? `${started.url}/join#${hub.id}.${tokens.guest}` : '';
     return onlineLink;
   }
   function stopOnline() {
     tunnel?.stop();
     tunnel = null;
     onlineLink = '';
+    onlineUrl = '';
     hub.closeOnline();
   }
   function stop() {
@@ -145,6 +162,9 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     goOnline,
     stopOnline,
     get onlineLink() { return onlineLink; },
+    // A drawing tablet on another network (the online tablet invite; the code stays local).
+    get onlineTabletLink() { return onlineUrl && hub.tokens.onlineTablet ? `${onlineUrl}/tablet#${hub.id}.${hub.tokens.onlineTablet}` : ''; },
+    get online() { return !!tunnel; },
     get guestLink() { return notes ? `${origin()}/join#${hub.id}.${hub.tokens.guest}` : ''; },
     tabletLink: () => `${origin()}/tablet#${hub.id}.${hub.tokens.tablet}`,
     code: () => ({ code: hub.code.value, expires: hub.code.expires }),

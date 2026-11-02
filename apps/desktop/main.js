@@ -425,10 +425,12 @@ app.whenReady().then(async () => {
         },
       });
       sharing = { owner, server };
+      // A Linux firewall would keep phones out: the dialog shows how to let them in.
+      sharing.firewall = await (await collabServer()).firewallHint(server.port).catch(() => null);
     }
     return sharingInfo(sharing.server);
   }));
-  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, addresses: server.addresses, port: server.port, onlineLink: server.onlineLink, ...server.code() });
+  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, addresses: server.addresses, port: server.port, onlineLink: server.onlineLink, onlineTabletLink: server.onlineTabletLink, online: server.online, firewall: sharing?.firewall || null, ...server.code() });
   ipcMain.handle('collab:address', guarded((event, address) => {
     if (sharing?.owner !== event.sender.id) return null;
     sharing.server.useAddress(String(address));

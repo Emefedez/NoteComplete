@@ -1,7 +1,7 @@
 // Browser check of touch on the pages (Chromium with real multi-touch through DevTools,
 // after a web build): one finger draws, a two-finger tap undoes and a three-finger tap
 // redoes, two fingers pinch-zoom and scroll, a finger selects and moves a stroke, and a
-// long menu scrolls on a short screen.
+// long menu scrolls on a short screen; a two-finger flick glides on; pen pressure turns off.
 //   node tools/touch_e2e.mjs
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -53,16 +53,27 @@ try {
   const w1 = (await p.locator('.sheet').first().boundingBox()).width;
   assert.ok(w1 > w0 * 1.8, `pinch zooms (${w0} → ${w1})`);
   const top0 = await p.evaluate(() => document.getElementById('viewport').scrollTop);
+  await p.evaluate(() => { const v = document.getElementById('viewport'); v.addEventListener('touchend', () => { window.lifted = v.scrollTop; }, { once: true, capture: true }); });
   await touch('touchStart', [[150, 450], [230, 450]]);
   for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 450 - i * 15], [230, 450 - i * 15]]); await sleep(16); }
-  await touch('touchEnd', []); await sleep(300);
-  assert.ok(await p.evaluate(() => document.getElementById('viewport').scrollTop) > top0 + 100, 'two fingers scroll');
+  await touch('touchEnd', []); await sleep(700);
+  const lifted = await p.evaluate(() => window.lifted);
+  const rest = await p.evaluate(() => document.getElementById('viewport').scrollTop);
+  assert.ok(lifted > top0 + 100, 'two fingers scroll');
+  assert.ok(rest > lifted + 30, `the scroll glides on after the fingers lift (${lifted} → ${rest})`);
   await added(1);
-  console.log('· two fingers pinch-zoom and scroll without drawing');
+  console.log('· two fingers pinch-zoom and scroll without drawing, and glide on when lifted');
+  // The pen's pressure can be turned off in the draw tool's settings, and it is remembered.
+  await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); document.querySelector('[data-tool=draw]').click(); });
+  await p.evaluate(() => document.querySelector('.choice-row[data-for="pressure"] [data-value="off"]').click());
+  assert.equal(await p.evaluate(() => localStorage.getItem('notecomplete-pressure')), 'off');
+  console.log('· pen pressure can be turned off');
   // A long menu scrolls on a short screen.
   await p.evaluate(() => document.querySelector('details.bar-menu')?.setAttribute('open', ''));
   const m = await p.evaluate(() => { const e = document.querySelector('details.bar-menu[open] .menu-content'); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, bottom: Math.min(r.bottom, innerHeight) - 20, top: r.y + 20, overflow: e.scrollHeight - e.clientHeight, fits: r.bottom <= innerHeight }; });
   assert.ok(m.fits, 'the menu stays inside the window');
+  // It is really seen: nothing (the menu row's faded edges, a mask) hides it.
+  assert.ok(await p.evaluate(() => { const menu = document.querySelector('details.bar-menu[open] .menu-content'); const r = menu.getBoundingClientRect(); return menu.contains(document.elementFromPoint(r.left + 20, r.top + 20)); }), 'the open menu is visible');
   if (m.overflow > 0) {
     await drag([m.x, m.bottom], [m.x, m.top], 12); await sleep(400);
     assert.ok(await p.evaluate(() => document.querySelector('details.bar-menu[open] .menu-content').scrollTop) > 0, 'the menu scrolls');

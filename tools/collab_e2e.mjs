@@ -138,6 +138,8 @@ try {
   await guest.fill('.collab-name input', 'Ana');
   await guest.press('.collab-name input', 'Enter');
   await guest.waitForSelector('#notesEditor .TinyMDE');
+  // The guest sees the note itself too, live, not only its notes.
+  await guest.waitForFunction(() => document.querySelectorAll('.sheet').length === 3 && document.querySelector('.sheet [data-item]'), null, { timeout: 20000 });
   await guest.click('#notesEditor .TinyMDE');
   await guest.keyboard.type('Hola desde Ana');
   await host.evaluate(() => document.getElementById('notesToggle').click());
