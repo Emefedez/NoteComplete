@@ -1,14 +1,11 @@
-## What's new in 1.1.3
+## What's new in 1.1.4
 
-- **Touch everywhere**: two fingers scroll and pinch-zoom, a two-finger tap undoes and three fingers redo, on phones, tablets and touchscreen computers. After a stylus has drawn, one finger scrolls. Stylus strokes keep the width they had while drawn. Long menus scroll on short screens.
-- **Groups move together**: the Grab rectangle selects everything inside it, the whole group moves, and one Undo brings it back.
-- **New page** below the last page adds a blank page the size of the last one.
-- **Links in handwriting**: `[label](url)` in Markdown is written underlined and opens on click.
-- **Online access** (sharing): a separate link through Cloudflare lets people on other networks join the notes. Drawing tablets stay on your network.
-- **Recognized text travels with the note** (.notecomp, .notepart, projects), so AI tools reading your notes see it too.
-- **Tabs in narrow windows**: a tab count opens the list of tabs.
-- **Website and web app**: the reader runs in any browser, with tabs and a welcome notebook. On iPhone and iPad, add it to the Home Screen.
-- **Fixes**: Internet Archive downloads in the Android app and the browser, undo of pages added at the end, tape drawn over everything, the keyboard focus ring, and an Android app icon.
+- **Apple Pencil draws reliably**: iPadOS no longer takes the Pencil for Scribble (writing into a text box) and cancels the stroke, and a new stroke starts at once, without waiting for the last one to finish.
+- **Pen pressure on or off**: the Pen's settings have a pressure switch, *Pressure changes the width* or *Even width*. It is remembered on each device.
+- **Smoother handwriting**: strokes are smoothed while drawn and once more when the pen lifts. With no stylus out, a finger draws.
+- **Scrolling that glides**: a two-finger flick (or a finger flick while a stylus is in use) keeps scrolling and slows down like native apps. Two fingers scroll or zoom, whichever the gesture starts as. Shift with the wheel or arrow keys scrolls faster.
+- **Sharing**: online guests see the whole note live, not only the Markdown notes, and draw on it when the session allows editing. Drawing tablets can join through the online link too. On Linux, the sharing panel names the firewall command when the local link cannot be reached.
+- **Fixes**: dropdown menus in the compact layout on Android, the toast no longer covers the toolbars, and touch or stylus no longer selects text by accident.
 
 NoteComplete preview installers for Android, Linux x86-64 (AppImage), macOS Intel/Apple Silicon (DMG and ZIP), and Windows x86-64 (EXE). SHA256SUMS.txt contains download checksums.
 

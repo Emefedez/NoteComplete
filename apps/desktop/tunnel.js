@@ -2,8 +2,8 @@
 // gives the session a temporary https://….trycloudflare.com address that works from any
 // network, like VS Code's port forwarding. No account is needed. `cloudflared` is
 // downloaded once from Cloudflare's GitHub releases, pinned to one version and checked
-// against the hashes below before it is ever run. Only notes guests can join through it
-// (collab-hub.js); drawing tablets stay on the local network.
+// against the hashes below before it is ever run. Only the online guest and online tablet
+// links work through it (collab-hub.js).
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';

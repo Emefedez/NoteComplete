@@ -1,5 +1,6 @@
 import { touchGestures } from "./touch.js";
 import { followPoint, smoothStroke } from "./stroke-smoothing.js";
+import { momentum, VelocityTracker } from "./momentum.js";
 import {
   prepareDocument,
   readImage,
@@ -1194,6 +1195,7 @@ function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
   $("tapeOptions").hidden = tool !== "tape";
+  $("pressureOptions").hidden = tool !== "draw";
   $("drawingOptions").hidden = tool === "select";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
@@ -1447,8 +1449,16 @@ const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 function pointerDown(e, p) {
   if (gesture) {
-    if (e.pointerId !== gesture.id) cancelGesture();
-    return;
+    if (e.pointerId === gesture.id) return;
+    // A stylus has one tip: a new pen-down means the last stroke's lift never arrived
+    // (iPadOS can swallow it). That stroke is kept and the new one starts at once.
+    if (e.pointerType === "pen" && gesture.pen && gesture.lastClient) {
+      const [clientX, clientY] = gesture.lastClient;
+      pointerUp({ pointerId: gesture.id, clientX, clientY, timeStamp: e.timeStamp });
+    } else {
+      cancelGesture();
+      return;
+    }
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
   // A link written in the handwriting opens on click (Pan and Select); no drag starts.
@@ -1467,6 +1477,8 @@ function pointerDown(e, p) {
       id: e.pointerId,
       tool: "pan",
       panel: p,
+      // A finger or stylus drag glides on when it lifts; a mouse drag stops where it is.
+      speed: e.pointerType === "mouse" ? null : new VelocityTracker(),
       x: e.clientX,
       y: e.clientY,
       left: $("viewport").scrollLeft,
@@ -1587,6 +1599,7 @@ function appendPoint(e) {
   } else if (g.straight) {
     g.points = highlightPoints(g.start, point(e, g.panel));
   } else {
+    g.lastClient = [e.clientX, e.clientY];
     const samples = e.getCoalescedEvents?.() || [];
     for (const sample of samples.length ? samples : [e]) {
       const raw = point(sample, g.panel),
@@ -1614,7 +1627,7 @@ function appendPoint(e) {
 // Pen pressure from a stylus, as the core stores it: the drawn radius at each point
 // (editor.rs). Light pressure draws about a third of the width, a firm press about 1.7×.
 function stylusPressure(g) {
-  if (!g.pen || g.pressures.length !== g.points.length) return {};
+  if (!g.pen || !pressureOn() || g.pressures.length !== g.points.length) return {};
   const half = g.width / 2;
   const radii = g.pressures.map((p) => Math.min(50, Math.max(0.05, half * (0.3 + 1.4 * (Number.isFinite(p) ? Math.min(1, Math.max(0, p)) : 0.5)))));
   return { pressure: radii.map((r) => Math.round(r * 1000) / 1000) };
@@ -1676,13 +1689,16 @@ function pointerMove(e) {
   if (gesture.tool === "pan") {
     $("viewport").scrollLeft = gesture.left + gesture.x - e.clientX;
     $("viewport").scrollTop = gesture.top + gesture.y - e.clientY;
+    gesture.speed?.add(e.clientX, e.clientY, e.timeStamp);
   } else appendPoint(e);
 }
 function pointerUp(e) {
   if (selection.up(e)) return;
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.tool === "pan") {
+    const v = gesture.speed?.velocity(e.timeStamp);
     cancelGesture();
+    if (v) glide.fling(-v.vx, -v.vy);
     return;
   }
   appendPoint(e);
@@ -1690,7 +1706,7 @@ function pointerUp(e) {
   gesture = null;
   collab?.drawn(g);
   g.panel.stale = false;
-  g.panel.el.releasePointerCapture(e.pointerId);
+  if (g.panel.el.hasPointerCapture(e.pointerId)) g.panel.el.releasePointerCapture(e.pointerId);
   if (g.tool === "grab") {
     const rect = grabRect(g);
     if (rect[2] < 8 || rect[3] < 8) { g.el.remove(); return; }
@@ -1816,6 +1832,8 @@ $("shape").onchange = () =>
 // the color input stay the data source the drawing code reads.
 const CHOICE_ICONS = {
   highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>' },
+  // A stroke that thickens where pressed harder, or one even line.
+  pressure: { on: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="1.2"/><path d="M8 12.5c2-2 3-3.4 4-3.4" stroke-width="3.2"/>', off: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="2.4"/>' },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
 };
 function buildChoices() {
@@ -1856,6 +1874,10 @@ function syncChoices() {
 }
 // Eraser size (page units around the pointer); remembered on this device.
 const eraserRadius = () => Number($("eraserSize").value) || 10;
+// Whether a stylus's pressure changes the pen's width; remembered on this device.
+const pressureOn = () => $("pressure").value !== "off";
+try { if (localStorage.getItem("notecomplete-pressure") === "off") $("pressure").value = "off"; } catch { /* Optional. */ }
+$("pressure").addEventListener("change", () => { try { localStorage.setItem("notecomplete-pressure", $("pressure").value); } catch { /* Optional. */ } });
 try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved && $("eraserSize").querySelector(`option[value="${saved}"]`)) $("eraserSize").value = saved; } catch { /* Optional. */ }
 $("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
@@ -1966,7 +1988,32 @@ function pinchBy(clientX, clientY, step) {
   }, 160);
 }
 // Fingers on the pages: two move and pinch-zoom, a two-finger tap undoes, three redo.
+// Scrolls that keep going after the fingers lift (momentum.js); a touch, wheel or key stops them.
+const glide = momentum({
+  apply(dx, dy) {
+    const v = $("viewport"), left = v.scrollLeft, top = v.scrollTop;
+    v.scrollLeft += dx;
+    v.scrollTop += dy;
+    return v.scrollLeft !== left || v.scrollTop !== top;
+  },
+});
+for (const type of ["wheel", "pointerdown"]) $("viewport").addEventListener(type, () => glide.stop(), { passive: true, capture: true });
+addEventListener("keydown", () => glide.stop(), true);
+// An Apple Pencil on the pages draws: iPadOS would otherwise take it for Scribble (writing
+// into a text box), hold each stroke while it decides, and cancel it. Stopping its touch
+// keeps the pointer events coming; nothing else uses a stylus's touches.
+const PENCIL_DRAWS = new Set(["draw", "highlight", "erase", "shape", "tape", "grab"]);
+$("viewport").addEventListener("touchstart", (e) => {
+  if (!doc || ![...e.changedTouches].some((t) => t.touchType === "stylus")) return;
+  if (!PENCIL_DRAWS.has(tool) && !document.body.classList.contains("tablet-mode")) return;
+  if (e.target.closest?.(".text-editor, .text-format, .ink-link")) return;
+  e.preventDefault();
+  const typing = document.activeElement;
+  if (typing && typing !== document.body && typing.matches?.("input, textarea, select, [contenteditable]") && !typing.closest(".text-editor")) typing.blur();
+}, { passive: false, capture: true });
 touchGestures({
+  fling: (vx, vy) => glide.fling(vx, vy),
+  stop: () => glide.stop(),
   viewport: $("viewport"),
   pinchBy: (x, y, step) => pinchBy(x, y, step),
   cancelGesture: () => cancelGesture(),

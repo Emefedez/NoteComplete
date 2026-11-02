@@ -46,3 +46,17 @@ test('two fingers scroll when they move together, even as their gap wobbles, and
   h.start(t([0, 0]), 0);
   assert.deepEqual(h.move(t([0, 40])), []);
 });
+
+test('a two-finger scroll glides on when the fingers lift', () => {
+  const g = new TouchGesture();
+  const two = (y) => [{ clientX: 100, clientY: y }, { clientX: 200, clientY: y }];
+  g.start(two(500), 0);
+  for (let t = 16, y = 480; t <= 160; t += 16, y -= 20) g.move(two(y), t);
+  const out = g.end([], 170);
+  const fling = out.find((a) => a.type === 'fling');
+  assert.ok(fling && fling.vy > 1000, JSON.stringify(out));
+  // A scroll that stopped before lifting stays put.
+  g.start(two(500), 1000);
+  for (let t = 1016, y = 480; t <= 1100; t += 16, y -= 20) g.move(two(y), t);
+  assert.deepEqual(g.end([], 1400), []);
+});
