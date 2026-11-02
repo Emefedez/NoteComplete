@@ -1,4 +1,8 @@
-## What's new in 1.1.21
+## What's new in 1.1.22
+
+- **Hold the quick menu's ×** to show or hide the tool bar, like View → Tool bar (Shift + T). The menu stays open; a tap on the × still closes it.
+
+### In 1.1.21
 
 - **Joining a shared note is several times faster.** In tests on a 5 Mbit/s link, a tablet's first join of a 3-page PDF note went from 15.9 s to 4.6 s and from 60 MB to 2.8 MB; joining again takes about 2 s.
   - The computer now compresses what it sends (the app and the note) and lets the device keep the app between sessions instead of downloading it again every time.
