@@ -2083,6 +2083,8 @@ touchGestures({
   undo: () => { if (!$("undo").disabled) $("undo").click(); },
   redo: () => { if (!$("redo").disabled) $("redo").click(); },
   menu: (x, y) => quick.open(x, y),
+  // Not while a stylus was just writing: a palm resting beside it is not a gesture.
+  penBusy: () => performance.now() - lastPen < 1500,
   enabled: () => !!doc,
 });
 // Quick menu (quick-menu.js): tools on a ring around the pen, colours and actions around
@@ -2201,16 +2203,25 @@ document.addEventListener("pointerover", (e) => {
 document.addEventListener("pointerout", (e) => {
   if (e.pointerType === "pen" && !e.relatedTarget) penBtn.pointer({ ...fields(e), type: "pointerleave" });
 }, true);
+const android = /Android/i.test(navigator.userAgent);
 document.addEventListener("contextmenu", (e) => {
   if (!onPages(e)) return;
-  const button = penBtn.contextmenu({ pointerType: e.pointerType || "", time: e.timeStamp }) === "menu";
-  // Our menu just opened from the pen: the browser's own menu must not follow it.
-  if (!button && Date.now() - penMenuAt > 800) return;
-  e.preventDefault();
-  e.stopPropagation();
-  // The button held and a tap: Chromium also selected a word there.
-  window.getSelection()?.removeAllRanges();
-  penMenu(e);
+  const type = e.pointerType || "";
+  const button = penBtn.contextmenu({ pointerType: type, time: e.timeStamp, android, last: lastPointerType }) === "menu";
+  const mouse = type === "mouse" || (!type && lastPointerType === "mouse");
+  if (button || (mouse && e.shiftKey) || Date.now() - penMenuAt <= 800) {
+    // The pen's button (or Shift + right-click): the menu. Our menu just opened from the
+    // pen: the browser's own menu must not follow it.
+    e.preventDefault();
+    e.stopPropagation();
+    // The button held and a tap: Chromium also selected a word there.
+    window.getSelection()?.removeAllRanges();
+    if (button || mouse) penMenu(e);
+    return;
+  }
+  // Only a mouse right-click removes what is under it; a long press of a finger or a pen
+  // (Samsung's button + touch included) never does.
+  if (!mouse) { e.preventDefault(); e.stopPropagation(); }
 }, true);
 document.addEventListener("keydown", (e) => {
   if (penBtn.key(e) !== "menu" || !doc || quick.isOpen) return;
@@ -4246,7 +4257,15 @@ $("penSetupStart").onclick = async () => {
   // Presses as the app will see them: a hover rising edge, or an entry with the button held.
   const probe = penButtonDetector();
   seen.presses = [];
-  const feed = (e, type = e.type) => { if (e.pointerType === "pen" && probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons }); };
+  // What the pen sends, live, so a step that seems to do nothing says why.
+  const live = (e, type) => {
+    if (phase === "baseline" || phase === "press") $("penSetupResult").textContent = `Pen ${type === "pointerleave" ? "out of range" : touching ? "touching" : "hovering"} · buttons ${e.buttons} · presses seen: ${seen.presses.length}`;
+  };
+  const feed = (e, type = e.type) => {
+    if (e.pointerType !== "pen") return;
+    if (probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons });
+    live(e, type);
+  };
   const move = (e) => {
     if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure });
     feed(e);

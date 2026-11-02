@@ -84,12 +84,19 @@ export class TouchGesture {
   }
 }
 
+// Two fingers that mean it: they land within 250 ms of each other and neither is as large
+// as a palm resting on the screen (radius over 30 CSS px, where the browser reports it).
+export function deliberate(touches, gapMs) {
+  if (gapMs > 250) return false;
+  return [...touches].every((t) => !(t.radiusX > 30 || t.radiusY > 30));
+}
+
 // Fingers only: an Apple Pencil's touches (touchType "stylus") are left to the pointer events.
 const fingers = (list) => [...list].filter((t) => t.touchType !== 'stylus');
 
-export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fling = () => {}, stop = () => {}, menu = () => {}, enabled = () => true }) {
+export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fling = () => {}, stop = () => {}, menu = () => {}, penBusy = () => false, enabled = () => true }) {
   const g = new TouchGesture();
-  let holdTimer = 0;
+  let holdTimer = 0, firstAt = 0;
   const apply = (actions) => {
     for (const a of actions) {
       if (a.type === 'cancel') cancelGesture();
@@ -111,7 +118,14 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
     if (touches.length > 1) e.preventDefault();
     apply(g.start(touches, e.timeStamp));
     clearTimeout(holdTimer);
-    if (touches.length === 2) { const at = e.timeStamp; holdTimer = setTimeout(() => apply(g.hold(at + HOLD_MS + 10)), HOLD_MS + 10); }
+    if (touches.length === 1) firstAt = e.timeStamp;
+    // Two fingers held still open the quick menu, if they look deliberate: both landed
+    // together, neither is a resting palm, and no stylus was just writing (palm rejection
+    // on iPad with the Pencil).
+    if (touches.length === 2 && deliberate(touches, e.timeStamp - firstAt) && !penBusy()) {
+      const at = e.timeStamp;
+      holdTimer = setTimeout(() => apply(g.hold(at + HOLD_MS + 10)), HOLD_MS + 10);
+    }
   });
   on('touchmove', (e) => {
     if (!g.active) return;

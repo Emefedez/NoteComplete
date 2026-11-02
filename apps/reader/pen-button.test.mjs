@@ -31,9 +31,11 @@ test('a lost pen lift does not hide the next hover press', () => {
 test('button held then a tap: Chromium sends only a contextmenu with no pointer type', () => {
   const d = penButtonDetector();
   d.pointer(pen('pointermove', 0, 1000));
-  assert.equal(d.contextmenu({ pointerType: '', time: 1400 }), 'menu');
-  assert.equal(d.contextmenu({ pointerType: '', time: 4000 }), null, 'long after the pen: a finger');
-  assert.equal(d.contextmenu({ pointerType: 'touch', time: 1100 }), null);
+  assert.equal(d.contextmenu({ pointerType: '', time: 1400, android: true, last: 'pen' }), 'menu');
+  assert.equal(d.contextmenu({ pointerType: '', time: 60000, android: true, last: 'touch' }), 'menu', 'on Android, any time once a pen was used');
+  assert.equal(d.contextmenu({ pointerType: '', time: 1400, android: true, last: 'mouse' }), null, 'a mouse right-click');
+  assert.equal(d.contextmenu({ pointerType: '', time: 4000, android: false, last: 'pen' }), null, 'elsewhere only right after the pen');
+  assert.equal(d.contextmenu({ pointerType: 'touch', time: 1100, android: true }), null);
 });
 
 test('desktop pens: barrel or eraser as the pen touches', () => {
@@ -49,7 +51,7 @@ test('turned off, nothing from the pen opens the menu; reset counts the next pre
   const d = penButtonDetector(() => profile);
   d.pointer(pen('pointermove', 0, 0));
   assert.equal(d.pointer(pen('pointermove', 1, 10)), null);
-  assert.equal(d.contextmenu({ pointerType: '', time: 20 }), null);
+  assert.equal(d.contextmenu({ pointerType: '', time: 20, android: true }), null);
   profile = null;
   d.pointer(pen('pointermove', 1, 30));
   assert.equal(d.pointer(pen('pointermove', 1, 40)), null);

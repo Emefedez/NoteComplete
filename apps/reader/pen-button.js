@@ -60,12 +60,17 @@ export function penButtonDetector(getProfile = () => null) {
       return !profile?.off && now && !was ? 'menu' : null;
     },
     // { pointerType, time }
+    // { pointerType, time, android, last }: `last` is the type of the last pointerdown.
     contextmenu(e) {
       const profile = getProfile();
       if (profile?.off) return null;
       if (e.pointerType === 'pen') return 'menu';
-      // Button held, then a tap: a long press with no pointer type, just after the pen hovered.
-      if (!e.pointerType && e.time - penSeenAt < PEN_RECENT_MS && !contact) return 'menu';
+      // Button held, then a tap: Chromium on Android sends a long press with no pointer type
+      // (and no pointerdown before it). Any time once a pen has been used, not only right
+      // after it hovered: the pen may have been out of range for a while.
+      if (!e.pointerType && e.android && penSeenAt > -Infinity && e.last !== 'mouse' && !contact) return 'menu';
+      // Elsewhere (desktop browsers without pointerType on contextmenu): only just after a pen.
+      if (!e.pointerType && !e.android && e.time - penSeenAt < PEN_RECENT_MS && e.last === 'pen' && !contact) return 'menu';
       return null;
     },
     // A key the calibration saw the button send (none on stock Android).
