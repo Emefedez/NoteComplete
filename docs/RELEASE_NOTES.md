@@ -1,4 +1,12 @@
-## What's new in 1.1.15
+## What's new in 1.1.16
+
+- **Drawing tablet: new page, tape and text.**
+  - The tablet's dock gains **New page** (a blank page after the current one, the same size), **Tape** (with its colours, widths and strip or rectangle) and **Text**.
+  - Tapping tape on the tablet lifts it there.
+  - Each edit reaches the computer.
+- **Text with a finger or pen** opens the box when you lift, and on phones and tablets the keyboard opens with it. The box scrolls above the keyboard while you type. Dragging with the Text tool moves the page.
+
+### In 1.1.15
 
 - **Grab in the quick menu**, last on the ring (key 9). With Grab on, opening the menu (Shift + S, Shift + right-click, Shift + pen, the pen button, two fingers or a pen held still) never starts a grab, and a grabbed region and its menu stay as they were. **Select** from the menu turns a grabbed region into a selection, as the tool bar's Select does.
 - **Choosing a tool in the quick menu no longer opens its settings in the tool bar**: the menu shows them itself.

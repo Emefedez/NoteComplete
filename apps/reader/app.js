@@ -464,8 +464,17 @@ async function importImages(files) {
     editing = false;
   }
 }
-// Below the last page: scrolling past the end offers a new blank page of the same size
-// (one undoable edit). Not on an infinite canvas, which grows instead.
+// A blank page after page `after`, the size of that page (one undoable edit). Not on an
+// infinite canvas, which grows instead. Used by the button below the last page and by a
+// drawing tablet's dock (collab.js).
+async function addBlankPage(after) {
+  if (!doc || busy() || doc.canvas) return;
+  const size = panels[after]?.size;
+  if (!size) return;
+  const at = after + 1;
+  await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+}
+// Below the last page: scrolling past the end offers a new blank page of the same size.
 function addPageButton() {
   const button = document.createElement("button");
   button.type = "button";
@@ -475,9 +484,7 @@ function addPageButton() {
   button.append(icon("plus"), Object.assign(document.createElement("span"), { textContent: "New page" }));
   button.onclick = async () => {
     if (!doc || busy() || doc.canvas) return;
-    const at = doc.pages, size = panels.at(-1)?.size;
-    if (!size) return;
-    await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+    await addBlankPage(panels.length - 1);
     status("Page added. You can undo this change.");
   };
   return button;
@@ -746,6 +753,41 @@ function syncTextFormat() {
   });
 }
 let textEditor = null;
+// Phones and tablets open the on-screen keyboard only for a focus made during a tap, and the
+// box opens after an await: a hidden field takes the focus at the tap and hands it on.
+let keyboardPrimer = null;
+function primeKeyboard() {
+  if (!keyboardPrimer) {
+    keyboardPrimer = Object.assign(document.createElement("textarea"), { className: "keyboard-primer", tabIndex: -1 });
+    keyboardPrimer.setAttribute("aria-hidden", "true");
+  }
+  document.body.append(keyboardPrimer);
+  keyboardPrimer.focus({ preventScroll: true });
+}
+function unprime() {
+  if (!keyboardPrimer?.isConnected) return;
+  if (document.activeElement === keyboardPrimer) keyboardPrimer.blur();
+  keyboardPrimer.remove();
+}
+// A tap with Text (finger or stylus, pointerUp): finish the open box, or start one there.
+async function typeAt(p, at) {
+  if (textEditor) return commitText();
+  primeKeyboard();
+  try { await openTextEditor(p, at); } finally { if (!textEditor) unprime(); }
+}
+// The on-screen keyboard covers the bottom of the screen (the visual viewport shrinks): the
+// box being typed scrolls above it, with room added below the pages to scroll that far.
+function keepTextVisible() {
+  const vv = window.visualViewport;
+  if (!textEditor || !vv) return;
+  const covered = Math.max(0, Math.round(innerHeight - vv.offsetTop - vv.height));
+  $("pages").style.marginBottom = covered ? `${covered}px` : "";
+  // Up by what is hidden, but never past the box's top (and the format bar above it).
+  const box = textEditor.area.getBoundingClientRect(), bottom = vv.offsetTop + vv.height - 16;
+  const by = Math.min(box.bottom - bottom, box.top - vv.offsetTop - 56);
+  if (by > 0) $("viewport").scrollTop += by;
+}
+window.visualViewport?.addEventListener("resize", keepTextVisible);
 async function openTextEditor(p, [x, y], known = null) {
   if (textEditor) return commitText();
   if (!doc || editing || busy() || !p.view) return;
@@ -805,7 +847,7 @@ async function openTextEditor(p, [x, y], known = null) {
     if (textEditor?.area !== area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
     commitText();
   }, 0));
-  requestAnimationFrame(() => area.focus());
+  requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
   status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
 }
 function closeText() {
@@ -814,6 +856,7 @@ function closeText() {
   textEditor.area.remove();
   textEditor.discard?.remove();
   textEditor = null;
+  $("pages").style.marginBottom = "";
   hideTextFormat();
 }
 async function commitText() {
@@ -1642,10 +1685,13 @@ function pointerDown(e, p) {
   // While a stylus is in use, fingers move the page instead of drawing (palm and finger
   // rejection, as in drawing apps); with the stylus put away, a finger draws again.
   const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penActive() && FINGER_PANS.has(tool));
+  // Text with a finger or stylus: the box opens when the tap lifts, since phones open the
+  // keyboard only for a focus made then (not when the tap starts); a drag moves the page.
+  const textTap = tool === "text" && e.pointerType !== "mouse" && !textEditor;
   if (!touchPan && selection.down(e, p, tool)) return;
-  if (tool === "pan" || touchPan) {
+  if (tool === "pan" || touchPan || textTap) {
     // On PDF or recognized words the mouse selects text instead of panning.
-    if (!touchPan && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
+    if (!touchPan && !textTap && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
     window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
@@ -1658,6 +1704,7 @@ function pointerDown(e, p) {
       y: e.clientY,
       left: $("viewport").scrollLeft,
       top: $("viewport").scrollTop,
+      text: textTap ? point(e, p) : null,
     };
     p.el.setPointerCapture(e.pointerId);
     return;
@@ -1878,15 +1925,18 @@ function pointerUp(e) {
   if (selection.up(e)) return;
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.tool === "pan") {
-    const v = gesture.speed?.velocity(e.timeStamp);
+    const g = gesture, v = g.speed?.velocity(e.timeStamp);
     cancelGesture();
+    if (g.text && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 10) return typeAt(g.panel, g.text);
     if (v) glide.fling(-v.vx, -v.vy);
     return;
   }
   appendPoint(e);
   const g = gesture;
   gesture = null;
-  collab?.drawn(g);
+  // A tap with tape lifts or covers it here only: the others drop the line drawn meanwhile.
+  const lift = point(e, g.panel), tapeTap = g.tool === "tape" && Math.hypot(lift[0] - g.start[0], lift[1] - g.start[1]) < 8;
+  collab?.drawn(g, tapeTap);
   g.panel.stale = false;
   if (g.panel.el.hasPointerCapture(e.pointerId)) g.panel.el.releasePointerCapture(e.pointerId);
   if (g.tool === "grab") {
@@ -1898,8 +1948,8 @@ function pointerUp(e) {
   }
   // Tape tool: a tap lifts or covers the tape under it; a drag lays new tape.
   if (g.tool === "tape") {
-    const [a, b] = [g.start, point(e, g.panel)];
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 8) {
+    const a = g.start;
+    if (tapeTap) {
       g.el.remove();
       g.dot.remove();
       const tape = [...(g.panel.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => a[0] >= x && a[0] <= x + w && a[1] >= y && a[1] <= y + h);
@@ -4806,6 +4856,10 @@ const collabHost = {
   title: () => $("title").textContent,
   setCollab(value) { collab = value; },
   setTool(name) { document.querySelector(`[data-tool="${name}"]`)?.click(); },
+  // A drawing tablet's New page: a blank page after the one in view, the same size.
+  addPage: () => addBlankPage(page),
+  // A tool's colours, as in its quick menu (the tablet's dock shows the tape's).
+  palette: (name) => [...(palettes[name] || [])],
   // A tablet's copy of the computer's note: opened like a project, never kept in Recent.
   async openProject(project, title) {
     cancelGesture();

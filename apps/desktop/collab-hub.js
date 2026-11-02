@@ -19,9 +19,21 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 
 export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
-// Edits a peer may send, by role. Tablets draw, highlight, erase and undo; the host edits anything.
-export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo']);
-export const HOST_OPS = new Set([...TABLET_OPS, 'remove', 'adjust', 'crop', 'lock', 'layer', 'image', 'editText', 'resize', 'resizePage', 'insertPages', 'insertHandwritten']);
+// Edits a peer may send, by role. Tablets (and guests who may draw) draw, highlight, tape,
+// erase, type text, add blank pages and undo; the host edits anything.
+export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo', 'insertPages', 'image', 'editText', 'remove']);
+export const HOST_OPS = new Set([...TABLET_OPS, 'adjust', 'crop', 'lock', 'layer', 'resize', 'resizePage', 'insertHandwritten']);
+// Of those, a tablet adds only blank pages and typed text: a PDF or a picture stays the host's
+// to bring in (they are large, and come from the computer's files).
+export function tabletMay(op, args) {
+  if (op === 'insertPages') {
+    const pages = args?.pages;
+    return !args.pdf && Array.isArray(pages) && pages.length >= 1 && pages.length <= 10
+      && pages.every((p) => p && Object.keys(p).length === 1 && Array.isArray(p.size) && p.size.length === 2 && p.size.every((v) => Number.isFinite(v) && v > 0));
+  }
+  if (op === 'image') return typeof args?.image === 'object' && !!args.image?.text && !args.image.base64;
+  return true;
+}
 export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#ad7f58'];
 const LOG_LIMIT = 20000;
 
@@ -246,9 +258,10 @@ export class CollabHub {
     const allowed = peer.role === 'host' ? HOST_OPS : this.draws(peer) ? TABLET_OPS : null;
     const nack = (error) => this.send(peer, { t: 'nack', ref, error });
     if (!allowed?.has(op)) return nack('Not allowed.');
+    if (args == null || typeof args !== 'object' || Array.isArray(args)) return nack('Invalid edit.');
+    if (peer.role !== 'host' && !tabletMay(op, args)) return nack('Not allowed.');
     if (!this.open || gen !== this.gen) return nack('The note changed.');
     if (!peer.synced) return nack('Still loading the note.');
-    if (args == null || typeof args !== 'object' || Array.isArray(args)) return nack('Invalid edit.');
     const entry = { t: 'op', gen: this.gen, seq: ++this.seq, from: peer.id, ref, op, args };
     this.log.push(entry);
     if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);

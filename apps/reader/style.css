@@ -1800,6 +1800,9 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 .sheet[data-tool="lock"] { cursor: pointer; }
 
 /* Text tool: the box being typed sits exactly where the text will be drawn. */
+/* Holds the focus between a tap with Text and its box opening, so the phone's keyboard opens
+   (app.js primeKeyboard). 16px: iOS zooms into smaller fields. */
+.keyboard-primer { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; }
 .text-editor { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
 .sheet[data-tool="text"] { cursor: text; }
 
@@ -2618,10 +2621,14 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .hw-ai-row button { flex: none; }
 .hw-ai p { margin: 0; font-size: 12px; }
 .fill-picker { margin-left: 6px; }
-.tablet-dock .dock-shapes { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border-radius: 10px; background: var(--fill); }
-.tablet-dock .dock-shapes[hidden] { display: none; }
-.tablet-dock .dock-shapes button { width: 40px; min-width: 40px; height: 36px; min-height: 36px; }
-.tablet-dock .dock-shapes svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.tablet-dock .dock-group { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border-radius: 10px; background: var(--fill); }
+.tablet-dock .dock-group[hidden] { display: none; }
+.tablet-dock .dock-group button { width: 40px; min-width: 40px; height: 36px; min-height: 36px; }
+.tablet-dock .dock-group svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.tablet-dock .dock-group .dock-swatch { width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 4px 0; }
+/* Wrappers only, for hiding: their buttons sit in the dock's own row or column. */
+.tablet-dock .dock-ink, .tablet-dock .dock-tape-widths { display: contents; }
+.tablet-dock .dock-ink[hidden] { display: none; }
 /* The handwriting dialog's approach: a prompt for the AI, or your own Markdown. Both fill the
    same Markdown editor below, so either can be edited afterwards. */
 .hw-modes { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); align-self: flex-start; }
@@ -2652,8 +2659,9 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
   .tablet-dock[data-side="left"] { top: 0; height: calc(60px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); padding-left: max(8px, env(safe-area-inset-left)); }
   .tablet-dock[data-side="right"] { bottom: 0; height: calc(60px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); padding-right: max(8px, env(safe-area-inset-right)); }
   .tablet-dock hr { width: 0; height: 32px; margin: 0 4px; border-top: 0; border-left: 1px solid var(--line); }
-  .tablet-dock .dock-shapes { flex-direction: row; padding: 0 4px; }
-  .tablet-dock .dock-shapes hr { height: 24px; }
+  .tablet-dock .dock-group { flex-direction: row; padding: 0 4px; }
+  .tablet-dock .dock-group hr { height: 24px; }
+  .tablet-dock .dock-group .dock-swatch { margin: 0 4px; }
   body.tablet-mode[data-dock="left"] #drop { padding-left: 0; padding-top: calc(60px + env(safe-area-inset-top)); }
   body.tablet-mode[data-dock="right"] #drop { padding-right: 0; padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 }
