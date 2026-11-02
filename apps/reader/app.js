@@ -228,8 +228,9 @@ async function openFromAddress() {
     await load(new File([await response.blob()], decodeURIComponent(url.pathname.split("/").pop())));
     // notes=1: the Notes panel open, formatted, so its links can be followed.
     if (tabParams.get("notes") === "1") {
-      if ($("notesToggle").getAttribute("aria-expanded") !== "true") $("notesToggle").click();
-      setTimeout(() => { if ($("notesPreview")?.getAttribute("aria-pressed") === "false") $("notesPreview").click(); }, 300);
+      // Once the panel is open (its notes loaded), not after a guessed delay.
+      if ($("notesToggle").getAttribute("aria-expanded") !== "true") await $("notesToggle").onclick();
+      if ($("notesPreview")?.getAttribute("aria-pressed") === "false") $("notesPreview").click();
     }
   } catch (e) { status(e.message, true); }
 }

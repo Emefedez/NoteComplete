@@ -57,7 +57,7 @@ _Note files, and everything else it opens_
 ## Also opens · exports
 >> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
 - A PDF or an image becomes a note to write on; HTML and Markdown open in their own views, with Markdown notes beside them.
-- Projects (`.nfedit`) keep your edits and their undo history.
+- Projects (`.nfedit`) keep the untouched original and every edit with its undo history: the lossless copy while saving to Noteful is still experimental.
 
 \pagebreak
 
@@ -103,9 +103,9 @@ _From the desktop app: Share in the top bar_
 </svg>
 !end
 
-- **Drawing tablet**: scan the QR code with a phone or tablet on the same Wi-Fi. Its strokes appear on the computer as you draw, with pen pressure, shapes and shared undo.
-- **Shared notes**: guests write the Markdown notes with you, with names and cursors.
-- **Online access**: a separate link through Cloudflare for people on other networks. Notes only, and it stops when you turn it off.
+- **Drawing tablet**: scan the QR code with a phone or tablet. Its strokes appear on the computer as you draw, with pen pressure, shapes and shared undo.
+- **Shared notes**: guests follow the whole note live and write its Markdown notes with you; they draw too if you allow editing.
+- **Online access**: links through Cloudflare for people and tablets on other networks. It stops when you turn it off.
 
 \pagebreak
 
@@ -116,9 +116,10 @@ _Free and open source_
 >> [teal] SOURCE CODE: the app, the docs and this notebook's Markdown on [GitHub](https://github.com/Emefedez/NoteComplete) || [purple] ANY BROWSER: you are using it now, offline once loaded
 
 ## Touch and stylus
-- Two fingers move and zoom; tap with ==two fingers to undo==, three to redo.
+- Two fingers scroll and zoom, and a flick keeps gliding; tap with ==two fingers to undo==, three to redo.
 - While a stylus is in use, one finger scrolls; put it away and a finger draws.
-- Scroll past the last page for a **new page**.
+- **Quick menu**: hold ==Z==, press a pen's side button, or hold two fingers still. Tap a tool for its colours and widths; hold one to move it.
+- Pen pressure turns on or off in the Pen's settings. Scroll past the last page for a **new page**.
 
 -> Click a link with Pan or Select. The user guide is in the **Notes** panel ((press N)).
 
