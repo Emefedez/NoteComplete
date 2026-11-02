@@ -1,4 +1,14 @@
-## What's new in 1.1.11
+## What's new in 1.1.12
+
+- **Long notes are much lighter and faster.** On a 193-page PDF, scrolling through every page:
+  - peaks at 414 MB instead of 1.2 GB;
+  - is three times faster;
+  - leaves 309 MB in use instead of 1 GB.
+
+  Drawing on it takes half the work. Pages away from the screen let go of everything (their selectable text used to stay). A thumbnail is drawn when it comes into view and again only when its own page changes. PDF pages are drawn at the size the screen needs. Details and measurements: [PERFORMANCE.md](PERFORMANCE.md).
+- **Writing on PDF pages with lots of ink** stays smooth: such pages show the PDF as a picture instead of a canvas.
+
+### In 1.1.11
 
 - **Quick menu, the same everywhere**:
   - Every tool's settings sit in the same places: colours across the top, from 12 o'clock and left to right; sizes along the bottom, from small on the left to large on the right; modes on the left; undo and redo on the right.

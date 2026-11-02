@@ -544,10 +544,21 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   box-shadow: 0 1px 5px #0002;
   scroll-margin-top: 24px;
 }
+.sheet > .render {
+  position: relative;
+  /* Ink blends (highlighter) with a PDF canvas beneath it, and nothing outside the page. */
+  isolation: isolate;
+}
 .sheet .render > svg {
+  position: relative;
   display: block;
   width: 100%;
   height: auto;
+}
+/* A PDF page drawn into a canvas under the ink (app.js placeRaster). */
+.sheet .render > .pdf-raster {
+  position: absolute;
+  display: block;
 }
 .sheet .overlay,
 .selection-overlay {

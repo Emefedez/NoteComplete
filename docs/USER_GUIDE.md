@@ -122,7 +122,7 @@ Choose **☰ → Google Drive** in the browser or an installed NoteComplete buil
 
 Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Balanced** (2×, 12 MP/page), or **Sharp** (3×, 20 MP/page, slightly stronger contrast). Adjust any slider to customize the preset:
 
-- **PDF resolution**: raster pixels per displayed pixel, from 1× to 3×. Vector ink remains sharp independently.
+- **PDF resolution**: raster pixels per displayed pixel on a 2× screen (tablets, phones, most laptops), from 1× to 3×. A 1× screen gets half as many per side, never fewer than it shows: Balanced draws at 1×, Sharp at 1.5×. Vector ink remains sharp independently.
 - **Page pixel budget**: 4–24 megapixels per PDF page. This caps resolution on large pages to control memory.
 - **Page contrast / brightness**: tune the page and preview appearance; the sample updates inside the dialog.
 

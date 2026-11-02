@@ -33,6 +33,14 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     close();
   }
   const persist = () => fingerprint && library.saveSearchData(fingerprint, stored);
+  // Words read while scrolling are written once scrolling settles: writing the whole store
+  // for every page shown made a long PDF quadratic (each write clones every page so far).
+  let persistTimer = 0;
+  const persistSoon = () => {
+    clearTimeout(persistTimer);
+    const note = fingerprint, data = stored;
+    persistTimer = setTimeout(() => { if (note) library.saveSearchData(note, data); }, 2000);
+  };
   // PDF and OCR words kept for this note, read once.
   function load() {
     const token = generation;
@@ -164,7 +172,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   }
   // Highlight boxes for the hits on one rendered page.
   function paint(p) {
-    if (!p?.el) return;
+    // Only on a page that is shown (an unloaded page is only a placeholder).
+    if (!p?.el || !p.render) return;
     let layer = p.findLayer;
     if (!layer || !layer.isConnected) {
       layer = document.createElementNS(ns, 'svg');
@@ -200,12 +209,20 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const slot = view.slot ?? p.index;
     if (view.pdf_background && !stored.pdf[slot]) {
       stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
-      if (token === generation) persist();
+      if (token === generation) persistSoon();
     }
     if (token !== generation || p.view !== view || !p.el) return;
-    p.textLayer?.remove();
     const recognized = stored.ocr[slot] || written(view);
-    p.textLayer = textLayer(view.size, { pdf: stored.pdf[slot], ocr: recognized.length ? recognized : undefined });
+    // The same words as the layer already made (a stroke redrew the page): it goes back as it
+    // is, instead of hundreds of text elements made again for every stroke.
+    const pdf = stored.pdf[slot], key = [view.size.join(), stored.ocr[slot] ? '' : JSON.stringify(recognized)].join('|');
+    const layer = p.textLayer;
+    if (layer && layer.pdf === pdf && layer.ocr === stored.ocr[slot] && layer.key === key) {
+      if (layer.parentNode !== p.el) p.el.append(layer);
+      return;
+    }
+    layer?.remove();
+    p.textLayer = Object.assign(textLayer(view.size, { pdf, ocr: recognized.length ? recognized : undefined }), { pdf, ocr: stored.ocr[slot], key });
     p.el.append(p.textLayer);
   }
   function go(i) {
