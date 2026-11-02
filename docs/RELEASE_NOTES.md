@@ -1,4 +1,8 @@
-## What's new in 1.1.23
+## What's new in 1.1.24
+
+- **S Pen button closes the quick menu too**: pressed again while the pen hovers, it closes the menu it opened (holding it does not open it again).
+
+### In 1.1.23
 
 - **Strokes no longer disappear while you write.** A finished stroke stays on screen until the page's new drawing shows it, whatever redraws the page in the meantime (someone else's edit, a zoom, the PDF image arriving).
 - **Sharing: no more skipped strokes.** Someone else's stroke stays visible from its live line until it is drawn into the page, instead of vanishing for a moment, and their strokes that were still on the way are no longer dropped.
