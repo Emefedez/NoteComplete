@@ -7,7 +7,7 @@
 // cancel its stroke.
 import { VelocityTracker } from './momentum.js';
 
-const TAP_MS = 300, TAP_SLOP = 12, PAN_START = 8, ZOOM_START = 0.08, HOLD_MS = 550;
+const TAP_MS = 300, TAP_SLOP = 12, PAN_START = 8, ZOOM_START = 0.08, HOLD_MS = 380;
 
 export function measure(touches) {
   const list = [...touches];

@@ -1,5 +1,5 @@
-// Browser check of the quick menu (Chromium): Z held over the pages, pointed at a tool
-// and let go chooses it; Z tapped, a tool tapped shows its settings; a held tool moves on
+// Browser check of the quick menu (Chromium): Shift + S held over the pages, pointed at a tool
+// and let go chooses it; Shift + S pressed, a tool tapped shows its settings; a held tool moves on
 // the ring; 1–8 choose tools;
 // Esc closes; a pen's side button opens it without removing anything; two fingers held
 // still open it on a touch screen and do not undo.
@@ -29,20 +29,20 @@ try {
   await openNote(p);
   const s = await p.locator('.sheet').first().boundingBox();
   await p.mouse.move(s.x + 300, s.y + 300);
-  // Hold Z, point at the highlighter, let go.
-  await p.keyboard.down('z');
+  // Hold Shift + S, point at the highlighter, let go.
+  await p.keyboard.down('Shift'); await p.keyboard.down('S');
   await p.waitForSelector('.quick-menu');
   if (shots) { await sleep(400); await p.screenshot({ path: `${shots}/quick-menu.png`, clip: { x: s.x + 100, y: s.y + 100, width: 420, height: 420 } }); }
   const hl = await p.locator('.quick-menu [aria-label="Highlighter"]').boundingBox();
   await sleep(300);
   await p.mouse.move(hl.x + 22, hl.y + 22);
-  await p.keyboard.up('z');
+  await p.keyboard.up('S'); await p.keyboard.up('Shift');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'letting go closes it');
   assert.equal(await tool(p), 'highlight');
-  console.log('· hold Z, point, let go: chooses the tool');
-  // Tap Z, tap the pen: it is chosen and its settings ring the tools; they apply at once
+  console.log('· hold Shift + S, point, let go: chooses the tool');
+  // Press Shift + S, tap the pen: it is chosen and its settings ring the tools; they apply at once
   // and the menu stays open for more.
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
   await p.click('.quick-menu .qm-inner[aria-label="Pen"]');
   assert.equal(await tool(p), 'draw');
@@ -61,8 +61,11 @@ try {
   assert.equal(await p.locator('.quick-menu').count(), 0, 'a tool without settings closes it');
   console.log('· tapping a tool shows its settings: colours, widths, pressure, eraser sizes');
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
+  // Select has no settings: the small menu, tools only.
+  assert.equal(await p.locator('.quick-menu .qm-outer').count(), 0, 'no outer ring without settings');
+  assert.ok((await p.locator('.quick-menu .qm-disc').boundingBox()).width < 170, 'the small menu');
   const ringOrder = () => p.evaluate(() => [...document.querySelectorAll('.quick-menu .qm-inner')].map((b) => b.getAttribute('aria-label')));
   const first = await ringOrder();
   const pen = await p.locator('.quick-menu .qm-inner >> nth=0').boundingBox();
@@ -76,17 +79,21 @@ try {
   assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-quick-order'))).slice(0, 3), ['highlight', 'erase', 'draw']);
   await p.keyboard.press('Escape');
   console.log('· hold a tool to move it on the ring (remembered)');
-  await p.keyboard.press('z'); await p.keyboard.press('2');
+  await p.keyboard.press('Shift+S'); await p.keyboard.press('2');
   assert.equal(await tool(p), 'erase', '2 chooses the second tool (after the move)');
   await p.keyboard.press('Escape');
-  await p.keyboard.press('z'); await p.keyboard.press('Escape');
+  await p.keyboard.press('Shift+S'); await p.keyboard.press('Escape');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'Esc closes it');
   // Typing in a text field never opens it.
   await p.evaluate(() => { const i = document.createElement('input'); i.id = 'probe'; document.body.append(i); i.focus(); });
-  await p.keyboard.press('z');
+  await p.keyboard.press('Shift+S');
   assert.equal(await p.locator('.quick-menu').count(), 0, 'not while typing');
   await p.evaluate(() => document.getElementById('probe').remove());
-  console.log('· number keys, Esc, not while typing');
+  // S alone is still the Select tool.
+  await p.keyboard.press('p'); await p.keyboard.press('s');
+  assert.equal(await p.locator('.quick-menu').count(), 0, 'S alone does not open it');
+  assert.equal(await tool(p), 'select');
+  console.log('· number keys, Esc, not while typing; S alone still selects');
   // A pen's side button: the menu, and nothing under it is removed.
   const cdp = await p.context().newCDPSession(p);
   const items = await p.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length);
@@ -111,6 +118,24 @@ try {
   await p.waitForSelector('.quick-menu');
   await p.keyboard.press('Escape');
   console.log('· Shift + pen opens it at the pen (touching or hovering)');
+  // The button however it is reported: pressed while hovering (right button, eraser bit),
+  // or in the middle of a stroke.
+  for (const buttons of [2, 4]) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 70, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 72, y: at[1] + 30, button: 'none', buttons, pointerType: 'pen' });
+    await p.waitForSelector('.quick-menu', { timeout: 3000 });
+    await p.keyboard.press('Escape');
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] + 74, y: at[1] + 30, button: 'none', buttons: 0, pointerType: 'pen' });
+  }
+  console.log('· a pen button pressed while hovering opens it (right or middle button bit)');
+  // Help → Test pen and stylus lists what the pen reports.
+  await p.evaluate(() => document.getElementById('penTestOpen').click());
+  const padBox = await p.locator('#penTestPad').boundingBox();
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: padBox.x + 40, y: padBox.y + 40, button: 'right', buttons: 2, clickCount: 1, pointerType: 'pen' });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: padBox.x + 40, y: padBox.y + 40, button: 'right', buttons: 0, clickCount: 1, pointerType: 'pen' });
+  assert.match(await p.textContent('#penTestLog'), /pointerdown · pen · button 2 · buttons 2/);
+  await p.click('#penTestClose');
+  console.log('· Help → Test pen and stylus shows what the pen reports');
   assert.deepEqual(errors, []);
 
   // Two fingers held still on a touch screen.
@@ -131,6 +156,9 @@ try {
   assert.equal(await tool(t), 'shape');
   console.log('· two fingers held still open it on a touch screen');
   console.log('Quick menu end to end: passed.');
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
 } finally {
   await b.close();
   await server.close?.();

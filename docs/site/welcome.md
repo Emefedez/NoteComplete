@@ -112,7 +112,7 @@ _From the desktop app: Share in the top bar_
 # KEYS // AND GESTURES
 _The same on a computer, a tablet and a phone_
 
->> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Z== and let go on a tool, ==Shift + pen==, a pen's side button, or two fingers held still. Tap a tool for its settings
+>> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Shift S== and let go on a tool, ==Shift + pen==, a pen's side button, or two fingers held still. Tap a tool for its settings
 >> [teal] THE NOTE: ==Ctrl Z== undo, ==Ctrl Shift Z== redo, ==Ctrl S== save, ==Ctrl F== find, ==N== notes, ==D== dark pages || [purple] MORE: ==Ctrl K== commands, ==Ctrl J== ask AI, ==A== audio, ==K== play, ==?== shows every key on its button
 
 ## Gestures

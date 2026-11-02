@@ -32,7 +32,7 @@ export function moved(list, from, to) {
   return out;
 }
 
-const INNER = 66, OUTER = 124, SIZE = 44, HOLD_MS = 450, SLOP = 8;
+const INNER = 50, OUTER = 94, SIZE = 36, HOLD_MS = 260, SLOP = 8;
 
 // `inner()` and `outer()` return [{ key?, label, icon (Node), swatch?, active?(), run(),
 // stay?() }]; they are asked again after each choice, so the outer ring follows the tool.
@@ -43,12 +43,13 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
   function draw() {
     const { x, y } = centre;
     root.replaceChildren();
-    const disc = document.createElement('div');
-    disc.className = 'qm-disc';
-    disc.style.left = `${x}px`;
-    disc.style.top = `${y}px`;
-    root.append(disc);
     const tools = list(inner), settings = list(outer);
+    // Only as large as it needs: the outer ring appears when there are settings to show.
+    const radius = (settings.length ? OUTER : INNER) + SIZE / 2 + 6;
+    const disc = document.createElement('div');
+    disc.className = `qm-disc${settings.length ? ' qm-full' : ''}`;
+    Object.assign(disc.style, { left: `${x}px`, top: `${y}px`, width: `${radius * 2}px`, height: `${radius * 2}px`, margin: `${-radius}px 0 0 ${-radius}px` });
+    root.append(disc);
     const place = (entries, radius, name) => ring(entries.length, radius).forEach((at, i) => {
       const entry = entries[i];
       const b = document.createElement('button');
@@ -122,7 +123,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     root = document.createElement('div');
     // Only opening animates; a redraw after a choice does not flash.
     root.className = 'quick-menu qm-opening';
-    setTimeout(() => root?.classList.remove('qm-opening'), 200);
+    setTimeout(() => root?.classList.remove('qm-opening'), 90);
     root.setAttribute('role', 'menu');
     root.setAttribute('aria-label', 'Quick menu');
     // Anywhere else closes it, without drawing or choosing what is underneath.

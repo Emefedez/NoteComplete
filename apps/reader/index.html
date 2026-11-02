@@ -154,6 +154,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen">Search commands<kbd>Ctrl K</kbd></button>
           <button id="shortcutsOpen">Keyboard shortcuts<kbd>?</kbd></button>
+          <button id="penTestOpen">Test pen and stylus…</button>
           <button id="installApp" data-palette="Add this site as an app…" title="Install NoteComplete from this site: it opens from your Home Screen or app list, offline">Add this site as an app…</button>
           <button id="agentsOpen" data-palette="Connect AI tools to your notes…" title="Let Claude Code, Codex, Antigravity or OpenCode read and write your notes" hidden>Connect AI tools…</button>
           <div id="updateItems" class="menu-group" hidden>
@@ -1117,6 +1118,14 @@
   <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
   <table class="shortcuts"><tbody id="shortcutsList"></tbody></table>
   <div class="ocr-actions"><button id="shortcutsClose" type="button" class="primary">Close</button></div>
+</dialog>
+
+<dialog id="penTestDialog" class="deck-dialog" aria-labelledby="penTestTitle">
+  <h2 id="penTestTitle">Test pen and stylus</h2>
+  <p class="muted">Touch, hover and press your pen's button over the box. Each line is what this browser reports; a pen button should open the quick menu on the pages. If it does not, these lines say why.</p>
+  <div id="penTestPad" class="pen-test-pad">Pen here</div>
+  <ol id="penTestLog" class="pen-test-log"></ol>
+  <div class="ocr-actions"><button id="penTestCopy" type="button">Copy</button><button id="penTestClose" type="button" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">
