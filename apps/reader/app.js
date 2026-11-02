@@ -892,23 +892,38 @@ function holdText() {
   t.area.setAttribute("aria-hidden", "true");
   t.area.className = "text-placeholder";
   t.area.blur();
-  const hold = { p: t.p, el: t.area, item: t.existing?.id, revision: Infinity };
+  const hold = { p: t.p, els: [t.area], item: t.existing?.id, revision: Infinity };
   (t.p.held ||= []).push(hold);
+  return hold;
+}
+// Finished strokes (this reader's, or another person's live line) stay in the page's
+// overlay the same way: a redraw for any other reason, or one with only the edits the
+// engine has answered so far, left them gone until a later render had them.
+function holdInk(p, ...els) {
+  for (const el of els) {
+    el.classList.add("pending-ink");
+    if (p.overlay && el.parentNode !== p.overlay) p.overlay.append(el);
+  }
+  const hold = { p, els, ink: true, revision: Infinity };
+  (p.held ||= []).push(hold);
   return hold;
 }
 // The edit was refused, or the note changed: the box goes, and the text it covered shows.
 function letGo(hold) {
   if (!hold || hold.revision !== Infinity) return;
   hold.p.held = hold.p.held.filter((h) => h !== hold);
-  hold.el.remove();
-  hideText(hold.p, hold.item, false);
+  for (const el of hold.els) el.remove();
+  if (!hold.ink) hideText(hold.p, hold.item, false);
 }
-// After a render of the page at `version`: boxes whose edit it has go; the others stay.
-function keepHeld(p, version) {
+// After a render of the page at `version` (strokes, `ink`, or text boxes): those whose edit
+// it has go; the others stay, strokes in the new overlay and boxes over the page.
+function keepHeld(p, version, ink) {
   p.held = (p.held || []).filter((h) => {
-    if (h.revision <= version) h.el.remove();
-    else { p.el.append(h.el); hideText(p, h.item); }
-    return h.revision > version;
+    if (!!h.ink !== ink) return true;
+    const keep = h.revision > version;
+    for (const el of h.els) if (keep) (ink ? p.overlay : p.el).append(el); else el.remove();
+    if (keep && !ink) hideText(p, h.item);
+    return keep;
   });
 }
 async function commitText() {
@@ -1248,7 +1263,10 @@ async function renderPage(p, provided) {
       p.stale = true;
       return;
     }
+    // A view kept from before (a zoom, a new raster) has only the edits it had then.
+    const shows = provided && provided === p.view ? p.viewRevision : version;
     p.view = result;
+    p.viewRevision = shows;
     const render = document.createElement("div");
     render.className = "render";
     render.innerHTML = result.svg;
@@ -1272,14 +1290,18 @@ async function renderPage(p, provided) {
     const overlay = document.createElementNS(ns, "svg");
     overlay.classList.add("overlay");
     overlay.setAttribute("viewBox", `0 0 ${p.size.join(" ")}`);
+    // The new page goes in at once with what is still drawn over the old one: others' live
+    // lines, and strokes waiting for a render with their edit. Nothing blinks out between.
+    if (p.overlay) overlay.append(...p.overlay.querySelectorAll(":scope > .remote-ink"));
     p.render = render;
     p.overlay = overlay;
+    keepHeld(p, shows, true);
     const typing = textEditor?.p === p && document.activeElement === textEditor.area;
     p.el.replaceChildren(render, overlay, lockMarks(result));
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     // Typed text is not lost to a redraw (another screen's edit, a zoom): finished text
     // waiting for its own render stays, and so does the box being typed in.
-    keepHeld(p, version);
+    keepHeld(p, shows, false);
     if (textEditor?.p === p) {
       p.el.append(textEditor.area, textEditor.discard);
       hideText(p, textEditor.existing?.id);
@@ -1334,8 +1356,8 @@ async function renderPage(p, provided) {
       error.className = "page-error";
       error.textContent = "Could not display this page: " + e.message;
       p.el.append(error);
-      // No text left waiting over a page that could not be drawn.
-      for (const h of p.held || []) if (h.revision <= version) h.el.remove();
+      // No text or ink left waiting over a page that could not be drawn.
+      for (const h of p.held || []) if (h.revision <= version) for (const el of h.els) el.remove();
       p.held = (p.held || []).filter((h) => h.revision > version);
     }
   } finally {
@@ -1490,7 +1512,8 @@ $("toolbarToggle").onclick = () => {
   cancelGesture();
   setCompact(chromeState.toggle($("viewport").scrollTop));
 };
-// `hold`: typed text kept on screen until the page's render with this edit (holdText).
+// `hold`: typed text or a stroke kept on screen until the page's render with this edit
+// (holdText, holdInk).
 async function action(op, args = {}, hold = null) {
   if (!doc || editing) return letGo(hold);
   mutationPending++;
@@ -1512,16 +1535,16 @@ async function action(op, args = {}, hold = null) {
     if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
   } catch (e) {
     if (token === epoch) status(e.message, true);
-    // A stroke that was not saved does not stay on screen.
-    if (op === "draw") for (const p of panels) for (const el of [...(p.overlay?.querySelectorAll(".pending-ink") || [])]) if (gesture?.panel !== p || !gesture.el?.isSameNode(el)) el.remove();
   } finally {
     mutationPending--;
+    // A stroke or text that was not saved (refused, or the note changed) does not stay.
     letGo(hold);
     if (token === epoch) {
       for (const p of panels) {
         if (gesture?.panel !== p) {
-          // Finished strokes waiting for the page to be redrawn stay (laterRender).
-          for (const child of [...(p.overlay?.children || [])]) if (!child.classList.contains("pending-ink")) child.remove();
+          // Finished strokes waiting for the page to be redrawn stay (holdInk), and so do
+          // others' live lines.
+          for (const child of [...(p.overlay?.children || [])]) if (!kept(child)) child.remove();
           shapeHandles(p);
         }
       }
@@ -1584,10 +1607,23 @@ function laterRender(p, result) {
 }
 // An edit in the session's shared order. This reader's own edits finish where they
 // were made (action, patchItem…); others' are shown here.
-async function applyShared({ op, args }, mine) {
-  const result = await call(op, args);
-  if (!mine && doc && !edited(op, args, result)) showEdit(op, args, result);
-  return result;
+// `live`: another person's line for this stroke (collab.js), kept until the page's render
+// has the stroke.
+async function applyShared({ op, args }, mine, live = null) {
+  let held = false;
+  try {
+    const result = await call(op, args);
+    if (!mine && doc && !edited(op, args, result)) {
+      if (live && panels[args.page]) {
+        holdInk(panels[args.page], live).revision = revision;
+        held = true;
+      }
+      showEdit(op, args, result);
+    }
+    return result;
+  } finally {
+    if (!held) live?.remove();
+  }
 }
 function syncInk() {
   const recording = audio.recording,
@@ -1682,7 +1718,7 @@ function cancelGesture() {
   if (g.tool === "grab") {
     g.el.remove();
     if (g.hidMenu && grabbed) $("grabMenu").hidden = false;
-  } else g.panel.overlay?.replaceChildren();
+  } else for (const child of [...(g.panel.overlay?.children || [])]) if (!kept(child)) child.remove();
   if (g.hidden) g.hidden.style.visibility = "";
   shapeHandles(g.panel);
   if (g.panel.el.hasPointerCapture(g.id))
@@ -1692,6 +1728,8 @@ function cancelGesture() {
     renderPage(g.panel);
   }
 }
+// Overlay lines that outlast a gesture or an edit: finished strokes and others' live lines.
+const kept = (el) => el.classList.contains("pending-ink") || el.classList.contains("remote-ink");
 function point(e, p) {
   const r = p.el.getBoundingClientRect();
   return [
@@ -2044,13 +2082,10 @@ function pointerUp(e) {
     const rgba = [1, 3, 5].map(
       (i) => parseInt(g.color.slice(i, i + 2), 16) / 255,
     );
-    // The stroke stays on screen as drawn until the page is redrawn (laterRender); the
+    // The stroke stays on screen as drawn until the page's render has it (holdInk); the
     // smoothed line replaces the one drawn meanwhile.
-    if (g.tool !== "shape") {
-      g.el.setAttribute("points", g.points.map((q) => q.join(",")).join(" "));
-      g.el.classList.add("pending-ink");
-      g.dot.classList.add("pending-ink");
-    }
+    if (g.tool !== "shape") g.el.setAttribute("points", g.points.map((q) => q.join(",")).join(" "));
+    const hold = holdInk(g.panel, g.el, g.dot);
     action("draw", {
       page: g.panel.index,
       line: {
@@ -2072,7 +2107,7 @@ function pointerUp(e) {
             }
           : {}),
       },
-    });
+    }, hold);
   }
 }
 // Switches tool. The tool bar's buttons and the quick menu both come here; only a press in

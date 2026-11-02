@@ -185,11 +185,25 @@ class Session {
   // A guest of a view-only session sees the note but cannot change it.
   get readOnly() { return this.role === 'guest' && this.client.loaded && !this.client.canEdit; }
   submit(op, args) { return this.client.submit(op, args); }
-  async apply(entry, mine) {
-    const result = await this.host.applyShared(entry, mine);
-    // The stroke drawn live is now a real edit.
-    for (const [key, stroke] of this.live) if (stroke.from === entry.from && stroke.done) this.dropLive(key);
-    return result;
+  // Another person's stroke drawn live is now a real edit: its line goes to the page, which
+  // keeps it until a render there has the stroke (app.js holdInk). Dropping it here left a
+  // gap until the page was redrawn. A person's strokes reach the shared order in the order
+  // they were drawn, so it is the oldest of theirs on that page.
+  apply(entry, mine) {
+    let line = null;
+    if (!mine && (entry.op === 'draw' || entry.op === 'erase')) {
+      const erase = entry.op === 'erase';
+      const key = [...this.live.keys()].find((k) => {
+        const s = this.live.get(k);
+        return s.from === entry.from && s.page === entry.args?.page && (s.tool === 'erase') === erase;
+      });
+      if (key) {
+        line = this.live.get(key).line;
+        clearTimeout(this.live.get(key).timer);
+        this.live.delete(key);
+      }
+    }
+    return this.host.applyShared(entry, mine, line);
   }
   // Tablets and guests: the host's note, as a project.
   async load({ project, title }) {
@@ -689,7 +703,7 @@ class Session {
       const erase = m.tool === 'erase';
       for (const [k, v] of Object.entries({ fill: 'none', stroke: erase ? '#ed6b55' : /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#246bce', 'stroke-width': Math.min(200, Math.max(0.5, Number(m.width) || 2)), 'stroke-linecap': m.tool === 'tape' ? 'butt' : 'round', 'stroke-linejoin': 'round', opacity: erase ? 0.3 : m.tool === 'highlight' ? 0.5 : 1 }))
         line.setAttribute(k, String(v));
-      stroke = { from: m.from, page: m.page, line, points: [] };
+      stroke = { from: m.from, page: m.page, tool: m.tool, line, points: [] };
       this.live.set(key, stroke);
     }
     const points = (Array.isArray(m.points) ? m.points : []).filter((pt) => Array.isArray(pt) && pt.every(Number.isFinite)).slice(0, 8192);
