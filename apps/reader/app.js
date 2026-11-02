@@ -828,11 +828,10 @@ async function openTextEditor(p, [x, y], known = null) {
   fit();
   placeDiscard();
   area.oninput = () => { fit(); placeDiscard(); };
-  const hidden = existing && p.render?.querySelector(`[data-item="${existing.id}"]`);
-  hidden?.setAttribute("visibility", "hidden");
+  hideText(p, existing?.id);
   p.el.append(area, discard);
   selection.clear();
-  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, hidden, layer: activeLayer };
+  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: () => { fit(); placeDiscard(); } };
   showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); placeDiscard(); area.focus(); });
   area.addEventListener("keydown", (e) => {
     // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
@@ -842,38 +841,78 @@ async function openTextEditor(p, [x, y], known = null) {
     // Typing stays in the box: no tool or study shortcuts while editing.
     e.stopPropagation();
   });
-  // Leaving the box finishes it, unless the focus went to its format bar.
+  // Leaving the box finishes it, unless the focus went to its format bar (or came back,
+  // as when the page is redrawn under it: renderPage).
   area.addEventListener("blur", () => setTimeout(() => {
-    if (textEditor?.area !== area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
+    if (textEditor?.area !== area || document.activeElement === area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
     commitText();
   }, 0));
   requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
   status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
 }
-function closeText() {
-  if (!textEditor) return;
-  textEditor.hidden?.removeAttribute("visibility");
-  textEditor.area.remove();
-  textEditor.discard?.remove();
+// A typed text box's drawn copy, hidden while the box over it shows its text instead.
+function hideText(p, id, hidden = true) {
+  const item = id != null && p.render?.querySelector(`[data-item="${id}"]`);
+  if (item) hidden ? item.setAttribute("visibility", "hidden") : item.removeAttribute("visibility");
+}
+function endText() {
+  const t = textEditor;
   textEditor = null;
+  t?.discard.remove();
   $("pages").style.marginBottom = "";
   hideTextFormat();
+  return t;
+}
+function closeText() {
+  const t = endText();
+  if (!t) return;
+  hideText(t.p, t.existing?.id, false);
+  t.area.remove();
+}
+// Finished text stays on screen as typed, in the box without its frame, until a render of
+// its page with the edit is in place (renderPage): removing the box at once left the text
+// gone while the edit was saved and the page redrawn. action() sets `revision` once the
+// edit is in the note, or lets the box go if it never gets there.
+function holdText() {
+  const t = endText();
+  t.area.readOnly = true;
+  t.area.tabIndex = -1;
+  t.area.setAttribute("aria-hidden", "true");
+  t.area.className = "text-placeholder";
+  t.area.blur();
+  const hold = { p: t.p, el: t.area, item: t.existing?.id, revision: Infinity };
+  (t.p.held ||= []).push(hold);
+  return hold;
+}
+// The edit was refused, or the note changed: the box goes, and the text it covered shows.
+function letGo(hold) {
+  if (!hold || hold.revision !== Infinity) return;
+  hold.p.held = hold.p.held.filter((h) => h !== hold);
+  hold.el.remove();
+  hideText(hold.p, hold.item, false);
+}
+// After a render of the page at `version`: boxes whose edit it has go; the others stay.
+function keepHeld(p, version) {
+  p.held = (p.held || []).filter((h) => {
+    if (h.revision <= version) h.el.remove();
+    else { p.el.append(h.el); hideText(p, h.item); }
+    return h.revision > version;
+  });
 }
 async function commitText() {
   const t = textEditor;
   if (!t) return;
   const value = t.area.value.replace(/\s+$/, "");
-  closeText();
   const text = textPayload(value, t.style);
   const [w, h] = textBoxSize(value || " ", t.style);
+  const same = t.existing && value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
+  if (same || (!t.existing && !value.trim())) return closeText();
+  const hold = holdText();
   if (t.existing) {
-    const same = value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
-    if (same) return;
-    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id });
-    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
+    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
+    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
   }
-  if (!value.trim()) return;
-  await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } });
+  await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } }, hold);
 }
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
 function lockMarks(view) {
@@ -1221,8 +1260,18 @@ async function renderPage(p, provided) {
     overlay.setAttribute("viewBox", `0 0 ${p.size.join(" ")}`);
     p.render = render;
     p.overlay = overlay;
+    const typing = textEditor?.p === p && document.activeElement === textEditor.area;
     p.el.replaceChildren(render, overlay, lockMarks(result));
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
+    // Typed text is not lost to a redraw (another screen's edit, a zoom): finished text
+    // waiting for its own render stays, and so does the box being typed in.
+    keepHeld(p, version);
+    if (textEditor?.p === p) {
+      p.el.append(textEditor.area, textEditor.discard);
+      hideText(p, textEditor.existing?.id);
+      textEditor.fit();
+      if (typing) textEditor.area.focus({ preventScroll: true });
+    }
     if (textFormatTarget?.p === p) p.el.append(textFormatBar);
     find.paint(p);
     find.selectable(p);
@@ -1269,6 +1318,9 @@ async function renderPage(p, provided) {
       error.className = "page-error";
       error.textContent = "Could not display this page: " + e.message;
       p.el.append(error);
+      // No text left waiting over a page that could not be drawn.
+      for (const h of p.held || []) if (h.revision <= version) h.el.remove();
+      p.held = (p.held || []).filter((h) => h.revision > version);
     }
   } finally {
     p.loading = false;
@@ -1422,8 +1474,9 @@ $("toolbarToggle").onclick = () => {
   cancelGesture();
   setCompact(chromeState.toggle($("viewport").scrollTop));
 };
-async function action(op, args = {}) {
-  if (!doc || editing) return;
+// `hold`: typed text kept on screen until the page's render with this edit (holdText).
+async function action(op, args = {}, hold = null) {
+  if (!doc || editing) return letGo(hold);
   mutationPending++;
   const token = epoch;
   try {
@@ -1437,6 +1490,7 @@ async function action(op, args = {}) {
     } else if (selection.item) {
       selection.selectId(selection.item.page, selection.item.id);
     }
+    if (hold) hold.revision = revision;
     showEdit(op, args, result);
     // Ordinary edits say nothing: the save icon in the bar shows there are unsaved changes.
     if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
@@ -1446,6 +1500,7 @@ async function action(op, args = {}) {
     if (op === "draw") for (const p of panels) for (const el of [...(p.overlay?.querySelectorAll(".pending-ink") || [])]) if (gesture?.panel !== p || !gesture.el?.isSameNode(el)) el.remove();
   } finally {
     mutationPending--;
+    letGo(hold);
     if (token === epoch) {
       for (const p of panels) {
         if (gesture?.panel !== p) {

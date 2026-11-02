@@ -1803,7 +1803,9 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 /* Holds the focus between a tap with Text and its box opening, so the phone's keyboard opens
    (app.js primeKeyboard). 16px: iOS zooms into smaller fields. */
 .keyboard-primer { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; }
-.text-editor { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+/* Finished text, shown as typed until the page's render has it: no frame, no clicks. */
+.text-placeholder { border-color: transparent; background: none; pointer-events: none; }
 .sheet[data-tool="text"] { cursor: text; }
 
 /* Model choice: a dropdown; "Other…" reveals a box for a name typed by hand. */
