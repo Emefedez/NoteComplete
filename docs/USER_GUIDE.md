@@ -209,6 +209,16 @@ completion or cancellation; page thumbnails retain small bitmaps only.
 
 Files download as new files; originals are not overwritten. Replacing a dirty document prompts before discarding edits. Native export does not mark the richer project as saved. Fonts resolve from the device; Apple fonts are not bundled. Exact native ink smoothing, advanced text layout and some object variants remain incomplete.
 
+
+### Auto-save
+
+**File → Auto-save** (on by default) copies the open note every minute, while it has changed, into automatic slots on this device. It also makes a copy when you switch away from the app or close it. Copies never go over the file you saved, and each note keeps its last five.
+
+- **File** lists this note's automatic saves; **All automatic saves…** lists every note's, to open or delete them.
+- Opening a note with an automatic save newer than your last save asks which to open: the **automatic save** or the **manual save** (the file). An automatic save opens as an unsaved copy; save it to keep it.
+- In a sharing session the **host's** switch applies to everyone: guests and tablets show it, locked. A guest or tablet that loses the session, or sees it end, keeps an automatic save of the note and is offered to open it.
+- Automatic saves are complete projects (the original note plus every edit, with undo history and the Markdown notes). They live in this browser's storage, so clearing site data removes them.
+
 ## Mobile and Android file opening
 
 The Expo wrapper uses SDK 57 and the same browser/WASM engine. Install dependencies and start it as shown in the [README](../README.md#expo-go). The launcher serves web assets on LAN port 8768 and Metro on 8081. It does not serve the original corpus. Files selected on the phone are not uploaded. A Metro tunnel alone does not expose the separate reader server.

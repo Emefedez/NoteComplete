@@ -405,3 +405,26 @@ test('the firewall hint names the running Linux firewall and the port to open', 
   assert.match((await firewallHint(41237, { platform: 'linux', run: active('firewalld') })).command, /--permanent --add-port=41237\/tcp/);
   assert.equal(await firewallHint(41237, { platform: 'linux', run: async () => '' }), null);
 });
+
+test('the host’s auto-save switch reaches everyone, joiners included; others cannot change it', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: 'edit' });
+  try {
+    const h = host(server, new Replica(), { yjs });
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Exam' });
+    const first = tablet(server, { token: server.hub.tokens.tablet });
+    await welcomed(first.client);
+    assert.equal(first.client.events.find(([t]) => t === 'welcome')[1].autosave, false);
+    h.settings({ autosave: true });
+    await until(() => first.client.events.some(([t, d]) => t === 'settings' && d.autosave === true), 'settings');
+    // A guest who joins later learns it from the welcome; a guest cannot turn it off.
+    const g = tablet(server, { token: server.hub.tokens.guest, role: 'guest', yjs });
+    await welcomed(g.client);
+    assert.equal(g.client.events.find(([t]) => t === 'welcome')[1].autosave, true);
+    g.client.settings({ autosave: false });
+    await wait(200);
+    assert.equal(server.hub.autosave, true);
+    first.client.close(); g.client.close(); h.close();
+  } finally { await server.stop(); }
+});

@@ -43,6 +43,8 @@
           <button id="joinNotes" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)">Join shared notes…</button>
           <hr />
           <button id="save" disabled>Save project<kbd>Ctrl S</kbd></button>
+          <button id="autosaveToggle" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
+          <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <div class="menu-export" role="group" aria-label="Export">
             <span>Export</span>
             <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
@@ -1138,6 +1140,19 @@
   <label class="check-row"><input id="penSetupOff" type="checkbox" /> Turn the pen button off (Shift + pen, Shift + S and two fingers still work)</label>
   <p class="muted">On Samsung devices, turn off <i>Open Air command with pen button</i> (Settings → Advanced features → S Pen → Air command), or Samsung takes the button while the pen hovers. Press the button while the pen hovers, or hold it and tap; a press while the pen touches the screen does not reach web pages.</p>
   <div class="ocr-actions"><button id="penSetupStart" type="button">Start</button><button id="penSetupSave" type="button" class="primary">Save</button><button id="penSetupClose" type="button">Close</button></div>
+</dialog>
+
+<dialog id="recoverDialog" class="ocr-dialog" aria-labelledby="recoverTitle">
+  <h2 id="recoverTitle">Recover your work?</h2>
+  <p id="recoverText"></p>
+  <div class="ocr-actions"><button id="recoverManual" type="button">Manual save</button><button id="recoverAuto" type="button" class="primary">Automatic save</button></div>
+</dialog>
+
+<dialog id="autosavesDialog" class="ocr-dialog saved-dialog" aria-labelledby="autosavesTitle">
+  <h2 id="autosavesTitle">Automatic saves</h2>
+  <p class="muted">Kept on this device, never over your files: the last five of each note. Opening one opens a copy; save it to keep it.</p>
+  <ul id="autosavesAll" class="autosave-all"></ul>
+  <div class="ocr-actions"><button id="autosavesClear" type="button" class="danger">Delete all</button><span class="spacer"></span><button id="autosavesClose" type="button" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="paletteDialog" class="palette" aria-label="Command palette">

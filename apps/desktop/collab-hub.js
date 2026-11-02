@@ -62,6 +62,8 @@ export class CollabHub {
     this.gen = 0;
     this.open = false;
     this.title = '';
+    // The host's auto-save switch: everyone in the session follows it (autosave.js).
+    this.autosave = false;
     this.seq = 0;
     this.log = [];
     this.requests = new Map();
@@ -176,7 +178,7 @@ export class CollabHub {
       notes: granted !== 'tablet' && !!this.notes,
       // A tablet paired with a code reconnects with the full token.
       token: granted === 'tablet' ? (peer.remote ? this.tokens.onlineTablet : this.tokens.tablet) : undefined,
-      gen: this.gen, open: this.open, title: this.title,
+      gen: this.gen, open: this.open, title: this.title, autosave: this.autosave,
     });
     this.sendPeers();
     if (granted === 'host') {
@@ -213,6 +215,13 @@ export class CollabHub {
     if (!value) return;
     peer.name = value;
     this.sendPeers();
+  }
+
+  // The host's session settings (auto-save on or off), passed on to everyone.
+  on_settings(peer, { autosave }) {
+    if (peer.role !== 'host') return;
+    this.autosave = !!autosave;
+    this.broadcast({ t: 'settings', autosave: this.autosave });
   }
 
   // Ink ----------------------------------------------------------------------------------
