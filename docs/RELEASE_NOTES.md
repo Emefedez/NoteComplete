@@ -1,4 +1,8 @@
-## What's new in 1.1.31
+## What's new in 1.1.32
+
+- **AI fact check.** **Study → Fact check…** (**Shift+F**) has your AI tool check the current page, some pages or the whole note for errors, inconsistencies (also between pages), unclear and missing points. The findings, each with a correction, are added to your Markdown notes under each page's badge, with the pages that need nothing listed too.
+
+### In 1.1.31
 
 - **Delete the edit history.** Projects (`.nfedit`) keep every edit for undo and grew without end. In **File**, ✂ beside an automatic save deletes the history up to that save, and **Delete history up to now** deletes all of it: strokes, pictures and text drawn and later erased go with all their edits, as do moves replaced by later ones and what was undone. The note stays exactly as it is (every page is checked to draw the same before anything changes), the file is smaller once saved, and undo stops at that point; later edits still undo.
 
