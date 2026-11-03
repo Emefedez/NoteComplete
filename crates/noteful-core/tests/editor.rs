@@ -173,3 +173,19 @@ fn replicas_applying_the_same_edits_agree() {
     tablet.undo();
     assert_ne!(before, tablet.history_digest().unwrap());
 }
+#[test]
+fn eraser_reaches_shapes_drawn_as_objects() {
+    // Exam page 1: a highlighter ellipse (object:3) and two triangles (object:9, object:10,
+    // the Δ marks) are Noteful shapes, not free-form paths; the eraser used to pass over them.
+    for id in ["object:3", "object:9", "object:10"] {
+        let mut e = exam();
+        let b = e.selection(0, id).unwrap()["bounds"].clone();
+        let [x, y, w, h] = [0, 1, 2, 3].map(|i| b[i].as_f64().unwrap());
+        // A sweep across the middle, top to bottom: it crosses the outline.
+        let path = [[x + w / 2., y - 1.], [x + w / 2., y + h + 1.]];
+        assert!(e.erase_path(0, &path, 0.5).unwrap() >= 1, "{id}");
+        assert!(e.selection(0, id).is_err(), "{id} erased");
+        e.undo();
+        assert!(e.selection(0, id).is_ok(), "{id} back after undo");
+    }
+}

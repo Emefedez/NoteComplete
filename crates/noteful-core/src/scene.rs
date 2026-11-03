@@ -359,9 +359,18 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
         let attrs=format!("stroke=\"{}\" stroke-opacity=\"{}\" stroke-width=\"{width}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" {fill}",color(&rgba),rgba[3]);
         let sx = if sw.abs() > 1e-9 { w / sw } else { 1. };
         let sy = if sh.abs() > 1e-9 { h / sh } else { 1. };
+        // A point of the shape's own drawing on the page: what the eraser is tested against.
+        let on_page = |gx: f64, gy: f64| {
+            let (px, py) = (gx * sx - w / 2., gy * sy - h / 2.);
+            [
+                x + px * a.cos() - py * a.sin(),
+                y + px * a.sin() + py * a.cos(),
+            ]
+        };
         let geometry = if !p["13"].is_null() {
             let coords = arr(&p["13"]["1"]);
             let mut cursor = 0;
+            let mut start = None;
             let mut path = String::new();
             for cmd in arr(&p["13"]["2"]) {
                 let (letter, n) = match cmd.as_u64() {
@@ -378,13 +387,19 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
                 for v in &coords[cursor..cursor + n] {
                     path.push_str(&format!("{} ", num(v, 0.)));
                 }
-                if kind == 20 && n == 2 {
-                    let px = num(&coords[cursor], 0.) * sx - w / 2.;
-                    let py = num(&coords[cursor + 1], 0.) * sy - h / 2.;
-                    hit.push([
-                        x + px * a.cos() - py * a.sin(),
-                        y + px * a.sin() + py * a.cos(),
-                    ]);
+                // Every point a command ends on, so the eraser reaches every shape drawn as a
+                // path (triangles, arrows, recognised shapes), not only free-form ones.
+                if n >= 2 {
+                    let point = on_page(
+                        num(&coords[cursor + n - 2], 0.),
+                        num(&coords[cursor + n - 1], 0.),
+                    );
+                    if letter == "M" {
+                        start = Some(point);
+                    }
+                    hit.push(point);
+                } else if let Some(first) = start {
+                    hit.push(first);
                 }
                 cursor += n;
             }
@@ -393,6 +408,10 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             }
             format!("<path d=\"{path}\" {attrs}/>")
         } else if kind == 6 {
+            hit.extend((0..=36).map(|i| {
+                let t = i as f64 * std::f64::consts::TAU / 36.;
+                on_page(sw / 2. * (1. + t.cos()), sh / 2. * (1. + t.sin()))
+            }));
             format!(
                 "<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {attrs}/>",
                 sw / 2.,
@@ -401,6 +420,9 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
                 sh / 2.
             )
         } else if kind == 3 {
+            hit.extend(
+                [[0., 0.], [sw, 0.], [sw, sh], [0., sh], [0., 0.]].map(|[gx, gy]| on_page(gx, gy)),
+            );
             format!(
                 "<rect width=\"{sw}\" height=\"{sh}\" rx=\"{}\" {attrs}/>",
                 num(&p["20"], 0.)

@@ -36,6 +36,7 @@ import { pageExporter, IMAGE_TYPES } from "./page-export.js";
 import { versionChooser, carryStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
+import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
@@ -4313,6 +4314,13 @@ async function selectGrab(targetGrab = grabbed) {
   }
 }
 $("grabSelect").onclick = () => selectGrab();
+// Erase: the eraser swept through the whole region (regionSweep), in one undo step.
+$("grabErase").onclick = async () => {
+  if (!grabbed) return;
+  const { page, rect } = grabbed;
+  clearGrab();
+  await action("erase", { page, ...regionSweep(rect) });
+};
 $("grabCopy").onclick = async () => {
   if (!grabbed) return;
   const text = await find.wordsIn(grabbed.page, grabbed.rect);

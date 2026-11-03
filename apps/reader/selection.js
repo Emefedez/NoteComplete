@@ -5,6 +5,14 @@ const svg=(tag,attrs)=>{const el=document.createElementNS(ns,tag);for(const [k,v
 // Group members carry their page element while dragged; elements are not copied.
 const plain=m=>{const {element,original,el,...rest}=m;return structuredClone(rest);};
 const clone=value=>value?.members?{...structuredClone({...value,members:[]}),members:value.members.map(plain)}:structuredClone(value);
+// Resizing ink thickens or thins it with the size, as the preview (an SVG transform) shows it:
+// enlarged highlighter still covers what it covered. Undefined when the width stays.
+function scaledWidth(item,before,scale){
+ if(!item.styled)return undefined;
+ const f=Math.sqrt(Math.abs(scale[0]*scale[1])/Math.abs(before.scale[0]*before.scale[1]));
+ if(!Number.isFinite(f)||Math.abs(f-1)<1e-6)return undefined;
+ return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
+}
 export class SelectionController {
  constructor({call,patch,remove,panel,editable,changed,status}){
   Object.assign(this,{call,patch,remove,panel,editable,changed,status});this.token=0;this.item=null;this.active=null;
@@ -88,17 +96,24 @@ export class SelectionController {
      if(adjustment.scale[0]===1&&adjustment.scale[1]===1&&adjustment.rotation===0){
       mAdj.translation=[mAdj.translation[0]+adjustment.translation[0],mAdj.translation[1]+adjustment.translation[1]];
      }else{
-      mAdj.translation=[mAdj.translation[0]+delta[4],mAdj.translation[1]+delta[5]];
+      // Each member scales and turns about its own centre, so it moves by where the group's
+      // change takes that centre (what the preview showed), not by the change's offset.
+      const [bx,by,bw,bh]=m.bounds,c=[bx+bw/2+mAdj.translation[0],by+bh/2+mAdj.translation[1]],to=point(delta,c);
+      mAdj.translation=[mAdj.translation[0]+to[0]-c[0],mAdj.translation[1]+to[1]-c[1]];
       mAdj.scale=[mAdj.scale[0]*adjustment.scale[0],mAdj.scale[1]*adjustment.scale[1]];
       mAdj.rotation=(mAdj.rotation+adjustment.rotation);
+      const width=scaledWidth(m,m.adjustment,[m.adjustment.scale[0]*adjustment.scale[0],m.adjustment.scale[1]*adjustment.scale[1]]);if(width!==undefined)mAdj.width=width;
      }
      const done=await this.patch(m,{...mAdj,joined});
      if(done){joined=true;m.adjustment=mAdj;}
     }
-    item.bounds=[item.bounds[0]+adjustment.translation[0],item.bounds[1]+adjustment.translation[1],item.bounds[2]*adjustment.scale[0],item.bounds[3]*adjustment.scale[1]];
+    // The box around the group where the change put it (scaling is about its centre).
+    const cs=corners(item,adjustment),xs=cs.map(c=>c[0]),ys=cs.map(c=>c[1]);
+    item.bounds=[Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)];
     item.adjustment={translation:[0,0],scale:[1,1],rotation:0};
     this.inspect();
    }else{
+    if(adjustment.width===item.adjustment.width){const width=scaledWidth(item,item.adjustment,adjustment.scale);if(width!==undefined)adjustment={...adjustment,width};}
     const result=await this.patch(item,adjustment);if(result&&this.item?.id===item.id&&this.item?.page===item.page){this.item=result.selection;this.inspect();}
    }
   }

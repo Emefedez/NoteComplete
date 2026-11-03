@@ -381,7 +381,7 @@ impl Editor {
         })
     }
     /// Sweep a round eraser; remove each touched whole stroke in one undo action.
-    /// Imported images and filled shapes are not eraser targets.
+    /// Imported images and text boxes are not eraser targets; shapes are, by their outline.
     pub fn erase_path(&mut self, page: usize, path: &[[f64; 2]], radius: f64) -> Result<usize> {
         let p = self.page(page)?;
         if !points_valid(path) || !radius.is_finite() || !(0.1..=100.).contains(&radius) {
