@@ -53,6 +53,22 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{
 const pageOf=name=>(!name||name.endsWith('/')||name==='join'||name==='tablet'?'index.html':name);
 // A cached response with the address the page asked for (modules resolve imports from it).
 const serve=r=>new Response(r.body,{status:r.status,statusText:r.statusText,headers:r.headers});
+// Files shared to the installed app (share_target in the manifest) wait in their own cache
+// until the page this opens (?shared=1) takes them out (app.js openLaunched).
+const SHARED='notecomplete-shared';
+self.addEventListener('fetch',event=>{
+ const request=event.request;
+ if(request.method!=='POST'||request.url!==new URL('share-target',base()).href)return;
+ event.respondWith((async()=>{
+  try{
+   const files=(await request.formData()).getAll('file').filter(f=>typeof f!=='string');
+   await caches.delete(SHARED);
+   const cache=await caches.open(SHARED);
+   for(const [i,file] of files.entries())await cache.put(new URL(`shared/${i}`,base()),new Response(file,{headers:{'x-name':encodeURIComponent(file.name||'Shared file')}}));
+  }catch{/* Nothing to open: the page starts as usual. */}
+  return Response.redirect(new URL('./?shared=1',base()).href,303);
+ })());
+});
 self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url);
  if(request.method!=='GET'||url.origin!==location.origin||!url.href.startsWith(base())||url.pathname.includes('/samples/')||request.headers.has('range'))return;

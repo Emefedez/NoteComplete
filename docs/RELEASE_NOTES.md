@@ -1,4 +1,10 @@
-## What's new in 1.1.24
+## What's new in 1.1.25
+
+- **Open with, on every system.** NoteComplete appears in "Open with" menus on Windows, macOS, Linux, Android and the installed web app (Chrome, Edge, ChromeOS). It is the default for its own files (`.noteful`, `.nfedit`, `.notecomp`, `.notepart`); for PDFs, images, Markdown, text, HTML, Word, OpenDocument and spreadsheets it is only offered, and your default app stays as it is.
+- On the desktop, files opened from the system open in a new tab of the open window and join Recent, so Save and Rename work as usual.
+- On Android, files keep their own names instead of being renamed to `.noteful`, and NoteComplete accepts files shared from other apps. The installed web app accepts shared files too.
+
+### In 1.1.24
 
 - **S Pen button closes the quick menu too**: pressed again while the pen hovers, it closes the menu it opened (holding it does not open it again).
 

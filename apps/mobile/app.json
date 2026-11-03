@@ -2,7 +2,7 @@
   "expo": {
     "name": "NoteComplete - a RE noteful viewer",
     "slug": "notecomplete",
-    "version": "1.1.24",
+    "version": "1.1.25",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "android": {
@@ -21,23 +21,265 @@
           ],
           "data": [
             {
-              "scheme": "content",
+              "scheme": "content"
+            },
+            {
+              "scheme": "file"
+            },
+            {
               "mimeType": "application/x-noteful"
             },
             {
-              "scheme": "file",
+              "mimeType": "application/x-nfedit"
+            },
+            {
+              "mimeType": "application/x-notecomp"
+            },
+            {
+              "mimeType": "application/x-notepart"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "image/png"
+            },
+            {
+              "mimeType": "image/jpeg"
+            },
+            {
+              "mimeType": "image/webp"
+            },
+            {
+              "mimeType": "text/markdown"
+            },
+            {
+              "mimeType": "text/x-markdown"
+            },
+            {
+              "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "text/html"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.text"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "text/csv"
+            },
+            {
+              "mimeType": "text/comma-separated-values"
+            },
+            {
+              "mimeType": "text/tab-separated-values"
+            }
+          ]
+        },
+        {
+          "action": "SEND",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
               "mimeType": "application/x-noteful"
+            },
+            {
+              "mimeType": "application/x-nfedit"
+            },
+            {
+              "mimeType": "application/x-notecomp"
+            },
+            {
+              "mimeType": "application/x-notepart"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "image/png"
+            },
+            {
+              "mimeType": "image/jpeg"
+            },
+            {
+              "mimeType": "image/webp"
+            },
+            {
+              "mimeType": "text/markdown"
+            },
+            {
+              "mimeType": "text/x-markdown"
+            },
+            {
+              "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "text/html"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.text"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "text/csv"
+            },
+            {
+              "mimeType": "text/comma-separated-values"
+            },
+            {
+              "mimeType": "text/tab-separated-values"
+            }
+          ]
+        },
+        {
+          "action": "SEND_MULTIPLE",
+          "category": [
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "mimeType": "application/x-noteful"
+            },
+            {
+              "mimeType": "application/x-nfedit"
+            },
+            {
+              "mimeType": "application/x-notecomp"
+            },
+            {
+              "mimeType": "application/x-notepart"
+            },
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "image/png"
+            },
+            {
+              "mimeType": "image/jpeg"
+            },
+            {
+              "mimeType": "image/webp"
+            },
+            {
+              "mimeType": "text/markdown"
+            },
+            {
+              "mimeType": "text/x-markdown"
+            },
+            {
+              "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "text/html"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.text"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "text/csv"
+            },
+            {
+              "mimeType": "text/comma-separated-values"
+            },
+            {
+              "mimeType": "text/tab-separated-values"
             }
           ]
         },
         {
           "action": "VIEW",
           "category": [
-            "DEFAULT"
+            "DEFAULT",
+            "BROWSABLE"
           ],
           "data": [
             {
               "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.noteful",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notepart",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.noteful",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notepart",
               "mimeType": "application/octet-stream"
             }
           ]
@@ -52,7 +294,62 @@
             {
               "scheme": "content",
               "host": "*",
-              "pathPattern": ".*\\.noteful"
+              "pathPattern": ".*\\.noteful",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notepart",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.noteful",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notepart",
+              "mimeType": "*/*"
             }
           ]
         },
@@ -66,37 +363,64 @@
             {
               "scheme": "content",
               "host": "*",
-              "pathPattern": ".*\\.noteful",
-              "mimeType": "*/*"
-            }
-          ]
-        },
-        {
-          "action": "VIEW",
-          "category": [
-            "DEFAULT",
-            "BROWSABLE"
-          ],
-          "data": [
+              "pathPattern": ".*\\.noteful"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete"
+            },
+            {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.notepart"
+            },
             {
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.noteful"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.nfedit"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomp"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notecomplete"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.notepart"
             }
           ]
         },
         {
           "action": "VIEW",
           "category": [
-            "DEFAULT",
-            "BROWSABLE"
+            "DEFAULT"
           ],
           "data": [
             {
-              "scheme": "file",
-              "host": "*",
-              "pathPattern": ".*\\.noteful",
-              "mimeType": "*/*"
+              "scheme": "content",
+              "mimeType": "application/octet-stream"
             }
           ]
         }

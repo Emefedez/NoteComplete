@@ -1,6 +1,10 @@
 package expo.modules.readerserver
 
+import android.content.Intent
 import android.content.res.AssetManager
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import fi.iki.elonen.NanoHTTPD
@@ -19,8 +23,44 @@ class ReaderServerModule : Module() {
       }
       "http://127.0.0.1:8768/"
     }
+    // The provider's file name and type: content:// URIs rarely carry the real name.
+    AsyncFunction("describe") { uri: String ->
+      val context = requireNotNull(appContext.reactContext)
+      val parsed = Uri.parse(uri)
+      var name: String? = null
+      if (parsed.scheme == "content") {
+        try {
+          context.contentResolver.query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) name = cursor.getString(0)
+          }
+        } catch (_: Exception) { /* Some providers refuse queries; the URI's name is used. */ }
+      } else name = parsed.lastPathSegment
+      val mime = if (parsed.scheme == "content") context.contentResolver.getType(parsed)
+        else MimeTypeMap.getSingleton().getMimeTypeFromExtension(MimeTypeMap.getFileExtensionFromUrl(uri))
+      mapOf("name" to name, "mime" to mime)
+    }
+    // Files shared to the app (Share → NoteComplete). Linking only reports VIEW intents, so
+    // the launch intent's streams are read here once, and later shares arrive as events.
+    Events("onShared")
+    Function("takeShared") {
+      val intent = appContext.currentActivity?.intent ?: return@Function emptyList<String>()
+      val uris = sharedUris(intent)
+      intent.removeExtra(Intent.EXTRA_STREAM)
+      uris
+    }
+    OnNewIntent { intent ->
+      val uris = sharedUris(intent)
+      if (uris.isNotEmpty()) sendEvent("onShared", mapOf("uris" to uris))
+    }
     OnDestroy { server?.stop(); server = null }
   }
+}
+
+@Suppress("DEPRECATION")
+private fun sharedUris(intent: Intent): List<String> = when (intent.action) {
+  Intent.ACTION_SEND -> listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.toString())
+  Intent.ACTION_SEND_MULTIPLE -> intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.map { it.toString() } ?: emptyList()
+  else -> emptyList()
 }
 
 private class ReaderServer(private val assets: AssetManager) : NanoHTTPD("127.0.0.1", 8768) {

@@ -249,6 +249,48 @@ async function openFromAddress() {
     }
   } catch (e) { status(e.message, true); }
 }
+// Files the system hands over ("Open with…", double-click, Share): the desktop app's tab asks
+// for its file; the installed web app gets them from launchQueue (file_handlers in the
+// manifest) or the share target, possibly before the engine is ready, so they wait in launchedFiles. One document per tab:
+// the first file opens, the others are named in the status.
+const launchedFiles = [];
+window.launchQueue?.setConsumer(async (params) => {
+  const files = [];
+  for (const handle of params?.files || []) {
+    try { if (handle.kind !== "directory") files.push(await handle.getFile()); } catch { /* Gone or not allowed. */ }
+  }
+  if (!files.length) return;
+  launchedFiles.splice(0, launchedFiles.length, ...files);
+  openLaunched();
+});
+// Files shared to the installed web app (share_target): sw.js keeps them for this page.
+async function sharedFiles() {
+  history.replaceState(null, "", location.pathname);
+  if (!window.caches) return [];
+  const cache = await caches.open("notecomplete-shared"), files = [];
+  for (const request of await cache.keys()) {
+    const response = await cache.match(request);
+    files.push(new File([await response.blob()], decodeURIComponent(response.headers.get("x-name") || "Shared file")));
+  }
+  await caches.delete("notecomplete-shared");
+  return files;
+}
+async function openLaunched() {
+  if (!ready) return;
+  try {
+    const desktop = await window.notecompleteFiles?.launched?.();
+    if (desktop) {
+      const file = new File([desktop.bytes], desktop.name);
+      await load(file);
+      return await openedLocal(desktop.path, desktop.name, file);
+    }
+    if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
+    const [file, ...rest] = launchedFiles.splice(0);
+    if (!file || busy() || !canReplace()) return;
+    await load(file);
+    if (rest.length) status(`Opened ${file.name}. Open ${rest.map((f) => f.name).join(", ")} on its own; one document per window.`);
+  } catch (e) { status(e.message, true); }
+}
 function call(op, args = {}) {
   return engine.call({ op, page, ...args }, args.bytes ? [args.bytes] : []);
 }
@@ -269,6 +311,7 @@ const engine = new Engine({
     $("open").disabled = $("emptyOpen").disabled = false;
     status("Ready. Everything is processed on your device.");
     openFromAddress();
+    openLaunched();
     window.ReactNativeWebView?.postMessage(
       JSON.stringify({ type: "noteful-ready" }),
     );

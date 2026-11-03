@@ -5,6 +5,7 @@ import path from 'node:path';
 import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { libraryFiles } from './library-files.js';
+import { launchFiles, openablePath } from './open-with.js';
 import { aiRunner } from './ai-runner.js';
 import { agentSetup, stableBinary } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
@@ -26,6 +27,12 @@ const tabs = tabStore();
 const views = new Map(), windows = new Map();
 // Called when a tab's page is gone, so work started for it stops (set once the AI runners exist).
 let tabGone = () => {};
+// Files the system asked to open ("Open with…", double-click, the dock): each gets a tab of
+// its own, whose reader collects it once ready (files:launched). Launch arguments and macOS
+// open-file events that come before the app is ready wait in launchQueue.
+const launchPending = new Map();
+const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
+let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
 const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v'];
@@ -78,11 +85,12 @@ function activate(win, id) {
   views.get(id)?.webContents.focus();
   broadcast(win);
 }
-function openTab(win) {
+function openTab(win, file = null) {
   const view = new WebContentsView({ webPreferences });
   view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
+  if (file) launchPending.set(id, file);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(({ url }) => {
     if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
@@ -117,6 +125,7 @@ function openTab(win) {
   });
   contents.on('destroyed', () => {
     views.delete(id);
+    launchPending.delete(id);
     tabGone(id);
     if (sharing?.owner === id) { sharing.server.stop(); sharing = null; }
   });
@@ -187,7 +196,7 @@ function closeTab(id) {
     win.close();
   } else activate(win, result.active);
 }
-function createWindow({ tab = true } = {}) {
+function createWindow({ tab = true, files = [] } = {}) {
   const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480, backgroundColor: backdrop(),
     // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
     title: 'NoteComplete', autoHideMenuBar: true });
@@ -221,17 +230,38 @@ function createWindow({ tab = true } = {}) {
     }
     windows.delete(id);
   });
-  if (tab) openTab(win);
+  if (tab) for (const file of files.length ? files : [null]) openTab(win, file);
   return win;
 }
+// Opens files from the system in new tabs of the focused window (or the last one), brought
+// to the front; a new window when none is open. False when none of them can be opened.
+function openSystemFiles(list) {
+  const wanted = list.filter(openablePath);
+  if (!wanted.length) return false;
+  if (!started) { launchQueue.push(...wanted.filter(f => !launchQueue.includes(f))); return true; }
+  const focused = BaseWindow.getFocusedWindow();
+  const win = (focused && windows.get(focused.id)) || [...windows.values()].at(-1);
+  if (!win) { createWindow({ files: wanted }); return true; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  for (const file of wanted) openTab(win, file);
+  return true;
+}
+// macOS hands files over as events, also before the app is ready (a cold launch).
+app.on('open-file', (event, file) => {
+  event.preventDefault();
+  openSystemFiles([file]);
+});
 // One process per profile: a second launch would find IndexedDB and Local Storage
 // locked (Recent, decks and settings would come up empty), so it opens a window here.
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
 // Launching the app again (menu, dock, terminal) opens a new window; Ctrl+T
-// and + make tabs from inside a window.
-app.on('second-instance', () => {
-  if (app.isReady()) createWindow();
+// and + make tabs from inside a window. A launch with files (Open with… on Windows and
+// Linux) opens them in tabs of the open window instead.
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  if (!openSystemFiles(launchFiles(argv, { cwd: workingDirectory, packaged: app.isPackaged })) && started) createWindow();
 });
 app.whenReady().then(async () => {
   if (!primary) return;
@@ -297,6 +327,15 @@ app.whenReady().then(async () => {
     const file = chosen.filePaths[0];
     await files.remember(file);
     return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
+  }));
+  // The file the system asked this tab to open, once; it joins Recent like a dialog pick.
+  ipcMain.handle('files:launched', guarded(async event => {
+    const file = launchPending.get(event.sender.id);
+    launchPending.delete(event.sender.id);
+    if (!openablePath(file)) return null;
+    const bytes = new Uint8Array(await readFile(file));
+    await files.remember(file);
+    return { path: file, name: path.basename(file), bytes };
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
   // Groups: a whole folder, or several files added to the open document.
@@ -496,7 +535,8 @@ app.whenReady().then(async () => {
       return await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true });
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
-  createWindow();
+  started = true;
+  createWindow({ files: launchQueue.splice(0) });
   app.on('activate', () => { if (!windows.size) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

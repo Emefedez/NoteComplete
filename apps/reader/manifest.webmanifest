@@ -33,5 +33,120 @@
     }
   ],
   "description": "A local-first reader and editor for notes, PDFs and images.",
-  "id": "./"
+  "id": "./",
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/x-noteful": [
+          ".noteful"
+        ],
+        "application/x-nfedit": [
+          ".nfedit"
+        ],
+        "application/x-notecomp": [
+          ".notecomp",
+          ".notecomplete"
+        ],
+        "application/x-notepart": [
+          ".notepart"
+        ],
+        "application/pdf": [
+          ".pdf"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg"
+        ],
+        "image/webp": [
+          ".webp"
+        ],
+        "text/markdown": [
+          ".md",
+          ".markdown"
+        ],
+        "text/plain": [
+          ".txt"
+        ],
+        "text/html": [
+          ".html",
+          ".htm"
+        ],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+          ".docx"
+        ],
+        "application/vnd.oasis.opendocument.text": [
+          ".odt"
+        ],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+          ".xlsx"
+        ],
+        "application/vnd.oasis.opendocument.spreadsheet": [
+          ".ods"
+        ],
+        "text/csv": [
+          ".csv"
+        ],
+        "text/tab-separated-values": [
+          ".tsv"
+        ]
+      },
+      "launch_type": "multiple-clients"
+    }
+  ],
+  "share_target": {
+    "action": "./share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            "application/x-noteful",
+            "application/x-nfedit",
+            "application/x-notecomp",
+            "application/x-notepart",
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "text/markdown",
+            "text/plain",
+            "text/html",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.oasis.opendocument.text",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.oasis.opendocument.spreadsheet",
+            "text/csv",
+            "text/tab-separated-values",
+            ".noteful",
+            ".nfedit",
+            ".notecomp",
+            ".notecomplete",
+            ".notepart",
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+            ".md",
+            ".markdown",
+            ".txt",
+            ".html",
+            ".htm",
+            ".docx",
+            ".odt",
+            ".xlsx",
+            ".ods",
+            ".csv",
+            ".tsv"
+          ]
+        }
+      ]
+    }
+  }
 }

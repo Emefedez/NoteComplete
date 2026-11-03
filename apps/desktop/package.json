@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.1.24",
+  "version": "1.1.25",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -28,6 +28,7 @@
       "main.js",
       "asset-path.js",
       "library-files.js",
+      "open-with.js",
       "ai-runner.js",
       "transcriber.js",
       "tabs.js",
@@ -43,6 +44,48 @@
       "google-auth.js",
       "google-desktop-client.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "noteful",
+        "name": "NoteComplete.Noteful",
+        "description": "Noteful note",
+        "mimeType": "application/x-noteful",
+        "role": "Editor",
+        "rank": "Owner"
+      },
+      {
+        "ext": "nfedit",
+        "name": "NoteComplete.Project",
+        "description": "NoteComplete project",
+        "mimeType": "application/x-nfedit",
+        "role": "Editor",
+        "rank": "Owner"
+      },
+      {
+        "ext": "notecomp",
+        "name": "NoteComplete.Package",
+        "description": "NoteComplete package",
+        "mimeType": "application/x-notecomp",
+        "role": "Editor",
+        "rank": "Owner"
+      },
+      {
+        "ext": "notecomplete",
+        "name": "NoteComplete.Package",
+        "description": "NoteComplete package",
+        "mimeType": "application/x-notecomp",
+        "role": "Editor",
+        "rank": "Owner"
+      },
+      {
+        "ext": "notepart",
+        "name": "NoteComplete.Part",
+        "description": "NoteComplete part",
+        "mimeType": "application/x-notepart",
+        "role": "Editor",
+        "rank": "Owner"
+      }
+    ],
     "mac": {
       "target": [
         "dmg",
@@ -50,7 +93,185 @@
       ],
       "category": "public.app-category.productivity",
       "identity": "-",
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "fileAssociations": [
+        {
+          "ext": [
+            "pdf"
+          ],
+          "name": "PDF document",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "png"
+          ],
+          "name": "PNG image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "jpg",
+            "jpeg"
+          ],
+          "name": "JPEG image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "webp"
+          ],
+          "name": "WebP image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "md",
+            "markdown"
+          ],
+          "name": "Markdown document",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "txt"
+          ],
+          "name": "Plain text",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "html",
+            "htm"
+          ],
+          "name": "HTML page",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "docx"
+          ],
+          "name": "Word document",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "odt"
+          ],
+          "name": "OpenDocument text",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "xlsx"
+          ],
+          "name": "Excel workbook",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "ods"
+          ],
+          "name": "OpenDocument spreadsheet",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "csv"
+          ],
+          "name": "CSV table",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "tsv"
+          ],
+          "name": "TSV table",
+          "role": "Viewer",
+          "rank": "Alternate"
+        }
+      ],
+      "extendInfo": {
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.notecomplete.noteful",
+            "UTTypeDescription": "Noteful note",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.content"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "noteful"
+              ],
+              "public.mime-type": [
+                "application/x-noteful"
+              ]
+            }
+          },
+          {
+            "UTTypeIdentifier": "com.notecomplete.nfedit",
+            "UTTypeDescription": "NoteComplete project",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.content"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "nfedit"
+              ],
+              "public.mime-type": [
+                "application/x-nfedit"
+              ]
+            }
+          },
+          {
+            "UTTypeIdentifier": "com.notecomplete.notecomp",
+            "UTTypeDescription": "NoteComplete package",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.content"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "notecomp",
+                "notecomplete"
+              ],
+              "public.mime-type": [
+                "application/x-notecomp"
+              ]
+            }
+          },
+          {
+            "UTTypeIdentifier": "com.notecomplete.notepart",
+            "UTTypeDescription": "NoteComplete part",
+            "UTTypeConformsTo": [
+              "public.data",
+              "public.content"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "notepart"
+              ],
+              "public.mime-type": [
+                "application/x-notepart"
+              ]
+            }
+          }
+        ]
+      }
     },
     "win": {
       "target": [
@@ -65,7 +286,22 @@
       "target": [
         "AppImage"
       ],
-      "category": "Office"
+      "category": "Office",
+      "mimeTypes": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "text/markdown",
+        "text/plain",
+        "text/html",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "text/csv",
+        "text/tab-separated-values"
+      ]
     },
     "icon": "build/icon.png",
     "extraResources": [
