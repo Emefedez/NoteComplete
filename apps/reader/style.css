@@ -1312,6 +1312,9 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .shortcuts td:first-child { white-space: nowrap; width: 1%; }
 .grab-menu { position: absolute; z-index: 28; display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
 .grab-menu button { padding: 3px 10px; font-size: 12px; }
+.grab-menu.grab-icons { gap: 2px; padding: 2px; }
+.grab-menu.grab-icons button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; }
+.grab-menu.grab-icons svg { width: 18px; height: 18px; }
 .grab-rect { fill: #246bce18; stroke: #246bce; stroke-width: 1.5; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
 .sheet[data-tool="grab"] { cursor: crosshair; }
 .quiz-correction { margin: 6px 0; padding: 6px 8px; background: var(--accent-soft); border-radius: var(--radius); font-size: 12px; }
