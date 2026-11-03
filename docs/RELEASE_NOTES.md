@@ -1,4 +1,11 @@
-## What's new in 1.1.28
+## What's new in 1.1.29
+
+- **Chinese text recognition.** Simplified and traditional Chinese are among the languages of **Pages → Recognize text**, and Find matches Chinese character by character (学习 is found wherever recognition split the line).
+- **High-quality recognition.** A new **Quality → High** option reads each page more ways (larger, with thicker strokes, line by line and as scattered text) and lets the readings vote; in our tests with messy handwriting it reads three words in four right instead of half (normal quality improved too, to two in three), at about one and a half times the time.
+- **Fewer misread Spanish words.** With Spanish chosen, misread words are corrected to the likeliest Spanish word a look-alike letter away (*procecador* → *procesador*), and missing accents come back (*direccion* → *dirección*). Real words, rare ones too, are never changed, and Find still finds what was read.
+- Recognition no longer merges two different words of one reading, and words come out line by line in reading order.
+
+### In 1.1.28
 
 - **Move and resize windows from anywhere.** As in a tiling window manager: hold **Ctrl** (**⌘** on a Mac) and drag anywhere on the Ask AI, quiz, flashcard or audio window to move it, or hold **Shift** and drag to resize it from the corner nearest the pointer. The new place and size are remembered.
 

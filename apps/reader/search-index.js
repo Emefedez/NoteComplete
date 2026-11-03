@@ -10,8 +10,13 @@ const FUZZY = new Set(['ocr', 'audio']);
 export function normalize(text) {
   return String(text).normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
 }
+// Chinese and Japanese are written without spaces between words, so each of their
+// characters is a word of its own: a query of several characters then matches them in a
+// row, wherever OCR or the PDF happened to break the line into "words".
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const pieces = token => (CJK.test(token) ? token.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu) : [token]);
 export function words(text) {
-  return normalize(text).match(/[\p{L}\p{N}]+/gu) || [];
+  return (normalize(text).match(/[\p{L}\p{N}]+/gu) || []).flatMap(pieces);
 }
 
 // True when a and b differ by at most one insertion, deletion or substitution.
@@ -40,11 +45,21 @@ export function matchWord(query, word, fuzzy) {
 const wordScore = (term, word, fuzzy) => Math.max(matchWord(term, word.norm, fuzzy), ...(word.altNorms || []).map(a => matchWord(term, a, fuzzy)));
 const clean = text => normalize(text).replace(/[^\p{L}\p{N}]+/gu, '');
 
+// A word with Chinese or Japanese characters becomes one word per character (and per run
+// of other letters), sharing its box in equal slices across it.
+function split(word) {
+  if (!CJK.test(word.text)) return [word];
+  const parts = word.text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\s]+/gu) || [];
+  if (parts.length < 2) return [word];
+  const { alts, ...rest } = word;
+  return parts.map((text, i) => ({ ...rest, text, ...(word.box ? { box: [word.box[0] + (word.box[2] * i) / parts.length, word.box[1], word.box[2] / parts.length, word.box[3]] } : {}) }));
+}
+
 export class SearchIndex {
   constructor() { this.units = []; }
   // unit: { page, source, words: [{ text, box?, time? }], label?, recordingId? }
   add(unit) {
-    const prepared = { ...unit, words: unit.words.map(w => ({ ...w, norm: clean(w.text), ...(w.alts?.length ? { altNorms: w.alts.map(clean).filter(Boolean) } : {}) })).filter(w => w.norm) };
+    const prepared = { ...unit, words: unit.words.flatMap(split).map(w => ({ ...w, norm: clean(w.text), ...(w.alts?.length ? { altNorms: w.alts.map(clean).filter(Boolean) } : {}) })).filter(w => w.norm) };
     if (prepared.words.length) this.units.push(prepared);
   }
   remove(predicate) { this.units = this.units.filter(u => !predicate(u)); }
@@ -83,7 +98,7 @@ export class SearchIndex {
           position: i, score,
           boxes: matched.map(k => list[k].box).filter(Boolean),
           time: list[i].time,
-          snippet: list.slice(from, to).map(w => w.text).join(' '),
+          snippet: list.slice(from, to).reduce((s, w, k, all) => s + (k && !(CJK.test(w.text) && CJK.test(all[k - 1].text)) ? ' ' : '') + w.text, ''),
           matched: matched.map(k => list[k].text),
         });
       }
