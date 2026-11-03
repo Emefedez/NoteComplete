@@ -79,3 +79,52 @@ test('two OCR readings of one handwritten word are one hit, found by either', ()
   assert.equal(index.search('sector').length, 1);
   assert.equal(index.search('sector')[0].page, 129);
 });
+
+test('Chinese is searched character by character, wherever OCR broke it into words', () => {
+  assert.deepEqual(words('学习中文 abc'), ['学', '习', '中', '文', 'abc']);
+  const index = new SearchIndex();
+  index.add({ page: 3, source: 'ocr', words: [
+    { text: '我们学', box: [0, 0, 30, 10], confidence: 80 },
+    { text: '习中文', box: [32, 0, 30, 10], confidence: 80 },
+    { text: 'Tesseract', box: [70, 0, 40, 10], confidence: 90 },
+  ] });
+  const hit = index.search('学习')[0];
+  assert.equal(hit.page, 3);
+  assert.deepEqual(hit.matched, ['学', '习']);
+  assert.deepEqual(hit.boxes, [[20, 0, 10, 10], [32, 0, 10, 10]]);
+  assert.match(hit.snippet, /^我们学习中文 Tesseract$/);
+  assert.equal(index.search('中文')[0].page, 3);
+  assert.equal(index.search('tesseract').length, 1);
+  assert.equal(index.search('英文').length, 0);
+});
+
+test('OCR readings agreed by several passes win over one confident guess', () => {
+  const words = mergeWords(
+    [{ text: 'cabaza', box: [10, 10, 60, 20], confidence: 75 }],
+    [{ text: 'cabeza', box: [11, 10, 59, 20], confidence: 60 }],
+    [{ text: 'Cabeza', box: [10, 11, 60, 19], confidence: 58 }],
+    [{ text: 'otra', box: [100, 10, 40, 20], confidence: 90 }],
+  );
+  assert.deepEqual(words.map(w => [w.text, w.alts || []]), [['cabeza', ['cabaza']], ['otra', []]]);
+});
+
+import { ocrPasses, OCR_LANGUAGES, readingOrder } from './ocr.js';
+test('high-quality OCR reads more, at more sizes, in more ways', () => {
+  assert.ok(OCR_LANGUAGES.chi_sim && OCR_LANGUAGES.chi_tra, 'Chinese is offered');
+  const normal = ocrPasses('normal'), high = ocrPasses('high');
+  assert.ok(high.ink.length > normal.ink.length && Math.max(...high.ink.map(p => p.width)) > Math.max(...normal.ink.map(p => p.width)));
+  assert.ok(high.ink.some(p => p.sparse) && high.ink.some(p => p.bold) && high.whole.some(p => p.sparse));
+});
+
+test('words of one pass never merge, and read line by line', () => {
+  const merged = mergeWords([
+    { text: '数据', box: [0, 0, 20, 10], confidence: 90 },
+    { text: '存储', box: [12, 0, 20, 10], confidence: 80 },
+  ]);
+  assert.deepEqual(merged.map(w => w.text), ['数据', '存储']);
+  const order = readingOrder([
+    { text: 'b', box: [30, 1, 10, 10] }, { text: 'a', box: [0, 2, 10, 10] }, { text: 'c', box: [60, 0, 10, 10] },
+    { text: 'd', box: [0, 20, 10, 10] },
+  ]);
+  assert.deepEqual(order.map(w => w.text), ['a', 'b', 'c', 'd']);
+});

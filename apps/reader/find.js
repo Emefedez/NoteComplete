@@ -3,7 +3,8 @@
 // OCR runs only when the user starts it from the Recognize text dialog, then
 // continues in the background as a job chip in the bar.
 import { SearchIndex } from './search-index.js';
-import { ocrWorker, recognizePage, mergeWords, OCR_LANGUAGES } from './ocr.js';
+import { ocrWorker, recognizePage, lineWords, uniqueLines, mergeWords, ocrPasses, OCR_LANGUAGES } from './ocr.js';
+import { loadDictionary, releaseDictionaries, correctWords, DICTIONARY_LANGUAGES } from './ocr-dictionary.js';
 import { textLayer } from './text-layer.js';
 
 const $ = id => document.getElementById(id);
@@ -267,12 +268,15 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   }
   try { for (const option of languages.options) option.selected = (localStorage.getItem('notecomplete-ocr-languages') || 'spa,eng').split(',').includes(option.value); }
   catch { languages.options[0].selected = languages.options[1].selected = true; }
+  // Quality: remembered like the languages.
+  const qualityPicked = () => document.querySelector('input[name="ocrQuality"]:checked')?.value || 'normal';
+  try { const q = document.querySelector(`input[name="ocrQuality"][value="${localStorage.getItem('notecomplete-ocr-quality') || 'normal'}"]`); if (q) q.checked = true; } catch { /* Optional. */ }
   function openOcr(currentPage) {
     const { pages } = documentInfo();
     $('ocrFrom').max = $('ocrTo').max = pages;
     $('ocrFrom').value = $('ocrTo').value = currentPage + 1;
     $('ocrStatus').textContent = ocrRun ? 'Recognition is running in the background; its progress is in the bar. Stop it there to start another.'
-      : Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} ${Object.keys(stored.ocr).length === 1 ? 'page' : 'pages'} already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use.';
+      : Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} ${Object.keys(stored.ocr).length === 1 ? 'page' : 'pages'} already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use (and, for Spanish, word lists that correct misread words).';
     $('ocrStart').disabled = !!ocrRun;
     $('ocrDialog').showModal();
   }
@@ -288,7 +292,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     if (ocrRun) return;
     const chosen = [...languages.selectedOptions].map(o => o.value);
     if (!chosen.length) { $('ocrStatus').textContent = 'Choose at least one language.'; return; }
-    try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); } catch { /* Optional. */ }
+    const quality = qualityPicked(), passes = ocrPasses(quality);
+    try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); localStorage.setItem('notecomplete-ocr-quality', quality); } catch { /* Optional. */ }
     $('ocrStart').disabled = true;
     $('ocrStatus').textContent = 'Checking the pages…';
     await build();
@@ -324,7 +329,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       worker = null;
       return w ? busy.catch(() => {}).then(() => w.terminate()).catch(() => {}) : Promise.resolve();
     };
-    const read = (canvas, scale) => (busy = recognizePage(worker, canvas, scale));
+    const read = (canvas, scale, options) => (busy = recognizePage(worker, canvas, scale, options));
     ocrRun = { cancel() { cancelled = true; stop(); shut(); } };
     const job = jobs().start('Recognize text', { kind: 'ocr', cancel: () => ocrRun?.cancel() });
     const kept = () => `${done} ${done === 1 ? 'page' : 'pages'} recognized${skipped ? ` (${skipped} done before)` : ''}`;
@@ -338,28 +343,43 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       }));
     };
     try {
-      job.set(0, skipped ? `loading the engine; ${skipped} pages already done` : 'loading the engine');
+      job.set(0, `${quality === 'high' ? 'high quality: ' : ''}${skipped ? `loading the engine; ${skipped} pages already done` : 'loading the engine'}`);
       await engine();
+      // Spelling help for the languages that have a word list (one at a time: the first).
+      const spelling = chosen.find(l => DICTIONARY_LANGUAGES.includes(l));
+      let dictionary = null;
+      if (spelling) {
+        job.set(0, 'loading the word list');
+        dictionary = await race(loadDictionary(spelling)).catch(error => { if (error === STOPPED) throw error; return null; });
+      }
       for (const [n, page] of pages.entries()) {
         if (cancelled || token !== generation) break;
         if (n && n % RECYCLE === 0) await engine();
         job.set(n / pages.length, pages.length === 1 ? `page ${page + 1}` : `page ${page + 1} (${n + 1} of ${pages.length})`);
-        // Up to three passes: the whole page, then the ink alone at two sizes
-        // (handwriting reads differently at each); readings of one spot merge.
-        const passes = [];
-        if (whole(page)) {
-          const { canvas, scale } = await race(pageCanvas(page));
-          try { passes.push(await race(read(canvas, scale))); }
+        // The whole page, then the ink alone at several sizes (handwriting reads
+        // differently at each; ocrPasses); readings of one spot merge by vote.
+        const readings = [];
+        if (whole(page)) for (const { width, sparse } of passes.whole) {
+          const { canvas, scale } = await race(pageCanvas(page, width));
+          try { readings.push(await race(read(canvas, scale, { sparse }))); }
           finally { canvas.width = canvas.height = 0; }
         }
-        if (inked.has(page)) for (const width of [1200, 3000]) {
+        if (inked.has(page)) for (const { width, sparse, bold } of passes.ink) {
           if (cancelled || token !== generation) break;
-          const ink = await race(pageCanvas(page, width, { inkOnly: true }));
+          const ink = await race(pageCanvas(page, width, { inkOnly: true, bold }));
           if (!ink) break;
-          try { passes.push(await race(read(ink.canvas, ink.scale))); }
+          try { readings.push(await race(read(ink.canvas, ink.scale, { sparse }))); }
           finally { ink.canvas.width = ink.canvas.height = 0; }
         }
-        const words = mergeWords(...passes);
+        // High quality: every line found, read again on its own.
+        if (passes.lines && inked.has(page) && !cancelled && token === generation) {
+          const lines = uniqueLines(...readings.map(r => r.lines || []));
+          const ink = lines.length ? await race(pageCanvas(page, passes.lines.width, { inkOnly: true })) : null;
+          if (ink) try { readings.push(await race(busy = lineWords(worker, ink.canvas, ink.scale, lines))); }
+          finally { ink.canvas.width = ink.canvas.height = 0; }
+        }
+        const merged = mergeWords(...readings);
+        const words = dictionary ? correctWords(merged, dictionary) : merged;
         if (cancelled || token !== generation) break;
         stored.ocr[slots.get(page)] = words;
         index.remove(u => u.source === 'ocr' && u.page === page);
@@ -379,6 +399,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       job.fail(cancelled || error === STOPPED ? `Recognition stopped. ${kept()}; they are kept, and the next run continues from there.` : `Could not recognize text: ${error.message}. ${kept()} are kept.`);
     } finally {
       shut();
+      releaseDictionaries();
       ocrRun = null;
     }
   };

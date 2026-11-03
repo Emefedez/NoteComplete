@@ -4576,7 +4576,7 @@ $("insertConfirm").onclick = async () => {
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
-async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false } = {}) {
+async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}) {
   const view = await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
@@ -4588,6 +4588,14 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
     if (!holder.querySelector("[data-item]")) return null;
     for (const mark of holder.querySelectorAll("[data-item] [stroke]")) if (mark.getAttribute("stroke") !== "none") mark.setAttribute("stroke", "#000");
     for (const mark of holder.querySelectorAll("[data-item] [fill]")) if (mark.getAttribute("fill") !== "none") mark.setAttribute("fill", "#000");
+    // Thicker strokes for one OCR pass: thin pen lines break into pieces the engine misreads.
+    if (bold) for (const mark of holder.querySelectorAll("[data-item] :is(path, polyline, line, ellipse, rect, polygon)")) {
+      if (mark.getAttribute("fill") && mark.getAttribute("fill") !== "none") {
+        mark.setAttribute("stroke", "#000");
+        mark.setAttribute("stroke-width", "0.7");
+        mark.setAttribute("stroke-linejoin", "round");
+      } else if (mark.getAttribute("stroke-width")) mark.setAttribute("stroke-width", String(Number(mark.getAttribute("stroke-width")) * 1.6 || 1));
+    }
   }
   const svg = holder.querySelector("svg"), [w, h] = view.size, scale = width / w;
   if (view.pdf_background && !inkOnly) {
