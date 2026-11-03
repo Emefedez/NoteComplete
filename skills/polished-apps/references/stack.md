@@ -71,6 +71,14 @@ docs/          user guide, REQUESTS.md (each request: state + how it was checked
 - Data keyed by a file version (study material, annotations, caches) must be offered for carry-over when the user takes a new version; copy, never move.
 - If the source can't be reached, open the local copy and say it wasn't checked; never silently open a stale copy as if current.
 
+## Opening files from the system
+
+- Register the app in every OS's **Open with**: the default for its own formats only; offered (not default) for common types it reads (PDF, images, Markdown, text, office, CSV).
+  - Electron: own formats in `build.fileAssociations` (role Editor, rank Owner, MIME types, macOS UTIs); common types as `mac.fileAssociations` rank Alternate, `linux.mimeTypes` in the `.desktop` file, and a custom NSIS include writing `OpenWithProgids` + `SupportedTypes` on Windows (electron-builder's own associations would take the default).
+  - Files arrive by `process.argv`, `second-instance` argv (single-instance lock) and macOS `open-file` (also before ready: queue them); each opens in a new tab of the front window, which joins Recent.
+  - Android: VIEW/SEND/SEND_MULTIPLE intent filters per MIME type and path patterns for own extensions; keep the provider's display name instead of renaming files.
+  - Installed web app: `file_handlers` + `launchQueue` (files may arrive before the engine is ready: queue them), and a POST `share_target` handled by the service worker.
+
 ## Windows and tabs
 
 Single instance; relaunch opens a window; tabs are views that can move between windows without reloading; window backdrop = `--chrome`; see `templates/electron/main.js` (Tauri: `WebviewWindow` per window, same rules).

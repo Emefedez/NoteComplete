@@ -202,6 +202,14 @@ dialog.sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
 /* Floating windows (templates/floating.js): grips on every edge and corner, a mark on the
    bottom-right one, a head that squeezes selects and titles but never its buttons. */
 .panel-grip { position: absolute; z-index: 2; }
+/* Ctrl/Shift + drag anywhere on a floating window (floating.js). */
+.dragging, .resizing { user-select: none; }
+.dragging, .dragging * { cursor: move !important; }
+.resizing, .resizing * { cursor: nwse-resize !important; }
+/* Region menus (actions on a dragged-out area): one row of 30px icon buttons with titles. */
+.region-menu { position: absolute; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-box, 8px); background: var(--menu); box-shadow: var(--shadow-pop); }
+.region-menu button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; }
+.region-menu svg { width: 18px; height: 18px; }
 .grip-left, .grip-right { top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
 .grip-left { left: -3px; } .grip-right { right: -3px; }
 .grip-top, .grip-bottom { left: 12px; right: 12px; height: 7px; cursor: ns-resize; }

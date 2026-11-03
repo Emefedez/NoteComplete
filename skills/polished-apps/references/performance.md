@@ -23,6 +23,24 @@
 - Video: decode ahead into a small frame ring around the playhead; scrubbing uses nearest keyframe + proxies; render effects on the GPU; export in a background job.
 - Audio: playback clock is the master; the UI follows it (never the reverse).
 
+## Memory in long documents
+
+- Items far from the view keep only their size: drop their drawing, rasters, text layers and search highlights (left-over text layers held 100k+ nodes and ~1 GB in a 193-page PDF).
+- Keep the last few rasters (an LRU of 3) for scrolling back; release them when the page list is rebuilt, and let new pages take them.
+- Rasters as large as the screen needs: scale by `devicePixelRatio` (a quality setting for 2× screens halves per side at 1×); redraw when the window moves to another screen.
+- One GPU texture per canvas: above ~4096 px a side or 16 MP many tablets draw nothing; use an image (drawn in tiles) there.
+- A canvas is a compositing layer: drawing over one with hundreds of SVG strokes costs ~10 ms a frame in overlap tests; show a PNG inside the SVG for ink-heavy items. Encode PNGs in a worker (`OffscreenCanvas.convertToBlob`), not `toDataURL` on the main thread.
+- Thumbnails redraw when *their* item changes (count edits per item), once the pen pauses; never all of them after any edit.
+- Debounce persisting derived data (search words) until scrolling settles; reuse layers a redraw doesn't change.
+- Measure memory as PSS of the whole browser process tree (workers and GPU included), peak while scrolling, after scrolling, and after a memory-pressure signal; medians of several runs (`tools/perf_bench.mjs`).
+
+## Joining over a network fast
+
+- Serve the app with content hashes: a precache list of `{path: hash}` plus the shell; the service worker is cache-first while a file's hash is current; heavy engines cached on first use, not at install.
+- `ETag`/`Last-Modified` with `Cache-Control: no-cache` (a 304 on the next join), gzip or brotli compressed once and kept; a stable port so the cache stays valid.
+- Send the document snapshot compressed; a peer that reconnects gets only the edits it missed.
+- Measure through a throttled link (5 Mbit/s): time and bytes for a cold and a warm join.
+
 ## Loops
 
 - Run `requestAnimationFrame` (or the native frame callback) only while something moves: playing, streaming, animating, dragging. Stop when it settles.
