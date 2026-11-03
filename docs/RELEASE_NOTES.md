@@ -1,4 +1,8 @@
-## What's new in 1.1.27
+## What's new in 1.1.28
+
+- **Move and resize windows from anywhere.** As in a tiling window manager: hold **Ctrl** (**⌘** on a Mac) and drag anywhere on the Ask AI, quiz, flashcard or audio window to move it, or hold **Shift** and drag to resize it from the corner nearest the pointer. The new place and size are remembered.
+
+### In 1.1.27
 
 - **Erase in the Grab menu.** Grab a region and choose the eraser icon to remove all the ink in it at once; one Undo brings it back.
 - **The eraser removes shapes.** Rectangles, ellipses, triangles and arrows made in Noteful (such as highlighter circles and Δ marks) used to be skipped by the eraser; it removes them now, like strokes.
