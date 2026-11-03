@@ -1,4 +1,8 @@
-## What's new in 1.1.25
+## What's new in 1.1.26
+
+- **A smaller Grab menu.** The buttons under a grabbed region are icons now (Select, Copy text, Ask AI, Add to chat, Cancel), with their names on hover, so the menu covers less of the page.
+
+### In 1.1.25
 
 - **Open with, on every system.** NoteComplete appears in "Open with" menus on Windows, macOS, Linux, Android and the installed web app (Chrome, Edge, ChromeOS). It is the default for its own files (`.noteful`, `.nfedit`, `.notecomp`, `.notepart`); for PDFs, images, Markdown, text, HTML, Word, OpenDocument and spreadsheets it is only offered, and your default app stays as it is.
 - On the desktop, files opened from the system open in a new tab of the open window and join Recent, so Save and Rename work as usual.
