@@ -1,4 +1,8 @@
-## What's new in 1.1.32
+## What's new in 1.1.33
+
+- **Resize all pages.** The **Page size** dialog has **Resize all pages** next to **Resize this page**: every page takes the chosen size in one step (space added and Original follow each page's own size), and one Undo restores them all.
+
+### In 1.1.32
 
 - **AI fact check.** **Study → Fact check…** (**Shift+F**) has your AI tool check the current page, some pages or the whole note for errors, inconsistencies (also between pages), unclear and missing points. The findings, each with a correction, are added to your Markdown notes under each page's badge, with the pages that need nothing listed too.
 

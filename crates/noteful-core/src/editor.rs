@@ -89,6 +89,9 @@ pub(crate) enum Edit {
         size: [f64; 2],
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pdf_rect: Option<[f64; 4]>,
+        /// Undone and redone with the edit before it (every page resized at once).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        joined: bool,
     },
     InsertPages {
         at: usize,
@@ -126,7 +129,10 @@ fn is_zero(n: &usize) -> bool {
 }
 impl Edit {
     fn joined(&self) -> bool {
-        matches!(self, Edit::Adjust { joined: true, .. })
+        matches!(
+            self,
+            Edit::Adjust { joined: true, .. } | Edit::ResizePage { joined: true, .. }
+        )
     }
 }
 pub struct Editor {
@@ -840,7 +846,17 @@ impl Editor {
                     page,
                     size,
                     pdf_rect,
-                } => editor.resize_page(page, size, pdf_rect)?,
+                    joined,
+                } => {
+                    let before = editor.cursor;
+                    editor.resize_page(page, size, pdf_rect)?;
+                    if joined && editor.cursor > before {
+                        if let Some(Edit::ResizePage { joined: j, .. }) = editor.history.last_mut()
+                        {
+                            *j = true;
+                        }
+                    }
+                }
                 Edit::Add { page, line } => editor.add_line(page, line)?,
                 Edit::Erase { page, ids } => {
                     let p = editor.page(page)?;

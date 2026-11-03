@@ -189,3 +189,40 @@ fn eraser_reaches_shapes_drawn_as_objects() {
         assert!(e.selection(0, id).is_ok(), "{id} back after undo");
     }
 }
+#[test]
+fn every_page_resized_at_once_is_one_undo_step() {
+    let mut e = exam();
+    let sizes = |e: &Editor| e.view(0).unwrap()["page_sizes"].clone();
+    let before = sizes(&e);
+    let order = e.page_order();
+    let all: Vec<_> = order.iter().map(|&s| (s, [700., 900.], None)).collect();
+    assert_eq!(e.resize_pages(&all).unwrap(), order.len());
+    let after = sizes(&e);
+    assert!(
+        after
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s[0] == 700. && s[1] == 900.),
+        "{after}"
+    );
+    // Saved and opened again: still one step.
+    let mut again = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(sizes(&again), after);
+    again.undo();
+    assert_eq!(sizes(&again), before, "one undo brings every page back");
+    again.redo();
+    assert_eq!(sizes(&again), after, "one redo resizes them all again");
+    // A stroke after it undoes on its own.
+    again.add_line(0, line()).unwrap();
+    again.undo();
+    assert_eq!(sizes(&again), after);
+    // One invalid size: nothing changes.
+    let mut bad = exam();
+    let mut wrong = all.clone();
+    wrong[1].1 = [5., 900.];
+    assert!(bad.resize_pages(&wrong).is_err());
+    assert_eq!(sizes(&bad), before);
+    // Pages already that size are left alone.
+    assert_eq!(e.resize_pages(&all).unwrap(), 0);
+}

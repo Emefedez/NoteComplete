@@ -166,6 +166,21 @@ impl EditorSession {
             .resize_page(page, [width, height], rect)
             .map_err(js_error)
     }
+    /// Resize several pages (display positions) as one undoable edit: JSON
+    /// [{"page", "size": [w, h], "pdf_rect": [x, y, w, h] | null}]. Returns how many changed.
+    pub fn resize_pages(&mut self, pages: &str) -> Result<usize, JsValue> {
+        let wanted: Vec<serde_json::Value> = serde_json::from_str(pages).map_err(js_error)?;
+        let mut list = Vec::with_capacity(wanted.len());
+        let bad = || JsValue::from_str("Invalid page size");
+        for w in wanted {
+            let page = w["page"].as_u64().ok_or_else(bad)? as usize;
+            let size: [f64; 2] = serde_json::from_value(w["size"].clone()).map_err(|_| bad())?;
+            let rect: Option<[f64; 4]> =
+                serde_json::from_value(w["pdf_rect"].clone()).map_err(|_| bad())?;
+            list.push((self.inner.slot(page).map_err(js_error)?, size, rect));
+        }
+        self.inner.resize_pages(&list).map_err(js_error)
+    }
     /// Open a `.notecomplete` archive: the note and its Markdown notes.
     pub fn open_notecomplete(data: &[u8]) -> Result<EditorSession, JsValue> {
         Ok(Self {

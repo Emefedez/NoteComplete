@@ -1613,7 +1613,7 @@ function edited(op, args, result) {
     return false;
   }
   if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
-    restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : undefined);
+    restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : op === "resizePages" ? `All ${result.pages} pages resized. One undo restores them.` : undefined);
     return true;
   }
   return false;
@@ -4423,8 +4423,10 @@ const RESIZE_PRESETS = {
 for (const [value, label] of Object.entries(RESIZE_PRESETS)) $("resizePreset").add(new Option(label, value));
 $("resizePreset").onchange = () => { $("resizeCustom").hidden = $("resizePreset").value !== "custom"; };
 const mm = (units) => Math.round(unitsToMm(units));
-function resizeTarget() {
-  const view = panels[page]?.view, base = view?.base_size || view?.size;
+// The chosen size for a page (its view): presets that add space, and Original, are
+// relative to that page's own original size.
+function resizeTarget(view = panels[page]?.view) {
+  const base = view?.base_size || view?.size;
   const preset = $("resizePreset").value;
   if (SPACE[preset]) return base.map((v, i) => v * SPACE[preset].grow[i]);
   if (preset === "original") return [...base];
@@ -4509,19 +4511,41 @@ function endResizeDrag() {
 }
 $("resizeDrag").onclick = startResizeDrag;
 $("resizeDragInstead").onclick = () => { $("resizeDialog").close(); startResizeDrag(); };
-$("resizeConfirm").onclick = () => {
-  const view = panels[page]?.view;
+// The new size of a page (its view) and, with "Scale the PDF", where its PDF goes; null if invalid.
+function resizeChoice(view) {
   // Whole units (exact in the project file); the original size is kept as it was.
-  const size = $("resizePreset").value === "original" ? resizeTarget() : resizeTarget().map((v) => Math.round(v));
-  if (!view || size.some((v) => !Number.isFinite(v) || v < 10)) return status("Choose a valid size.", true);
+  const size = $("resizePreset").value === "original" ? resizeTarget(view) : resizeTarget(view).map((v) => Math.round(v));
+  if (!view || size.some((v) => !Number.isFinite(v) || v < 10)) return null;
   let pdfRect;
   if (view.pdf_background && $("resizeFit").checked) {
     // The PDF fills the page as far as its own proportions allow, centred.
     const [, , w, h] = view.pdf_background.rect, scale = Math.min(size[0] / w, size[1] / h);
     pdfRect = [(size[0] - w * scale) / 2, (size[1] - h * scale) / 2, w * scale, h * scale];
   }
+  return { size, pdfRect };
+}
+$("resizeConfirm").onclick = () => {
+  const choice = resizeChoice(panels[page]?.view);
+  if (!choice) return status("Choose a valid size.", true);
   $("resizeDialog").close();
-  action("resizePage", { page, size, pdfRect, focus: page });
+  action("resizePage", { page, ...choice, focus: page });
+};
+// The same choice for every page, as one undo step. Space added and Original follow each
+// page's own original size; a PDF is scaled to fill only if that is ticked.
+$("resizeAll").onclick = async () => {
+  if (!doc || busy()) return;
+  const count = doc.pages;
+  $("resizeDialog").close();
+  status(`Resizing ${count} pages…`);
+  const pages = [];
+  for (let i = 0; i < count; i++) {
+    const view = await call("view", { page: i });
+    const choice = resizeChoice(view);
+    if (!choice) return status(`Page ${i + 1} cannot take that size. Choose another.`, true);
+    if (choice.size[0] !== view.size[0] || choice.size[1] !== view.size[1] || choice.pdfRect) pages.push({ page: i, ...choice });
+  }
+  if (!pages.length) return status("Every page already has that size.");
+  action("resizePages", { pages, focus: page });
 };
 // Pages → Insert: blank pages of a chosen size, or pages of another PDF at native scale.
 let insertPdfSource = null;
