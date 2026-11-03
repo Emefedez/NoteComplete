@@ -24,6 +24,17 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | Saved AI explanations | `card.explanation` in `study.js` (folded under the answer, editable, reused) |
 | AI review actions | quiz: Clarify C, Dispute X, Double check V; flashcards: Ask AI C (saved explanation, editable), Double check V, Edit E, Discard X |
 | Requests log | `docs/REQUESTS.md` (`[D]` done, `[!]` not yet verified, `[ ]` to do, + how each was checked) |
+| One undo step for many edits | `joined` on `Adjust` (group moves) and `ResizePage` (Resize all pages, `resize_pages` in `crates/noteful-core/src/pages.rs`) |
+| Preview = result | group resize in `apps/reader/selection.js` (members move by where the matrix takes their centre; `scaledWidth`) |
+| No blinking ink | `holdInk` / `holdText` in `app.js`: pending strokes move into the new render's overlay |
+| Region icon menu | Grab menu (`#grabMenu.grab-icons`): Select, Copy text, Ask AI, Add to chat, Erase, Cancel; erase = `regionSweep` in `selection-geometry.js` |
+| Compacting the history | `crates/noteful-core/src/compact.rs` (floor, renumbering, reopen-and-compare); ✂ per automatic save in File (`drawAutosaveList`) |
+| Ctrl/Shift + drag windows | `apps/reader/floating.js` |
+| Recognition | `apps/reader/ocr.js` (passes, voting, lines), `ocr-dictionary.js` (word lists, noisy channel), `find.js` (quick result first), `search-index.js` (CJK), `tools/ocr_handwriting_bench.mjs` |
+| Fact check | `apps/reader/fact-check.js` (prompt, findings, Markdown with `<!-- page N -->` badges), Study → Fact check (Shift F) |
+| Memory in long PDFs | `apps/reader/pdf-background.js` (raster LRU, DPR-aware size, bitmap canvas vs PNG in a worker), `docs/PERFORMANCE.md`, `tools/perf_bench.mjs` |
+| Fast joins | `apps/desktop/collab-server.js` (ETag, compression, stable port), `sw.js` + `precache.json` (hashes, lazy engines) |
+| Open with | `apps/desktop/open-with.js`, `build/installer.nsh`, `apps/mobile/app.json` intent filters, `manifest.webmanifest` `file_handlers` |
 
 ## Screens
 
@@ -60,3 +71,13 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | A recorded take showed "Infinity:NaN" and no seek bar | MediaRecorder WebM has no duration: seek far once and wait for `durationchange` |
 | The 70% dim looked like 20% in screenshots | shrunk screenshots look lighter: sample a pixel instead of judging by eye |
 | Ask AI opened from the quiz went under the veil, then over the quiz | windows stack from one `--window-z`; dimming raises the variable, not single windows |
+| Resizing a group landed every item away from the preview | members move by where the group transform takes their own centre; compare preview and result in a test |
+| Enlarged highlighter no longer covered the boxes it sat behind | scale stroke widths with the geometry, as the preview does |
+| The eraser never removed circles and triangles | fix hit outlines at the source; a region eraser built on the eraser then works too |
+| Strokes vanished until the pen stopped, and in shared sessions | keep drawn ink until a render containing its edit replaces it |
+| A 193-page PDF used 1 GB after one scroll | far pages drop text layers and highlights too; LRU of rasters; measure PSS of the whole process tree |
+| PDFs disappeared when zoomed in on an Android tablet | one canvas is one GPU texture: images (tiled) above 4096 px / 16 MP |
+| Joining a shared note took minutes on home Wi-Fi | content-hashed cache-first files, ETag, compression, lazy engines; measure on a throttled link |
+| Tesseract's best models aborted in the browser | its WASM cores lack float routines: get quality from passes and voting |
+| Spelling help turned "caché" into "coche" and English terms into Spanish | a full word list vetoes corrections; all chosen languages count; an accent the engine saw is kept |
+| `.nfedit` projects grew without end | compact the log up to a save point, verify by reopening, undo stops there |

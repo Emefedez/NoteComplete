@@ -11,17 +11,19 @@ Target: lightweight, feature-rich, wide and calm, fast to render. One set of dec
 
 | Need | File |
 |---|---|
-| Stack per app type, crates, shells, data plumbing, repo layout | `references/stack.md` |
+| Stack per app type, crates, shells, data plumbing, repo layout, Open with on every OS | `references/stack.md` |
 | Workspace layout, top bar, docks, command palette, layering | `references/layout.md` |
-| Real-time rendering, plots, media, budgets, measuring, tests | `references/performance.md` |
-| AI features: providers, prompts, jobs, review actions | `references/ai.md` |
+| Real-time rendering, plots, media, memory in long documents, fast joins, budgets, measuring, tests | `references/performance.md` |
+| AI features: providers, prompts, jobs, review actions, checks that write back | `references/ai.md` |
+| Undo log: batch actions as one step, preview = result, no blinking, region tools, compacting the history, automatic saves | `references/editing.md` |
+| Local recognition (OCR): passes and voting, quick result first, dictionary correction, CJK search, measuring | `references/recognition.md` |
 | A full app built this way (NoteComplete): where each rule lives, decisions, bugs | `references/example-notecomplete.md` |
 | Tokens: palette, data series, sizes, z-scale, dark, touch | `templates/tokens.css` |
 | Components: buttons, fields, menus, toolbars, docks, inspector, dialogs, lists, palette, tags, toasts | `templates/components.css` |
 | Workspace skeleton with ARIA | `templates/layout.html` |
 | Command palette | `templates/command-palette.js` |
 | Drag to reorder / drag out | `templates/reorder.js` |
-| Floating windows (drag, resize, _ □ ×, tray) | `templates/floating.js` |
+| Floating windows (drag, resize, Ctrl/Shift + drag anywhere, _ □ ×, tray) | `templates/floating.js` |
 | Export rows, one download path, recording/importing media, focus dimming | `references/export-and-focus.md`, `templates/export-row.js`, `templates/focus-dim.js` |
 | Electron shell (windows, tabs, guarded IPC, no flash) | `templates/electron/` |
 | Screenshots of every state, light + dark | `scripts/cdp-gallery.mjs` |
@@ -71,6 +73,7 @@ Tool windows that sit over the work (assistant, audio, quiz, practice, inspector
 - head buttons `_ □ ×`: `_` puts the window in the **tray** (a pill with a caret at the bottom left listing put-away windows; choosing one brings it back in place), `□` toggles small (head only) / large, `×` closes; closing also removes it from the tray;
 - place and size remembered per window; modal dialogs stay modal and fixed;
 - `□` collapses under the head: same width, head stays put (place windows by left/top, not bottom); expanding restores the exact size;
+- Ctrl (⌘) + drag anywhere moves a window and Shift + drag resizes it from the corner nearest the pointer, as in a tiling window manager; text fields keep their own Shift-click, and the click that ends the gesture doesn't press the button it started on;
 - stacking like a desktop: the window pressed last is in front, a window that opens comes in front; a focus mode that dims the background lifts the whole stack above its veil without reordering it.
 
 Optional focus mode (`templates/focus-dim.js`, details in `references/export-and-focus.md`): a sun toggle in a study/review window's head dims everything behind it to ~70%. One remembered preference for all such windows; the veil shows only while one of them is really shown (not small, put away, closed or docked) and lets clicks through; every floating window stays above it in the same order (`--window-z` raised to `--z-focus`).
@@ -89,6 +92,12 @@ Optional focus mode (`templates/focus-dim.js`, details in `references/export-and
 - Direct manipulation on the main view (drag, scrub, zoom to pointer, box select); inspector edits the selection with live preview and one undo step per gesture.
 - Long work runs in the background with a job chip (phase, elapsed time, progress, Stop); the UI never blocks.
 - Undo instead of confirmation; confirm only before losing data.
+- One action = one undo step, also when it changes many things (move a group, resize every page): commit edits joined to the first, check all before changing any, and offer the batch beside the single action ("Resize this page" · "Resize all pages"). Relative options follow each item's own reference (`references/editing.md`).
+- The preview is the result: what a drag shows is exactly what lands on release (same transform, widths scaled with the size); what was drawn stays on screen until a render that contains it replaces it.
+- Actions on a dragged-out region appear as a small row of icon buttons at its edge (select, copy, ask AI, attach, erase, cancel), titled, not a text menu.
+- Histories that grow with every edit get a way to shrink: delete the history up to an automatic save or now, verified page by page before replacing, with undo stopping there.
+- Slow local work offers a quick result first, then improves it in place reusing what was already computed (`references/recognition.md`).
+- Files open from the OS's "Open with" on every platform: default for the app's own formats, offered for the common types it reads.
 - Reserve space for things that appear, so layout never jumps; new windows/views paint the backdrop colour first.
 - Spell check off by default (`spellcheck="false"` on `<html>`, Electron `webPreferences.spellcheck: false`): people write in several languages and a single-language checker underlines everything. Offer it as a setting with chosen languages if the app is mostly about writing.
 
@@ -102,11 +111,11 @@ Optional focus mode (`templates/focus-dim.js`, details in `references/export-and
 
 ## Performance (details in references/performance.md)
 
-Idle = zero work. Render loops run only while playing, streaming or animating. Draw at most once per frame, decimate to pixels (min/max per column), level-of-detail caches, GPU for large data, workers for decoding and analysis, bounded DOM, lazy-loaded heavy modules.
+Idle = zero work. Render loops run only while playing, streaming or animating. Draw at most once per frame, decimate to pixels (min/max per column), level-of-detail caches, GPU for large data, workers for decoding, analysis and encoding, bounded DOM, lazy-loaded heavy modules. Long documents: far items keep only their size, a small LRU of rasters sized to the screen's pixel ratio, images instead of canvases past GPU texture limits or under heavy vector overlays. Network joins: content-hashed cache-first files, ETag + compression, compressed snapshots.
 
 ## AI (details in references/ai.md)
 
-AI acts on the user's selection with the source attached, returns structured output, and every result can be explained, double-checked, edited or discarded in place. Long requests are background jobs; everything is cancellable.
+AI acts on the user's selection with the source attached, returns structured output, and every result can be explained, double-checked, edited or discarded in place. Long requests are background jobs; everything is cancellable. Checks (a fact check) report findings with corrections into the user's own notes, anchored to each item with a badge, listing what was found clean, as suggestions to verify.
 
 ## Customization
 

@@ -63,6 +63,14 @@ Every AI output is questionable in place:
 
 User corrections win over the original and are stored with the project.
 
+## Checks that write back
+
+A check reads the material and reports what to fix, without changing the material (e.g. a fact check of notes):
+- Scope like any generation (current item, range, whole document), same dialog, no amount; a background job.
+- Batches as usual, and each batch also gets the **text of the other items** checked (capped, shared out evenly) so inconsistencies *between* items are found.
+- Structured findings per item: `kind` (error · inconsistency · unclear · missing), the exact `quote`, the `problem`, a `correction`, the `related` item for inconsistencies, a `confidence`. Every item asked must be listed, empty when nothing is wrong, so the result also says what was checked.
+- Write the findings where the user works on the material, anchored to it: appended to their notes under a dated heading naming the tool, one item badge per item with findings (a page marker that jumps to the page), a mark per kind (❌ ⚠️ ❓ ➕), the correction on its own line, low-confidence ones marked unsure, and the clean items in one line. Say they are suggestions to check against sources. The finished job offers "Open notes".
+
 ## Testing
 
 Inject a fake bridge (canned JSON, streamed deltas, errors); assert payloads (attachments, prompt contents), partial rendering while streaming, cancel on close, and that invalid items are dropped.
