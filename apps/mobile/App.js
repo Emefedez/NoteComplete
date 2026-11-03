@@ -3,13 +3,15 @@ import {ActivityIndicator, StyleSheet, Text, View, Pressable, useColorScheme, Li
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import Constants from 'expo-constants';
-import {requireNativeModule} from 'expo';
+import {requireNativeModule, requireOptionalNativeModule} from 'expo';
 import {WebView} from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import {mobileDriveToken} from './drive-auth.mjs';
 import {IncomingFiles} from './incoming-files.mjs';
 import {readerURL, exportRequest, allowsNavigation} from './connection.mjs';
+// The provider's file names and Share intents come from the app's own module (absent in Expo Go).
+const files = requireOptionalNativeModule('ReaderServer');
 
 export default function App() {
  const web = useRef(null), sharing = useRef(false), incoming = useRef(null), driveSession = useRef({generation:0,busy:false});
@@ -29,8 +31,11 @@ export default function App() {
  let uri, configError;
  try { uri = bundled ? localUri : readerURL(process.env.EXPO_PUBLIC_READER_URL, Constants.expoConfig?.hostUri, Constants.expoConfig?.extra?.readerPort); }
  catch (e) { configError = e.message; }
- if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message)});
- useEffect(()=>{const subscription=Linking.addEventListener('url',event=>incoming.current.open(event.url));Linking.getInitialURL().then(url=>incoming.current.open(url)).catch(e=>setError(e.message));return()=>subscription.remove();},[]);
+ if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message),describe:files?.describe?uri=>files.describe(uri):null});
+ useEffect(()=>{const subscription=Linking.addEventListener('url',event=>incoming.current.open(event.url));Linking.getInitialURL().then(url=>incoming.current.open(url)).catch(e=>setError(e.message));
+  // Share → NoteComplete: the launch's files, then any shared while open.
+  let shared;try{for(const u of files?.takeShared?.()||[])incoming.current.open(u);shared=files?.addListener?.('onShared',event=>{for(const u of event?.uris||[])incoming.current.open(u);});}catch(e){setNotice('Could not open the shared file: '+e.message);}
+  return()=>{subscription.remove();shared?.remove();};},[]);
  const reply = result => web.current?.postMessage(JSON.stringify({type:'noteful-export-result', ...result}));
  async function onMessage(event) {
   let request;
