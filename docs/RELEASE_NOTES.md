@@ -1,4 +1,10 @@
-## What's new in 1.1.26
+## What's new in 1.1.27
+
+- **Erase in the Grab menu.** Grab a region and choose the eraser icon to remove all the ink in it at once; one Undo brings it back.
+- **The eraser removes shapes.** Rectangles, ellipses, triangles and arrows made in Noteful (such as highlighter circles and Δ marks) used to be skipped by the eraser; it removes them now, like strokes.
+- **Resizing a group lands where the preview shows.** Resizing several items at once (for example boxes with highlighter behind them) moved each one away from where it was shown while dragging. They now stay as previewed, the ink keeps its look (thicker when enlarged, so a highlighter still covers what it covered), and the selection box stays around them.
+
+### In 1.1.26
 
 - **A smaller Grab menu.** The buttons under a grabbed region are icons now (Select, Copy text, Ask AI, Add to chat, Cancel), with their names on hover, so the menu covers less of the page.
 

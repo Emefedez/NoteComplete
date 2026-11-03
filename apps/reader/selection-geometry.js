@@ -24,3 +24,18 @@ export function resizeAdjustment(item,index,moving){
  a.translation=[fixed[0]+c*lx-s*ly-item.bounds[0]-item.bounds[2]/2,fixed[1]+s*lx+c*ly-item.bounds[1]-item.bounds[3]/2];
  return a;
 }
+// Erase in a grabbed region (app.js): the eraser's path through the whole region, row by row.
+// Rows are two radii apart, so every stroke that enters the region is touched; the radius is
+// small next to the region, so strokes outside it are left alone.
+export function regionSweep([x, y, w, h]) {
+  const r = Math.min(100, Math.max(0.5, Math.min(w, h) / 16, h / 400));
+  const rows = Math.max(1, Math.ceil(h / (2 * r)));
+  const points = [];
+  for (let i = 0; i < rows; i++) {
+    const ry = rows === 1 ? y + h / 2 : y + r + (i * (h - 2 * r)) / (rows - 1);
+    const ends = [x, x + w];
+    if (i % 2) ends.reverse();
+    for (const ex of ends) points.push([ex, ry]);
+  }
+  return { points, radius: r };
+}

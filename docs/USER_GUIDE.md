@@ -27,7 +27,7 @@ Study and Ask AI use an AI tool already installed and signed in on your computer
 
 - **Study → Quiz me (Shift+Q)** generates multiple-choice questions in the background; the chip in the bar shows progress and has Stop. Quizzes are saved with the note: **Q** resumes the latest, **Study → Saved decks and quizzes (Shift+D)** lists them, **Retake wrong answers (Shift+W)** gathers misses from all of them. In the quiz: 1–4 answer, **H** shows the region of your notes that answers it (a correct answer is then worth 1 point instead of 2), **C** asks the AI to clarify, **X** twice disputes a question that is wrong, **V** asks the AI to double check and lets you save the correct answer yourself, **Enter** next, **M** minimizes. **Edit quiz instructions…** changes what the AI is asked for.
 - **Study → Generate flashcards (Shift+C)** makes a deck shown as cards, question over answer. Click a card to edit it in place (Esc or Ctrl+Enter to finish); the page badge shows its page and ✕ deletes it. Lists the AI writes on one line ("1) … 2) …") are put one item per line. **Practise** flips cards in a fixed-size card: **Space** shows the answer, **1** not yet, **2** I knew it. **Export to Anki…** keeps line breaks.
-- **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**), which can also copy the text of a region.
+- **Ask AI (Ctrl+J)** answers questions about the page, a selected item, or a region grabbed with the **Grab** tool (**G**). Under a grabbed region, icons select what is inside, copy its text, ask AI, add it to the chat, or **erase** the ink in it (one undo brings it back).
 - **Help → Connect AI tools…** lets those tools work with your notes outside the app too (summary pages written in handwriting, clean copies, grading a quiz, flashcards). NoteComplete comes with the note server they use; **Connect** registers it with each installed tool, and *Run it yourself* shows the command instead. The desktop app offers this once by itself when it finds a tool that is not connected. Restart the tool afterwards. See [AI agents](MCP.md).
 
 ## Tape and locked items
@@ -155,10 +155,10 @@ Open **☰ → Display quality**. Choose **Performance** (1×, 4 MP/page), **Bal
 | Tool | Behavior |
 |---|---|
 | Pan | Drag with a mouse or scroll with touch. |
-| Select | Select existing ink, supported shapes, images or text placement; drag to move, use four corners to resize, or the upper handle to rotate. The inspector changes dimensions/angle and ink/shape stroke color and width. |
+| Select | Select existing ink, supported shapes, images or text placement; drag to move, use four corners to resize (ink thickens or thins with the size, so a highlighter still covers what it covered), or the upper handle to rotate. The inspector changes dimensions/angle and ink/shape stroke color and width. |
 | Pen | Freehand ink. With a stylus that reports pressure, pressing harder draws wider (about a third of the width when light, 1.7× when firm); a mouse or finger draws the chosen width. |
 | Highlight | Straight segment by default; choose Freehand for sampled ink. Multiply at 50% preserves the appearance over images. |
-| Erase | Remove whole strokes and supported line objects the eraser touches; choose its size (small to extra large) in the tool settings. Other selected objects can be deleted with Select. |
+| Erase | Remove whole strokes and shapes (lines, rectangles, ellipses, triangles, arrows) the eraser touches; choose its size (small to extra large) in the tool settings. Other selected objects can be deleted with Select. |
 | Image | Import PNG, JPEG or WebP onto the current page, then move or resize with Select. |
 | Shapes | Draw a bounding box or use Insert for a line, rectangle, ellipse, triangle or arrow. Rectangles, ellipses and triangles can be filled: choose outline, tint (a pale fill in the pen colour) or solid in the shape settings, or press **F** to cycle. Resizing keeps the fill. In `.noteful` exports the fill becomes highlighter colouring under the outline. |
 
