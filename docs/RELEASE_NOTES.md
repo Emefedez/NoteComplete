@@ -1,4 +1,10 @@
-## What's new in 1.1.29
+## What's new in 1.1.30
+
+- **High-quality recognition settles on real words.** Readings that are words count double in the vote between passes, and each word is then corrected as a spelling checker would: the reading, what other passes read there and words one or two changes away are weighed by how common they are and how likely the change (*ce* → *se*, *Lempo* → *tiempo*, *trabjndo* → *trabajando*). In our handwriting tests this reads 79 % of the words right instead of 72 % in a messy hand, and 56 % instead of 45 % in a harder one.
+- **Every chosen language counts.** Word lists now cover English, French, German, Italian, Portuguese and Catalan too (all but Chinese), and a word of any chosen language is kept: English terms in Spanish notes are no longer "corrected".
+- **Quick result first.** With high quality, a new option (on by default) reads every page as Normal first, so Find has the words at once, then runs the remaining passes and votes them together with that first reading instead of starting over.
+
+### In 1.1.29
 
 - **Chinese text recognition.** Simplified and traditional Chinese are among the languages of **Pages → Recognize text**, and Find matches Chinese character by character (学习 is found wherever recognition split the line).
 - **High-quality recognition.** A new **Quality → High** option reads each page more ways (larger, with thicker strokes, line by line and as scattered text) and lets the readings vote; in our tests with messy handwriting it reads three words in four right instead of half (normal quality improved too, to two in three), at about one and a half times the time.

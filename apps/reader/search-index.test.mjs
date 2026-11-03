@@ -109,11 +109,14 @@ test('OCR readings agreed by several passes win over one confident guess', () =>
 });
 
 import { ocrPasses, OCR_LANGUAGES, readingOrder } from './ocr.js';
-test('high-quality OCR reads more, at more sizes, in more ways', () => {
+test('high-quality OCR reads more, at more sizes, in more ways; the normal passes are part of it', () => {
   assert.ok(OCR_LANGUAGES.chi_sim && OCR_LANGUAGES.chi_tra, 'Chinese is offered');
-  const normal = ocrPasses('normal'), high = ocrPasses('high');
+  const normal = ocrPasses('normal'), high = ocrPasses('high'), extra = ocrPasses('high', { extra: true });
   assert.ok(high.ink.length > normal.ink.length && Math.max(...high.ink.map(p => p.width)) > Math.max(...normal.ink.map(p => p.width)));
-  assert.ok(high.ink.some(p => p.sparse) && high.ink.some(p => p.bold) && high.whole.some(p => p.sparse));
+  assert.ok(high.ink.some(p => p.sparse) && high.ink.some(p => p.bold) && high.whole.some(p => p.sparse) && high.lines);
+  // A quick normal reading is kept and improved by the rest: together they are high quality.
+  assert.deepEqual([...normal.whole, ...extra.whole], high.whole);
+  assert.deepEqual([...normal.ink, ...extra.ink], high.ink);
 });
 
 test('words of one pass never merge, and read line by line', () => {
