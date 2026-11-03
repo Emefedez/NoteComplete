@@ -2,7 +2,9 @@
 //! Wire grammar and evidence: spec/noteful-v0.1.md and DEVELOPMENT.md.
 #![forbid(unsafe_code)]
 
+mod compact;
 mod editor;
+pub use compact::Compacted;
 pub mod ink;
 mod markdown;
 mod page_pdf;

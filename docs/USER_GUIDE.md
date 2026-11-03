@@ -236,6 +236,7 @@ Files download as new files; originals are not overwritten. Replacing a dirty do
 - Opening a note with an automatic save newer than your last save asks which to open: the **automatic save** or the **manual save** (the file). An automatic save opens as an unsaved copy; save it to keep it.
 - In a sharing session the **host's** switch applies to everyone: guests and tablets show it, locked. A guest or tablet that loses the session, or sees it end, keeps an automatic save of the note and is offered to open it.
 - Automatic saves are complete projects (the original note plus every edit, with undo history and the Markdown notes). They live in this browser's storage, so clearing site data removes them.
+- **Deleting the history.** A project (`.nfedit`) keeps every edit so it can undo, and grows with them. In **File**, ✂ beside an automatic save deletes the history up to that save, and **Delete history up to now** deletes all of it. The note stays exactly as it is: strokes, pictures and text drawn and later erased go, with all their edits, as do moves superseded by later ones and what was undone; the file is smaller once saved. You can no longer undo past that point; edits after it still undo. ✂ appears beside saves made from version 1.1.31 on that are still part of the note's history as it is now (not after deleting the history up to a later point). It is not available while sharing, since every copy of the note keeps the same history. The engine checks that every page still draws the same before changing anything.
 
 ## Mobile and Android file opening
 

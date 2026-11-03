@@ -144,6 +144,20 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       postMessage({ id, result: session.history_digest() });
       return;
     }
+    if (op === "historyMark") {
+      postMessage({ id, result: JSON.parse(session.history_mark()) });
+      return;
+    }
+    if (op === "prefixDigest") {
+      postMessage({ id, result: session.prefix_digest(args.edits) });
+      return;
+    }
+    // The history compacted up to `upto` edits: the report, with the page view after it.
+    if (op === "compactHistory") {
+      const report = JSON.parse(session.compact_history(args.upto));
+      postMessage({ id, result: { report, view: JSON.parse(session.view(page)) } });
+      return;
+    }
     if (op === "undo") session.undo();
     if (op === "redo") session.redo();
     // Undoing inserted pages can take away the page in view: show the last one left.

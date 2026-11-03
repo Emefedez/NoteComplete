@@ -2717,6 +2717,16 @@ body.guest-session #closeNotes, body.guest-session #notesToggle { display: none 
 .autosave-list[hidden] { display: none; }
 .autosave-list .autosave-label { width: 100%; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .autosave-list button { min-height: 26px; padding: 2px 8px; border-radius: 99px; background: var(--fill); font-size: 12px; }
+/* A save and, beside it, ✂ (delete the history up to it): one pill. */
+.autosave-list .autosave-slot { display: inline-flex; flex: none; align-items: stretch; border-radius: 99px; background: var(--fill); }
+.autosave-list .autosave-slot > button, .autosave-list .autosave-now { width: auto; flex: none; white-space: nowrap; justify-content: flex-start; }
+.autosave-list .autosave-slot > button { background: transparent; }
+.autosave-list .autosave-slot > button:first-child:not(:last-child) { padding-right: 4px; }
+.autosave-list .autosave-trim { display: inline-grid; place-items: center; min-width: 26px; padding: 0 6px 0 4px; border-left: 1px solid var(--line); border-radius: 0 99px 99px 0; color: var(--muted); }
+.autosave-list .autosave-trim:hover, .autosave-list .autosave-now:hover:not(:disabled) { color: var(--danger, #c0392b); }
+.autosave-list .autosave-trim svg, .autosave-list .autosave-now svg { width: 14px; height: 14px; }
+.autosave-list .autosave-now { display: inline-flex; align-items: center; gap: 4px; }
+.autosave-list .autosave-now:disabled { opacity: .5; }
 .autosave-all { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
 .autosave-all li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .autosave-all li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,4 +1,8 @@
-## What's new in 1.1.30
+## What's new in 1.1.31
+
+- **Delete the edit history.** Projects (`.nfedit`) keep every edit for undo and grew without end. In **File**, ✂ beside an automatic save deletes the history up to that save, and **Delete history up to now** deletes all of it: strokes, pictures and text drawn and later erased go with all their edits, as do moves replaced by later ones and what was undone. The note stays exactly as it is (every page is checked to draw the same before anything changes), the file is smaller once saved, and undo stops at that point; later edits still undo.
+
+### In 1.1.30
 
 - **High-quality recognition settles on real words.** Readings that are words count double in the vote between passes, and each word is then corrected as a spelling checker would: the reading, what other passes read there and words one or two changes away are weighed by how common they are and how likely the change (*ce* → *se*, *Lempo* → *tiempo*, *trabjndo* → *trabajando*). In our handwriting tests this reads 79 % of the words right instead of 72 % in a messy hand, and 56 % instead of 45 % in a harder one.
 - **Every chosen language counts.** Word lists now cover English, French, German, Italian, Portuguese and Catalan too (all but Chinese), and a word of any chosen language is kept: English terms in Spanish notes are no longer "corrected".

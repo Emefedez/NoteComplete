@@ -15,7 +15,7 @@ NoteComplete saves a note in two formats of its own. This page records why both 
 | Text of handwriting (written or recognized) | Kept | Kept |
 | Recordings added in NoteComplete | **Not kept** (they stay on the device) | Kept (`audio/`) |
 | Opens elsewhere | NoteComplete only | Any tar tool; `note.noteful` opens in Noteful |
-| Size | Original × 1.33 (Base64) plus the edits | About the size of the note, plus audio |
+| Size | Original × 1.33 (Base64) plus the edits (File → Delete history compacts them) | About the size of the note, plus audio |
 
 ## The assessment
 
