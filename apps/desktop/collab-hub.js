@@ -24,7 +24,7 @@ export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
 // Edits a peer may send, by role. Tablets (and guests who may draw) draw, highlight, tape,
 // erase, type text, add blank pages and undo; the host edits anything.
 export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo', 'insertPages', 'image', 'editText', 'remove']);
-export const HOST_OPS = new Set([...TABLET_OPS, 'adjust', 'crop', 'lock', 'layer', 'resize', 'resizePage', 'insertHandwritten']);
+export const HOST_OPS = new Set([...TABLET_OPS, 'adjust', 'crop', 'lock', 'layer', 'resize', 'resizePage', 'resizePages', 'insertHandwritten']);
 // Of those, a tablet adds only blank pages and typed text: a PDF or a picture stays the host's
 // to bring in (they are large, and come from the computer's files).
 export function tabletMay(op, args) {

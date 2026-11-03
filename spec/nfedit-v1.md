@@ -83,6 +83,8 @@ Native export writes each text box as a kind-2 object with the field layout and 
 
 `ResizePage` sets a page slot's size. Ink, objects and text keep their page coordinates (the page grows or shrinks from its top-left corner). The PDF background keeps its rectangle unless `pdf_rect` (optional, only for PDF pages) gives a new one. Sizes must be finite, at least 10 units and within ±1e6; identical sizes add no action. Views report the current `size` and the page's `base_size` before resizes. Native export writes the size in background tag 1 and the PDF rectangle in background tag 9 (type 0x23, as on widened Noteful pages), so the PDF stays in place; inserted pages are written at their final size.
 
+`ResizePage` may carry `"joined": true`: it is undone and redone with the edit before it, so `resize_pages` (every page resized at once) is one undo step. Absent means false.
+
 ## Markdown notes (project version 5)
 
 A project may carry the note's Markdown notes in a top-level `markdown` string (omitted when empty; at most 8 MiB). They are not part of the edit history. A line consisting of `<!-- page N -->` ties the text after it to display page N (1-based).

@@ -123,6 +123,9 @@ pub(crate) fn order_between(a: &str, b: Option<&str>) -> Option<String> {
     }
 }
 
+/// A page (slot) to resize: its new size, and where its PDF goes (`None`: it stays put).
+pub type PageResize = (usize, [f64; 2], Option<[f64; 4]>);
+
 impl Editor {
     fn original_pages(&self) -> usize {
         self.scene.pages.len()
@@ -245,6 +248,7 @@ impl Editor {
                 page,
                 size: s,
                 pdf_rect,
+                ..
             } = edit
             {
                 if *page == slot {
@@ -279,7 +283,37 @@ impl Editor {
             page: slot,
             size,
             pdf_rect,
+            joined: false,
         })
+    }
+    /// Resize several pages (slots) as one undoable edit: every size is checked first, so
+    /// either all change or none. Pages already that size are left alone. Returns how many changed.
+    pub fn resize_pages(&mut self, pages: &[PageResize]) -> Result<usize> {
+        for (slot, size, pdf_rect) in pages {
+            let (_, background) = self.page_geometry(*slot)?;
+            if !finite(size)
+                || size.iter().any(|v| *v < 10.)
+                || pdf_rect.is_some_and(|r| {
+                    !finite(&r) || r[2] <= 0. || r[3] <= 0. || background.is_none()
+                })
+            {
+                return Err(Error::new(0, "Invalid page size"));
+            }
+        }
+        let mut changed = 0;
+        for (slot, size, pdf_rect) in pages {
+            let before = self.cursor;
+            self.resize_page(*slot, *size, *pdf_rect)?;
+            if self.cursor > before {
+                if changed > 0 {
+                    if let Some(Edit::ResizePage { joined, .. }) = self.history.last_mut() {
+                        *joined = true;
+                    }
+                }
+                changed += 1;
+            }
+        }
+        Ok(changed)
     }
     pub(crate) fn added_pdf(&self, id: &str) -> Option<&[u8]> {
         self.added_pdfs
