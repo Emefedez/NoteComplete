@@ -2850,8 +2850,9 @@ async function autosaveNow({ force = false } = {}) {
   try {
     await notes?.flush?.();
     const project = await call("save");
+    const mark = await call("historyMark").catch(() => null);
     if (note !== epoch) return null;
-    const slot = await autosaves.save({ key, title, project, shared });
+    const slot = await autosaves.save({ key, title, project, shared, mark });
     autosavedRevision = at;
     return slot;
   } catch (e) {
@@ -2897,24 +2898,63 @@ async function openAutosave(slot) {
   savedState();
   status(`Opened the automatic save from ${when(slot.time)}. Save it to keep it.`);
 }
-// File menu: this note's automatic saves, newest first, and all of them.
+// File menu: this note's automatic saves, newest first, and all of them. Beside each, ✂
+// deletes the edit history up to that save (compact.rs), and the last ✂ up to now: the
+// note stays as it is, its file gets smaller, and undo stops there.
 async function drawAutosaveList() {
   const list = $("autosaveList");
   const slots = doc ? await autosaves.list(autosaveKey()).catch(() => []) : [];
   const all = await autosaves.list().catch(() => []);
-  list.hidden = !all.length;
-  if (!all.length) return list.replaceChildren();
+  list.hidden = !all.length && !doc;
+  if (list.hidden) return list.replaceChildren();
   const label = document.createElement("span");
   label.className = "autosave-label";
   label.textContent = slots.length ? "Automatic saves" : "No automatic saves of this note";
-  list.replaceChildren(label, ...slots.map((slot) => {
+  const floor = doc?.history_floor || 0, edits = doc?.edit_count || 0;
+  const trim = (title, run) => Object.assign(document.createElement("button"), { type: "button", className: "autosave-trim", title, ariaLabel: title, onclick: run });
+  const items = await Promise.all(slots.map(async (slot) => {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = when(slot.time);
     b.title = `Open the automatic save of “${slot.title}” from ${when(slot.time)}`;
     b.onclick = () => openAutosave(slot);
-    return b;
-  }), Object.assign(document.createElement("button"), { type: "button", textContent: "All automatic saves…", onclick: openAutosaves }));
+    const pair = document.createElement("span");
+    pair.className = "autosave-slot";
+    pair.append(b);
+    // Offered when the save is part of this note's history as it is now, with edits before it.
+    const usable = slot.edits > floor && slot.edits <= edits && (await call("prefixDigest", { edits: slot.edits }).catch(() => "")) === slot.digest;
+    if (usable) {
+      const t = trim(`Delete the history up to this save (${when(slot.time)}): undo stops there; the note stays as it is`, () => compactHistory(slot.edits, `up to the automatic save of ${when(slot.time)}`));
+      t.append(icon("trim"));
+      pair.append(t);
+    }
+    return pair;
+  }));
+  const now = Object.assign(document.createElement("button"), { type: "button", className: "autosave-now", textContent: "Delete history up to now", title: "Delete the whole undo history: the note stays as it is and its file gets smaller", disabled: !doc || (edits <= floor && !doc.can_redo), onclick: () => compactHistory(edits, "up to now") });
+  now.prepend(icon("trim"));
+  list.replaceChildren(label, ...items, Object.assign(document.createElement("button"), { type: "button", textContent: "All automatic saves…", onclick: openAutosaves }), now);
+}
+// Deletes the edit history up to `upto` edits (an automatic save's point, or now): the
+// edits that no longer shape the note go (strokes drawn and erased, superseded moves, what
+// was undone), and undo stops there. The engine checks every page still draws the same.
+async function compactHistory(upto, label) {
+  closeMenus();
+  if (!doc) return;
+  if (collab) return status("The history cannot be deleted while sharing: every copy of the note keeps the same history. Stop sharing first.", true);
+  if (busy()) return status("Wait for the edit in progress to finish, then try again.", true);
+  if (!confirm(`Delete the edit history ${label}?\n\nThe note stays exactly as it is, and its file gets smaller once saved. You will not be able to undo past this point.`)) return;
+  try {
+    const { report, view } = await call("compactHistory", { upto });
+    const removed = report.edits_before - report.edits_after, saved = report.bytes_before - report.bytes_after;
+    revision++;
+    dirty = changed = true;
+    doc = view;
+    savedState();
+    const size = saved >= 1048576 ? `${(saved / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(saved / 1024))} KB`;
+    restructure(view, page, removed ? `History deleted ${label}: ${removed} ${removed === 1 ? "edit" : "edits"} fewer, ${size} smaller. Save to keep it.` : `Nothing to delete ${label}: every edit still shapes the note. Undo now stops there.`);
+  } catch (e) {
+    status(`Could not delete the history: ${e.message}`, true);
+  }
 }
 $("fileMenu").addEventListener("toggle", () => { if ($("fileMenu").open) { autosaveSwitch(); drawAutosaveList(); } });
 async function openAutosaves() {

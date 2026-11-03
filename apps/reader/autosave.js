@@ -44,9 +44,11 @@ export function when(time, now = Date.now()) {
 export function autosaveStore(backend = idbBackend()) {
   let next = 0;
   return {
-    async save({ key, title, project, shared = false, time = Date.now() }) {
+    // `mark` ({edits, digest}): where the note's edit history was, so the history up to
+    // this save can later be compacted (File menu).
+    async save({ key, title, project, shared = false, time = Date.now(), mark = null }) {
       const id = `${time}-${next++}-${Math.random().toString(36).slice(2, 8)}`;
-      const slot = { id, key, title: title || 'Untitled note', time, size: project.byteLength, shared };
+      const slot = { id, key, title: title || 'Untitled note', time, size: project.byteLength, shared, ...(mark ? { edits: mark.edits, digest: mark.digest } : {}) };
       await backend.putData(id, project);
       await backend.putMeta(slot);
       for (const gone of pruned(await this.list())) await this.remove(gone);

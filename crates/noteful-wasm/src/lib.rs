@@ -307,6 +307,21 @@ impl EditorSession {
     pub fn history_digest(&self) -> Result<String, JsValue> {
         self.inner.history_digest().map_err(js_error)
     }
+    /// Where the history is now, as JSON {edits, digest} (an automatic save keeps it).
+    pub fn history_mark(&self) -> Result<String, JsValue> {
+        let (edits, digest) = self.inner.history_mark().map_err(js_error)?;
+        Ok(serde_json::json!({ "edits": edits, "digest": digest }).to_string())
+    }
+    /// A digest of the first `edits` edits ("" when the history is shorter).
+    pub fn prefix_digest(&self, edits: usize) -> String {
+        self.inner.prefix_digest(edits).unwrap_or_default()
+    }
+    /// Compacts the history up to `upto` edits (compact.rs), as JSON
+    /// {edits_before, edits_after, bytes_before, bytes_after}.
+    pub fn compact_history(&mut self, upto: usize) -> Result<String, JsValue> {
+        let done = self.inner.compact_history(upto).map_err(js_error)?;
+        Ok(serde_json::json!({ "edits_before": done.edits_before, "edits_after": done.edits_after, "bytes_before": done.bytes_before, "bytes_after": done.bytes_after }).to_string())
+    }
     pub fn pdf_bytes(&self, id: &str) -> Result<Vec<u8>, JsValue> {
         Ok(self.inner.pdf_bytes(id).map_err(js_error)?.to_vec())
     }

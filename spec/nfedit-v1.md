@@ -1,4 +1,4 @@
-# Noteful RE Project (.nfedit), versions 1–6
+# Noteful RE Project (.nfedit), versions 1–9
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -100,6 +100,20 @@ The words describe the ink as written; erasing or moving that ink later does not
 ## Recognized text (project version 8)
 
 A project may have `recognized_text`: page slot → words (`{"text", "bounds"}`, as in version 6), the text a host recognized in the handwriting (OCR). It is not part of the edit history; hosts set it with `set_recognized_words(slot, words)`, and an empty list clears it. `view(page)` returns it as `recognized_text`. In `.notecomp` files it is `ocr-text.json` (`{"pages": [[word, …], …]}` in display order, `"ocr_text":"ocr-text.json"` in the manifest).
+
+## Compacted history (project version 9)
+
+A project may have `floor`: the edits before it were compacted and cannot be undone (`undo` stops at `floor`; `view(page)` reports `can_undo` against it and returns it as `history_floor`). `0 ≤ floor ≤ cursor`; projects with a floor above 0 are version 9.
+
+`Editor::compact_history(upto)` (`upto` between `floor` and `cursor`) rewrites `history[0, upto)` so it holds only what shapes the note now, then sets `floor` to its new length:
+
+- `Add`/`Image` edits whose item an `Erase` in that range erased go, with every `Adjust`, `Replace` and `Retext` of the item; the item leaves those `Erase` lists, and an `Erase` left empty goes.
+- Of an item's `Adjust` edits, one goes when the next one of the same item has the same `locked` value as it and as the one kept before it (each adjustment is absolute; a lock change stays its own edit, as `adjust_item` requires). Only an item's last `Replace` and last `Retext` stay. Kept edits lose `joined`.
+- `upto == cursor` also drops the redo branch; an earlier `upto` keeps every later edit (and the redo branch) as it was.
+- Added items are named by edit position (`new:N`, `image:N`), so every id in `Erase`, `Adjust`, `Replace` and `Retext` is renumbered.
+- The result is reopened from its JSON and every page's SVG (without `data-item` names) and text boxes (without ids) compared with the note before; any difference leaves the note unchanged and fails.
+
+`Editor::history_mark()` returns `(cursor, digest of history[0, cursor))` and `prefix_digest(n)` the digest of the first `n` edits (MD5 of their JSON), so a host can tell whether an automatic save is a point of the current history.
 
 ## Infinite canvas (project version 7)
 
