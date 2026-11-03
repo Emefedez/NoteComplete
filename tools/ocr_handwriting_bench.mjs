@@ -1,6 +1,6 @@
 // Handwriting OCR benchmark (Chromium, after a web build; needs the network for the
 // language data and word lists, fetched with curl and kept in the system temp folder).
-// Known Spanish text is written as handwriting ink (Insert handwritten pages) in several
+// Known Spanish text (with some English words, as notes have) is written as handwriting ink (Insert handwritten pages) in several
 // hands, recognized at normal and high quality, and scored: recall is the share of the
 // text's words found, precision the share of the words read that are right.
 //   node tools/ocr_handwriting_bench.mjs [font,hand,pen ...] [--json out.json]
@@ -22,7 +22,9 @@ Cuando una dirección no está en la caché, se produce un fallo y hay que traer
 
 El sistema operativo reparte el tiempo del procesador entre los procesos según su prioridad y su estado.
 
-Ejercicio: calcula el número de páginas, la dirección física y el tamaño de la tabla de páginas.`;
+Ejercicio: calcula el número de páginas, la dirección física y el tamaño de la tabla de páginas.
+
+El framework guarda cada request en un buffer y un thread pool hace el scheduling del trabajo.`;
 const truth = TEXT.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').match(/[a-zñ]+/g);
 async function run(CONFIG) {
 const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
@@ -62,7 +64,7 @@ for (const quality of ['normal', 'high']) {
   await p.waitForSelector('#ocrDialog[open]');
   await p.evaluate(() => document.querySelector('input[name="ocrScope"][value="range"]').click());
   await p.fill('#ocrFrom', '2'); await p.fill('#ocrTo', String(pages));
-  await p.selectOption('#ocrLanguage', ['spa']);
+  await p.selectOption('#ocrLanguage', ['spa', 'eng']);
   await p.locator(`input[name="ocrQuality"][value="${quality}"]`).locator('xpath=..').click();
   if (!(await p.isChecked('#ocrRedo'))) await p.check('#ocrRedo');
   await p.evaluate(() => { document.getElementById('status').textContent = ''; });

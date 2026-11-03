@@ -43,7 +43,7 @@ const errors = []; p.on('pageerror', e => errors.push(e.message));
 await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
 await p.setInputFiles('#file', png);
 await p.waitForSelector('.sheet[data-page="0"] .render svg');
-const recognize = async (quality) => {
+const recognize = async (quality, during = null) => {
   await p.evaluate(() => document.getElementById('ocrOpen').click());
   await p.waitForSelector('#ocrDialog[open]');
   await p.selectOption('#ocrLanguage', ['spa', 'chi_sim']);
@@ -52,6 +52,7 @@ const recognize = async (quality) => {
   assert.equal(await p.evaluate(() => document.querySelector('input[name="ocrQuality"]:checked').value), quality);
   await p.evaluate(() => { document.getElementById('status').textContent = ''; });
   await p.click('#ocrStart');
+  if (during) await during();
   await p.waitForFunction(() => /Text recognized|Could not recognize/.test(document.getElementById('status').textContent), null, { timeout: 600000 });
   const message = await p.textContent('#status');
   assert.match(message, /Text recognized/, message);
@@ -76,7 +77,14 @@ console.log('· normal quality:', `${(normalTime / 1000).toFixed(1)} s`, normal)
 
 t = Date.now();
 fetched.length = 0;
-await recognize('high');
+// Quick result first (the default): while the extra passes run, Find already has the words.
+let duringRun = null;
+await recognize('high', async () => {
+  await p.waitForFunction(() => /improving/.test(document.getElementById('jobArea').textContent), null, { timeout: 300000 });
+  duringRun = await find('memoria');
+});
+assert.ok(duringRun > 0, 'the quick result is searchable while the run improves it');
+console.log('· quick result searchable while improving');
 const highTime = Date.now() - t;
 const high = {}; for (const w of words) high[w] = await find(w);
 console.log('· high quality:', `${(highTime / 1000).toFixed(1)} s`, high);

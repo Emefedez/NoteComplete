@@ -3,8 +3,8 @@
 // OCR runs only when the user starts it from the Recognize text dialog, then
 // continues in the background as a job chip in the bar.
 import { SearchIndex } from './search-index.js';
-import { ocrWorker, recognizePage, lineWords, uniqueLines, mergeWords, ocrPasses, OCR_LANGUAGES } from './ocr.js';
-import { loadDictionary, releaseDictionaries, correctWords, DICTIONARY_LANGUAGES } from './ocr-dictionary.js';
+import { ocrWorker, recognizePage, lineWords, uniqueLines, voteWords, ocrPasses, OCR_LANGUAGES } from './ocr.js';
+import { loadDictionary, releaseDictionaries, correctWords, isWord as isLexiconWord, DICTIONARY_LANGUAGES } from './ocr-dictionary.js';
 import { textLayer } from './text-layer.js';
 
 const $ = id => document.getElementById(id);
@@ -271,12 +271,17 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   // Quality: remembered like the languages.
   const qualityPicked = () => document.querySelector('input[name="ocrQuality"]:checked')?.value || 'normal';
   try { const q = document.querySelector(`input[name="ocrQuality"][value="${localStorage.getItem('notecomplete-ocr-quality') || 'normal'}"]`); if (q) q.checked = true; } catch { /* Optional. */ }
+  // Quick result first: only for high quality.
+  try { $('ocrProgressive').checked = localStorage.getItem('notecomplete-ocr-progressive') !== '0'; } catch { /* Optional. */ }
+  const progressiveShown = () => { $('ocrProgressiveRow').hidden = qualityPicked() !== 'high'; };
+  for (const radio of document.querySelectorAll('input[name="ocrQuality"]')) radio.addEventListener('change', progressiveShown);
+  progressiveShown();
   function openOcr(currentPage) {
     const { pages } = documentInfo();
     $('ocrFrom').max = $('ocrTo').max = pages;
     $('ocrFrom').value = $('ocrTo').value = currentPage + 1;
     $('ocrStatus').textContent = ocrRun ? 'Recognition is running in the background; its progress is in the bar. Stop it there to start another.'
-      : Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} ${Object.keys(stored.ocr).length === 1 ? 'page' : 'pages'} already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use (and, for Spanish, word lists that correct misread words).';
+      : Object.keys(stored.ocr).length ? `${Object.keys(stored.ocr).length} ${Object.keys(stored.ocr).length === 1 ? 'page' : 'pages'} already recognized in this note.` : 'Recognition runs on this device. Language data downloads once on first use, with word lists that correct misread words (every language but Chinese).';
     $('ocrStart').disabled = !!ocrRun;
     $('ocrDialog').showModal();
   }
@@ -292,8 +297,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     if (ocrRun) return;
     const chosen = [...languages.selectedOptions].map(o => o.value);
     if (!chosen.length) { $('ocrStatus').textContent = 'Choose at least one language.'; return; }
-    const quality = qualityPicked(), passes = ocrPasses(quality);
-    try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); localStorage.setItem('notecomplete-ocr-quality', quality); } catch { /* Optional. */ }
+    const quality = qualityPicked(), progressive = $('ocrProgressive').checked;
+    try { localStorage.setItem('notecomplete-ocr-languages', chosen.join(',')); localStorage.setItem('notecomplete-ocr-quality', quality); localStorage.setItem('notecomplete-ocr-progressive', progressive ? '1' : '0'); } catch { /* Optional. */ }
     $('ocrStart').disabled = true;
     $('ocrStatus').textContent = 'Checking the pages…';
     await build();
@@ -315,7 +320,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     if (!pages.length) { $('ocrStatus').textContent = `All ${skipped} ${skipped === 1 ? 'page is' : 'pages are'} already recognized. Tick “Recognize again” to redo them.`; return; }
     $('ocrDialog').close();
     const token = generation;
-    let cancelled = false, worker = null, done = 0, stop;
+    let cancelled = false, worker = null, done = 0, improved = 0, quick = false, stop;
     // Stop ends the run at once: every wait (engine, page raster, recognition)
     // races against it, so a page in progress cannot keep the job alive.
     const stopped = new Promise(resolve => { stop = resolve; });
@@ -332,7 +337,8 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const read = (canvas, scale, options) => (busy = recognizePage(worker, canvas, scale, options));
     ocrRun = { cancel() { cancelled = true; stop(); shut(); } };
     const job = jobs().start('Recognize text', { kind: 'ocr', cancel: () => ocrRun?.cancel() });
-    const kept = () => `${done} ${done === 1 ? 'page' : 'pages'} recognized${skipped ? ` (${skipped} done before)` : ''}`;
+    // With a quick result first, pages not improved yet keep it: Recognize again improves them.
+    const kept = () => `${done} ${done === 1 ? 'page' : 'pages'} recognized${skipped ? ` (${skipped} done before)` : ''}${quick && improved < done ? `; ${done - improved} with the quick result only (Recognize again, ticked, improves them)` : ''}`;
     // Tesseract's memory only grows: a fresh engine every few pages keeps a
     // whole-note run from piling it up.
     const RECYCLE = 12;
@@ -345,50 +351,71 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     try {
       job.set(0, `${quality === 'high' ? 'high quality: ' : ''}${skipped ? `loading the engine; ${skipped} pages already done` : 'loading the engine'}`);
       await engine();
-      // Spelling help for the languages that have a word list (one at a time: the first).
-      const spelling = chosen.find(l => DICTIONARY_LANGUAGES.includes(l));
+      // Spelling help from the word lists of every chosen language that has them.
       let dictionary = null;
-      if (spelling) {
-        job.set(0, 'loading the word list');
-        dictionary = await race(loadDictionary(spelling)).catch(error => { if (error === STOPPED) throw error; return null; });
+      if (chosen.some(l => DICTIONARY_LANGUAGES.includes(l))) {
+        job.set(0, 'loading the word lists');
+        dictionary = await race(loadDictionary(chosen)).catch(error => { if (error === STOPPED) throw error; return null; });
       }
-      for (const [n, page] of pages.entries()) {
-        if (cancelled || token !== generation) break;
-        if (n && n % RECYCLE === 0) await engine();
-        job.set(n / pages.length, pages.length === 1 ? `page ${page + 1}` : `page ${page + 1} (${n + 1} of ${pages.length})`);
-        // The whole page, then the ink alone at several sizes (handwriting reads
-        // differently at each; ocrPasses); readings of one spot merge by vote.
-        const readings = [];
-        if (whole(page)) for (const { width, sparse } of passes.whole) {
+      const deep = quality === 'high', isWord = dictionary ? text => isLexiconWord(text, dictionary) : null;
+      // One page read with some passes, added to readings it already has.
+      const readPage = async (page, set, readings = []) => {
+        if (whole(page)) for (const { width, sparse } of set.whole) {
+          if (cancelled || token !== generation) return readings;
           const { canvas, scale } = await race(pageCanvas(page, width));
           try { readings.push(await race(read(canvas, scale, { sparse }))); }
           finally { canvas.width = canvas.height = 0; }
         }
-        if (inked.has(page)) for (const { width, sparse, bold } of passes.ink) {
-          if (cancelled || token !== generation) break;
+        if (inked.has(page)) for (const { width, sparse, bold } of set.ink) {
+          if (cancelled || token !== generation) return readings;
           const ink = await race(pageCanvas(page, width, { inkOnly: true, bold }));
           if (!ink) break;
           try { readings.push(await race(read(ink.canvas, ink.scale, { sparse }))); }
           finally { ink.canvas.width = ink.canvas.height = 0; }
         }
         // High quality: every line found, read again on its own.
-        if (passes.lines && inked.has(page) && !cancelled && token === generation) {
+        if (set.lines && inked.has(page) && !cancelled && token === generation) {
           const lines = uniqueLines(...readings.map(r => r.lines || []));
-          const ink = lines.length ? await race(pageCanvas(page, passes.lines.width, { inkOnly: true })) : null;
+          const ink = lines.length ? await race(pageCanvas(page, set.lines.width, { inkOnly: true })) : null;
           if (ink) try { readings.push(await race(busy = lineWords(worker, ink.canvas, ink.scale, lines))); }
           finally { ink.canvas.width = ink.canvas.height = 0; }
         }
-        const merged = mergeWords(...readings);
-        const words = dictionary ? correctWords(merged, dictionary) : merged;
-        if (cancelled || token !== generation) break;
+        return readings;
+      };
+      // The readings of a page voted into words, corrected, kept and searchable at once.
+      const keep = async (page, readings, { deep: thorough }) => {
+        const merged = voteWords(readings, { isWord: thorough ? isWord : null });
+        const words = dictionary ? correctWords(merged, dictionary, { deep: thorough }) : merged;
         stored.ocr[slots.get(page)] = words;
         index.remove(u => u.source === 'ocr' && u.page === page);
         index.add({ page, source: 'ocr', words });
         await persist();
-        done++;
-        // Recognized words become selectable on the page right away.
         const panel = panels().find(p => p.index === page);
         if (panel) selectable(panel);
+      };
+      // Phases: one with every pass of the quality; or, quick result first, the normal
+      // passes over every page (kept and searchable), then the rest, voting with them.
+      const phases = deep && progressive
+        ? [{ set: ocrPasses('normal'), deep: false, label: 'quick pass' }, { set: ocrPasses('high', { extra: true }), deep: true, label: 'improving' }]
+        : [{ set: ocrPasses(quality), deep, label: '' }];
+      quick = phases.length > 1;
+      const earlier = new Map();
+      let step = 0;
+      const steps = phases.length * pages.length;
+      for (const [phase, { set, deep: thorough, label }] of phases.entries()) {
+        for (const [n, page] of pages.entries()) {
+          if (cancelled || token !== generation) break;
+          if (step && step % RECYCLE === 0) await engine();
+          job.set(step / steps, `${label ? `${label}: ` : ''}${pages.length === 1 ? `page ${page + 1}` : `page ${page + 1} (${n + 1} of ${pages.length})`}`);
+          step++;
+          const readings = await readPage(page, set, earlier.get(page) || []);
+          if (cancelled || token !== generation) break;
+          await keep(page, readings, { deep: thorough });
+          if (phase < phases.length - 1) earlier.set(page, readings);
+          else earlier.delete(page);
+          if (phase === 0) done++;
+          if (phase === phases.length - 1 && phases.length > 1) improved++;
+        }
       }
       refresh();
       if (token !== generation) job.fail(`Recognition stopped: another note was opened. ${kept()} are kept.`);

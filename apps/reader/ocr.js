@@ -21,10 +21,14 @@ export async function ocrWorker(languages, progress = () => {}) {
 // pen lines break into pieces the engine misreads), and once as scattered text (page
 // segmentation 11, for notes written all over the page). Every reading then votes.
 // (Tesseract's full-precision data would need float routines its web build lacks.)
-export function ocrPasses(quality = 'normal') {
-  return quality === 'high'
-    ? { whole: [{ width: 3000 }, { width: 2200, sparse: true }], ink: [{ width: 1200 }, { width: 2000 }, { width: 3000 }, { width: 4200 }, { width: 2400, bold: true }, { width: 2400, sparse: true }], lines: { width: 3000 } }
-    : { whole: [{ width: 2200 }], ink: [{ width: 1200 }, { width: 3000 }] };
+// High quality is the normal passes and more, so a quick normal reading of the pages
+// can be kept and improved by the rest (`extra`).
+const NORMAL = { whole: [{ width: 2200 }], ink: [{ width: 1200 }, { width: 3000 }] };
+const EXTRA = { whole: [{ width: 3000 }, { width: 2200, sparse: true }], ink: [{ width: 2000 }, { width: 4200 }, { width: 2400, bold: true }, { width: 2400, sparse: true }], lines: { width: 3000 } };
+export function ocrPasses(quality = 'normal', { extra = false } = {}) {
+  if (quality !== 'high') return NORMAL;
+  if (extra) return EXTRA;
+  return { whole: [...NORMAL.whole, ...EXTRA.whole], ink: [...NORMAL.ink, ...EXTRA.ink], lines: EXTRA.lines };
 }
 
 // Recognised words in page units, dropping low-confidence noise.
@@ -101,7 +105,10 @@ const overlap = (a, b) => {
   const w = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), h = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
   return w > 0 && h > 0 ? (w * h) / Math.min(a[2] * a[3], b[2] * b[3]) : 0;
 };
-export function mergeWords(...passes) {
+export function mergeWords(...passes) { return voteWords(passes); }
+// The same, where a reading that is a real word (`isWord`, from the chosen languages'
+// word lists) counts double: several passes then settle on a word that exists.
+export function voteWords(passes, { isWord = null } = {}) {
   // Only readings from different passes merge: two words of one pass are two words,
   // even when their boxes overlap (close Chinese characters, a word and its accent).
   const spots = [];
@@ -119,8 +126,9 @@ export function mergeWords(...passes) {
     const votes = new Map();
     for (const r of readings) {
       const key = r.text.toLowerCase(), v = votes.get(key);
-      if (v) v.score += r.confidence;
-      else votes.set(key, { score: r.confidence, best: r });
+      const weight = r.confidence * (isWord?.(r.text) ? 2 : 1);
+      if (v) v.score += weight;
+      else votes.set(key, { score: weight, best: r });
     }
     const ranked = [...votes.values()].sort((a, b) => b.score - a.score || b.best.confidence - a.best.confidence);
     const word = { ...ranked[0].best };

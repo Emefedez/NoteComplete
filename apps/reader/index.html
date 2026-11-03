@@ -352,7 +352,7 @@
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" hidden>Change folder…</button>
         <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · Text · Markdown · PNG · JPEG · WebP · Your documents stay on this device.</span>
-        <span id="homeVersion" class="home-version">v1.1.29</span>
+        <span id="homeVersion" class="home-version">v1.1.30</span>
       </footer>
     </section>
     <section id="htmlView" hidden>
@@ -1024,6 +1024,7 @@
     <div><label title="Three passes over a page"><input type="radio" name="ocrQuality" value="normal" checked /> Normal</label>
     <label title="Eight passes over a page: larger, with thicker strokes and as scattered text; the readings vote. About three times slower, fewer misread words"><input type="radio" name="ocrQuality" value="high" /> High <span class="muted">(slower; fewer misread words)</span></label></div>
   </fieldset>
+  <label id="ocrProgressiveRow" class="ocr-skip"><input id="ocrProgressive" type="checkbox" checked /> Quick result first: every page with Normal (searchable at once), then improved with the rest of the passes</label>
   <label class="ocr-skip"><input id="ocrSkipPdf" type="checkbox" checked /> Skip the printed text of PDF pages (handwriting on them is still read)</label>
   <label class="ocr-skip"><input id="ocrRedo" type="checkbox" /> Recognize again pages already done (otherwise a stopped run continues where it left off)</label>
   <p id="ocrStatus" class="muted" role="status" aria-live="polite"></p>
