@@ -2,6 +2,7 @@
 // note's pages (images with tape lifted, plus typed/PDF/OCR/audio text).
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
+import { factCheckPrompt, cleanFindings, findingsMarkdown, referenceText } from './fact-check.js';
 import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
@@ -128,7 +129,7 @@ export function prompts(kind, { amount, language, title, unit = 'page', pages = 
   return `${intro}\n${multiQuestions} ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":${samplePage}}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {} }) {
+export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -154,15 +155,18 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     mode = kind;
     await fillProviders();
     const { pages, unit } = documentInfo(), text = unit === 'section';
-    $('studyTitle').textContent = kind === 'cards' ? 'Generate flashcards' : 'Quiz me';
+    $('studyTitle').textContent = kind === 'cards' ? 'Generate flashcards' : kind === 'check' ? 'Fact check' : 'Quiz me';
     $('studyAmountLabel').firstChild.textContent = `${kind === 'cards' ? 'Cards' : 'Questions'} per ${text ? 'section' : 'page'} `;
+    // A fact check has no amount: it reports what it finds, and adds it to the notes.
+    $('studyAmountLabel').hidden = kind === 'check';
+    $('studyGo').textContent = kind === 'check' ? 'Check in background' : 'Generate in background';
     // A text document is split into sections; the one being read is the current one.
     $('studyScopePage').textContent = text ? 'Section being read' : 'Current page';
     $('studyScopeRange').textContent = text ? `Sections (${pages})` : 'Pages';
     $('studyScopeAll').textContent = text ? 'Whole document' : 'Whole note';
     $('studyFrom').max = $('studyTo').max = pages;
     $('studyFrom').value = $('studyTo').value = currentPage() + 1;
-    $('studyStatus').textContent = jobs.busy('ai') ? 'Another generation is still running; it can be stopped from the bar.' : `Runs in the background: keep reading while your AI tool works. ${text ? 'The sections are sent as text.' : 'Pages are sent as images with tape lifted, plus their text.'}`;
+    $('studyStatus').textContent = jobs.busy('ai') ? 'Another generation is still running; it can be stopped from the bar.' : `Runs in the background: keep reading while your AI tool works. ${text ? 'The sections are sent as text.' : 'Pages are sent as images with tape lifted, plus their text.'}${kind === 'check' ? ` Errors, inconsistencies (also between ${text ? 'sections' : 'pages'}), unclear and missing points go into your notes, each under its ${text ? 'section' : 'page'}'s badge, with a correction.` : ''}`;
     $('studyGo').disabled = jobs.busy('ai');
     $('studyPromptEdit').hidden = kind !== 'quiz';
     $('studyDialog').showModal();
@@ -195,16 +199,24 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     for (let i = 0; i < pages.length; i += BATCH) batches.push(pages.slice(i, i + BATCH));
     $('studyDialog').close();
     cancelled = false;
-    const job = jobs.start(kind === 'cards' ? 'Flashcards' : 'Quiz', { pages: pages.length, batches: batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel('study'); } });
+    const job = jobs.start(kind === 'cards' ? 'Flashcards' : kind === 'check' ? 'Fact check' : 'Quiz', { pages: pages.length, batches: batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel('study'); } });
     (async () => {
       // A few batches at a time: each request mostly waits on the AI service,
       // and page preparation for the next batch overlaps the ones in flight.
       const answers = [];
       let prepared = 0, next = 0, failure = null;
-      let avoid = [];
+      let avoid = [], texts = [];
       try {
         avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
       } catch { /* Optional. */ }
+      // A fact check over several batches compares each with the text of all the others.
+      if (kind === 'check' && batches.length > 1) {
+        for (const p of pages) {
+          if (cancelled) break;
+          const parts = await pageText(p).catch(() => ({}));
+          texts.push({ page: p, label: `${unit === 'section' ? 'Section' : 'Page'} ${p + 1}`, text: Object.values(parts || {}).filter(v => typeof v === 'string').join('\n') });
+        }
+      }
       const lane = async () => {
         while (!cancelled && !failure && next < batches.length) {
           const b = next++, batch = batches[b];
@@ -214,12 +226,14 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
             job.asking(b, providerName);
             const batchPrompt = (kind === 'cards'
               ? prompts('cards', { amount, language, title, unit, pages: batch })
-              : quizPrompt(instructions(), { amount, language, title, unit, pages: batch }))
+              : kind === 'check'
+                ? factCheckPrompt({ title, language, unit, pages: batch, reference: referenceText(texts.filter(t => !batch.includes(t.page))) })
+                : quizPrompt(instructions(), { amount, language, title, unit, pages: batch }))
               + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
             const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study' });
             if (cancelled) return;
             const parsed = jsonFrom(text);
-            answers[b] = kind === 'cards' ? cleanCards(parsed, batch) : prepareQuestions(parsed, batch);
+            answers[b] = kind === 'cards' ? cleanCards(parsed, batch) : kind === 'check' ? cleanFindings(parsed, batch) : prepareQuestions(parsed, batch);
             job.answered(b);
           } catch (error) {
             // One failed batch stops the rest; what came back is still kept.
@@ -233,6 +247,15 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
         await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
         const results = answers.flatMap(a => a || []);
         if (failure && !results.length) throw failure;
+        if (kind === 'check') {
+          const stoppedEarly = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
+          if (!results.length) return job.fail(cancelled ? 'Fact check stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
+          const issues = results.reduce((n, f) => n + f.issues.length, 0);
+          if (!appendNotes) throw new Error('This document has no notes to add the fact check to.');
+          await appendNotes(findingsMarkdown(results, { provider: providerName, unit }));
+          const word = unit === 'section' ? 'section' : 'page';
+          return job.finish(issues ? `Fact check: ${issues} ${issues === 1 ? 'suggestion' : 'suggestions'} on ${results.filter(f => f.issues.length).length} of ${results.length} ${word}s, added to your notes${stoppedEarly}.` : `Fact check: nothing to correct on ${results.length} ${results.length === 1 ? word : `${word}s`}; noted in your notes${stoppedEarly}.`, openNotes ? { label: 'Open notes', run: openNotes } : undefined);
+        }
         if (!results.length) return job.fail(cancelled ? 'Generation stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
         const stopped = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
         const name = `${title} · ${unit === 'section' ? '§' : 'p.'} ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
@@ -828,5 +851,5 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     await download(ankiText(name, (d.cards || []).filter(c => c.front?.trim() && c.back?.trim())), `${name}.txt`, 'text/plain');
     status('Anki deck exported. In Anki: File → Import, then choose the file.');
   }
-  return { cards: () => open('cards'), quiz: () => open('quiz'), saved: openSaved, exportQuiz, exportAll, openDeck, exportDeck, fillProviders, key: onKey };
+  return { cards: () => open('cards'), quiz: () => open('quiz'), check: () => open('check'), saved: openSaved, exportQuiz, exportAll, openDeck, exportDeck, fillProviders, key: onKey };
 }
