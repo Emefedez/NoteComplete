@@ -1,5 +1,6 @@
 // Floating windows (Ask AI, audio, quiz, flashcard practice): drag them by their
-// head, resize them from any edge or corner, and they stay inside their area so
+// head, resize them from any edge or corner (or anywhere, like a tiling window manager:
+// Ctrl/⌘ + drag moves, Shift + drag resizes from the nearest corner), and they stay inside their area so
 // the head and its × are always reachable. The head gets _ (put away in the
 // window tray at the bottom left, from which it comes back) and □ (small or
 // large) next to ×. Place and size are remembered per window.
@@ -188,6 +189,39 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     down.preventDefault();
   });
   head.classList.add('window-head');
+
+  // Anywhere on the window, as in a tiling window manager: Ctrl (⌘ on a Mac) + drag moves
+  // it, Shift + drag resizes it from the corner nearest the pointer. Text fields keep
+  // their own Shift-click (extend the selection) and Ctrl-click.
+  el.addEventListener('pointerdown', down => {
+    const moving = down.ctrlKey || down.metaKey, sizing = down.shiftKey && !moving;
+    if (!enabled() || down.button !== 0 || down.altKey || !(moving || sizing) || !visible()) return;
+    if (down.target.closest('input, textarea, select, [contenteditable="true"], .panel-grip')) return;
+    const start = current(), a = area(), r = el.getBoundingClientRect();
+    let edges = (down.clientX < r.left + r.width / 2 ? 'l' : 'r') + (down.clientY < r.top + r.height / 2 ? 't' : 'b');
+    if (isCompact()) edges = edges.replace(/[tb]/, '');
+    down.preventDefault();
+    down.stopPropagation();
+    el.setPointerCapture(down.pointerId);
+    const cls = moving ? 'dragging' : 'resizing';
+    el.classList.add(cls);
+    const move = e => {
+      if (e.pointerId !== down.pointerId) return;
+      const dx = e.clientX - down.clientX, dy = e.clientY - down.clientY;
+      apply(moving ? { ...start, left: start.left + dx, top: start.top + dy } : resizeRect(start, dx, dy, edges, min, a));
+    };
+    const up = e => {
+      if (e.pointerId !== down.pointerId) return;
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      el.classList.remove(cls);
+      apply(current(), true);
+      // The click that ends the gesture does not press the button it started on.
+      const swallow = c => { c.stopPropagation(); c.preventDefault(); };
+      el.addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => el.removeEventListener('click', swallow, { capture: true }), 0);
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }, true);
 
   // Resize from every edge and corner.
   for (const [name, edges] of Object.entries(EDGES)) {

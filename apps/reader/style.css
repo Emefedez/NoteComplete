@@ -1442,7 +1442,9 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .in-tray { display: none !important; }
 /* A small (head-only) window shows no resize marks. */
 :is(.minimized, .compact) > .panel-grip::after { display: none; }
-.dragging { user-select: none; }
+.dragging, .resizing { user-select: none; }
+.screen-window.dragging, .screen-window.dragging * { cursor: move !important; }
+.screen-window.resizing, .screen-window.resizing * { cursor: nwse-resize !important; }
 .window-away svg, .window-size svg { width: 14px; height: 14px; }
 .chat-panel.compact, .audio-panel.compact { height: auto !important; }
 .chat-panel.compact > :not(.chat-head, .panel-grip), .audio-panel.compact > .panel-body { display: none !important; }
