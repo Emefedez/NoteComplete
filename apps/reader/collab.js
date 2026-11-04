@@ -97,6 +97,8 @@ export async function openStudySend(host, aimed = null) {
     try {
       const pack = build();
       const invite = aimed || parseInvite(link.value, code.value, 'sender');
+      // An https page (the web app) cannot open a plain ws:// connection: browsers block it.
+      if (location.protocol === 'https:' && invite.url.startsWith('ws:')) throw Error('This page is on https, so the browser blocks a plain network address. Use the other NoteComplete’s online link (https://…, from its Online tab), send from the desktop app, or save the material as a file and open it there.');
       if (invite.role !== 'sender') throw Error('That is a drawing tablet link. Use the address and PIN, or the notes link.');
       if (!aimed && !/^[a-z]+:\/\//i.test(link.value.trim())) try { localStorage.setItem('notecomplete-collab-address', link.value.trim()); } catch { /* Optional. */ }
       if (who.value.trim()) remember(who.value.trim());
