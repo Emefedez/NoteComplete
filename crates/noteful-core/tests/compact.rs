@@ -197,7 +197,11 @@ fn a_preview_reports_the_cut_without_making_it() {
     assert!(can_undo(&e), "the history is still there");
     let done = e.compact_history(edits).unwrap();
     assert_eq!(
-        (preview.bytes_before, preview.bytes_after, preview.edits_after),
+        (
+            preview.bytes_before,
+            preview.bytes_after,
+            preview.edits_after
+        ),
         (done.bytes_before, done.bytes_after, done.edits_after)
     );
 }

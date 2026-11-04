@@ -482,7 +482,10 @@ mod tests {
         // Pictures beside the document stay for the reader to resolve; other schemes do not.
         let pics = markdown_html("![a](Tema%203_files/image1.png) ![b](//evil.example/x.png) ![c](file:///etc/passwd) ![d](ftp://x/y.png)");
         assert!(pics.contains("src=\"Tema%203_files/image1.png\""), "{pics}");
-        assert!(!pics.contains("evil") && !pics.contains("file:") && !pics.contains("ftp:"), "{pics}");
+        assert!(
+            !pics.contains("evil") && !pics.contains("file:") && !pics.contains("ftp:"),
+            "{pics}"
+        );
         // Links to files beside the document stay (the text view opens them).
         let links = markdown_html("[a](otro.md) [b](../Tema%202.md#parte) [c](//evil.example) [d](data:text/html,x) [e](a/b:c)");
         assert!(
