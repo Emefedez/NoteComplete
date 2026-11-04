@@ -49,6 +49,18 @@ const paths = {
  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
  unplug:'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5',
  check:'m5 12.5 4.5 4.5L19 7.5',
+ link:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+ window:'M3 5h18v14H3zM3 9h18M6 7h.01',
+ tablet:'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2',
+ clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
+ crop:'M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14',
+ monitor:'M3 5h18v11H3zM8 20h8M12 16v4',
+ minus:'M5 12h14',
+ hash:'M5 9h14M5 15h14M10 4 8 20M16 4l-2 16',
+ help:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5M12 17h.01',
+ play:'M8 5v14l11-7Z',
+ keyboard:'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
+ chat:'M4 5h16v11H9l-5 4V5Z',
  tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };
 export function icon(name) {

@@ -1086,7 +1086,7 @@ header .brand p { font-size: 12px; font-weight: 600; max-width: 100%; }
 .bar-menu .menu-content { left: 0; right: auto; top: calc(100% + 3px); width: 250px; padding: 4px; }
 /* Long menus scroll inside the window (short screens, phones in landscape) instead of running off it. */
 .bar-menu .menu-content { max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 16px; }
+.bar-menu .menu-content button { min-height: 28px; padding: 4px 10px; font-size: 13px; gap: 10px; }
 .bar-menu .menu-content button kbd { margin-left: auto; border: 0; background: none; padding: 0; }
 .bar-menu .menu-content hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
 .bar-menu [role="menuitemradio"], .bar-menu [role="menuitemcheckbox"] { justify-content: flex-start; }
@@ -2806,3 +2806,28 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .notes-render li, .notes-render blockquote { min-width: 0; }
 .notes-render .md-image-missing { display: inline-block; padding: 1px 8px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: .9em; }
 .notes-render img { border-radius: 4px; }
+
+/* Top menus: an icon before each action; a toggle's or tool's ✓ sits at the right edge, so the icons line up. */
+.bar-menu .menu-content button > svg, .bar-menu .menu-content .menu-export > span > svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; color: var(--muted); }
+.bar-menu .menu-content button:hover:not(:disabled) > svg { color: var(--ink); }
+.bar-menu .menu-content button:disabled > svg { opacity: .5; }
+.bar-menu .menu-content button .menu-label { flex: 1; }
+.bar-menu .menu-content .menu-export > span { display: flex; align-items: center; gap: 10px; padding-left: 0; }
+.bar-menu .menu-content .menu-export { padding-left: 10px; }
+.bar-menu [role="menuitemradio"]::before, .bar-menu [role="menuitemcheckbox"]::before { content: none; }
+.bar-menu [role="menuitemradio"], .bar-menu [role="menuitemcheckbox"] { justify-content: flex-start; }
+.bar-menu [role="menuitemradio"]::after, .bar-menu [role="menuitemcheckbox"]::after { content: ""; flex: none; width: 14px; margin-left: auto; text-align: center; color: var(--accent); font-weight: 700; }
+.bar-menu button:has(> kbd)[role="menuitemradio"]::after, .bar-menu button:has(> kbd)[role="menuitemcheckbox"]::after { margin-left: 0; }
+.bar-menu [role="menuitemradio"][aria-checked="true"]::after, .bar-menu [role="menuitemcheckbox"][aria-checked="true"]::after { content: "✓"; }
+.bar-menu [role="menuitemradio"][aria-checked="true"] > svg, .bar-menu [role="menuitemcheckbox"][aria-checked="true"] > svg { color: var(--accent); }
+.bar-menu .menu-content hr + hr, .bar-menu .menu-content hr:first-child, .bar-menu .menu-content hr:last-child { display: none; }
+.bar-menu .menu-content > button, .bar-menu .menu-content > .menu-group > button { justify-content: flex-start; }
+.bar-menu [role="menuitemradio"][aria-checked="true"]::before, .bar-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: none; }
+.bar-menu .menu-content .menu-export > span { white-space: nowrap; gap: 10px; }
+.bar-menu .menu-content .menu-export button:not(.format-help):not(.menu-icon) { min-width: 38px; padding: 0 6px; }
+/* In menus with toggles or tools, the ✓ column is reserved on every row, so shortcut keys line up. */
+.bar-menu:has([role="menuitemradio"], [role="menuitemcheckbox"]) .menu-content button > kbd { margin-right: 24px; }
+.bar-menu .menu-content :is([role="menuitemradio"], [role="menuitemcheckbox"]) > kbd { margin-right: 0 !important; }
+.bar-menu .menu-content .menu-export { padding-left: 11px; gap: 3px; }
+.bar-menu .menu-content .menu-export button:not(.format-help):not(.menu-icon) { min-width: 34px; padding: 0 5px; }
+.bar-menu .menu-content .menu-export .format-help { margin-left: 2px; }

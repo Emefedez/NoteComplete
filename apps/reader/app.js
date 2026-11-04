@@ -410,7 +410,7 @@ function releaseImages() {
 }
 const SAVE_TEXT_TITLE = $("textSave").title;
 const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
-function saveLabel() { $("save").firstChild.textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
+function saveLabel() { $("save").querySelector(".menu-label").textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
 async function load(file, preparedDocument = null) {
   if (!ready || busy()) {
     status("Wait for the current operation to finish.", true);

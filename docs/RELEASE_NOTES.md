@@ -10,6 +10,7 @@
 - **Text and Markdown documents stay in the page.** Long words and links break, code wraps, wide tables scroll in their own box and pictures shrink to fit. The folder ⋯ menu wraps long names and paths.
 - **Edit Word, OpenDocument, Excel and CSV files as Markdown.** They open as Markdown as before, now with an **Edit** button. **Save** writes a copy (`Name.md`, or `Name (2).md`) beside the original and never changes it; saving again updates that copy.
 - **Pictures.** Pictures in `.docx` and `.odt` files now show, kept in a `<name>_files` folder that the saved copy links to (a browser download is a `.zip` of both). Markdown files show pictures linked from beside them in the desktop app, and a missing picture shows its description.
+- **Icons in the top menus.** File, Edit, View, Pages, Study and Help have an icon on each action, related actions grouped between rules, toggles and tools marked with a ✓ at the right edge, and shortcut keys in one column.
 - **Search models.** In Ask AI, a magnifier beside the model list opens a search box over the tool's models, for long lists such as OpenCode's.
 - **Resize windows with Ctrl + right button.** Holding **Ctrl** and dragging with the right mouse button resizes Ask AI, quiz, flashcard and audio windows from the nearest corner (it was Shift + drag). Ctrl + drag still moves them.
 - **New folder** is now a folder-with-plus icon, and the arrow beside **Recent** is centered with its title.
