@@ -1,15 +1,5 @@
-## What's new in 1.1.34
+## What's new in 1.1.35
 
-- **Google Drive stays connected in new tabs.** The Drive sign-in is shared by every tab and window, so opening a tab no longer unlinks Drive; Disconnect applies to all of them.
-- **Check Drive for a newer version.** The **⋯** menu of a Drive note in Recent can check Drive on demand. It always answers (up to date, not found, or not connected) and compares file contents, not only dates.
-- **Fewer "which save?" questions.** Opening a note no longer asks between the automatic and manual save when they are the same, and a manual save no longer leads to an identical automatic copy.
-- **Automatic save pills** in File have one size.
-- **The ⋯ menu of a note** has an icon on each action, shorter labels, a darker outline and rules between groups; Drive's **Back**, **Refresh** and **Disconnect** are icons.
-- **Filters are dropdowns.** On Home, Type, Modified, Source, Size and Tags are one dropdown each, with checkboxes (Modified takes one value), showing what is picked; Favourites and With audio stay as toggles.
-- **Cut history.** The ⋯ menu of a project (.nfedit) in Recent has **Cut history…**, which opens it and deletes its whole undo history. Hovering ✂ in File → automatic saves says how much space the cut frees, and the confirmation says it too.
-- **Text and Markdown documents stay in the page.** Long words and links break, code wraps, wide tables scroll in their own box and pictures shrink to fit. The folder ⋯ menu wraps long names and paths.
-- **Edit Word, OpenDocument, Excel and CSV files as Markdown.** They open as Markdown as before, now with an **Edit** button. **Save** writes a copy (`Name.md`, or `Name (2).md`) beside the original and never changes it; saving again updates that copy.
-- **Pictures.** Pictures in `.docx` and `.odt` files now show, kept in a `<name>_files` folder that the saved copy links to (a browser download is a `.zip` of both). Markdown files show pictures linked from beside them in the desktop app, and a missing picture shows its description.
 - **Icons in the top menus.** File, Edit, View, Pages, Study and Help have an icon on each action, related actions grouped between rules, toggles and tools marked with a ✓ at the right edge, and shortcut keys in one column.
 - **Joining a big note shows how far it is.** The tablet or guest sees the stages (the computer preparing the note, receiving it with megabytes, speed and time left, opening it) on a bar that fills, and the computer's bar shows who is receiving the note and how far ("Tablet · 43 %"). The note is sent in parts, compressed as it goes (above 32 MB with a fast setting that is four times quicker and 1% larger), so it no longer waits for the whole compression before the first byte.
 - **Sharing keeps copies in step.** Every 10 seconds, if there were edits, every copy checks that it matches the computer's; one that drifted is reloaded and the computer says which. A connection that went quiet (Wi-Fi power saving, a link that dropped without telling anyone) is noticed within 30 seconds and resumed with only the missed edits.
@@ -21,6 +11,19 @@
 - **The Sharing dialog explains Tablets and Guests.** One address and PIN, then a section for each kind of device saying what it gets.
 - **Highlight PDF text by dragging across it.** The highlighter has a new **Text** mode (in the tool bar's highlighter settings and in the hover menu): drag from one word to another and the words in between are highlighted, one band per line, as in a PDF reader; a click highlights a word. A multi-line selection is one undo step. The bands are the highlighter's own lines, so they can be moved, recoloured and erased like any other. On a page with no text (a scan) it draws a straight highlight and says so.
 - **Send study material to another NoteComplete.** **Study → Send study material…** sends the open note's flashcard decks, quizzes and Markdown notes (your choice) to another NoteComplete that is sharing: type its address and PIN (same network) or paste its online link (any network, from the app or a browser). The other side is asked first; the material is added to the same note when it has it, else kept as a note of its own in **All quizzes and decks**. It can also be saved as a `.ncstudy` file and opened with **Study → Import study material…**.
+
+### In 1.1.34
+
+- **Google Drive stays connected in new tabs.** The Drive sign-in is shared by every tab and window, so opening a tab no longer unlinks Drive; Disconnect applies to all of them.
+- **Check Drive for a newer version.** The **⋯** menu of a Drive note in Recent can check Drive on demand. It always answers (up to date, not found, or not connected) and compares file contents, not only dates.
+- **Fewer "which save?" questions.** Opening a note no longer asks between the automatic and manual save when they are the same, and a manual save no longer leads to an identical automatic copy.
+- **Automatic save pills** in File have one size.
+- **The ⋯ menu of a note** has an icon on each action, shorter labels, a darker outline and rules between groups; Drive's **Back**, **Refresh** and **Disconnect** are icons.
+- **Filters are dropdowns.** On Home, Type, Modified, Source, Size and Tags are one dropdown each, with checkboxes (Modified takes one value), showing what is picked; Favourites and With audio stay as toggles.
+- **Cut history.** The ⋯ menu of a project (.nfedit) in Recent has **Cut history…**, which opens it and deletes its whole undo history. Hovering ✂ in File → automatic saves says how much space the cut frees, and the confirmation says it too.
+- **Text and Markdown documents stay in the page.** Long words and links break, code wraps, wide tables scroll in their own box and pictures shrink to fit. The folder ⋯ menu wraps long names and paths.
+- **Edit Word, OpenDocument, Excel and CSV files as Markdown.** They open as Markdown as before, now with an **Edit** button. **Save** writes a copy (`Name.md`, or `Name (2).md`) beside the original and never changes it; saving again updates that copy.
+- **Pictures.** Pictures in `.docx` and `.odt` files now show, kept in a `<name>_files` folder that the saved copy links to (a browser download is a `.zip` of both). Markdown files show pictures linked from beside them in the desktop app, and a missing picture shows its description.
 - **Search models.** In Ask AI, a magnifier beside the model list opens a search box over the tool's models, for long lists such as OpenCode's.
 - **Resize windows with Ctrl + right button.** Holding **Ctrl** and dragging with the right mouse button resizes Ask AI, quiz, flashcard and audio windows from the nearest corner (it was Shift + drag). Ctrl + drag still moves them.
 - **New folder** is now a folder-with-plus icon, and the arrow beside **Recent** is centered with its title.
