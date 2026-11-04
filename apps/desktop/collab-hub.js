@@ -13,14 +13,32 @@
 // Everything else is a JSON text frame `{ t: type, ... }`.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { gzip as gzipCallback } from 'node:zlib';
+import { createGzip, gzip as gzipCallback, constants as zlib } from 'node:zlib';
 import * as Y from 'yjs';
 import * as sync from 'y-protocols/sync';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 
-export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
+// chunk: a piece of a snapshot sent in parts ([3][id u32][plain bytes so far u32][gzip data]).
+export const FRAME = { sync: 0, awareness: 1, snapshot: 2, chunk: 3 };
+// A big note is sent in parts, so the joiner (and the host) can see how far it is: the note
+// is fed to the compressor a slice at a time, and the next slice waits while the joiner's
+// socket still holds AHEAD bytes, so the progress is what has really crossed the network.
+const SLICE = 1 << 20, AHEAD = 8 << 20;
+// Past this size the note's own bytes (already compressed, in base64) are nearly all of the
+// snapshot: gzip's search for repeats finds nothing and costs four times as long, so only
+// its entropy coding is used (about 1% larger).
+const FAST_ABOVE = 32 << 20;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export function chunkFrame(id, done, data) {
+  const out = Buffer.alloc(9 + data.length);
+  out[0] = FRAME.chunk;
+  out.writeUInt32BE(id >>> 0, 1);
+  out.writeUInt32BE(done >>> 0, 5);
+  data.copy(out, 9);
+  return out;
+}
 // Edits a peer may send, by role. Tablets (and guests who may draw) draw, highlight, tape,
 // erase, type text, add blank pages and undo; the host edits anything.
 export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo', 'insertPages', 'image', 'editText', 'remove']);
@@ -64,9 +82,11 @@ export function unpackSnapshot(frame) {
 export class CollabHub {
   // notes: 'edit' | 'view' | null (no notes shared, tablets only). The clock and limits are
   // options for the tests.
-  constructor({ notes = 'edit', maxPeers = 10, now = Date.now, codeLife = 10 * 60e3, flushWait = 2000, rate = { burst: 800, perSecond: 400 }, maxMessage = 2 * 1024 * 1024, checkEvery = 100, onEnded = () => {} } = {}) {
-    Object.assign(this, { notes, maxPeers, now, codeLife, flushWait, rate, maxMessage, checkEvery, onEnded });
+  constructor({ notes = 'edit', maxPeers = 10, now = Date.now, codeLife = 10 * 60e3, flushWait = 2000, rate = { burst: 800, perSecond: 400 }, maxMessage = 2 * 1024 * 1024, checkEvery = 100, checkInterval = 10000, onEnded = () => {} } = {}) {
+    Object.assign(this, { notes, maxPeers, now, codeLife, flushWait, rate, maxMessage, checkEvery, checkInterval, onEnded });
+    this.checked = 0;
     this.digests = new Map();
+    this.streams = 0;
     this.id = randomBytes(4).toString('hex');
     this.tokens = { host: token(), guest: token(), tablet: token() };
     this.newCode();
@@ -186,6 +206,8 @@ export class CollabHub {
     peer.role = granted;
     // A joiner that can unzip gets the note's snapshot gzipped (a third smaller or more).
     peer.gzip = Array.isArray(accept) && accept.includes('gzip');
+    // A joiner that can take the note in parts shows how far it is (older ones get it whole).
+    peer.chunks = peer.gzip && accept.includes('chunks');
     const resumed = this.follows(peer) && this.open && !!this.host && this.canResume(have);
     const taken = new Set(this.members().map((p) => p.color));
     peer.color = COLORS.find((c) => !taken.has(c)) || COLORS[peer.id % COLORS.length];
@@ -233,6 +255,7 @@ export class CollabHub {
   }
   drop(peer) {
     if (!this.peers.delete(peer.id)) return;
+    if (peer.stage) this.loadingChanged();
     if (peer.clients.size) awarenessProtocol.removeAwarenessStates(this.awareness, [...peer.clients], peer);
     if (peer.role) this.sendPeers();
     for (const waiting of this.requests.values()) waiting.delete(peer.id);
@@ -262,6 +285,7 @@ export class CollabHub {
     this.open = !!open;
     this.title = clean(title, 200);
     this.seq = 0;
+    this.checked = 0;
     this.log = [];
     this.digests.clear();
     this.requests.clear();
@@ -287,10 +311,20 @@ export class CollabHub {
     for (const p of this.members()) if (p.synced) this.send(p, data);
     // Now and then every copy reports its history digest right after this edit (in the same
     // stream, so all at the same point); a tablet that differs from the host reloads.
-    if (this.checkEvery && entry.seq % this.checkEvery === 0 && this.members().some((p) => this.follows(p) && p.synced)) {
-      const check = JSON.stringify({ t: 'check', gen: this.gen, seq: entry.seq });
-      for (const p of this.members()) if (p.synced) this.send(p, check);
+    if (this.checkEvery && entry.seq % this.checkEvery === 0) this.check();
+    // And on a timer, so a copy that drifted is caught within seconds on a quiet note too.
+    if (this.checkInterval && !this.checkTimer) {
+      this.checkTimer = setInterval(() => { if (this.seq > this.checked) this.check(); }, this.checkInterval);
+      this.checkTimer.unref?.();
     }
+  }
+  // Every copy reports its history digest right after the latest edit (in the same stream, so
+  // all at the same point).
+  check() {
+    if (!this.members().some((p) => this.follows(p) && p.synced)) return;
+    this.checked = this.seq;
+    const check = JSON.stringify({ t: 'check', gen: this.gen, seq: this.seq });
+    for (const p of this.members()) if (p.synced) this.send(p, check);
   }
   // A stroke being drawn: shown live on the other screens, never stored.
   on_live(peer, message) {
@@ -316,6 +350,8 @@ export class CollabHub {
         this.send(p, { t: 'resyncing' });
         p.synced = false;
         this.requestSnapshot(p);
+        const host = this.host;
+        if (host) this.send(host, { t: 'resynced', name: p.name });
       }
     }
     round.tablets.clear();
@@ -327,6 +363,38 @@ export class CollabHub {
     const id = ++this.request;
     this.requests.set(id, new Set([peer.id]));
     this.send(host, { t: 'snapshot', req: id, gen: this.gen });
+    // The joiner and the host can say what is happening while the computer makes the snapshot.
+    if (peer.chunks) {
+      peer.stage = 'preparing';
+      peer.progress = { done: 0, total: 0 };
+      this.send(peer, { t: 'prepare' });
+      this.loadingChanged();
+    }
+  }
+  // Who is loading the note, and how far: sent to the host, a few times a second at most.
+  loadingChanged() {
+    if (this.loadingTimer) return;
+    this.loadingTimer = setTimeout(() => { this.loadingTimer = null; this.sendLoading(); }, 200);
+    this.loadingTimer.unref?.();
+  }
+  sendLoading() {
+    const host = this.host;
+    if (!host || this.state === 'ended') return;
+    const peers = this.members().filter((p) => p.stage).map(({ id, name, role, stage, progress }) => ({ id, name, role, stage, done: progress?.done || 0, total: progress?.total || 0 }));
+    if (!peers.length && !this.hadLoading) return;
+    this.hadLoading = peers.length > 0;
+    this.send(host, { t: 'loading', peers });
+  }
+  // The reader's heartbeat: answering shows the connection still works both ways.
+  on_ping(peer) { this.send(peer, { t: 'pong' }); }
+  // A joiner's own report of how much of the note it has and what it is doing with it.
+  on_progress(peer, { stage, done, total }) {
+    if (!this.follows(peer)) return;
+    const count = (n) => (Number.isFinite(n) && n >= 0 && n <= 2 ** 32 - 1 ? Math.floor(n) : 0);
+    if (stage === 'ready') { peer.stage = ''; peer.progress = null; }
+    else if (stage === 'receiving' || stage === 'opening') { peer.stage = stage === 'receiving' ? 'sending' : 'opening'; peer.progress = { done: count(done), total: count(total) }; }
+    else return;
+    this.loadingChanged();
   }
   // The host's project at its edit `seq`: sent to the waiting tablets with the edits after it.
   // Gzipped once for those that can unzip it (zlib works off the main thread); edits made
@@ -336,6 +404,15 @@ export class CollabHub {
     const { header, payload } = unpackSnapshot(frame);
     const waiting = this.requests.get(header.req);
     if (!waiting || header.gen !== this.gen) { this.requests.delete(header.req); return; }
+    // Joiners that take it in parts: streamed, compressed as it goes (their own request ends
+    // here, so a joiner arriving meanwhile asks the host for its own snapshot).
+    const parts = [...waiting].map((id) => this.peers.get(id)).filter((p) => p?.chunks);
+    if (parts.length) {
+      for (const p of parts) waiting.delete(p.id);
+      if (!waiting.size) this.requests.delete(header.req);
+      this.stream(parts, header, payload).catch(() => { /* A joiner that vanished; its close drops it. */ });
+      if (!waiting.size) return;
+    }
     // Still listed as waiting while it is compressed, so nobody asks the host for another.
     const zipped = [...waiting].some((id) => this.peers.get(id)?.gzip) ? await gzip(payload, { level: 6 }).catch(() => null) : null;
     // The note changed or the session ended meanwhile: this snapshot is stale.
@@ -351,6 +428,39 @@ export class CollabHub {
       this.send(p, p.gzip && packed ? packed : plain);
       this.catchUp(p, header.seq);
     }
+  }
+  // The snapshot to joiners that take it in parts: a header, gzip pieces as they are made, and
+  // an end, then the edits made meanwhile. A slice is fed only when every joiner's socket has
+  // drained below AHEAD, so `done` (plain bytes fed) follows the wire.
+  async stream(targets, header, payload) {
+    const id = ++this.streams, total = payload.length;
+    const live = () => this.state !== 'ended' && header.gen === this.gen;
+    const here = () => targets.filter((p) => this.peers.get(p.id) === p);
+    const begin = JSON.stringify({ t: 'begin', id, total, enc: 'gzip', seq: header.seq, gen: this.gen, title: this.title });
+    for (const p of targets) { p.stage = 'sending'; p.progress = { done: 0, total }; this.send(p, begin); }
+    this.loadingChanged();
+    const gz = createGzip(total > FAST_ABOVE ? { level: 1, strategy: zlib.Z_HUFFMAN_ONLY } : { level: 6 });
+    let fed = 0;
+    gz.on('data', (data) => { const frame = chunkFrame(id, fed, data); for (const p of here()) this.send(p, frame); });
+    const ended = new Promise((resolve, reject) => { gz.on('end', resolve); gz.on('error', reject); });
+    ended.catch(() => {});
+    for (let at = 0; at < total && live() && here().length; at += SLICE) {
+      while (live() && here().some((p) => (p.transport.buffered?.() ?? 0) > AHEAD)) await sleep(25);
+      const slice = payload.subarray(at, Math.min(total, at + SLICE));
+      fed = at + slice.length;
+      if (!gz.write(slice)) await new Promise((resolve) => gz.once('drain', resolve));
+    }
+    if (!live() || !here().length) { gz.destroy(); return; }
+    gz.end();
+    await ended;
+    // Edits made meanwhile are in the log and follow the snapshot, so the order holds.
+    for (const p of here()) {
+      if (this.log.length && this.log[0].seq > header.seq + 1) { this.requestSnapshot(p); continue; }
+      this.send(p, { t: 'end', id });
+      p.stage = 'opening';
+      this.catchUp(p, header.seq);
+    }
+    this.loadingChanged();
   }
   // A tablet whose copy disagrees with the host's (see the core's history digest) reloads.
   on_resync(peer) {
@@ -472,6 +582,8 @@ export class CollabHub {
   finish(reason = 'The host ended the session.') {
     if (this.state === 'ended') return;
     clearTimeout(this.timer);
+    clearInterval(this.checkTimer);
+    clearTimeout(this.loadingTimer);
     this.state = 'ended';
     const text = this.text();
     for (const p of [...this.peers.values()]) {

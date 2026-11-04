@@ -168,10 +168,17 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     // Online access off: nothing from outside this network gets a session.
     if (remote && !tunnel) return socket.destroy();
     sockets.handleUpgrade(req, socket, head, (ws) => {
-      const peer = hub.connect({ send: (data) => ws.send(data), close: (code, reason) => ws.close(code, reason) }, { remote });
+      const peer = hub.connect({ send: (data) => ws.send(data), close: (code, reason) => ws.close(code, reason), buffered: () => ws.bufferedAmount }, { remote });
       // A connection that never says hello is closed.
       const hello = setTimeout(() => { if (!hub.peers.get(peer.id)?.role) ws.close(1008, 'Say hello first'); }, 10000);
-      ws.on('message', (data, binary) => peer.receive(binary ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : data.toString(), binary));
+      // A device that went away without saying so (Wi-Fi power saving, a lost link) is noticed and
+      // dropped, so the host does not see a ghost; it resumes from the edit log when it is back.
+      ws.alive = true;
+      ws.on('pong', () => { ws.alive = true; });
+      const sweep = setInterval(() => { if (!ws.alive) return ws.terminate(); ws.alive = false; try { ws.ping(); } catch { /* Closing. */ } }, 20000);
+      sweep.unref?.();
+      ws.on('close', () => clearInterval(sweep));
+      ws.on('message', (data, binary) => { ws.alive = true; peer.receive(binary ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : data.toString(), binary); });
       ws.on('close', () => { clearTimeout(hello); peer.closed(); });
       ws.on('error', () => ws.terminate());
     });

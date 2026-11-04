@@ -9,6 +9,7 @@ import * as awareness from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { gunzipSync, brotliDecompressSync } from 'node:zlib';
+import { randomBytes } from 'node:crypto';
 import { startServer, lanAddress, lanAddresses, readerFile, firewallHint, pickEncoding } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
 
@@ -510,7 +511,8 @@ test('snapshots go gzipped to joiners that can unzip them, plain to others', asy
     await welcomed(h);
     h.documentChanged({ open: true, title: 'Exam' });
     for (let i = 0; i < 50; i++) await h.submit('draw', { line: `a long enough line to compress ${i}` });
-    const zipped = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Spy });
+    // `chunks: false` is a joiner from before notes came in parts: one gzipped frame.
+    const zipped = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Spy, chunks: false });
     await until(() => zipped.client.loaded, 'gzipped snapshot');
     const plain = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Spy, gzip: false });
     await until(() => plain.client.loaded, 'plain snapshot');
@@ -562,6 +564,121 @@ test('a joiner back after a dropped connection gets only the edits it missed', a
     assert.equal(t.client.events.findLast(([e]) => e === 'welcome')[1].resumed, false);
     await until(() => t.client.loaded && t.client.gen === h.gen && asked === 2, 'reloaded');
     assert.deepEqual(t.replica.visible(), []);
+    t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('a big note arrives in parts, and the joiner and the host both see how far it is', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  try {
+    // A note past the size where only entropy coding is used (the note's own bytes, in base64).
+    const mine = new Replica();
+    mine.history.push(randomBytes(26 * 1024 * 1024).toString('base64')); mine.cursor = 1;
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Big note' });
+    const t = tablet(server, { token: server.hub.tokens.tablet });
+    await until(() => t.client.loaded, 'the big snapshot', 60000);
+    // The joiner saw every stage in order, the bytes only going up to the whole.
+    const stages = t.client.events.filter(([type]) => type === 'progress').map(([, d]) => d);
+    const order = [...new Set(stages.map((d) => d.stage))];
+    assert.deepEqual(order, ['preparing', 'receiving', 'opening', 'ready']);
+    const receiving = stages.filter((d) => d.stage === 'receiving');
+    assert.ok(receiving.length > 10, `${receiving.length} parts`);
+    assert.ok(receiving.every((d, i) => d.total > 30e6 && (i === 0 || d.done >= receiving[i - 1].done)));
+    assert.equal(receiving.at(-1).done, receiving[0].total, 'ends at the whole');
+    assert.equal(t.replica.digest(), mine.digest());
+    // The host was told who was loading and how far, then that nobody is.
+    await until(() => h.events.some(([type, d]) => type === 'loading' && d.length === 0), 'the host told loading ended');
+    const lists = h.events.filter(([type]) => type === 'loading').map(([, d]) => d);
+    const seen = lists.flat().filter((p) => p.role === 'tablet');
+    assert.ok(seen.some((p) => p.stage === 'preparing' || p.stage === 'sending'), JSON.stringify(seen.slice(0, 3)));
+    assert.ok(seen.every((p) => p.total >= 0 && p.done <= (p.total || Infinity)));
+    t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('a copy that drifts is caught within seconds on a quiet note, and the host is told', async () => {
+  const root = await reader();
+  // The count-based check would wait for 1000 edits; only the timer can notice this one.
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null, hubOptions: { checkEvery: 1000, checkInterval: 80 } });
+  try {
+    const mine = new Replica();
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Quiet' });
+    await h.submit('draw', { page: 0, line: 'one' });
+    const t = tablet(server, { token: server.hub.tokens.tablet });
+    await until(() => t.client.loaded, 'snapshot');
+    // A few edits, then a copy goes wrong and nothing more is drawn.
+    await h.submit('draw', { page: 0, line: 'two' });
+    await until(() => t.client.seq === h.seq, 'caught up');
+    t.replica.history[0] = 'stray';
+    await h.submit('draw', { page: 0, line: 'three' });
+    await until(() => t.client.events.some(([e, d]) => e === 'status' && d.state === 'resync'), 'resync by the timer', 4000);
+    await until(() => t.client.loaded && t.client.seq === h.seq, 'reloaded');
+    assert.equal(t.replica.digest(), mine.digest());
+    assert.ok(h.events.some(([e, d]) => e === 'resynced' && /Tablet/.test(d.name)), 'the host was told which copy was reloaded');
+    t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('edits made while a big note is still being sent arrive after it, in order', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null, hubOptions: { rate: { burst: 5000, perSecond: 5000 }, checkInterval: 0 } });
+  try {
+    const mine = new Replica();
+    mine.history.push(randomBytes(20 * 1024 * 1024).toString('base64')); mine.cursor = 1;
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Big' });
+    await h.submit('draw', { line: 'before' });
+    // The host keeps drawing (and the tablet joins) while the snapshot is on its way.
+    const t = tablet(server, { token: server.hub.tokens.tablet });
+    const drawing = (async () => { for (let i = 0; i < 40; i++) { await h.submit('draw', { line: `during-${i}` }); await wait(15); } })();
+    await until(() => t.client.state === 'open', 'welcome');
+    await Promise.all([drawing, until(() => t.client.loaded, 'the big snapshot', 60000)]);
+    await h.submit('draw', { line: 'after' });
+    await until(() => t.client.seq === h.seq, 'caught up');
+    assert.equal(t.replica.visible().length, mine.visible().length);
+    assert.equal(t.replica.digest(), mine.digest());
+    assert.equal(t.replica.visible().at(-1), 'after');
+    // Some edits really were made while it was being sent (otherwise this proved nothing).
+    const receiving = t.client.events.findIndex(([e, d]) => e === 'progress' && d.stage === 'receiving');
+    assert.ok(receiving >= 0 && h.seq > 20, `seq ${h.seq}`);
+    t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('a connection that goes quiet is dropped and resumed from the edit log, not reloaded', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null, hubOptions: { checkInterval: 0 } });
+  const state = { muted: null };
+  // A tablet whose socket stops hearing the hub (but can still send), like a half-dead Wi-Fi link.
+  class Deaf extends WebSocket {
+    set onmessage(fn) { super.onmessage = (event) => { if (state.muted === this) return; fn(event); }; }
+  }
+  try {
+    const mine = new Replica();
+    const h = host(server, mine);
+    await welcomed(h);
+    h.documentChanged({ open: true, title: 'Quiet' });
+    await h.submit('draw', { line: 'one' });
+    const t = tablet(server, { token: server.hub.tokens.tablet, WebSocketImpl: Deaf, retries: [20, 20, 20], heartbeat: { every: 40, dead: 160 } });
+    await until(() => t.client.loaded, 'snapshot');
+    const welcomes = () => t.client.events.filter(([e]) => e === 'welcome').length;
+    assert.equal(welcomes(), 1);
+    const snapshots = server.hub.requestSnapshot;
+    let asked = 0;
+    server.hub.requestSnapshot = (p) => { asked++; return snapshots.call(server.hub, p); };
+    state.muted = t.client.ws;
+    await h.submit('draw', { line: 'made while it was deaf' });
+    await until(() => t.client.events.some(([e, d]) => e === 'status' && d.state === 'reconnecting'), 'the quiet link noticed', 3000);
+    await until(() => welcomes() === 2 && t.client.loaded && t.client.seq === h.seq, 'resumed', 3000);
+    assert.equal(asked, 0, 'no new snapshot: only the missed edits came');
+    assert.deepEqual(t.replica.visible(), ['one', 'made while it was deaf']);
+    assert.equal(t.replica.digest(), mine.digest());
     t.client.close(); h.close();
   } finally { await server.stop(); }
 });

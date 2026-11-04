@@ -6,7 +6,8 @@
 //   the same. A tablet starts from a snapshot of the host's project.
 // - Notes: a Yjs Y.Text, merged as a CRDT, with awareness for cursors. Yjs is passed in
 //   (`yjs`) and only by readers that show the notes; tablets never load it.
-export const FRAME = { sync: 0, awareness: 1, snapshot: 2 };
+// chunk: a piece of a snapshot sent in parts ([3][id u32][plain bytes so far u32][gzip data]).
+export const FRAME = { sync: 0, awareness: 1, snapshot: 2, chunk: 3 };
 const RETRIES = [500, 1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
 // A gzipped snapshot (the hub compresses it for joiners that say they can unzip it).
 async function gunzip(bytes) {
@@ -53,9 +54,13 @@ export class SyncClient {
   // digest() returns the core's history digest (tablets and host, for the agreement check).
   // on(type, detail) reports: welcome, peers, doc, live, notes-reset, ending, ended, lost,
   // closed, status, nack.
+  // heartbeat: a ping every `every` ms; nothing heard for `dead` ms means the connection is half
+  // dead (Wi-Fi power saving, a NAT that forgot it): it is dropped and resumed from the edit log.
   // gzip: this reader can unzip snapshots (DecompressionStream; old browsers get them plain).
-  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES, gzip = typeof DecompressionStream === 'function' }) {
-    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries, gzip });
+  // chunks: it takes the snapshot in parts and reports progress({ stage, done, total }) while it
+  // is prepared (preparing), received (receiving) and opened (opening); then ready.
+  constructor({ url, token, code, name = '', role = 'guest', yjs = null, WebSocketImpl = globalThis.WebSocket, apply = async () => {}, load = async () => {}, snapshot = async () => '', digest = async () => '', on = () => {}, retries = RETRIES, gzip = typeof DecompressionStream === 'function', chunks = true, heartbeat = { every: 10000, dead: 30000 } }) {
+    Object.assign(this, { url, token, code, name, role, yjs, WebSocketImpl, apply, load, snapshot, digest, on, retries, gzip, chunks: gzip && chunks, heartbeat });
     this.queue = Promise.resolve();
     this.pending = new Map();
     this.ref = 0;
@@ -68,41 +73,72 @@ export class SyncClient {
   }
   connect() {
     if (this.state === 'closed' || this.state === 'ended') return;
+    this.rx = null;
     const ws = (this.ws = new this.WebSocketImpl(this.url));
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       this.attempt = 0;
+      this.beat(ws);
       // Back after a dropped connection with the note loaded: the hub sends only the edits
       // made since, when it still has them, instead of the whole note again.
       const have = this.role !== 'host' && this.loaded && this.session ? { session: this.session, gen: this.gen, seq: this.seq } : undefined;
-      this.send({ t: 'hello', token: this.token, code: this.token ? undefined : this.code, name: this.name, role: this.role, accept: this.gzip ? ['gzip'] : undefined, have });
+      this.send({ t: 'hello', token: this.token, code: this.token ? undefined : this.code, name: this.name, role: this.role, accept: this.gzip ? (this.chunks ? ['gzip', 'chunks'] : ['gzip']) : undefined, have });
     };
     ws.onmessage = ({ data }) => {
       if (ws !== this.ws) return;
+      this.heard = Date.now();
       if (typeof data === 'string') this.message(JSON.parse(data));
       else this.binary(new Uint8Array(data));
     };
-    ws.onclose = (event) => {
-      if (ws !== this.ws) return;
-      this.ws = null;
-      this.failPending('Disconnected.');
-      if (this.state === 'closed' || this.state === 'ended') return;
-      // Refused (bad invite, removed, full): no point retrying.
-      if (event.code === 1008 || event.code === 4001 || event.code === 1009 || !this.welcomed && this.attempt >= 2) {
-        this.state = 'closed';
-        this.awareness?.destroy();
-        return this.on('closed', { reason: this.refusal || event.reason || 'Could not connect.' });
+    ws.onclose = (event) => this.closed(ws, event);
+  }
+  // Pings now and then, and drops a connection that has gone quiet (see `heartbeat`).
+  beat(ws) {
+    clearInterval(this.beating);
+    if (!this.heartbeat?.every) return;
+    this.heard = Date.now();
+    this.beating = setInterval(() => {
+      if (ws !== this.ws) return clearInterval(this.beating);
+      if (Date.now() - this.heard > this.heartbeat.dead) {
+        ws.onopen = ws.onmessage = ws.onclose = null;
+        try { ws.close(); } catch { /* Already gone. */ }
+        return this.closed(ws, { code: 4002, reason: 'No answer.' });
       }
-      const wait = this.retries[this.attempt++];
-      if (wait == null) {
-        this.state = 'closed';
-        this.awareness?.destroy();
-        return this.on('lost', { text: this.text?.toString() ?? '' });
-      }
-      this.state = 'reconnecting';
-      this.on('status', { state: 'reconnecting' });
-      this.retry = setTimeout(() => this.connect(), wait);
-    };
+      this.send({ t: 'ping' });
+    }, this.heartbeat.every);
+    this.beating.unref?.();
+  }
+  closed(ws, event) {
+    if (ws !== this.ws) return;
+    clearInterval(this.beating);
+    this.ws = null;
+    this.failPending('Disconnected.');
+    if (this.state === 'closed' || this.state === 'ended') return;
+    // Refused (bad invite, removed, full): no point retrying.
+    if (event.code === 1008 || event.code === 4001 || event.code === 1009 || !this.welcomed && this.attempt >= 2) {
+      this.state = 'closed';
+      this.awareness?.destroy();
+      return this.on('closed', { reason: this.refusal || event.reason || 'Could not connect.' });
+    }
+    const wait = this.retries[this.attempt++];
+    if (wait == null) {
+      this.state = 'closed';
+      this.awareness?.destroy();
+      return this.on('lost', { text: this.text?.toString() ?? '' });
+    }
+    this.state = 'reconnecting';
+    this.on('status', { state: 'reconnecting' });
+    this.retry = setTimeout(() => this.connect(), wait);
+  }
+  // Tells the screen how the note is arriving, and (at most a few times a second) the hub, which
+  // shows the host.
+  progress(stage, done, total) {
+    this.on('progress', { stage, done, total });
+    if (this.role === 'host') return;
+    const now = Date.now();
+    if (stage === 'receiving' && stage === this.reported?.stage && now - this.reported.at < 300) return;
+    this.reported = { stage, at: now };
+    this.send({ t: 'progress', stage, done, total });
   }
   send(message) {
     if (this.ws?.readyState !== 1) return false;
@@ -144,6 +180,32 @@ export class SyncClient {
         p?.reject(Error(m.error));
         return this.on('nack', m);
       }
+      case 'resynced':
+        return this.on('resynced', m);
+      case 'loading':
+        // Host: who is receiving the note, and how far (from the hub).
+        return this.on('loading', m.peers);
+      case 'prepare':
+        // The computer is making the snapshot of the note for this joiner.
+        this.rx = null;
+        return this.progress('preparing', 0, 0);
+      case 'begin':
+        this.rx = { id: m.id, total: m.total, seq: m.seq, gen: m.gen, title: m.title, enc: m.enc, chunks: [], done: 0, at: Date.now() };
+        return this.progress('receiving', 0, m.total);
+      case 'end':
+        return this.enqueue(async () => {
+          const rx = this.rx;
+          if (!rx || rx.id !== m.id) return;
+          this.rx = null;
+          if (rx.gen !== this.gen) return;
+          this.progress('opening', rx.total, rx.total);
+          const parts = new Blob(rx.chunks);
+          const project = rx.enc === 'gzip' ? await gunzip(parts) : new Uint8Array(await parts.arrayBuffer());
+          await this.load({ project: new TextDecoder().decode(project), seq: rx.seq, gen: rx.gen, title: rx.title });
+          this.seq = rx.seq;
+          this.loaded = true;
+          this.progress('ready', 0, 0);
+        });
       case 'snapshot':
         return this.enqueue(async () => {
           const project = await this.snapshot();
@@ -215,14 +277,23 @@ export class SyncClient {
     this.send({ t: 'resync' });
   }
   binary(bytes) {
+    if (bytes[0] === FRAME.chunk) {
+      const rx = this.rx, view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      if (!rx || view.getUint32(1) !== rx.id) return;
+      rx.chunks.push(bytes.subarray(9));
+      rx.done = view.getUint32(5);
+      return this.progress('receiving', rx.done, rx.total);
+    }
     if (bytes[0] === FRAME.snapshot) {
       const { header, payload } = unpackSnapshot(bytes);
       return this.enqueue(async () => {
         if (header.gen !== this.gen) return;
         const project = header.enc === 'gzip' ? await gunzip(payload) : payload;
+        this.on('progress', { stage: 'opening', done: 0, total: 0 });
         await this.load({ project: new TextDecoder().decode(project), seq: header.seq, gen: header.gen, title: header.title });
         this.seq = header.seq;
         this.loaded = true;
+        this.on('progress', { stage: 'ready', done: 0, total: 0 });
       });
     }
     if (!this.doc) return;
@@ -279,6 +350,7 @@ export class SyncClient {
   close() {
     this.state = 'closed';
     clearTimeout(this.retry);
+    clearInterval(this.beating);
     this.failPending('Disconnected.');
     this.ws?.close(1000, 'Left');
     this.ws = null;

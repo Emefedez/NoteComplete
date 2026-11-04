@@ -159,6 +159,10 @@ async function join(host, invite) {
   else session.loading('Connecting…', { inline: true });
 }
 
+// "147 MB", "3.4 MB", "820 KB"; "1 min 5 s".
+const megabytes = (bytes) => (bytes >= 1e6 ? `${bytes >= 1e7 ? Math.round(bytes / 1e6) : (bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
+const duration = (seconds) => (seconds >= 90 ? `${Math.round(seconds / 60)} min` : seconds >= 60 ? '1 min' : `${Math.max(1, seconds)} s`);
+
 class Session {
   constructor(host, { url, token, code, role, name, yjs, info = null }) {
     Object.assign(this, { host, role, yjs, info, people: [], live: new Map() });
@@ -245,16 +249,44 @@ class Session {
   }
   // A full-screen "Connecting… / Loading the note…" with a moving bar; null hides it.
   // `inline` (guests): a small bar at the top that leaves the page and the notes usable.
-  loading(text, { inline = false } = {}) {
-    if (!text) { this.loader?.remove(); this.loader = null; return; }
+  // `fraction` (0..1) makes the bar show how far it is; `detail` is a second line (speed, time left).
+  loading(text, { inline = false, fraction = null, detail = '' } = {}) {
+    if (!text) { this.loader?.remove(); this.loader = null; this.transfer = null; return; }
     if (this.loader && this.loader.classList.contains('inline') !== inline) { this.loader.remove(); this.loader = null; }
     if (!this.loader) {
-      this.loader = el('div', { className: 'tablet-loader', role: 'status' }, el('div', { className: 'loader-bar' }), el('p'),
+      this.loader = el('div', { className: 'tablet-loader', role: 'status' }, el('div', { className: 'loader-bar' }), el('p'), el('small', { className: 'loader-detail' }),
         el('button', { type: 'button', textContent: 'Cancel', onclick: () => this.leave() }));
       this.loader.classList.toggle('inline', inline);
       document.body.append(this.loader);
     }
     this.loader.querySelector('p').textContent = text;
+    const detailLine = this.loader.querySelector('.loader-detail'), bar = this.loader.querySelector('.loader-bar');
+    detailLine.textContent = detail;
+    detailLine.hidden = !detail;
+    bar.classList.toggle('determinate', fraction != null);
+    if (fraction != null) bar.style.setProperty('--p', `${Math.round(Math.max(0, Math.min(1, fraction)) * 1000) / 10}%`);
+    else bar.style.removeProperty('--p');
+  }
+  // How the note is arriving (the sync client's progress events): the computer preparing it, the
+  // bytes received with the speed and time left, then opening it.
+  joinProgress({ stage, done, total }) {
+    const inline = this.role === 'guest' || !!this.host.doc;
+    if (stage === 'preparing') { this.transfer = null; return this.loading('The computer is preparing the note…', { inline }); }
+    if (stage === 'opening') { this.transfer = null; return this.loading('Opening the note…', { inline }); }
+    if (stage !== 'receiving') return;
+    const now = Date.now(), t = (this.transfer ||= { at: now, last: now, lastDone: 0, rate: 0 });
+    // A smoothed speed from the last few parts; the time left comes from it.
+    if (now - t.last >= 400 && done >= t.lastDone) {
+      const instant = (done - t.lastDone) / ((now - t.last) / 1000);
+      t.rate = t.rate ? t.rate * 0.7 + instant * 0.3 : instant;
+      t.last = now; t.lastDone = done;
+    }
+    const fraction = total ? done / total : null;
+    const left = t.rate > 0 && total > done ? Math.ceil((total - done) / t.rate) : null;
+    this.loading(total ? `Receiving the note · ${megabytes(done)} of ${megabytes(total)} (${Math.floor(fraction * 100)} %)` : 'Receiving the note…', {
+      inline, fraction,
+      detail: t.rate > 0 ? `${megabytes(t.rate)}/s${left != null ? ` · about ${duration(left)} left` : ''}` : 'Starting…',
+    });
   }
   event(type, detail) {
     const host = this.host;
@@ -273,6 +305,18 @@ class Session {
       }
       if (this.role === 'tablet' && detail.resumed) host.status('Connected again.');
       else if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); this.loading(detail.open ? 'Loading the note…' : null); }
+    } else if (type === 'resynced') {
+      // Host: a tablet's or guest's copy no longer matched, and is being sent the note again.
+      host.status(`${detail.name || 'A device'} had drifted out of sync; sending it the note again.`, true);
+    } else if (type === 'progress') {
+      this.joinProgress(detail);
+    } else if (type === 'loading') {
+      // Host: who is receiving the note, and how far.
+      const before = this.loadingPeers || new Map();
+      this.loadingPeers = new Map(detail.map((p) => [p.id, p]));
+      for (const [id, p] of before) if (!this.loadingPeers.has(id) && p.stage === 'opening') this.host.status(`${p.name} has the note.`);
+      this.drawPeople();
+      if ($('collabDialog')?.open && this.shareShown) this.drawShareList();
     } else if (type === 'peers') {
       this.people = detail;
       this.drawPeople();
@@ -458,7 +502,7 @@ class Session {
     list.replaceChildren(...(others.length ? others.map((p) => el('li', {},
       el('span', { className: 'collab-dot', style: `background:${p.color}` }),
       el('span', { textContent: p.name }),
-      el('small', { className: 'muted', textContent: p.role === 'tablet' ? 'drawing tablet' : 'notes' }),
+      el('small', { className: 'muted', textContent: this.loadingPeers?.has(p.id) ? this.loadingText(this.loadingPeers.get(p.id)) : p.role === 'tablet' ? 'drawing tablet' : 'notes' }),
       (() => { const b = el('button', { type: 'button', className: 'collab-remove', title: `Remove ${p.name}`, 'aria-label': `Remove ${p.name}`, onclick: () => this.client.removePeer(p.id) }); b.append(icon('close')); return b; })())) : [el('li', { className: 'muted', textContent: 'No one has joined yet.' })]));
   }
   // Closing the tab while sharing (app.js asks this first): Minimize / End session and close / Cancel.
@@ -633,6 +677,19 @@ class Session {
   }
 
   // Presence in the bar -----------------------------------------------------------------
+  // What a joiner is doing with the note, for the host: "Sending 43 % · 63 of 147 MB".
+  loadingText(p) {
+    if (p.stage === 'preparing') return 'Preparing the note…';
+    if (p.stage === 'opening') return 'Opening the note…';
+    return p.total ? `Sending ${Math.floor((p.done / p.total) * 100)} % · ${megabytes(p.done)} of ${megabytes(p.total)}` : 'Sending the note…';
+  }
+  loadingPill(list) {
+    const first = list[0], fraction = first.stage === 'sending' && first.total ? first.done / first.total : null;
+    const bar = el('i', { className: 'collab-loading-bar' });
+    if (fraction != null) bar.style.setProperty('--p', `${Math.round(fraction * 1000) / 10}%`); else bar.classList.add('wait');
+    const text = list.length > 1 ? `${list.length} people loading…` : `${first.name} · ${first.stage === 'sending' && first.total ? `${Math.floor(fraction * 100)} %` : this.loadingText(first).replace('…', '')}`;
+    return el('span', { className: 'collab-loading', role: 'status', title: list.map((p) => `${p.name}: ${this.loadingText(p)}`).join('\n') }, bar, el('span', { textContent: text }));
+  }
   drawPeople() {
     let bar = $('collabPeopleBar');
     if (!bar) {
@@ -651,7 +708,8 @@ class Session {
       return b;
     };
     const me = el('button', { type: 'button', className: 'collab-chip me', title: `You: ${this.client.name}. Click to change your name.`, style: `--who:${this.client.color}`, textContent: (this.client.name.trim()[0] || '?').toUpperCase(), onclick: () => this.rename(this.client.name) });
-    bar.replaceChildren(...[me, ...shown.map(chip), others.length > shown.length ? el('span', { className: 'collab-more', textContent: `+${others.length - shown.length}`, title: others.slice(shown.length).map((p) => p.name).join(', ') }) : null].filter(Boolean));
+    const loading = [...(this.loadingPeers?.values() || [])].filter((p) => others.some((o) => o.id === p.id));
+    bar.replaceChildren(...[me, ...shown.map(chip), ...(loading.length ? [this.loadingPill(loading)] : []), others.length > shown.length ? el('span', { className: 'collab-more', textContent: `+${others.length - shown.length}`, title: others.slice(shown.length).map((p) => p.name).join(', ') }) : null].filter(Boolean));
   }
   // Clicking a name shows that person's cursor in the notes (opening them if closed).
   async goTo(peer) {
