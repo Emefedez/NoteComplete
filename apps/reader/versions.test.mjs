@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pageDiff, pageHash, mergeStudy, carryStudy, studyCounts } from './versions.js';
+import { pageDiff, versionChooser, pageHash, mergeStudy, carryStudy, studyCounts } from './versions.js';
 import { memoryStore } from './library.js';
 
 test('pages are aligned like a diff: unchanged, changed, added and removed', () => {
@@ -47,4 +47,27 @@ test('migrating content can leave or empty the old note', async () => {
   await clearStudy(store, 'old', ['decks']);
   assert.deepEqual(await studyCounts(store, 'old'), { decks: 0, quizzes: 0, notes: 1, recordings: 0 });
   assert.deepEqual(await studyCounts(store, 'new'), { decks: 1, quizzes: 0, notes: 1, recordings: 0 });
+});
+
+test('a forced check always answers, and trusts a different checksum over the dates', async () => {
+  const messages = [];
+  const entry = { source: 'drive', key: 'drive:a', driveId: 'a', name: 'Tema 3.noteful', md5: 'x', modifiedTime: '2026-10-27T00:00:00Z' };
+  const local = new Blob(['x']);
+  const make = newest => versionChooser({
+    library: { store: { set: async () => {} }, md5: async () => 'x' },
+    drive: { ready: true, newest: async () => newest },
+    open: async () => {}, status: text => messages.push(text), fingerprint: async () => '',
+  });
+  // Same content: up to date, and the answer is shown.
+  assert.equal(await make([{ id: 'a', md5Checksum: 'x', modifiedTime: '2026-10-27T00:00:00Z' }]).openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /up to date/);
+  // Older date and same checksum without force: silent.
+  assert.equal(await make([{ id: 'a', md5Checksum: 'x', modifiedTime: '2026-10-27T00:00:00Z' }]).openRecent(entry, local), false);
+  // Not found in the folder.
+  assert.equal(await make([]).openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /Nothing named/);
+  // Drive not connected.
+  const off = versionChooser({ library: { store: {} }, drive: { ready: false }, open() {}, status: text => messages.push(text), fingerprint: async () => '' });
+  assert.equal(await off.openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /Connect Google Drive/);
 });

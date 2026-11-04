@@ -218,17 +218,23 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
   }
 
   // Opening a Drive note from Recent: true when handled here (opened or cancelled).
-  async function openRecent(entry, local) {
+  // `force` (⋯ → Check Drive for a newer version) always answers, compares by content and not
+  // only by date, and says so when the kept copy is already the newest.
+  async function openRecent(entry, local, { force = false } = {}) {
     if (entry.source !== 'drive') return false;
     if (!drive.ready) {
-      if (!warned) status('Opened the copy on this device. Connect Google Drive to check for newer versions.');
+      if (force) status('Connect Google Drive first (Home → Google Drive), then check again.', true);
+      else if (!warned) status('Opened the copy on this device. Connect Google Drive to check for newer versions.');
       warned = true;
-      return false;
+      return force;
     }
     let newest;
     try { newest = (await drive.newest(entry))?.[0]; }
-    catch (error) { status(`Could not check Drive for a newer version: ${error.message}`, true); return false; }
-    if (!newest) return false;
+    catch (error) { status(`Could not check Drive for a newer version: ${error.message}`, true); return force; }
+    if (!newest) {
+      if (force) status(`Nothing named ${entry.name} was found in its Drive folder. It may have been renamed, moved or deleted there.`, true);
+      return force;
+    }
     if (!entry.md5 && library.md5) {
       entry.md5 = await library.md5(new Uint8Array(await local.arrayBuffer()));
       await library.store.set('entries', entry.key, entry);
@@ -236,9 +242,15 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
     // Same content under a new Drive file: adopt it quietly.
     if (newest.md5Checksum && newest.md5Checksum === entry.md5) {
       if (newest.id !== entry.driveId) await library.cached(newest).catch(() => null);
-      return false;
+      if (force) status(`${entry.name} is up to date: the copy on this device matches Drive (${when(newest.modifiedTime)}).`);
+      return force;
     }
-    if (Date.parse(newest.modifiedTime || 0) <= Date.parse(entry.modifiedTime || 0)) return false;
+    // A forced check trusts a different checksum over the dates (an upload can keep an old date).
+    const differs = force && newest.md5Checksum && entry.md5 && newest.md5Checksum !== entry.md5;
+    if (!differs && Date.parse(newest.modifiedTime || 0) <= Date.parse(entry.modifiedTime || 0)) {
+      if (force) status(`${entry.name} is up to date: Drive's newest copy is from ${when(newest.modifiedTime)}.`);
+      return force;
+    }
     $('versionText').textContent = `“${entry.name.replace(/\.noteful$/i, '')}” has a newer version in Google Drive.`;
     $('versionMine').textContent = `${when(entry.modifiedTime)} · ${mb(entry.size)}`;
     $('versionDrive').textContent = `${when(newest.modifiedTime)} · ${mb(newest.size)}`;
