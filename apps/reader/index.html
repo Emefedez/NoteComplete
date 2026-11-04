@@ -227,7 +227,7 @@
       <section id="foldersSection" class="home-section" aria-labelledby="foldersTitle">
         <div class="drive-heading">
           <button id="foldersToggle" type="button" class="category-toggle" aria-expanded="true" aria-controls="foldersContent"><h3 id="foldersTitle">Folders</h3><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <div class="drive-actions"><button id="folderNew" type="button" title="Make a folder in NoteComplete to keep notes together; files stay where they are">New folder</button></div>
+          <div class="drive-actions"><button id="folderNew" type="button" class="icon-button" title="New folder: keep notes together in NoteComplete; files stay where they are" aria-label="New folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5"/></svg></button></div>
         </div>
         <div id="foldersContent" class="category-content">
           <div id="folderNewRow" class="folder-new" hidden><label for="folderNewName">Name</label><input id="folderNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderNewCreate" type="button" class="primary">Create</button><button id="folderNewCancel" type="button">Cancel</button></div>
@@ -353,7 +353,7 @@
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" hidden>Change folder…</button>
         <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · Text · Markdown · PNG · JPEG · WebP · Your documents stay on this device.</span>
-        <span id="homeVersion" class="home-version">v1.1.33</span>
+        <span id="homeVersion" class="home-version">v1.1.34</span>
       </footer>
     </section>
     <section id="htmlView" hidden>
@@ -1051,6 +1051,7 @@
   <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
   <div id="moveRow" class="note-move" role="group" aria-label="Folders" hidden></div>
   <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
+  <button id="forgetCheck" type="button" role="menuitem" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for a newer version</button>
   <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
   <p id="forgetText" class="muted"></p>

@@ -1,4 +1,11 @@
-## What's new in 1.1.33
+## What's new in 1.1.34
+
+- **Google Drive stays connected in new tabs.** The Drive sign-in is shared by every tab and window, so opening a tab no longer unlinks Drive; Disconnect applies to all of them.
+- **Check Drive for a newer version.** The **⋯** menu of a Drive note in Recent can check Drive on demand. It always answers (up to date, not found, or not connected) and compares file contents, not only dates.
+- **Fewer "which save?" questions.** Opening a note no longer asks between the automatic and manual save when they are the same, and a manual save no longer leads to an identical automatic copy.
+- **New folder** is now a folder-with-plus icon, and the arrow beside **Recent** is centered with its title.
+
+### In 1.1.33
 
 - **Resize all pages.** The **Page size** dialog has **Resize all pages** next to **Resize this page**: every page takes the chosen size in one step (space added and Original follow each page's own size), and one Undo restores them all.
 

@@ -24,6 +24,24 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 // Windows hold tabs: one reader view per tab, only the active one shown. The
 // readers draw the tab strip in their own top bar from the list sent here.
 const tabs = tabStore();
+// Google Drive access tokens, shared by all tabs (see drive:session below).
+const driveSession = { read: null, write: null };
+function currentDriveSession() {
+  const out = {};
+  for (const kind of ['read', 'write']) {
+    const t = driveSession[kind];
+    if (t && t.expires - Date.now() > 10000) out[kind] = { access_token: t.access_token, scope: t.scope, expires_in: Math.floor((t.expires - Date.now()) / 1000) };
+  }
+  return out;
+}
+function sendDriveSession() {
+  const session = currentDriveSession();
+  for (const view of views.values()) if (!view.webContents.isDestroyed()) view.webContents.send('drive:session', session);
+}
+function shareDriveSession(kind, token) {
+  driveSession[kind] = { access_token: token.access_token, scope: token.scope, expires: Date.now() + Number(token.expires_in || 0) * 1000 };
+  sendDriveSession();
+}
 const views = new Map(), windows = new Map();
 // Called when a tab's page is gone, so work started for it stops (set once the AI runners exist).
 let tabGone = () => {};
@@ -511,6 +529,10 @@ app.whenReady().then(async () => {
     const win = windowOf(event.sender);
     if (win && tabs.update(event.sender.id, { title: state.title, dirty: state.dirty })) broadcast(win);
   }));
+  // The Drive session belongs to the app, not to one tab: kept here in memory (never on disk)
+  // and handed to every tab, so a new tab does not start signed out.
+  ipcMain.handle('drive:session', event => (trusted(event) ? currentDriveSession() : null));
+  ipcMain.on('drive:forget', event => { if (trusted(event)) { driveSession.read = driveSession.write = null; sendDriveSession(); } });
   ipcMain.on('drive:cancel', event => { if (trusted(event)) pendingAuth.get(event.sender.id)?.abort(); });
   ipcMain.handle('drive:sign-in', async (event, options = {}) => {
     if (!trusted(event)) throw Error('Unexpected authentication origin.');
@@ -532,7 +554,9 @@ app.whenReady().then(async () => {
         config = desktopCredentials(value);
         await writeFile(saved, JSON.stringify({ installed: { client_id: config.clientId, client_secret: config.clientSecret } }), { mode: 0o600 });
       }
-      return await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true });
+      const token = await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true });
+      shareDriveSession(options?.write === true ? 'write' : 'read', token);
+      return token;
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   started = true;

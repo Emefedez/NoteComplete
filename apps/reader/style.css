@@ -2217,7 +2217,8 @@ button.category-toggle:hover {
   color: var(--muted);
   transition: transform .15s ease;
   transform: rotate(0deg);
-  margin-top: -1px;
+  /* "Recent" has no descenders, so its visual centre sits above the line box centre: lift the arrow to match. */
+  margin-top: -3px;
   display: inline-block;
   vertical-align: middle;
 }

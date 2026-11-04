@@ -275,6 +275,16 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     $('moveRow').hidden = true; $('moveNewRow').hidden = true;
     $('moveOpen').hidden = !groups;
     $('moveOpen').onclick = async () => { const row = $('moveRow'); if (row.hidden) await moveRow(entry, close); row.hidden = !row.hidden; };
+    $('forgetCheck').hidden = entry.source !== 'drive' || !versions;
+    $('forgetCheck').onclick = async () => {
+      close();
+      try {
+        status(`Checking Drive for a newer ${entry.name}…`);
+        const file = await library.open(entry);
+        if (!file) return status(`${entry.name} is no longer kept on this device. Open it again from Drive.`, true);
+        if (await versions.openRecent(entry, file, { force: true })) renderRecent();
+      } catch (error) { status(error.message, true); }
+    };
     $('forgetExport').hidden = !exportStudy;
     $('forgetExport').onclick = () => { close(); exportStudy?.(entry).catch(error => status(error.message, true)); };
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
