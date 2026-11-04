@@ -1,5 +1,5 @@
 import { touchGestures } from "./touch.js";
-import { followPoint, smoothStroke } from "./stroke-smoothing.js";
+import { followPoint, smoothStroke, pressureRadii, extentOf } from "./stroke-smoothing.js";
 import { momentum, VelocityTracker } from "./momentum.js";
 import {
   prepareDocument,
@@ -2012,7 +2012,7 @@ function appendPoint(e) {
       const raw = point(sample, g.panel),
         last = g.points.at(-1);
       g.raw = raw;
-      const p = followPoint(last, raw, g.smooth);
+      const p = followPoint(last, raw, g.smooth, g.smooth ? extentOf(g.points) : Infinity);
       if (
         Math.hypot(p[0] - last[0], p[1] - last[1]) >= 0.3 &&
         g.points.length < 8192
@@ -2035,8 +2035,7 @@ function appendPoint(e) {
 // (editor.rs). Light pressure draws about a third of the width, a firm press about 1.7×.
 function stylusPressure(g) {
   if (!g.pen || !pressureOn() || g.pressures.length !== g.points.length) return {};
-  const half = g.width / 2;
-  const radii = g.pressures.map((p) => Math.min(50, Math.max(0.05, half * (0.3 + 1.4 * (Number.isFinite(p) ? Math.min(1, Math.max(0, p)) : 0.5)))));
+  const radii = pressureRadii(g.pressures, g.points, g.width / 2);
   return { pressure: radii.map((r) => Math.round(r * 1000) / 1000) };
 }
 // Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
