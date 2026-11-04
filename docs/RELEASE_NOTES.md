@@ -1,9 +1,14 @@
-## What's new in 1.1.36
+## What's new in 1.1.37
+
+- **One place for study material.** **Study → Share study material…** replaces the separate Send, Receive and Import items: its **Send** tab sends the note's flashcards, quizzes and notes (or saves a file), and its **Receive** tab shows the QR code and PIN for another NoteComplete to send you some (the desktop app), with **Import a file…**. In the web version, Receive offers the file, and explains that receiving live needs the desktop app.
+- **The Online tab's links are set apart:** Guests, Tablets and Study material each have their own block and QR code, with a divider between them.
+- **Sending from the web app** says why a plain network address cannot be used from an https page (the browser blocks it) and what to use instead: the other NoteComplete's online link, the desktop app, or a file.
+
+### In 1.1.36
 
 - **QR code and PIN for receiving study material.** **Study → Receive study material…** shows a QR code and link (and the address and PIN) for another NoteComplete to send you flashcards, quizzes and notes; with online access on, a second link works from any network. Scan the code with a phone's camera and NoteComplete opens ready to send the newest note's material to that computer, or in **Send study material…** use **Scan its QR code** (browsers that can read QR codes) or type the address and PIN. The link only lets a device send: it cannot join the session as a guest or a tablet.
 - **Notes beside text documents, and for guests.** A text or Markdown document now has a **Notes** button in its bar and **N** opens the Markdown notes beside it, as for HTML pages. In a shared session, guests can close and open the notes panel (button and **N**) instead of having it fixed open, and a guest viewing the host's shared text document gets the shared notes beside it.
 
-- **Sending from the web app** says why a plain network address cannot be used from an https page (the browser blocks it) and what to use instead: the other NoteComplete's online link, the desktop app, or a file.
 
 ### In 1.1.35
 

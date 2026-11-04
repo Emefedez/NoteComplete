@@ -2871,3 +2871,7 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 .recent-heading > .folder-back svg { width: 16px; height: 16px; }
 .collab-dialog .check { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
 .collab-dialog .check .muted { font-size: 12px; }
+
+/* Online tab: each link with its QR code is its own block, set apart from the next. */
+#collabOnline .collab-pair + .collab-pair { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+#collabOnline .collab-online-actions { margin-top: 16px; }

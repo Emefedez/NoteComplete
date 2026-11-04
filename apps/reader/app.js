@@ -4361,7 +4361,7 @@ function documentControls() {
   // A canvas is one page that grows: no inserted pages.
   for (const id of ["insertBlank", "insertPdf", "insertHandwritten"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "studySend", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   if (!open) $("svg").disabled = true;
 }
@@ -5312,6 +5312,7 @@ const collabHost = {
     await notes?.flush?.();
     return { title, fingerprint, study: await studyOf(library.store, fingerprint) };
   },
+  importStudyFile: () => $("studyPackFile").click(),
   async importStudyPack(pack) { const { importPack } = await import("./study-pack.js"); return importPack(library.store, pack); },
   // The open text document (.txt, Markdown, a converted file), as shared with guests.
   textDocument: () => (!doc && textView.hasDocument ? { name: textView.key || textView.name, markdown: textView.markdown, content: textView.text } : null),
@@ -5360,14 +5361,10 @@ async function startCollab(mode) {
     status(e.message, true);
   }
 }
-$("studySend").onclick = async () => {
+$("studyShare").onclick = async () => {
   closeMenus();
-  try { const { openStudySend } = await (collabLoading ||= import("./collab.js")); await openStudySend(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }
+  try { const { openStudyShare } = await (collabLoading ||= import("./collab.js")); await openStudyShare(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }
 };
-// Study → Import study material…: a .ncstudy file from another NoteComplete.
-$("studyImport").onclick = () => { closeMenus(); $("studyPackFile").click(); };
-// Study → Receive study material…: the Sharing dialog's Local tab shows the QR code and PIN for it.
-$("studyReceive").onclick = () => { closeMenus(); try { localStorage.setItem("notecomplete-collab-tab", "local"); } catch { /* Optional. */ } startCollab("host"); };
 $("studyPackFile").onchange = async () => {
   const [file] = $("studyPackFile").files;
   $("studyPackFile").value = "";
@@ -5380,7 +5377,6 @@ $("studyPackFile").onchange = async () => {
     status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}.`);
   } catch (e) { status(e.message, true); }
 };
-$("studyReceive").hidden = !window.notecompleteCollab;
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");

@@ -68,10 +68,11 @@ function buttons(...list) { return el('div', { className: 'dialog-actions' }, ..
 // Study → Send study material…: the open note's flashcard decks, quizzes and Markdown notes, to
 // another NoteComplete that is sharing (address and PIN, or its link, on this network or online),
 // or as a .ncstudy file. The other side is asked before anything is kept.
-export async function openStudySend(host, aimed = null) {
+export const openStudySend = (host, aimed = null) => openStudyShare(host, { aimed });
+export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) {
   const { buildPack, describePack, summary, KINDS } = await import('./study-pack.js');
   const material = await host.studyMaterial();
-  if (!material) return host.status('Open a note first: the study material belongs to the note.', true);
+  if (!material) return studyDialog(host, el('div', { className: 'collab-panel' }, el('p', { textContent: 'Open a note that has flashcards, quizzes or notes to send them. Receiving does not need one.' }), buttons(el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }))), tab === 'receive' ? 'receive' : 'send');
   const have = summary({ decks: material.study.decks, quizzes: material.study.quizzes, notes: material.study.notes });
   const counts = { decks: have.decks ? `${have.decks} · ${have.cards} card${have.cards === 1 ? '' : 's'}` : '', quizzes: have.quizzes ? `${have.quizzes} · ${have.questions} question${have.questions === 1 ? '' : 's'}` : '', notes: have.notes ? 'the notes panel' : '' };
   const boxes = Object.fromEntries(KINDS.map(([kind, label]) => {
@@ -109,14 +110,65 @@ export async function openStudySend(host, aimed = null) {
       host.status(`Sent ${describePack(pack)}. ${done.message}`.trim());
     } catch (e) { state.textContent = e.message; send.disabled = false; }
   };
-  dialog('Send study material',
+  const sendPanel = el('div', { className: 'collab-panel' },
     el('p', { textContent: `From “${material.title}”:` }), ...KINDS.map(([kind]) => boxes[kind].row),
     el('h3', { textContent: 'To another NoteComplete' }),
     aimed ? '' : el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link. Or scan the QR code it shows: Study → Receive study material… on the other computer.' }),
     aimed ? el('p', {}, el('strong', { textContent: 'To: ' }), `the NoteComplete at ${new URL(aimed.url).host.replace(/^ws/, '')} (from the QR code)`) : '',
     el('div', { className: 'collab-join' }, ...(aimed ? [] : [el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), scan]), el('label', {}, el('span', { textContent: 'Your name' }), who)),
     state, buttons(save, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
+  studyDialog(host, sendPanel, tab === 'receive' ? 'receive' : 'send', aimed);
   (aimed ? who : link.value ? code : link).focus();
+}
+
+// One dialog for study material: Send (what and to whom, or a file) and Receive (the QR code and PIN
+// for another NoteComplete, or a file). In a browser, which cannot accept connections, Receive is the file.
+function studyDialog(host, sendPanel, tab, aimed = null) {
+  const receivePanel = el('div', { className: 'collab-panel', hidden: true });
+  const bar = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Send or receive study material' });
+  const show = (id) => {
+    for (const [name, panel] of [['send', sendPanel], ['receive', receivePanel]]) {
+      panel.hidden = name !== id;
+      $(`studyTab-${name}`)?.setAttribute('aria-selected', String(name === id));
+    }
+    if (id === 'receive') fillReceive(host, receivePanel);
+  };
+  for (const [id, label] of [['send', 'Send'], ['receive', 'Receive']]) bar.append(el('button', { type: 'button', role: 'tab', id: `studyTab-${id}`, textContent: label, onclick: () => show(id) }));
+  const d = dialog('Share study material', bar, sendPanel, receivePanel);
+  d.addEventListener('close', () => { if (session?.codeClock) clearInterval(session.codeClock); }, { once: true });
+  show(aimed ? 'send' : tab);
+}
+async function fillReceive(host, panel) {
+  const close = el('button', { type: 'button', textContent: 'Close', onclick: closeDialog });
+  const importFile = el('button', { type: 'button', textContent: 'Import a file…', title: 'A .ncstudy file from another NoteComplete', onclick: () => { closeDialog(); host.importStudyFile(); } });
+  if (!window.notecompleteCollab) {
+    panel.replaceChildren(
+      el('p', { textContent: 'Receive study material from a file: on the other NoteComplete, Send → Save as a file, then open that file here.' }),
+      el('p', { className: 'muted', textContent: 'Receiving it live, with a QR code and PIN, needs the NoteComplete desktop app: it can accept connections and a browser cannot yet.' }),
+      buttons(close, importFile));
+    return;
+  }
+  if (session?.role !== 'host') {
+    const start = el('button', { className: 'primary', type: 'button', textContent: 'Start receiving' });
+    start.onclick = async () => {
+      start.disabled = true;
+      try {
+        const info = await window.notecompleteCollab.start({ notes: null });
+        session = new Session(host, { url: info.hostUrl, token: info.hostToken, role: 'host', name: remembered() || 'Host', yjs: null, info: { ...info, notesMode: null } });
+        await fillReceive(host, panel);
+      } catch (e) { start.disabled = false; host.status(e.message, true); }
+    };
+    panel.replaceChildren(
+      el('p', { textContent: 'Another NoteComplete on this network (or online, when you turn it on) can send you flashcards, quizzes and notes. Start receiving to get a QR code and PIN. You are asked before anything is kept.' }),
+      buttons(close, importFile, start));
+    return;
+  }
+  const card = el('section', { id: 'collabStudy', className: 'collab-section' });
+  panel.replaceChildren(card, buttons(close, importFile));
+  await session.drawStudy(true);
+  session.tickCode();
+  clearInterval(session.codeClock);
+  session.codeClock = setInterval(() => session.tickCode(), 1000);
 }
 
 // A pack sent by another NoteComplete: asks, keeps it, and answers the sender.
@@ -597,8 +649,9 @@ class Session {
         el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', 'aria-label': 'Link', onfocus: (e) => e.target.select() }), copy)));
     };
     const blocks = [];
-    if (this.info.onlineLink) blocks.push(await block('People:', this.info.onlineLink, 'the note and its notes, in a browser anywhere.'));
-    if (this.info.onlineTabletLink) blocks.push(await block('Drawing tablet:', this.info.onlineTabletLink, 'a phone or tablet on any network.'));
+    if (this.info.onlineLink) blocks.push(await block('Guests:', this.info.onlineLink, 'read the note and its notes along with you, in a browser anywhere.'));
+    if (this.info.onlineTabletLink) blocks.push(await block('Tablets:', this.info.onlineTabletLink, 'a phone or tablet on any network, as a drawing surface.'));
+    if (this.info.onlineSendLink) blocks.push(await block('Study material:', this.info.onlineSendLink, 'another NoteComplete anywhere sends you flashcards, quizzes and notes.'));
     section.replaceChildren(title, ...blocks, el('div', { className: 'collab-online-actions' }, off));
   }
 
@@ -616,13 +669,19 @@ class Session {
   }
   // Another NoteComplete sends study material here: a send-only QR code and link, or the address and
   // PIN above (Study → Send study material… on the other side).
-  async drawStudy() {
+  async drawStudy(withPin = false) {
     const section = $('collabStudy');
     if (!section || !this.info.sendLink) return;
     const qr = el('div', { className: 'collab-qr small' });
     qr.innerHTML = await qrSvg(this.info.sendLink);
     const online = this.info.onlineSendLink ? el('div', {}, el('div', { className: 'collab-linkrow-label', textContent: 'From another network (online access is on)' }), this.linkRow(this.info.onlineSendLink, 'Online link to send study material copied.')) : '';
-    section.replaceChildren(el('h3', { textContent: 'Study material' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+    const copyIcon = (text, label, message) => el('button', { type: 'button', className: 'collab-copy', title: `Copy the ${label}`, 'aria-label': `Copy the ${label}`, onclick: () => navigator.clipboard.writeText(text).then(() => this.host.status(message), () => this.host.status('Select it and copy it.', true)) }, icon('copy'));
+    const code = String(this.info.code || ''), address = `${this.info.address}:${this.info.port}`;
+    const alone = el('div', {}, el('dl', { className: 'collab-code' },
+      el('dt', { textContent: 'Address' }), el('dd', {}, el('span', { textContent: address }), el('span', { className: 'collab-icons' }, copyIcon(address, 'address', 'Address copied.'))),
+      el('dt', { textContent: 'PIN' }), el('dd', { className: 'code' }, el('span', { textContent: `${code.slice(0, 3)} ${code.slice(3)}` }), el('span', { className: 'collab-icons' }, copyIcon(code, 'PIN', 'PIN copied.'), el('button', { type: 'button', className: 'collab-copy', title: 'Make a new PIN now', 'aria-label': 'New PIN', onclick: () => this.client.newCode().then?.(() => this.drawStudy(true)) }, icon('restart'))))),
+      el('p', { className: 'muted' }, el('span', { id: 'collabCodeLeft' })));
+    section.replaceChildren(el('h3', { textContent: 'Receive study material' }), ...(withPin ? [alone] : []), el('div', { className: 'collab-pair' }, qr, el('div', {},
       el('p', { textContent: 'Another NoteComplete can send you flashcards, quizzes and notes. Scan this code with its camera (it opens NoteComplete ready to send), or in its Study → Send study material type the address and PIN above. You are asked before anything is kept.' }),
       this.linkRow(this.info.sendLink, 'Link to send study material copied.'), online)));
   }
