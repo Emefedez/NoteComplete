@@ -49,7 +49,7 @@
             <span>Export <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></span>
             <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
             <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
-            <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note and its notes; NoteComplete opens it with both.">NC</button>
+            <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note, its notes and recordings, without the undo history (Save as a project keeps it).">NC</button>
           </div>
           <div class="menu-export" role="group" aria-label="Export pages as">
             <span>Pages as</span>
@@ -1169,11 +1169,18 @@
   <table class="formats-table">
     <thead><tr><th></th><th>Keeps</th><th>Use it for</th></tr></thead>
     <tbody>
-      <tr><th>NoteComplete<br><span class="muted">.nfedit</span></th><td>The original note untouched, every edit with its undo history, the Markdown notes and the text of the handwriting. Recordings added here stay on this device.</td><td>Your notes in NoteComplete: nothing is ever lost.</td></tr>
+      <tr><th>NoteComplete project<br><span class="muted">.nfedit</span></th><td>The original note untouched, every edit with its undo history, the Markdown notes and the text of the handwriting. Recordings added here stay on this device.</td><td>Your notes in NoteComplete: nothing is ever lost.</td></tr>
       <tr><th>Noteful<br><span class="muted">.noteful</span></th><td>Pages, ink, PDFs, images and text, as Noteful stores them. No undo history; notes stay in NoteComplete.</td><td>Notes you also open in Noteful on the iPad.</td></tr>
     </tbody>
   </table>
-  <p><strong>Export</strong> (File menu): <b>NF</b> a .noteful copy · <b>N+MD</b> the .noteful and its notes as a .md file · <b>NC</b> one .notecomp file with the note, its notes and added recordings, to send to someone · pages as SVG, PDF or images · study decks for Anki. NoteComplete opens .notecomp and .notepart files as well.</p>
+  <p><strong>Export</strong> (File menu) makes other files and never changes your note:</p>
+  <ul>
+    <li><b>NF</b> a .noteful copy. No undo history.</li>
+    <li><b>N+MD</b> the .noteful and its notes as a .md file.</li>
+    <li><b>NC</b> one <b>.notecomp</b> file with the note, its Markdown notes, the text of the handwriting and added recordings, to send to someone. It is flattened: <b>no undo history</b>, shapes become outlines and locked ink is unlocked. Save as a project (.nfedit) to keep the history.</li>
+    <li>Pages as SVG, PDF or images · study decks for Anki.</li>
+  </ul>
+  <p class="muted">NoteComplete opens .notecomp and .notepart files as well.</p>
   <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
 </dialog>
 
