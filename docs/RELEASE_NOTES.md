@@ -4,6 +4,9 @@
 - **Check Drive for a newer version.** The **⋯** menu of a Drive note in Recent can check Drive on demand. It always answers (up to date, not found, or not connected) and compares file contents, not only dates.
 - **Fewer "which save?" questions.** Opening a note no longer asks between the automatic and manual save when they are the same, and a manual save no longer leads to an identical automatic copy.
 - **Automatic save pills** in File have one size.
+- **The ⋯ menu of a note** has an icon on each action, shorter labels, a darker outline and rules between groups; Drive's **Back**, **Refresh** and **Disconnect** are icons.
+- **Search models.** In Ask AI, a magnifier beside the model list opens a search box over the tool's models, for long lists such as OpenCode's.
+- **Resize windows with Ctrl + right button.** Holding **Ctrl** and dragging with the right mouse button resizes Ask AI, quiz, flashcard and audio windows from the nearest corner (it was Shift + drag). Ctrl + drag still moves them.
 - **New folder** is now a folder-with-plus icon, and the arrow beside **Recent** is centered with its title.
 
 ### In 1.1.33

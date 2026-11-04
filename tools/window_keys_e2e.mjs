@@ -1,8 +1,8 @@
 // Browser check of moving and resizing floating windows from anywhere on them, as in a
 // tiling window manager (Chromium, after a web build): Ctrl + drag moves the Ask AI
-// window, Shift + drag resizes it from the corner nearest the pointer, the place is
+// window, Ctrl + right-button drag resizes it from the corner nearest the pointer, the place is
 // remembered, a drag that starts on a button does not press it, and text fields keep
-// their own Shift-click.
+// their own clicks.
 //   node tools/window_keys_e2e.mjs
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -20,23 +20,23 @@ await p.waitForSelector('.sheet[data-page="0"] .render svg');
 await p.evaluate(() => { const c = document.getElementById('chatPanel'); c.hidden = false; c.classList.remove('compact'); });
 await p.waitForFunction(() => document.getElementById('chatPanel').classList.contains('screen-window'));
 const box = () => p.evaluate(() => { const r = document.getElementById('chatPanel').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
-const drag = async (key, from, by) => {
+const drag = async (key, from, by, button = 'left') => {
   await p.keyboard.down(key);
-  await p.mouse.move(from.x, from.y); await p.mouse.down();
-  await p.mouse.move(from.x + by.x, from.y + by.y, { steps: 8 }); await p.mouse.up();
+  await p.mouse.move(from.x, from.y); await p.mouse.down({ button });
+  await p.mouse.move(from.x + by.x, from.y + by.y, { steps: 8 }); await p.mouse.up({ button });
   await p.keyboard.up(key);
 };
 // The panel's body, away from its head and edges.
 const inside = (r, fx, fy) => ({ x: r.x + r.w * fx, y: r.y + r.h * fy });
 
 let r0 = await box();
-await drag('Shift', inside(r0, 0.2, 0.2), { x: 40, y: 250 });
+await drag('Control', inside(r0, 0.2, 0.2), { x: 40, y: 250 }, 'right');
 let r1 = await box();
-assert.ok(Math.abs(r1.x + r1.w - (r0.x + r0.w)) < 1 && Math.abs(r1.y + r1.h - (r0.y + r0.h)) < 1 && Math.abs(r1.w - (r0.w - 40)) < 2 && Math.abs(r1.h - (r0.h - 250)) < 2, `Shift + drag near the top left shrinks it from there (${JSON.stringify([r0, r1])})`);
-await drag('Shift', inside(r1, 0.8, 0.8), { x: -30, y: -50 });
+assert.ok(Math.abs(r1.x + r1.w - (r0.x + r0.w)) < 1 && Math.abs(r1.y + r1.h - (r0.y + r0.h)) < 1 && Math.abs(r1.w - (r0.w - 40)) < 2 && Math.abs(r1.h - (r0.h - 250)) < 2, `Ctrl + right-drag near the top left shrinks it from there (${JSON.stringify([r0, r1])})`);
+await drag('Control', inside(r1, 0.8, 0.8), { x: -30, y: -50 }, 'right');
 let r2 = await box();
-assert.ok(Math.abs(r2.x - r1.x) < 1 && Math.abs(r2.y - r1.y) < 1 && Math.abs(r2.w - (r1.w - 30)) < 2 && Math.abs(r2.h - (r1.h - 50)) < 2, `Shift + drag near the bottom right resizes it from there (${JSON.stringify([r1, r2])})`);
-console.log('· Shift + drag resized it from the nearest corner');
+assert.ok(Math.abs(r2.x - r1.x) < 1 && Math.abs(r2.y - r1.y) < 1 && Math.abs(r2.w - (r1.w - 30)) < 2 && Math.abs(r2.h - (r1.h - 50)) < 2, `Ctrl + right-drag near the bottom right resizes it from there (${JSON.stringify([r1, r2])})`);
+console.log('· Ctrl + right-button drag resized it from the nearest corner');
 await drag('Control', inside(r2, 0.5, 0.6), { x: -150, y: 40 });
 let r3 = await box();
 assert.ok(Math.abs(r3.x - (r2.x - 150)) < 2 && Math.abs(r3.y - (r2.y + 40)) < 2 && Math.abs(r3.w - r2.w) < 1 && Math.abs(r3.h - r2.h) < 1, `Ctrl + drag moves it (${JSON.stringify([r2, r3])})`);
@@ -60,10 +60,10 @@ const field = p.locator('#probeField');
 {
   await field.fill('one two three');
   const fb = await field.boundingBox();
-  await drag('Shift', { x: fb.x + 10, y: fb.y + fb.height / 2 }, { x: 40, y: 0 });
+  await drag('Control', { x: fb.x + 10, y: fb.y + fb.height / 2 }, { x: 40, y: 0 }, 'right');
   const r5 = await box();
-  assert.deepEqual([r5.x, r5.y, r5.w, r5.h].map(Math.round), [r4.x, r4.y, r4.w, r4.h].map(Math.round), 'Shift-drag in a text field leaves the window alone');
-  console.log('· Shift in the question field left the window alone');
+  assert.deepEqual([r5.x, r5.y, r5.w, r5.h].map(Math.round), [r4.x, r4.y, r4.w, r4.h].map(Math.round), 'Ctrl + right-drag in a text field leaves the window alone');
+  console.log('· Ctrl + right-click in the question field left the window alone');
 }
 assert.deepEqual(errors, []);
 await b.close(); await server.stop();

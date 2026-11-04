@@ -73,7 +73,7 @@ Tool windows that sit over the work (assistant, audio, quiz, practice, inspector
 - head buttons `_ □ ×`: `_` puts the window in the **tray** (a pill with a caret at the bottom left listing put-away windows; choosing one brings it back in place), `□` toggles small (head only) / large, `×` closes; closing also removes it from the tray;
 - place and size remembered per window; modal dialogs stay modal and fixed;
 - `□` collapses under the head: same width, head stays put (place windows by left/top, not bottom); expanding restores the exact size;
-- Ctrl (⌘) + drag anywhere moves a window and Shift + drag resizes it from the corner nearest the pointer, as in a tiling window manager; text fields keep their own Shift-click, and the click that ends the gesture doesn't press the button it started on;
+- Ctrl (⌘) + drag anywhere moves a window and Ctrl + right-button drag resizes it from the corner nearest the pointer, as in a tiling window manager; text fields keep their own clicks, and the click that ends the gesture doesn't press the button it started on;
 - stacking like a desktop: the window pressed last is in front, a window that opens comes in front; a focus mode that dims the background lifts the whole stack above its veil without reordering it.
 
 Optional focus mode (`templates/focus-dim.js`, details in `references/export-and-focus.md`): a sun toggle in a study/review window's head dims everything behind it to ~70%. One remembered preference for all such windows; the veil shows only while one of them is really shown (not small, put away, closed or docked) and lets clicks through; every floating window stays above it in the same order (`--window-z` raised to `--z-focus`).

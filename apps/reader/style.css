@@ -1333,7 +1333,13 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .note-more { position: absolute; right: 6px; bottom: 6px; width: 22px; min-height: 18px; height: 18px; padding: 0; line-height: 1; border-radius: 4px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1; opacity: 0.8; box-shadow: 0 1px 3px #0002; }
 .note-grid li:hover .note-more, .note-more:focus-visible, .note-more[aria-expanded="true"] { opacity: 1; color: var(--ink); }
 .note-menu { position: fixed; z-index: 80; width: 280px; padding: 5px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); display: grid; gap: 2px; }
-.note-menu > button { justify-content: flex-start; font-size: 13px; }
+/* The ⋯ menu: a clear outline against the page, an icon before each action, groups divided by a rule. */
+.note-menu { border: 1px solid color-mix(in srgb, var(--ink) 38%, var(--line)); box-shadow: var(--shadow-pop), 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent); }
+.note-menu > button { display: flex; align-items: center; justify-content: flex-start; gap: 10px; font-size: 13px; text-align: left; }
+.note-menu > button > svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; color: var(--muted); }
+.note-menu > button:hover > svg { color: var(--ink); }
+.note-menu-sep { width: calc(100% - 12px); height: 0; margin: 3px 6px; border: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 22%, var(--line)); }
+.note-menu > .menu-remove:hover, .note-menu > .menu-remove:hover > svg { color: var(--danger, #c0392b); }
 .note-menu-title { margin: 2px 6px; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-menu .muted { margin: 0 6px 4px; font-size: 12px; line-height: 1.4; }
 .note-menu .danger-zone { margin: 4px 0 0; }
@@ -2720,11 +2726,11 @@ body.guest-session #closeNotes, body.guest-session #notesToggle { display: none 
 .autosave-list button { min-height: 26px; padding: 2px 8px; border-radius: 99px; background: var(--fill); font-size: 12px; }
 /* A save and, beside it, ✂ (delete the history up to it): one pill. */
 .autosave-list .autosave-slot { display: flex; min-width: 0; align-items: stretch; border-radius: 99px; background: var(--fill); }
-.autosave-list .autosave-slot > button:first-child { flex: 1; min-width: 0; justify-content: center; white-space: nowrap; }
+.autosave-list .autosave-slot > button:first-child { flex: 1; width: auto; min-width: 0; justify-content: center; white-space: nowrap; }
 .autosave-list .autosave-slot > button:first-child:last-child { border-radius: 99px; }
-.autosave-list .autosave-slot > .autosave-trim { flex: none; }
+.autosave-list .autosave-slot > .autosave-trim { flex: none; width: auto; justify-content: center; }
 /* The two action pills sit on their own row, so the time pills keep one size. */
-.autosave-list > button:not(.autosave-slot) { grid-column: 1 / -1; justify-self: start; width: auto; white-space: nowrap; justify-content: flex-start; }
+.autosave-list > button:not(.autosave-slot) { grid-column: 1 / -1; width: 100%; white-space: nowrap; justify-content: center; }
 .autosave-list .autosave-slot > button { background: transparent; }
 .autosave-list .autosave-slot > button:first-child:not(:last-child) { padding-right: 4px; }
 .autosave-list .autosave-trim { display: inline-grid; place-items: center; min-width: 26px; padding: 0 6px 0 4px; border-left: 1px solid var(--line); border-radius: 0 99px 99px 0; color: var(--muted); }
@@ -2757,3 +2763,15 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .width-inputs { display: flex; align-items: center; gap: 12px; }
 .width-inputs input[type=range] { flex: 1; }
 .width-inputs input[type=number] { width: 5.5em; }
+
+/* Model search: a magnifier beside the Ask AI model dropdown opens a filterable list. */
+.model-search[hidden] { display: none; }
+.chat-head .model-search { min-height: 26px; width: 26px; border: 1px solid var(--line); background: var(--surface); }
+.model-search-pop { position: fixed; z-index: 90; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid color-mix(in srgb, var(--ink) 38%, var(--line)); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
+.model-search-pop input { width: 100%; min-height: 28px; padding: 2px 8px; font-size: 13px; }
+.model-search-pop ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
+.model-search-pop li { padding: 5px 8px; border-radius: var(--radius); font-size: 13px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-search-pop li:hover, .model-search-pop li.active { background: var(--accent-soft); }
+.model-search-pop li.current { font-weight: 600; }
+.model-search-pop li.none { color: var(--muted); cursor: default; }
+.model-search-pop li.none:hover { background: none; }

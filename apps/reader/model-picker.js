@@ -3,6 +3,8 @@
 // The dropdown opens at once with the list kept on this device; the tool is asked
 // again in the background and its answer replaces the list, keeping the choice
 // when it is still offered (listing models can take many seconds, e.g. `agy models`).
+import { icon } from './icons.js';
+
 const OTHER = '__other';
 const storageKey = provider => `notecomplete-ai-model:${provider}`;
 const listKey = provider => `notecomplete-ai-models:${provider}`;
@@ -16,8 +18,79 @@ export function modelOptions(models, choice, typed = false) {
   return typed ? { options, value: OTHER, other: choice } : { options, value: '', other: '' };
 }
 
-export function modelPicker(select, other, ai) {
-  let provider = '', loads = 0;
+// Models whose label or id contains every word typed (any order, any case).
+export function filterModels(models, query) {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  return models.filter(m => { const text = `${m.label} ${m.id}`.toLowerCase(); return words.every(w => text.includes(w)); });
+}
+const SEARCH_FROM = 8; // shorter lists need no search
+
+// A magnifier beside the dropdown: type to narrow a long list (OpenCode offers hundreds)
+// and pick from it. `pick(id)` selects it as the dropdown would.
+function searchButton(select, models, current, pick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-button model-search';
+  button.setAttribute('aria-label', 'Search models');
+  button.title = 'Search this tool’s models';
+  button.append(icon('search'));
+  select.after(button);
+  let pop = null;
+  const close = () => { pop?.remove(); pop = null; document.removeEventListener('pointerdown', outside, true); button.setAttribute('aria-expanded', 'false'); };
+  const outside = event => { if (pop && !pop.contains(event.target) && !button.contains(event.target)) close(); };
+  function open() {
+    pop = document.createElement('div');
+    pop.className = 'model-search-pop';
+    const input = Object.assign(document.createElement('input'), { type: 'search', placeholder: `Search ${models().length} models…`, autocomplete: 'off', spellcheck: false });
+    input.setAttribute('aria-label', 'Search models');
+    const list = document.createElement('ul');
+    list.setAttribute('role', 'listbox');
+    let shown = [], active = 0;
+    const draw = () => {
+      shown = filterModels(models(), input.value);
+      active = Math.min(active, Math.max(0, shown.length - 1));
+      list.replaceChildren(...shown.map((m, i) => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.textContent = m.label;
+        if (m.label !== m.id) li.title = m.id;
+        if (m.id === current()) li.classList.add('current');
+        if (i === active) li.classList.add('active');
+        li.onpointerdown = event => { event.preventDefault(); pick(m.id); close(); };
+        return li;
+      }));
+      if (!shown.length) list.append(Object.assign(document.createElement('li'), { className: 'none', textContent: 'No model matches.' }));
+      list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+    };
+    input.oninput = () => { active = 0; draw(); };
+    input.onkeydown = event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); button.focus(); }
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, Math.min(shown.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1))); draw(); }
+      else if (event.key === 'Enter' && shown[active]) { event.preventDefault(); pick(shown[active].id); close(); }
+    };
+    pop.append(input, list);
+    document.body.append(pop);
+    const r = button.getBoundingClientRect(), w = Math.min(300, innerWidth - 16);
+    pop.style.width = `${w}px`;
+    pop.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+    pop.style.top = `${r.bottom + 6}px`;
+    pop.style.maxHeight = `${Math.max(160, innerHeight - r.bottom - 20)}px`;
+    button.setAttribute('aria-expanded', 'true');
+    draw();
+    input.focus();
+    setTimeout(() => document.addEventListener('pointerdown', outside, true));
+  }
+  button.onclick = () => (pop ? close() : open());
+  return { button, close };
+}
+
+export function modelPicker(select, other, ai, { search = false } = {}) {
+  let provider = '', loads = 0, models = [];
+  const finder = search ? searchButton(select, () => models, () => select.value, id => {
+    select.value = id;
+    if (select.value !== id) return;
+    select.dispatchEvent(new Event('change'));
+  }) : null;
   const read = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
   function remember() {
     try { localStorage.setItem(storageKey(provider), value()); } catch { /* Optional. */ }
@@ -25,8 +98,10 @@ export function modelPicker(select, other, ai) {
   function value() {
     return select.value === OTHER ? other.value.trim() : select.value;
   }
-  function fill(models, choice, typed) {
-    const next = modelOptions(models, choice, typed);
+  function fill(list, choice, typed) {
+    models = list;
+    if (finder) finder.button.hidden = list.length < SEARCH_FROM;
+    const next = modelOptions(list, choice, typed);
     select.replaceChildren(...next.options.map(([label, id]) => new Option(label, id)));
     select.value = next.value;
     other.value = next.other;

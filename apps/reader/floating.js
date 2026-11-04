@@ -191,11 +191,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   head.classList.add('window-head');
 
   // Anywhere on the window, as in a tiling window manager: Ctrl (⌘ on a Mac) + drag moves
-  // it, Shift + drag resizes it from the corner nearest the pointer. Text fields keep
-  // their own Shift-click (extend the selection) and Ctrl-click.
+  // it, Ctrl + right-button drag resizes it from the corner nearest the pointer. Text fields
+  // keep their own clicks.
   el.addEventListener('pointerdown', down => {
-    const moving = down.ctrlKey || down.metaKey, sizing = down.shiftKey && !moving;
-    if (!enabled() || down.button !== 0 || down.altKey || !(moving || sizing) || !visible()) return;
+    const mod = down.ctrlKey || down.metaKey, moving = mod && down.button === 0, sizing = mod && down.button === 2;
+    if (!enabled() || down.altKey || !(moving || sizing) || !visible()) return;
     if (down.target.closest('input, textarea, select, [contenteditable="true"], .panel-grip')) return;
     const start = current(), a = area(), r = el.getBoundingClientRect();
     let edges = (down.clientX < r.left + r.width / 2 ? 'l' : 'r') + (down.clientY < r.top + r.height / 2 ? 't' : 'b');
@@ -221,6 +221,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       setTimeout(() => el.removeEventListener('click', swallow, { capture: true }), 0);
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }, true);
+
+  // Ctrl + right button is a resize here, not a context menu.
+  el.addEventListener('contextmenu', e => {
+    if ((e.ctrlKey || e.metaKey) && !e.target.closest('input, textarea, select, [contenteditable="true"], .panel-grip')) e.preventDefault();
   }, true);
 
   // Resize from every edge and corner.

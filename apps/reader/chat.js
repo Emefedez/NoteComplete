@@ -35,7 +35,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
   let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
-  const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
+  const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai, { search: true }) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
   function answer(item, content) {

@@ -202,7 +202,7 @@ dialog.sheet p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
 /* Floating windows (templates/floating.js): grips on every edge and corner, a mark on the
    bottom-right one, a head that squeezes selects and titles but never its buttons. */
 .panel-grip { position: absolute; z-index: 2; }
-/* Ctrl/Shift + drag anywhere on a floating window (floating.js). */
+/* Ctrl + drag, Ctrl + right-button drag anywhere on a floating window (floating.js). */
 .dragging, .resizing { user-select: none; }
 .dragging, .dragging * { cursor: move !important; }
 .resizing, .resizing * { cursor: nwse-resize !important; }

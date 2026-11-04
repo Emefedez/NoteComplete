@@ -277,7 +277,7 @@
           <div id="driveSection" class="cloud-panel" role="tabpanel" aria-labelledby="cloudTabDrive">
             <div class="drive-heading">
               <h4 id="driveTitle" class="cloud-panel-title">Google Drive</h4>
-              <div class="drive-actions"><button id="driveBack" type="button" disabled>Back</button><button id="driveRefresh" type="button" disabled>Refresh</button><button id="driveDisconnect" type="button" disabled hidden>Disconnect</button></div>
+              <div class="drive-actions"><button id="driveBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button><button id="driveRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button><button id="driveDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Google Drive on this device (no files change in Drive)" disabled hidden></button></div>
             </div>
             <div id="driveSignin" class="drive-signin">
               <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
@@ -1042,21 +1042,23 @@
 
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
-  <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>
+  <button id="renameOpen" type="button" role="menuitem" aria-expanded="false" data-icon="draw" title="Change the name shown in Recent; the file keeps its own name">Rename…</button>
   <div id="renameRow" class="note-rename" hidden>
     <div class="note-rename-field"><label for="renameInput">Name</label><input id="renameInput" type="text" autocomplete="off" spellcheck="false" maxlength="200" /><button id="renameSave" type="button">Rename</button></div>
     <p id="renameOriginal" class="muted"></p>
     <button id="renameRestore" type="button" hidden>Use the file name</button>
   </div>
-  <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
+  <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" data-icon="folder" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
   <div id="moveRow" class="note-move" role="group" aria-label="Folders" hidden></div>
   <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
-  <button id="forgetCheck" type="button" role="menuitem" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for a newer version</button>
-  <button id="forgetExport" type="button" role="menuitem" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export flashcards and quizzes to Anki</button>
-  <button id="forgetMigrate" type="button" role="menuitem" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content to file…</button>
+  <hr class="note-menu-sep" />
+  <button id="forgetCheck" type="button" role="menuitem" data-icon="cloud" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for updates</button>
+  <button id="forgetExport" type="button" role="menuitem" data-icon="cards" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export to Anki</button>
+  <button id="forgetMigrate" type="button" role="menuitem" data-icon="swap" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content…</button>
+  <hr class="note-menu-sep" />
   <p id="forgetText" class="muted"></p>
-  <button id="forgetLocal" type="button" role="menuitem">Remove from this device</button>
-  <button id="forgetUpload" type="button" role="menuitem" hidden>Upload changes to Drive, then remove</button>
+  <button id="forgetLocal" type="button" role="menuitem" data-icon="trash" class="menu-remove">Remove from this device</button>
+  <button id="forgetUpload" type="button" role="menuitem" data-icon="upload" class="menu-remove" hidden>Upload changes, then remove</button>
   <details id="forgetDanger" class="danger-zone" hidden>
     <summary>Also delete it in Google Drive…</summary>
     <p>Moves the Drive file to Drive’s trash for everyone who can see it; it can be restored there for 30 days. Type <strong>DELETE</strong> to confirm.</p>

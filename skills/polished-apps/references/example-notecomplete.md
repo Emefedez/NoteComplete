@@ -29,7 +29,7 @@ A real app built on these rules: a reader/editor for handwritten notes with PDFs
 | No blinking ink | `holdInk` / `holdText` in `app.js`: pending strokes move into the new render's overlay |
 | Region icon menu | Grab menu (`#grabMenu.grab-icons`): Select, Copy text, Ask AI, Add to chat, Erase, Cancel; erase = `regionSweep` in `selection-geometry.js` |
 | Compacting the history | `crates/noteful-core/src/compact.rs` (floor, renumbering, reopen-and-compare); ✂ per automatic save in File (`drawAutosaveList`) |
-| Ctrl/Shift + drag windows | `apps/reader/floating.js` |
+| Ctrl + drag / Ctrl + right-drag windows | `apps/reader/floating.js` |
 | Recognition | `apps/reader/ocr.js` (passes, voting, lines), `ocr-dictionary.js` (word lists, noisy channel), `find.js` (quick result first), `search-index.js` (CJK), `tools/ocr_handwriting_bench.mjs` |
 | Fact check | `apps/reader/fact-check.js` (prompt, findings, Markdown with `<!-- page N -->` badges), Study → Fact check (Shift F) |
 | Memory in long PDFs | `apps/reader/pdf-background.js` (raster LRU, DPR-aware size, bitmap canvas vs PNG in a worker), `docs/PERFORMANCE.md`, `tools/perf_bench.mjs` |

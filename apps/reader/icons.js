@@ -45,6 +45,10 @@ const paths = {
  copy:'M9 9h11v11H9zM5 15H4V4h11v1',
  attach:'m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7',
  trim:'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.2 7.7 20 18M8.2 16.3 20 6',
+ back:'M19 12H5m6-6-6 6 6 6',
+ trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+ unplug:'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5',
+ check:'m5 12.5 4.5 4.5L19 7.5',
  tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };
 export function icon(name) {
