@@ -26,11 +26,11 @@ export function parseInvite(link, code = '', role = 'tablet') {
   const secure = url.protocol === 'https:' || url.protocol === 'wss:';
   const ws = `${secure ? 'wss' : 'ws'}://${url.host}/sync`;
   const [, token] = url.hash.slice(1).split('.');
-  if (token) return { url: ws, token, role: url.pathname.startsWith('/tablet') ? 'tablet' : 'guest' };
+  if (token) return { url: ws, token, role: url.pathname.startsWith('/tablet') ? 'tablet' : role === 'sender' ? 'sender' : 'guest' };
   const digits = String(code).replace(/\D/g, '');
   if (digits.length !== 6) throw Error('Enter the 6-digit code shown on the computer.');
   if (!url.port) throw Error('Add the port shown on the computer, for example 192.168.1.20:41237.');
-  return { url: ws, code: digits, role: role === 'guest' ? 'guest' : 'tablet' };
+  return { url: ws, code: digits, role: role === 'guest' ? 'guest' : role === 'sender' ? 'sender' : 'tablet' };
 }
 export function packSnapshot(header, payload) {
   const head = new TextEncoder().encode(JSON.stringify(header));
@@ -180,6 +180,10 @@ export class SyncClient {
         p?.reject(Error(m.error));
         return this.on('nack', m);
       }
+      case 'pack-begin': case 'pack-part': case 'pack-cancel': case 'pack-result':
+        // Study material between NoteComplete instances: the host gets the parts of what a sender
+        // sends, the sender gets the host's answer.
+        return this.on(m.t, m);
       case 'text':
         // Guest: the host's open text document (or none: shared is false).
         return this.on('text', m);
@@ -333,6 +337,8 @@ export class SyncClient {
     this.send({ t: 'live', gen: this.gen, ...stroke });
   }
   // Host: another note is open now (or none). Edits after this belong to it.
+  // Host: the answer to a sender (accepted or not, and what was done).
+  packResult(id, ok, message = '') { this.send({ t: 'pack-result', id, ok: !!ok, message }); }
   // Host: the open text document changed (typed in): guests see the new text.
   textChanged(text) { if (text) this.send({ t: 'text', ...text }); }
   documentChanged({ open, title = '', notes, text = null }) {
@@ -415,4 +421,33 @@ export function applyTextDiff(ytext, to, origin = null) {
     if (from.length - start - end) ytext.delete(start, from.length - start - end);
     if (to.length - start - end) ytext.insert(start, to.slice(start, to.length - end));
   }, origin);
+}
+
+// Sends study material (a JSON text) to another NoteComplete that is sharing: connects as a
+// `sender` with its address and PIN or an invite link, passes the text in parts, and waits
+// for the person there to accept. Resolves with what they did; rejects with why not.
+// progress({ stage: 'connecting' | 'sending' | 'waiting', sent, total }).
+export const PACK_PART = 512 * 1024;
+export function sendPack(invite, text, { name = '', WebSocketImpl = globalThis.WebSocket, progress = () => {}, timeout = 10 * 60e3 } = {}) {
+  return new Promise((resolve, reject) => {
+    const id = Math.random().toString(36).slice(2, 8), total = text.length, parts = Math.max(1, Math.ceil(total / PACK_PART));
+    const ws = new WebSocketImpl(invite.url);
+    let finished = false, refusal = '';
+    const finish = (settle, value) => { if (finished) return; finished = true; clearTimeout(timer); try { ws.close(1000, 'Done'); } catch { /* Already closed. */ } settle(value); };
+    const timer = setTimeout(() => finish(reject, Error('No answer: the other NoteComplete did not respond in time.')), timeout);
+    progress({ stage: 'connecting', sent: 0, total });
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: invite.token, code: invite.token ? undefined : invite.code, name, role: 'sender' }));
+    ws.onerror = () => {};
+    ws.onmessage = ({ data }) => {
+      if (typeof data !== 'string') return;
+      let m; try { m = JSON.parse(data); } catch { return; }
+      if (m.t === 'welcome') {
+        ws.send(JSON.stringify({ t: 'pack-begin', id, size: total, parts }));
+        for (let i = 0; i < parts; i++) ws.send(JSON.stringify({ t: 'pack-part', id, index: i, data: text.slice(i * PACK_PART, (i + 1) * PACK_PART) }));
+        progress({ stage: 'waiting', sent: total, total });
+      } else if (m.t === 'closed') refusal = m.reason || '';
+      else if (m.t === 'pack-result' && m.id === id) finish(m.ok ? resolve : reject, m.ok ? { message: m.message || '' } : Error(m.message || 'The other NoteComplete did not accept it.'));
+    };
+    ws.onclose = (event) => finish(reject, Error(refusal || event.reason || 'Could not connect. Check the address and PIN, and that the other NoteComplete is sharing (File → Share…).'));
+  });
 }

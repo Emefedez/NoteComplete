@@ -81,3 +81,10 @@ test('an address and a code join as a tablet, or as a guest when asked', () => {
   // A link still decides by its path.
   assert.equal(parseInvite('http://192.168.1.20:41237/join#abc.def', '', 'tablet').role, 'guest');
 });
+
+test('an invite link or an address and a code can be used to send study material', () => {
+  assert.equal(parseInvite('http://192.168.1.20:41237/join#abc.def', '', 'sender').role, 'sender');
+  assert.equal(parseInvite('192.168.1.20:41237', '123456', 'sender').role, 'sender');
+  // A drawing tablet link stays a tablet's.
+  assert.equal(parseInvite('http://192.168.1.20:41237/tablet#abc.def', '', 'sender').role, 'tablet');
+});

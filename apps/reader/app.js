@@ -4352,7 +4352,7 @@ function documentControls() {
   // A canvas is one page that grows: no inserted pages.
   for (const id of ["insertBlank", "insertPdf", "insertHandwritten"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "studySend", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   if (!open) $("svg").disabled = true;
 }
@@ -5286,6 +5286,15 @@ const collabHost = {
   get fingerprint() { return (doc && find.fingerprint) || sideFp; },
   get kind() { return doc ? "note" : sideView() ? "side" : null; },
   title: () => $("title").textContent,
+  // The open note's study material (decks, quizzes, notes), and keeping a pack sent by another NoteComplete.
+  async studyMaterial() {
+    const fingerprint = (doc && find.fingerprint) || sideFp;
+    if (!fingerprint) return null;
+    await notes?.flush?.();
+    const { studyOf } = await import("./study-pack.js");
+    return { title: $("title").textContent, fingerprint, study: await studyOf(library.store, fingerprint) };
+  },
+  async importStudyPack(pack) { const { importPack } = await import("./study-pack.js"); return importPack(library.store, pack); },
   // The open text document (.txt, Markdown, a converted file), as shared with guests.
   textDocument: () => (!doc && textView.hasDocument ? { name: textView.key || textView.name, markdown: textView.markdown, content: textView.text } : null),
   get sharedText() { return sharedText; },
@@ -5333,6 +5342,24 @@ async function startCollab(mode) {
     status(e.message, true);
   }
 }
+$("studySend").onclick = async () => {
+  closeMenus();
+  try { const { openStudySend } = await (collabLoading ||= import("./collab.js")); await openStudySend(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }
+};
+// Study → Import study material…: a .ncstudy file from another NoteComplete.
+$("studyImport").onclick = () => { closeMenus(); $("studyPackFile").click(); };
+$("studyPackFile").onchange = async () => {
+  const [file] = $("studyPackFile").files;
+  $("studyPackFile").value = "";
+  if (!file) return;
+  try {
+    const { readPack, importPack, describePack } = await import("./study-pack.js");
+    if (file.size > 24 * 1024 * 1024) throw Error("That file is too large to be study material.");
+    const pack = readPack(await file.text());
+    const { merged } = await importPack(library.store, pack);
+    status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}.`);
+  } catch (e) { status(e.message, true); }
+};
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");

@@ -58,6 +58,9 @@ export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#
 const LOG_LIMIT = 20000;
 // A shared text document (a .txt or Markdown file open on the host) goes to guests as text, up to this long.
 const TEXT_LIMIT = 4 * 1024 * 1024;
+// Study material sent by another NoteComplete (a `sender`): in parts of at most PACK_PART characters,
+// at most PACK_LIMIT in all. The hub only passes the parts on to the host, who decides.
+const PACK_LIMIT = 24 * 1024 * 1024, PACK_PART = 700 * 1024, PACK_PARTS = 64;
 const gzip = promisify(gzipCallback);
 
 const token = () => randomBytes(16).toString('base64url');
@@ -188,18 +191,18 @@ export class CollabHub {
     // Through the tunnel only the online invites work: never the host's token, the local
     // invites or the 6-digit code.
     if (peer.remote) {
-      if (token && this.notes && this.tokens.online && same(token, this.tokens.online) && role !== 'tablet') granted = 'guest';
+      if (token && this.notes && this.tokens.online && same(token, this.tokens.online) && role !== 'tablet') granted = role === 'sender' ? 'sender' : 'guest';
       else if (token && this.tokens.onlineTablet && same(token, this.tokens.onlineTablet)) granted = 'tablet';
       else return this.kick(peer, 1008, 'This invite does not work from another network. Ask for the online link.');
     } else if (token && same(token, this.tokens.host) && !this.host) granted = 'host';
     else if (token && same(token, this.tokens.tablet)) granted = 'tablet';
-    else if (token && this.notes && same(token, this.tokens.guest)) granted = role === 'tablet' ? null : 'guest';
+    else if (token && this.notes && same(token, this.tokens.guest)) granted = role === 'tablet' ? null : role === 'sender' ? 'sender' : 'guest';
     else if (code != null) {
       if (this.now() > this.code.expires || this.code.failures >= 5) return this.kick(peer, 1008, 'This code expired. Show a new code on the computer.');
       // The same code brings a drawing tablet, or a guest of the notes (who says so).
       if (same(String(code).replace(/\D/g, ''), this.code.value)) {
         if (role === 'guest' && !this.notes) return this.kick(peer, 1008, 'This session shares no notes. Join as a drawing tablet.');
-        granted = role === 'guest' ? 'guest' : 'tablet';
+        granted = role === 'guest' ? 'guest' : role === 'sender' ? 'sender' : 'tablet';
       } else {
         this.code.failures++;
         return this.kick(peer, 1008, 'Wrong code.');
@@ -216,7 +219,7 @@ export class CollabHub {
     const resumed = this.follows(peer) && this.open && !!this.host && this.canResume(have);
     const taken = new Set(this.members().map((p) => p.color));
     peer.color = COLORS.find((c) => !taken.has(c)) || COLORS[peer.id % COLORS.length];
-    peer.name = clean(name) || (granted === 'host' ? 'Host' : granted === 'tablet' ? 'Tablet' : this.guestName());
+    peer.name = clean(name) || (granted === 'host' ? 'Host' : granted === 'tablet' ? 'Tablet' : granted === 'sender' ? 'Sender' : this.guestName());
     this.send(peer, {
       t: 'welcome', id: peer.id, role: granted, name: peer.name, color: peer.color, session: this.id,
       canEdit: granted === 'host' || (granted === 'guest' && this.notes === 'edit'),
@@ -233,7 +236,7 @@ export class CollabHub {
     }
     if (resumed) this.catchUp(peer, have.seq);
     else if (this.follows(peer) && this.open && this.host) this.requestSnapshot(peer);
-    if (peer.role !== 'tablet' && this.notes) this.startNotes(peer);
+    if ((peer.role === 'host' || peer.role === 'guest') && this.notes) this.startNotes(peer);
     if (this.docText) this.sendText(peer);
   }
   // A tablet or guest back after a dropped connection, with this note as it was at edit `seq`:
@@ -262,6 +265,8 @@ export class CollabHub {
   drop(peer) {
     if (!this.peers.delete(peer.id)) return;
     if (peer.stage) this.loadingChanged();
+    // A sender that left before the end: the host drops what it had of the pack.
+    if (peer.pack && this.host) this.send(this.host, { t: 'pack-cancel', id: `${peer.id}:${peer.pack.id}` });
     if (peer.clients.size) awarenessProtocol.removeAwarenessStates(this.awareness, [...peer.clients], peer);
     if (peer.role) this.sendPeers();
     for (const waiting of this.requests.values()) waiting.delete(peer.id);
@@ -303,6 +308,36 @@ export class CollabHub {
       p.synced = false;
       if (this.open) this.requestSnapshot(p);
     }
+  }
+  // Study material from another NoteComplete (docs/COLLABORATION.md, "Sending study material"):
+  // `pack-begin { id, size, parts }`, then `pack-part { id, index, data }` for each part; the hub
+  // gives the host `pack-begin { id: "<sender>:<id>", from, size, parts }` and the parts, and the
+  // host's `pack-result { id, ok, message }` goes back to the sender. A sender holds one
+  // pack at a time.
+  'on_pack-begin'(peer, { id, size, parts }) {
+    if (peer.role !== 'sender' && peer.role !== 'guest') return;
+    const host = this.host;
+    const fail = (message) => this.send(peer, { t: 'pack-result', id, ok: false, message });
+    if (!host) return fail('The other NoteComplete is not receiving right now.');
+    if (!Number.isInteger(size) || size < 1 || size > PACK_LIMIT || !Number.isInteger(parts) || parts < 1 || parts > PACK_PARTS) return fail('That is too much to send at once (the limit is 24 MB).');
+    if (peer.pack) return fail('Wait for the first one to be answered.');
+    peer.pack = { id, size, parts, got: 0, bytes: 0 };
+    this.send(host, { t: 'pack-begin', id: `${peer.id}:${id}`, from: peer.name, size, parts });
+  }
+  'on_pack-part'(peer, { id, index, data }) {
+    const pack = peer.pack, host = this.host;
+    if (!pack || pack.id !== id || !host || typeof data !== 'string' || data.length > PACK_PART || index !== pack.got) return;
+    pack.bytes += data.length;
+    if (pack.bytes > pack.size * 1.1 + 1024) { peer.pack = null; return this.send(peer, { t: 'pack-result', id, ok: false, message: 'The parts do not match what was announced.' }); }
+    pack.got++;
+    this.send(host, { t: 'pack-part', id: `${peer.id}:${id}`, index, data });
+  }
+  'on_pack-result'(peer, { id, ok, message }) {
+    if (peer.role !== 'host' || typeof id !== 'string') return;
+    const [who, mine] = id.split(':'), target = this.peers.get(Number(who));
+    if (!target?.pack || String(target.pack.id) !== mine) return;
+    target.pack = null;
+    this.send(target, { t: 'pack-result', id: mine, ok: !!ok, message: clean(message, 300) });
   }
   // The host's open text document (.txt, Markdown…), shown to guests as text, and again whenever
   // the host edits it. Drawn notes are shared as notes and ink instead (snapshots); a tablet has
@@ -504,7 +539,7 @@ export class CollabHub {
       encoding.writeVarUint(e, FRAME.sync);
       sync.writeUpdate(e, update);
       const data = encoding.toUint8Array(e);
-      this.broadcast(data, (p) => p !== origin && p.role !== 'tablet');
+      this.broadcast(data, (p) => p !== origin && (p.role === 'host' || p.role === 'guest'));
     });
     this.awareness.on('update', ({ added, updated, removed }, origin) => {
       if (origin && origin.clients) {
@@ -514,7 +549,7 @@ export class CollabHub {
       const e = encoding.createEncoder();
       encoding.writeVarUint(e, FRAME.awareness);
       encoding.writeVarUint8Array(e, awarenessProtocol.encodeAwarenessUpdate(this.awareness, [...added, ...updated, ...removed]));
-      this.broadcast(encoding.toUint8Array(e), (p) => p.role !== 'tablet');
+      this.broadcast(encoding.toUint8Array(e), (p) => p.role === 'host' || p.role === 'guest');
     });
   }
   // The host's notes for the note it opened: everyone's notes start again from that text.
@@ -523,8 +558,8 @@ export class CollabHub {
     for (const p of this.members()) p.clients.clear();
     this.resetNotes(text);
     this.notesGen = (this.notesGen || 0) + 1;
-    this.broadcast({ t: 'notes-reset', gen: this.notesGen }, (p) => p.role !== 'tablet');
-    for (const p of this.members()) if (p.role !== 'tablet') this.startNotes(p);
+    this.broadcast({ t: 'notes-reset', gen: this.notesGen }, (p) => p.role === 'host' || p.role === 'guest');
+    for (const p of this.members()) if (p.role === 'host' || p.role === 'guest') this.startNotes(p);
   }
   startNotes(peer) {
     const e = encoding.createEncoder();
@@ -542,7 +577,7 @@ export class CollabHub {
   binary(peer, data) {
     const kind = data[0];
     if (kind === FRAME.snapshot) return this.snapshot(peer, data).catch(() => { /* A malformed frame: nobody is sent it. */ });
-    if (peer.role === 'tablet' || !this.notes) return;
+    if (peer.role === 'tablet' || peer.role === 'sender' || !this.notes) return;
     const decoder = decoding.createDecoder(data);
     decoding.readVarUint(decoder);
     try {

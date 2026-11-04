@@ -744,3 +744,61 @@ test('the 6-digit code brings a guest of the notes as well as a drawing tablet',
     assert.match(await closedWith(client(quiet, { code: quiet.code().code, role: 'guest' })), /shares no notes/);
   } finally { await quiet.stop(); }
 });
+
+test('study material goes from one NoteComplete to another through the sharing server, and the host decides', async () => {
+  const { sendPack } = await import('../reader/sync.js');
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  try {
+    const h = host(server, new Replica());
+    await welcomed(h);
+    const parts = new Map(), begun = [];
+    // The receiving side: assemble the parts, answer when done.
+    const watch = (type, detail) => {
+      if (type === 'pack-begin') begun.push(detail);
+      if (type === 'pack-part') { const list = parts.get(detail.id) || []; list[detail.index] = detail.data; parts.set(detail.id, list); }
+    };
+    h.events.push = ((push) => (...entry) => { watch(...entry[0]); return push.apply(h.events, entry); })(h.events.push);
+    const invite = { url: server.hostUrl, code: server.code().code, role: 'sender' };
+    const big = JSON.stringify({ format: 'notecomplete-study', version: 1, notes: 'é'.repeat(1200000) });   // three parts
+    const sent = sendPack(invite, big, { name: 'Ana', timeout: 8000 });
+    await until(() => begun.length === 1 && parts.get(begun[0].id)?.filter(Boolean).length === begun[0].parts, 'the parts at the host', 8000);
+    assert.equal(begun[0].from, 'Ana');
+    assert.equal(begun[0].parts, 3);
+    assert.equal(parts.get(begun[0].id).join(''), big, 'the host has exactly what was sent, accents included');
+    // The host accepts: the sender is told what was done.
+    h.packResult(begun[0].id, true, 'Added 2 decks.');
+    assert.deepEqual(await sent, { message: 'Added 2 decks.' });
+    // Declined: the sender gets the reason as an error.
+    const again = sendPack(invite, '{"x":1}', { timeout: 8000 });
+    await until(() => begun.length === 2, 'the second pack');
+    h.packResult(begun[1].id, false, 'Declined.');
+    await assert.rejects(again, /Declined/);
+    // Too big is refused before anything is sent on; a wrong PIN is refused at the door.
+    await assert.rejects(sendPack({ ...invite, code: '000000' }, '{}', { timeout: 4000 }), /Wrong code/);
+    const huge = sendPack(invite, 'x'.repeat(25 * 1024 * 1024), { timeout: 4000 });
+    await assert.rejects(huge, /too much/);
+    // A sender is not a guest: it never receives the notes or the note, and shows to nobody as a person to follow.
+    await until(() => ![...server.hub.peers.values()].some((p) => p.role === 'sender'), 'the sender gone when done');
+    h.close();
+  } finally { await server.stop(); }
+});
+
+test('a sender that leaves in the middle makes the host drop the partial pack', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  try {
+    const h = host(server, new Replica());
+    await welcomed(h);
+    const ws = new WebSocket(server.hostUrl);
+    await new Promise((resolve) => { ws.onopen = resolve; });
+    ws.send(JSON.stringify({ t: 'hello', code: server.code().code, role: 'sender', name: 'Leo' }));
+    await new Promise((resolve) => { ws.onmessage = ({ data }) => { if (JSON.parse(data).t === 'welcome') resolve(); }; });
+    ws.send(JSON.stringify({ t: 'pack-begin', id: 'a1', size: 100, parts: 2 }));
+    ws.send(JSON.stringify({ t: 'pack-part', id: 'a1', index: 0, data: 'x'.repeat(50) }));
+    await until(() => h.events.some(([e]) => e === 'pack-begin'), 'begin');
+    ws.close();
+    await until(() => h.events.some(([e]) => e === 'pack-cancel'), 'cancel');
+    h.close();
+  } finally { await server.stop(); }
+});

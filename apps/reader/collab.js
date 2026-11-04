@@ -5,7 +5,7 @@
 // - a drawing tablet (a phone or tablet, in the app or a browser) shows the host's note
 //   with only a tool dock, and draws on it: the edits are the host's own edits.
 // The protocol is in sync.js; the host's server in apps/desktop/collab-server.js.
-import { SyncClient, parseInvite, applyTextDiff } from './sync.js';
+import { SyncClient, parseInvite, applyTextDiff, sendPack } from './sync.js';
 import { icon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -64,6 +64,80 @@ function dialog(title, ...body) {
 }
 function closeDialog() { $('collabDialog')?.close(); }
 function buttons(...list) { return el('div', { className: 'dialog-actions' }, ...list); }
+
+// Study → Send study material…: the open note's flashcard decks, quizzes and Markdown notes, to
+// another NoteComplete that is sharing (address and PIN, or its link, on this network or online),
+// or as a .ncstudy file. The other side is asked before anything is kept.
+export async function openStudySend(host) {
+  const { buildPack, describePack, summary, KINDS } = await import('./study-pack.js');
+  const material = await host.studyMaterial();
+  if (!material) return host.status('Open a note first: the study material belongs to the note.', true);
+  const have = summary({ decks: material.study.decks, quizzes: material.study.quizzes, notes: material.study.notes });
+  const counts = { decks: have.decks ? `${have.decks} · ${have.cards} card${have.cards === 1 ? '' : 's'}` : '', quizzes: have.quizzes ? `${have.quizzes} · ${have.questions} question${have.questions === 1 ? '' : 's'}` : '', notes: have.notes ? 'the notes panel' : '' };
+  const boxes = Object.fromEntries(KINDS.map(([kind, label]) => {
+    const input = el('input', { type: 'checkbox', checked: !!counts[kind], disabled: !counts[kind] });
+    return [kind, { input, row: el('label', { className: 'check' }, input, ` ${label}`, el('span', { className: 'muted', textContent: counts[kind] ? ` (${counts[kind]})` : ' (none yet)' })) }];
+  }));
+  const link = el('input', { type: 'text', autocomplete: 'off', placeholder: '192.168.1.20:41237 or the link', spellcheck: false, 'aria-label': 'Address or link' });
+  const code = el('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', placeholder: '123 456', maxLength: 7, 'aria-label': 'PIN' });
+  const who = el('input', { type: 'text', maxLength: 40, value: remembered(), placeholder: 'Your name (they see it)', 'aria-label': 'Your name' });
+  const state = el('p', { className: 'muted', role: 'status', textContent: '' });
+  try { link.value = localStorage.getItem('notecomplete-collab-address') || ''; } catch { /* Optional. */ }
+  const build = () => buildPack({ title: material.title, fingerprint: material.fingerprint, from: who.value.trim(), study: material.study, include: Object.fromEntries(KINDS.map(([kind]) => [kind, boxes[kind].input.checked])) });
+  const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with Study → Import study material', onclick: async () => {
+    try { const pack = build(); await host.download(JSON.stringify(pack), `${material.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - study.ncstudy`, 'application/json'); state.textContent = `Saved: ${describePack(pack)}.`; } catch (e) { state.textContent = e.message; }
+  } });
+  const send = el('button', { type: 'button', className: 'primary', textContent: 'Send' });
+  send.onclick = async () => {
+    send.disabled = true;
+    try {
+      const pack = build();
+      const invite = parseInvite(link.value, code.value, 'sender');
+      if (invite.role !== 'sender') throw Error('That is a drawing tablet link. Use the address and PIN, or the notes link.');
+      if (!/^[a-z]+:\/\//i.test(link.value.trim())) try { localStorage.setItem('notecomplete-collab-address', link.value.trim()); } catch { /* Optional. */ }
+      if (who.value.trim()) remember(who.value.trim());
+      const text = JSON.stringify(pack);
+      const steps = { connecting: 'Connecting…', sending: 'Sending…', waiting: 'Sent. Waiting for the other NoteComplete to accept it…' };
+      const done = await sendPack(invite, text, { name: who.value.trim() || 'Someone', progress: ({ stage }) => { state.textContent = steps[stage] || ''; } });
+      closeDialog();
+      host.status(`Sent ${describePack(pack)}. ${done.message}`.trim());
+    } catch (e) { state.textContent = e.message; send.disabled = false; }
+  };
+  dialog('Send study material',
+    el('p', { textContent: `From “${material.title}”:` }), ...KINDS.map(([kind]) => boxes[kind].row),
+    el('h3', { textContent: 'To another NoteComplete' }),
+    el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link.' }),
+    el('div', { className: 'collab-join' }, el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), el('label', {}, el('span', { textContent: 'Your name' }), who)),
+    state, buttons(save, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
+  (link.value ? code : link).focus();
+}
+
+// A pack sent by another NoteComplete: asks, keeps it, and answers the sender.
+async function askAboutPack(session, id, pack, from) {
+  const { describePack } = await import('./study-pack.js');
+  return new Promise((resolve) => {
+    const finish = (accept) => async () => {
+      d.close();
+      if (!accept) { session.client.packResult(id, false, 'Declined.'); return resolve(); }
+      try {
+        const { merged, fingerprint } = await session.host.importStudyPack(pack);
+        const message = merged ? `Added to the matching note “${pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
+        session.client.packResult(id, true, message);
+        session.host.status(`Received ${describePack(pack)} from ${from}. ${message}`);
+      } catch (e) { session.client.packResult(id, false, e.message); session.host.status(e.message, true); }
+      resolve();
+    };
+    const d = el('dialog', { className: 'ocr-dialog collab-dialog', 'aria-labelledby': 'packTitle' },
+      el('h2', { id: 'packTitle', textContent: `${from} sends you study material` }),
+      el('p', {}, el('strong', { textContent: pack.title }), `: ${describePack(pack)}.`),
+      el('p', { className: 'muted', textContent: 'It is added to the same note here when you have it; otherwise it is kept as a note of its own in Study → All quizzes and decks.' }),
+      buttons(el('button', { type: 'button', textContent: 'Decline', onclick: finish(false) }), el('button', { type: 'button', className: 'primary', textContent: 'Accept', onclick: finish(true) })));
+    d.addEventListener('cancel', (event) => { event.preventDefault(); finish(false)(); });
+    document.body.append(d);
+    d.addEventListener('close', () => d.remove());
+    d.showModal();
+  });
+}
 
 // Entry point (app.js): mode is host, join-tablet, join-notes or link (an invite URL).
 export async function openCollab(host, mode) {
@@ -307,6 +381,23 @@ class Session {
       }
       if (this.role === 'tablet' && detail.resumed) host.status('Connected again.');
       else if (this.role === 'tablet') { host.status('Connected. Waiting for the computer’s note…'); this.waiting(!detail.open); this.loading(detail.open ? 'Loading the note…' : null); }
+    } else if (type === 'pack-begin') {
+      (this.packs ||= new Map()).set(detail.id, { from: detail.from, parts: detail.parts, list: [] });
+    } else if (type === 'pack-part') {
+      const pack = this.packs?.get(detail.id);
+      if (!pack) return;
+      pack.list[detail.index] = detail.data;
+      if (pack.list.filter((x) => x != null).length < pack.parts) return;
+      this.packs.delete(detail.id);
+      // One question at a time, in the order they came.
+      this.packQueue = (this.packQueue || Promise.resolve()).then(async () => {
+        try {
+          const { readPack } = await import('./study-pack.js');
+          await askAboutPack(this, detail.id, readPack(pack.list.join('')), pack.from || 'Another NoteComplete');
+        } catch (e) { this.client.packResult(detail.id, false, e.message); }
+      });
+    } else if (type === 'pack-cancel') {
+      this.packs?.delete(detail.id);
     } else if (type === 'text') {
       this.showText(detail);
     } else if (type === 'resynced') {
@@ -587,7 +678,7 @@ class Session {
   drawShareList() {
     const list = $('collabPeople');
     if (!list) return;
-    const others = this.people.filter((p) => p.id !== this.client.id);
+    const others = this.people.filter((p) => p.id !== this.client.id && p.role !== 'sender');
     list.replaceChildren(...(others.length ? others.map((p) => el('li', {},
       el('span', { className: 'collab-dot', style: `background:${p.color}` }),
       el('span', { textContent: p.name }),
@@ -789,7 +880,7 @@ class Session {
       const share = $('shareButton');
       if (share) { share.classList.add('active'); share.querySelector('span').textContent = this.role === 'host' ? 'Sharing' : 'Shared'; }
     }
-    const others = this.people.filter((p) => p.id !== this.client.id);
+    const others = this.people.filter((p) => p.id !== this.client.id && p.role !== 'sender');
     const shown = others.slice(0, 4);
     const chip = (p) => {
       const b = el('button', { type: 'button', className: 'collab-chip', title: `${p.name}${p.role === 'tablet' ? ' (drawing tablet)' : ''}`, style: `--who:${p.color}`, textContent: (p.name.trim()[0] || '?').toUpperCase() });

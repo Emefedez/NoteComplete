@@ -2868,3 +2868,5 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 .recent-heading > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
 .recent-heading > .folder-back[hidden] { display: none; }
 .recent-heading > .folder-back svg { width: 16px; height: 16px; }
+.collab-dialog .check { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
+.collab-dialog .check .muted { font-size: 12px; }

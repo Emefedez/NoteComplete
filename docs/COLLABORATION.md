@@ -494,3 +494,11 @@ No open questions left.
 - **Heartbeat and checks.** The reader sends `ping` every 10 s and drops and resumes a connection that has heard nothing for 30 s; the server pings sockets and terminates dead ones; every 10 s, if there were edits, the hub puts a `check` in the edit stream (besides every 100 edits).
 - **Text documents.** The host sends `text { name, markdown, content }` for an open `.txt`/Markdown/converted file (up to 4 MB; `tooBig` beyond), and again when it is typed in; the hub forwards it to guests only (and to a guest that joins later) and clears it when the host opens another document. Guests show it read-only.
 - **The PIN.** `hello { code, role: 'guest' }` with the pairing code joins as a guest when notes are shared (the welcome carries the guest token to come back with); without a role it joins as a tablet as before.
+
+## Sending study material (1.1.34)
+
+A `sender` is a connection that can only deliver a pack: `hello { code | token, role: 'sender' }` with the PIN, a guest link or an online guest link (a tablet link never makes one). It sends `pack-begin { id, size, parts }` and `pack-part { id, index, data }` (a part is at most 700 000 characters; a pack at most 24 MB and 64 parts; one pack at a time). The hub holds none of it: it passes `pack-begin { id: "<sender>:<id>", from, size, parts }` and the parts on to the host, and the host's `pack-result { id, ok, message }` back to the sender; a sender that leaves early makes the host get `pack-cancel`. The host assembles the parts, reads the pack (`apps/reader/study-pack.js`: `format: 'notecomplete-study'`, decks, quizzes, notes; unknown fields are dropped) and asks before keeping it. Senders get no notes, snapshots or edits, and are not shown as people.
+
+The same pack is a `.ncstudy` file (JSON). On import it is merged into the note with the same fingerprint when the device knows it (decks and quizzes by id, so importing twice adds nothing; notes appended), else kept as `received:<id>` with a `doc:` record, which lists it in Study → All quizzes and decks. The browser can send over `wss://` (an online link) but not over a plain `ws://` LAN address from an https page.
+
+For sharing sessions started in the web app, see [ONLINE-SHARING.md](ONLINE-SHARING.md).
