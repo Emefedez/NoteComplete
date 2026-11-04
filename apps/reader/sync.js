@@ -17,7 +17,7 @@ async function gunzip(bytes) {
 
 // A pasted or scanned invite: a link (http://host:port/tablet#session.token or /join#…),
 // or a computer address plus the short pairing code shown on it.
-export function parseInvite(link, code = '') {
+export function parseInvite(link, code = '', role = 'tablet') {
   const text = String(link || '').trim();
   if (!text) throw Error('Enter the link or the computer address shown on the computer.');
   let url;
@@ -30,7 +30,7 @@ export function parseInvite(link, code = '') {
   const digits = String(code).replace(/\D/g, '');
   if (digits.length !== 6) throw Error('Enter the 6-digit code shown on the computer.');
   if (!url.port) throw Error('Add the port shown on the computer, for example 192.168.1.20:41237.');
-  return { url: ws, code: digits, role: 'tablet' };
+  return { url: ws, code: digits, role: role === 'guest' ? 'guest' : 'tablet' };
 }
 export function packSnapshot(header, payload) {
   const head = new TextEncoder().encode(JSON.stringify(header));
@@ -180,6 +180,9 @@ export class SyncClient {
         p?.reject(Error(m.error));
         return this.on('nack', m);
       }
+      case 'text':
+        // Guest: the host's open text document (or none: shared is false).
+        return this.on('text', m);
       case 'resynced':
         return this.on('resynced', m);
       case 'loading':
@@ -330,11 +333,14 @@ export class SyncClient {
     this.send({ t: 'live', gen: this.gen, ...stroke });
   }
   // Host: another note is open now (or none). Edits after this belong to it.
-  documentChanged({ open, title = '', notes }) {
+  // Host: the open text document changed (typed in): guests see the new text.
+  textChanged(text) { if (text) this.send({ t: 'text', ...text }); }
+  documentChanged({ open, title = '', notes, text = null }) {
     this.gen++;
     this.seq = 0;
     this.failPending('The note changed.');
     this.send({ t: 'doc', open, title });
+    if (text) this.send({ t: 'text', ...text });
     if (typeof notes === 'string' && this.notesShared) this.send({ t: 'notes', text: notes });
   }
   // Host: the session's settings (auto-save), which everyone follows.

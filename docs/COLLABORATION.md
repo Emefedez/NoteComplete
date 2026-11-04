@@ -486,3 +486,11 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 - **Ending the session**: closing the host's app asks *Minimize* / *End session and close* / *Cancel*. Ending tells everyone to save first. See *Ending a session*.
 
 No open questions left.
+
+
+## Added in 1.1.34
+
+- **Progress.** A joiner that says `accept: ['gzip', 'chunks']` gets `prepare`, then `begin { id, total, enc, seq, gen, title }`, binary `chunk` frames (`[3][id u32][plain bytes so far u32][gzip data]`) and `end { id }`, then the edits after the snapshot. It reports `progress { stage: receiving | opening | ready, done, total }` (a few times a second) and the hub tells the host `loading { peers }` and `resynced { name }`. Older joiners get one gzipped frame as before. The hub feeds the compressor a megabyte at a time and waits while a joiner's socket holds 8 MB unsent, so the progress is the wire's; above 32 MB only gzip's entropy coding is used (the note's own bytes, in base64, leave nothing for the repeat search: four times faster, 1% larger).
+- **Heartbeat and checks.** The reader sends `ping` every 10 s and drops and resumes a connection that has heard nothing for 30 s; the server pings sockets and terminates dead ones; every 10 s, if there were edits, the hub puts a `check` in the edit stream (besides every 100 edits).
+- **Text documents.** The host sends `text { name, markdown, content }` for an open `.txt`/Markdown/converted file (up to 4 MB; `tooBig` beyond), and again when it is typed in; the hub forwards it to guests only (and to a guest that joins later) and clears it when the host opens another document. Guests show it read-only.
+- **The PIN.** `hello { code, role: 'guest' }` with the pairing code joins as a guest when notes are shared (the welcome carries the guest token to come back with); without a role it joins as a tablet as before.

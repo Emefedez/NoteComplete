@@ -299,7 +299,7 @@ function call(op, args = {}) {
 // A sharing session (collab.js, loaded only when one starts). While it holds the open
 // note, edits go into the session's shared order and come back to be applied here
 // (applyShared), so every copy applies the same edits in the same order.
-let collab = null;
+let collab = null, sharedText = false;
 function mutate(op, args = {}) {
   if (collab?.readOnly) return Promise.reject(Error("This note is shared view-only: you can read it and follow along."));
   return collab?.ink ? collab.submit(op, args) : call(op, args);
@@ -372,6 +372,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
   converted = false;
+  sharedText = false;
   releaseImages();
   $("textEdit").hidden = false;
   $("textSave").title = SAVE_TEXT_TITLE;
@@ -3951,6 +3952,7 @@ const textView = textViewer({
   },
   onChange: () => {
     textFinder.refresh();
+    collab?.textChanged?.();
     dirty = changed = true;
     $("textSave").hidden = false;
     tabBar.update({ title: textView.name, dirty: true });
@@ -5221,6 +5223,18 @@ const collabHost = {
   get fingerprint() { return (doc && find.fingerprint) || sideFp; },
   get kind() { return doc ? "note" : sideView() ? "side" : null; },
   title: () => $("title").textContent,
+  // The open text document (.txt, Markdown, a converted file), as shared with guests.
+  textDocument: () => (!doc && textView.hasDocument ? { name: textView.key || textView.name, markdown: textView.markdown, content: textView.text } : null),
+  get sharedText() { return sharedText; },
+  // A guest's copy of the host's text document: read-only, and it follows the host's edits.
+  async openSharedText({ name, markdown, content }) {
+    if (sharedText && textView.hasDocument && textView.key === name) return textView.setText(content);
+    reset({ opening: true });
+    $("editor").hidden = true;
+    await load(new File([content], name, { type: "text/plain" }), { kind: "text", title: name.replace(/\.[^.]+$/, ""), text: content, markdown, bytes: new ArrayBuffer(0) });
+    sharedText = true;
+    $("textEdit").hidden = $("textSave").hidden = true;
+  },
   setCollab(value) { collab = value; },
   setTool(name) { document.querySelector(`[data-tool="${name}"]`)?.click(); },
   // A drawing tablet's New page: a blank page after the one in view, the same size.

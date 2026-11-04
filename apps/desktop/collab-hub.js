@@ -56,6 +56,8 @@ export function tabletMay(op, args) {
 }
 export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#ad7f58'];
 const LOG_LIMIT = 20000;
+// A shared text document (a .txt or Markdown file open on the host) goes to guests as text, up to this long.
+const TEXT_LIMIT = 4 * 1024 * 1024;
 const gzip = promisify(gzipCallback);
 
 const token = () => randomBytes(16).toString('base64url');
@@ -194,8 +196,11 @@ export class CollabHub {
     else if (token && this.notes && same(token, this.tokens.guest)) granted = role === 'tablet' ? null : 'guest';
     else if (code != null) {
       if (this.now() > this.code.expires || this.code.failures >= 5) return this.kick(peer, 1008, 'This code expired. Show a new code on the computer.');
-      if (same(String(code).replace(/\D/g, ''), this.code.value)) granted = 'tablet';
-      else {
+      // The same code brings a drawing tablet, or a guest of the notes (who says so).
+      if (same(String(code).replace(/\D/g, ''), this.code.value)) {
+        if (role === 'guest' && !this.notes) return this.kick(peer, 1008, 'This session shares no notes. Join as a drawing tablet.');
+        granted = role === 'guest' ? 'guest' : 'tablet';
+      } else {
         this.code.failures++;
         return this.kick(peer, 1008, 'Wrong code.');
       }
@@ -216,8 +221,8 @@ export class CollabHub {
       t: 'welcome', id: peer.id, role: granted, name: peer.name, color: peer.color, session: this.id,
       canEdit: granted === 'host' || (granted === 'guest' && this.notes === 'edit'),
       notes: granted !== 'tablet' && !!this.notes,
-      // A tablet paired with a code reconnects with the full token.
-      token: granted === 'tablet' ? (peer.remote ? this.tokens.onlineTablet : this.tokens.tablet) : undefined,
+      // A tablet or guest paired with a code reconnects with the full token.
+      token: granted === 'tablet' ? (peer.remote ? this.tokens.onlineTablet : this.tokens.tablet) : granted === 'guest' && !peer.remote ? this.tokens.guest : undefined,
       gen: this.gen, open: this.open, title: this.title, autosave: this.autosave, resumed,
     });
     this.sendPeers();
@@ -229,6 +234,7 @@ export class CollabHub {
     if (resumed) this.catchUp(peer, have.seq);
     else if (this.follows(peer) && this.open && this.host) this.requestSnapshot(peer);
     if (peer.role !== 'tablet' && this.notes) this.startNotes(peer);
+    if (this.docText) this.sendText(peer);
   }
   // A tablet or guest back after a dropped connection, with this note as it was at edit `seq`:
   // the edits since then are enough when the log still has them, so it does not download
@@ -281,6 +287,7 @@ export class CollabHub {
   // The host opened another note (or closed it): a new generation, and tablets reload.
   on_doc(peer, { open, title }) {
     if (peer.role !== 'host') return;
+    this.docText = null;
     this.gen++;
     this.open = !!open;
     this.title = clean(title, 200);
@@ -290,11 +297,26 @@ export class CollabHub {
     this.digests.clear();
     this.requests.clear();
     this.broadcast({ t: 'doc', gen: this.gen, open: this.open, title: this.title });
+    this.sendText();
     for (const p of this.members()) {
       if (!this.follows(p)) continue;
       p.synced = false;
       if (this.open) this.requestSnapshot(p);
     }
+  }
+  // The host's open text document (.txt, Markdown…), shown to guests as text, and again whenever
+  // the host edits it. Drawn notes are shared as notes and ink instead (snapshots); a tablet has
+  // nothing to draw on in a text document.
+  on_text(peer, { name, markdown, content }) {
+    if (peer.role !== 'host') return;
+    if (typeof content !== 'string') this.docText = null;
+    else if (content.length > TEXT_LIMIT) this.docText = { name: clean(name, 200), tooBig: true };
+    else this.docText = { name: clean(name, 200), markdown: !!markdown, content };
+    this.sendText();
+  }
+  sendText(only = null) {
+    const message = JSON.stringify({ t: 'text', shared: !!this.docText, ...(this.docText || {}) });
+    for (const p of this.members()) if (p.role === 'guest' && (!only || p === only)) this.send(p, message);
   }
   on_op(peer, { gen, ref, op, args }) {
     const allowed = peer.role === 'host' ? HOST_OPS : this.draws(peer) ? TABLET_OPS : null;

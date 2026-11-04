@@ -73,3 +73,11 @@ test('a tablet link keeps its token in the fragment only', () => {
   assert.equal(invite.token, 'abcDEF_-123');
   assert.equal(invite.url, 'ws://192.168.1.20:41237/sync');
 });
+
+test('an address and a code join as a tablet, or as a guest when asked', () => {
+  assert.deepEqual(parseInvite('192.168.1.20:41237', '123 456'), { url: 'ws://192.168.1.20:41237/sync', code: '123456', role: 'tablet' });
+  assert.deepEqual(parseInvite('192.168.1.20:41237', '123 456', 'guest'), { url: 'ws://192.168.1.20:41237/sync', code: '123456', role: 'guest' });
+  assert.throws(() => parseInvite('192.168.1.20:41237', '12', 'guest'), /6-digit/);
+  // A link still decides by its path.
+  assert.equal(parseInvite('http://192.168.1.20:41237/join#abc.def', '', 'tablet').role, 'guest');
+});

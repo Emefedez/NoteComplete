@@ -152,6 +152,15 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       body.scrollTop = 0;
       return render();
     },
+    // New text for the open document (a shared one following its host), keeping the place read.
+    async setText(content) {
+      if (editing || !name) return;
+      text = content;
+      const top = body.scrollTop;
+      await render();
+      body.scrollTop = top;
+    },
+    get markdown() { return markdown; },
     // The file was renamed on disk: new title and the key MD on/off is remembered under.
     rename(shown, id = shown) { name = shown; key = id; if (title) title.textContent = shown; },
     // Draw again (pictures beside the file can be read once its place is known).

@@ -682,3 +682,65 @@ test('a connection that goes quiet is dropped and resumed from the edit log, not
     t.client.close(); h.close();
   } finally { await server.stop(); }
 });
+
+test('a text document open on the host is shown to guests as text, and follows the host', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: 'edit' });
+  const texts = (c) => c.events.filter(([e]) => e === 'text').map(([, d]) => d);
+  try {
+    const h = host(server, new Replica(), { yjs });
+    await welcomed(h);
+    // The host opens a Markdown file: not a drawn note (open: false), but its text is shared.
+    h.documentChanged({ open: false, title: 'Apuntes', notes: '', text: { name: 'Apuntes.md', markdown: true, content: '# Tema 1\n\nHola' } });
+    // A guest that joins afterwards gets it at once; a tablet gets nothing to draw on, and no text.
+    const g = tablet(server, { token: server.hub.tokens.guest, role: 'guest', yjs });
+    const t = tablet(server, { token: server.hub.tokens.tablet });
+    await until(() => texts(g.client).length > 0, 'the text on the guest');
+    assert.deepEqual(texts(g.client).at(-1), { t: 'text', shared: true, name: 'Apuntes.md', markdown: true, content: '# Tema 1\n\nHola' });
+    await welcomed(t.client);
+    assert.equal(texts(t.client).length, 0);
+    // The host types: guests get the new text a moment later.
+    h.textChanged({ name: 'Apuntes.md', markdown: true, content: '# Tema 1\n\nHola mundo' });
+    await until(() => texts(g.client).at(-1)?.content === '# Tema 1\n\nHola mundo', 'the edit on the guest');
+    // Only the host may set it.
+    g.client.send({ t: 'text', name: 'x.md', markdown: true, content: 'not allowed' });
+    await wait(100);
+    assert.equal(texts(g.client).at(-1).content, '# Tema 1\n\nHola mundo');
+    // Too long: guests are told it cannot be shown, not sent it.
+    h.textChanged({ name: 'Grande.md', markdown: true, content: 'x'.repeat(5 * 1024 * 1024) });
+    await until(() => texts(g.client).at(-1)?.tooBig, 'too big');
+    assert.equal(texts(g.client).at(-1).content, undefined);
+    // The host moves to a drawn note: the text is gone for guests.
+    h.documentChanged({ open: true, title: 'Dibujo', notes: '' });
+    await until(() => texts(g.client).at(-1)?.shared === false, 'the text withdrawn');
+    g.client.close(); t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('the 6-digit code brings a guest of the notes as well as a drawing tablet', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: 'edit' });
+  try {
+    const h = host(server, new Replica(), { yjs });
+    await welcomed(h);
+    const code = server.code().code;
+    // A guest enters the address and the code: it is a guest (notes), and gets a token to come back with.
+    const g = client(server, { code, role: 'guest', yjs });
+    await welcomed(g);
+    assert.equal(g.events.find(([e]) => e === 'welcome')[1].role, 'guest');
+    assert.equal(g.token, server.hub.tokens.guest);
+    // The same code still brings a tablet (the default), with the tablet's token.
+    const t = client(server, { code, role: 'tablet' });
+    await welcomed(t);
+    assert.equal(t.events.find(([e]) => e === 'welcome')[1].role, 'tablet');
+    assert.equal(t.token, server.hub.tokens.tablet);
+    // A wrong code is refused for guests too, and counts against the five tries.
+    assert.match(await closedWith(client(server, { code: '000000', role: 'guest', yjs })), /Wrong code/);
+    g.close(); t.close(); h.close();
+  } finally { await server.stop(); }
+  // A session that shares no notes does not let a guest in by code.
+  const quiet = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: null });
+  try {
+    assert.match(await closedWith(client(quiet, { code: quiet.code().code, role: 'guest' })), /shares no notes/);
+  } finally { await quiet.stop(); }
+});
