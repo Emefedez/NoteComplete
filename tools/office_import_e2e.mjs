@@ -1,6 +1,7 @@
 // Browser check of Word, OpenDocument, Excel and CSV files (Chromium, after a web build):
-// each opens as formatted Markdown in the text view, read-only, searchable, and Save
-// keeps a .md copy. The Word and spreadsheet readers are fetched only when needed.
+// each opens as formatted Markdown in the text view, editable as Markdown, searchable, with
+// its pictures shown, and Save keeps a copy (.md, or .zip with the pictures folder), never
+// over the original. The Word and spreadsheet readers are fetched only when needed.
 //   node tools/office_import_e2e.mjs [screenshots folder]
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -8,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { startServer } from '../apps/desktop/collab-server.js';
 import { docx, odt, workbook, CSV } from '../tests/fixtures/office-files.mjs';
+import { zipEntry } from '../apps/reader/office.js';
+// A one-pixel PNG.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -30,10 +34,10 @@ try {
     await p.setInputFiles('#file', { name, mimeType, buffer: Buffer.from(bytes) });
     await p.waitForFunction((title) => !document.getElementById('textView').hidden && document.getElementById('textTitle').textContent === title
       && document.querySelector('#textBody')?.children.length > 0, name.replace(/\.[^.]+$/, ''), { timeout: 20000 });
-    // Read-only: no Edit; Save (a .md copy) is offered at once.
-    assert.equal(await p.isVisible('#textEdit'), false);
+    // Editable as Markdown; Save (a copy) is offered at once.
+    assert.equal(await p.isVisible('#textEdit'), true);
     assert.equal(await p.isVisible('#textSave'), true);
-    assert.match(await p.textContent('#status'), /Opened as Markdown, read-only/);
+    assert.match(await p.textContent('#status'), /Opened as Markdown\. Edit it if you like/);
   };
   const text = (selector) => p.$$eval(selector, (els) => els.map((e) => e.textContent.trim()));
 
@@ -50,6 +54,27 @@ try {
   assert.equal(saved.suggestedFilename(), 'Informe.md');
   assert.match(readFileSync(await saved.path(), 'utf8'), /^# Informe trimestral\n\nVentas de \*\*marzo\*\*/);
   console.log('· Save wrote Informe.md');
+
+  // Pictures: shown from the converted file, editable, and saved with a folder of their own.
+  await open('Informe con foto.docx', docx({ image: PNG }));
+  await p.waitForSelector('#textBody img');
+  assert.equal(await p.$eval('#textBody img', (img) => img.complete && img.naturalWidth), 1, 'the picture is drawn');
+  assert.match(await p.$eval('#textBody img', (img) => img.src), /^blob:/);
+  assert.equal(await p.$eval('#textBody img', (img) => img.alt), 'Esquema del circuito');
+  assert.match(await p.textContent('#status'), /and its pictures/);
+  if (DIR) await p.screenshot({ path: DIR + 'docx-picture.png' });
+  await p.click('#textEdit');
+  await p.waitForSelector('#textEditor .TinyMDE', { timeout: 20000 });
+  await p.click('#textEditor .TinyMDE');
+  await p.keyboard.press('Control+Home');
+  await p.keyboard.type('Nota mía. ');
+  const [zipped] = await Promise.all([p.waitForEvent('download'), p.click('#textSave')]);
+  assert.equal(zipped.suggestedFilename(), 'Informe con foto.zip');
+  const archive = new Uint8Array(readFileSync(await zipped.path()));
+  assert.match(new TextDecoder().decode(await zipEntry(archive, 'Informe con foto.md')), /Nota mía\. .*Informe trimestral[\s\S]*!\[Esquema del circuito\]\(Informe%20con%20foto_files\/image1\.png\)/);
+  assert.deepEqual([...await zipEntry(archive, 'Informe con foto_files/image1.png')], [...PNG]);
+  assert.match(await p.textContent('#status'), /Unzip it together/);
+  console.log('· a .docx picture is shown, the text is editable, and Save keeps a .zip with the pictures folder');
 
   await open('Ventas.xlsx', workbook('xlsx'));
   assert.deepEqual(await text('#textBody h2'), ['Ventas', 'Notas']);

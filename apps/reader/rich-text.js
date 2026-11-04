@@ -67,9 +67,27 @@ function loadKatex() {
 
 // `document`: a text document's own Markdown, whose links are not AI page or image
 // references (text-view.js follows them); web links still open in the browser.
-export async function renderMarkdown(element, text, toHtml, { document: own = false } = {}) {
+export async function renderMarkdown(element, text, toHtml, { document: own = false, imageUrl = null } = {}) {
   const html = await toHtml(normalizeMarkdown(text, { links: !own }));
-  element.innerHTML = html;
+  // Parsed apart from the page, so no picture is fetched before it is settled: a picture
+  // beside the document is shown through `imageUrl(path)` (a URL, or null) in a document, and
+  // is only its description elsewhere (AI answers, notes), where no file sits beside the text.
+  const inert = element.ownerDocument.implementation.createHTMLDocument('').createElement('div');
+  inert.innerHTML = html;
+  await Promise.all([...inert.querySelectorAll('img')].map(async (img) => {
+    const src = img.getAttribute('src') || '';
+    if (/^(https:|data:image\/)/i.test(src)) return;
+    let path = src;
+    try { path = decodeURIComponent(src); } catch { /* Kept as written. */ }
+    const url = own && src && imageUrl ? await Promise.resolve(imageUrl(path)).catch(() => null) : null;
+    if (url) { img.setAttribute('src', url); img.dataset.file = path; return; }
+    const note = element.ownerDocument.createElement('span');
+    note.className = 'md-image-missing';
+    note.textContent = img.getAttribute('alt') ? `🖼 ${img.getAttribute('alt')}` : '🖼 image';
+    if (own && src) note.title = `${path}: this picture is not available here`;
+    img.replaceWith(note);
+  }));
+  element.replaceChildren(...inert.childNodes);
   for (const a of element.querySelectorAll('a')) {
     const resolved = own ? (/^(https?:|mailto:)/i.test(a.getAttribute('href') || '') ? { external: true } : null) : resolveAiLink(a.textContent, a.getAttribute('href') || '');
     if (resolved?.external) {

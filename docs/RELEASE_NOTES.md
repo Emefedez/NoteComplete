@@ -8,6 +8,8 @@
 - **Filters are dropdowns.** On Home, Type, Modified, Source, Size and Tags are one dropdown each, with checkboxes (Modified takes one value), showing what is picked; Favourites and With audio stay as toggles.
 - **Cut history.** The ⋯ menu of a project (.nfedit) in Recent has **Cut history…**, which opens it and deletes its whole undo history. Hovering ✂ in File → automatic saves says how much space the cut frees, and the confirmation says it too.
 - **Text and Markdown documents stay in the page.** Long words and links break, code wraps, wide tables scroll in their own box and pictures shrink to fit. The folder ⋯ menu wraps long names and paths.
+- **Edit Word, OpenDocument, Excel and CSV files as Markdown.** They open as Markdown as before, now with an **Edit** button. **Save** writes a copy (`Name.md`, or `Name (2).md`) beside the original and never changes it; saving again updates that copy.
+- **Pictures.** Pictures in `.docx` and `.odt` files now show, kept in a `<name>_files` folder that the saved copy links to (a browser download is a `.zip` of both). Markdown files show pictures linked from beside them in the desktop app, and a missing picture shows its description.
 - **Search models.** In Ask AI, a magnifier beside the model list opens a search box over the tool's models, for long lists such as OpenCode's.
 - **Resize windows with Ctrl + right button.** Holding **Ctrl** and dragging with the right mouse button resizes Ask AI, quiz, flashcard and audio windows from the nearest corner (it was Shift + drag). Ctrl + drag still moves them.
 - **New folder** is now a folder-with-plus icon, and the arrow beside **Recent** is centered with its title.

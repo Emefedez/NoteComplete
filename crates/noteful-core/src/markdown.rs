@@ -32,11 +32,12 @@ pub fn markdown_pages(src: &str) -> Vec<(usize, usize)> {
 }
 
 // Links may only go to the web, mail or within the notes; images may only be
-// embedded data or web images. Anything else (javascript:, file:) is dropped.
+// embedded data, web images or files beside the document. Anything else (javascript:, file:) is dropped.
 fn safe_url(url: &str, image: bool) -> bool {
     let lower = url.trim().to_ascii_lowercase();
     if image {
-        lower.starts_with("https://") || lower.starts_with("data:image/")
+        // A picture beside the document ("Tema_files/image1.png") is for the reader to resolve.
+        lower.starts_with("https://") || lower.starts_with("data:image/") || relative(&lower)
     } else {
         lower.starts_with("https://")
             || lower.starts_with("http://")
@@ -478,6 +479,10 @@ mod tests {
         assert!(html.contains("&lt;script&gt;") && !html.contains("<script>"));
         assert!(!html.contains("javascript:") && !html.contains("file:"));
         assert!(html.contains("checkbox"));
+        // Pictures beside the document stay for the reader to resolve; other schemes do not.
+        let pics = markdown_html("![a](Tema%203_files/image1.png) ![b](//evil.example/x.png) ![c](file:///etc/passwd) ![d](ftp://x/y.png)");
+        assert!(pics.contains("src=\"Tema%203_files/image1.png\""), "{pics}");
+        assert!(!pics.contains("evil") && !pics.contains("file:") && !pics.contains("ftp:"), "{pics}");
         // Links to files beside the document stay (the text view opens them).
         let links = markdown_html("[a](otro.md) [b](../Tema%202.md#parte) [c](//evil.example) [d](data:text/html,x) [e](a/b:c)");
         assert!(

@@ -1,7 +1,7 @@
 // Word, OpenDocument and spreadsheet files, and CSV/TSV tables, turned into Markdown for
 // the text view, as the "jimmy" note converter does. Fidelity is not the aim: headings,
-// paragraphs, lists, tables, links, bold and italic come through; layout and images do
-// not. .odt is read here from its content.xml; .docx goes through mammoth (to HTML, then
+// paragraphs, lists, tables, links, bold, italic and pictures (kept as files in a folder beside
+// the Markdown) come through; layout does not. .odt is read here from its content.xml; .docx goes through mammoth (to HTML, then
 // Markdown here) and .xlsx/.ods through SheetJS. Both libraries (vendor/) and this module
 // are fetched only when such a file is opened.
 import { decodeText } from './text-types.js';
@@ -15,6 +15,45 @@ export const MAX_ROWS = 1000, MAX_COLUMNS = 50;
 export const escapeText = (text) => String(text).replace(/[\\`*_[\]<$~]/g, '\\$&');
 // A paragraph must not start a heading, quote or list by accident.
 const blockStart = (text) => text.replace(/^([#>+-])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2');
+// ---- Pictures --------------------------------------------------------------------------
+
+// Pictures found in a document are kept as files in a folder beside the Markdown, "<name>_files",
+// and linked from it, so they show in the text view and travel with a saved copy.
+const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml' };
+const MAX_IMAGES = 300, MAX_IMAGE_BYTES = 25 * 1048576;
+// The extension for a content type or a file name; null for pictures a browser cannot show (EMF, WMF, TIFF).
+export function imageExtension(typeOrName) {
+  const text = String(typeOrName || '').toLowerCase();
+  const byType = Object.entries(IMAGE_TYPES).find(([, type]) => type === text.split(';')[0].trim());
+  if (byType) return byType[0] === 'jpeg' ? 'jpg' : byType[0];
+  const ext = text.match(/\.([a-z0-9]+)$/)?.[1];
+  return ext && IMAGE_TYPES[ext] ? (ext === 'jpeg' ? 'jpg' : ext) : null;
+}
+export const imageType = (name) => IMAGE_TYPES[String(name).toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]] || 'application/octet-stream';
+// The folder for a document's pictures: its name without extension, with nothing a file system dislikes.
+export const imageFolder = (name) => `${String(name).replace(/\.[^./\\]+$/, '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/^\.+/, '').trim().slice(0, 120) || 'document'}_files`;
+// A path inside a Markdown link: spaces and brackets encoded, slashes kept.
+export const linkPath = (path) => path.split('/').map((part) => encodeURIComponent(part).replace(/[()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)).join('/');
+const imageMarkdown = (alt, path) => `![${escapeText(alt || '').replace(/[\]\n]/g, ' ')}](${linkPath(path)})`;
+// Pictures collected while converting: numbered, the same bytes stored once.
+function imageCollector(folder) {
+  const images = [], seen = new Map();
+  return {
+    images,
+    add(bytes, extension, key = '') {
+      if (!extension || !bytes?.byteLength || bytes.byteLength > MAX_IMAGE_BYTES) return null;
+      const id = key || `${extension}:${bytes.byteLength}:${Array.from(bytes.subarray(0, 64)).join(',')}:${Array.from(bytes.subarray(-64)).join(',')}`;
+      if (seen.has(id)) return seen.get(id);
+      if (images.length >= MAX_IMAGES) return null;
+      const name = `image${images.length + 1}.${extension}`, path = `${folder}/${name}`;
+      images.push({ name, path, bytes, type: IMAGE_TYPES[extension === 'jpg' ? 'jpeg' : extension] });
+      seen.set(id, path);
+      return path;
+    },
+  };
+}
+const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
 const cellText = (text) => String(text ?? '').replace(/\s*\n\s*/g, ' ').trim();
 
 // Runs of text with their style become Markdown; neighbouring runs styled alike are
@@ -164,6 +203,7 @@ function documentMarkdown(root, dialect) {
       if (r.skip) continue;
       if (r.br) out.push({ br: true });
       else if (r.text !== undefined) out.push({ ...style, t: r.text });
+      else if (r.image !== undefined && r.src) out.push({ raw: imageMarkdown(r.image, r.src) });
       else if (r.image !== undefined) out.push({ ...style, t: r.image ? `[Image: ${r.image}]` : '[Image]' });
       else if (r.note) {
         const text = inlineMarkdown(runs(r.note, {}, []));
@@ -243,7 +283,7 @@ function odfStyles(...trees) {
   return { text: (name) => resolve(name), list: (name, depth) => lists.get(name)?.[depth + 1] ?? false };
 }
 
-export function odfToMarkdown(contentXml, stylesXml = '') {
+export function odfToMarkdown(contentXml, stylesXml = '', pictures = new Map()) {
   const content = parseXml(contentXml);
   const styles = odfStyles(content, parseXml(stylesXml));
   const body = find(find(find(content, 'office:document-content'), 'office:body'), 'office:text');
@@ -303,9 +343,10 @@ export function odfToMarkdown(contentXml, stylesXml = '') {
         case 'draw:frame': {
           // Text boxes keep their text; a picture is named by its title or description.
           if (find(n, 'draw:text-box')) return { style };
-          if (!find(n, 'draw:image')) return { style };
+          const picture = find(n, 'draw:image');
+          if (!picture) return { style };
           const label = (find(n, 'svg:title') || find(n, 'svg:desc'))?.children.filter((c) => typeof c === 'string').join('').trim();
-          return { image: label || '' };
+          return { image: label || '', src: pictures.get(picture.attrs['xlink:href']) };
         }
         default: return { style };
       }
@@ -342,13 +383,23 @@ export async function zipEntry(bytes, name) {
   }
   return null;
 }
-export async function odtMarkdown(bytes) {
+// { markdown, images }: the pictures of the text, as files under `folder`.
+export async function odtDocument(bytes, folder = 'document_files') {
   const content = await zipEntry(bytes, 'content.xml');
   if (!content) throw Error('This file has no text.');
   const styles = await zipEntry(bytes, 'styles.xml');
   const decode = (b) => new TextDecoder().decode(b);
-  return odfToMarkdown(decode(content), styles ? decode(styles) : '');
+  const xml = decode(content), collector = imageCollector(folder), pictures = new Map();
+  for (const m of xml.matchAll(/<draw:image\b[^>]*?xlink:href\s*=\s*"([^"]+)"/g)) {
+    const href = decodeEntities(m[1]);
+    if (pictures.has(href) || /^[a-z]+:/i.test(href)) continue;
+    const data = await zipEntry(bytes, href).catch(() => null);
+    const path = data && collector.add(data, imageExtension(href));
+    if (path) pictures.set(href, path);
+  }
+  return { markdown: odfToMarkdown(xml, styles ? decode(styles) : '', pictures), images: collector.images };
 }
+export async function odtMarkdown(bytes) { return (await odtDocument(bytes)).markdown; }
 
 // ---- Word (.docx), through mammoth's HTML ------------------------------------------------
 
@@ -389,7 +440,7 @@ export function htmlToMarkdown(html) {
     inline(n, style) {
       switch (n.name) {
         case 'br': return { br: true };
-        case 'img': return { image: n.attrs.alt || '' };
+        case 'img': return { image: n.attrs.alt || '', src: n.attrs.src && !/^(data:|[a-z]+:)/i.test(n.attrs.src) ? n.attrs.src : '' };
         case 'strong': case 'b': return { style: { ...style, b: true } };
         case 'em': case 'i': return { style: { ...style, i: true } };
         case 's': case 'del': case 'strike': return { style: { ...style, s: true } };
@@ -408,10 +459,19 @@ export function htmlToMarkdown(html) {
 }
 // mammoth: the library (window.mammoth, or require('mammoth') in tests); input as it takes
 // it ({ arrayBuffer } in the browser, { buffer } in Node). Pictures are not read at all.
-export async function docxToMarkdown(mammoth, input) {
-  const result = await mammoth.convertToHtml(input, { convertImage: mammoth.images.imgElement(() => ({ src: '' })) });
-  return htmlToMarkdown(result.value);
+// Pictures are saved as files under `folder` and linked; { markdown, images }.
+export async function docxDocument(mammoth, input, folder = 'document_files') {
+  const collector = imageCollector(folder);
+  const convertImage = mammoth.images.imgElement(async (image) => {
+    try {
+      const path = collector.add(fromBase64(await image.read('base64')), imageExtension(image.contentType));
+      return path ? { src: path, alt: image.altText || '' } : { src: '' };
+    } catch { return { src: '' }; }
+  });
+  const result = await mammoth.convertToHtml(input, { convertImage });
+  return { markdown: htmlToMarkdown(result.value), images: collector.images };
 }
+export async function docxToMarkdown(mammoth, input) { return (await docxDocument(mammoth, input)).markdown; }
 
 // ---- Spreadsheets (.xlsx, .ods), through SheetJS ------------------------------------------
 
@@ -450,18 +510,21 @@ function library(file, global, what) {
 }
 const NAMES = { docx: 'Word document', odt: 'OpenDocument text', xlsx: 'Excel spreadsheet', ods: 'OpenDocument spreadsheet', csv: 'CSV table', tsv: 'TSV table' };
 
-// The Markdown shown for an opened office file or CSV/TSV table.
-export async function officeMarkdown(name, bytes) {
+// The Markdown shown for an opened office file or CSV/TSV table, and its pictures as files
+// under `imageFolder` ({ markdown, images, folder }).
+export async function officeDocument(name, bytes) {
   const ext = String(name).toLowerCase().match(/\.([a-z]+)$/)?.[1];
   if (!NAMES[ext]) throw Error('This file type cannot be converted.');
-  if (ext === 'csv' || ext === 'tsv') return delimitedMarkdown(decodeText(bytes), ext === 'tsv' ? '\t' : undefined);
+  const folder = imageFolder(name);
+  if (ext === 'csv' || ext === 'tsv') return { markdown: delimitedMarkdown(decodeText(bytes), ext === 'tsv' ? '\t' : undefined), images: [], folder };
   const lib = ext === 'docx' ? await library('mammoth/mammoth.browser.min.js', 'mammoth', 'Word')
     : ext === 'xlsx' || ext === 'ods' ? await library('sheetjs/xlsx.mini.min.js', 'XLSX', 'spreadsheet') : null;
   try {
-    if (ext === 'odt') return await odtMarkdown(bytes);
-    if (ext === 'docx') return await docxToMarkdown(lib, { arrayBuffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
-    return workbookMarkdown(lib, readWorkbook(lib, bytes));
+    if (ext === 'odt') return { ...(await odtDocument(bytes, folder)), folder };
+    if (ext === 'docx') return { ...(await docxDocument(lib, { arrayBuffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }, folder)), folder };
+    return { markdown: workbookMarkdown(lib, readWorkbook(lib, bytes)), images: [], folder };
   } catch {
     throw Error(`This ${NAMES[ext]} could not be read. It may be damaged or protected with a password.`);
   }
 }
+export async function officeMarkdown(name, bytes) { return (await officeDocument(name, bytes)).markdown; }

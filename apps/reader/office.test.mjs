@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDelimited, guessSeparator, delimitedMarkdown, gridMarkdown, tableMarkdown, escapeText, parseXml, odfToMarkdown, zipEntry, odtMarkdown,
-  htmlToMarkdown, docxToMarkdown, workbookMarkdown, readWorkbook, officeMarkdown, MAX_ROWS, MAX_COLUMNS } from './office.js';
+  htmlToMarkdown, docxToMarkdown, docxDocument, odtDocument, officeDocument, imageFolder, imageExtension, linkPath, workbookMarkdown, readWorkbook, officeMarkdown, MAX_ROWS, MAX_COLUMNS } from './office.js';
 import { fileKind, prepareDocument } from './media-import.js';
 import { isOfficeName } from './text-types.js';
 import { zip, docx, odt, workbook, ODT_CONTENT, CSV, XLSX, mammoth } from '../../tests/fixtures/office-files.mjs';
@@ -225,4 +225,40 @@ test('a damaged file gives a plain message', async () => {
   await assert.rejects(officeMarkdown('roto.odt', new Uint8Array([1, 2, 3])), { message: 'This OpenDocument text could not be read. It may be damaged or protected with a password.' });
   await assert.rejects(officeMarkdown('x.pages', new Uint8Array()), /cannot be converted/);
   await assert.rejects(prepareDocument(new File([new Uint8Array(30)], 'roto.odt')), /could not be read/);
+});
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5]);
+test('picture folders are named after the document, and links to them are safe', () => {
+  assert.equal(imageFolder('Tema 3 (v2).docx'), 'Tema 3 (v2)_files');
+  assert.equal(imageFolder('a/b:c.odt'), 'a_b_c_files');
+  assert.equal(imageFolder('.hidden.docx'), 'hidden_files');
+  assert.equal(linkPath('Tema 3 (v2)_files/image1.png'), 'Tema%203%20%28v2%29_files/image1.png');
+  assert.equal(imageExtension('image/jpeg'), 'jpg');
+  assert.equal(imageExtension('Pictures/x.PNG'), 'png');
+  assert.equal(imageExtension('image/x-emf'), null);
+});
+
+test('an .odt keeps its pictures as files linked from the Markdown', async () => {
+  const folder = 'Apuntes_files';
+  const { markdown, images } = await odtDocument(odt({ pictures: { 'Pictures/foto 1.png': PNG, 'Pictures/dibujo.emf': new Uint8Array([1, 2]) } }), folder);
+  assert.deepEqual(images.map((i) => [i.path, i.type, i.bytes.length]), [[`${folder}/image1.png`, 'image/png', PNG.length]]);
+  assert.match(markdown, /!\[Gráfica de Pictures\/foto 1\.png\]\(Apuntes_files\/image1\.png\)/);
+  // A picture a browser cannot show stays a named placeholder.
+  assert.match(markdown, /\\\[Image: Gráfica de Pictures\/dibujo\.emf\\\]/);
+});
+
+test('a .docx keeps its pictures as files, the same picture once', async () => {
+  const { markdown, images } = await docxDocument(mammoth, { buffer: Buffer.from(docx({ image: PNG })) }, 'Informe_files');
+  assert.equal(images.length, 1);
+  assert.equal(images[0].path, 'Informe_files/image1.png');
+  assert.deepEqual([...images[0].bytes], [...PNG]);
+  assert.match(markdown, /!\[Esquema del circuito\]\(Informe_files\/image1\.png\)/);
+});
+
+test('an office file opened by name reports its picture folder', async () => {
+  const done = await officeDocument('Mi apunte.odt', odt({ pictures: { 'Pictures/a.png': PNG } }));
+  assert.equal(done.folder, 'Mi apunte_files');
+  assert.match(done.markdown, /\(Mi%20apunte_files\/image1\.png\)/);
+  assert.equal(done.images[0].path, 'Mi apunte_files/image1.png');
+  assert.deepEqual((await officeDocument('x.csv', new TextEncoder().encode('a,b\n1,2'))).images, []);
 });

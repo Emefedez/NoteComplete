@@ -124,7 +124,7 @@ A note is **saved** in one of two formats; the others are **exports**.
 
 `.notecomp` and `.notepart` files keep opening. Why the project and the package both exist: [docs/FILE-FORMATS.md](docs/FILE-FORMATS.md).
 
-NoteComplete also **opens to read**: PDFs and PNG, JPEG and WebP images (as notes you can write on), HTML pages, text and Markdown files, and Word (`.docx`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`), CSV and TSV files. Word, OpenDocument, Excel and CSV files are shown as Markdown, read-only: headings, lists, tables, links, bold and italic come through, layout and pictures do not; a spreadsheet becomes one table per sheet, up to 1000 rows and 50 columns. Save keeps a `.md` copy.
+NoteComplete also **opens to read**: PDFs and PNG, JPEG and WebP images (as notes you can write on), HTML pages, text and Markdown files, and Word (`.docx`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`), CSV and TSV files. Word, OpenDocument, Excel and CSV files are shown as Markdown that you can edit: headings, lists, tables, links, bold, italic and pictures come through, layout does not; a spreadsheet becomes one table per sheet, up to 1000 rows and 50 columns. Save writes a `.md` copy (with its pictures in a `<name>_files` folder) and never changes the original.
 
 ## Known issues
 

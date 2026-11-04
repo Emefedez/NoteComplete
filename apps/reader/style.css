@@ -2804,3 +2804,5 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .notes-render img, .notes-render video, .notes-render svg, .notes-render iframe { max-width: 100%; height: auto; }
 .notes-render a { overflow-wrap: break-word; }
 .notes-render li, .notes-render blockquote { min-width: 0; }
+.notes-render .md-image-missing { display: inline-block; padding: 1px 8px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: .9em; }
+.notes-render img { border-radius: 4px; }

@@ -39,6 +39,7 @@ import { SelectionController } from "./selection.js";
 import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
+import { zipFiles } from "./zip.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
 import { qualitySettings } from "./quality.js";
@@ -371,6 +372,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
   converted = false;
+  releaseImages();
   $("textEdit").hidden = false;
   $("textSave").title = SAVE_TEXT_TITLE;
   documentControls();
@@ -383,6 +385,29 @@ function reset({ opening = false, keepSession = false } = {}) {
 let saveAs = null;
 // A Word, OpenDocument, Excel or CSV file shown as Markdown: read-only, Save writes a .md.
 let converted = false;
+// The pictures of a converted document (files the Markdown links to, "<name>_files/…"), their
+// folder name, and the copy this session already saved (a later Save updates it).
+let convertedImages = [], convertedFolder = "", copyTarget = null;
+const imageUrls = new Map();
+const PICTURE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml" };
+// A picture a text document links to: kept in memory for a converted document, read from beside
+// the file for a Markdown file on this device (the desktop app), otherwise not available.
+async function textImageUrl(path) {
+  if (imageUrls.has(path)) return imageUrls.get(path);
+  const type = PICTURE_TYPES[path.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]];
+  if (!type) return null;
+  let bytes = convertedImages.find((image) => image.path === path)?.bytes || null;
+  if (!bytes && !converted && docMember?.source === "local" && window.notecompleteFiles?.readSibling) bytes = await window.notecompleteFiles.readSibling(docMember.path, path).catch(() => null);
+  if (!bytes) return null;
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  imageUrls.set(path, url);
+  return url;
+}
+function releaseImages() {
+  for (const url of imageUrls.values()) URL.revokeObjectURL(url);
+  imageUrls.clear();
+  convertedImages = []; convertedFolder = ""; copyTarget = null;
+}
 const SAVE_TEXT_TITLE = $("textSave").title;
 const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
 function saveLabel() { $("save").firstChild.textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
@@ -402,6 +427,7 @@ async function load(file, preparedDocument = null) {
     // HTML pages and text/Markdown files have their own views instead of the page editor.
     if (prepared.kind === "html" || prepared.kind === "text") {
       reset({ opening: true });
+      if (prepared.converted) { convertedImages = prepared.images || []; convertedFolder = prepared.imageFolder || ""; converted = true; }
       sideFp = await fingerprint;
       const sideTitle = prepared.title || file.name || "Document";
       $("title").textContent = sideTitle;
@@ -410,15 +436,14 @@ async function load(file, preparedDocument = null) {
       if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
       else { await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? isMarkdownName(file.name), key: file.name }); textSource.forget(); }
       if (prepared.converted) {
-        converted = true;
-        $("textEdit").hidden = true;
+        // Editable as Markdown: Save writes a copy beside the file, never over it.
         $("textSave").hidden = false;
-        $("textSave").title = "Save as Markdown: a .md copy of what is shown (Ctrl S)";
+        $("textSave").title = "Save a Markdown copy (Ctrl S): the original file is never changed";
       }
       showDocument();
       rememberDocument();
       documentControls();
-      status(prepared.kind === "html" ? "HTML document opened." : prepared.converted ? "Opened as Markdown, read-only. Save keeps a .md copy." : "Text document opened.");
+      status(prepared.kind === "html" ? "HTML document opened." : prepared.converted ? `Opened as Markdown. Edit it if you like: Save keeps a .md copy${convertedImages.length ? " and its pictures" : ""} beside the file and never changes the original.` : "Text document opened.");
       collab?.documentChanged();
       return;
     }
@@ -3914,6 +3939,7 @@ const textView = textViewer({
   root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
   zoom: { out: $("textZoomOut"), into: $("textZoomIn"), value: $("textZoomValue") },
   toHtml: (value) => call("markdownHtml", { text: value }),
+  imageUrl: textImageUrl,
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   // A relative link to another file opens it here, from this file's folder.
@@ -3939,19 +3965,41 @@ const textFinder = textFind({
 });
 for (const id of ["textEdit", "textMarkdown"]) $(id).addEventListener("click", () => textFinder.refresh());
 const htmlZoom = zoomControl({ key: "notecomplete-html-zoom", out: $("htmlZoomOut"), into: $("htmlZoomIn"), value: $("htmlZoomValue"), apply: (z) => htmlView.setZoom(z) });
+// Save (Ctrl S) for a converted document (.docx, .odt, .xlsx, .csv…): a Markdown copy, never over
+// the file it came from. The desktop app writes it beside the original (a taken name gets " (2)")
+// with the pictures in "<name>_files", and the next Save in the same session updates that copy;
+// the browser downloads the .md, or a .zip with the pictures folder.
+async function saveConvertedCopy() {
+  const name = `${textView.name}.md`, text = textView.text;
+  try {
+    const { linkPath } = await import("./office.js");
+    const used = convertedImages.filter((image) => text.includes(linkPath(image.path)));
+    const bridge = window.notecompleteFiles;
+    let message;
+    if (bridge?.saveCopy) {
+      const original = docMember?.source === "local" ? docMember.path : null;
+      const saved = await bridge.saveCopy(original, { name, text, images: used.map(({ name: file, bytes }) => ({ name: file, bytes })), folder: convertedFolder, replace: copyTarget });
+      copyTarget = saved;
+      await library.rememberLocal(saved.path, saved.name, saved.size).catch(() => {});
+      message = `Saved a copy as ${saved.name}${original ? "" : " in your downloads folder"}${saved.folder ? `, with its pictures in ${saved.folder}` : ""}. The original is untouched.`;
+    } else if (used.length) {
+      const zipName = `${textView.name}.zip`;
+      await download(zipFiles([{ name, bytes: new TextEncoder().encode(text) }, ...used.map((image) => ({ name: image.path, bytes: image.bytes }))]), zipName, "application/zip");
+      message = `${zipName} downloaded: the .md and its ${convertedFolder} folder of pictures. Unzip it together to keep the links working.`;
+    } else {
+      await download(text, name, "text/markdown");
+      message = `${name} saved. The original is untouched.`;
+    }
+    dirty = changed = false;
+    tabBar.update({ title: textView.name, dirty: false });
+    status(message);
+  } catch (error) { status(error.message, true); }
+}
 // Save (Ctrl S) for an edited text document: back to its file on this device, else a download.
 // Saves the edited text or HTML document over its file (a download when it has none here).
 async function saveText() {
   const view = textView.hasDocument ? textView : htmlView.hasDocument ? htmlView : null;
-  if (view === textView && converted) {
-    // Never over the .docx/.xlsx/.csv it came from.
-    try {
-      const name = `${textView.name}.md`;
-      await download(textView.text, name, "text/markdown");
-      status(`${name} saved.`);
-    } catch (error) { status(error.message, true); }
-    return;
-  }
+  if (view === textView && converted) return saveConvertedCopy();
   if (!view || !changed) return;
   const html = view === htmlView, name = docMember?.name || `${view.name}${html ? ".html" : ".txt"}`;
   try {
@@ -4140,6 +4188,8 @@ $("htmlSide").onclick = $("textSide").onclick = $("webSide").onclick = () => {
 let docMember = null;
 function setDocMember(member) {
   docMember = member;
+  // A Markdown file's pictures sit beside it: show them now that its place is known.
+  if (textView.hasDocument && !converted && /!\[[^\]]*\]\(/.test(textView.text)) textView.rerender();
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
   // Opening a document of a folder brings that folder to the front of Home's Folders.

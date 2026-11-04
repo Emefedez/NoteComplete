@@ -34,7 +34,7 @@ export function zip(files, { deflate = true } = {}) {
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const p = (text, extra = '') => `<w:p>${extra}<w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
-export function docx() {
+export function docx({ image = null } = {}) {
   const body = [
     `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Informe trimestral</w:t></w:r></w:p>`,
     `<w:p><w:r><w:t xml:space="preserve">Ventas de </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>marzo</w:t></w:r><w:r><w:t xml:space="preserve"> y </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>abril</w:t></w:r><w:r><w:t xml:space="preserve"> (*no* final).</w:t></w:r></w:p>`,
@@ -42,15 +42,23 @@ export function docx() {
     p('Segundo punto', '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>'),
     `<w:tbl><w:tr><w:tc>${p('Mes')}</w:tc><w:tc>${p('Total')}</w:tc></w:tr><w:tr><w:tc>${p('Marzo')}</w:tc><w:tc>${p('1|200')}</w:tc></w:tr></w:tbl>`,
     `<w:p><w:hyperlink r:id="rLink"><w:r><w:t>Sitio</w:t></w:r></w:hyperlink></w:p>`,
+    // A picture (a one-pixel PNG, say), inline, with a description.
+    ...(image ? [`<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="990000" cy="792000"/><wp:docPr id="1" name="Imagen 1" descr="Esquema del circuito"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="a.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImg"/></pic:blipFill><pic:spPr/></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`] : []),
   ].join('');
-  return zip({
+  const files = {
     '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
     '_rels/.rels': `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
     'word/_rels/document.xml.rels': `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/a" TargetMode="External"/></Relationships>`,
     'word/styles.xml': `<?xml version="1.0" encoding="UTF-8"?><w:styles ${W}><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style></w:styles>`,
     'word/numbering.xml': `<?xml version="1.0" encoding="UTF-8"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`,
     'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${body}</w:body></w:document>`,
-  });
+  };
+  if (image) {
+    files['word/media/image1.png'] = image;
+    files['word/_rels/document.xml.rels'] = files['word/_rels/document.xml.rels'].replace('</Relationships>', '<Relationship Id="rImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>');
+    files['[Content_Types].xml'] = files['[Content_Types].xml'].replace('<Default Extension="rels"', '<Default Extension="png" ContentType="image/png"/><Default Extension="rels"');
+  }
+  return zip(files);
 }
 
 // content.xml of a small OpenDocument text, written by hand.
@@ -87,10 +95,12 @@ export const ODT_CONTENT = `<?xml version="1.0" encoding="UTF-8"?>
   </office:text>
  </office:body>
 </office:document-content>`;
-export function odt() {
+export function odt({ pictures = {} } = {}) {
+  const frames = Object.keys(pictures).map((name) => `<text:p><draw:frame draw:name="f"><draw:image xlink:href="${name}"/><svg:title>Gráfica de ${name}</svg:title></draw:frame></text:p>`).join('');
   return zip({
     mimetype: 'application/vnd.oasis.opendocument.text',
-    'content.xml': ODT_CONTENT,
+    'content.xml': frames ? ODT_CONTENT.replace('</office:text>', `${frames}</office:text>`) : ODT_CONTENT,
+    ...pictures,
     'META-INF/manifest.xml': '<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"/>',
   });
 }

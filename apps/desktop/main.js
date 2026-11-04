@@ -365,6 +365,8 @@ app.whenReady().then(async () => {
     return { folder, name: path.basename(folder), files: await files.listFolder(folder) };
   }));
   ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
+  ipcMain.handle('files:read-sibling', guarded((_event, file, relative) => files.readSibling(file, relative)));
+  ipcMain.handle('files:save-copy', guarded((_event, file, options) => files.saveCopy(file, options)));
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));

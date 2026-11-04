@@ -120,11 +120,13 @@ export async function prepareDocument(file) {
       },
     };
   }
-  // Word, OpenDocument, Excel and CSV/TSV files are shown as Markdown, read-only
-  // (converted: Save writes a new .md file, never over the original).
+  // Word, OpenDocument, Excel and CSV/TSV files are shown as Markdown and can be edited as such
+  // (converted: Save writes a new .md copy, never over the original). Their pictures come as
+  // `images`, files for the folder `imageFolder` that the Markdown links to.
   if (kind === "office" || (kind === "text" && isTableName(file.name))) {
-    const { officeMarkdown } = await import("./office.js");
-    return { kind: "text", title, text: await officeMarkdown(file.name, new Uint8Array(bytes)), bytes, markdown: true, converted: true };
+    const { officeDocument } = await import("./office.js");
+    const { markdown, images, folder } = await officeDocument(file.name, new Uint8Array(bytes));
+    return { kind: "text", title, text: markdown, bytes, markdown: true, converted: true, images, imageFolder: folder };
   }
   if (kind === "html" || kind === "text") {
     const text = kind === "text" ? decodeText(new Uint8Array(bytes)) : new TextDecoder().decode(bytes);

@@ -1,7 +1,7 @@
 // Main-process side of the reader's downloads folder and Recent list.
 // The renderer may only read/write plain file names inside the chosen folder,
 // and reopen paths the user picked through the main-process open dialog.
-import { chmod, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open as openFile, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 // Notes, PDFs, HTML, images, Word/OpenDocument/Excel files, text formats (as in the
@@ -15,6 +15,18 @@ async function textStart(file) {
   finally { await handle.close(); }
 }
 const RECENT = 50, FOLDERS = 50;
+// Pictures a document may show from beside it, and what a saved copy may hold.
+const PICTURE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+const MAX_PICTURE = 25 * 1048576, MAX_PICTURES = 300;
+const inside = (dir, file) => file === dir || file.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
+// A link path as the converter writes it, to follow a pictures folder that had to be renamed.
+const linkPart = (name) => encodeURIComponent(name).replace(/[()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+const exists = async (file) => { try { await stat(file); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; } };
+async function writeAtomic(file, bytes) {
+  const partial = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.partial`);
+  await writeFile(partial, bytes);
+  await rename(partial, file);
+}
 
 export function plainName(name) {
   if (typeof name !== 'string' || !name || name.length > 200 || name !== path.basename(name) || name.startsWith('.') || /[\\/\x00-\x1f]/.test(name) || !NOTE.test(name))
@@ -128,6 +140,65 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
         } catch { /* Gone meanwhile. */ }
       }
       return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    },
+    // A picture a document shows from beside it ("Tema_files/image1.png"): inside the document's
+    // folder (or the opened folder holding it), never through a link that leads elsewhere.
+    async readSibling(file, relative) {
+      await opened(file);
+      if (typeof relative !== 'string' || !relative || relative.length > 500 || relative.includes('\0') || path.isAbsolute(relative) || !PICTURE.test(relative)) throw Error('Invalid picture path.');
+      const s = await load();
+      const root = s.folders.filter(f => inside(f, file)).sort((a, b) => b.length - a.length)[0] || path.dirname(file);
+      const target = path.resolve(path.dirname(file), relative);
+      if (!inside(root, target)) throw Error('That picture is outside the document\'s folder.');
+      let real;
+      try { real = await realpath(target); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+      if (!inside(await realpath(root), real)) throw Error('That picture is outside the document\'s folder.');
+      const info = await stat(real);
+      if (!info.isFile() || info.size > MAX_PICTURE) return null;
+      return new Uint8Array(await readFile(real));
+    },
+    // Saves a converted document (Word, OpenDocument, Excel, CSV) as a Markdown copy beside the
+    // original (or in the downloads folder), never over any file: a taken name gets " (2)". Its
+    // pictures go in a folder of their own, also never over different files. `replace` is the
+    // copy made earlier from this session, which a later save updates. Returns where it went.
+    async saveCopy(file, { name, text, images = [], folder = '', replace = null } = {}) {
+      const dir = file ? (await opened(file), path.dirname(file)) : (await load()).folder;
+      if (!/\.md$/i.test(plainName(name)) || typeof text !== 'string') throw Error('Expected a Markdown name and text.');
+      if (!Array.isArray(images) || images.length > MAX_PICTURES) throw Error('Too many pictures.');
+      if (images.length && !(typeof folder === 'string' && /^[^\\/\0.][^\\/\0]{0,200}_files$/.test(folder))) throw Error('Invalid pictures folder.');
+      for (const image of images) {
+        if (typeof image?.name !== 'string' || image.name !== path.basename(image.name) || image.name.startsWith('.') || !PICTURE.test(image.name) || !(image.bytes instanceof Uint8Array)) throw Error('Invalid picture.');
+      }
+      await mkdir(dir, { recursive: true });
+      const s = await load();
+      const again = replace && typeof replace.path === 'string' && s.recent.includes(replace.path) && path.dirname(replace.path) === dir && /\.md$/i.test(replace.path);
+      let target = again ? replace.path : path.join(dir, name);
+      if (!again) for (let n = 2; await exists(target); n++) target = path.join(dir, name.replace(/(\.md)$/i, ` (${n})$1`));
+      let used = folder;
+      if (images.length) {
+        if (again && typeof replace.folder === 'string' && replace.folder.endsWith('_files') && replace.folder === path.basename(replace.folder)) used = replace.folder;
+        else {
+          // The first folder that is new, or holds only these same pictures.
+          for (let n = 2; ; n++) {
+            const taken = path.join(dir, used);
+            if (!await exists(taken)) break;
+            let same = true;
+            for (const image of images) {
+              try { same &&= Buffer.from(image.bytes).equals(await readFile(path.join(taken, image.name))); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+            }
+            if (same) break;
+            used = `${folder.replace(/_files$/, '')} (${n})_files`;
+          }
+        }
+        await mkdir(path.join(dir, used), { recursive: true });
+        for (const image of images) await writeAtomic(path.join(dir, used, image.name), image.bytes);
+      }
+      // Links follow the folder when it had to be renamed.
+      const body = images.length && used !== folder ? text.replaceAll(`${linkPart(folder)}/`, `${linkPart(used)}/`) : text;
+      await writeAtomic(target, new TextEncoder().encode(body));
+      s.recent = [target, ...s.recent.filter(p => p !== target)].slice(0, RECENT);
+      await save();
+      return { path: target, name: path.basename(target), folder: images.length ? used : '', size: Buffer.byteLength(body) };
     },
     async readRecent(file) {
       await opened(file);

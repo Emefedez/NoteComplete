@@ -113,3 +113,69 @@ test('only an opened file can be moved to the trash, and Recent forgets it', asy
   assert.deepEqual(trashed, [file]);
   await assert.rejects(files.readRecent(file), /not opened/);
 });
+
+test('a document shows pictures from beside it, and nothing outside its folder', async () => {
+  const { mkdir, symlink, writeFile: put } = await import('node:fs/promises');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-pics-'));
+  const folder = path.join(root, 'notas'), nested = path.join(folder, 'Tema 3_files');
+  await mkdir(nested, { recursive: true });
+  await put(path.join(folder, 'tema.md'), '![a](Tema%203_files/image1.png)');
+  await put(path.join(nested, 'image1.png'), new Uint8Array([1, 2, 3]));
+  await put(path.join(root, 'secreto.png'), new Uint8Array([9]));
+  await put(path.join(folder, 'nota.txt'), 'no es una imagen');
+  await symlink(path.join(root, 'secreto.png'), path.join(nested, 'enlace.png'));
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  const doc = path.join(folder, 'tema.md');
+  await assert.rejects(files.readSibling(doc, 'Tema 3_files/image1.png'), /not opened/);
+  await files.remember(doc);
+  assert.deepEqual([...await files.readSibling(doc, 'Tema 3_files/image1.png')], [1, 2, 3]);
+  assert.equal(await files.readSibling(doc, 'Tema 3_files/falta.png'), null);
+  for (const bad of ['../secreto.png', '/etc/passwd', 'Tema 3_files/enlace.png', 'nota.txt', '', 'a\0.png']) await assert.rejects(files.readSibling(doc, bad), /Invalid|outside/, bad);
+  // From an opened folder, a picture one level up (a shared "img" folder) is reachable; beyond it is not.
+  await mkdir(path.join(folder, 'sub'));
+  await put(path.join(folder, 'sub', 'otro.md'), 'x');
+  await files.rememberFolder(folder);
+  await files.remember(path.join(folder, 'sub', 'otro.md'));
+  assert.deepEqual([...await files.readSibling(path.join(folder, 'sub', 'otro.md'), '../Tema 3_files/image1.png')], [1, 2, 3]);
+  await assert.rejects(files.readSibling(path.join(folder, 'sub', 'otro.md'), '../../secreto.png'), /outside/);
+});
+
+test('a converted document is saved as a copy, never over a file, with its pictures beside it', async () => {
+  const { mkdir, writeFile: put, readdir: list } = await import('node:fs/promises');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-copy-'));
+  const folder = path.join(root, 'clase');
+  await mkdir(folder);
+  await put(path.join(folder, 'Informe.docx'), 'original');
+  await put(path.join(folder, 'Informe.md'), 'mío');
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  const original = path.join(folder, 'Informe.docx');
+  const pic = (n) => ({ name: 'image1.png', bytes: new Uint8Array([n]) });
+  const text = '# Informe\n\n![x](Informe_files/image1.png)\n';
+  await assert.rejects(files.saveCopy(original, { name: 'Informe.md', text }), /not opened/);
+  await files.remember(original);
+  // The name is taken: the copy is "Informe (2).md"; the original and the other file are untouched.
+  const first = await files.saveCopy(original, { name: 'Informe.md', text, images: [pic(1)], folder: 'Informe_files' });
+  assert.equal(first.name, 'Informe (2).md');
+  assert.equal(first.folder, 'Informe_files');
+  assert.equal(await readFile(original, 'utf8'), 'original');
+  assert.equal(await readFile(path.join(folder, 'Informe.md'), 'utf8'), 'mío');
+  assert.deepEqual([...await readFile(path.join(folder, 'Informe_files', 'image1.png'))], [1]);
+  // Saving again in the same session updates that copy instead of piling up more.
+  const second = await files.saveCopy(original, { name: 'Informe.md', text: text + 'más\n', images: [pic(1)], folder: 'Informe_files', replace: first });
+  assert.equal(second.path, first.path);
+  assert.match(await readFile(first.path, 'utf8'), /más/);
+  // A later session with different pictures finds the folder taken: a new folder, and the links follow it.
+  const third = await files.saveCopy(original, { name: 'Informe.md', text, images: [pic(2)], folder: 'Informe_files' });
+  assert.equal(third.name, 'Informe (3).md');
+  assert.equal(third.folder, 'Informe (2)_files');
+  assert.match(await readFile(third.path, 'utf8'), /\(Informe%20%282%29_files\/image1\.png\)/);
+  assert.deepEqual([...await readFile(path.join(folder, 'Informe_files', 'image1.png'))], [1], 'the earlier pictures stay');
+  // Without an original (a copy kept from Drive) it goes to the downloads folder.
+  const kept = await files.saveCopy(null, { name: 'Drive.md', text: 'x' });
+  assert.equal(path.dirname(kept.path), path.join(root, 'NoteComplete'));
+  // Bad requests.
+  await assert.rejects(files.saveCopy(original, { name: 'x.txt', text }), /Markdown/);
+  await assert.rejects(files.saveCopy(original, { name: 'x.md', text, images: [{ name: '../x.png', bytes: new Uint8Array(1) }], folder: 'x_files' }), /Invalid picture/);
+  await assert.rejects(files.saveCopy(original, { name: 'x.md', text, images: [pic(1)], folder: '../fuera_files' }), /Invalid pictures folder/);
+  assert.ok((await list(folder)).every((n) => !n.endsWith('.partial')));
+});

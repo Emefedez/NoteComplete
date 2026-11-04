@@ -55,7 +55,7 @@ export function headingFor(headings, fragment) {
 // Links in a Markdown document: #anchors scroll to their heading or footnote, web
 // links open in the browser (target=_blank, rich-text.js), other links go to openLink
 // (a file next to this one).
-export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {} }) {
+export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0;
   const zoomer = zoomControl({ ...zoom, apply: (z) => root.style.setProperty('--text-zoom', String(z)) });
   body.addEventListener('click', (event) => {
@@ -83,7 +83,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     body.classList.toggle('text-plain', !markdown);
     if (!markdown) { body.textContent = text; return; }
     const scratch = body.ownerDocument.createElement('div');
-    await renderMarkdown(scratch, text, toHtml, { document: true });
+    await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
     if (token === renders) body.replaceChildren(...scratch.childNodes);
   }
   function changed(next) { text = next; onChange(text); }
@@ -154,6 +154,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     },
     // The file was renamed on disk: new title and the key MD on/off is remembered under.
     rename(shown, id = shown) { name = shown; key = id; if (title) title.textContent = shown; },
+    // Draw again (pictures beside the file can be read once its place is known).
+    rerender() { return editing ? undefined : render(); },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
     close() { stopEditing(); renders++; root.hidden = true; body.replaceChildren(); text = ''; name = ''; },

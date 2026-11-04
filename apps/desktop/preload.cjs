@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   listFolder: folder => ipcRenderer.invoke('files:list-folder', folder),
   pickFiles: () => ipcRenderer.invoke('files:pick'),
   writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
+  readSibling: (file, relative) => ipcRenderer.invoke('files:read-sibling', file, relative),
+  saveCopy: (file, options) => ipcRenderer.invoke('files:save-copy', file, options),
   renameOpened: (file, name) => ipcRenderer.invoke('files:rename-opened', file, name),
   trashOpened: (file) => ipcRenderer.invoke('files:trash-opened', file),
   downloadUrl: (url, onProgress) => {
