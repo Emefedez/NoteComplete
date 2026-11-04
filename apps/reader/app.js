@@ -2874,6 +2874,13 @@ async function autosaveOpened(recovered) {
     const [latest] = await autosaves.list(key);
     const manual = await autosaves.manualAt(key);
     if (note !== epoch || !offerRecovery(latest, manual)) return;
+    // Same edit history as the note just opened: nothing to choose between, so do not ask.
+    const mark = await call("historyMark").catch(() => null);
+    if (note !== epoch) return;
+    if (mark && latest.digest && latest.edits === mark.edits && latest.digest === mark.digest) {
+      autosaves.markManual(key).catch(() => {});
+      return;
+    }
     $("recoverText").textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : "the file you opened"}. Which do you want to open?`;
     $("recoverAuto").textContent = `Automatic save (${when(latest.time)})`;
     $("recoverManual").textContent = manual ? `Manual save (${when(manual)})` : "The file";
@@ -3242,7 +3249,11 @@ async function save(native, as = native ? "noteful" : "project") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
-    if (!delivery.shared) autosaves.markManual(autosaveKey()).catch(() => {});
+    if (!delivery.shared) {
+      autosaves.markManual(autosaveKey()).catch(() => {});
+      // Just saved by hand: an automatic copy of exactly this state would only be a duplicate.
+      autosavedRevision = revision;
+    }
     if (as === saveAs && !delivery.shared) {
       dirty = changed = false;
       savedState();
