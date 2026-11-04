@@ -437,7 +437,12 @@ async function load(file, preparedDocument = null) {
       document.title = `${sideTitle} — NoteComplete`;
       tabBar.update({ title: sideTitle, dirty: false });
       if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
-      else { await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? isMarkdownName(file.name), key: file.name }); textSource.forget(); }
+      else {
+        await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? isMarkdownName(file.name), key: file.name });
+        textSource.forget();
+        // Its notes (a guest keeps the shared ones, bound by the session).
+        if (collab?.role !== "guest") notes?.load(sideFp, { core: false });
+      }
       if (prepared.converted) {
         // Editable as Markdown: Save writes a copy beside the file, never over it.
         $("textSave").hidden = false;
@@ -3164,7 +3169,7 @@ function shortcut(e) {
   // Text documents have the study keys too (flashcards, quizzes, saved decks).
   const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), F: () => study.check(), D: () => study.saved(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
   if (studyKey) return studyKey(), true;
-  if (!doc && htmlView.visible && k === "n") return $("htmlNotes").click(), true;
+  if (!doc && (htmlView.visible || textView.visible) && k === "n") return notesButton().click(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   if (k === "f" && tool === "shape" && !$("editor").hidden) return setShapeFill({ none: "tint", tint: "solid", solid: "none" }[shapeFill]), status(`Shape fill: ${shapeFill === "none" ? "outline only" : shapeFill}.`), true;
   const keyTool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
@@ -3172,7 +3177,7 @@ function shortcut(e) {
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
   if (k === "T") return $("toolsToggle").click(), true;
-  if (k === "n") return $("notesToggle").click(), true;
+  if (k === "n") return notesButton().click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
   if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
   if (k === "R" && !$("audioToggle").hidden) return (addedStore.recording ? stopRecording() : (toggleAudio(true), startRecording())), true;
@@ -3495,25 +3500,28 @@ function notesApi() {
   return notesLoading ||= import("./notes.js").then(({ notesController }) => {
     notes = notesController({ call, jump, currentPage: () => page, store: library.store, status });
     if (doc) return notes.load(find.fingerprint).then(() => notes);
-    if (htmlView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
+    if (htmlView.hasDocument || textView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
     return notes;
   });
 }
 $("notesToggle").onclick = async () => {
+  // A guest with no note open has only the notes: they stay.
+  if (document.body.classList.contains("guest-mode")) return;
   const api = await notesApi();
   if (api.visible) await api.close();
   else await api.open();
   $("notesToggle").setAttribute("aria-expanded", String(api.visible));
   resize();
 };
-// HTML pages have the same Notes, from their bar (N); kept on this device per page.
-$("htmlNotes").onclick = async () => {
+// HTML pages and text documents have the same Notes, from their bar (N); kept on this device per file.
+const notesButton = () => (!doc && htmlView.visible ? $("htmlNotes") : !doc && textView.visible ? $("textNotes") : $("notesToggle"));
+for (const id of ["htmlNotes", "textNotes"]) $(id).onclick = async () => {
   const api = await notesApi();
   if (api.visible) await api.close();
   else await api.open();
-  for (const id of ["htmlNotes", "notesToggle"]) $(id).setAttribute("aria-expanded", String(api.visible));
+  for (const button of ["htmlNotes", "textNotes", "notesToggle"]) $(button).setAttribute("aria-expanded", String(api.visible));
 };
-$("closeNotes").onclick = () => (!doc && htmlView.visible ? $("htmlNotes") : $("notesToggle")).click();
+$("closeNotes").onclick = () => notesButton().click();
 // The panel's left edge resizes it; the width is remembered.
 try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
 $("notesResize").onpointerdown = (down) => {
@@ -4084,7 +4092,7 @@ async function saveText() {
       await carryStudy(library.store, before, after, ["decks", "quizzes", "notes", "recordings", "scratch"]);
       sideFp = after;
       rememberDocument();
-      if (html) await notes?.load(sideFp, { core: false });
+      await notes?.load(sideFp, { core: false });
     }
   } catch (error) { status(error.message, true); }
 }
@@ -4305,17 +4313,18 @@ function studyPanelsTo(text) {
   $("practiceAskPage").title = text ? "The card's section of the document, as text" : "The card's page as an image, with its text";
   for (const chip of document.querySelectorAll('.practice-ask-material [data-material="page"]:not(#practiceAskPage)')) chip.textContent = text ? "Section" : "Region";
 }
-// The Notes panel sits beside the pages, or beside an HTML page while one is shown.
-function notesPanelTo(html) {
-  const panel = $("notesPanel"), host = html ? $("htmlView").querySelector(".side-body") : $("layersPanel").parentElement;
+// The Notes panel sits beside the pages, or beside an HTML page or a text document while one is shown.
+function notesPanelTo(side) {
+  const view = side === htmlView ? $("htmlView") : side === textView ? $("textView") : null;
+  const panel = $("notesPanel"), host = view ? view.querySelector(".side-body") : $("layersPanel").parentElement;
   if (panel.parentElement === host) return;
-  if (html) host.append(panel); else $("layersPanel").before(panel);
+  if (view) host.append(panel); else $("layersPanel").before(panel);
 }
 function showDocument() {
   home.hide();
   const side = sideView();
   studyPanelsTo(side === textView);
-  notesPanelTo(side === htmlView);
+  notesPanelTo(side);
   if (side) {
     $("editor").hidden = true;
     side.show();
@@ -4980,7 +4989,8 @@ const study = studyController({
   pagePdf: (index) => (studyText() ? Promise.resolve(null) : pagePdfOf(index)),
   // Fact check: findings go into the Markdown notes; "Open notes" shows them.
   appendNotes: async (markdown) => (await notesApi()).append(markdown),
-  openNotes: async () => { const api = await notesApi(); if (!api.visible) (!doc && htmlView.visible ? $("htmlNotes") : $("notesToggle")).click(); api.scrollToIndex?.(api.text.length); },
+  showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
+  openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });

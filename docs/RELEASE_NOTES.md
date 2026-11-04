@@ -12,6 +12,10 @@
 - **Highlight PDF text by dragging across it.** The highlighter has a new **Text** mode (in the tool bar's highlighter settings and in the hover menu): drag from one word to another and the words in between are highlighted, one band per line, as in a PDF reader; a click highlights a word. A multi-line selection is one undo step. The bands are the highlighter's own lines, so they can be moved, recoloured and erased like any other. On a page with no text (a scan) it draws a straight highlight and says so.
 - **Send study material to another NoteComplete.** **Study → Send study material…** sends the open note's flashcard decks, quizzes and Markdown notes (your choice) to another NoteComplete that is sharing: type its address and PIN (same network) or paste its online link (any network, from the app or a browser). The other side is asked first; the material is added to the same note when it has it, else kept as a note of its own in **All quizzes and decks**. It can also be saved as a `.ncstudy` file and opened with **Study → Import study material…**.
 
+### Next
+
+- **Notes beside text documents, and for guests.** A text or Markdown document now has a **Notes** button in its bar and **N** opens the Markdown notes beside it, as for HTML pages. In a shared session, guests can close and open the notes panel (button and **N**) instead of having it fixed open, and a guest viewing the host's shared text document gets the shared notes beside it.
+
 ### In 1.1.34
 
 - **Google Drive stays connected in new tabs.** The Drive sign-in is shared by every tab and window, so opening a tab no longer unlinks Drive; Disconnect applies to all of them.

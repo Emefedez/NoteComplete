@@ -479,7 +479,7 @@ class Session {
     if (m.tooBig) return this.host.status(`“${m.name}” is too large to share as text.`, true);
     document.body.classList.remove('guest-mode');
     this.loading(null);
-    this.host.openSharedText({ name: m.name, markdown: m.markdown, content: m.content }).catch((e) => this.host.status(e.message, true));
+    this.host.openSharedText({ name: m.name, markdown: m.markdown, content: m.content }).then(() => this.host.showNotes?.()).catch((e) => this.host.status(e.message, true));
   }
   async showShare() {
     this.shareShown = true;

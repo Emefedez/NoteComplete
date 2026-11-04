@@ -350,7 +350,7 @@ main {
 .doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
 .doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
 .doc-editor-plain:focus, .doc-editor-plain:focus-visible { outline: none; }
-#textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"], #htmlNotes[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+#textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"], #htmlNotes[aria-expanded="true"], #textNotes[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .html-bar .zoom-controls { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }
 /* Document bar actions are filled chips, like the File menu's export buttons (MD, PDF…);
    the sidebar and moon toggles stay plain, as in the notes bar. */
@@ -2686,7 +2686,8 @@ body.tablet-waiting #drop::after { content: "Waiting for the computer’s note�
 .tablet-loader.inline p { margin: 0; }
 .tablet-loader.inline button { min-height: 26px; padding: 0 10px; font-size: 12px; }
 /* A guest's notes stay open: they are what the session shares. */
-body.guest-session #closeNotes, body.guest-session #notesToggle { display: none !important; }
+/* A guest can close and open the notes, except while no note is open: then the notes are all there is. */
+body.guest-session.guest-mode #closeNotes, body.guest-session.guest-mode #notesToggle { display: none !important; }
 .tablet-loader .loader-bar { width: min(260px, 60vw); height: 4px; border-radius: 99px; background: var(--fill); overflow: hidden; }
 .tablet-loader .loader-bar::after { content: ""; display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--accent); animation: loader-slide 1.1s ease-in-out infinite; }
 @keyframes loader-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
