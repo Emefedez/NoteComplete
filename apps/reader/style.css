@@ -2714,13 +2714,17 @@ body.guest-session #closeNotes, body.guest-session #notesToggle { display: none 
 .pen-setup-step { font-weight: 600; }
 #penSetupDialog .check-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 /* File → automatic saves of this note (autosave.js) */
-.autosave-list { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 8px 6px; }
+.autosave-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-items: center; gap: 4px; padding: 2px 8px 6px; }
 .autosave-list[hidden] { display: none; }
-.autosave-list .autosave-label { width: 100%; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.autosave-list .autosave-label { grid-column: 1 / -1; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .autosave-list button { min-height: 26px; padding: 2px 8px; border-radius: 99px; background: var(--fill); font-size: 12px; }
 /* A save and, beside it, ✂ (delete the history up to it): one pill. */
-.autosave-list .autosave-slot { display: inline-flex; flex: none; align-items: stretch; border-radius: 99px; background: var(--fill); }
-.autosave-list .autosave-slot > button, .autosave-list .autosave-now { width: auto; flex: none; white-space: nowrap; justify-content: flex-start; }
+.autosave-list .autosave-slot { display: flex; min-width: 0; align-items: stretch; border-radius: 99px; background: var(--fill); }
+.autosave-list .autosave-slot > button:first-child { flex: 1; min-width: 0; justify-content: center; white-space: nowrap; }
+.autosave-list .autosave-slot > button:first-child:last-child { border-radius: 99px; }
+.autosave-list .autosave-slot > .autosave-trim { flex: none; }
+/* The two action pills sit on their own row, so the time pills keep one size. */
+.autosave-list > button:not(.autosave-slot) { grid-column: 1 / -1; justify-self: start; width: auto; white-space: nowrap; justify-content: flex-start; }
 .autosave-list .autosave-slot > button { background: transparent; }
 .autosave-list .autosave-slot > button:first-child:not(:last-child) { padding-right: 4px; }
 .autosave-list .autosave-trim { display: inline-grid; place-items: center; min-width: 26px; padding: 0 6px 0 4px; border-left: 1px solid var(--line); border-radius: 0 99px 99px 0; color: var(--muted); }
