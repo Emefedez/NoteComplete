@@ -486,13 +486,13 @@ class Session {
       this.drawOnline();
     } });
     const block = async (label, link, text) => {
-      const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy' });
+      const copy = el('button', { type: 'button', className: 'collab-copy', title: 'Copy the link', 'aria-label': 'Copy the link' }, icon('copy'));
       copy.onclick = () => navigator.clipboard.writeText(link).then(() => this.host.status('Link copied.'), () => this.host.status('Select the link and copy it.', true));
       const qr = el('div', { className: 'collab-qr small' });
       qr.innerHTML = await qrSvg(link);
       return el('div', { className: 'collab-pair' }, qr, el('div', {},
         el('p', {}, el('strong', { textContent: label }), ` ${text}`),
-        el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', onfocus: (e) => e.target.select() }), copy));
+        el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', 'aria-label': 'Link', onfocus: (e) => e.target.select() }), copy)));
     };
     const blocks = [];
     if (this.info.onlineLink) blocks.push(await block('People:', this.info.onlineLink, 'the note and its notes, in a browser anywhere.'));
@@ -513,7 +513,7 @@ class Session {
   }
   // A link in a box that selects on focus, with Copy.
   linkRow(link, done) {
-    const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy link' });
+    const copy = el('button', { type: 'button', className: 'collab-copy', title: 'Copy the link', 'aria-label': 'Copy the link' }, icon('copy'));
     copy.onclick = () => navigator.clipboard.writeText(link).then(() => this.host.status(done), () => this.host.status('Select the link and copy it.', true));
     return el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', 'aria-label': 'Link', onfocus: (e) => e.target.select() }), copy);
   }
@@ -522,12 +522,11 @@ class Session {
   firewallHint() {
     const hint = this.info.firewall;
     if (!hint?.command) return null;
-    const copy = el('button', { type: 'button', className: 'accent', textContent: 'Copy command' });
+    const copy = el('button', { type: 'button', className: 'collab-copy', title: 'Copy the command', 'aria-label': 'Copy the command' }, icon('copy'));
     copy.onclick = () => navigator.clipboard.writeText(hint.command).then(() => this.host.status('Command copied. Run it in a terminal.'), () => this.host.status('Select the command and copy it.', true));
     return el('div', { className: 'collab-firewall' },
       el('p', { textContent: `The page never loads on the device? This computer's firewall (${hint.name}) blocks it. Allow NoteComplete's port once, in a terminal:` }),
-      el('input', { type: 'text', readOnly: true, value: hint.command, className: 'collab-link', onfocus: (e) => e.target.select() }),
-      copy,
+      el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: hint.command, className: 'collab-link', 'aria-label': 'Command', onfocus: (e) => e.target.select() }), copy),
       window.notecompleteCollab?.online ? el('p', { className: 'muted', textContent: 'Or turn on online access (Online tab): it works without changing the firewall.' }) : '');
   }
   // This computer has several networks (Wi-Fi and a VPN, say): the links can use another.
@@ -553,12 +552,12 @@ class Session {
     qr.innerHTML = await qrSvg(this.info.tabletLink);
     const code = String(this.info.code || ''), address = `${this.info.address}:${this.info.port}`;
     const copy = (text, label, message) => el('button', { type: 'button', className: 'collab-copy', title: `Copy the ${label}`, 'aria-label': `Copy the ${label}`, onclick: () => navigator.clipboard.writeText(text).then(() => this.host.status(message), () => this.host.status('Select it and copy it.', true)) }, icon('copy'));
-    const renew = el('button', { type: 'button', className: 'link', textContent: 'New PIN', title: 'Make a new PIN now', onclick: () => this.client.newCode() });
+    const renew = el('button', { type: 'button', className: 'collab-copy', title: 'Make a new PIN now', 'aria-label': 'New PIN', onclick: () => this.client.newCode() }, icon('restart'));
     section.replaceChildren(el('h3', { textContent: 'Join from this network' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
       el('p', { textContent: `On a device on the same Wi-Fi, scan the code with its camera, or in NoteComplete choose File → Join as drawing tablet${this.info.guestLink ? ' (or Join shared notes)' : ''} and type:` }),
       el('dl', { className: 'collab-code' },
-        el('dt', { textContent: 'Address' }), el('dd', {}, el('span', { textContent: address }), copy(address, 'address', 'Address copied.')),
-        el('dt', { textContent: 'PIN' }), el('dd', { className: 'code' }, el('span', { textContent: `${code.slice(0, 3)} ${code.slice(3)}` }), copy(code, 'PIN', 'PIN copied.'), renew)),
+        el('dt', { textContent: 'Address' }), el('dd', {}, el('span', { textContent: address }), el('span', { className: 'collab-icons' }, copy(address, 'address', 'Address copied.'))),
+        el('dt', { textContent: 'PIN' }), el('dd', { className: 'code' }, el('span', { textContent: `${code.slice(0, 3)} ${code.slice(3)}` }), el('span', { className: 'collab-icons' }, copy(code, 'PIN', 'PIN copied.'), renew))),
       el('p', { className: 'muted' }, el('span', { id: 'collabCodeLeft' }), ` · the same PIN works for tablets${this.info.guestLink ? ' and guests' : ''}; after joining, the device reconnects by itself.`),
       el('div', { className: 'collab-linkrow-label', textContent: 'Drawing tablet link' }), this.linkRow(this.info.tabletLink, 'Drawing tablet link copied.'))));
     this.tickCode();

@@ -101,8 +101,8 @@ Misread words are corrected with word lists of the chosen languages (every langu
 
 In the desktop app, **Share** in the top bar (or **File → Share and draw on a tablet…**) starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
 
-- **Drawing tablet**: a QR code, the computer's address and a 6-digit code (valid 10 minutes; **New code** makes another).
-- **Notes invite**: a link (and its QR code) to send to people; **Copy link**.
+- **Drawing tablet**: a QR code, the computer's address and a 6-digit code (valid 10 minutes; **New PIN** (the circular arrow) makes another).
+- **Notes invite**: a link (and its QR code) to send to people; the copy icon.
 - **People**: who joined, with **Remove**.
 
 The connection is meant for a trusted network (home, school): it is not encrypted, and the invite holds a secret. Coloured chips beside the note's name show who is connected; the first one is you (click it to change your name), and clicking someone scrolls the notes to their cursor. **Sharing** next to them reopens the dialog; **Stop sharing** ends the session for everyone. Closing the window while people are connected asks first: **Minimize** keeps the session running, **End session and close** ends it after everyone has saved.

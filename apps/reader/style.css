@@ -2862,3 +2862,5 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .collab-pointer { margin: 2px 0 6px; font-size: 12px; }
 button.link { min-height: 0; padding: 0; border: 0; background: none; color: var(--accent); text-decoration: underline; font: inherit; cursor: pointer; }
 .collab-code dd.code button.link { margin-left: 4px; font: 500 12px system-ui, sans-serif; letter-spacing: 0; }
+.collab-icons { display: inline-flex; align-items: center; gap: 2px; }
+.collab-linkrow .collab-link { margin-bottom: 0; }
