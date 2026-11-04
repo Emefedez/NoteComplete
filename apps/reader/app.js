@@ -1942,6 +1942,9 @@ function pointerDown(e, p) {
   if (tool === "tape" || box) el.setAttribute("stroke-linecap", "butt");
   dot.setAttribute("r", width / 2);
   dot.setAttribute("fill", tool === "erase" ? "#ed6b55" : color);
+  // The highlighter blends with what is under it (multiply) as it is drawn, as the page's own
+  // render of it does, so nothing changes in how it looks when that render arrives.
+  if (tool === "highlight") for (const part of [el, dot]) part.style.mixBlendMode = "multiply";
   dot.setAttribute(
     "opacity",
     tool === "highlight" ? 0.5 : tool === "erase" ? 0.3 : 1,

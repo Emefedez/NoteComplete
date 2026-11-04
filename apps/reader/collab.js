@@ -396,11 +396,12 @@ class Session {
     const tabs = [['local', 'Local'], ...(online ? [['online', 'Online']] : []), ['fixes', 'Fixes']];
     // Local: this network, with the address and PIN and the links. Online: other networks.
     // Fixes: what to try when a device does not connect (firewall, another address).
+    const pin = el('section', { id: 'collabPin', className: 'collab-section' });
     const tablet = el('section', { id: 'collabTablet', className: 'collab-section' });
     const invite = el('section', { id: 'collabInvite', className: 'collab-section' });
     const pointer = el('p', { className: 'muted collab-pointer' }, 'A device does not connect? ', el('button', { type: 'button', className: 'link', textContent: 'See Fixes', onclick: () => this.showTab('fixes') }));
     const panels = {
-      local: el('div', { id: 'collabPanelLocal', className: 'collab-panel', role: 'tabpanel' }, tablet, invite, pointer),
+      local: el('div', { id: 'collabPanelLocal', className: 'collab-panel', role: 'tabpanel' }, pin, tablet, invite, pointer),
       online: el('div', { id: 'collabPanelOnline', className: 'collab-panel', role: 'tabpanel' }, el('section', { id: 'collabOnline', className: 'collab-section' })),
       fixes: el('div', { id: 'collabPanelFixes', className: 'collab-panel', role: 'tabpanel' }, el('section', { id: 'collabFixes', className: 'collab-section' })),
     };
@@ -507,9 +508,10 @@ class Session {
     invite.hidden = false;
     const qr = el('div', { className: 'collab-qr small' });
     qr.innerHTML = await qrSvg(this.info.guestLink);
-    invite.replaceChildren(el('h3', { textContent: 'People: notes' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
-      el('p', { textContent: 'On this network, people join the note and its notes with this link, in a browser or in NoteComplete (File → Join shared notes), or by typing the address and PIN above.' }),
-      this.linkRow(this.info.guestLink, 'Invite link copied.'))));
+    const can = this.info.notesMode === 'view' ? 'They can read the note and its notes and follow along, but not change anything.' : 'They can also draw on the note and write the notes with you.';
+    invite.replaceChildren(el('h3', { textContent: 'Guests' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+      el('p', { textContent: 'People who read the note along with you, in a browser or in NoteComplete (File → Join shared notes): the pages with their tools, and the shared notes beside them, with everyone’s cursors. A Markdown or text document you open is shown to them as text. ' + can }),
+      this.linkRow(this.info.guestLink, 'Guest link copied.'))));
   }
   // A link in a box that selects on focus, with Copy.
   linkRow(link, done) {
@@ -542,10 +544,10 @@ class Session {
     } }, ...list.map((a) => el('option', { value: a, textContent: a, selected: a === this.info.address })));
     return el('label', { className: 'collab-network' }, el('span', { textContent: 'Address of this computer for the links and the PIN: ' }), select);
   }
-  // The address and PIN (for drawing tablets and for guests), and the tablet's link with its QR code.
+  // The address and PIN (for tablets and for guests), then the tablet's link with its QR code.
   async drawTablet() {
-    const section = $('collabTablet');
-    if (!section) return;
+    const section = $('collabTablet'), pin = $('collabPin');
+    if (!section || !pin) return;
     const fresh = await window.notecompleteCollab.info().catch(() => null);
     if (fresh) Object.assign(this.info, fresh);
     const qr = el('div', { className: 'collab-qr' });
@@ -553,13 +555,16 @@ class Session {
     const code = String(this.info.code || ''), address = `${this.info.address}:${this.info.port}`;
     const copy = (text, label, message) => el('button', { type: 'button', className: 'collab-copy', title: `Copy the ${label}`, 'aria-label': `Copy the ${label}`, onclick: () => navigator.clipboard.writeText(text).then(() => this.host.status(message), () => this.host.status('Select it and copy it.', true)) }, icon('copy'));
     const renew = el('button', { type: 'button', className: 'collab-copy', title: 'Make a new PIN now', 'aria-label': 'New PIN', onclick: () => this.client.newCode() }, icon('restart'));
-    section.replaceChildren(el('h3', { textContent: 'Join from this network' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
-      el('p', { textContent: `On a device on the same Wi-Fi, scan the code with its camera, or in NoteComplete choose File → Join as drawing tablet${this.info.guestLink ? ' (or Join shared notes)' : ''} and type:` }),
+    // One address and PIN for both kinds of device on this network.
+    pin.replaceChildren(el('h3', { textContent: 'Join with the address and PIN' }),
+      el('p', { className: 'muted', textContent: `On a device on the same Wi-Fi, in NoteComplete: File → Join as drawing tablet${this.info.guestLink ? ', or File → Join shared notes for a guest' : ''}. Type:` }),
       el('dl', { className: 'collab-code' },
         el('dt', { textContent: 'Address' }), el('dd', {}, el('span', { textContent: address }), el('span', { className: 'collab-icons' }, copy(address, 'address', 'Address copied.'))),
         el('dt', { textContent: 'PIN' }), el('dd', { className: 'code' }, el('span', { textContent: `${code.slice(0, 3)} ${code.slice(3)}` }), el('span', { className: 'collab-icons' }, copy(code, 'PIN', 'PIN copied.'), renew))),
-      el('p', { className: 'muted' }, el('span', { id: 'collabCodeLeft' }), ` · the same PIN works for tablets${this.info.guestLink ? ' and guests' : ''}; after joining, the device reconnects by itself.`),
-      el('div', { className: 'collab-linkrow-label', textContent: 'Drawing tablet link' }), this.linkRow(this.info.tabletLink, 'Drawing tablet link copied.'))));
+      el('p', { className: 'muted' }, el('span', { id: 'collabCodeLeft' }), ' · after joining, the device reconnects by itself.'));
+    section.replaceChildren(el('h3', { textContent: 'Tablets' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+      el('p', { textContent: 'A phone or tablet used as a drawing surface for the note open on this computer: it shows the pages and a pen dock (pen, highlighter, eraser, tape, text, undo) and nothing else, and what it draws appears here as it is drawn. Scan the code with its camera, or open the link.' }),
+      this.linkRow(this.info.tabletLink, 'Tablet link copied.'))));
     this.tickCode();
   }
   // What to try when a device does not connect, in the order that fixes it most often.
@@ -586,7 +591,7 @@ class Session {
     list.replaceChildren(...(others.length ? others.map((p) => el('li', {},
       el('span', { className: 'collab-dot', style: `background:${p.color}` }),
       el('span', { textContent: p.name }),
-      el('small', { className: 'muted', textContent: this.loadingPeers?.has(p.id) ? this.loadingText(this.loadingPeers.get(p.id)) : p.role === 'tablet' ? 'drawing tablet' : 'notes' }),
+      el('small', { className: 'muted', textContent: this.loadingPeers?.has(p.id) ? this.loadingText(this.loadingPeers.get(p.id)) : p.role === 'tablet' ? 'tablet' : 'guest' }),
       (() => { const b = el('button', { type: 'button', className: 'collab-remove', title: `Remove ${p.name}`, 'aria-label': `Remove ${p.name}`, onclick: () => this.client.removePeer(p.id) }); b.append(icon('close')); return b; })())) : [el('li', { className: 'muted', textContent: 'No one has joined yet.' })]));
   }
   // Closing the tab while sharing (app.js asks this first): Minimize / End session and close / Cancel.

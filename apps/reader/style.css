@@ -1121,7 +1121,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 #empty .home-actions button { padding-inline: 12px; }
 .home-section { max-width: 1240px; margin: 22px auto 0; }
 .home-section h3 { font-size: 15px; margin: 0; }
-.recent-heading { display: flex; align-items: center; gap: 10px; }
+.recent-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .folder-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .folder-list li { position: relative; min-width: 0; }
 .folder-list li:hover .note-more, .folder-list .note-more[aria-expanded="true"] { opacity: 1; color: var(--ink); }
@@ -1136,7 +1136,6 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .folder-new input { min-height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: inherit; font: inherit; }
 .note-move { display: grid; gap: 2px; padding: 0 0 4px 12px; }
 .note-move > button { justify-content: flex-start; font-size: 13px; }
-#recentTitle { margin-bottom: 12px; }
 .note-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 14px; }
 .note-grid li { min-width: 0; }
 .note-card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; width: 100%; height: 100%; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); overflow: hidden; text-align: left; }
@@ -2210,7 +2209,7 @@ button.category-toggle:hover {
   background: var(--fill) !important;
 }
 .category-toggle h3 {
-  margin: 0;
+  margin: 0 !important;
   font-size: 15px;
   font-weight: 600;
   color: var(--ink);
@@ -2223,8 +2222,7 @@ button.category-toggle:hover {
   color: var(--muted);
   transition: transform .15s ease;
   transform: rotate(0deg);
-  /* "Recent" has no descenders, so its visual centre sits above the line box centre: lift the arrow to match. */
-  margin-top: -3px;
+  margin-top: 0;
   display: inline-block;
   vertical-align: middle;
 }
@@ -2864,3 +2862,9 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 .collab-code dd.code button.link { margin-left: 4px; font: 500 12px system-ui, sans-serif; letter-spacing: 0; }
 .collab-icons { display: inline-flex; align-items: center; gap: 2px; }
 .collab-linkrow .collab-link { margin-bottom: 0; }
+
+/* Inside a folder: an icon-only back button before the folder's name, centred on it. */
+.recent-heading > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0 0 0 auto; border-radius: 99px; background: var(--fill); color: var(--ink); }
+.recent-heading > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
+.recent-heading > .folder-back[hidden] { display: none; }
+.recent-heading > .folder-back svg { width: 16px; height: 16px; }
