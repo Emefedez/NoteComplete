@@ -10,6 +10,7 @@ fn line() -> Line {
         square: false,
         pressure: None,
         under: false,
+        joined: false,
     }
 }
 fn adjustment() -> Adjustment {

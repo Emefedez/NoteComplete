@@ -219,6 +219,8 @@ impl Editor {
                     }
                 }
                 Edit::Replace { id, .. } | Edit::Retext { id, .. } => *id = renamed(id, &map)?,
+                // What is compacted can no longer be undone: no step starts inside it.
+                Edit::Add { line, .. } if i < upto => line.joined = false,
                 _ => {}
             }
             compacted.push((i, edit));

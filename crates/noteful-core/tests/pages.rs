@@ -12,6 +12,7 @@ fn line() -> Line {
         square: false,
         pressure: None,
         under: false,
+        joined: false,
     }
 }
 fn blank(w: f64, h: f64) -> NewPage {

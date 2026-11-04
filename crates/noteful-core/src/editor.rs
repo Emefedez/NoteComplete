@@ -29,6 +29,10 @@ pub struct Line {
     /// Drawn below the page's other ink (a highlighter under handwriting).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub under: bool,
+    /// Undone and redone with the edit before it: the lines of one gesture (a highlight over
+    /// several lines of text) are one step.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub joined: bool,
 }
 impl Line {
     /// A plain stroke: the given points, full width and colour, on layer 0.
@@ -43,6 +47,7 @@ impl Line {
             square: false,
             pressure: None,
             under: false,
+            joined: false,
         }
     }
 }
@@ -129,10 +134,11 @@ fn is_zero(n: &usize) -> bool {
 }
 impl Edit {
     fn joined(&self) -> bool {
-        matches!(
-            self,
-            Edit::Adjust { joined: true, .. } | Edit::ResizePage { joined: true, .. }
-        )
+        match self {
+            Edit::Adjust { joined, .. } | Edit::ResizePage { joined, .. } => *joined,
+            Edit::Add { line, .. } => line.joined,
+            _ => false,
+        }
     }
 }
 pub struct Editor {

@@ -2863,8 +2863,8 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 .collab-icons { display: inline-flex; align-items: center; gap: 2px; }
 .collab-linkrow .collab-link { margin-bottom: 0; }
 
-/* Inside a folder: an icon-only back button before the folder's name, centred on it. */
-.recent-heading > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0 0 0 auto; border-radius: 99px; background: var(--fill); color: var(--ink); }
+/* Inside a folder: an icon-only back button right after the folder's name, centred on it. */
+.recent-heading > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0; border-radius: 99px; background: var(--fill); color: var(--ink); }
 .recent-heading > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
 .recent-heading > .folder-back[hidden] { display: none; }
 .recent-heading > .folder-back svg { width: 16px; height: 16px; }

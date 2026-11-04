@@ -205,3 +205,48 @@ fn a_preview_reports_the_cut_without_making_it() {
         (done.bytes_before, done.bytes_after, done.edits_after)
     );
 }
+
+#[test]
+fn the_lines_of_one_gesture_are_one_undo_step() {
+    let mut e = exam();
+    let band = |y: f64, joined: bool| Line {
+        square: true,
+        tool: 1,
+        joined,
+        ..Line::new(vec![[20., y], [200., y]], 12., [1., 0.9, 0.2, 0.5])
+    };
+    let before = pages(&e);
+    // A highlight over three lines of text: the first line starts the step, the others join it.
+    e.add_line(0, band(100., false)).unwrap();
+    e.add_line(0, band(116., true)).unwrap();
+    e.add_line(0, band(132., true)).unwrap();
+    let three = pages(&e);
+    assert_ne!(three, before);
+    e.undo();
+    assert_eq!(pages(&e), before, "one undo takes all three lines");
+    assert!(!can_undo(&e));
+    e.redo();
+    assert_eq!(pages(&e), three, "one redo brings them back");
+    // A line drawn after it is a step of its own.
+    e.add_line(0, band(200., false)).unwrap();
+    e.undo();
+    assert_eq!(pages(&e), three);
+    e.undo();
+    assert_eq!(pages(&e), before);
+    // The flag survives saving and opening the project, and is not written when unset: the
+    // reopened group still undoes and redoes as one step.
+    e.redo();
+    assert_eq!(pages(&e), three);
+    let project = e.save_project().unwrap();
+    assert_eq!(project.matches("\"joined\":true").count(), 2);
+    let mut back = Editor::open_project(&project).unwrap();
+    assert_eq!(pages(&back), three);
+    back.undo();
+    assert_eq!(
+        pages(&back),
+        before,
+        "the reopened group undoes as one step"
+    );
+    back.redo();
+    assert_eq!(pages(&back), three);
+}

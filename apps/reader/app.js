@@ -1,5 +1,7 @@
 import { touchGestures } from "./touch.js";
 import { followPoint, smoothStroke, pressureRadii, extentOf } from "./stroke-smoothing.js";
+import { textLines } from "./text-layer.js";
+import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
 import {
   prepareDocument,
@@ -1969,12 +1971,46 @@ function pointerDown(e, p) {
     smooth: tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free") ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
     pressures: [e.pressure],
   };
+  if (tool === "highlight" && $("highlightMode").value === "text") startTextHighlight(gesture);
   p.el.setPointerCapture(e.pointerId);
   preview();
 }
+// The highlighter's Text mode (text-highlight.js): the words under the drag, as bands. A page
+// with no text to pick (a scan, a drawn page) gets a straight highlight instead.
+function startTextHighlight(g) {
+  const layer = g.panel.textLayer;
+  const words = readingOrder(textLines({ pdf: layer?.pdf || [], ocr: layer?.ocr || [] }));
+  if (!words.length) {
+    g.straight = true;
+    status("No text to pick on this page (yet): drawing a straight highlight. Text mode needs a PDF page with text.");
+    return;
+  }
+  g.textMode = { words, anchor: nearestWord(words, g.start), at: nearestWord(words, g.start), bands: [], preview: document.createElementNS(ns, "g") };
+  g.el.style.display = "none";
+  g.dot.style.display = "none";
+  g.textMode.preview.style.mixBlendMode = "multiply";
+  g.panel.overlay.append(g.textMode.preview);
+  showTextBands(g);
+}
+// The bands for the words from where the drag started to where it is now.
+function showTextBands(g) {
+  const t = g.textMode;
+  t.bands = bandsFor(t.words, t.anchor, t.at);
+  t.preview.replaceChildren(...t.bands.map((b) => {
+    const rect = document.createElementNS(ns, "rect");
+    const line = bandLine(b, [0, 0, 0], 0);
+    rect.setAttribute("x", line.points[0][0]);
+    rect.setAttribute("y", b.y0 - line.width * 0.04);
+    rect.setAttribute("width", line.points[1][0] - line.points[0][0]);
+    rect.setAttribute("height", line.width);
+    rect.setAttribute("fill", g.color);
+    rect.setAttribute("opacity", 0.5);
+    return rect;
+  }));
+}
 function preview() {
   const g = gesture;
-  if (!g || g.tool === "pan") return;
+  if (!g || g.tool === "pan" || g.textMode) return;
   if (g.tool === "grab") {
     const [x, y, w, h] = grabRect(g);
     for (const [k, v] of Object.entries({ x, y, width: w, height: h })) g.el.setAttribute(k, v);
@@ -1993,6 +2029,12 @@ function preview() {
 }
 function appendPoint(e) {
   const g = gesture;
+  if (g.textMode) {
+    const where = point(e, g.panel), at = nearestWord(g.textMode.words, where);
+    g.textMode.end = where;
+    if (at !== g.textMode.at) { g.textMode.at = at; showTextBands(g); }
+    return;
+  }
   if (g.tool === "shape") {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
   } else if (g.tool === "grab") {
@@ -2127,6 +2169,7 @@ function pointerUp(e) {
     showGrabMenu(g.panel, rect, g.el);
     return;
   }
+  if (g.textMode) return commitTextHighlight(g);
   // Tape tool: a tap lifts or covers the tape under it; a drag lays new tape.
   if (g.tool === "tape") {
     const a = g.start;
@@ -2181,6 +2224,23 @@ function pointerUp(e) {
       },
     }, hold);
   }
+}
+// A drag that ends: the bands become the highlighter's own lines, one undo step for them all.
+// A click on a word highlights that word; a click away from any text does nothing.
+async function commitTextHighlight(g) {
+  const t = g.textMode;
+  g.el.remove();
+  g.dot.remove();
+  // A click (no drag) counts only on or right beside a word, not anywhere on the page.
+  const click = !t.end || Math.hypot(t.end[0] - g.start[0], t.end[1] - g.start[1]) < 4, word = t.words[t.anchor];
+  if (!t.bands.length || (click && (!word || distanceTo(word, g.start) > word.h * 1.2))) { t.preview.remove(); return status("Drag across the text to highlight it, or click a word."); }
+  const rgba = [1, 3, 5].map((i) => parseInt(g.color.slice(i, i + 2), 16) / 255);
+  const hold = holdInk(g.panel, t.preview);
+  for (const [i, band] of t.bands.entries()) {
+    // The last line's render clears the preview; the lines before it are in that render too.
+    await action("draw", { page: g.panel.index, line: bandLine(band, rgba, g.layer, i > 0) }, i === t.bands.length - 1 ? hold : null);
+  }
+  if (!t.bands.length) letGo(hold);
 }
 // Switches tool. The tool bar's buttons and the quick menu both come here; only a press in
 // the tool bar opens (or toggles) the tool's settings there, since the menu shows its own.
@@ -2240,7 +2300,7 @@ function selectTool(name, { fromMenu = false } = {}) {
 for (const button of document.querySelectorAll("[data-tool]"))
   button.onclick = () => selectTool(button.dataset.tool);
 function highlightHint() {
-  return { straight: "Straight highlight: drag between the endpoints.", free: "Freehand highlight: draw on the page.", box: "Rectangle highlight: drag a box over what to highlight." }[$("highlightMode").value];
+  return { straight: "Straight highlight: drag between the endpoints.", free: "Freehand highlight: draw on the page.", box: "Rectangle highlight: drag a box over what to highlight.", text: "Text highlight: drag across the text of a PDF page; the words under the drag are highlighted." }[$("highlightMode").value];
 }
 $("highlightMode").onchange = () => {
   cancelGesture();
@@ -2251,7 +2311,7 @@ $("shape").onchange = () =>
 // Tool settings are rows of visual choices, like the shapes; hidden selects and
 // the color input stay the data source the drawing code reads.
 const CHOICE_ICONS = {
-  highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>' },
+  highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>', text: '<rect x="3" y="9.5" width="18" height="5" rx="0.5" fill="currentColor" fill-opacity="0.35" stroke="none"/><path d="M4 7h10M4 12h16M4 17h12"/>' },
   // A stroke that thickens where pressed harder, or one even line.
   pressure: { on: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="1.2"/><path d="M8 12.5c2-2 3-3.4 4-3.4" stroke-width="3.2"/>', off: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="2.4"/>' },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
