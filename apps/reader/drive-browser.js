@@ -523,5 +523,27 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       }
     }
   }
+  // Desktop: the app keeps one Drive session for every tab, so a new tab starts signed in and
+  // signing in or out in one tab applies to all (the tokens live in the main process only).
+  function adopt(session) {
+    try {
+      if (session?.read?.access_token) {
+        if (client.token !== session.read.access_token) {
+          client.authorize(session.read);
+          config.connected = true; saveConfig();
+          controls();
+          if (visible && !$('driveList').children.length) run(resume);
+        }
+      } else if (client.token) {
+        client.clear(); config.connected = false; saveConfig(); controls();
+      }
+      if (session?.write?.access_token && client.writeToken !== session.write.access_token) client.authorizeWrite(session.write);
+    } catch { /* A stale or malformed session just means signing in again. */ }
+  }
+  const shared = window.notecompleteDrive;
+  if (shared?.session) {
+    shared.onSession?.(adopt);
+    shared.session().then(adopt, () => {});
+  }
   return { show, hide, update, trash, setQuick, newest, onQueueItemDone, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
 }

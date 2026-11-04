@@ -87,6 +87,10 @@ contextBridge.exposeInMainWorld('notecompleteUpdates', {
 contextBridge.exposeInMainWorld('notecompleteDrive', {
   signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),
   cancel: () => ipcRenderer.send('drive:cancel'),
+  // The session shared by every tab: what is signed in now, and changes made in other tabs.
+  session: () => ipcRenderer.invoke('drive:session'),
+  onSession: callback => { ipcRenderer.on('drive:session', (_event, session) => callback(session)); },
+  disconnect: () => ipcRenderer.send('drive:forget'),
 });
 // Sharing notes and pairing drawing tablets (docs/COLLABORATION.md): the server runs in the
 // main process; the reader connects to it as the host.
