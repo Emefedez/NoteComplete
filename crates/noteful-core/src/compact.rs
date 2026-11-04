@@ -99,6 +99,18 @@ impl Editor {
     /// it is the cursor), after which undo stops there. Fails, leaving the note as it was,
     /// when the result would not draw every page the same.
     pub fn compact_history(&mut self, upto: usize) -> Result<Compacted> {
+        let (next, done) = self.compacted(upto)?;
+        *self = next;
+        Ok(done)
+    }
+
+    /// What `compact_history(upto)` would do, without changing the note: the sizes it would
+    /// give (for showing how much space a cut frees).
+    pub fn compact_preview(&self, upto: usize) -> Result<Compacted> {
+        Ok(self.compacted(upto)?.1)
+    }
+
+    fn compacted(&self, upto: usize) -> Result<(Editor, Compacted)> {
         if upto < self.floor || upto > self.cursor {
             return Err(Error::new(
                 0,
@@ -245,12 +257,14 @@ impl Editor {
         }
         let edits_after = next.history.len();
         let bytes_after = next.save_project()?.len();
-        *self = next;
-        Ok(Compacted {
-            edits_before,
-            edits_after,
-            bytes_before,
-            bytes_after,
-        })
+        Ok((
+            next,
+            Compacted {
+                edits_before,
+                edits_after,
+                bytes_before,
+                bytes_after,
+            },
+        ))
     }
 }

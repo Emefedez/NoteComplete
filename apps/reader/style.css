@@ -1340,8 +1340,8 @@ table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margi
 .note-menu > button:hover > svg { color: var(--ink); }
 .note-menu-sep { width: calc(100% - 12px); height: 0; margin: 3px 6px; border: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 22%, var(--line)); }
 .note-menu > .menu-remove:hover, .note-menu > .menu-remove:hover > svg { color: var(--danger, #c0392b); }
-.note-menu-title { margin: 2px 6px; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.note-menu .muted { margin: 0 6px 4px; font-size: 12px; line-height: 1.4; }
+.note-menu-title { margin: 2px 6px; font-weight: 600; font-size: 13px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.35; }
+.note-menu .muted { margin: 0 6px 4px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .note-menu .danger-zone { margin: 4px 0 0; }
 .note-rename { min-width: 0; display: grid; gap: 4px; padding: 4px 6px 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 .note-rename-field { min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
@@ -2726,11 +2726,11 @@ body.guest-session #closeNotes, body.guest-session #notesToggle { display: none 
 .autosave-list button { min-height: 26px; padding: 2px 8px; border-radius: 99px; background: var(--fill); font-size: 12px; }
 /* A save and, beside it, ✂ (delete the history up to it): one pill. */
 .autosave-list .autosave-slot { display: flex; min-width: 0; align-items: stretch; border-radius: 99px; background: var(--fill); }
-.autosave-list .autosave-slot > button:first-child { flex: 1; width: auto; min-width: 0; justify-content: center; white-space: nowrap; }
+.autosave-list .autosave-slot > button:first-child { flex: 1; width: auto; min-width: 0; justify-content: flex-start; text-align: left; white-space: nowrap; }
 .autosave-list .autosave-slot > button:first-child:last-child { border-radius: 99px; }
 .autosave-list .autosave-slot > .autosave-trim { flex: none; width: auto; justify-content: center; }
 /* The two action pills sit on their own row, so the time pills keep one size. */
-.autosave-list > button:not(.autosave-slot) { grid-column: 1 / -1; width: 100%; white-space: nowrap; justify-content: center; }
+.autosave-list > button:not(.autosave-slot) { grid-column: 1 / -1; width: 100%; white-space: nowrap; justify-content: flex-start; text-align: left; }
 .autosave-list .autosave-slot > button { background: transparent; }
 .autosave-list .autosave-slot > button:first-child:not(:last-child) { padding-right: 4px; }
 .autosave-list .autosave-trim { display: inline-grid; place-items: center; min-width: 26px; padding: 0 6px 0 4px; border-left: 1px solid var(--line); border-radius: 0 99px 99px 0; color: var(--muted); }
@@ -2775,3 +2775,32 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .model-search-pop li.current { font-weight: 600; }
 .model-search-pop li.none { color: var(--muted); cursor: default; }
 .model-search-pop li.none:hover { background: none; }
+
+/* Home filters: a dropdown per category, with checkboxes. */
+.filter-bar { display: contents; }
+.filter-drop { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control); padding: 2px 10px !important; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.filter-drop:hover, .filter-drop[aria-expanded="true"] { background: var(--accent-soft); }
+.filter-drop.has-value { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.filter-value { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; border-radius: 99px; background: var(--surface); color: var(--accent); font-size: 11px; line-height: 17px; }
+.filter-caret { width: 6px; height: 6px; margin-left: 1px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: .6; }
+.filter-drop[aria-expanded="true"] .filter-caret { transform: translateY(1px) rotate(-135deg); }
+.filter-menu { width: auto; max-width: 260px; max-height: min(60vh, 420px); overflow: auto; }
+.filter-menu .filter-option { display: flex; align-items: center; gap: 9px; width: 100%; justify-content: flex-start; font-size: 13px; }
+.filter-check { flex: none; width: 15px; height: 15px; box-sizing: border-box; border: 1.5px solid color-mix(in srgb, var(--ink) 38%, var(--line)); border-radius: 4px; }
+.filter-option.radio .filter-check { border-radius: 50%; }
+.filter-option.on .filter-check { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 11px no-repeat; border-color: var(--accent); }
+.filter-option.radio.on .filter-check { background-image: none; box-shadow: inset 0 0 0 2.5px var(--menu); }
+.autosave-saves { margin-left: auto; padding-left: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.autosave-list .autosave-now { justify-content: flex-start; }
+
+/* Rendered Markdown and text documents stay inside the page: long words and links break,
+   code wraps, wide tables scroll in their own box, pictures shrink to fit. */
+.notes-render { overflow-wrap: break-word; }
+.notes-render > * { max-width: 100%; }
+.notes-render pre { white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; }
+.notes-render pre code { white-space: inherit; overflow-wrap: inherit; padding: 0; background: none; }
+.notes-render code { overflow-wrap: break-word; }
+.notes-render table { display: block; max-width: 100%; overflow-x: auto; }
+.notes-render img, .notes-render video, .notes-render svg, .notes-render iframe { max-width: 100%; height: auto; }
+.notes-render a { overflow-wrap: break-word; }
+.notes-render li, .notes-render blockquote { min-width: 0; }

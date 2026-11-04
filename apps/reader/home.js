@@ -12,7 +12,7 @@ import { icon } from './icons.js';
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, groups = null, archive = null }) {
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, groups = null, archive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -98,13 +98,13 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     $('folderMenuTitle').textContent = group.name;
     $('folderMenuText').textContent = group.folder ? `On disk: ${group.folder}. Removing it here leaves the folder and its files as they are.` : 'Removing the folder keeps its documents in Recent; no file is deleted.';
     $('folderRenameRow').hidden = true;
-    $('folderRemove').textContent = 'Remove folder'; delete $('folderRemove').dataset.armed;
+    $('folderRemove').querySelector('.menu-label').textContent = 'Remove folder'; delete $('folderRemove').dataset.armed;
     const close = () => { menu.hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
     const outside = event => { if (!menu.contains(event.target) && event.target !== anchor) close(); };
     $('folderRename').onclick = () => inlineName($('folderRenameRow'), $('folderRenameName'), group.name, async name => { await groups.rename(group, name); close(); renderFolders(); });
     $('folderRenameSave').onclick = async () => { const v = $('folderRenameName').value.trim(); if (v) { await groups.rename(group, v); close(); renderFolders(); } };
     $('folderRemove').onclick = async () => {
-      if ($('folderRemove').dataset.armed !== '1') { $('folderRemove').dataset.armed = '1'; $('folderRemove').textContent = 'Press again to remove'; return; }
+      if ($('folderRemove').dataset.armed !== '1') { $('folderRemove').dataset.armed = '1'; $('folderRemove').querySelector('.menu-label').textContent = 'Press again to remove'; return; }
       await groups.delete(group); close(); status(`${group.name} removed from Folders.`); renderFolders();
     };
     placeMenu(menu, anchor);
@@ -285,6 +285,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         if (await versions.openRecent(entry, file, { force: true })) renderRecent();
       } catch (error) { status(error.message, true); }
     };
+    $('forgetCut').hidden = !cutHistory || !/\.nfedit$/i.test(entry.name || '');
+    $('forgetCut').onclick = () => { close(); cutHistory?.(entry).catch(error => status(error.message, true)); };
     $('forgetExport').hidden = !exportStudy;
     $('forgetExport').onclick = () => { close(); exportStudy?.(entry).catch(error => status(error.message, true)); };
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
@@ -353,34 +355,85 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     b.onclick = onclick;
     return b;
   };
-  const group = name => document.querySelector(`#homeFilters [data-group="${name}"]`);
   function changed() {
     filters.since = filters.period ? Date.now() - PERIODS[filters.period][1] : 0;
     try { localStorage.setItem('notecomplete-home-filters', JSON.stringify({ ...filters, since: 0 })); } catch { /* Optional. */ }
     renderFilters();
     applyFilters();
   }
-  function renderFilters() {
-    const label = n => n.querySelector('.filter-label');
-    group('period').replaceChildren(label(group('period')), ...Object.entries(PERIODS).map(([k, [name]]) => chip(name, filters.period === k, () => { filters.period = filters.period === k ? '' : k; changed(); })));
-    const typeChip = ([k, [name]]) => chip(name, filters.types.includes(k), () => { filters.types = filters.types.includes(k) ? filters.types.filter(x => x !== k) : [...filters.types, k]; changed(); });
-    // The three NoteComplete formats share one big pill with a pill each; the other file types stay loose chips.
-    const own = ['noteful', 'notepart', 'notecomp'], types = Object.entries(TYPES);
-    const formats = document.createElement('div');
-    formats.className = 'format-pill'; formats.setAttribute('role', 'group'); formats.setAttribute('aria-label', 'NoteComplete formats');
-    formats.append(...types.filter(([k]) => own.includes(k)).map(typeChip));
-    group('types').replaceChildren(label(group('types')), ...types.filter(([k]) => !own.includes(k)).map(typeChip), formats);
-    group('sizes').replaceChildren(label(group('sizes')), ...Object.entries(SIZES).map(([k, [name]]) => chip(name, filters.sizes.includes(k), () => { filters.sizes = filters.sizes.includes(k) ? filters.sizes.filter(x => x !== k) : [...filters.sizes, k]; changed(); })));
-    // Hosts besides this device: picking some shows only their sections.
-    group('sources').replaceChildren(label(group('sources')), ...Object.entries(SOURCES).map(([k, name]) => chip(name, filters.sources.includes(k), () => { filters.sources = filters.sources.includes(k) ? filters.sources.filter(x => x !== k) : [...filters.sources, k]; changed(); })));
+  // The filters: one dropdown per category (checkboxes, so several values at once without
+  // taking a row each) and two toggles. A dropdown's button says what it has picked.
+  let openCategory = null;
+  const toggleIn = (key, value) => { filters[key] = filters[key].includes(value) ? filters[key].filter(x => x !== value) : [...filters[key], value]; changed(); };
+  function categories() {
     const known = new Set(filters.tags);
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
-    group('tags').hidden = !known.size;
-    group('tags').replaceChildren(label(group('tags')), ...[...known].sort().map(t => chip(`#${t.replace(/^#/, '')}`, filters.tags.includes(t), () => { filters.tags = filters.tags.includes(t) ? filters.tags.filter(x => x !== t) : [...filters.tags, t]; changed(); })));
-    document.querySelector('#homeFilters [data-filter="audio"]').setAttribute('aria-pressed', String(filters.audio));
-    document.querySelector('#homeFilters [data-filter="favourites"]').setAttribute('aria-pressed', String(filters.favourites));
-    $('filtersClear').hidden = !(filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length);
+    return [
+      { id: 'types', label: 'Type', options: Object.entries(TYPES).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.types.includes(v), flip: v => toggleIn('types', v) },
+      // Modified takes one value: the periods overlap (today is inside this week).
+      { id: 'period', label: 'Modified', single: true, options: Object.entries(PERIODS).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.period === v, flip: v => { filters.period = filters.period === v ? '' : v; changed(); } },
+      { id: 'sources', label: 'Source', options: Object.entries(SOURCES).map(([k, name]) => ({ value: k, label: name })), on: v => filters.sources.includes(v), flip: v => toggleIn('sources', v) },
+      { id: 'sizes', label: 'Size', options: Object.entries(SIZES).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.sizes.includes(v), flip: v => toggleIn('sizes', v) },
+      ...(known.size ? [{ id: 'tags', label: 'Tags', options: [...known].sort().map(t => ({ value: t, label: `#${t.replace(/^#/, '')}` })), on: v => filters.tags.includes(v), flip: v => toggleIn('tags', v) }] : []),
+    ];
   }
+  const TOGGLES = [
+    { id: 'favourites', label: '★ Favourites', title: 'Only notes you starred' },
+    { id: 'audio', label: '♪ With audio', title: 'Only notes with recordings' },
+  ];
+  const isActive = () => filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
+  function renderFilters() {
+    const nodes = categories().map(c => {
+      const picked = c.options.filter(o => c.on(o.value));
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = `chip filter-drop${picked.length ? ' has-value' : ''}`; b.dataset.category = c.id;
+      b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', String(openCategory === c.id));
+      const value = picked.length === 1 ? picked[0].label : picked.length ? String(picked.length) : '';
+      b.append(c.label, ...(value ? [Object.assign(document.createElement('span'), { className: 'filter-value', textContent: value })] : []), Object.assign(document.createElement('span'), { className: 'filter-caret', ariaHidden: 'true' }));
+      b.onclick = () => (openCategory === c.id ? closeFilterMenu() : showFilterMenu(c.id));
+      return b;
+    });
+    for (const t of TOGGLES) nodes.push(chip(t.label, !!filters[t.id], () => { filters[t.id] = !filters[t.id]; changed(); }));
+    $('filterBar').replaceChildren(...nodes);
+    for (const [i, t] of TOGGLES.entries()) nodes[nodes.length - TOGGLES.length + i].title = t.title;
+    $('filtersClear').hidden = !isActive();
+    if (openCategory) showFilterMenu(openCategory);
+  }
+  // The open dropdown: a checkbox per value, under its button.
+  function showFilterMenu(id) {
+    const category = categories().find(c => c.id === id), anchor = $('filterBar').querySelector(`[data-category="${id}"]`), menu = $('filterMenu');
+    if (!category || !anchor) return closeFilterMenu();
+    const keep = menu.hidden ? 0 : menu.scrollTop;
+    openCategory = id;
+    menu.setAttribute('aria-label', category.label);
+    menu.replaceChildren(...category.options.map(o => {
+      const on = category.on(o.value), b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitemcheckbox'); b.setAttribute('aria-checked', String(on));
+      b.className = `filter-option${on ? ' on' : ''}${category.single ? ' radio' : ''}`;
+      b.append(Object.assign(document.createElement('span'), { className: 'filter-check' }), o.label);
+      b.onclick = () => category.flip(o.value);
+      return b;
+    }));
+    anchor.setAttribute('aria-expanded', 'true');
+    menu.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    menu.style.minWidth = `${Math.max(160, Math.round(r.width))}px`;
+    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.left))}px`;
+    menu.style.top = `${r.bottom + 6}px`;
+    menu.scrollTop = keep;
+    document.addEventListener('pointerdown', outsideFilter, true);
+    document.addEventListener('keydown', escapeFilter, true);
+  }
+  function closeFilterMenu() {
+    const was = openCategory;
+    openCategory = null;
+    $('filterMenu').hidden = true;
+    document.removeEventListener('pointerdown', outsideFilter, true);
+    document.removeEventListener('keydown', escapeFilter, true);
+    if (was) $('filterBar').querySelector(`[data-category="${was}"]`)?.setAttribute('aria-expanded', 'false');
+  }
+  const outsideFilter = event => { if (!$('filterMenu').contains(event.target) && !event.target.closest?.('.filter-drop')) closeFilterMenu(); };
+  const escapeFilter = event => { if (event.key === 'Escape') { event.stopPropagation(); closeFilterMenu(); } };
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
@@ -458,8 +511,6 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   let filterFrame = 0;
   // New tags can appear as facts arrive; refresh the chips at most once per frame.
   const renderFiltersSoon = () => { cancelAnimationFrame(filterFrame); filterFrame = requestAnimationFrame(renderFilters); };
-  document.querySelector('#homeFilters [data-filter="favourites"]').onclick = () => { filters.favourites = !filters.favourites; changed(); };
-  document.querySelector('#homeFilters [data-filter="audio"]').onclick = () => { filters.audio = !filters.audio; changed(); };
   $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [] }; changed(); };
   for (const [value, label] of Object.entries(SORTS)) $('homeSort').add(new Option(label, value));
   $('homeSort').value = SORTS[filters.sort] ? filters.sort : 'name';

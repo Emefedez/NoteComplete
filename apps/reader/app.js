@@ -2908,6 +2908,19 @@ async function openAutosave(slot) {
 // File menu: this note's automatic saves, newest first, and all of them. Beside each, ✂
 // deletes the edit history up to that save (compact.rs), and the last ✂ up to now: the
 // note stays as it is, its file gets smaller, and undo stops there.
+const bytesText = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+// The bytes a cut up to `upto` edits would free (null when it cannot be told), one at a time.
+let previewQueue = Promise.resolve();
+const previewed = new Map();
+function previewCut(upto) {
+  const key = `${epoch}:${revision}:${upto}`;
+  if (!previewed.has(key)) {
+    if (previewed.size > 40) previewed.clear();
+    const run = () => (doc && !busy() ? call("compactPreview", { upto }).then((r) => r.bytes_before - r.bytes_after).catch(() => null) : Promise.resolve(null));
+    previewed.set(key, (previewQueue = previewQueue.then(run, run)));
+  }
+  return previewed.get(key);
+}
 async function drawAutosaveList() {
   const list = $("autosaveList");
   const slots = doc ? await autosaves.list(autosaveKey()).catch(() => []) : [];
@@ -2919,6 +2932,12 @@ async function drawAutosaveList() {
   label.textContent = slots.length ? "Automatic saves" : "No automatic saves of this note";
   const floor = doc?.history_floor || 0, edits = doc?.edit_count || 0;
   const trim = (title, run) => Object.assign(document.createElement("button"), { type: "button", className: "autosave-trim", title, ariaLabel: title, onclick: run });
+  // How much space a cut frees, worked out one at a time in the background (it measures the
+  // note before and after) and written into the tooltip when ready.
+  const tell = (button, text, upto, apply) => {
+    button.title = `${text}\nWorking out how much space this frees…`;
+    previewCut(upto).then((freed) => { apply?.(freed); button.title = `${text}\n${freed == null ? "Could not work out the space it frees." : freed > 0 ? `Frees about ${bytesText(freed)} once saved.` : "Nothing to free: every edit still shapes the note."}`; });
+  };
   const items = await Promise.all(slots.map(async (slot) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -2931,14 +2950,17 @@ async function drawAutosaveList() {
     // Offered when the save is part of this note's history as it is now, with edits before it.
     const usable = slot.edits > floor && slot.edits <= edits && (await call("prefixDigest", { edits: slot.edits }).catch(() => "")) === slot.digest;
     if (usable) {
-      const t = trim(`Delete the history up to this save (${when(slot.time)}): undo stops there; the note stays as it is`, () => compactHistory(slot.edits, `up to the automatic save of ${when(slot.time)}`));
+      const text = `Delete the history up to this save (${when(slot.time)}): undo stops there; the note stays as it is.`;
+      const t = trim(text, () => compactHistory(slot.edits, `up to the automatic save of ${when(slot.time)}`));
       t.append(icon("trim"));
+      tell(t, text, slot.edits);
       pair.append(t);
     }
     return pair;
   }));
   const now = Object.assign(document.createElement("button"), { type: "button", className: "autosave-now", textContent: "Delete history up to now", title: "Delete the whole undo history: the note stays as it is and its file gets smaller", disabled: !doc || (edits <= floor && !doc.can_redo), onclick: () => compactHistory(edits, "up to now") });
   now.prepend(icon("trim"));
+  if (!now.disabled) tell(now, "Delete the whole undo history: the note stays as it is and its file gets smaller.", edits, (freed) => { if (freed > 0) now.append(Object.assign(document.createElement("span"), { className: "autosave-saves", textContent: `−${bytesText(freed)}` })); });
   list.replaceChildren(label, ...items, Object.assign(document.createElement("button"), { type: "button", textContent: "All automatic saves…", onclick: openAutosaves }), now);
 }
 // Deletes the edit history up to `upto` edits (an automatic save's point, or now): the
@@ -2949,7 +2971,9 @@ async function compactHistory(upto, label) {
   if (!doc) return;
   if (collab) return status("The history cannot be deleted while sharing: every copy of the note keeps the same history. Stop sharing first.", true);
   if (busy()) return status("Wait for the edit in progress to finish, then try again.", true);
-  if (!confirm(`Delete the edit history ${label}?\n\nThe note stays exactly as it is, and its file gets smaller once saved. You will not be able to undo past this point.`)) return;
+  const freed = await previewCut(upto);
+  const frees = freed > 0 ? `its file gets about ${bytesText(freed)} smaller once saved` : "its file gets smaller once saved";
+  if (!confirm(`Delete the edit history ${label}?\n\nThe note stays exactly as it is, and ${frees}. You will not be able to undo past this point.`)) return;
   try {
     const { report, view } = await call("compactHistory", { upto });
     const removed = report.edits_before - report.edits_after, saved = report.bytes_before - report.bytes_after;
@@ -2957,7 +2981,7 @@ async function compactHistory(upto, label) {
     dirty = changed = true;
     doc = view;
     savedState();
-    const size = saved >= 1048576 ? `${(saved / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(saved / 1024))} KB`;
+    const size = bytesText(saved);
     restructure(view, page, removed ? `History deleted ${label}: ${removed} ${removed === 1 ? "edit" : "edits"} fewer, ${size} smaller. Save to keep it.` : `Nothing to delete ${label}: every edit still shapes the note. Undo now stops there.`);
   } catch (e) {
     status(`Could not delete the history: ${e.message}`, true);
@@ -3000,7 +3024,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Shift + drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -3814,6 +3838,17 @@ async function rememberDocument(entryKey = "") {
   const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
   await library.store.set("settings", `doc:${fp}`, { title: doc?.title || sideView()?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
 }
+// ⋯ on a Recent note: opens it and deletes its whole edit history (asking first, saying how
+// much space that frees); the note stays unsaved until the user saves.
+async function cutHistoryOf(entry) {
+  const file = await library.open(entry);
+  if (!file) throw Error(`${entry.name} is no longer kept on this device.`);
+  await library.touch(entry.key);
+  if (!(await openFromLibrary(file, entry))) return;
+  if (!doc) return;
+  if (!(doc.edit_count > (doc.history_floor || 0) || doc.can_redo)) return status("This note has no edit history to delete.");
+  await compactHistory(doc.edit_count || 0, "up to now");
+}
 // ⋯ on a Recent note: its decks and quizzes to Anki, without opening it.
 async function exportStudyOf(entry) {
   const file = await library.open(entry);
@@ -4011,6 +4046,7 @@ var home = homeScreen({
   groups,
   status,
   exportStudy: exportStudyOf,
+  cutHistory: cutHistoryOf,
   current: () => ({
     entryKey: noteEntryKey,
     dirty,

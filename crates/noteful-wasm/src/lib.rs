@@ -337,6 +337,11 @@ impl EditorSession {
         let done = self.inner.compact_history(upto).map_err(js_error)?;
         Ok(serde_json::json!({ "edits_before": done.edits_before, "edits_after": done.edits_after, "bytes_before": done.bytes_before, "bytes_after": done.bytes_after }).to_string())
     }
+    /// The same report without compacting: the sizes a cut up to `upto` edits would give.
+    pub fn compact_preview(&self, upto: usize) -> Result<String, JsValue> {
+        let done = self.inner.compact_preview(upto).map_err(js_error)?;
+        Ok(serde_json::json!({ "edits_before": done.edits_before, "edits_after": done.edits_after, "bytes_before": done.bytes_before, "bytes_after": done.bytes_after }).to_string())
+    }
     pub fn pdf_bytes(&self, id: &str) -> Result<Vec<u8>, JsValue> {
         Ok(self.inner.pdf_bytes(id).map_err(js_error)?.to_vec())
     }

@@ -154,6 +154,10 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
       return;
     }
     // The history compacted up to `upto` edits: the report, with the page view after it.
+    if (op === "compactPreview") {
+      postMessage({ id, result: JSON.parse(session.compact_preview(args.upto)) });
+      return;
+    }
     if (op === "compactHistory") {
       const report = JSON.parse(session.compact_history(args.upto));
       postMessage({ id, result: { report, view: JSON.parse(session.view(page)) } });

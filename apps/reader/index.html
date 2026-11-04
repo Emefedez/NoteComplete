@@ -214,13 +214,7 @@
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
         <label class="filter-group sort-group"><span class="filter-label">Sort</span><select id="homeSort" data-native aria-label="Sort notes"></select></label>
         <div class="home-view" role="radiogroup" aria-label="Show notes as"><button type="button" role="radio" data-home-view="cards" title="Cards with covers" aria-label="Cards with covers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button><button type="button" role="radio" data-home-view="list" title="Quick list: no covers, nothing read from the files" aria-label="Quick list without covers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
-        <div class="filter-group" data-group="types" aria-label="Type"><span class="filter-label">Type</span></div>
-        <div class="filter-group" data-group="period" aria-label="Modified"><span class="filter-label">Modified</span></div>
-        <div class="filter-group" data-group="sources" aria-label="Source"><span class="filter-label">Source</span></div>
-        <div class="filter-group" data-group="favourites"><button type="button" class="chip" data-filter="favourites" aria-pressed="false" title="Only notes you starred">★ Favourites</button></div>
-        <div class="filter-group" data-group="audio"><button type="button" class="chip" data-filter="audio" aria-pressed="false">With audio</button></div>
-        <div class="filter-group" data-group="sizes" aria-label="Size"><span class="filter-label">Size</span></div>
-        <div class="filter-group" data-group="tags" aria-label="Tags" hidden><span class="filter-label">Tags</span></div>
+        <div id="filterBar" class="filter-bar" role="group" aria-label="Filters"></div>
         <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
         <span id="filterSummary" class="muted"></span>
       </div>
@@ -1034,11 +1028,13 @@
 
 <div id="folderMenu" class="note-menu" role="menu" aria-labelledby="folderMenuTitle" hidden>
   <p id="folderMenuTitle" class="note-menu-title"></p>
-  <button id="folderRename" type="button" role="menuitem">Rename…</button>
+  <button id="folderRename" type="button" role="menuitem" data-icon="draw">Rename…</button>
   <div id="folderRenameRow" class="note-rename" hidden><div class="note-rename-field"><label for="folderRenameName">Name</label><input id="folderRenameName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /><button id="folderRenameSave" type="button">Rename</button></div></div>
   <p id="folderMenuText" class="muted"></p>
-  <button id="folderRemove" type="button" role="menuitem">Remove folder</button>
+  <button id="folderRemove" type="button" role="menuitem" data-icon="trash" class="menu-remove"><span class="menu-label">Remove folder</span></button>
 </div>
+
+<div id="filterMenu" class="note-menu filter-menu" role="menu" aria-label="Filters" hidden></div>
 
 <div id="forgetDialog" class="note-menu" role="menu" aria-labelledby="forgetTitle" hidden>
   <p id="forgetTitle" class="note-menu-title"></p>
@@ -1053,6 +1049,7 @@
   <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
   <hr class="note-menu-sep" />
   <button id="forgetCheck" type="button" role="menuitem" data-icon="cloud" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for updates</button>
+  <button id="forgetCut" type="button" role="menuitem" data-icon="trim" title="Open this note and delete its undo history to make the file smaller; the note stays as it is until you save" hidden>Cut history…</button>
   <button id="forgetExport" type="button" role="menuitem" data-icon="cards" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" data-icon="swap" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content…</button>
   <hr class="note-menu-sep" />

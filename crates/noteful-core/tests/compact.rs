@@ -186,3 +186,18 @@ fn a_point_outside_the_history_is_refused() {
     e.compact_history(10).unwrap();
     assert!(e.compact_history(0).is_err(), "before the compacted point");
 }
+
+#[test]
+fn a_preview_reports_the_cut_without_making_it() {
+    let mut e = busy();
+    let edits = e.view(0).unwrap()["edit_count"].as_u64().unwrap() as usize;
+    let before = pages(&e);
+    let preview = e.compact_preview(edits).unwrap();
+    assert_eq!(pages(&e), before);
+    assert!(can_undo(&e), "the history is still there");
+    let done = e.compact_history(edits).unwrap();
+    assert_eq!(
+        (preview.bytes_before, preview.bytes_after, preview.edits_after),
+        (done.bytes_before, done.bytes_after, done.edits_after)
+    );
+}
