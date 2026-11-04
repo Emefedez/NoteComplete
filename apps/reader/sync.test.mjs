@@ -88,3 +88,8 @@ test('an invite link or an address and a code can be used to send study material
   // A drawing tablet link stays a tablet's.
   assert.equal(parseInvite('http://192.168.1.20:41237/tablet#abc.def', '', 'sender').role, 'tablet');
 });
+
+test('a /send link is for sending study material', () => {
+  assert.equal(parseInvite('http://192.168.1.20:41237/send#abc.def').role, 'sender');
+  assert.deepEqual(parseInvite('https://x.trycloudflare.com/send#abc.def'), { url: 'wss://x.trycloudflare.com/sync', token: 'def', role: 'sender' });
+});

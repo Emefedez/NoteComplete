@@ -68,7 +68,7 @@ function buttons(...list) { return el('div', { className: 'dialog-actions' }, ..
 // Study → Send study material…: the open note's flashcard decks, quizzes and Markdown notes, to
 // another NoteComplete that is sharing (address and PIN, or its link, on this network or online),
 // or as a .ncstudy file. The other side is asked before anything is kept.
-export async function openStudySend(host) {
+export async function openStudySend(host, aimed = null) {
   const { buildPack, describePack, summary, KINDS } = await import('./study-pack.js');
   const material = await host.studyMaterial();
   if (!material) return host.status('Open a note first: the study material belongs to the note.', true);
@@ -82,6 +82,10 @@ export async function openStudySend(host) {
   const code = el('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', placeholder: '123 456', maxLength: 7, 'aria-label': 'PIN' });
   const who = el('input', { type: 'text', maxLength: 40, value: remembered(), placeholder: 'Your name (they see it)', 'aria-label': 'Your name' });
   const state = el('p', { className: 'muted', role: 'status', textContent: '' });
+  // Scan the other NoteComplete's QR code with this device's camera (where the browser can read QR codes).
+  const scan = el('button', { type: 'button', textContent: 'Scan its QR code', hidden: !('BarcodeDetector' in globalThis) || !navigator.mediaDevices?.getUserMedia, onclick: async () => {
+    try { const { scanQr } = await import('./qr-scan.js'); const text = await scanQr(state); link.value = text; state.textContent = 'Scanned. Type the PIN if the code did not include one, then Send.'; } catch (e) { state.textContent = e.message; }
+  } });
   try { link.value = localStorage.getItem('notecomplete-collab-address') || ''; } catch { /* Optional. */ }
   const build = () => buildPack({ title: material.title, fingerprint: material.fingerprint, from: who.value.trim(), study: material.study, include: Object.fromEntries(KINDS.map(([kind]) => [kind, boxes[kind].input.checked])) });
   const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with Study → Import study material', onclick: async () => {
@@ -92,9 +96,9 @@ export async function openStudySend(host) {
     send.disabled = true;
     try {
       const pack = build();
-      const invite = parseInvite(link.value, code.value, 'sender');
+      const invite = aimed || parseInvite(link.value, code.value, 'sender');
       if (invite.role !== 'sender') throw Error('That is a drawing tablet link. Use the address and PIN, or the notes link.');
-      if (!/^[a-z]+:\/\//i.test(link.value.trim())) try { localStorage.setItem('notecomplete-collab-address', link.value.trim()); } catch { /* Optional. */ }
+      if (!aimed && !/^[a-z]+:\/\//i.test(link.value.trim())) try { localStorage.setItem('notecomplete-collab-address', link.value.trim()); } catch { /* Optional. */ }
       if (who.value.trim()) remember(who.value.trim());
       const text = JSON.stringify(pack);
       const steps = { connecting: 'Connecting…', sending: 'Sending…', waiting: 'Sent. Waiting for the other NoteComplete to accept it…' };
@@ -106,10 +110,11 @@ export async function openStudySend(host) {
   dialog('Send study material',
     el('p', { textContent: `From “${material.title}”:` }), ...KINDS.map(([kind]) => boxes[kind].row),
     el('h3', { textContent: 'To another NoteComplete' }),
-    el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link.' }),
-    el('div', { className: 'collab-join' }, el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), el('label', {}, el('span', { textContent: 'Your name' }), who)),
+    aimed ? '' : el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link. Or scan the QR code it shows: Study → Receive study material… on the other computer.' }),
+    aimed ? el('p', {}, el('strong', { textContent: 'To: ' }), `the NoteComplete at ${new URL(aimed.url).host.replace(/^ws/, '')} (from the QR code)`) : '',
+    el('div', { className: 'collab-join' }, ...(aimed ? [] : [el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), scan]), el('label', {}, el('span', { textContent: 'Your name' }), who)),
     state, buttons(save, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
-  (link.value ? code : link).focus();
+  (aimed ? who : link.value ? code : link).focus();
 }
 
 // A pack sent by another NoteComplete: asks, keeps it, and answers the sender.
@@ -148,6 +153,7 @@ export async function openCollab(host, mode) {
   if (mode === 'link') {
     const invite = parseInvite(location.href);
     history.replaceState(null, '', location.pathname);
+    if (invite.role === 'sender') return openStudySend(host, invite);
     return join(host, invite);
   }
   return joinDialog(host, mode === 'join-tablet' ? 'tablet' : 'guest');
@@ -488,11 +494,12 @@ class Session {
     // Local: this network, with the address and PIN and the links. Online: other networks.
     // Fixes: what to try when a device does not connect (firewall, another address).
     const pin = el('section', { id: 'collabPin', className: 'collab-section' });
+    const study = el('section', { id: 'collabStudy', className: 'collab-section' });
     const tablet = el('section', { id: 'collabTablet', className: 'collab-section' });
     const invite = el('section', { id: 'collabInvite', className: 'collab-section' });
     const pointer = el('p', { className: 'muted collab-pointer' }, 'A device does not connect? ', el('button', { type: 'button', className: 'link', textContent: 'See Fixes', onclick: () => this.showTab('fixes') }));
     const panels = {
-      local: el('div', { id: 'collabPanelLocal', className: 'collab-panel', role: 'tabpanel' }, pin, tablet, invite, pointer),
+      local: el('div', { id: 'collabPanelLocal', className: 'collab-panel', role: 'tabpanel' }, pin, tablet, invite, study, pointer),
       online: el('div', { id: 'collabPanelOnline', className: 'collab-panel', role: 'tabpanel' }, el('section', { id: 'collabOnline', className: 'collab-section' })),
       fixes: el('div', { id: 'collabPanelFixes', className: 'collab-panel', role: 'tabpanel' }, el('section', { id: 'collabFixes', className: 'collab-section' })),
     };
@@ -513,6 +520,7 @@ class Session {
     d.addEventListener('close', () => { this.shareShown = false; clearInterval(this.codeClock); }, { once: true });
     await this.drawTablet();
     await this.drawInvite();
+    await this.drawStudy();
     await this.drawOnline();
     await this.drawFixes();
     this.drawShareList();
@@ -603,6 +611,18 @@ class Session {
     invite.replaceChildren(el('h3', { textContent: 'Guests' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
       el('p', { textContent: 'People who read the note along with you, in a browser or in NoteComplete (File → Join shared notes): the pages with their tools, and the shared notes beside them, with everyone’s cursors. A Markdown or text document you open is shown to them as text. ' + can }),
       this.linkRow(this.info.guestLink, 'Guest link copied.'))));
+  }
+  // Another NoteComplete sends study material here: a send-only QR code and link, or the address and
+  // PIN above (Study → Send study material… on the other side).
+  async drawStudy() {
+    const section = $('collabStudy');
+    if (!section || !this.info.sendLink) return;
+    const qr = el('div', { className: 'collab-qr small' });
+    qr.innerHTML = await qrSvg(this.info.sendLink);
+    const online = this.info.onlineSendLink ? el('div', {}, el('div', { className: 'collab-linkrow-label', textContent: 'From another network (online access is on)' }), this.linkRow(this.info.onlineSendLink, 'Online link to send study material copied.')) : '';
+    section.replaceChildren(el('h3', { textContent: 'Study material' }), el('div', { className: 'collab-pair' }, qr, el('div', {},
+      el('p', { textContent: 'Another NoteComplete can send you flashcards, quizzes and notes. Scan this code with its camera (it opens NoteComplete ready to send), or in its Study → Send study material type the address and PIN above. You are asked before anything is kept.' }),
+      this.linkRow(this.info.sendLink, 'Link to send study material copied.'), online)));
   }
   // A link in a box that selects on focus, with Copy.
   linkRow(link, done) {

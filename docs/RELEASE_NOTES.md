@@ -1,4 +1,9 @@
-## What's new in 1.1.35
+## What's new in 1.1.36
+
+- **QR code and PIN for receiving study material.** **Study → Receive study material…** shows a QR code and link (and the address and PIN) for another NoteComplete to send you flashcards, quizzes and notes; with online access on, a second link works from any network. Scan the code with a phone's camera and NoteComplete opens ready to send the newest note's material to that computer, or in **Send study material…** use **Scan its QR code** (browsers that can read QR codes) or type the address and PIN. The link only lets a device send: it cannot join the session as a guest or a tablet.
+- **Notes beside text documents, and for guests.** A text or Markdown document now has a **Notes** button in its bar and **N** opens the Markdown notes beside it, as for HTML pages. In a shared session, guests can close and open the notes panel (button and **N**) instead of having it fixed open, and a guest viewing the host's shared text document gets the shared notes beside it.
+
+### In 1.1.35
 
 - **Icons in the top menus.** File, Edit, View, Pages, Study and Help have an icon on each action, related actions grouped between rules, toggles and tools marked with a ✓ at the right edge, and shortcut keys in one column.
 - **Joining a big note shows how far it is.** The tablet or guest sees the stages (the computer preparing the note, receiving it with megabytes, speed and time left, opening it) on a bar that fills, and the computer's bar shows who is receiving the note and how far ("Tablet · 43 %"). The note is sent in parts, compressed as it goes (above 32 MB with a fast setting that is four times quicker and 1% larger), so it no longer waits for the whole compression before the first byte.
@@ -11,10 +16,6 @@
 - **The Sharing dialog explains Tablets and Guests.** One address and PIN, then a section for each kind of device saying what it gets.
 - **Highlight PDF text by dragging across it.** The highlighter has a new **Text** mode (in the tool bar's highlighter settings and in the hover menu): drag from one word to another and the words in between are highlighted, one band per line, as in a PDF reader; a click highlights a word. A multi-line selection is one undo step. The bands are the highlighter's own lines, so they can be moved, recoloured and erased like any other. On a page with no text (a scan) it draws a straight highlight and says so.
 - **Send study material to another NoteComplete.** **Study → Send study material…** sends the open note's flashcard decks, quizzes and Markdown notes (your choice) to another NoteComplete that is sharing: type its address and PIN (same network) or paste its online link (any network, from the app or a browser). The other side is asked first; the material is added to the same note when it has it, else kept as a note of its own in **All quizzes and decks**. It can also be saved as a `.ncstudy` file and opened with **Study → Import study material…**.
-
-### Next
-
-- **Notes beside text documents, and for guests.** A text or Markdown document now has a **Notes** button in its bar and **N** opens the Markdown notes beside it, as for HTML pages. In a shared session, guests can close and open the notes panel (button and **N**) instead of having it fixed open, and a guest viewing the host's shared text document gets the shared notes beside it.
 
 ### In 1.1.34
 

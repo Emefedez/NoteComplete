@@ -93,7 +93,7 @@ export class CollabHub {
     this.digests = new Map();
     this.streams = 0;
     this.id = randomBytes(4).toString('hex');
-    this.tokens = { host: token(), guest: token(), tablet: token() };
+    this.tokens = { host: token(), guest: token(), tablet: token(), send: token() };
     this.newCode();
     this.peers = new Map();
     this.next = 1;
@@ -179,11 +179,13 @@ export class CollabHub {
   allowOnline() {
     this.tokens.online = this.notes ? token() : null;
     this.tokens.onlineTablet = token();
-    return { guest: this.tokens.online, tablet: this.tokens.onlineTablet };
+    this.tokens.onlineSend = token();
+    return { guest: this.tokens.online, tablet: this.tokens.onlineTablet, send: this.tokens.onlineSend };
   }
   closeOnline() {
     this.tokens.online = null;
     this.tokens.onlineTablet = null;
+    this.tokens.onlineSend = null;
     for (const p of [...this.peers.values()]) if (p.remote) this.kick(p, 1008, 'Online access was turned off.');
   }
   hello(peer, { token, code, name, role, accept, have }) {
@@ -193,9 +195,11 @@ export class CollabHub {
     if (peer.remote) {
       if (token && this.notes && this.tokens.online && same(token, this.tokens.online) && role !== 'tablet') granted = role === 'sender' ? 'sender' : 'guest';
       else if (token && this.tokens.onlineTablet && same(token, this.tokens.onlineTablet)) granted = 'tablet';
+      else if (token && this.tokens.onlineSend && same(token, this.tokens.onlineSend)) granted = role === 'sender' ? 'sender' : null;
       else return this.kick(peer, 1008, 'This invite does not work from another network. Ask for the online link.');
     } else if (token && same(token, this.tokens.host) && !this.host) granted = 'host';
     else if (token && same(token, this.tokens.tablet)) granted = 'tablet';
+    else if (token && same(token, this.tokens.send)) granted = role === 'sender' ? 'sender' : null;
     else if (token && this.notes && same(token, this.tokens.guest)) granted = role === 'tablet' ? null : role === 'sender' ? 'sender' : 'guest';
     else if (code != null) {
       if (this.now() > this.code.expires || this.code.failures >= 5) return this.kick(peer, 1008, 'This code expired. Show a new code on the computer.');

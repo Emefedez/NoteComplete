@@ -489,7 +489,7 @@ app.whenReady().then(async () => {
     }
     return sharingInfo(sharing.server);
   }));
-  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, addresses: server.addresses, port: server.port, onlineLink: server.onlineLink, onlineTabletLink: server.onlineTabletLink, online: server.online, firewall: sharing?.firewall || null, ...server.code() });
+  const sharingInfo = (server) => ({ hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), sendLink: server.sendLink(), onlineSendLink: server.onlineSendLink, address: server.address, addresses: server.addresses, port: server.port, onlineLink: server.onlineLink, onlineTabletLink: server.onlineTabletLink, online: server.online, firewall: sharing?.firewall || null, ...server.code() });
   ipcMain.handle('collab:address', guarded((event, address) => {
     if (sharing?.owner !== event.sender.id) return null;
     sharing.server.useAddress(String(address));
@@ -514,7 +514,7 @@ app.whenReady().then(async () => {
     await sharing?.server.stop();
     sharing = null;
   }));
-  ipcMain.handle('collab:info', guarded((event) => (sharing?.owner === event.sender.id ? { tabletLink: sharing.server.tabletLink(), address: sharing.server.address, ...sharing.server.code() } : null)));
+  ipcMain.handle('collab:info', guarded((event) => (sharing?.owner === event.sender.id ? { tabletLink: sharing.server.tabletLink(), sendLink: sharing.server.sendLink(), onlineSendLink: sharing.server.onlineSendLink, address: sharing.server.address, ...sharing.server.code() } : null)));
   ipcMain.handle('collab:minimize', guarded((event) => windowOf(event.sender)?.minimize()));
   ipcMain.handle('ui:zoom', guarded((_event, step) => setUiZoom([-1, 0, 1].includes(step) ? step : 0)));
   ipcMain.handle('tabs:detach', guarded((event, id) => tabs.windowOf(id) === tabs.windowOf(event.sender.id) && detachTab(id)));

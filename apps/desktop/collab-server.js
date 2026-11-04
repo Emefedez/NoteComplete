@@ -17,7 +17,7 @@ import { ensureCloudflared, startTunnel } from './tunnel.js';
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/json', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.traineddata': 'application/octet-stream' };
 // Pages that open the reader as a guest or as a drawing tablet; the invite is in the fragment.
-const PAGES = new Set(['/join', '/tablet']);
+const PAGES = new Set(['/join', '/tablet', '/send']);
 // Text and WebAssembly shrink to a quarter or a third compressed; images and fonts do not.
 const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.webmanifest', '.wasm', '.svg']);
 const gzip = promisify(zlib.gzip), brotli = promisify(zlib.brotliCompress);
@@ -252,6 +252,9 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     get onlineLink() { return onlineLink; },
     // A drawing tablet on another network (the online tablet invite; the code stays local).
     get onlineTabletLink() { return onlineUrl && hub.tokens.onlineTablet ? `${onlineUrl}/tablet#${hub.id}.${hub.tokens.onlineTablet}` : ''; },
+    // Where another NoteComplete sends study material (scan it, or open it): a send-only invite.
+    sendLink: () => `${origin()}/send#${hub.id}.${hub.tokens.send}`,
+    get onlineSendLink() { return onlineUrl && hub.tokens.onlineSend ? `${onlineUrl}/send#${hub.id}.${hub.tokens.onlineSend}` : ''; },
     get online() { return !!tunnel; },
     get guestLink() { return notes ? `${origin()}/join#${hub.id}.${hub.tokens.guest}` : ''; },
     tabletLink: () => `${origin()}/tablet#${hub.id}.${hub.tokens.tablet}`,

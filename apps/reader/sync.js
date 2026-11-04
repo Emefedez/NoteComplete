@@ -26,7 +26,7 @@ export function parseInvite(link, code = '', role = 'tablet') {
   const secure = url.protocol === 'https:' || url.protocol === 'wss:';
   const ws = `${secure ? 'wss' : 'ws'}://${url.host}/sync`;
   const [, token] = url.hash.slice(1).split('.');
-  if (token) return { url: ws, token, role: url.pathname.startsWith('/tablet') ? 'tablet' : role === 'sender' ? 'sender' : 'guest' };
+  if (token) return { url: ws, token, role: url.pathname.startsWith('/tablet') ? 'tablet' : url.pathname.startsWith('/send') || role === 'sender' ? 'sender' : 'guest' };
   const digits = String(code).replace(/\D/g, '');
   if (digits.length !== 6) throw Error('Enter the 6-digit code shown on the computer.');
   if (!url.port) throw Error('Add the port shown on the computer, for example 192.168.1.20:41237.');

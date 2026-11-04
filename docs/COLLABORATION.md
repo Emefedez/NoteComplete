@@ -502,3 +502,7 @@ A `sender` is a connection that can only deliver a pack: `hello { code | token, 
 The same pack is a `.ncstudy` file (JSON). On import it is merged into the note with the same fingerprint when the device knows it (decks and quizzes by id, so importing twice adds nothing; notes appended), else kept as `received:<id>` with a `doc:` record, which lists it in Study → All quizzes and decks. The browser can send over `wss://` (an online link) but not over a plain `ws://` LAN address from an https page.
 
 For sharing sessions started in the web app, see [ONLINE-SHARING.md](ONLINE-SHARING.md).
+
+### Receiving by QR code or PIN (1.1.36)
+
+The hub keeps a `send` token (and an `onlineSend` one while online access is on). `…/send#<session>.<token>` is a link that only makes a sender: the same token with `role: 'guest'` or `'tablet'` is refused. The Local tab of the Sharing dialog (and Study → Receive study material…) shows it with a QR code, beside the address and PIN that also make a sender (`hello { code, role: 'sender' }`). The reader opens `/send#…` straight into the Send dialog aimed at that computer, offering the current note's study material, or with no note open the newest note on the device that has some. Where the browser has `BarcodeDetector`, the Send dialog can also scan the QR code itself (`qr-scan.js`).

@@ -802,3 +802,23 @@ test('a sender that leaves in the middle makes the host drop the partial pack', 
     h.close();
   } finally { await server.stop(); }
 });
+
+test('the send link admits senders only: a token that cannot make a guest or a tablet', async () => {
+  const root = await reader();
+  const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', port: 0, notes: 'edit' });
+  try {
+    const h = host(server, new Replica());
+    await welcomed(h);
+    const token = server.sendLink().split('.').pop();
+    assert.match(server.sendLink(), /\/send#[\w-]+\.[\w-]+$/);
+    const sender = client(server, { token, role: 'sender' });
+    await welcomed(sender);
+    assert.equal(sender.events.find(([e]) => e === 'welcome')[1].role, 'sender');
+    // The same token does not make a guest or a drawing tablet.
+    assert.match(await closedWith(client(server, { token, role: 'guest', yjs })), /not valid/);
+    assert.match(await closedWith(client(server, { token, role: 'tablet' })), /not valid/);
+    // And no other token makes a sender except the local guest, tablet and PIN ones.
+    assert.match(await closedWith(client(server, { token: 'nope', role: 'sender' })), /not valid/);
+    sender.close(); h.close();
+  } finally { await server.stop(); }
+});

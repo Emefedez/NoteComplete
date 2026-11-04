@@ -3555,7 +3555,7 @@ window.addEventListener("beforeunload", (e) => {
 // the app (sw.js) is made once the note is open, or after a minute, not while it downloads.
 if ("serviceWorker" in navigator) {
   const register = () => navigator.serviceWorker.register("./sw.js").catch(() => {});
-  if (/^\/(join|tablet)$/.test(location.pathname)) {
+  if (/^\/(join|tablet|send)$/.test(location.pathname)) {
     const later = setTimeout(register, 60000);
     addEventListener("notecomplete:joined", () => { clearTimeout(later); setTimeout(register, 2000); }, { once: true });
   } else register();
@@ -5298,11 +5298,19 @@ const collabHost = {
   title: () => $("title").textContent,
   // The open note's study material (decks, quizzes, notes), and keeping a pack sent by another NoteComplete.
   async studyMaterial() {
-    const fingerprint = (doc && find.fingerprint) || sideFp;
-    if (!fingerprint) return null;
-    await notes?.flush?.();
+    let fingerprint = (doc && find.fingerprint) || sideFp, title = $("title").textContent;
     const { studyOf } = await import("./study-pack.js");
-    return { title: $("title").textContent, fingerprint, study: await studyOf(library.store, fingerprint) };
+    // With no note open (a QR link opened this page): the newest note on this device that has study material.
+    if (!fingerprint) {
+      const docs = [];
+      for (const key of (await library.store.keys("settings").catch(() => [])).filter((k) => String(k).startsWith("doc:"))) docs.push([key.slice(4), await library.store.get("settings", key).catch(() => null)]);
+      for (const [fp, record] of docs.sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0))) {
+        if (Object.keys(await studyOf(library.store, fp)).length) { fingerprint = fp; title = record?.title || "Study material"; break; }
+      }
+      if (!fingerprint) return null;
+    }
+    await notes?.flush?.();
+    return { title, fingerprint, study: await studyOf(library.store, fingerprint) };
   },
   async importStudyPack(pack) { const { importPack } = await import("./study-pack.js"); return importPack(library.store, pack); },
   // The open text document (.txt, Markdown, a converted file), as shared with guests.
@@ -5358,6 +5366,8 @@ $("studySend").onclick = async () => {
 };
 // Study → Import study material…: a .ncstudy file from another NoteComplete.
 $("studyImport").onclick = () => { closeMenus(); $("studyPackFile").click(); };
+// Study → Receive study material…: the Sharing dialog's Local tab shows the QR code and PIN for it.
+$("studyReceive").onclick = () => { closeMenus(); try { localStorage.setItem("notecomplete-collab-tab", "local"); } catch { /* Optional. */ } startCollab("host"); };
 $("studyPackFile").onchange = async () => {
   const [file] = $("studyPackFile").files;
   $("studyPackFile").value = "";
@@ -5370,6 +5380,7 @@ $("studyPackFile").onchange = async () => {
     status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}.`);
   } catch (e) { status(e.message, true); }
 };
+$("studyReceive").hidden = !window.notecompleteCollab;
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");
@@ -5377,4 +5388,4 @@ $("joinNotes").onclick = () => startCollab("join-notes");
 // Share in the bar: the desktop shares (or shows its session); elsewhere it offers the ways to join.
 $("shareButton").onclick = () => startCollab(window.notecompleteCollab ? "host" : "share-menu");
 // Opened from an invite (/join#… or /tablet#…, served by the host's computer).
-if (/^\/(join|tablet)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");
+if (/^\/(join|tablet|send)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");
