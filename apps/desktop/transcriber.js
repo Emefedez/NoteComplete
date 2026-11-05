@@ -13,12 +13,23 @@ const PIECE = { voxtype: 30, antigravity: 600 };
 const CODES = { spanish: 'es', galician: 'gl', english: 'en', catalan: 'ca', french: 'fr', german: 'de', italian: 'it', portuguese: 'pt' };
 const PARALLEL = { voxtype: 1, antigravity: 3 };
 
+function terminateProcess(child, graceMs = 4000) {
+  if (!child) return;
+  try { child.kill('SIGTERM'); } catch {}
+  const timer = setTimeout(() => {
+    try {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    } catch {}
+  }, graceMs);
+  child.once('close', () => clearTimeout(timer));
+}
+
 function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { cwd, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
     kill?.(child);
     let out = '', err = '';
-    const timer = setTimeout(() => child.kill('SIGTERM'), timeout);
+    const timer = setTimeout(() => terminateProcess(child), timeout);
     child.stdout.on('data', d => { out += d; });
     child.stderr.on('data', d => { err += d; });
     child.on('error', reject);
@@ -56,7 +67,7 @@ export function transcriber({ tools }) {
         { id: 'antigravity', label: 'Gemini via Antigravity (cloud)', available: !!(found.antigravity && found.ffmpeg) },
       ];
     },
-    cancel(owner) { for (const child of running.get(owner) || []) child.kill('SIGTERM'); },
+    cancel(owner) { for (const child of running.get(owner) || []) terminateProcess(child); },
     // Returns segments [{start, end, text}]; `progress(done, total, segments, skipped)` streams pieces
     // as they finish (skipped: parts Voxtype could not transcribe even when cut smaller).
     async run(owner, { backend, bytes, language = '' }, progress = () => {}) {

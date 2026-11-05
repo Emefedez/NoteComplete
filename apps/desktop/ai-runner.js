@@ -160,6 +160,19 @@ async function listModels(provider, binary, home = homedir()) {
 const lastFinal = (provider, out) => out.split('\n').map(l => streamLine(provider, l).final).filter(f => typeof f === 'string').at(-1);
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
 
+// Stop a child process cleanly with SIGTERM, then escalate to SIGKILL if
+// it hangs or deadlocks during shutdown.
+function terminateProcess(child, graceMs = 4000) {
+  if (!child) return;
+  try { child.kill('SIGTERM'); } catch {}
+  const timer = setTimeout(() => {
+    try {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    } catch {}
+  }, graceMs);
+  child.once('close', () => clearTimeout(timer));
+}
+
 export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   let found;
   // Several requests per window may run at once (study batches, chat); each
@@ -193,7 +206,10 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
       return list;
     },
     cancel(owner, tag = '') {
-      for (const r of running.get(owner) || []) if (!tag || r.tag === tag) { r.cancelled = true; r.child?.kill('SIGTERM'); }
+      for (const r of running.get(owner) || []) if (!tag || r.tag === tag) {
+        r.cancelled = true;
+        terminateProcess(r.child);
+      }
     },
     // One request: write images, run the tool in the temporary folder, return its answer.
     // `onDelta` receives the answer's text pieces while it is written (tools that stream).
@@ -234,7 +250,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...call.env }, stdio: ['pipe', 'pipe', 'pipe'] });
           entry.child = child;
           let out = '', err = '', pending = '';
-          const timer = setTimeout(() => child.kill('SIGTERM'), 10 * 60 * 1000);
+          const timer = setTimeout(() => terminateProcess(child), 10 * 60 * 1000);
           child.stdout.on('data', d => {
             out += d;
             if (!stream) return;
@@ -248,11 +264,23 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           });
           child.stderr.on('data', d => { err += d; });
           child.on('error', reject);
-          child.on('close', (code, signal) => {
+          child.on('close', async (code, signal) => {
             clearTimeout(timer);
-            if (signal) reject(Error('The AI request was stopped.'));
-            else if (code) reject(Error(`${PROVIDERS[provider].label} failed: ${call.failure?.(out) || tail(err || out) || `exit ${code}`}`));
-            else resolve(out);
+            if (entry.cancelled) return reject(Error('The AI request was stopped.'));
+            if (signal || code) {
+              // If the process already produced the complete answer before hanging or
+              // dying on shutdown, preserve its valid result.
+              if (out.trim()) {
+                try {
+                  const text = await call.parse(out);
+                  if (typeof text === 'string' && text.trim()) return resolve(out);
+                } catch { /* Output was incomplete or invalid. */ }
+              }
+              if (signal) reject(Error('The AI request was stopped.'));
+              else reject(Error(`${PROVIDERS[provider].label} failed: ${call.failure?.(out) || tail(err || out) || `exit ${code}`}`));
+              return;
+            }
+            resolve(out);
           });
           if (call.stdin != null) child.stdin.end(call.stdin);
           else child.stdin.end();

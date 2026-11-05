@@ -82,6 +82,31 @@ test('closing a window stops all its requests at once and leaves nothing behind'
   assert.equal(runner.owners(), 0);
 });
 
+test('processes that ignore SIGTERM are killed with SIGKILL on cancel', async () => {
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-unresponsive-'));
+  const fake = path.join(bin, 'claude');
+  await writeFile(fake, '#!/bin/sh\ntrap "" TERM\ncat >/dev/null\nexec sleep 60\n');
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
+  const run = runner.run('w1', { provider: 'claude', prompt: 'x' });
+  await new Promise(r => setTimeout(r, 100));
+  const started = Date.now();
+  runner.cancel('w1');
+  await assert.rejects(run, /stopped/);
+  assert.ok(Date.now() - started < 6000, 'escalated to SIGKILL within grace period');
+  assert.equal(runner.owners(), 0);
+});
+
+test('a provider that writes a complete answer before hanging or dying on exit is preserved', async () => {
+  const bin = await mkdtemp(path.join(tmpdir(), 'nc-exitcrash-'));
+  const fake = path.join(bin, 'claude');
+  await writeFile(fake, '#!/bin/sh\nprintf \'{"result":"recovered answer"}\\n\'\nexit 1\n');
+  await chmod(fake, 0o755);
+  const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
+  const res = await runner.run('w1', { provider: 'claude', prompt: 'x' });
+  assert.equal(res.text, 'recovered answer');
+});
+
 test('Antigravity model listing is parsed into ids and labels', async () => {
   const { parseAgyModels } = await import('./ai-runner.js');
   assert.deepEqual(parseAgyModels('Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n'),
