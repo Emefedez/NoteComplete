@@ -1,4 +1,8 @@
-## What's new in 1.1.42
+## Unreleased
+
+- **The quick menu has the tool bar's options.** The pen's ring has **Shapes from the pen** (tap it for Hold, On lift, Off), every tool with colours has **Any colour…** after its palette, the Shapes ring has its widths beside undo and redo (2 and 4 px shown, the others hidden at first), and **Lock in place** is among the tools (hidden at first: hold any tool to show it). On phones, where the tool bar's settings do not show, the quick menu was the only way to reach some of them.
+
+### In 1.1.42
 
 - **Fixed: Ask AI's head in a narrow panel.** On phones (and in the panel's usual width) the AI tool and model lists had shrunk to their arrows beside the search and Small model; they now get a row of their own under the title and the window's buttons.
 
