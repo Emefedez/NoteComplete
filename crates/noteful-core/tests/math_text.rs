@@ -9,6 +9,7 @@ fn math_box(text: &str, math: bool) -> Image {
         bounds: [100., 100., 240., 60.],
         layer: 0,
         joined: false,
+        part: None,
         text: Some(TextBox {
             text: text.into(),
             font_size: 20.,
@@ -99,4 +100,64 @@ fn a_joined_text_box_is_undone_with_the_lines_before_it() {
     );
     e.redo();
     assert_eq!(e.view(0).unwrap()["visible_added"], 3);
+}
+
+#[test]
+fn graph_parts_are_listed_and_redrawing_one_is_one_undo_step() {
+    use noteful_core::{Line, Part};
+    let part = |spec: Option<&str>| Part {
+        id: "g1".into(),
+        kind: "graph".into(),
+        spec: spec.map(str::to_owned),
+    };
+    let line = |y: f64, spec: Option<&str>, joined: bool| Line {
+        part: Some(part(spec)),
+        joined,
+        ..Line::new(vec![[0., y], [100., y]], 1., [0., 0., 0., 1.])
+    };
+    let mut e = Editor::create_document("Graph", &[[600., 800.]], &[]).unwrap();
+    e.add_line(0, line(10., Some(r#"{"x":[-5,5]}"#), false))
+        .unwrap();
+    e.add_line(0, line(20., None, true)).unwrap();
+    e.add_image(
+        0,
+        Image {
+            joined: true,
+            part: Some(part(None)),
+            ..math_box("2", false)
+        },
+    )
+    .unwrap();
+    let view = e.view(0).unwrap();
+    let parts = view["parts"].as_array().unwrap();
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0]["kind"], "graph");
+    assert_eq!(parts[0]["spec"], r#"{"x":[-5,5]}"#);
+    let items: Vec<String> = parts
+        .iter()
+        .map(|p| p["item"].as_str().unwrap().to_owned())
+        .collect();
+    // Drawn again: the old parts go and the new ones come in one step.
+    e.remove_items(0, &items, false).unwrap();
+    e.add_line(0, line(30., Some(r#"{"x":[-2,2]}"#), true))
+        .unwrap();
+    let view = e.view(0).unwrap();
+    assert_eq!(view["parts"].as_array().unwrap().len(), 1);
+    assert_eq!(view["parts"][0]["spec"], r#"{"x":[-2,2]}"#);
+    e.undo();
+    assert_eq!(
+        e.view(0).unwrap()["parts"].as_array().unwrap().len(),
+        3,
+        "one undo brings the old graph back"
+    );
+    // A part with an unknown kind is refused.
+    let bad = Line {
+        part: Some(Part {
+            id: "x".into(),
+            kind: "chart".into(),
+            spec: None,
+        }),
+        ..Line::new(vec![[0., 0.], [1., 1.]], 1., [0., 0., 0., 1.])
+    };
+    assert!(e.add_line(0, bad).is_err());
 }

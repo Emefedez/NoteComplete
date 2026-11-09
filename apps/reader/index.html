@@ -87,6 +87,7 @@
           <hr />
           <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
           <button id="insertGraph" data-icon="graph" disabled data-palette="Insert graph (axes and grid)" title="Axes and a grid to draw a graph on; for a function, use the Graph key of the math keypad (∑ in a text box)">Insert graph<kbd>Shift X</kbd></button>
+          <button id="insertTable" data-icon="table" disabled data-palette="Insert table" title="Rows and columns of typed cells; select it later to edit it, add rows or columns">Insert table<kbd>Shift Y</kbd></button>
         </div>
       </details>
       <details class="menu bar-menu" id="viewMenu">
@@ -506,6 +507,12 @@
               >
                 Crop</button
               ><button
+                id="editCompound"
+                type="button"
+                hidden
+              >
+                Edit…</button
+              ><button
                 id="deleteSelection"
                 type="button"
                 aria-label="Delete item"
@@ -528,6 +535,8 @@
                 ><button type="button" data-shape="ellipse" role="radio" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6"/></svg></button
                 ><button type="button" data-shape="triangle" role="radio" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 19H3Z"/></svg></button
                 ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button
+                ><button type="button" data-shape="graph" role="radio" title="Graph: drag its box, then choose the function"><svg viewBox="0 0 24 24"><path d="M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6"/></svg></button
+                ><button type="button" data-shape="table" role="radio" title="Table: drag its box, then type the cells"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14M15 5v14"/></svg></button
                 ><button type="button" data-shape="star" role="radio" title="Star"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.5 5.6 6.1.6-4.6 4 1.4 6-5.4-3.2-5.4 3.2 1.4-6-4.6-4 6.1-.6Z"/></svg></button>
               </div>
               <div id="shapeFill" class="shape-picker fill-picker" role="radiogroup" aria-label="Fill (F)" title="Fill of rectangles, ellipses, triangles and stars (F)">
@@ -541,7 +550,9 @@
                 <option value="ellipse">Ellipse</option>
                 <option value="triangle">Triangle</option>
                 <option value="arrow">Arrow</option>
-                <option value="star">Star</option></select
+                <option value="star">Star</option>
+                <option value="graph">Graph</option>
+                <option value="table">Table</option></select
               ><button
                 id="insertShape"
                 aria-label="Insert shape"

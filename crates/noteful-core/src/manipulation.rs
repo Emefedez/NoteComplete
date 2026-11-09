@@ -485,6 +485,27 @@ impl Editor {
         self.commit(Edit::Erase {
             page,
             ids: vec![id.to_owned()],
+            joined: false,
+        })
+    }
+    /// Several items in one edit (a graph or table being drawn again); `joined` undoes it
+    /// with the edit before it.
+    pub fn remove_items(&mut self, page: usize, ids: &[String], joined: bool) -> Result<()> {
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        if ids.is_empty() || unique.len() != ids.len() {
+            return Err(Error::new(0, "Invalid items to remove"));
+        }
+        let deleted = self.deleted(page);
+        for id in ids {
+            if deleted.contains(id.as_str()) {
+                return Err(Error::new(0, "Item already removed"));
+            }
+            self.editable_layer(page, id)?;
+        }
+        self.commit(Edit::Erase {
+            page,
+            ids: ids.to_vec(),
+            joined,
         })
     }
     pub fn selection(&self, page: usize, id: &str) -> Result<Value> {

@@ -2,7 +2,8 @@
 // records, a second press (or Enter) stops, and the words are typed into the field at the
 // cursor, ready to edit before sending; Esc drops the take. It transcribes with the engine,
 // language and model chosen for transcripts in the audio panel (Whisper on this device by
-// default), keeping the speech model loaded between takes.
+// default), keeping the speech model loaded between takes, and dropping it (worker, model
+// and its memory) two minutes after the last one.
 import { prepareSpeech, speechSettings } from './audio-processing.js';
 import { recordingMime } from './recorder.js';
 import { icon } from './icons.js';
@@ -16,8 +17,11 @@ export function insertText(value, start, end, spoken) {
   return { value: before + lead + text + tail + after, caret: (before + lead + text).length };
 }
 
-let worker = null;
+let worker = null, idle = 0;
+export const DICTATION_IDLE_MS = 2 * 60 * 1000;
+function release() { worker?.terminate(); worker = null; }
 function whisper(samples, language, model) {
+  clearTimeout(idle);
   worker ||= new Worker(new URL('./transcript-worker.js', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
     worker.onerror = event => { worker = null; reject(Error(event.message || 'The local speech engine could not start')); };
@@ -26,7 +30,7 @@ function whisper(samples, language, model) {
       if (data.type === 'complete') resolve(String(data.result?.text || (data.result?.chunks || []).map(c => c.text).join(' ')));
     };
     worker.postMessage({ samples, language, model }, [samples.buffer]);
-  });
+  }).finally(() => { clearTimeout(idle); idle = setTimeout(release, DICTATION_IDLE_MS); });
 }
 async function transcribe(blob) {
   const backend = $('transcriptBackend')?.value || 'whisper', language = $('transcriptLanguage')?.value || '';

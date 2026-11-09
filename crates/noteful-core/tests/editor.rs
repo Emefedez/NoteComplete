@@ -5,6 +5,7 @@ fn exam() -> Editor {
 }
 fn line() -> Line {
     Line {
+        part: None,
         points: vec![[10., 10.], [100., 10.]],
         width: 2.,
         rgba: [0., 0., 1., 1.],

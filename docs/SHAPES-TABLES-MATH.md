@@ -19,11 +19,12 @@ narrows a control; recognised shapes are ordinary parametric shapes and get them
 | S5 | Settings: shapes from the pen on/off (View menu, Pen settings) | done |
 | M1 | Math text boxes: LaTeX typeset by KaTeX (core flag, reader, export) | done |
 | M2 | Math text boxes from the MCP (`write_on_page` `textbox` with `math`) | done |
-| M3 | Math keypad (Photomath-like input for desktop and touch) | done (keypad); structure editing planned |
+| M3 | Math keypad and structured formula editing (MathLive), arrows | done |
 | G0 | Empty graph preset: axes, grid and numbers to draw on (Insert → Graph) | done |
 | G1 | Function graphs from LaTeX (`y = f(x)`) from the keypad | done |
-| G2 | Editable graph object (change the function or range later) | planned |
-| T1 | Tables: an expandable grid object with typed cells | planned |
+| G2 | Editable graph (functions, ranges, grid, numbers; Edit graph) | done |
+| P1 | Parts: graphs and tables as one object made of ordinary items | done |
+| T1 | Tables: expandable grid of typed cells (Insert table, Edit table) | done |
 | T2 | Tables and graphs from the MCP | planned |
 | U1 | Text format bar docked in the tool bar (setting) | done |
 | U2 | Shortcuts for actions without one | done |
@@ -130,14 +131,21 @@ sized from an estimate (formulas are about 0.6 of the text's characters wide) un
 are given; the reader fits the formula into it. The MCP never draws math as ink: it is always
 a typed, typeset text box. Documented in `docs/MCP.md`.
 
-## M3 Math keypad (done)
+## M3 Math keypad and formula editing (done)
 
-Decision: a keypad of our own (`apps/reader/math-keypad.js`, no dependency) rather than
-MathLive. MathLive gives structure editing but adds about 1 MB and its own look; the keypad
-is small, uses the app's design (its tokens, radii, menu surface and shadow, stroke icons from
-`icons.js` in its head, KaTeX-typeset key faces) and keeps LaTeX, which is the stored form, as
-what is typed. MathLive stays an option for structure editing (planned) if the keypad is not
-enough.
+The keypad (`apps/reader/math-keypad.js`) is the app's own: its tokens, radii, menu surface and
+shadow, stroke icons in its head, KaTeX-typeset key faces.
+
+Decision changed after use (2026-11-09): editing raw LaTeX in a text box made it hard to change
+a value inside a fraction or a power. A box that is one formula is now edited in a **MathLive**
+`<math-field>` (`math-field.js`, MathLive 0.111.1, MIT, vendored by `tools/build_web.py`, about
+850 KB loaded only when a formula is edited; its fonts are KaTeX's, already vendored): tap any
+part to change it, arrows move through the structure, Backspace deletes whole pieces. MathLive's
+menu and keyboard are hidden; the keypad sends it commands (`insert` with `#0`/`#?` places,
+`moveToPreviousChar`, `moveUp`…). The text box keeps the LaTeX (the field writes it back on each
+change). Words mixed with `$…$` stay as LaTeX text with the typeset preview under the box, and
+the keypad's arrows step over whole commands there (`\frac` is one step) and jump between
+empty places (↑ ↓).
 
 - Shown while a math box (∑) is typed, docked at the bottom of the window and above an
   on-screen keyboard (visual viewport); the page scrolls so the box stays above it.
@@ -177,27 +185,35 @@ flatten the curve), padded, and includes the x axis when it is near; grid steps 
 × 10ⁿ. The curve is cut where it leaves the box (ending on its edge) or jumps (poles of
 `1/x`, `\tan x`).
 
-## G2 Editable graph (planned)
+## P1 Parts (done)
 
-A graph object that keeps the function and ranges, so they can be changed afterwards (and x
-ranges other than −5…5, several functions, points). Would need a core item kind and an
-editor; only worth it if redrawing a graph proves too limiting.
+Graphs and tables stay ordinary items (exported to Noteful as they look) but each item carries
+`part: {id, kind, spec?}` (`crates/noteful-core/src/part.rs`, on `Line` and `Image`, serialised
+only when set). The frame (a graph's plot rectangle, a table's border) carries the spec, as JSON
+written by the reader, and is the object's box. The view lists `parts`; picking any part with
+Select selects the whole object as a group (move, resize) titled Graph or Table with **Edit
+graph…** / **Edit table…**, and Delete removes it in one step. Editing draws it again where its
+frame is now: one `drawMany` with `replace` (an `Erase` of the old parts, then the new ones
+joined to it), so one undo brings the old one back. `Erase` gained `joined`.
 
-## T1 Tables (planned)
+## G2 Editable graph (done)
 
-Insert → Table: a grid of rows × columns of typed cells, stored as one object in the core
-(`Table { bounds, columns: widths, rows: heights, cells: [[TextBox-like cell]], line colour,
-width, header row }`), an edit kind of its own with undoable cell edits.
+The graph editor (`compound-dialogs.js`) has the functions (several, each its colour, typed
+with the keypad, typeset beside), x from/to, y fitted to the curves or from/to, grid and numbers
+on or off, and a live preview. It opens from Insert graph (Shift X), from the Shapes tool's Graph
+(drag the box first), from the keypad's graph key in a math box (with that function), and from
+Edit graph.
 
-- **Expanding**: `+` buttons on the right and bottom edges add a column or row; hovering a
-  border shows a handle to drag its width or height; a cell's menu inserts or deletes rows and
-  columns. Typing in a cell that overflows grows its row. Tab and arrow keys move between
-  cells; Tab in the last cell adds a row.
-- **Cells**: plain text or math (M1), with the text box styles.
-- **Export**: Noteful has no tables: grid lines as ink and each non-empty cell as a native
-  text box, so it reads the same there. `.nfedit` keeps the table object.
-- **Selection**: one item; corner handles scale the whole table (columns and rows keep their
-  proportions).
+## T1 Tables (done)
+
+`table.js` draws a table as parts (P1): its border (the frame, with the cells), rules between
+rows and columns, a header band (highlighter under the ink, so the header's text shows), and a
+typed text box per filled cell (bold in the header, math when it has `$…$`). The table editor is
+a grid of cells: Tab and the arrows move, Enter goes down, Tab in the last cell or Enter in the
+last row adds a row; buttons insert rows above/below and columns left/right of the cursor, or
+delete them; Header row on or off. Up to 30 rows and 12 columns. Opens from Insert table
+(Shift Y), the Shapes tool's Table (drag its box), and Edit table. Not yet: dragging a single
+column's width on the page (widths are kept in the spec for it).
 
 ## T2 Tables and graphs from the MCP (planned)
 

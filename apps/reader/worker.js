@@ -141,7 +141,9 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (op === "image") session.add_image(page, JSON.stringify(args.image));
     // Several lines, then typed text boxes, as one undo step (graph.js: an inserted graph).
     if (op === "drawMany") {
+      // `replace`: the items of a graph or table drawn again, removed first in the same step.
       let first = true;
+      if (Array.isArray(args.replace) && args.replace.length) { session.remove_items(page, JSON.stringify(args.replace), false); first = false; }
       for (const line of args.lines || []) { session.draw(page, JSON.stringify({ ...line, joined: !first })); first = false; }
       for (const image of args.images || []) { session.add_image(page, JSON.stringify({ ...image, joined: !first })); first = false; }
     }

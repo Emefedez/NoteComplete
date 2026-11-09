@@ -24,6 +24,9 @@ pub struct Image {
     /// its lines). Not part of the item.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub joined: bool,
+    /// One part of a graph or table (part.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<crate::Part>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -272,6 +275,9 @@ impl Image {
 impl Editor {
     pub fn add_image(&mut self, page: usize, image: Image) -> Result<()> {
         self.page(page)?;
+        if image.part.as_ref().is_some_and(|p| !p.valid()) {
+            return Err(Error::new(0, "Invalid graph or table part"));
+        }
         match &image.text {
             Some(text) if text.valid() && image.base64.is_empty() && image.mime.is_empty() => {}
             Some(_) => return Err(Error::new(0, "Invalid text box")),

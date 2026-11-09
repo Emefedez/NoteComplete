@@ -1,6 +1,7 @@
 use noteful_core::{Editor, Layer, Line, Package};
 fn line(layer: u32, tool: u16) -> Line {
     Line {
+        part: None,
         points: vec![[10., 10.], [30., 20.], [45., 60.], [66., 80.], [90., 15.]],
         width: 8.,
         rgba: [1., 0.8, 0., 1.],
@@ -184,6 +185,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
 fn square_highlight_bands_have_square_ends_and_stay_inside_their_box_in_noteful() {
     let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
     let band = Line {
+        part: None,
         points: vec![[100., 200.], [300., 200.]],
         width: 120.,
         rgba: [1., 0.9, 0., 1.],

@@ -1,4 +1,11 @@
-## What's new in 1.1.38
+## What's new in 1.1.39
+
+- **Tables.** **Edit → Insert table** (**Shift Y**) or the Shapes tool's **Table** (drag its box): type in a grid of cells, Tab and the arrows move, Tab in the last cell adds a row, and buttons add or delete rows and columns where the cursor is; a bold header row on a tinted band; `$…$` in a cell is math. Select the table to move or resize it, **Edit table…** to change it.
+- **Graphs you can edit.** The graph editor has several functions in their own colours, the x range, y fitted to the curves or set by hand, grid and numbers on or off, and a live preview. Select any part of a graph to move the whole graph, **Edit graph…** to change it (one undo brings the old one back), Delete to remove it. Graph and Table are in the Shapes tool and the quick menu too.
+- **Edit formulas in place.** A text box that is one formula is edited as a formula: tap a numerator or an exponent to change it, arrows move through it, Backspace removes whole pieces. The math keypad has ← → ↑ ↓; in boxes with words and `$…$` the arrows step over whole commands.
+- **Less memory.** The dictation speech model is released two minutes after the last take, and the OCR word lists three minutes after recognition.
+
+### In 1.1.38
 
 - **Shapes from the pen.** Draw a line, arrow, rectangle or square, ellipse or circle, triangle or star with the Pen and keep the pen still for a moment: it becomes a clean shape in the pen's colour and width, with all the usual handles (corners, turning, fill). Move before lifting to resize it. Shapes drawn at an angle keep their angle, and one undo removes them. The Pen's settings choose **hold** (default), **on lift** or **off**; **View → Shapes from the pen** turns it on or off.
 - **Star** in the Shapes tool, with fill like rectangles, ellipses and triangles.

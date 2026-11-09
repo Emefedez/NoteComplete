@@ -35,56 +35,85 @@ const textBox = (text, x, y, layer, { size = LABEL_SIZE, rgba = LABEL, math = fa
   return { base64: '', mime: '', bounds: [x, y, w, h], layer, text: { text, font_size: size, rgba, bold: false, italic: false, font: 'Helvetica', ...(math ? { math: true } : {}) } };
 };
 
-// `box`: [x, y, w, h] on the page. `tex`: a function of x (or none for empty axes). The
-// curve takes `rgba` and `width` (the pen's). Returns { lines, images } for `drawMany`, and
-// throws with a reason when the formula cannot be drawn.
-export function graphItems(box, { tex = '', xRange = [-5, 5], rgba = [0.14, 0.42, 0.81, 1], width = 2, layer = 0 } = {}) {
+// What a graph is (kept with it, so it can be edited again): its functions of x, the x
+// range, the y range (null: chosen to show the curves), and whether it has a grid and numbers.
+export const GRAPH_DEFAULTS = Object.freeze({ v: 1, functions: [], x: [-5, 5], y: null, grid: true, numbers: true });
+// Colours for the second and later functions (the first takes the pen's).
+const MORE = [[0.82, 0.29, 0.36, 1], [0.16, 0.62, 0.39, 1], [0.56, 0.31, 0.78, 1], [0.94, 0.55, 0, 1]];
+export function graphSpec(value = {}) {
+  const spec = { ...GRAPH_DEFAULTS, ...value };
+  const range = (r, fallback) => (Array.isArray(r) && r.length === 2 && r.every(Number.isFinite) && r[1] > r[0] ? [r[0], r[1]] : fallback);
+  return {
+    v: 1,
+    functions: (spec.functions || []).map((f) => String(f).trim()).filter(Boolean).slice(0, 6),
+    x: range(spec.x, [-5, 5]),
+    y: spec.y == null ? null : range(spec.y, null),
+    grid: spec.grid !== false,
+    numbers: spec.numbers !== false,
+  };
+}
+
+// `box`: [x, y, w, h] on the page. `spec`: graphSpec(). The first curve takes `rgba` and
+// `width` (the pen's). `id` names the graph on all its parts (part.rs). Returns { lines,
+// images } for `drawMany`, and throws with a reason when a function cannot be drawn.
+export function graphItems(box, spec = {}, { rgba = [0.14, 0.42, 0.81, 1], width = 2, layer = 0, id = `g${Date.now().toString(36)}` } = {}) {
+  spec = graphSpec(spec);
   const [bx, by, bw, bh] = box;
-  const [x0, x1] = xRange;
-  const fn = tex.trim() ? compileFunction(tex) : null;
-  const samples = fn ? Array.from({ length: 481 }, (_, i) => { const x = x0 + (x1 - x0) * i / 480; return [x, fn(x)]; }) : [];
-  // Without a curve the cells are square: the y range follows the box's shape.
+  const [x0, x1] = spec.x;
+  const fns = spec.functions.map((tex) => {
+    try { return compileFunction(tex); } catch (error) { throw new Error(`${tex}: ${error.message}`); }
+  });
+  const samples = fns.map((fn) => Array.from({ length: 481 }, (_, i) => { const x = x0 + (x1 - x0) * i / 480; return [x, fn(x)]; }));
+  samples.forEach((s, i) => { if (!s.some((p) => Number.isFinite(p[1]))) throw new Error(`${spec.functions[i]}: no values between ${format(x0)} and ${format(x1)}.`); });
+  // Without curves, or with no y range given, the cells are square or the curves fit.
   const half = (x1 - x0) * bh / bw / 2;
-  const [y0, y1] = (fn && yRange(samples.map((s) => s[1]))) || [-half, half];
-  if (fn && !samples.some((s) => Number.isFinite(s[1]))) throw new Error('This function has no values between −5 and 5.');
+  const [y0, y1] = spec.y || (fns.length && yRange(samples.flat().map((s) => s[1]))) || [-half, half];
   const px = (x) => bx + (x - x0) / (x1 - x0) * bw, py = (y) => by + bh - (y - y0) / (y1 - y0) * bh;
-  const lines = [], images = [];
-  // Grid.
-  const sx = niceStep(x1 - x0), sy = niceStep(y1 - y0, fn ? 8 : Math.max(4, Math.round(10 * bh / bw)));
-  for (let x = Math.ceil(x0 / sx) * sx; x <= x1 + 1e-9; x += sx) lines.push(shapeLine([px(x), by], [px(x), by + bh], 'line', 0.7, GRID, layer));
-  for (let y = Math.ceil(y0 / sy) * sy; y <= y1 + 1e-9; y += sy) lines.push(shapeLine([bx, py(y)], [bx + bw, py(y)], 'line', 0.7, GRID, layer));
-  // Axes through 0, or along the edge when 0 is out of view; arrows at the positive ends.
+  // The plot's frame: its box exactly, so the graph can be drawn again where it is now after
+  // being moved or resized (it carries the spec).
+  const frame = { points: [[bx, by], [bx + bw, by], [bx + bw, by + bh], [bx, by + bh], [bx, by]], width: 0.7, rgba: GRID, tool: 0, layer, shape: { kind: 'rectangle', start: [bx, by], end: [bx + bw, by + bh] } };
+  const lines = [frame], images = [];
+  const sx = niceStep(x1 - x0), sy = niceStep(y1 - y0, fns.length ? 8 : Math.max(4, Math.round(10 * bh / bw)));
+  if (spec.grid) {
+    for (let x = Math.ceil(x0 / sx) * sx; x <= x1 + 1e-9; x += sx) lines.push(shapeLine([px(x), by], [px(x), by + bh], 'line', 0.7, GRID, layer));
+    for (let y = Math.ceil(y0 / sy) * sy; y <= y1 + 1e-9; y += sy) lines.push(shapeLine([bx, py(y)], [bx + bw, py(y)], 'line', 0.7, GRID, layer));
+  }
   const ax = y0 <= 0 && y1 >= 0 ? py(0) : by + bh, ay = x0 <= 0 && x1 >= 0 ? px(0) : bx;
   lines.push(shapeLine([bx, ax], [bx + bw + 10, ax], 'arrow', 1.4, AXIS, layer));
   lines.push(shapeLine([ay, by + bh], [ay, by - 10], 'arrow', 1.4, AXIS, layer));
   images.push(textBox('x', bx + bw + 6, ax + 2, layer, { size: 13, rgba: AXIS }));
   images.push(textBox('y', ay + 6, by - 24, layer, { size: 13, rgba: AXIS }));
-  // Numbers on every other grid line at most, never at 0 or crowding the arrows.
-  const every = (step, span) => (span / step > 7 ? 2 : 1);
-  const ex = every(sx, x1 - x0), ey = every(sy, y1 - y0);
-  // Every other one by value (−4, −2, 2, 4), so the numbers are even steps from 0.
-  const labelled = (v, step, each) => Math.abs(v) > step / 2 && Math.round(v / step) % each === 0;
-  for (let x = Math.ceil(x0 / sx) * sx; x <= x1 - sx * 0.5; x += sx) if (labelled(x, sx, ex)) images.push(textBox(format(x), px(x) - 6, ax + 2, layer));
-  for (let y = Math.ceil(y0 / sy) * sy; y <= y1 - sy * 0.5; y += sy) if (labelled(y, sy, ey)) images.push(textBox(format(y), ay + 3, py(y) - 18, layer));
-  // The curve: one ink line per visible run, cut where it leaves the box or jumps (a pole).
-  let run = [];
-  const flush = () => { if (run.length > 1) lines.push({ points: run, width, rgba, tool: 0, layer }); run = []; };
-  for (let i = 0; i < samples.length; i++) {
-    const [x, y] = samples[i], prev = samples[i - 1];
-    const inside = Number.isFinite(y) && y >= y0 && y <= y1;
-    const jump = prev && Number.isFinite(prev[1]) && Number.isFinite(y) && Math.abs(y - prev[1]) > (y1 - y0) * 0.9;
-    if (jump) flush();
-    if (inside) {
-      // Entering from beyond an edge: start on the edge.
-      if (!run.length && prev && Number.isFinite(prev[1]) && !jump) run.push(edgePoint(prev, [x, y], y0, y1, px, py));
-      run.push([px(x), py(y)]);
-    } else if (run.length) {
-      if (Number.isFinite(y) && !jump) run.push(edgePoint(prev, [x, y], y0, y1, px, py));
-      flush();
-    }
+  if (spec.numbers) {
+    const every = (step, span) => (span / step > 7 ? 2 : 1);
+    const ex = every(sx, x1 - x0), ey = every(sy, y1 - y0);
+    // Every other one by value (−4, −2, 2, 4), so the numbers are even steps from 0.
+    const labelled = (v, step, each) => Math.abs(v) > step / 2 && Math.round(v / step) % each === 0;
+    for (let x = Math.ceil(x0 / sx) * sx; x <= x1 - sx * 0.5; x += sx) if (labelled(x, sx, ex)) images.push(textBox(format(x), px(x) - 6, ax + 2, layer));
+    for (let y = Math.ceil(y0 / sy) * sy; y <= y1 - sy * 0.5; y += sy) if (labelled(y, sy, ey)) images.push(textBox(format(y), ay + 3, py(y) - 18, layer));
   }
-  flush();
-  return { lines, images, range: { x: [x0, x1], y: [y0, y1] } };
+  // The curves: one ink line per visible run, cut where a curve leaves the box or jumps.
+  samples.forEach((points, f) => {
+    const colour = f ? MORE[(f - 1) % MORE.length] : rgba;
+    let run = [];
+    const flush = () => { if (run.length > 1) lines.push({ points: run, width, rgba: colour, tool: 0, layer }); run = []; };
+    for (let i = 0; i < points.length; i++) {
+      const [x, y] = points[i], prev = points[i - 1];
+      const inside = Number.isFinite(y) && y >= y0 && y <= y1;
+      const jump = prev && Number.isFinite(prev[1]) && Number.isFinite(y) && Math.abs(y - prev[1]) > (y1 - y0) * 0.9;
+      if (jump) flush();
+      if (inside) {
+        if (!run.length && prev && Number.isFinite(prev[1]) && !jump) run.push(edgePoint(prev, [x, y], y0, y1, px, py));
+        run.push([px(x), py(y)]);
+      } else if (run.length) {
+        if (Number.isFinite(y) && !jump) run.push(edgePoint(prev, [x, y], y0, y1, px, py));
+        flush();
+      }
+    }
+    flush();
+  });
+  // Every part names the graph; the frame keeps what it is, to edit it again.
+  for (const item of [...lines, ...images]) item.part = { id, kind: 'graph', ...(item === frame ? { spec: JSON.stringify(spec) } : {}) };
+  return { lines, images, range: { x: [x0, x1], y: [y0, y1] }, spec };
 }
 // Where the segment from a to b crosses the box's top or bottom.
 function edgePoint(a, b, y0, y1, px, py) {

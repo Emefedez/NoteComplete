@@ -3,7 +3,8 @@ const SIN72 = Math.sin(72 * Math.PI / 180), COS36 = Math.cos(36 * Math.PI / 180)
 export const CLOSED_SHAPES = new Set(['rectangle', 'ellipse', 'triangle', 'star']);
 export function shapePoints(kind,a,b){
  const [x,y]=a,[u,v]=b;
- if(kind==='rectangle')return [[x,y],[u,y],[u,v],[x,v],[x,y]];
+ // A graph or table is drawn as its box while it is dragged.
+ if(kind==='rectangle'||kind==='graph'||kind==='table')return [[x,y],[u,y],[u,v],[x,v],[x,y]];
  if(kind==='ellipse')return Array.from({length:65},(_,i)=>[(x+u)/2+Math.abs(u-x)/2*Math.cos(i*Math.PI/32),(y+v)/2+Math.abs(v-y)/2*Math.sin(i*Math.PI/32)]);
  if(kind==='triangle')return [[(x+u)/2,y],[u,v],[x,v],[(x+u)/2,y]];
  if(kind==='star')return Array.from({length:11},(_,i)=>{

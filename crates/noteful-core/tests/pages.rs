@@ -3,6 +3,7 @@ use noteful_core::{Editor, Line, NewPage, NewPdf, Package, PdfPlacement};
 
 fn line() -> Line {
     Line {
+        part: None,
         points: vec![[10., 10.], [80., 40.], [120., 90.]],
         width: 4.,
         rgba: [0., 0., 1., 1.],

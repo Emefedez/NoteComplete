@@ -82,6 +82,14 @@ def main():
     for name in ['katex.mjs','katex.min.css']: shutil.copy2(katex/'dist'/name,tex/name)
     shutil.copytree(katex/'dist/fonts',tex/'fonts',ignore=shutil.ignore_patterns('*.ttf','*.woff'))
     shutil.copy2(katex/'LICENSE',tex/'LICENSE')
+    # Structured math editing in text boxes (math-field.js), loaded only when a formula is
+    # edited; its fonts are KaTeX's, already above.
+    ml=ROOT/'apps/reader/vendor/mathlive'
+    if ml.exists(): shutil.rmtree(ml)
+    ml.mkdir(parents=True,exist_ok=True)
+    mathlive=ROOT/'apps/reader/node_modules/mathlive'
+    shutil.copy2(mathlive/'mathlive.min.mjs',ml/'mathlive.min.mjs')
+    shutil.copy2(mathlive/'LICENSE.txt',ml/'LICENSE')
     # Dark Reader, inlined into HTML documents in the dark theme, fetched on first use.
     dr=ROOT/'apps/reader/vendor/darkreader'
     if dr.exists(): shutil.rmtree(dr)
@@ -119,7 +127,7 @@ def check_webllm():
 # instead of at install, so a first visit (a tablet joining a session) downloads the app and
 # not 40 MB of engines. Speech, text recognition, Word and spreadsheet readers, math, Dark
 # Reader, and the fonts, character maps and image decoders only some PDFs use.
-LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/')
+LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/mathlive/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/')
 def write_manifest():
     """precache.json: every file the app ships, with a hash of its contents (the service worker
     downloads a file again only when its hash changes; the desktop and Android apps ship

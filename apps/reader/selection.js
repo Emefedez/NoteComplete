@@ -14,12 +14,12 @@ function scaledWidth(item,before,scale){
  return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
 }
 export class SelectionController {
- constructor({call,patch,remove,panel,editable,changed,status}){
-  Object.assign(this,{call,patch,remove,panel,editable,changed,status});this.token=0;this.item=null;this.active=null;
+ constructor({call,patch,remove,removeWhole,panel,editable,changed,status}){
+  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status});this.token=0;this.item=null;this.active=null;
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
-  $('clearSelection').onclick=()=>this.clear();$('cropSelection').onclick=()=>this.startCrop();$('deleteSelection').onclick=async()=>{if(this.item&&this.editable()){const item=this.item;this.clear();if(item.kind==='group'){for(const m of item.members){try{await this.remove(m);}catch{}}}else{await this.remove(item);}}};
+  $('clearSelection').onclick=()=>this.clear();$('cropSelection').onclick=()=>this.startCrop();$('deleteSelection').onclick=async()=>{if(this.item&&this.editable()){const item=this.item;this.clear();if(item.compound&&this.removeWhole){await this.removeWhole(item);}else if(item.kind==='group'){for(const m of item.members){try{await this.remove(m);}catch{}}}else{await this.remove(item);}}};
  }
  clear(){this.token++;this.cropping?.cancel();this.cancel();this.item=null;this.overlay?.remove();this.overlay=null;$('selectionOptions').hidden=true;this.changed();}
  async selectId(page,id){
@@ -47,14 +47,16 @@ export class SelectionController {
  inspect(){
   const item=this.item;if(!item)return;const a=item.adjustment;
   if(item.kind==='group'){
-   $('selectionOptions').hidden=false;$('selectionKind').textContent=`Group (${item.members.length})`;
+   // A graph or table (several parts) says what it is and offers its editor.
+   $('selectionOptions').hidden=false;$('selectionKind').textContent=item.compound?(item.compound.kind==='graph'?'Graph':'Table'):`Group (${item.members.length})`;
+   $('editCompound').hidden=!item.compound;if(item.compound)$('editCompound').textContent=item.compound.kind==='graph'?'Edit graph…':'Edit table…';
    $('selectedStyle').hidden=true;$('cropSelection').hidden=true;
    $('selectedW').value=+(item.bounds[2]*a.scale[0]).toFixed(2);$('selectedW').disabled=false;
    $('selectedH').value=+(item.bounds[3]*a.scale[1]).toFixed(2);$('selectedH').disabled=false;
    $('selectedAngle').value=+(item.base_rotation+a.rotation).toFixed(2);
    return;
   }
-  $('selectionOptions').hidden=false;$('selectionKind').textContent={shape:'Shape',ink:'Stroke',image:'Image',text:'Text'}[item.kind];
+  $('selectionOptions').hidden=false;$('selectionKind').textContent={shape:'Shape',ink:'Stroke',image:'Image',text:'Text'}[item.kind];$('editCompound').hidden=true;
   $('selectedStyle').hidden=!item.styled;$('cropSelection').hidden=item.kind!=='image'||!item.crop;
   const rgba=a.rgba||item.base_rgba;
   $('selectedColor').value='#'+rgba.slice(0,3).map(n=>Math.round(n*255).toString(16).padStart(2,'0')).join('');

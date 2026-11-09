@@ -26,3 +26,13 @@ test('every key template has at most one cursor mark, and every tab a title', ()
     for (const [label, template = label] of keys) assert.ok((template.match(/‸/g) || []).length <= 1, template);
   }
 });
+
+test('arrow keys step over a whole LaTeX command', async () => {
+  const { caretStep } = await import('./math-keypad.js');
+  const v = '\\frac{1}{x}+\\alpha';
+  assert.equal(caretStep(v, 0, 1), 5, '\\frac is one step');
+  assert.equal(caretStep(v, 5, 1), 6);
+  assert.equal(caretStep(v, v.length, -1), v.length - 6, '\\alpha is one step back');
+  assert.equal(caretStep(v, 0, -1), 0);
+  assert.equal(caretStep(v, v.length, 1), v.length);
+});

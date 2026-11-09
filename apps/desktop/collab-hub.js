@@ -53,7 +53,7 @@ export function tabletMay(op, args) {
       && pages.every((p) => p && Object.keys(p).length === 1 && Array.isArray(p.size) && p.size.length === 2 && p.size.every((v) => Number.isFinite(v) && v > 0));
   }
   if (op === 'image') return typeof args?.image === 'object' && !!args.image?.text && !args.image.base64;
-  if (op === 'drawMany') return Array.isArray(args?.lines) && Array.isArray(args?.images ?? []) && args.lines.length + (args.images?.length || 0) <= 400
+  if (op === 'drawMany') return Array.isArray(args?.lines) && Array.isArray(args?.images ?? []) && Array.isArray(args?.replace ?? []) && args.lines.length + (args.images?.length || 0) + (args.replace?.length || 0) <= 1200
     && (args.images || []).every((image) => typeof image === 'object' && !!image?.text && !image.base64);
   return true;
 }

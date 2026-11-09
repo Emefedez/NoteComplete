@@ -33,6 +33,9 @@ pub struct Line {
     /// several lines of text) are one step.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub joined: bool,
+    /// One part of a graph or table (part.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<crate::Part>,
 }
 impl Line {
     /// A plain stroke: the given points, full width and colour, on layer 0.
@@ -48,6 +51,7 @@ impl Line {
             pressure: None,
             under: false,
             joined: false,
+            part: None,
         }
     }
 }
@@ -86,6 +90,10 @@ pub(crate) enum Edit {
     Erase {
         page: usize,
         ids: Vec<String>,
+        /// Undone and redone with the edit before it… or, first in a replacement, the edits
+        /// after it are joined to it (a graph or table drawn again).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        joined: bool,
     },
     /// A page's new size; content keeps its page coordinates (anchored top
     /// left). `pdf_rect` moves or scales its PDF; otherwise the PDF stays put.
@@ -138,6 +146,7 @@ impl Edit {
             Edit::Adjust { joined, .. } | Edit::ResizePage { joined, .. } => *joined,
             Edit::Add { line, .. } => line.joined,
             Edit::Image { image, .. } => image.joined,
+            Edit::Erase { joined, .. } => *joined,
             _ => false,
         }
     }
@@ -246,7 +255,9 @@ impl Editor {
         self.history[..self.cursor]
             .iter()
             .filter_map(|e| match e {
-                Edit::Erase { page: p, ids } if *p == page => Some(ids.iter().map(String::as_str)),
+                Edit::Erase { page: p, ids, .. } if *p == page => {
+                    Some(ids.iter().map(String::as_str))
+                }
                 _ => None,
             })
             .flatten()
@@ -347,6 +358,9 @@ impl Editor {
     fn check_line(line: &Line) -> Result<()> {
         if line.shape.as_ref().is_some_and(|s| !s.fill_valid()) {
             return Err(Error::new(0, "Invalid shape fill"));
+        }
+        if line.part.as_ref().is_some_and(|p| !p.valid()) {
+            return Err(Error::new(0, "Invalid graph or table part"));
         }
         let pressure_ok = line.pressure.as_ref().is_none_or(|p| {
             line.tool == 0
@@ -461,7 +475,11 @@ impl Editor {
         }
         let count = ids.len();
         if count > 0 {
-            self.commit(Edit::Erase { page, ids })?;
+            self.commit(Edit::Erase {
+                page,
+                ids,
+                joined: false,
+            })?;
         }
         Ok(count)
     }
@@ -642,6 +660,17 @@ impl Editor {
                 r
             })
             .collect();
+        // Parts of graphs and tables (part.rs): the reader selects and edits each as a whole.
+        let parts: Vec<Value> = self
+            .additions(page)
+            .filter_map(|(id, l)| l.part.clone().map(|p| (id, p)))
+            .chain(
+                self.images(page)
+                    .filter_map(|(id, i)| i.part.clone().map(|p| (id, p))),
+            )
+            .filter(|(id, _)| !deleted.contains(id.as_str()))
+            .map(|(item, p)| json!({"item":item,"id":p.id,"kind":p.kind,"spec":p.spec}))
+            .collect();
         let defs = if content.contains("nc-tape-pattern") {
             crate::scene::TAPE_DEFS
         } else {
@@ -649,7 +678,7 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>self.floor,"history_floor":self.floor,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page),"recognized_text":self.recognized_words(page),"canvas":self.canvas}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"parts":parts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>self.floor,"history_floor":self.floor,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page),"recognized_text":self.recognized_words(page),"canvas":self.canvas}),
         )
     }
     /// Items locked in place on a page, with their current bounds.
@@ -868,7 +897,7 @@ impl Editor {
                     }
                 }
                 Edit::Add { page, line } => editor.add_line(page, line)?,
-                Edit::Erase { page, ids } => {
+                Edit::Erase { page, ids, joined } => {
                     let p = editor.page(page)?;
                     let deleted = editor.deleted(page);
                     let valid: HashSet<String> = p
@@ -887,7 +916,7 @@ impl Editor {
                     {
                         return Err(Error::new(0, "Invalid erased item IDs"));
                     }
-                    editor.commit(Edit::Erase { page, ids })?;
+                    editor.commit(Edit::Erase { page, ids, joined })?;
                 }
             }
         }

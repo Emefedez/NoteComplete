@@ -60,6 +60,9 @@ import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath, mathSize, previewMath } from "./math-boxes.js";
 import { mathKeypad } from "./math-keypad.js";
 import { graphItems } from "./graph.js";
+import { tableItems } from "./table.js";
+import { editGraph, editTable } from "./compound-dialogs.js";
+import { mathField, styleField, mounted, focusField } from "./math-field.js";
 import { audioTrim } from "./audio-trim.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
@@ -171,7 +174,10 @@ audio.transcript = new TranscriptController(audio);
 audio.processing = new AudioProcessing(audio.audio);
 let addedStore = null; // recordings added in NoteComplete, set up with the library below
 const selection = new SelectionController({
-  call,
+  // A part of a graph or table selects all of it (pickWhole, with the object's editor).
+  call: (op, args) => (op === "pick" ? pickWhole(args) : call(op, args)),
+  // A graph or table is removed in one step.
+  removeWhole: (item) => action("drawMany", { page: item.page, replace: item.compound.items, lines: [], images: [] }),
   patch: patchItem,
   remove: (item) => action("remove", { page: item.page, itemId: item.id }),
   panel: (index) => panels[index],
@@ -973,9 +979,61 @@ async function openTextEditor(p, [x, y], known = null) {
   // Math (the ∑ button): the formula typeset live under the box while its LaTeX is typed.
   const mathPreview = Object.assign(document.createElement("div"), { className: "math-preview" });
   mathPreview.setAttribute("aria-hidden", "true");
+  // A box that is one formula is edited in a math field (math-field.js) over the text box:
+  // tap any part to change it, arrows through its structure. The text box keeps its LaTeX.
+  // Words mixed with $…$ stay as LaTeX text, with the typeset preview under the box.
+  let field = null, fieldLoading = false;
+  const placeField = () => {
+    if (!field) return;
+    const s = p.el.clientWidth / p.size[0];
+    styleField(field, { ...style, size: style.size * s });
+    Object.assign(field.style, { left: area.style.left, top: area.style.top, minWidth: `${Math.max(48, 40 * s)}px`, minHeight: area.style.height });
+    discard.style.left = `calc(${area.style.left} + ${field.offsetWidth}px)`;
+  };
+  const dropField = () => {
+    if (!field) return;
+    const focused = document.activeElement === field;
+    field.remove();
+    field = textEditor && (textEditor.field = null);
+    area.classList.remove("under-field");
+    if (focused) area.focus();
+  };
+  const useField = () => {
+    if (field || fieldLoading) return placeField();
+    fieldLoading = true;
+    const s = p.el.clientWidth / p.size[0];
+    mathField(area.value, { ...style, size: style.size * s }, {
+      onInput: (latex) => { area.value = latex; fit(); placeField(); },
+    }).then((mf) => {
+      if (textEditor?.area !== area || !style.math || area.value.includes("$")) return;
+      field = textEditor.field = mf;
+      // Esc and Ctrl+Enter finish the box before the field sees them; other keys go to the
+      // field, and stop there (no tool or study shortcuts while a formula is typed).
+      mf.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) closeText(); else commitText(); }
+        else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); commitText(); }
+      }, true);
+      mf.addEventListener("keydown", (e) => e.stopPropagation());
+      mf.addEventListener("focusout", () => setTimeout(() => {
+        if (textEditor?.field !== mf || document.activeElement === mf || document.activeElement === area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
+        commitText();
+      }, 0));
+      area.classList.add("under-field");
+      p.el.append(mf);
+      mounted(mf);
+      placeField();
+      mathKeys.attach(mf);
+      // MathLive takes the focus only once it is mounted (the hidden text box has lost it).
+      focusField(mf);
+      keepTextVisible();
+    }).catch(() => status("The formula editor could not load: type the LaTeX instead.", true)).finally(() => { fieldLoading = false; });
+  };
   const showMath = () => {
-    mathPreview.hidden = !style.math;
+    const formula = style.math && !area.value.includes("$");
+    if (!formula) dropField();
+    mathPreview.hidden = !style.math || formula;
     if (!style.math) return mathKeys.detach();
+    if (formula) return useField();
     mathKeys.attach(area);
     const s = p.el.clientWidth / p.size[0];
     Object.assign(mathPreview.style, { left: area.style.left, top: `calc(${area.style.top} + ${area.style.height} + 6px)` });
@@ -1000,7 +1058,7 @@ async function openTextEditor(p, [x, y], known = null) {
   // Leaving the box finishes it, unless the focus went to its format bar (or came back,
   // as when the page is redrawn under it: renderPage).
   area.addEventListener("blur", () => setTimeout(() => {
-    if (textEditor?.area !== area || document.activeElement === area || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
+    if (textEditor?.area !== area || document.activeElement === area || (textEditor.field && document.activeElement === textEditor.field) || textFormatBar.contains(document.activeElement) || Date.now() - textFormatPressed < 1000) return;
     commitText();
   }, 0));
   requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
@@ -1026,6 +1084,7 @@ function closeText() {
   if (!t) return;
   hideText(t.p, t.existing?.id, false);
   t.area.remove();
+  t.field?.remove();
 }
 // Finished text stays on screen as typed, in the box without its frame, until a render of
 // its page with the edit is in place (renderPage): removing the box at once left the text
@@ -1033,6 +1092,15 @@ function closeText() {
 // edit is in the note, or lets the box go if it never gets there.
 function holdText() {
   const t = endText();
+  // A formula stays as typeset in its field until the page shows it.
+  if (t.field) {
+    t.area.remove();
+    t.field.readOnly = true;
+    t.field.tabIndex = -1;
+    const hold = { p: t.p, els: [t.field], item: t.existing?.id, revision: Infinity };
+    (t.p.held ||= []).push(hold);
+    return hold;
+  }
   t.area.readOnly = true;
   t.area.tabIndex = -1;
   t.area.setAttribute("aria-hidden", "true");
@@ -1458,17 +1526,17 @@ async function renderPage(p, provided) {
     p.render = render;
     p.overlay = overlay;
     keepHeld(p, shows, true);
-    const typing = textEditor?.p === p && document.activeElement === textEditor.area;
+    const typing = textEditor?.p === p && (document.activeElement === textEditor.area || (textEditor.field && document.activeElement === textEditor.field));
     p.el.replaceChildren(render, overlay, lockMarks(result));
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     // Typed text is not lost to a redraw (another screen's edit, a zoom): finished text
     // waiting for its own render stays, and so does the box being typed in.
     keepHeld(p, shows, false);
     if (textEditor?.p === p) {
-      p.el.append(textEditor.area, textEditor.discard, textEditor.mathPreview);
+      p.el.append(textEditor.area, textEditor.discard, textEditor.mathPreview, ...(textEditor.field ? [textEditor.field] : []));
       hideText(p, textEditor.existing?.id);
       textEditor.fit();
-      if (typing) textEditor.area.focus({ preventScroll: true });
+      if (typing) (textEditor.field || textEditor.area).focus({ preventScroll: true });
     }
     if (textFormatTarget?.p === p && !textFormatDocked()) p.el.append(textFormatBar);
     typesetMath(render, result.texts);
@@ -2063,6 +2131,8 @@ function pointerDown(e, p) {
     // Strokes are smoothed: most for a stylus or a finger, a little for a mouse.
     smooth: tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free") ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
     pressures: [e.pressure],
+    // The Shapes tool's kind when the drag started (a graph or table opens its editor at the end).
+    kind: tool === "shape" ? $("shape").value : null,
   };
   if (tool === "highlight" && $("highlightMode").value === "text") startTextHighlight(gesture);
   p.el.setPointerCapture(e.pointerId);
@@ -2362,6 +2432,14 @@ function pointerUp(e) {
     if (shape) snapTo(g, shape);
   }
   if (g.snapped) return commitSnapped(g);
+  // The Shapes tool's Graph and Table: the box dragged is where the object goes, after its editor.
+  if (g.tool === "shape" && (g.kind === "graph" || g.kind === "table")) {
+    g.el.remove();
+    g.dot.remove();
+    const end = point(e, g.panel), box = [Math.min(g.start[0], end[0]), Math.min(g.start[1], end[1]), Math.abs(end[0] - g.start[0]), Math.abs(end[1] - g.start[1])];
+    insertCompound(g.panel, g.kind, box);
+    return;
+  }
   if (g.tool === "erase")
     action("erase", { page: g.panel.index, points: g.points, radius: eraserRadius() });
   else {
@@ -3284,7 +3362,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert graph: axes and grid to draw on"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert graph: a function of x, or axes and a grid to draw on"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -3349,6 +3427,7 @@ function shortcut(e) {
   if (k === "I") return $("importImage").click(), true;
   if (k === "B") return $("insertBlank").click(), true;
   if (k === "X") return $("insertGraph").click(), true;
+  if (k === "Y") return $("insertTable").click(), true;
   if (k === "O") return $("ocrOpen").click(), true;
   if (k === "E") return $("exportStudy").click(), true;
   // Lifts all tape, or covers it all again when it is all lifted.
@@ -3787,6 +3866,7 @@ async function patchItem(item, adjustment, crop = null) {
 }
 $("insertShape").onclick = () => {
   if (!doc || editing) return;
+  if (["graph", "table"].includes($("shape").value)) return insertCompound(panels[page], $("shape").value);
   document.querySelector('[data-tool="shape"]').click();
   const p = panels[page],
     r = p.el.getBoundingClientRect(),
@@ -4531,7 +4611,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .notecomp only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -4925,43 +5005,97 @@ function openInsert(pdf) {
   $("insertDialog").showModal();
 }
 $("insertBlank").onclick = () => doc && openInsert(null);
-// Graphs (graph.js): empty axes from Insert → Graph, or a function from the math keypad.
-const GRAPH_SIZE = [420, 300];
-async function insertGraph(p, [x, y], tex = "") {
-  const layer = doc?.layers.find((l) => l.id === activeLayer);
-  if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
-  const [w, h] = [Math.min(GRAPH_SIZE[0], p.size[0] - 60), GRAPH_SIZE[1]];
-  // Inside the page, with room for the axis names and arrows past its edges.
-  const box = [Math.max(20, Math.min(x, p.size[0] - w - 40)), Math.max(30, Math.min(y, p.size[1] - h - 30)), w, h];
-  const pen = { ...TOOL_DEFAULTS.draw, ...toolPrefs.draw };
-  let items;
-  try {
-    items = graphItems(box, { tex, rgba: [...rgbaOf(pen.color).slice(0, 3), 1], width: Number(pen.width) || 2, layer: activeLayer });
-  } catch (e) {
-    return status(e.message, true), false;
+// Graphs and tables (graph.js, table.js, compound-dialogs.js): drawn as ordinary items, parts
+// of one object (part.rs) so that any of it selects all of it and its editor brings back
+// what it is. Insert → Graph or Table, a box dragged with the Shapes tool's Graph or Table,
+// or the math keypad's graph key; Edit graph / Edit table on the selected object.
+const COMPOUND_SIZE = { graph: [420, 300], table: [360, 132] };
+const compoundId = (kind) => `${kind[0]}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const penStyle = () => { const pen = { ...TOOL_DEFAULTS.draw, ...toolPrefs.draw }; return { rgba: [...rgbaOf(pen.color).slice(0, 3), 1], width: Number(pen.width) || 2 }; };
+function compoundItems(kind, box, spec, id = compoundId(kind)) {
+  return kind === "graph" ? graphItems(box, spec, { ...penStyle(), layer: activeLayer, id }) : tableItems(box, spec, { layer: activeLayer, id });
+}
+// A box on the page for a new graph or table: centred on `at` (or the middle of the view),
+// inside the page with room for a graph's axis names past its edges.
+function compoundBox(p, kind, box = null) {
+  if (box && box[2] >= 40 && box[3] >= 30) return box;
+  const [w, h] = [Math.min(COMPOUND_SIZE[kind][0], p.size[0] - 60), COMPOUND_SIZE[kind][1]];
+  let x, y;
+  if (box) [x, y] = box;
+  else {
+    const r = p.el.getBoundingClientRect(), v = $("viewport").getBoundingClientRect();
+    y = (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) / r.height) * p.size[1] - h / 2;
+    x = (p.size[0] - w) / 2;
   }
+  return [Math.max(20, Math.min(x, p.size[0] - w - 40)), Math.max(30, Math.min(y, p.size[1] - h - 30)), w, h];
+}
+// The editor for a new graph or table, then the object in `box` (one undo step).
+async function insertCompound(p, kind, box = null, spec = {}) {
+  if (!doc || !p) return false;
+  const layer = doc.layers.find((l) => l.id === activeLayer);
+  if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
+  const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: mathKeys }) : await editTable({ spec });
+  if (!chosen) return false;
+  let items;
+  try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
   await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
-  status(tex ? "Graph drawn: each part is its own item (one undo removes it all)." : "Graph inserted: draw on it with the pen. One undo removes it.");
+  status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
   return true;
 }
-$("insertGraph").onclick = () => {
-  if (!doc) return;
-  const p = panels[page], r = p.el.getBoundingClientRect(), v = $("viewport").getBoundingClientRect();
-  const cy = (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) / r.height) * p.size[1];
-  insertGraph(p, [(p.size[0] - GRAPH_SIZE[0]) / 2, cy - GRAPH_SIZE[1] / 2]);
-};
-// The keypad's Graph key: the box's function on axes below it (the box is kept), or empty
-// axes there when the box is empty. A formula that cannot be drawn leaves the box open.
+$("insertGraph").onclick = () => doc && insertCompound(panels[page], "graph");
+$("insertTable").onclick = () => doc && insertCompound(panels[page], "table");
+// The box a graph or table has now: its frame's (moved or resized since it was drawn).
+async function compoundFrame(item) {
+  const c = item.compound, info = await call("selection", { page: item.page, itemId: c.frame });
+  const [x, y, w, h] = info.bounds, a = info.adjustment, pad = info.base_width / 2;
+  const cw = (w - 2 * pad) * a.scale[0], ch = (h - 2 * pad) * a.scale[1], cx = x + w / 2 + a.translation[0], cy = y + h / 2 + a.translation[1];
+  return [cx - cw / 2, cy - ch / 2, cw, ch];
+}
+// Edit graph / Edit table: its editor with what it is, then drawn again where it is now.
+async function editCompound(item) {
+  const c = item?.compound;
+  if (!c || !doc) return;
+  let spec = {};
+  try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
+  const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: mathKeys }) : await editTable({ spec, editing: true });
+  if (!chosen) return;
+  let items;
+  try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
+  selection.clear();
+  await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
+  status(`${c.kind === "graph" ? "Graph" : "Table"} changed. One undo brings back the one before.`);
+}
+// Any part picked selects the whole graph or table: a group of its parts, with what it is.
+async function pickWhole(args) {
+  const item = await call("pick", args);
+  const parts = item && panels[args.page]?.view?.parts;
+  const part = parts?.find((q) => q.item === item.id);
+  if (!part) return item;
+  const own = parts.filter((q) => q.id === part.id), frame = own.find((q) => q.spec);
+  const members = (await Promise.all(own.map((q) => call("selection", { page: args.page, itemId: q.item }).catch(() => null)))).filter(Boolean);
+  if (members.length < 2) return item;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const m of members) {
+    const [x, y, w, h] = m.bounds, a = m.adjustment, cx = x + w / 2 + a.translation[0], cy = y + h / 2 + a.translation[1], hw = (w * Math.abs(a.scale[0])) / 2, hh = (h * Math.abs(a.scale[1])) / 2;
+    x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
+  }
+  return {
+    kind: "group", page: args.page, id: `group:${part.id}`, bounds: [x0, y0, x1 - x0, y1 - y0],
+    base_rotation: 0, base_width: 1, base_rgba: [0, 0, 0, 1], styled: false,
+    adjustment: { translation: [0, 0], scale: [1, 1], rotation: 0 }, members,
+    compound: { id: part.id, kind: part.kind, spec: frame?.spec, frame: frame?.item ?? own[0].item, items: own.map((q) => q.item) },
+  };
+}
+$("editCompound").onclick = () => editCompound(selection.item);
+// The keypad's graph key in a text box: the graph editor with the box's function; the graph
+// goes under the box, which is kept.
 async function graphFromBox(value) {
   const t = textEditor;
   if (!t) return;
   const tex = value.trim(), [, h] = tex ? await boxSize(tex, t.style) : [0, 0];
-  const at = [t.bx, t.by + h + 24];
-  if (tex) {
-    try { graphItems([0, 0, ...GRAPH_SIZE], { tex }); } catch (e) { return status(e.message, true); }
-    await commitText();
-  } else closeText();
-  await insertGraph(t.p, at, tex);
+  const p = t.p, at = [t.bx, t.by + h + 24, 0, 0];
+  if (tex) await commitText(); else closeText();
+  await insertCompound(p, "graph", at, { functions: tex ? [tex] : [] });
 }
 $("insertPdf").onclick = () => doc && $("pdfPagesFile").click();
 $("pdfPagesFile").onchange = async (event) => {

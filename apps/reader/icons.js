@@ -70,6 +70,18 @@ const paths = {
  backspace:'M9 5h11v14H9l-6-7 6-7Zm4 4 6 6m0-6-6 6',
  slotNext:'M4 12h11m-4-4 4 4-4 4M20 6v12',
  slotPrev:'M20 12H9m4-4-4 4 4 4M4 6v12',
+ arrowLeft:'m14 6-6 6 6 6',
+ arrowRight:'m10 6 6 6-6 6',
+ arrowUp:'m6 14 6-6 6 6',
+ arrowDown:'m6 10 6 6 6-6',
+ // Tables (table.js): the grid, and rows or columns added or taken away.
+ table:'M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14M15 5v14',
+ rowAbove:'M3 11h18v8H3zM3 15h18M12 3v6M9 6h6',
+ rowBelow:'M3 5h18v8H3zM3 9h18M12 15v6M9 18h6',
+ colLeft:'M11 3h8v18h-8zM15 3v18M3 12h6M6 9v6',
+ colRight:'M5 3h8v18H5zM9 3v18M15 12h6M18 9v6',
+ rowDelete:'M3 7h18v10H3zM3 12h18M9 9.5l6 5M15 9.5l-6 5',
+ colDelete:'M7 3h10v18H7zM12 3v18M9.5 9l5 6M14.5 9l-5 6',
  chat:'M4 5h16v11H9l-5 4V5Z',
  tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };

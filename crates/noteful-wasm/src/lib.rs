@@ -261,6 +261,14 @@ impl EditorSession {
         self.inner.crop_item(page, id, rect).map_err(js_error)?;
         Ok(on_page(self.inner.item_patch(page, id).map_err(js_error)?, display).to_string())
     }
+    /// Several items in one edit (JSON list of ids); `joined` undoes it with the edit before.
+    pub fn remove_items(&mut self, page: usize, ids: &str, joined: bool) -> Result<(), JsValue> {
+        let page = self.inner.slot(page).map_err(js_error)?;
+        let ids: Vec<String> = serde_json::from_str(ids).map_err(js_error)?;
+        self.inner
+            .remove_items(page, &ids, joined)
+            .map_err(js_error)
+    }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), JsValue> {
         let page = self.inner.slot(page).map_err(js_error)?;
         self.inner.remove_item(page, id).map_err(js_error)

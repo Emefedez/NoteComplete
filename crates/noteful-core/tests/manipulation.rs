@@ -1,6 +1,7 @@
 use noteful_core::{Adjustment, Editor, Line, Package};
 fn line() -> Line {
     Line {
+        part: None,
         points: vec![[10., 10.], [110., 10.]],
         width: 2.,
         rgba: [0., 0., 1., 1.],

@@ -6,6 +6,8 @@
 // No library: KaTeX (already used for the boxes) only draws the key labels.
 import { loadKatex } from './rich-text.js';
 import { icon } from './icons.js';
+// Small: MathLive itself loads only when a formula is edited (math-field.js loadMathLive).
+import { mathliveTemplate, MOVES } from './math-field.js';
 
 // ‸ marks where the cursor goes; a selection is put there (selecting x and pressing √ gives √x).
 const C = '‸';
@@ -50,19 +52,54 @@ export function nextSlot(value, from, back = false) {
 }
 
 // `onLayout`: the keypad's height changed (keys drawn, a tab chosen), so what it covers did.
+// The caret moved one step in LaTeX text: a command (\frac, \alpha) is one step.
+export function caretStep(value, at, dir) {
+  if (dir > 0) {
+    if (at >= value.length) return value.length;
+    const command = /^\\[a-zA-Z]+/.exec(value.slice(at));
+    return at + (command ? command[0].length : 1);
+  }
+  if (at <= 0) return 0;
+  const command = /\\[a-zA-Z]+$/.exec(value.slice(0, at));
+  return at - (command ? command[0].length : 1);
+}
+
+// `onGraph(latex)`: the Graph key. `onLayout`: the keypad's height changed (keys drawn, a tab
+// chosen), so what it covers did. It types into a text field (LaTeX as text) or into a
+// MathLive field (math-field.js), whichever it is attached to.
 export function mathKeypad({ onGraph, onLayout = () => {}, status = () => {} } = {}) {
   let area = null, el = null, tab = 0, typing = false, listener = null;
   const touch = () => matchMedia('(pointer: coarse)').matches;
+  const isField = () => area?.localName === 'math-field';
+  // Synchronous, so a key typed right after a template lands inside it.
+  const command = (name) => area?.executeCommand(MOVES[name]);
   function insert(template) {
     if (!area) return;
+    if (isField()) {
+      area.insert(mathliveTemplate(template), { selectionMode: 'placeholder', focus: true });
+      return;
+    }
     const { value, cursor } = applyTemplate(area.value, area.selectionStart, area.selectionEnd, template);
     area.value = value;
     area.setSelectionRange(cursor, cursor);
     area.dispatchEvent(new Event('input'));
   }
-  function jump(back = false) {
-    const at = nextSlot(area.value, area.selectionStart, back);
-    area.setSelectionRange(at, at);
+  // Arrows: through the structure in a math field; in text, by LaTeX steps (← →) and between
+  // empty places (↑ ↓).
+  function move(dir) {
+    if (!area) return;
+    if (isField()) return command(dir);
+    const at = area.selectionStart;
+    const to = dir === 'left' ? caretStep(area.value, at, -1) : dir === 'right' ? caretStep(area.value, at, 1) : nextSlot(area.value, at, dir === 'up');
+    area.setSelectionRange(to, to);
+  }
+  function erase() {
+    if (!area) return;
+    if (isField()) return command('back');
+    const s = area.selectionStart, e = area.selectionEnd;
+    if (s === e && s === 0) return;
+    area.setRangeText('', s === e ? caretStep(area.value, s, -1) : s, e, 'end');
+    area.dispatchEvent(new Event('input'));
   }
   // A key press keeps the typing focus (and the box open) instead of taking it.
   const keep = (b) => { b.addEventListener('pointerdown', (e) => e.preventDefault()); return b; };
@@ -100,16 +137,13 @@ export function mathKeypad({ onGraph, onLayout = () => {}, status = () => {} } =
     const spacer = document.createElement('span');
     spacer.className = 'spacer';
     head.append(tabs, spacer,
-      button('slotPrev', 'Previous empty place (Shift Tab)', () => jump(true), 'math-nav'),
-      button('slotNext', 'Next empty place (Tab)', () => jump(), 'math-nav'),
-      button('backspace', 'Delete', () => {
-        const s = area.selectionStart, e = area.selectionEnd;
-        if (s === e && s === 0) return;
-        area.setRangeText('', s === e ? s - 1 : s, e, 'end');
-        area.dispatchEvent(new Event('input'));
-      }, 'math-nav'),
+      button('arrowLeft', 'Left', () => move('left'), 'math-nav'),
+      button('arrowRight', 'Right', () => move('right'), 'math-nav'),
+      button('arrowUp', 'Up: the place before, or up in the formula (Shift Tab)', () => move('up'), 'math-nav'),
+      button('arrowDown', 'Down: the next place, or down in the formula (Tab)', () => move('down'), 'math-nav'),
+      button('backspace', 'Delete', erase, 'math-nav'),
       keyboard,
-      button('graph', 'Graph: draw this function of x on axes below the box (empty axes when the box is empty)', () => onGraph?.(area.value), 'math-graph'),
+      button('graph', 'Graph: draw this function of x on axes below the box (empty axes when the box is empty)', () => onGraph?.(area?.value ?? ''), 'math-graph'),
     );
     const keys = document.createElement('div');
     keys.className = 'math-keys';
@@ -120,7 +154,8 @@ export function mathKeypad({ onGraph, onLayout = () => {}, status = () => {} } =
     const [, keys] = KEY_TABS[tab];
     el.querySelectorAll('[role=tab]').forEach((b, i) => b.setAttribute('aria-selected', String(i === tab)));
     el.querySelector('.math-abc').setAttribute('aria-pressed', String(typing));
-    el.querySelector('.math-abc').hidden = !touch();
+    el.querySelector('.math-abc').hidden = !touch() || isField();
+    el.querySelector('.math-graph').hidden = !onGraph || !!area?.closest?.('dialog');
     const grid = el.querySelector('.math-keys');
     const katex = await loadKatex().catch(() => null);
     // Key faces and tab names are typeset, so each shows the symbol it writes.
@@ -141,37 +176,41 @@ export function mathKeypad({ onGraph, onLayout = () => {}, status = () => {} } =
     if (area) onLayout();
   }
   function keydown(e) {
-    if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+    // A math field moves between its places with Tab by itself.
+    if (isField() || e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    jump(e.shiftKey);
+    move(e.shiftKey ? 'up' : 'down');
   }
   return {
     get open() { return !!area; },
     // Where the keypad starts on screen (what it covers below), for keeping the box in view.
     get top() { return el && !el.hidden ? el.getBoundingClientRect().top : innerHeight; },
-    attach(textarea) {
-      if (area === textarea) return;
+    // A text field or a math field to type into.
+    attach(target) {
+      if (area === target) return;
       this.detach();
-      area = textarea;
+      area = target;
       if (!el) build();
-      // Touch: the keypad is the keyboard until ABC is pressed.
+      // Touch: the keypad is the keyboard of a text field until the keyboard key is pressed.
       typing = !touch();
-      if (!typing) area.inputMode = 'none';
+      if (!typing && !isField()) area.inputMode = 'none';
       area.addEventListener('keydown', keydown);
       listener = place;
       window.visualViewport?.addEventListener('resize', listener);
       el.hidden = false;
       draw();
-      status('Math: type LaTeX or use the keys; Tab goes to the next empty place.');
+      status(isField() ? 'Math: tap any part to change it; arrows move through the formula.' : 'Math: type LaTeX or use the keys; Tab goes to the next empty place.');
     },
     detach() {
       if (!area) return;
       area.removeEventListener('keydown', keydown);
-      area.inputMode = '';
+      if (!isField()) area.inputMode = '';
       window.visualViewport?.removeEventListener('resize', listener);
       area = null;
       if (el) el.hidden = true;
     },
+    // Shown inside `parent` (a modal dialog is above everything else on the page).
+    mount(parent) { if (!el) build(); if (el.parentElement !== parent) parent.append(el); },
     // Whether a press went to the keypad (so the box it types into stays open).
     contains: (node) => !!el?.contains(node),
   };

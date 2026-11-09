@@ -196,6 +196,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                     bounds: [need(it.x, n, "x")?, need(it.y, n, "y")?, w, h],
                     layer: 0,
                     joined: false,
+                    part: None,
                     text: Some(TextBox {
                         text: text.to_owned(),
                         font_size: size,

@@ -63,7 +63,13 @@ export function isWord(text, lexicon) {
   return key.length > 1 && (lexicon.has(key) || lexicon.all?.has(key));
 }
 
+// Word lists stay loaded while recognition goes on, and are let go three minutes after the
+// last use (the full lists are hundreds of thousands of words); the browser's HTTP cache
+// keeps the downloads, so a later run reads them again without the network.
 const loaded = new Map();
+export const DICTIONARY_IDLE_MS = 3 * 60 * 1000;
+let idle = 0;
+export function forgetDictionaries() { clearTimeout(idle); loaded.clear(); }
 const download = url => fetch(url, { cache: 'force-cache' }).then(r => { if (!r.ok) throw new Error(`word list ${r.status}`); return r; });
 function loadLanguage(language) {
   const lists = LISTS[language];
@@ -76,6 +82,9 @@ function loadLanguage(language) {
 }
 // The lexicon of the chosen languages that have word lists; null when none has.
 export async function loadDictionary(languages) {
+  clearTimeout(idle);
+  idle = setTimeout(forgetDictionaries, DICTIONARY_IDLE_MS);
+  idle?.unref?.();
   const chosen = [].concat(languages).filter(l => LISTS[l]);
   return chosen.length ? makeLexicon(await Promise.all(chosen.map(loadLanguage))) : null;
 }
