@@ -3,12 +3,13 @@
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
 import { factCheckPrompt, cleanFindings, findingsMarkdown, referenceText } from './fact-check.js';
-import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
+import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages, canvasImage } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
+import { runAI, smallStudy } from './small-model.js';
 
 const $ = id => document.getElementById(id);
 const BATCH = 6, PARALLEL = 3;
@@ -104,6 +105,15 @@ export function cardVerdict(value, card) {
   return { correct: value?.correct === true, front: text(value?.front, card.front), back: text(value?.back, card.back), reason: typeof value?.reason === 'string' ? value.reason.trim() : '' };
 }
 
+// The JSON shapes the prompts ask for, as JSON Schema. The model in this app
+// (local-ai.js) is constrained to them; the desktop tools ignore the field.
+export function studySchema(kind) {
+  const page = { type: 'integer' };
+  if (kind === 'cards') return { type: 'object', properties: { cards: { type: 'array', items: { type: 'object', properties: { front: { type: 'string' }, back: { type: 'string' }, page }, required: ['front', 'back', 'page'] } } }, required: ['cards'] };
+  if (kind === 'quiz') return { type: 'object', properties: { questions: { type: 'array', items: { type: 'object', properties: { question: { type: 'string' }, options: { type: 'array', items: { type: 'string' } }, answer: { type: 'integer' }, source: { type: 'object', properties: { page, quote: { type: 'string' } }, required: ['page'] } }, required: ['question', 'options', 'answer', 'source'] } } }, required: ['questions'] };
+  return undefined;
+}
+
 export function prompts(kind, { amount, language, title, unit = 'page', pages = [] }) {
   const lang = language ? `Write in ${language}.` : "Write in the note's own language.";
   const count = pages.length || 1;
@@ -129,7 +139,7 @@ export function prompts(kind, { amount, language, title, unit = 'page', pages = 
   return `${intro}\n${multiQuestions} ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":${samplePage}}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null }) {
+export function studyController({ ai, pageCanvas, pageText, pageWords = async () => null, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -148,7 +158,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     await model.load(select.value);
   }
   function unavailable() {
-    status('Flashcards, quizzes and chat use AI tools installed on your computer (Claude Code, Antigravity, Codex or OpenCode) and are available in the desktop app.', true);
+    status('Flashcards, quizzes and chat need the desktop app with an AI tool (Claude Code, Antigravity, Codex or OpenCode), or a browser with WebGPU (recent Chrome, Edge or Safari) to run a model in this app.', true);
   }
   async function open(kind) {
     if (!ai) return unavailable();
@@ -195,11 +205,13 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
     try { localStorage.setItem('notecomplete-ai-provider', provider); localStorage.setItem('notecomplete-ai-model:' + provider, chosen); } catch { /* Optional. */ }
     const pages = chosenPages(), { title, unit } = documentInfo(), kind = mode;
     const amount = $('studyAmount').value, language = $('studyLanguage').value;
+    // Small model (small-model.js): each page read and worked on alone, then merged.
+    const small = model.small, vision = model.vision, contextTokens = model.contextTokens;
     const batches = [];
     for (let i = 0; i < pages.length; i += BATCH) batches.push(pages.slice(i, i + BATCH));
     $('studyDialog').close();
     cancelled = false;
-    const job = jobs.start(kind === 'cards' ? 'Flashcards' : kind === 'check' ? 'Fact check' : 'Quiz', { pages: pages.length, batches: batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel('study'); } });
+    const job = jobs.start(kind === 'cards' ? 'Flashcards' : kind === 'check' ? 'Fact check' : 'Quiz', { pages: small ? 0 : pages.length, batches: small ? 1 : batches.length, kind: 'ai', cancel: () => { cancelled = true; ai.cancel('study'); } });
     (async () => {
       // A few batches at a time: each request mostly waits on the AI service,
       // and page preparation for the next batch overlaps the ones in flight.
@@ -209,8 +221,9 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       try {
         avoid = kind === 'quiz' ? (await quizzes.disputed()).slice(0, 40) : [];
       } catch { /* Optional. */ }
+      let failed = [];
       // A fact check over several batches compares each with the text of all the others.
-      if (kind === 'check' && batches.length > 1) {
+      if (!small && kind === 'check' && batches.length > 1) {
         for (const p of pages) {
           if (cancelled) break;
           const parts = await pageText(p).catch(() => ({}));
@@ -230,7 +243,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
                 ? factCheckPrompt({ title, language, unit, pages: batch, reference: referenceText(texts.filter(t => !batch.includes(t.page))) })
                 : quizPrompt(instructions(), { amount, language, title, unit, pages: batch }))
               + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
-            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study' });
+            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study', schema: studySchema(kind) });
             if (cancelled) return;
             const parsed = jsonFrom(text);
             answers[b] = kind === 'cards' ? cleanCards(parsed, batch) : kind === 'check' ? cleanFindings(parsed, batch) : prepareQuestions(parsed, batch);
@@ -243,21 +256,46 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
           }
         }
       };
+      const smallRun = async () => {
+        const own = instructions() !== DEFAULT_QUIZ_PROMPT ? instructions() : '';
+        const out = await smallStudy({
+          ai, provider, model: chosen, notePath: notePath(), kind, pages, amount, language, title, unit, vision, contextTokens,
+          instructions: [own, avoid.length ? `Do not ask these questions the student marked as wrong, or close variants:\n${avoid.slice(0, 10).map(q => `- ${q}`).join('\n')}` : ''].filter(Boolean).join('\n'),
+          pageImage: async p => {
+            const drawn = await pageCanvas(p, 1400, { liftTape: true });
+            if (!drawn?.canvas) return null;
+            const image = await canvasImage(drawn.canvas, `page-${p + 1}`);
+            drawn.canvas.width = drawn.canvas.height = 0;
+            return image;
+          },
+          pageText: async p => Object.values((await pageText(p, { recognize: true }).catch(() => ({}))) || {}).filter(v => typeof v === 'string').join('\n'),
+          pageWords,
+          clean: (k, value, batch) => (k === 'cards' ? cleanCards(value, batch) : k === 'check' ? cleanFindings(value, batch) : prepareQuestions(value, batch)),
+          onProgress: ({ phase, fraction }) => job.set(fraction, phase),
+          cancelled: () => cancelled,
+        });
+        failed = out.failures;
+        answers.push(out.items);
+      };
       try {
-        await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
+        if (small) await smallRun();
+        else await Promise.all(Array.from({ length: Math.min(PARALLEL, batches.length) }, lane));
         const results = answers.flatMap(a => a || []);
         if (failure && !results.length) throw failure;
+        if (failed.length && !results.length && !cancelled) throw Error(failed[0].error);
+        // Small model: pages that failed are skipped, the others kept.
+        const word = unit === 'section' ? 'section' : 'page';
+        const skipped = failed.length ? ` (${failed.length} ${word}${failed.length === 1 ? '' : 's'} failed: ${failed[0].error})` : '';
         if (kind === 'check') {
-          const stoppedEarly = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
+          const stoppedEarly = (cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '') + skipped;
           if (!results.length) return job.fail(cancelled ? 'Fact check stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
           const issues = results.reduce((n, f) => n + f.issues.length, 0);
           if (!appendNotes) throw new Error('This document has no notes to add the fact check to.');
           await appendNotes(findingsMarkdown(results, { provider: providerName, unit }));
-          const word = unit === 'section' ? 'section' : 'page';
           return job.finish(issues ? `Fact check: ${issues} ${issues === 1 ? 'suggestion' : 'suggestions'} on ${results.filter(f => f.issues.length).length} of ${results.length} ${word}s, added to your notes${stoppedEarly}.` : `Fact check: nothing to correct on ${results.length} ${results.length === 1 ? word : `${word}s`}; noted in your notes${stoppedEarly}.`, openNotes ? { label: 'Open notes', run: openNotes } : undefined);
         }
         if (!results.length) return job.fail(cancelled ? 'Generation stopped.' : 'The AI returned nothing usable. Try again or choose other pages.');
-        const stopped = cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '';
+        const stopped = (cancelled ? (failure ? ` (stopped early: ${failure.message})` : ' (stopped early)') : '') + skipped;
         const name = `${title} · ${unit === 'section' ? '§' : 'p.'} ${pages[0] + 1}${pages.length > 1 ? `–${pages.at(-1) + 1}` : ''}`;
         if (kind === 'cards') {
           const value = { id: String(Date.now()), title: name, created: Date.now(), cards: results };
@@ -525,7 +563,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       const { provider, model } = await aiChoice(), want = material();
       const context = await cardContext(card, { ...want, page: true });
       if (fixing !== fix) return;
-      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-check', prompt: [cardCheckPrompt(card, card.page ? (documentInfo().unit === 'section' ? 'section' : true) : false), ...context.notes.filter(Boolean), context.text].filter(Boolean).join('\n\n') });
+      const { text } = await runAI(ai, { provider, model, notePath: want.note ? notePath() : '', images: context.images, tag: 'card-check', prompt: [cardCheckPrompt(card, card.page ? (documentInfo().unit === 'section' ? 'section' : true) : false), ...context.notes.filter(Boolean), context.text].filter(Boolean).join('\n\n') }, null, { small: cardModel?.small, vision: cardModel?.vision });
       fix.asking = false;
       if (fixing !== fix) return;
       const verdict = cardVerdict(jsonFrom(text), card);
@@ -661,7 +699,7 @@ export function studyController({ ai, pageCanvas, pageText, documentInfo, curren
       let timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)).then(growWindow); };
       const mine = await Promise.all(pastedCards.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawCardTray();
-      const { text } = await ai.run({ provider, model, notePath: want.note ? notePath() : '', images: [...context.images, ...mine], tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
+      const { text } = await runAI(ai, { provider, model, notePath: want.note ? notePath() : '', images: [...context.images, ...mine], tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); }, { small: cardModel?.small, vision: cardModel?.vision });
       clearTimeout(timer);
       await rendering;
       if (asking !== thread) return;

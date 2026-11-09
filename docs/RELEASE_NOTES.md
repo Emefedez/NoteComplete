@@ -1,4 +1,17 @@
-## What's new in 1.1.37
+## What's new in 1.1.38
+
+- **Shapes from the pen.** Draw a line, arrow, rectangle or square, ellipse or circle, triangle or star with the Pen and keep the pen still for a moment: it becomes a clean shape in the pen's colour and width, with all the usual handles (corners, turning, fill). Move before lifting to resize it. Shapes drawn at an angle keep their angle, and one undo removes them. The Pen's settings choose **hold** (default), **on lift** or **off**; **View → Shapes from the pen** turns it on or off.
+- **Star** in the Shapes tool, with fill like rectangles, ellipses and triangles.
+- **Math in text boxes.** The **∑** button in the format bar makes a text box LaTeX, typeset on the page (`\frac{a}{b}`, or `$…$` parts among words), with a live preview. A **math keypad** at the bottom of the window writes fractions, powers, roots, functions, Greek letters and calculus with the cursor in the right place (Tab goes to the next empty place); on phones and tablets it replaces the system keyboard. AI tools connected through the note server can write math text boxes too.
+- **Graphs.** **Edit → Insert graph** (**Shift X**) puts axes and a grid to draw on; the keypad's graph key plots a function of x (`y = \sin x`, `\frac{1}{x}`…) on them. Every part is an ordinary item and one undo removes the graph.
+- **Text from part of a recording.** The scissors in the audio panel (**Shift K**) choose a segment by dragging two handles, typing times or marking the playing position, and give only its text: at once from the transcript if there is one, otherwise by transcribing just that part. Copy it, add it to the notes or put it in a text box.
+- **AI without installing anything.** The web version gets quizzes, flashcards, Ask AI and explanations from a model that runs in the browser on the graphics card (WebLLM, WebGPU); the desktop app offers it beside your AI tools. Models download once. Pages are read with the app's own handwriting recognition. A **Small model** checkbox beside every model list splits the work page by page (on by default for this model).
+- **Text format bar in the tool bar:** **View → Text format bar in the tool bar** puts the font, size, style and colour controls in the tool bar's settings row instead of a bar over the box. The floating bar now stays inside narrow windows.
+- **More keys:** Shift P page list, Shift G go to page, Shift I insert image, Shift B blank page, Shift O recognize text, Shift E export to Anki, Shift U lift or cover all tape, Shift X graph, Shift K text from part of a recording.
+- **Model search everywhere:** the magnifier for long model lists is in the flashcards, quiz, explain and handwriting dialogs too.
+- **Fixes:** the audio window keeps its buttons on one row as it is resized; tape stripes are drawn in a way Safari on iPhone and iPad handles.
+
+### In 1.1.37
 
 - **One place for study material.** **Study → Share study material…** replaces the separate Send, Receive and Import items: its **Send** tab sends the note's flashcards, quizzes and notes (or saves a file), and its **Receive** tab shows the QR code and PIN for another NoteComplete to send you some (the desktop app), with **Import a file…**. In the web version, Receive offers the file, and explains that receiving live needs the desktop app.
 - **The Online tab's links are set apart:** Guests, Tablets and Study material each have their own block and QR code, with a divider between them.

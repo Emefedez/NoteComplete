@@ -110,3 +110,35 @@ fn noteful_files_get_the_inside_as_highlighter_under_the_outline() {
     let reopened = Editor::open(&coloured).unwrap();
     assert_eq!(reopened.view(0).unwrap()["warnings"], serde_json::json!([]));
 }
+
+#[test]
+fn a_star_fills_its_box_point_up_and_takes_a_fill() {
+    let s = Shape {
+        kind: ShapeKind::Star,
+        start: [100., 100.],
+        end: [260., 220.],
+        fill: None,
+    };
+    let points = s.points();
+    assert_eq!(points.len(), 11);
+    assert_eq!(points[0], points[10]);
+    // The top point is at the middle of the top edge; the outline spans the whole box.
+    assert!((points[0][0] - 180.).abs() < 1e-9 && (points[0][1] - 100.).abs() < 1e-9);
+    let (xs, ys): (Vec<f64>, Vec<f64>) = points.iter().map(|p| (p[0], p[1])).unzip();
+    let min = |v: &[f64]| v.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = |v: &[f64]| v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    assert!((min(&xs) - 100.).abs() < 1e-9 && (max(&xs) - 260.).abs() < 1e-9);
+    assert!((min(&ys) - 100.).abs() < 1e-9 && (max(&ys) - 220.).abs() < 1e-9);
+    assert!(s.closed());
+    let mut e = blank();
+    e.add_line(0, shape(ShapeKind::Star, Some([1., 0.8, 0., 1.])))
+        .unwrap();
+    assert!(e.view(0).unwrap()["svg"].as_str().unwrap().contains("<polygon"));
+    // Exported, its inside becomes highlighter bands under the outline.
+    let plain = {
+        let mut e = blank();
+        e.add_line(0, shape(ShapeKind::Star, None)).unwrap();
+        strokes(&e.export_noteful().unwrap())
+    };
+    assert!(strokes(&e.export_noteful().unwrap()) > plain);
+}

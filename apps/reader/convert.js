@@ -1,4 +1,5 @@
 import { modelPicker } from "./model-picker.js";
+import { compactDialect } from "./small-model.js";
 import { icon } from "./icons.js";
 
 // Markdown into handwritten pages, with the same engine as the MCP ink tools:
@@ -227,7 +228,8 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
     snapshot();
     let streamed = "";
     try {
-      const dialect = await call("dialect");
+      // Small model: only the core of the dialect, so the prompt stays short.
+      const dialect = model?.small ? compactDialect(await call("dialect")) : await call("dialect");
       const look = el("hw-look").value;
       const prompt = kind === "prompt" ? aiPrompt({ request, dialect, look }) : aiEnrichPrompt({ markdown: source, dialect, look });
       const { text } = await ai.run({ provider, model: model.value, prompt, tag: "handwriting" }, (delta) => {

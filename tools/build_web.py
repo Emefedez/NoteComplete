@@ -97,9 +97,23 @@ def main():
         out.mkdir(parents=True,exist_ok=True)
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/name,out/Path(name).name)
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/'LICENSE',out/'LICENSE')
+    check_webllm()
     vendor_modules()
     write_manifest()
     print('Built apps/reader/. Serve with any static HTTP server. No Python/Rust server required at runtime.')
+
+def check_webllm():
+    """The model in this app (local-ai.js) downloads WebLLM from jsDelivr on first use instead of
+    shipping it: the desktop stage copies every vendored file into the installers. It runs the file
+    only if its hash is the one pinned in local-ai.js, so the pin must match the npm package here."""
+    package=ROOT/'apps/reader/node_modules/@mlc-ai/web-llm'
+    source=(ROOT/'apps/reader/local-ai.js').read_text()
+    version=re.search(r"WEBLLM_VERSION = '([^']+)'",source).group(1)
+    pinned=re.search(r"WEBLLM_SHA256 = '([0-9a-f]{64})'",source).group(1)
+    installed=json.loads((package/'package.json').read_text())['version']
+    actual=hashlib.sha256((package/'lib/index.js').read_bytes()).hexdigest()
+    if installed!=version:raise SystemExit(f'local-ai.js pins WebLLM {version}, package.json installs {installed}: update WEBLLM_VERSION.')
+    if actual!=pinned:raise SystemExit(f'WebLLM {version} lib/index.js has SHA-256 {actual}; set WEBLLM_SHA256 in apps/reader/local-ai.js to it.')
 
 # Fetched only when a feature needs them: the service worker (sw.js) caches them the first time
 # instead of at install, so a first visit (a tablet joining a session) downloads the app and

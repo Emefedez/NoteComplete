@@ -991,7 +991,8 @@ class Session {
     if (g.liveFrame) return;
     g.liveFrame = requestAnimationFrame(() => {
       g.liveFrame = 0;
-      const whole = g.tool === 'shape' || g.straight || g.box;
+      // A pen stroke that became a shape (g.snapped) is sent whole, as a shape is.
+      const whole = g.tool === 'shape' || g.straight || g.box || !!g.snapped;
       const from = whole ? 0 : g.liveSent || 0;
       const points = g.points.slice(from).map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
       if (!points.length) return;

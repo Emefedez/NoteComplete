@@ -7,6 +7,19 @@ pub enum ShapeKind {
     Ellipse,
     Triangle,
     Arrow,
+    /// A five-pointed star, point up, filling the box from start to end.
+    Star,
+}
+/// A five-pointed star's outline on a unit circle (outer points radius 1, inner ones
+/// the regular pentagram's 0.382), point up, closed: 11 points.
+fn unit_star() -> Vec<[f64; 2]> {
+    (0..=10)
+        .map(|i| {
+            let r = if i % 2 == 0 { 1. } else { 0.381_966 };
+            let a = (-90. + 36. * f64::from(i)).to_radians();
+            [r * a.cos(), r * a.sin()]
+        })
+        .collect()
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,7 +36,7 @@ impl Shape {
     pub fn closed(&self) -> bool {
         matches!(
             self.kind,
-            ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Triangle
+            ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Triangle | ShapeKind::Star
         )
     }
     pub(crate) fn fill_valid(&self) -> bool {
@@ -47,6 +60,19 @@ impl Shape {
                     ]
                 })
                 .collect(),
+            ShapeKind::Star => {
+                // The star's own box (x ±sin 72°, y from -1 to cos 36°) mapped onto start–end.
+                let (sx, top, bottom) = (72f64.to_radians().sin(), -1., 36f64.to_radians().cos());
+                unit_star()
+                    .into_iter()
+                    .map(|[px, py]| {
+                        [
+                            x + (px + sx) / (2. * sx) * (u - x),
+                            y + (py - top) / (bottom - top) * (v - y),
+                        ]
+                    })
+                    .collect()
+            }
             ShapeKind::Arrow => {
                 let a = (v - y).atan2(u - x);
                 let d = 24f64.min((u - x).hypot(v - y) / 3.);

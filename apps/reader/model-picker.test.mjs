@@ -5,6 +5,7 @@ import { modelOptions, filterModels } from './model-picker.js';
 const list = [{ id: 'opus', label: 'Opus' }, { id: 'sonnet', label: 'Sonnet' }];
 
 test('a refreshed list keeps the chosen model while it is offered', () => {
+  assert.equal(modelOptions(list, '', false, 'Default: Phi 3.5 Vision').options[0][0], 'Default: Phi 3.5 Vision');
   assert.equal(modelOptions(list, 'sonnet').value, 'sonnet');
   assert.deepEqual(modelOptions(list, '').options.map(([, id]) => id), ['', 'opus', 'sonnet', '__other']);
 });

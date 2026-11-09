@@ -41,7 +41,8 @@ export function chunkFrame(id, done, data) {
 }
 // Edits a peer may send, by role. Tablets (and guests who may draw) draw, highlight, tape,
 // erase, type text, add blank pages and undo; the host edits anything.
-export const TABLET_OPS = new Set(['draw', 'erase', 'undo', 'redo', 'insertPages', 'image', 'editText', 'remove']);
+// drawMany: several lines and typed text boxes as one undo step (an inserted graph).
+export const TABLET_OPS = new Set(['draw', 'drawMany', 'erase', 'undo', 'redo', 'insertPages', 'image', 'editText', 'remove']);
 export const HOST_OPS = new Set([...TABLET_OPS, 'adjust', 'crop', 'lock', 'layer', 'resize', 'resizePage', 'resizePages', 'insertHandwritten']);
 // Of those, a tablet adds only blank pages and typed text: a PDF or a picture stays the host's
 // to bring in (they are large, and come from the computer's files).
@@ -52,6 +53,8 @@ export function tabletMay(op, args) {
       && pages.every((p) => p && Object.keys(p).length === 1 && Array.isArray(p.size) && p.size.length === 2 && p.size.every((v) => Number.isFinite(v) && v > 0));
   }
   if (op === 'image') return typeof args?.image === 'object' && !!args.image?.text && !args.image.base64;
+  if (op === 'drawMany') return Array.isArray(args?.lines) && Array.isArray(args?.images ?? []) && args.lines.length + (args.images?.length || 0) <= 400
+    && (args.images || []).every((image) => typeof image === 'object' && !!image?.text && !image.base64);
   return true;
 }
 export const COLORS = ['#e5484d', '#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#12a594', '#d6409f', '#ad7f58'];

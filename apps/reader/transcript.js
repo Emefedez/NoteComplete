@@ -1,8 +1,11 @@
 import { timedWords, wordAt } from './transcript-timing.js';
 import { download } from './download.js';
 import { prepareSpeech, speechSettings } from './audio-processing.js';
+import { RATE, sliceSamples, wavBytes, shiftWords, wordsInRange } from './audio-trim.js';
 import { reviseWords } from './transcript-revise.js';
 import { jsonFrom } from './ai-context.js';
+import { sharedAI } from './local-ai.js';
+import { smallSetting } from './small-model.js';
 const $ = id => document.getElementById(id);
 
 async function storedTranscript(key, value) {
@@ -45,6 +48,22 @@ export function segmentWords(segments) {
   });
 }
 const MIME = { txt: 'text/plain', srt: 'application/x-subrip', vtt: 'text/vtt', json: 'application/json' };
+// Whisper in its own worker over 16 kHz samples: timed words. `job.worker` holds the worker so
+// a cancel can stop it; `progress(share, label, text)` reports loading and transcribing.
+function whisperWords(samples, duration, { language, model }, job, progress) {
+  return new Promise((resolve, reject) => {
+    const worker = job.worker = new Worker(new URL('./transcript-worker.js', import.meta.url), { type: 'module' });
+    worker.onerror = event => reject(Error(event.message || 'The local speech engine could not start'));
+    worker.onmessage = ({ data }) => {
+      if (job.cancelled) return;
+      if (data.type === 'progress' && data.progress.status === 'progress') progress(0.05 * (data.progress.progress || 0) / 100, `Loading speech model ${Math.round(data.progress.progress || 0)} %`);
+      if (data.type === 'speaking') progress(0.05 + 0.95 * data.done / data.total, `Transcribing ${Math.round(100 * data.done / data.total)} %`, data.text);
+      if (data.type === 'error') reject(Error(data.error));
+      if (data.type === 'complete') resolve(timedWords(data.result.chunks, duration));
+    };
+    worker.postMessage({ samples, language, model }, [samples.buffer]);
+  }).finally(() => { job.worker?.terminate(); job.worker = null; });
+}
 
 export class TranscriptController {
   constructor(audio) {
@@ -118,6 +137,28 @@ export class TranscriptController {
     this.status('Transcription cancelled.');
   }
   reset() { this.cancel(); this.select(null); this.results.clear(); }
+  // Only [start, end] of a recording (audio-trim.js): the words of the whole transcript when
+  // there is one, or that part of the audio alone transcribed with the panel's engine and
+  // settings. Neither the whole transcript nor its cache changes. `job` (cancelled, worker,
+  // external) lets the caller stop it; `progress(share, label)` reports.
+  async transcribeRange(asset, start, end, progress = () => {}, job = {}) {
+    const whole = this.results.get(asset.id) || await this.cached(asset).catch(() => null);
+    if (whole?.length) return { words: wordsInRange(whole, start, end), from: 'transcript' };
+    const bytes = await this.audio.read(asset.id);
+    const { buffer, language, model, settings } = await this.key(asset, bytes);
+    progress(0.02, 'Preparing audio');
+    const { samples } = await prepareSpeech(buffer, settings);
+    const part = sliceSamples(samples, RATE, start, end);
+    if (job.cancelled) throw Error('Cancelled');
+    const backend = this.backend();
+    if (backend === 'whisper') {
+      const words = await whisperWords(part, part.length / RATE, { language, model }, job, progress);
+      return { words: shiftWords(words, start), from: 'audio' };
+    }
+    job.external = true;
+    const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: wavBytes(part, RATE), language }, ({ done, total }) => progress(done / total, 'Transcribing'));
+    return { words: shiftWords(segmentWords(segments), start), from: 'audio' };
+  }
   // Switching recordings keeps a running transcription going in the background.
   select(asset) {
     this.asset = asset;
@@ -155,11 +196,12 @@ export class TranscriptController {
   }
   // Clean up the transcript with the user's AI tool; timings are kept per word.
   async revise() {
-    const ai = globalThis.notecompleteAI, asset = this.asset, words = this.words;
+    const ai = sharedAI(), asset = this.asset, words = this.words;
     if (!ai || !asset || !words.length || this.revising) return;
     let provider = '';
     try { provider = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
-    if (!provider) provider = (await ai.providers()).find(p => p.available)?.id || '';
+    const providers = await ai.providers();
+    if (!providers.some(p => p.id === provider && p.available)) provider = providers.find(p => p.available)?.id || '';
     if (!provider) { this.status('Revision needs Claude Code, Antigravity, Codex or OpenCode installed and signed in.'); return; }
     let stopped = false;
     this.revising = true;
@@ -170,7 +212,7 @@ export class TranscriptController {
       const language = $('transcriptLanguage').selectedOptions?.[0]?.textContent || '';
       const result = await reviseWords(words, {
         ask: async prompt => (await ai.run({ provider, prompt, images: [] })).text,
-        parse: jsonFrom, title: this.context?.().title, language, perCall: 25, cancelled: () => stopped,
+        parse: jsonFrom, title: this.context?.().title, language, perCall: smallSetting(provider, { ai }) ? 3 : 25, cancelled: () => stopped,
         onProgress: (done, total) => chip?.set(done / total, `${done} of ${total} parts`),
       });
       const key = this.keys.get(asset.id);
@@ -194,7 +236,7 @@ export class TranscriptController {
     this.renderWindow();
     $('downloadTranscript').hidden = $('transcriptFormat').hidden = !words.length || provisional;
     $('transcriptEdit').hidden = !words.length || provisional;
-    $('transcriptRevise').hidden = !words.length || provisional || !globalThis.notecompleteAI;
+    $('transcriptRevise').hidden = !words.length || provisional || !sharedAI();
     $('transcriptRestore').hidden = true;
     if (words.length && !provisional) this.originalOf(this.asset).then(original => { if (original && this.words === words) $('transcriptRestore').hidden = false; });
     this.update();
@@ -288,22 +330,12 @@ export class TranscriptController {
       if (backend === 'whisper') {
         const { samples, duration } = await prepareSpeech(buffer, settings);
         if (!alive()) return;
-        words = await new Promise((resolve, reject) => {
-          const worker = job.worker = new Worker(new URL('./transcript-worker.js', import.meta.url), { type: 'module' });
-          this.progress(0.05, 'Loading Whisper (downloads once)');
-          worker.onerror = event => reject(Error(event.message || 'The local speech engine could not start'));
-          worker.onmessage = ({ data }) => {
-            if (!alive()) return;
-            if (data.type === 'progress' && data.progress.status === 'progress') this.progress(0.05 * (data.progress.progress || 0) / 100, `Loading speech model ${Math.round(data.progress.progress || 0)} %`);
-            if (data.type === 'speaking') {
-              this.progress(0.05 + 0.95 * data.done / data.total, `Transcribing ${Math.round(100 * data.done / data.total)} %`);
-              if (data.text) partial([...job.partial, ...data.text.split(/\s+/).filter(Boolean).map(text => ({ text }))]);
-            }
-            if (data.type === 'error') reject(Error(data.error));
-            if (data.type === 'complete') resolve(timedWords(data.result.chunks, duration));
-          };
-          worker.postMessage({ samples, language, model }, [samples.buffer]);
-        }).finally(() => { job.worker?.terminate(); job.worker = null; });
+        this.progress(0.05, 'Loading Whisper (downloads once)');
+        words = await whisperWords(samples, duration, { language, model }, job, (share, label, text) => {
+          if (!alive()) return;
+          this.progress(share, label);
+          if (text) partial([...job.partial, ...text.split(/\s+/).filter(Boolean).map(text => ({ text }))]);
+        });
       } else {
         job.external = true;
         this.progress(0.03, backend === 'antigravity' ? 'Sending audio to Gemini' : 'Splitting audio for Voxtype');

@@ -5,6 +5,7 @@
 import { scratchButton, newId } from './scratchpad.js';
 import { canvasImage, textBlock, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
+import { runAI } from './small-model.js';
 import { renderMarkdown, plainText, rememberAiFile } from './rich-text.js';
 
 const $ = id => document.getElementById(id);
@@ -35,7 +36,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
   let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
-  const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai, { search: true }) : null;
+  const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
   function answer(item, content) {
@@ -74,7 +75,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   }
   async function open() {
     if (!ai) {
-      status('Ask AI uses AI tools installed on your computer (Claude Code, Antigravity, Codex or OpenCode) and is available in the desktop app.', true);
+      status('Ask AI needs the desktop app with an AI tool (Claude Code, Antigravity, Codex or OpenCode), or a browser with WebGPU (recent Chrome, Edge or Safari) to run a model in this app.', true);
       return;
     }
     const select = $('chatProvider');
@@ -162,10 +163,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
           images.push(await canvasImage(drawn.canvas, `page-${page + 1}`));
           drawn.canvas.width = drawn.canvas.height = 0;
         }
-        context.push(textBlock(page, await pageText(page), sections ? 12000 : 6000, unit));
+        // Small model: a handwritten page is recognized first, so its text can be sent.
+        context.push(textBlock(page, await pageText(page, { recognize: !!model?.small }), sections ? 12000 : 6000, unit));
       }
       if ($('chatNotes').checked) {
-        const block = notesBlock(await notesText().catch(() => ''));
+        const block = notesBlock(await notesText().catch(() => ''), model?.small ? 2000 : 20000);
         if (block) context.push(block);
       }
       for (const [i, a] of attachments.splice(0).entries()) {
@@ -179,7 +181,8 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         const picked = await selectionImage(page);
         if (picked) { images.push(picked.image); context.push(`The student selected a ${picked.kind} on page ${page + 1}; its crop is the image labelled "selection". Focus on it.`); }
       }
-      const transcript = history.slice(-10).map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
+      // Small model: a shorter memory of the conversation.
+      const transcript = history.slice(model?.small ? -4 : -10).map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
       const prompt = [
         sections
           ? `You are a patient tutor helping a student understand their own text document, "${title}" (split into ${documentInfo().pages} sections; they are reading section ${page + 1}). Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not in the text.`
@@ -193,11 +196,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       // every 120 ms so long answers stay cheap.
       let streamed = '', timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
-      const { text } = await ai.run({ provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' }, delta => {
+      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' }, delta => {
         if (!streamed) { waiting.querySelector('small')?.remove(); dots.remove(); }
         streamed += delta;
         timer ||= setTimeout(show, 120);
-      });
+      }, { small: model?.small, vision: model?.vision });
       clearTimeout(timer);
       await rendering;
       history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });

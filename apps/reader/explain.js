@@ -8,6 +8,7 @@ import { renderAnswer } from './chat.js';
 import { modelPicker } from './model-picker.js';
 import { icon } from './icons.js';
 import { hasClipboardImage, clipboardImages } from './ai-context.js';
+import { runAI } from './small-model.js';
 
 const el = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
 const chip = (label, title, on) => { const b = el('button', { type: 'button', className: 'chip', title, textContent: label }); b.setAttribute('aria-pressed', String(on)); return b; };
@@ -162,7 +163,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       let timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => asking === run && render(reply, streamed)).then(growWindow); };
       const mine = await Promise.all(pasted.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawTray();
-      const { text } = await ai.run({ provider: tool, model: picker?.value || '', notePath: want.note ? notePath() : '', images: [...ctx.images, ...mine], tag, prompt: text0 }, delta => { streamed += delta; timer ||= setTimeout(show, 120); });
+      const { text } = await runAI(ai, { provider: tool, model: picker?.value || '', notePath: want.note ? notePath() : '', images: [...ctx.images, ...mine], tag, prompt: text0 }, delta => { streamed += delta; timer ||= setTimeout(show, 120); }, { small: picker?.small, vision: picker?.vision });
       clearTimeout(timer); await rendering;
       if (asking !== run) return;
       const answer = text.trim();

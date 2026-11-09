@@ -60,6 +60,16 @@ const paths = {
  help:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5M12 17h.01',
  play:'M8 5v14l11-7Z',
  keyboard:'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
+ // Math keypad: a curve on axes, delete back, and the next / previous empty place.
+ graph:'M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6',
+ // Audio segment (audio-trim.js): scissors, its start and end flags, play only the segment.
+ scissors:'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12',
+ flagStart:'M5 21V4M5 4h11l-2 4 2 4H5',
+ flagEnd:'M19 21V4M19 4H8l2 4-2 4h11',
+ playSegment:'M4 5v14M20 5v14M9 8v8l6-4-6-4Z',
+ backspace:'M9 5h11v14H9l-6-7 6-7Zm4 4 6 6m0-6-6 6',
+ slotNext:'M4 12h11m-4-4 4 4-4 4M20 6v12',
+ slotPrev:'M20 12H9m4-4-4 4 4 4M4 6v12',
  chat:'M4 5h16v11H9l-5 4V5Z',
  tape:'M3 8.5 18 4l3 9.5L6 18 3 8.5Zm3.4 1.6.6 2m3-3.1.6 2m3-3.1.6 2'
 };

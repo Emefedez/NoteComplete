@@ -137,6 +137,7 @@ impl Edit {
         match self {
             Edit::Adjust { joined, .. } | Edit::ResizePage { joined, .. } => *joined,
             Edit::Add { line, .. } => line.joined,
+            Edit::Image { image, .. } => image.joined,
             _ => false,
         }
     }
@@ -616,6 +617,9 @@ impl Editor {
                         let mut t = serde_json::to_value(item.text.as_ref()?).ok()?;
                         t["bounds"] = json!(self.current_bounds(page, &id).ok()?);
                         t["id"] = json!(id);
+                        if image.text.as_ref().is_some_and(|b| b.math) {
+                            t["math"] = json!(true);
+                        }
                         Some(t)
                     }),
             )

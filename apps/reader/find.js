@@ -438,13 +438,60 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     index = new SearchIndex(); hits = []; current = -1;
     if (!$('findBar').hidden) { build(); run(); }
   }
-  // A page's text by source (text, pdf, ocr, audio) for AI context.
-  async function pageText(page) {
+  // One page recognized for the AI (small-model mode, docs/LOCAL-AI.md): the
+  // normal passes in the languages chosen for Recognize handwriting, kept and
+  // searchable as from the dialog. Only pages with handwriting and no OCR yet;
+  // one engine serves the following pages and is dropped after a minute idle.
+  let aiOcr = null, aiOcrIdle = 0;
+  async function recognizeForAI(page) {
+    const view = await call('view', { page }), slot = view.slot ?? page;
+    if (stored.ocr[slot] || !/data-item="stroke:/.test(view.svg)) return false;
+    const token = generation;
+    clearTimeout(aiOcrIdle);
+    let chosen = 'spa,eng';
+    try { chosen = localStorage.getItem('notecomplete-ocr-languages') || chosen; } catch { /* Optional. */ }
+    aiOcr ||= ocrWorker(chosen.split(',').join('+')).catch(error => { aiOcr = null; throw error; });
+    const worker = await aiOcr, set = ocrPasses('normal'), readings = [];
+    try {
+      if (!((stored.pdf[slot]?.length || 0) > 20)) for (const { width, sparse } of set.whole) {
+        const { canvas, scale } = await pageCanvas(page, width);
+        try { readings.push(await recognizePage(worker, canvas, scale, { sparse })); } finally { canvas.width = canvas.height = 0; }
+      }
+      for (const { width, sparse, bold } of set.ink) {
+        const ink = await pageCanvas(page, width, { inkOnly: true, bold });
+        if (!ink) break;
+        try { readings.push(await recognizePage(worker, ink.canvas, ink.scale, { sparse })); } finally { ink.canvas.width = ink.canvas.height = 0; }
+      }
+    } finally {
+      aiOcrIdle = setTimeout(async () => { const w = aiOcr; aiOcr = null; (await w?.catch(() => null))?.terminate?.(); }, 60000);
+    }
+    if (token !== generation || !readings.length) return false;
+    const words = voteWords(readings);
+    stored.ocr[slot] = words;
+    index.remove(u => u.source === 'ocr' && u.page === page);
+    index.add({ page, source: 'ocr', words });
+    await persist();
+    const panel = panels().find(p => p.index === page);
+    if (panel) selectable(panel);
+    return true;
+  }
+  // A page's text by source (text, pdf, ocr, audio) for AI context. `recognize`
+  // first reads its handwriting when it has none yet.
+  async function pageText(page, { recognize = false } = {}) {
     await build();
+    if (recognize) await recognizeForAI(page).catch(() => false);
     const parts = {};
     for (const unit of index.units)
       if (unit.page === page) (parts[unit.source] ||= []).push(unit.words.map(w => w.text).join(' '));
     return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join('\n')]));
+  }
+  // The page's words with their boxes (page units) and its size: where a quote is.
+  async function pageWords(page) {
+    await build();
+    const view = await call('view', { page });
+    const words = index.units.filter(u => u.page === page && u.source !== 'audio')
+      .flatMap(u => u.words.filter(w => Array.isArray(w.box)).map(w => ({ text: w.text, box: w.box })));
+    return { size: view.size, words };
   }
   // Text inside a page region (page units), in reading order: PDF, OCR and typed words.
   async function wordsIn(page, [rx, ry, rw, rh]) {
@@ -470,7 +517,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     return out;
   }
   return {
-    reset, open, close, paint, selectable, openOcr, restructure, pageText, wordsIn,
+    reset, open, close, paint, selectable, openOcr, restructure, pageText, pageWords, wordsIn,
     // OCR results of this note by page slot, as the core keeps them ({text, bounds}).
     recognizedText() {
       const out = {};

@@ -20,6 +20,10 @@ pub struct Image {
     /// kind-2 text object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<TextBox>,
+    /// Undone and redone with the edit before it (the labels of an inserted graph go with
+    /// its lines). Not part of the item.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub joined: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +45,11 @@ pub struct TextBox {
     pub underline: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub strikethrough: bool,
+    /// LaTeX (docs/SHAPES-TABLES-MATH.md, M1): `$…$` and `$$…$$` parts among words, or the
+    /// whole text one formula when it has no `$`. Readers typeset it (KaTeX); the native
+    /// text box keeps the source, since Noteful has no math.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub math: bool,
 }
 fn default_font() -> String {
     "Helvetica".into()

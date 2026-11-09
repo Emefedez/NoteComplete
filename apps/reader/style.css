@@ -1872,12 +1872,83 @@ body.bar-compact .tab { height: 22px; }
 /* Text format bar: sits on the box being typed or the selected text box. */
 .text-format { position: absolute; z-index: 8; display: flex; align-items: center; gap: 4px; padding: 4px; transform: translateY(calc(-100% - 8px)); border: 1px solid var(--line); border-radius: 9px; background: var(--menu); box-shadow: 0 4px 16px #0002; white-space: nowrap; }
 .text-format.below { transform: translateY(8px); }
+.text-format:not(.docked) { flex-wrap: wrap; max-width: calc(100vw - 16px); }
 .text-format[hidden] { display: none; }
+/* Docked (View → Text format bar in the tool bar): one more group in the settings row. */
+.text-format-docked #toolOptions .text-format { position: static; z-index: auto; transform: none; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .text-format select { min-height: 28px; padding: 0 6px; font-size: 12px; }
 #textFont { width: 112px; }
 #textSize { width: 58px; }
 .text-format .fmt-bold, .text-format .fmt-italic { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 14px; }
 .text-format .fmt-bold { font-weight: 700; }
+.text-format .fmt-math { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 15px; }
+/* Math text boxes (math-boxes.js): the formula over the box's plain-text source. */
+.math-box { width: max-content; padding: 2px 4px; line-height: 1.25; white-space: pre-wrap; transform-origin: 0 0; }
+.math-box .katex-display { margin: 0.15em 0; }
+.math-probe { position: fixed; left: -10000px; top: 0; visibility: hidden; }
+.math-preview { position: absolute; z-index: 7; max-width: 90%; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--menu); box-shadow: 0 4px 16px #0002; pointer-events: none; width: max-content; }
+.math-preview[hidden] { display: none; }
+/* Text from part of a recording (audio-trim.js): a band over the position bar with a handle at
+   each end, and a row of times and icon buttons under it. */
+.audio-seek { position: relative; }
+.trim-band { position: absolute; top: 50%; height: 18px; transform: translateY(-50%); border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 0 0 1px var(--accent); pointer-events: none; }
+.trim-band[hidden] { display: none; }
+.trim-handle { position: absolute; top: -4px; bottom: -4px; width: 12px; margin-left: -6px; border-radius: var(--radius); background: var(--accent); pointer-events: auto; cursor: ew-resize; touch-action: none; }
+.trim-handle.trim-end { left: 100%; }
+.trim-handle:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+@media (pointer: coarse) { .trim-handle { width: 20px; margin-left: -10px; } }
+.trim-panel { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); }
+.trim-panel[hidden] { display: none; }
+.trim-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.trim-time { width: 64px; min-height: 28px; padding: 0 6px; font-variant-numeric: tabular-nums; text-align: center; }
+.trim-length { margin: 0 4px; font-variant-numeric: tabular-nums; }
+.trim-go { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.trim-go svg, .trim-row .icon-button svg, .trim-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.trim-state { margin: 0; font-size: 12px; }
+.trim-result[hidden] { display: none; }
+.trim-result { display: flex; align-items: flex-start; gap: 6px; }
+.trim-text { flex: 1; max-height: 160px; overflow: auto; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--menu); font-size: 13px; line-height: 1.45; user-select: text; white-space: pre-wrap; }
+.trim-actions { display: flex; flex-direction: column; gap: 2px; }
+#trimAudio[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* The audio window's rows follow its own width (it is resized like the quiz window): the
+   transport stays one row, with its icons in order and the page/sync/settings group on the
+   right; the space between them gives way first, then the buttons narrow a little. Record and
+   Import keep only their icons when it is narrow. */
+.audio-panel { container: audio-panel / inline-size; }
+.audio-transport { display: flex; flex-wrap: nowrap; align-items: center; min-width: 0; }
+.audio-transport > * { flex: none; }
+.audio-transport > .spacer { flex: 1 1 0; min-width: 0; }
+@container audio-panel (max-width: 330px) {
+  .audio-transport { gap: 2px; }
+  .audio-transport button, .audio-transport .icon-toggle { width: 27px; }
+  .audio-transport .play { width: 34px; }
+  .audio-head { gap: 4px; }
+  .audio-pick .audio-sources button { padding: 0 7px; }
+  .audio-pick .audio-sources button .label { display: none; }
+}
+/* The math keypad (math-keypad.js): a bar like the others, docked at the bottom of the window
+   (above an on-screen keyboard), icon buttons in its head, typeset symbols on its keys. */
+.math-keypad { position: fixed; z-index: 60; left: 50%; bottom: 0; width: min(560px, calc(100vw - 16px)); margin-bottom: 8px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
+.math-keypad[hidden] { display: none; }
+.math-keypad-head { display: flex; align-items: center; gap: 2px; }
+.math-keypad-head .spacer { flex: 1; }
+.math-tabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.math-keypad button { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--radius); background: none; color: var(--ink); }
+.math-keypad button:hover { background: var(--fill, var(--accent-soft)); }
+.math-keypad button > svg { width: 20px; height: 20px; }
+.math-keypad .math-tab { min-width: 44px; font-size: 13px; }
+.math-keypad .math-tab[aria-selected="true"], .math-keypad .math-abc[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.math-keypad .math-nav, .math-keypad .math-abc, .math-keypad .math-graph { width: 34px; padding: 0; }
+.math-keypad .math-graph { color: var(--accent); }
+.math-keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.math-keypad .math-key { min-height: 40px; border: 1px solid var(--line); background: var(--surface); font-size: 15px; overflow: hidden; }
+.math-keypad .math-key:active { background: var(--accent-soft); }
+.math-keypad .katex { font-size: 1.05em; }
+@media (pointer: coarse) {
+  .math-keypad { width: 100vw; margin-bottom: 0; border-radius: var(--radius-box) var(--radius-box) 0 0; padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
+  .math-keypad .math-key { min-height: 46px; }
+  .math-keypad button { min-height: 38px; }
+}
 .text-format .fmt-italic { font-style: italic; }
 .text-format [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .text-swatches { display: inline-flex; gap: 1px; padding-left: 4px; border-left: 1px solid var(--line); }
@@ -2765,6 +2836,7 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 
 /* Model search: a magnifier beside the Ask AI model dropdown opens a filterable list. */
 .model-search[hidden] { display: none; }
+.model-search { flex: none; min-height: 28px; width: 28px; margin-left: 4px; vertical-align: middle; border: 1px solid var(--line); background: var(--surface); }
 .chat-head .model-search { min-height: 26px; width: 26px; border: 1px solid var(--line); background: var(--surface); }
 .model-search-pop { position: fixed; z-index: 90; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid color-mix(in srgb, var(--ink) 38%, var(--line)); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
 .model-search-pop input { width: 100%; min-height: 28px; padding: 2px 8px; font-size: 13px; }
@@ -2774,6 +2846,16 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 .model-search-pop li.current { font-weight: 600; }
 .model-search-pop li.none { color: var(--muted); cursor: default; }
 .model-search-pop li.none:hover { background: none; }
+/* Downloaded models… (local-ai.js): the models in this app and deleting them. */
+.local-models-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; font-size: 13px; }
+.local-models-table :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.local-models-table th { font-weight: 600; white-space: normal; }
+.local-models-table td:last-child { text-align: right; }
+/* Small model and Text only (model-picker.js), beside every model list. */
+.small-model { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 12px; white-space: nowrap; vertical-align: middle; cursor: pointer; }
+.small-model input { margin: 0; }
+.text-only-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; white-space: nowrap; vertical-align: middle; cursor: help; }
+.text-only-badge[hidden] { display: none; }
 
 /* Home filters: a dropdown per category, with checkboxes. */
 .filter-bar { display: contents; }

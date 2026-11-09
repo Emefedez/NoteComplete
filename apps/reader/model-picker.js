@@ -4,6 +4,7 @@
 // again in the background and its answer replaces the list, keeping the choice
 // when it is still offered (listing models can take many seconds, e.g. `agy models`).
 import { icon } from './icons.js';
+import { smallSetting, rememberSmall } from './small-model.js';
 
 const OTHER = '__other';
 const storageKey = provider => `notecomplete-ai-model:${provider}`;
@@ -12,8 +13,8 @@ const listKey = provider => `notecomplete-ai-models:${provider}`;
 // The options for a model list and a choice: [options, selected value, text for Other].
 // A typed name stays under Other unless the list now offers it; a listed model that
 // is gone falls back to the tool's default.
-export function modelOptions(models, choice, typed = false) {
-  const options = [['Tool default', ''], ...models.map(m => [m.label, m.id]), ['Other…', OTHER]];
+export function modelOptions(models, choice, typed = false, defaultLabel = 'Tool default') {
+  const options = [[defaultLabel, ''], ...models.map(m => [m.label, m.id]), ['Other…', OTHER]];
   if (!choice || models.some(m => m.id === choice)) return { options, value: choice, other: '' };
   return typed ? { options, value: OTHER, other: choice } : { options, value: '', other: '' };
 }
@@ -84,13 +85,50 @@ function searchButton(select, models, current, pick) {
   return { button, close };
 }
 
-export function modelPicker(select, other, ai, { search = false } = {}) {
+function manageButton(after, open) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-button model-search model-manage';
+  button.setAttribute('aria-label', 'Downloaded models');
+  button.title = 'Downloaded models…';
+  button.append(icon('settings'));
+  button.hidden = true;
+  button.onclick = () => open();
+  after.after(button);
+  return button;
+}
+
+// Small model (small-model.js), beside every model list: the work split into
+// one page at a time. Remembered per tool; on by default for the model in this
+// app. The badge says when the chosen model cannot read page images.
+function smallControls(after) {
+  const box = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  const label = document.createElement('label');
+  label.className = 'small-model';
+  label.title = 'Small model: each page is read and worked on alone, in short steps. Best for the model in this app; for large AI tools it is slower and sees less at once.';
+  label.append(box, ' Small model');
+  const badge = Object.assign(document.createElement('span'), { className: 'text-only-badge', textContent: 'Text only', hidden: true });
+  badge.title = 'This model cannot read page images: it gets the text extracted from the pages (typed, PDF, recognized handwriting, transcripts). For handwriting, run Recognize handwriting first, or choose Phi 3.5 Vision.';
+  after.after(label, badge);
+  return { box, badge };
+}
+
+// Every picker gets the magnifier (it hides itself for short lists): study (quiz,
+// flashcards), explain, handwriting conversion and chat alike.
+export function modelPicker(select, other, ai, { search = true } = {}) {
   let provider = '', loads = 0, models = [];
   const finder = search ? searchButton(select, () => models, () => select.value, id => {
     select.value = id;
     if (select.value !== id) return;
     select.dispatchEvent(new Event('change'));
   }) : null;
+  // Tools whose models live on this device (the model in this app, local-ai.js)
+  // get a button to see and delete what is downloaded.
+  const manage = typeof ai.manage === 'function' ? manageButton(finder?.button || select, () => ai.manage(provider)) : null;
+  const small = smallControls(manage || finder?.button || select);
+  const capabilities = () => ai.capabilities?.(provider, value()) || { vision: true, contextTokens: 0 };
+  const showBadge = () => { small.badge.hidden = capabilities().vision !== false; };
+  small.box.addEventListener('change', () => rememberSmall(provider, small.box.checked));
   const read = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
   function remember() {
     try { localStorage.setItem(storageKey(provider), value()); } catch { /* Optional. */ }
@@ -101,14 +139,17 @@ export function modelPicker(select, other, ai, { search = false } = {}) {
   function fill(list, choice, typed) {
     models = list;
     if (finder) finder.button.hidden = list.length < SEARCH_FROM;
-    const next = modelOptions(list, choice, typed);
+    const next = modelOptions(list, choice, typed, ai.defaultLabel?.(provider) || 'Tool default');
     select.replaceChildren(...next.options.map(([label, id]) => new Option(label, id)));
     select.value = next.value;
     other.value = next.other;
     other.hidden = next.value !== OTHER;
+    showBadge();
   }
   async function load(next) {
     provider = next;
+    if (manage) manage.hidden = !ai.canManage?.(next);
+    small.box.checked = smallSetting(next, { ai });
     const mine = ++loads;
     let cached = [];
     try { cached = JSON.parse(read(listKey(next), '[]')) || []; } catch { /* Kept list unreadable: start empty. */ }
@@ -131,7 +172,15 @@ export function modelPicker(select, other, ai, { search = false } = {}) {
     other.hidden = select.value !== OTHER;
     if (!other.hidden) other.focus();
     remember();
+    showBadge();
   });
-  other.addEventListener('change', remember);
-  return { load, get value() { return value(); } };
+  other.addEventListener('change', () => { remember(); showBadge(); });
+  return {
+    load,
+    get value() { return value(); },
+    // What a request needs to know: split into small steps, and whether the model reads images.
+    get small() { return small.box.checked; },
+    get vision() { return capabilities().vision !== false; },
+    get contextTokens() { return capabilities().contextTokens || 0; },
+  };
 }

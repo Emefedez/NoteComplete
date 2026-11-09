@@ -336,8 +336,9 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
         } else {
             String::new()
         };
+        // data-box: the text's own size, where a reader can lay typeset math over it.
         let svg = format!(
-            "<g transform=\"scale({sx} {sy})\">{pill}{}</g>",
+            "<g transform=\"scale({sx} {sy})\" data-box=\"{sw} {sh}\">{pill}{}</g>",
             crate::text_svg(&parsed, sw)
         );
         rich_text = Some(parsed);

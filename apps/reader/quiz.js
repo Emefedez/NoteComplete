@@ -194,7 +194,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizHintButton').hidden = !q.source;
     $('quizClarify').hidden = false;
     $('quizWhere').hidden = !q.source;
-    $('quizWhere').textContent = q.source ? `Where it is: ${q.source.quote !== undefined || documentInfo().unit === 'section' ? 'section' : 'p.'} ${q.source.page}` : '';
+    // Note pages can carry a quote too (small-model mode finds its region with it), so the label follows the document.
+    $('quizWhere').textContent = q.source ? `Where it is: ${documentInfo().unit === 'section' ? 'section' : 'p.'} ${q.source.page}` : '';
     $('quizNextButton').hidden = !answer;
     $('quizDispute').hidden = $('quizCheck').hidden = !answer;
     $('quizDispute').textContent = q.disputed ? 'Disputed: not counted' : 'Dispute';
@@ -207,7 +208,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     if (!q?.source) return;
     if (counts && !quiz.answers[quiz.at]) { quiz.hinted = { ...(quiz.hinted || {}), [quiz.at]: true }; save(); }
     $('quizHint').hidden = false;
-    if (q.source.quote) {
+    // A region of the page is the hint when there is one; otherwise the quote.
+    if (q.source.quote && !q.source.box) {
       const quote = document.createElement('blockquote');
       quote.textContent = q.source.quote;
       $('quizHint').replaceChildren(quote);
@@ -258,11 +260,11 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     mount: $('quizExplainBox'), savedMount: $('quizExplainSaved'),
     handoff: continueInChat && (async ({ item: q, history, question, onAnswer, extraImages, useNote }) => {
       const answered = answerOf(q);
-      const about = `The conversation is about this quiz question from the student's notes${q.source?.quote ? ` (section ${q.source.page}, which says: "${q.source.quote}")` : q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
+      const about = `The conversation is about this quiz question from the student's notes${q.source?.quote ? ` (${documentInfo().unit === 'section' ? 'section' : 'page'} ${q.source.page}, which says: "${q.source.quote}")` : q.source ? ` (page ${q.source.page})` : ''}:\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : '\nThe student has not answered yet: do not say which option is correct.'}`;
       const image = q.source ? hint || await capture(q.source).catch(() => null) : null;
       return continueInChat({ title: `From the quiz: ${q.question}`, about, messages: history, image, label: 'the part of the notes that answers the quiz question', question, onAnswer, extraImages, useNote });
     }),
-    unavailable: () => status('Clarify uses an AI tool installed on your computer and is available in the desktop app.', true),
+    unavailable: () => status('Clarify needs the desktop app with an AI tool, or a browser with WebGPU to run a model in this app.', true),
     // An explanation made after answering names the correct option: kept hidden until this question is answered.
     saved: q => (q.explanation && (!q.explanation.withAnswer || answerOf(q)) ? q.explanation : null),
     save: async (q, value) => { if (value) q.explanation = value; else delete q.explanation; await save(); },

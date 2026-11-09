@@ -55,12 +55,19 @@ import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { Engine } from "./engine.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
-import { shapePoints } from "./shapes.js";
+import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
+import { recognizeShape } from "./shape-recognize.js";
+import { typesetMath, mathSize, previewMath } from "./math-boxes.js";
+import { mathKeypad } from "./math-keypad.js";
+import { graphItems } from "./graph.js";
+import { audioTrim } from "./audio-trim.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
 import { autosaveStore, offerRecovery, when, EVERY_MS } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
+import { sharedAI } from "./local-ai.js";
+import { runAI, smallSetting } from "./small-model.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -762,7 +769,12 @@ const rgbaOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) /
 let textDefaults = { font: "Helvetica", size: 16, bold: false, italic: false, rgba: [0.12, 0.14, 0.16, 1] };
 try { textDefaults = { ...textDefaults, ...JSON.parse(localStorage.getItem("notecomplete-text-style") || "{}") }; } catch { /* Optional. */ }
 const styleOf = (run) => run ? { font: run.font_family || "Helvetica", size: run.font_size, bold: run.bold, italic: run.italic, rgba: run.rgba } : { ...textDefaults };
-const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font });
+// `math`: the text is LaTeX, typeset by KaTeX (math-boxes.js); sent only when set.
+const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font, ...(style.math ? { math: true } : {}) });
+// A typed box's style, with its math flag (kept by the box, not by its runs).
+const boxStyleOf = (existing) => ({ ...styleOf(existing?.runs?.[0]), ...(existing?.math ? { math: true } : {}) });
+// The size a box needs: typeset math is measured, other text from its lines.
+const boxSize = (value, style) => (style.math ? mathSize(value, style).catch(() => textBoxSize(value, style)) : Promise.resolve(textBoxSize(value, style)));
 const boxText = (existing) => existing.runs.map((r) => r.text).join("").replaceAll("​", "");
 for (const size of TEXT_SIZES) $("textSize").add(new Option(String(size), String(size)));
 for (const color of SWATCHES) {
@@ -782,6 +794,16 @@ function showTextFormat(p, bounds, style, apply) {
   const bar = textFormatBar;
   textFormatTarget = { p, style, apply };
   syncTextFormatControls(style);
+  // Docked (View → Text format bar in the tool bar): in the tool bar's settings row, never a
+  // bar of its own over the page.
+  if (textFormatDocked()) {
+    if (bar.parentElement !== $("toolOptions")) $("toolOptions").append(bar);
+    bar.classList.remove("below");
+    bar.style.left = bar.style.top = "";
+    bar.hidden = false;
+    toolOptions();
+    return;
+  }
   bar.style.left = `${(bounds[0] / p.size[0]) * 100}%`;
   bar.style.top = `${(bounds[1] / p.size[1]) * 100}%`;
   // Above the box, or below it when the box is at the top of the page.
@@ -789,6 +811,11 @@ function showTextFormat(p, bounds, style, apply) {
   if (bar.classList.contains("below")) bar.style.top = `${((bounds[1] + bounds[3]) / p.size[1]) * 100}%`;
   if (bar.parentElement !== p.el) p.el.append(bar);
   bar.hidden = false;
+  // Kept inside the window: a box near its right edge, or a phone, moves the bar left (it
+  // wraps onto a second row when even that is not enough: style.css).
+  const r = bar.getBoundingClientRect(), view = $("viewport").getBoundingClientRect();
+  const shift = Math.min(r.right - (view.right - 8), r.left - (view.left + 8));
+  if (shift > 0) bar.style.left = `calc(${bar.style.left} - ${shift}px)`;
 }
 function syncTextFormatControls(style) {
   $("textFont").value = FONT_STACKS[style.font] ? style.font : "Helvetica";
@@ -796,20 +823,44 @@ function syncTextFormatControls(style) {
   $("textSize").value = String(style.size);
   $("textBold").setAttribute("aria-pressed", String(!!style.bold));
   $("textItalic").setAttribute("aria-pressed", String(!!style.italic));
+  $("textMath").setAttribute("aria-pressed", String(!!style.math));
   const hex = hexColor(style.rgba);
   $("textColor").value = hex;
   for (const b of $("textSwatches").children) b.setAttribute("aria-checked", String(b.dataset.color.toLowerCase() === hex));
 }
 function hideTextFormat() {
   textFormatTarget = null;
+  const docked = textFormatBar.parentElement === $("toolOptions");
   textFormatBar.hidden = true;
   document.body.append(textFormatBar);
+  if (docked) toolOptions();
 }
+// Read from the page (a class on <body>), so the tool bar code can ask before this is set up.
+const textFormatDocked = () => document.body.classList.contains("text-format-docked");
+function setTextFormatDocked(on) {
+  document.body.classList.toggle("text-format-docked", on);
+  $("textFormatDock").setAttribute("aria-checked", String(on));
+  try { localStorage.setItem("notecomplete-text-format-docked", on ? "1" : "0"); } catch { /* Optional. */ }
+  // A bar showing now moves to its new place.
+  const t = textFormatTarget;
+  if (t) {
+    hideTextFormat();
+    if (textEditor) showTextFormat(t.p, [textEditor.bx, textEditor.by, 0, 0], t.style, t.apply);
+    else syncTextFormat();
+  }
+}
+try { setTextFormatDocked(localStorage.getItem("notecomplete-text-format-docked") === "1"); } catch { /* Optional. */ }
+$("textFormatDock").onclick = () => {
+  setTextFormatDocked(!textFormatDocked());
+  status(textFormatDocked() ? "Text format in the tool bar's settings row." : "Text format in a bar over the text box.");
+};
 function changeTextStyle(change) {
   const t = textFormatTarget;
   if (!t) return;
   Object.assign(t.style, change);
-  textDefaults = { ...t.style };
+  // Math is chosen per box: new boxes start as plain text.
+  const { math: _math, ...defaults } = t.style;
+  textDefaults = defaults;
   try { localStorage.setItem("notecomplete-text-style", JSON.stringify(textDefaults)); } catch { /* Optional. */ }
   syncTextFormatControls(t.style);
   t.apply(t.style);
@@ -821,6 +872,7 @@ textFormatBar.addEventListener("pointerdown", () => { textFormatPressed = Date.n
 for (const el of textFormatBar.querySelectorAll("button")) el.addEventListener("pointerdown", (e) => e.preventDefault());
 $("textBold").onclick = () => changeTextStyle({ bold: !textFormatTarget?.style.bold });
 $("textItalic").onclick = () => changeTextStyle({ italic: !textFormatTarget?.style.italic });
+$("textMath").onclick = () => changeTextStyle({ math: !textFormatTarget?.style.math });
 $("textFont").onchange = () => changeTextStyle({ font: $("textFont").value });
 $("textSize").onchange = () => changeTextStyle({ size: Number($("textSize").value) });
 $("textColor").oninput = () => changeTextStyle({ rgba: rgbaOf($("textColor").value) });
@@ -835,13 +887,15 @@ function syncTextFormat() {
   const item = selection.item, p = item && panels[item.page];
   const existing = tool === "select" && item?.kind === "text" && (p?.view?.texts || []).find((t) => t.id === item.id);
   if (!existing) return hideTextFormat();
-  const style = styleOf(existing.runs[0]);
-  showTextFormat(p, existing.bounds, style, (next) => {
-    const value = boxText(existing), [w, h] = textBoxSize(value, next);
+  const style = boxStyleOf(existing);
+  showTextFormat(p, existing.bounds, style, async (next) => {
+    const value = boxText(existing), [w, h] = await boxSize(value, next);
     action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next), width: w, height: h });
   });
 }
 let textEditor = null;
+// The math keypad: shown while a math box (∑) is typed; its Graph key draws the box's function.
+const mathKeys = mathKeypad({ onGraph: (value) => graphFromBox(value), onLayout: () => keepTextVisible(), status: (text) => status(text) });
 // Phones and tablets open the on-screen keyboard only for a focus made during a tap, and the
 // box opens after an await: a hidden field takes the focus at the tap and hands it on.
 let keyboardPrimer = null;
@@ -869,10 +923,12 @@ async function typeAt(p, at) {
 function keepTextVisible() {
   const vv = window.visualViewport;
   if (!textEditor || !vv) return;
-  const covered = Math.max(0, Math.round(innerHeight - vv.offsetTop - vv.height));
+  // The on-screen keyboard, or the math keypad over the bottom of the window.
+  const keypad = mathKeys.open ? Math.max(0, innerHeight - mathKeys.top) : 0;
+  const covered = Math.max(0, Math.round(innerHeight - vv.offsetTop - vv.height), Math.round(keypad));
   $("pages").style.marginBottom = covered ? `${covered}px` : "";
   // Up by what is hidden, but never past the box's top (and the format bar above it).
-  const box = textEditor.area.getBoundingClientRect(), bottom = vv.offsetTop + vv.height - 16;
+  const box = textEditor.area.getBoundingClientRect(), bottom = Math.min(vv.offsetTop + vv.height, mathKeys.open ? mathKeys.top : Infinity) - 16;
   const by = Math.min(box.bottom - bottom, box.top - vv.offsetTop - 56);
   if (by > 0) $("viewport").scrollTop += by;
 }
@@ -891,7 +947,7 @@ async function openTextEditor(p, [x, y], known = null) {
     }
   } catch { /* Nothing under the pointer. */ }
   if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
-  const style = styleOf(existing?.runs?.[0]);
+  const style = existing ? boxStyleOf(existing) : styleOf(null);
   const [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - style.size * 0.8];
   const area = document.createElement("textarea");
   area.className = "text-editor";
@@ -914,14 +970,25 @@ async function openTextEditor(p, [x, y], known = null) {
   discard.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); });
   discard.onclick = (e) => { e.stopPropagation(); closeText(); };
   const placeDiscard = () => Object.assign(discard.style, { left: `calc(${area.style.left} + ${area.style.width})`, top: area.style.top });
-  fit();
-  placeDiscard();
-  area.oninput = () => { fit(); placeDiscard(); };
+  // Math (the ∑ button): the formula typeset live under the box while its LaTeX is typed.
+  const mathPreview = Object.assign(document.createElement("div"), { className: "math-preview" });
+  mathPreview.setAttribute("aria-hidden", "true");
+  const showMath = () => {
+    mathPreview.hidden = !style.math;
+    if (!style.math) return mathKeys.detach();
+    mathKeys.attach(area);
+    const s = p.el.clientWidth / p.size[0];
+    Object.assign(mathPreview.style, { left: area.style.left, top: `calc(${area.style.top} + ${area.style.height} + 6px)` });
+    previewMath(mathPreview, area.value, { ...style, size: style.size * s }).catch(() => { mathPreview.textContent = "Math needs KaTeX, which could not load."; });
+  };
+  const refit = () => { fit(); placeDiscard(); showMath(); };
+  refit();
+  area.oninput = refit;
   hideText(p, existing?.id);
-  p.el.append(area, discard);
+  p.el.append(area, discard, mathPreview);
   selection.clear();
-  textEditor = { p, area, discard, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: () => { fit(); placeDiscard(); } };
-  showTextFormat(p, [bx, by, 0, 0], style, () => { fit(); placeDiscard(); area.focus(); });
+  textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: refit };
+  showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); });
   area.addEventListener("keydown", (e) => {
     // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
     if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) closeText(); else commitText(); }
@@ -948,6 +1015,8 @@ function endText() {
   const t = textEditor;
   textEditor = null;
   t?.discard.remove();
+  t?.mathPreview.remove();
+  mathKeys.detach();
   $("pages").style.marginBottom = "";
   hideTextFormat();
   return t;
@@ -1008,14 +1077,12 @@ async function commitText() {
   if (!t) return;
   const value = t.area.value.replace(/\s+$/, "");
   const text = textPayload(value, t.style);
-  const [w, h] = textBoxSize(value || " ", t.style);
   const same = t.existing && value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
   if (same || (!t.existing && !value.trim())) return closeText();
   const hold = holdText();
-  if (t.existing) {
-    if (!value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
-    return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
-  }
+  if (t.existing && !value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
+  const [w, h] = await boxSize(value || " ", t.style);
+  if (t.existing) return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
   await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } }, hold);
 }
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
@@ -1102,6 +1169,22 @@ function tapeOpen(p, tape) {
   if (tapeTaps.has(key)) return tapeTaps.get(key);
   return tapeMode === "note" ? tape.revealed : tapeMode === "revealed";
 }
+// The tape's stripes (the core's TAPE_DEFS) come as one pattern per page SVG, id ncTape,
+// painted onto each tape's copy by a CSS rule. Safari on iOS draws them unreliably that way:
+// every page has the same id, and the paint is a url() in a style sheet. Here each page gets
+// its own pattern id and the copies get it as plain attributes, which every browser
+// resolves; the style rule goes, so no page's copy depends on another page's pattern.
+function paintTapes(render, key) {
+  const pattern = render?.querySelector('pattern[id^="ncTape"]');
+  if (!pattern) return;
+  const id = `ncTape-p${key}`;
+  pattern.id = id;
+  for (const style of render.querySelectorAll("defs > style")) if (style.textContent.includes("nc-tape-pattern")) style.remove();
+  for (const el of render.querySelectorAll(".nc-tape-pattern :is(path, rect, circle, polygon, polyline)")) {
+    if (el.localName === "polyline") el.setAttribute("stroke", `url(#${id})`);
+    else { el.setAttribute("fill", `url(#${id})`); el.setAttribute("stroke", "none"); }
+  }
+}
 function applyTapes(p, render = p.render) {
   for (const tape of p.view?.tapes || []) {
     const el = render?.querySelector(`[data-tape="${tape.id}"]`);
@@ -1144,6 +1227,7 @@ async function renderThumbnail(panel) {
     if (note !== epoch) return;
     const render = document.createElement("div");
     render.innerHTML = result.svg;
+    paintTapes(render, `t${panel.index}`);
     if (result.pdf_background) {
       const thumb = panel.pageButton.querySelector(".page-thumb");
       const width = Math.max(80, thumb?.clientWidth || 128);
@@ -1347,6 +1431,7 @@ async function renderPage(p, provided) {
     const render = document.createElement("div");
     render.className = "render";
     render.innerHTML = result.svg;
+    paintTapes(render, p.index);
     // An edit redraws the page's ink; the PDF raster under it stays the same,
     // so the existing image moves over at once instead of blinking out while
     // the background cache answers.
@@ -1380,12 +1465,13 @@ async function renderPage(p, provided) {
     // waiting for its own render stays, and so does the box being typed in.
     keepHeld(p, shows, false);
     if (textEditor?.p === p) {
-      p.el.append(textEditor.area, textEditor.discard);
+      p.el.append(textEditor.area, textEditor.discard, textEditor.mathPreview);
       hideText(p, textEditor.existing?.id);
       textEditor.fit();
       if (typing) textEditor.area.focus({ preventScroll: true });
     }
-    if (textFormatTarget?.p === p) p.el.append(textFormatBar);
+    if (textFormatTarget?.p === p && !textFormatDocked()) p.el.append(textFormatBar);
+    typesetMath(render, result.texts);
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -1540,15 +1626,16 @@ function toolOptions() {
   $("highlightOptions").hidden = tool !== "highlight";
   $("tapeOptions").hidden = tool !== "tape";
   $("pressureOptions").hidden = tool !== "draw";
-  $("drawingOptions").hidden = tool === "select";
+  $("snapOptions").hidden = tool !== "draw";
+  $("drawingOptions").hidden = tool === "select" || tool === "text";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
-  $("toolOptions").hidden =
-    chromeState.compact || !optionsOpen ||
-    (!["draw", "highlight", "shape", "tape", "erase"].includes(tool) &&
-      !(tool === "select" && selection.item));
+  // The text format bar, when docked here, shows while a text box is typed or selected.
+  const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
+  const usual = optionsOpen && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
+  $("toolOptions").hidden = chromeState.compact || !(usual || textDock);
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   syncChoices();
   if (!$("toolOptions").hidden) {
@@ -1600,7 +1687,7 @@ async function action(op, args = {}, hold = null) {
     if (token !== epoch) return;
     if (edited(op, args, result)) return;
     // A new shape is selected to adjust it, except on a drawing tablet (it keeps drawing shapes).
-    if (op === "draw" && args.line.shape && !gesture && collab?.role !== "tablet") {
+    if (op === "draw" && args.line.shape && !args.recognized && !gesture && collab?.role !== "tablet") {
       document.querySelector("[data-tool=select]").click();
       selection.selectId(args.page ?? page, `new:${result.edit_count - 1}`);
     } else if (selection.item) {
@@ -1655,7 +1742,7 @@ function showEdit(op, args, result) {
   updateTools(result);
   layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
-  const only = ["draw", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
     p.edits = pageEdits(p) + 1;
@@ -1790,6 +1877,7 @@ function cancelGesture() {
   const g = gesture;
   gesture = null;
   if (!g) return;
+  clearTimeout(g.holdTimer);
   collab?.drawn(g, true);
   // A cancelled grab takes only its own box away: a region grabbed before keeps its menu.
   if (g.tool === "grab") {
@@ -2040,7 +2128,9 @@ function appendPoint(e) {
     if (at !== g.textMode.at) { g.textMode.at = at; showTextBands(g); }
     return;
   }
-  if (g.tool === "shape") {
+  if (g.snapped) {
+    resizeSnapped(g, point(e, g.panel));
+  } else if (g.tool === "shape") {
     g.points = shapePoints($("shape").value, g.start, point(e, g.panel));
   } else if (g.tool === "grab") {
     g.points = [g.start, point(e, g.panel)];
@@ -2078,9 +2168,78 @@ function appendPoint(e) {
       const { pressure } = stylusPressure(g);
       if (pressure?.length) g.el.setAttribute("stroke-width", (2 * pressure.reduce((s, r) => s + r, 0)) / pressure.length);
     }
+    watchHold(g, e);
   }
+  if (g.snapped) return collab?.drawing(g);
   preview();
   collab?.drawing(g);
+}
+// Shape recognition (shape-recognize.js; docs/SHAPES-TABLES-MATH.md): with the Pen, a stroke
+// held still for a moment becomes the shape it looks like (or, opt-in, on every lift).
+const shapeSnap = () => $("shapeSnap").value;
+const SNAP_HOLD_MS = 550;
+// View → Shapes from the pen: on (hold, or on lift when chosen in the Pen's settings) or off.
+function syncShapeSnapMenu() { $("shapeSnapMenu").setAttribute("aria-checked", String(shapeSnap() !== "off")); }
+$("shapeSnap").addEventListener("change", syncShapeSnapMenu);
+$("shapeSnapMenu").onclick = () => {
+  $("shapeSnap").value = shapeSnap() === "off" ? "hold" : "off";
+  $("shapeSnap").dispatchEvent(new Event("change"));
+  syncChoices();
+  status(shapeSnap() === "off" ? "Shapes from the pen off: strokes stay as drawn." : "Shapes from the pen: hold the pen still at the end of a stroke to make it a shape.");
+};
+// The timer restarts whenever the pen moves more than a few pixels.
+function watchHold(g, e) {
+  if (g.tool !== "draw" || shapeSnap() !== "hold") return;
+  if (g.still && Math.hypot(e.clientX - g.still[0], e.clientY - g.still[1]) <= 4) return;
+  g.still = [e.clientX, e.clientY];
+  clearTimeout(g.holdTimer);
+  g.holdTimer = setTimeout(() => {
+    if (gesture !== g || g.snapped) return;
+    const shape = recognizeShape(g.points);
+    if (shape) { snapTo(g, shape); navigator.vibrate?.(8); }
+  }, SNAP_HOLD_MS);
+}
+const SHAPE_NAMES = { line: "Line", arrow: "Arrow", rectangle: "Rectangle", ellipse: "Ellipse", triangle: "Triangle", star: "Star" };
+// The stroke on screen becomes the shape; moving on before lifting resizes it.
+function snapTo(g, shape) {
+  const [x0, y0] = shape.start, [x1, y1] = shape.end;
+  const square = ["rectangle", "ellipse"].includes(shape.kind) && Math.abs(Math.abs(x1 - x0) - Math.abs(y1 - y0)) < 1e-6;
+  g.snapped = { ...shape, from: g.raw || g.points.at(-1), end0: shape.end };
+  // A stylus stroke drawn meanwhile took its pressure's average width; the shape has the pen's.
+  g.el.setAttribute("stroke-width", g.width);
+  showSnapped(g);
+  status(`${square ? (shape.kind === "ellipse" ? "Circle" : "Square") : SHAPE_NAMES[shape.kind]}: lift to keep it, or move to resize it.`);
+}
+// The far corner follows the pen, in the shape's own frame when it is turned.
+function resizeSnapped(g, at) {
+  const s = g.snapped, t = -(s.rotation || 0) * Math.PI / 180, dx = at[0] - s.from[0], dy = at[1] - s.from[1];
+  const [ux, uy] = s.kind === "line" || s.kind === "arrow" ? [dx, dy] : [dx * Math.cos(t) - dy * Math.sin(t), dx * Math.sin(t) + dy * Math.cos(t)];
+  s.end = [s.end0[0] + ux, s.end0[1] + uy];
+  showSnapped(g);
+}
+// The shape's points as drawn: turned about its box's centre, as the core will turn it.
+function snappedPoints(s) {
+  const points = shapePoints(s.kind, s.start, s.end);
+  if (!s.rotation) return points;
+  const c = [(s.start[0] + s.end[0]) / 2, (s.start[1] + s.end[1]) / 2], t = s.rotation * Math.PI / 180;
+  return points.map(([x, y]) => [c[0] + (x - c[0]) * Math.cos(t) - (y - c[1]) * Math.sin(t), c[1] + (x - c[0]) * Math.sin(t) + (y - c[1]) * Math.cos(t)]);
+}
+function showSnapped(g) {
+  g.points = snappedPoints(g.snapped);
+  g.el.setAttribute("points", g.points.map((p) => p.join(",")).join(" "));
+  g.dot.style.display = "none";
+}
+// A recognised shape is an ordinary shape (Select, corners, turning, fill all apply), in the
+// pen's colour and width, and the pen stays the tool. One edit, turned in the same step.
+function commitSnapped(g) {
+  const s = g.snapped, rgba = [1, 3, 5].map((i) => parseInt(g.color.slice(i, i + 2), 16) / 255);
+  const hold = holdInk(g.panel, g.el, g.dot);
+  return action("draw", {
+    page: g.panel.index,
+    recognized: true,
+    ...(s.rotation ? { turn: s.rotation } : {}),
+    line: { points: shapePoints(s.kind, s.start, s.end), width: g.width, rgba: [...rgba, 1], tool: 0, layer: g.layer, shape: { kind: s.kind, start: s.start, end: s.end } },
+  }, hold);
 }
 // Pen pressure from a stylus, as the core stores it: the drawn radius at each point
 // (editor.rs). Light pressure draws about a third of the width, a firm press about 1.7×.
@@ -2196,6 +2355,13 @@ function pointerUp(e) {
     }
     ({ points: g.points, pressures: g.pressures } = smoothStroke(g.points, g.pressures));
   }
+  clearTimeout(g.holdTimer);
+  // On lift (opt-in): a stroke that is clearly a shape becomes one.
+  if (!g.snapped && g.tool === "draw" && shapeSnap() === "lift") {
+    const shape = recognizeShape(g.points, { strict: true });
+    if (shape) snapTo(g, shape);
+  }
+  if (g.snapped) return commitSnapped(g);
   if (g.tool === "erase")
     action("erase", { page: g.panel.index, points: g.points, radius: eraserRadius() });
   else {
@@ -2320,6 +2486,8 @@ const CHOICE_ICONS = {
   // A stroke that thickens where pressed harder, or one even line.
   pressure: { on: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="1.2"/><path d="M8 12.5c2-2 3-3.4 4-3.4" stroke-width="3.2"/>', off: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="2.4"/>' },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
+  // A wobbly loop that becomes a clean box: when the pen is held, on every lift, or never.
+  shapeSnap: { hold: '<path d="M5 8c3-3 10-3 13 0" stroke-dasharray="2 2"/><rect x="5" y="11" width="14" height="8" rx="0.5"/><circle cx="19" cy="6" r="2.2" fill="currentColor"/>', lift: '<path d="M4 9c2-4 6 1 8-3s5 2 8-1" stroke-dasharray="2 2"/><rect x="5" y="12" width="14" height="7" rx="0.5"/>', off: '<path d="M4 14c3-6 5 4 8-2s5 5 9-3"/>' },
 };
 function buildChoices() {
   for (const row of document.querySelectorAll(".choice-row[data-for]")) {
@@ -2487,10 +2655,11 @@ function saveToolPrefs() {
 }
 for (const id of ["color", "width"]) $(id).addEventListener("change", saveToolPrefs);
 $("color").addEventListener("input", saveToolPrefs);
-for (const id of ["highlightMode", "tapeMode", "shape"]) {
+for (const id of ["highlightMode", "tapeMode", "shape", "shapeSnap"]) {
   try { const saved = localStorage.getItem(`notecomplete-${id}`); if (saved && $(id).querySelector(`option[value="${saved}"]`)) $(id).value = saved; } catch { /* Optional. */ }
   $(id).addEventListener("change", () => { try { localStorage.setItem(`notecomplete-${id}`, $(id).value); } catch { /* Optional. */ } });
 }
+syncShapeSnapMenu();
 // The visible shape row drives the (hidden) select that the drawing code reads.
 function syncShapePicker() {
   for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
@@ -2513,7 +2682,6 @@ function setShapeFill(value) {
 }
 for (const b of document.querySelectorAll("#shapeFill [data-fill]")) b.onclick = () => setShapeFill(b.dataset.fill);
 setShapeFill(shapeFill);
-const CLOSED_SHAPES = new Set(["rectangle", "ellipse", "triangle"]);
 // The fill for a new shape of `kind` in pen colour `hex`, or nothing.
 function fillFor(kind, hex) {
   if (shapeFill === "none" || !CLOSED_SHAPES.has(kind)) return {};
@@ -3116,7 +3284,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert graph: axes and grid to draw on"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -3149,7 +3317,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesToggle": "⇧P", "#importImage": "⇧I", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -3176,10 +3344,21 @@ function shortcut(e) {
   if (keyTool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
+  if (k === "P") return $("pagesToggle").click(), true;
+  if (k === "G") return $("gotoPage").click(), true;
+  if (k === "I") return $("importImage").click(), true;
+  if (k === "B") return $("insertBlank").click(), true;
+  if (k === "X") return $("insertGraph").click(), true;
+  if (k === "O") return $("ocrOpen").click(), true;
+  if (k === "E") return $("exportStudy").click(), true;
+  // Lifts all tape, or covers it all again when it is all lifted.
+  if (k === "U") return (tapeAllLifted ? $("tapeCover") : $("tapeReveal")).click(), true;
   if (k === "T") return $("toolsToggle").click(), true;
   if (k === "n") return notesButton().click(), true;
   if (k.toLowerCase() === "a" && !e.shiftKey) return $("audioToggle")?.click(), true;
   if (k === "A" && !$("audioToggle").hidden) return $("audioPage").click(), true;
+  // Text from part of the recording (audio-trim.js): the scissors, with the audio panel open.
+  if (k === "K" && !$("audioBar").hidden) return $("trimAudio")?.click(), true;
   if (k === "R" && !$("audioToggle").hidden) return (addedStore.recording ? stopRecording() : (toggleAudio(true), startRecording())), true;
   if (k === "i" && !$("audioToggle").hidden) return $("syncEnabled").click(), true;
   if (!$("audioToggle").hidden && ["j", "k", "l"].includes(k)) {
@@ -3446,7 +3625,7 @@ $("newCreate").onclick = async () => {
 const converter = handwritingConverter({
   call,
   status,
-  ai: window.notecompleteAI || null,
+  ai: sharedAI(),
   hasDocument: () => !!doc,
   sourceText: () => (!doc && textView?.visible && (converted || isMarkdownName(textView.key)) ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
@@ -3463,7 +3642,7 @@ const converter = handwritingConverter({
   },
 });
 $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
-$("newWithAi").hidden = !window.notecompleteAI;
+$("newWithAi").hidden = !sharedAI();
 $("newWithAi").onclick = () => { closeMenus(); converter.open({ withAi: true }); };
 $("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
 // The "?" beside Save as (New document) and Export: what each format keeps.
@@ -3585,6 +3764,8 @@ async function patchItem(item, adjustment, crop = null) {
     if (el) {
       el.innerHTML = result.svg;
       el.removeAttribute("transform");
+      paintTapes(p.render, p.index);
+      typesetMath(p.render, p.view?.texts);
     }
     if (p.view) {
       Object.assign(p.view, {
@@ -4350,7 +4531,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .notecomp only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -4555,8 +4736,9 @@ $("grabAsk").onclick = async () => {
   clearGrab();
 };
 $("grabCancel").onclick = clearGrab;
-$("tapeReveal").onclick = () => setTapeMode("revealed");
-$("tapeCover").onclick = () => setTapeMode("covered");
+let tapeAllLifted = false;
+$("tapeReveal").onclick = () => { tapeAllLifted = true; setTapeMode("revealed"); };
+$("tapeCover").onclick = () => { tapeAllLifted = false; setTapeMode("covered"); };
 $("tapeNote").onclick = () => setTapeMode("note");
 $("findOpen").onclick = () => { showDocument(); if (!doc && textView.hasDocument) textFinder.open(); else find.open(); };
 $("ocrOpen").onclick = () => find.openOcr(page);
@@ -4743,6 +4925,44 @@ function openInsert(pdf) {
   $("insertDialog").showModal();
 }
 $("insertBlank").onclick = () => doc && openInsert(null);
+// Graphs (graph.js): empty axes from Insert → Graph, or a function from the math keypad.
+const GRAPH_SIZE = [420, 300];
+async function insertGraph(p, [x, y], tex = "") {
+  const layer = doc?.layers.find((l) => l.id === activeLayer);
+  if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
+  const [w, h] = [Math.min(GRAPH_SIZE[0], p.size[0] - 60), GRAPH_SIZE[1]];
+  // Inside the page, with room for the axis names and arrows past its edges.
+  const box = [Math.max(20, Math.min(x, p.size[0] - w - 40)), Math.max(30, Math.min(y, p.size[1] - h - 30)), w, h];
+  const pen = { ...TOOL_DEFAULTS.draw, ...toolPrefs.draw };
+  let items;
+  try {
+    items = graphItems(box, { tex, rgba: [...rgbaOf(pen.color).slice(0, 3), 1], width: Number(pen.width) || 2, layer: activeLayer });
+  } catch (e) {
+    return status(e.message, true), false;
+  }
+  await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
+  status(tex ? "Graph drawn: each part is its own item (one undo removes it all)." : "Graph inserted: draw on it with the pen. One undo removes it.");
+  return true;
+}
+$("insertGraph").onclick = () => {
+  if (!doc) return;
+  const p = panels[page], r = p.el.getBoundingClientRect(), v = $("viewport").getBoundingClientRect();
+  const cy = (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) / r.height) * p.size[1];
+  insertGraph(p, [(p.size[0] - GRAPH_SIZE[0]) / 2, cy - GRAPH_SIZE[1] / 2]);
+};
+// The keypad's Graph key: the box's function on axes below it (the box is kept), or empty
+// axes there when the box is empty. A formula that cannot be drawn leaves the box open.
+async function graphFromBox(value) {
+  const t = textEditor;
+  if (!t) return;
+  const tex = value.trim(), [, h] = tex ? await boxSize(tex, t.style) : [0, 0];
+  const at = [t.bx, t.by + h + 24];
+  if (tex) {
+    try { graphItems([0, 0, ...GRAPH_SIZE], { tex }); } catch (e) { return status(e.message, true); }
+    await commitText();
+  } else closeText();
+  await insertGraph(t.p, at, tex);
+}
 $("insertPdf").onclick = () => doc && $("pdfPagesFile").click();
 $("pdfPagesFile").onchange = async (event) => {
   const file = event.target.files[0];
@@ -4871,7 +5091,8 @@ const find = findController({
   documentInfo: () => ({ pages: doc?.pages || 0 }),
   jobs: () => jobs,
 });
-const ai = window.notecompleteAI || null;
+// The desktop AI tools and/or the model in this app (WebLLM, where WebGPU exists).
+const ai = sharedAI();
 // Scratchpad: AI conversations kept per note (View → Scratchpad…).
 const scratch = scratchpad({
   store: library.store,
@@ -4889,7 +5110,9 @@ const studyDeps = {
   keep: (entry) => scratch.keep(entry),
   ai,
   pageCanvas: (p, width, options) => (studyText() ? Promise.resolve(null) : pageCanvas(p, width, options)),
-  pageText: async (p) => (studyText() ? textSource.sectionText(p) : find.pageText(p)),
+  // `options.recognize`: small-model mode reads a page's handwriting first (find.js).
+  pageText: async (p, options) => (studyText() ? textSource.sectionText(p) : find.pageText(p, options)),
+  pageWords: async (p) => (studyText() ? null : find.pageWords(p)),
   documentInfo: () => (studyText() ? { pages: textSource.count, title: textView.name || "Document", unit: "section" } : { pages: doc?.pages || 0, title: doc?.title || "Note", unit: "page" }),
   currentPage: () => (studyText() ? textSource.current() : page),
   notePath: () => (studyText() ? "" : notePath),
@@ -4929,6 +5152,8 @@ async function answerToTextBox(text) {
 const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: answerToTextBox });
 const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
+// The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
+const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => answerToTextBox(text) });
 audio.transcript.context = () => ({ title: doc?.title || "" });
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {
@@ -4970,7 +5195,7 @@ const quizzes = quizController({
     try { provider = localStorage.getItem("notecomplete-ai-provider") || provider; } catch { /* Optional. */ }
     const images = [];
     if (image) { const blob = await (await fetch(image)).blob(); images.push({ bytes: new Uint8Array(await blob.arrayBuffer()), type: "image/jpeg", label: "notes-region" }); }
-    const { text } = await ai.run({ provider, images, notePath, tag: "check", prompt: `A student disputes a quiz question about their notes${image ? " (the attached image is the region of the notes the quiz cites)" : ""}. Using the notes, decide which option is correct, or say that none is. Write in the question's language.\nQuestion: ${q.question}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}\nReply with ONLY JSON: {"answer": <index of the correct option, or null>, "reason": "two or three sentences that cite the notes"}` });
+    const { text } = await runAI(ai, { provider, images, notePath, tag: "check", prompt: `A student disputes a quiz question about their notes${image ? " (the attached image is the region of the notes the quiz cites)" : ""}. Using the notes, decide which option is correct, or say that none is. Write in the question's language.\nQuestion: ${q.question}\n${q.options.map((o, i) => `${i}: ${o}`).join("\n")}\nReply with ONLY JSON: {"answer": <index of the correct option, or null>, "reason": "two or three sentences that cite the notes"}` }, null, { small: smallSetting(provider, { ai }), vision: ai.capabilities?.(provider, "")?.vision !== false });
     const value = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
     return { answer: Number.isInteger(value.answer) ? value.answer : null, reason: String(value.reason || "") };
   },

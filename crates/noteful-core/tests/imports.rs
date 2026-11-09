@@ -1,7 +1,7 @@
 use noteful_core::{Adjustment, Editor, Image, Package};
 
 fn image() -> Image {
-    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0, text: None }
+    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0, text: None, joined: false }
 }
 
 #[test]
@@ -107,6 +107,7 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         align: 0,
         underline: false,
         strikethrough: false,
+        math: false,
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
@@ -114,6 +115,7 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         bounds: [100., 100., 200., 40.],
         layer: 0,
         text: Some(t),
+        joined: false,
     };
     assert!(editor.add_image(0, image(text("  "))).is_err());
     editor.add_image(0, image(text("Hola\nmundo"))).unwrap();

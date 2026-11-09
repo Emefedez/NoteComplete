@@ -55,7 +55,7 @@ export function normalizeMarkdown(markdown, { links = true } = {}) {
     .join('');
 }
 
-function loadKatex() {
+export function loadKatex() {
   return katex ||= import('./vendor/katex/katex.mjs').then(module => {
     const css = document.createElement('link');
     css.rel = 'stylesheet';

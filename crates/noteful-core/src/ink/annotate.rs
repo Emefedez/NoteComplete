@@ -53,6 +53,8 @@ pub struct Item {
     pub italic: bool,
     pub underline: bool,
     pub strikethrough: bool,
+    /// A `textbox` whose text is LaTeX, typeset by readers (never drawn as ink).
+    pub math: bool,
     pub align: Option<String>,
 }
 
@@ -176,8 +178,11 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                 let rgba = pen_color("#1f2233")?;
                 let lines = text.lines().count().max(1) as f64;
                 let longest = text.lines().map(|l| l.chars().count()).max().unwrap_or(1) as f64;
-                let w = it.w.or(it.width).unwrap_or(longest * size * 0.58 + 16.).max(size);
-                let h = it.h.or(it.height).unwrap_or(lines * size * 1.3 + 12.).max(size);
+                // Typeset math is narrower than its source (commands, braces) and taller
+                // (fractions, powers); readers fit the formula into the box either way.
+                let (wide, tall) = if it.math { (0.45, 2.2) } else { (0.58, 1.3) };
+                let w = it.w.or(it.width).unwrap_or(longest * size * wide + 16.).max(size);
+                let h = it.h.or(it.height).unwrap_or(lines * size * tall + 12.).max(size);
                 let align = match it.align.as_deref().unwrap_or("left") {
                     "left" => 0,
                     "center" | "centre" => 1,
@@ -190,6 +195,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                     mime: String::new(),
                     bounds: [need(it.x, n, "x")?, need(it.y, n, "y")?, w, h],
                     layer: 0,
+                    joined: false,
                     text: Some(TextBox {
                         text: text.to_owned(),
                         font_size: size,
@@ -200,6 +206,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                         align,
                         underline: it.underline,
                         strikethrough: it.strikethrough,
+                        math: it.math,
                     }),
                 });
             }
@@ -315,5 +322,21 @@ mod tests {
         ] {
             assert!(annotate(&items(bad), 1).is_err(), "{bad}");
         }
+    }
+    #[test]
+    fn math_text_boxes_are_typed_text_flagged_as_latex_never_ink() {
+        let a = annotate(
+            &items(r#"[{"type":"textbox","text":"x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}","x":100,"y":100,"math":true}]"#),
+            1,
+        )
+        .unwrap();
+        assert!(a.lines.is_empty(), "math is never drawn");
+        let image = &a.text_boxes[0];
+        let tb = image.text.as_ref().unwrap();
+        assert!(tb.math && tb.text.starts_with("x = \\frac"));
+        // Sized for a formula: taller than a line of text.
+        assert!(image.bounds[3] >= 16. * 2.2, "{:?}", image.bounds);
+        let plain = annotate(&items(r#"[{"type":"textbox","text":"Score","x":1,"y":1}]"#), 1).unwrap();
+        assert!(!plain.text_boxes[0].text.as_ref().unwrap().math);
     }
 }

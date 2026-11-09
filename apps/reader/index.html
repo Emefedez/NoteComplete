@@ -85,13 +85,14 @@
           <button data-proxy-tool="shape" data-icon="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
           <button data-proxy-tool="grab" data-icon="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
           <hr />
-          <button data-proxy="importImage" data-icon="image">Insert image…</button>
+          <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
+          <button id="insertGraph" data-icon="graph" disabled data-palette="Insert graph (axes and grid)" title="Axes and a grid to draw a graph on; for a function, use the Graph key of the math keypad (∑ in a text box)">Insert graph<kbd>Shift X</kbd></button>
         </div>
       </details>
       <details class="menu bar-menu" id="viewMenu">
         <summary role="menuitem">View</summary>
         <div class="menu-content" role="menu">
-          <button data-proxy="pagesToggle" data-icon="pages">Page list</button>
+          <button data-proxy="pagesToggle" data-icon="pages">Page list<kbd>Shift P</kbd></button>
           <button data-proxy="layersToggle" data-icon="layers">Layers</button>
           <button data-proxy="notesToggle" data-icon="note">Notes<kbd>N</kbd></button>
           <button id="toolsToggle" data-icon="menu" role="menuitemcheckbox" aria-checked="true" data-palette="Show or hide the tool bar" title="The row of tools and their settings; with it hidden, use the quick menu (Shift + S, a pen's button or two fingers held still)">Tool bar<kbd>Shift T</kbd></button>
@@ -110,6 +111,8 @@
           <hr />
           <button id="resetToolOrder" data-icon="restart" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="toolSettingsAuto" data-icon="settings" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
+          <button id="shapeSnapMenu" data-icon="shape" role="menuitemcheckbox" aria-checked="true" data-palette="Shapes from the pen: on or off" title="With the Pen, a stroke held still for a moment becomes a clean line, arrow, rectangle, ellipse, triangle or star. The Pen's settings also offer making shapes on every lift">Shapes from the pen</button>
+          <button id="textFormatDock" data-icon="text" role="menuitemcheckbox" aria-checked="false" data-palette="Text format bar in the tool bar" title="Font, size, bold, italic and colour of text boxes in the tool bar's settings row, instead of a bar floating over the box">Text format bar in the tool bar</button>
           <button id="penSetupOpen" data-icon="draw" title="Teach NoteComplete your pen's side button, or choose another way to open the quick menu">Pen button…</button>
           <hr />
           <button data-proxy="zoomIn" data-icon="plus">Zoom in<kbd>Ctrl +</kbd></button>
@@ -122,8 +125,8 @@
             <button id="uiReset" data-icon="fit" data-palette="Interface size 100%">Interface size 100%<kbd>Ctrl Shift 0</kbd></button>
             <hr />
           </div>
-          <button id="tapeReveal" data-icon="tape" disabled>Lift all tape</button>
-          <button id="tapeCover" data-icon="tape" disabled>Cover with all tape</button>
+          <button id="tapeReveal" data-icon="tape" disabled>Lift all tape<kbd>Shift U</kbd></button>
+          <button id="tapeCover" data-icon="tape" disabled>Cover with all tape<kbd>Shift U</kbd></button>
           <button id="tapeNote" data-icon="tape" disabled>Tape as saved</button>
           <hr />
           <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
@@ -133,10 +136,10 @@
       <details class="menu bar-menu" id="pagesMenu">
         <summary role="menuitem">Pages</summary>
         <div class="menu-content" role="menu">
-          <button id="gotoPage" data-icon="hash" disabled>Go to page…</button>
-          <button id="ocrOpen" data-icon="grab" disabled>Recognize text (OCR)…</button>
+          <button id="gotoPage" data-icon="hash" disabled>Go to page…<kbd>Shift G</kbd></button>
+          <button id="ocrOpen" data-icon="grab" disabled>Recognize text (OCR)…<kbd>Shift O</kbd></button>
           <hr />
-          <button id="insertBlank" data-icon="plus" disabled>Insert blank page…</button>
+          <button id="insertBlank" data-icon="plus" disabled>Insert blank page…<kbd>Shift B</kbd></button>
           <button id="insertPdf" data-icon="note" disabled>Insert PDF pages…</button>
           <button id="insertHandwritten" data-icon="draw" disabled data-palette="Insert handwritten pages from Markdown…" title="Write Markdown as real handwriting ink on new pages">Insert handwritten pages…</button>
           <hr />
@@ -524,9 +527,10 @@
                 ><button type="button" data-shape="rectangle" role="radio" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></button
                 ><button type="button" data-shape="ellipse" role="radio" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6"/></svg></button
                 ><button type="button" data-shape="triangle" role="radio" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 19H3Z"/></svg></button
-                ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button>
+                ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button
+                ><button type="button" data-shape="star" role="radio" title="Star"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.5 5.6 6.1.6-4.6 4 1.4 6-5.4-3.2-5.4 3.2 1.4-6-4.6-4 6.1-.6Z"/></svg></button>
               </div>
-              <div id="shapeFill" class="shape-picker fill-picker" role="radiogroup" aria-label="Fill (F)" title="Fill of rectangles, ellipses and triangles (F)">
+              <div id="shapeFill" class="shape-picker fill-picker" role="radiogroup" aria-label="Fill (F)" title="Fill of rectangles, ellipses, triangles and stars (F)">
                 <button type="button" data-fill="none" role="radio" title="Outline only"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1"/></svg></button
                 ><button type="button" data-fill="tint" role="radio" title="Tint: a pale fill in the pen colour"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1" fill="currentColor" fill-opacity=".25"/></svg></button
                 ><button type="button" data-fill="solid" role="radio" title="Solid: filled with the pen colour"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1" fill="currentColor"/></svg></button>
@@ -536,7 +540,8 @@
                 <option value="rectangle">Rectangle</option>
                 <option value="ellipse">Ellipse</option>
                 <option value="triangle">Triangle</option>
-                <option value="arrow">Arrow</option></select
+                <option value="arrow">Arrow</option>
+                <option value="star">Star</option></select
               ><button
                 id="insertShape"
                 aria-label="Insert shape"
@@ -567,6 +572,14 @@
               <select id="pressure" data-native hidden aria-label="Pen pressure">
                 <option value="on" selected>Pressure changes the width</option>
                 <option value="off">Even width</option>
+              </select>
+            </div>
+            <div id="snapOptions" class="option-group" hidden>
+              <div class="choice-row" data-for="shapeSnap" role="radiogroup" aria-label="Shapes from the pen"></div>
+              <select id="shapeSnap" data-native hidden aria-label="Shapes from the pen">
+                <option value="hold" selected>Hold the pen still to make a shape</option>
+                <option value="lift">Clear shapes become shapes on lift</option>
+                <option value="off">No shapes from the pen</option>
               </select>
             </div>
             <div id="highlightOptions" class="option-group" hidden>
@@ -894,6 +907,7 @@
   <select id="textSize" data-native aria-label="Size" title="Size"></select>
   <button id="textBold" type="button" class="fmt-bold" aria-pressed="false" title="Bold">B</button>
   <button id="textItalic" type="button" class="fmt-italic" aria-pressed="false" title="Italic">I</button>
+  <button id="textMath" type="button" class="fmt-math" aria-pressed="false" title="Math: the text is LaTeX, typeset (the whole box, or the parts between $…$ and $$…$$)">∑</button>
   <span id="textSwatches" class="text-swatches" role="radiogroup" aria-label="Color"></span>
   <label class="color-label" title="Custom color"><input type="color" id="textColor" value="#1f2328" aria-label="Custom color" /></label>
 </div>

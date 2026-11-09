@@ -128,8 +128,23 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (op === "resize")
       session.resize_shape(page, args.shapeId, JSON.stringify(args.shape));
     if (op === "layer") session.set_layer(JSON.stringify(args.layer));
-    if (op === "draw") session.draw(page, JSON.stringify(args.line));
+    if (op === "draw") {
+      session.draw(page, JSON.stringify(args.line));
+      // A shape recognised at an angle (shape-recognize.js) is added level, then turned about
+      // its centre in the same step: one undo removes both, and every copy in a sharing
+      // session does the same, since the op travels with its arguments.
+      if (Number.isFinite(args.turn) && args.turn) {
+        const id = `new:${JSON.parse(session.view(page)).edit_count - 1}`;
+        session.adjust_item(page, id, JSON.stringify({ translation: [0, 0], scale: [1, 1], rotation: args.turn, joined: true }));
+      }
+    }
     if (op === "image") session.add_image(page, JSON.stringify(args.image));
+    // Several lines, then typed text boxes, as one undo step (graph.js: an inserted graph).
+    if (op === "drawMany") {
+      let first = true;
+      for (const line of args.lines || []) { session.draw(page, JSON.stringify({ ...line, joined: !first })); first = false; }
+      for (const image of args.images || []) { session.add_image(page, JSON.stringify({ ...image, joined: !first })); first = false; }
+    }
     if (op === "erase")
       session.erase(page, JSON.stringify(args.points), args.radius);
     if (op === "insertHandwritten")
