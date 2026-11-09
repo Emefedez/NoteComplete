@@ -64,21 +64,37 @@ Recognition (`apps/reader/shape-recognize.js`, pure and unit-tested) works on th
 points in page units:
 
 1. Too small (bounding box diagonal under 14 units) → nothing.
-2. **Line**: end-to-end distance over path length ≥ 0.94. Angles within 6° of a multiple of
-   45° snap to it.
-3. **Arrow**: the point farthest from the start is the tip; the part up to it is straight
-   (≥ 0.9), and the rest of the stroke (the head) is short, stays near the tip and behind it,
-   and goes out to the side. One stroke: shaft, then the head without lifting.
-4. **Closed shapes** (the ends meet within a quarter of the size): the convex hull's
-   minimum-area rectangle gives the orientation and size; the stroke simplified
-   (Douglas–Peucker) gives its corners; the turning of the simplified path tells a pentagram.
+2. **What the hand adds is dropped first**: the jitter while the pen is held still to snap
+   (a cluster of points round the end, which counted as length and as turns and spoilt short
+   lines and arrow heads), the tick where the pen lands, and tremor finer than a hair.
+3. **Line**: close to the chord all along (7%) and end-to-end distance over the length of a
+   coarse copy ≥ 0.9. Angles within 6° of a multiple of 45° snap to it.
+4. **Arrow**: the point farthest from the start is the tip; the part up to it is straight
+   (near its chord, ≥ 0.9 on a coarse copy), and the rest of the stroke (the head) is short,
+   stays near the tip and behind it, and goes out to the side. One stroke: shaft, then the
+   head without lifting.
+5. **Closed shapes**: the ends meet within a third of the size (a quarter on lift), or the
+   stroke goes on past its start along its own beginning (a circle drawn round a bit more
+   than once); then the part drawn twice is cut off. The stroke simplified (Douglas–Peucker)
+   gives its corners; the turning of the simplified path tells a pentagram.
    - **Star**: a pentagram (corners turn about 720° in all) or an outline with about ten
      corners alternating far and near from the centre.
-   - **Triangle**: three corners, or hull area about half its rectangle.
-   - **Rectangle**: four corners and the stroke close to its rectangle's edges.
-   - **Ellipse**: the stroke close to the ellipse inscribed in the rectangle.
+   - **Rectangle, ellipse, triangle**: each is fitted to the stroke and the closest wins. The
+     rectangle and the ellipse start from the hull's minimum-area rectangle and are refined
+     (centre, half sizes, angle) to follow the stroke, so a wobble outwards on one side does
+     not throw them off; the triangle is the hull's biggest triangle, grown a little for
+     rounded corners. The misfit is measured both ways (the stroke stays near the outline,
+     and the outline is covered all round, so a U is not a rectangle), plus its farthest
+     points on their own (a loop with a tail, an "a" or a "6", is not an oval), as a share of
+     the outline's size: under 0.036 (0.026 on lift). Four corners favour the rectangle,
+     three the triangle, almost none the ellipse.
    Rectangles and ellipses whose sides are within 13% of each other become squares and
-   circles.
+   circles. A nearly equilateral triangle, which could point either way, keeps its base
+   level.
+
+`apps/reader/shape-recognize.test.mjs` covers each shape, the hand's extras (a held end, a
+landing tick, round corners, overshoot and gaps, egg-shaped ovals) and strokes that must stay
+ink (cursive, zigzags, a U, a spiral, a loop with a tail).
 
 The result is `{kind, start, end, rotation}` in the shape's own frame. The reader draws it as
 a normal shape (`line.shape`, pen colour and width, no fill), so it is selectable and
