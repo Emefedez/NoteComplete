@@ -1,4 +1,8 @@
-## What's new in 1.1.46
+## What's new in 1.1.47
+
+- **Recent's filters now work on Internet Archive too, and stay in view.** Type, Modified, Size and the sort apply to Internet Archive listings as well as Drive and Recent, and the filter bar stays at the top while you scroll down to the Cloud section.
+
+### In 1.1.46
 
 - **Search all of Drive from inside a folder.** In the Google Drive browser, an **All Drive** button next to Search appears once you open a folder. Turn it on and the box finds folders and notes by name anywhere in your Drive, so you no longer have to find the folder first; Back returns to the folder you were in. Off, the box filters the open folder as before.
 

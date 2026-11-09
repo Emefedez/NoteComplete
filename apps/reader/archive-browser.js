@@ -143,6 +143,8 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'note-card';
+      // What the home filters and sort look at.
+      b.note = { name: doc.name, modified: Date.parse(doc.modifiedTime) || 0, size: Number(doc.size) || 0, facts: null };
 
       const cover = document.createElement('img');
       cover.className = 'note-cover';

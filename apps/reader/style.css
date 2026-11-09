@@ -1371,7 +1371,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .transcript-word-edit { font: inherit; font-size: 14px; padding: 0 3px; border: 1px solid var(--accent); border-radius: 3px; }
 #transcriptEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Home filters: stackable chips */
-.home-filters { max-width: 1240px; margin: 16px auto 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.home-filters { position: sticky; top: 0; z-index: 5; padding: 6px 0; background: Canvas; max-width: 1240px; margin: 16px auto 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .filter-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .filter-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
 .sort-group select { min-height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 12px; }

@@ -367,7 +367,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   const toggleIn = (key, value) => { filters[key] = filters[key].includes(value) ? filters[key].filter(x => x !== value) : [...filters[key], value]; changed(); };
   function categories() {
     const known = new Set(filters.tags);
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #archiveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
     return [
       { id: 'types', label: 'Type', options: Object.entries(TYPES).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.types.includes(v), flip: v => toggleIn('types', v) },
       // Modified takes one value: the periods overlap (today is inside this week).
@@ -437,7 +437,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
-    for (const list of [$('recentList'), $('driveList')]) {
+    for (const list of [$('recentList'), $('driveList'), $('archiveList')]) {
       if (!list) continue;
       const items = [...list.children], notes = items.filter(li => li.querySelector('.note-card')?.note);
       if (notes.length < 2) continue;
@@ -499,7 +499,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     }
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0;
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card')) {
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #archiveList .note-card')) {
       const show = !active || !card.note || matches(card.note, filters);
       card.closest('li').hidden = !show;
       if (!show) { hidden++; if (filters.tags.length && card.note && card.note.facts?.tags == null) unknown++; }
@@ -507,6 +507,11 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     const needsFacts = quick && (filters.audio || filters.tags.length);
     $('filterSummary').textContent = active ? `${hidden} hidden by filters${needsFacts ? ' · the quick list does not read recordings or tags; switch to cards for those filters' : unknown ? ` · ${unknown} not yet read for tags (open them once)` : ''}` : '';
     renderFiltersSoon();
+  }
+  // Internet Archive listings are drawn by their own browser: filter them when they change.
+  if ($('archiveList') && typeof MutationObserver === 'function') {
+    let frame = 0;
+    new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(applyFilters); }).observe($('archiveList'), { childList: true });
   }
   let filterFrame = 0;
   // New tags can appear as facts arrive; refresh the chips at most once per frame.
