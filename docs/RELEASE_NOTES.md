@@ -1,4 +1,8 @@
-## What's new in 1.1.44
+## What's new in 1.1.45
+
+- **Tool bar on the left or right.** **View → Tool bar** puts the page row and the tools at the top (as before) or as two slim columns on the left or right, like the drawing tablet's dock, on computers, tablets and phones held sideways; a phone held sideways gets the pages' full height. The page row has a button for it too: it shows where the bar is and moves it on (top, left, right). Remembered on this device.
+
+### In 1.1.44
 
 - **The quick menu has the tool bar's options.** The pen's ring has **Shapes from the pen** (tap it for Hold, On lift, Off), every tool with colours has **Any colour…** after its palette, the Shapes ring has its widths beside undo and redo (2 and 4 px shown, the others hidden at first), and **Lock in place** is among the tools (hidden at first: hold any tool to show it). On phones, where the tool bar's settings do not show, the quick menu was the only way to reach some of them.
 

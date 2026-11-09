@@ -1437,6 +1437,24 @@ $("toolNames").onclick = () => {
   fitTools();
   status(on ? "Tool names shown when they fit." : "Tool bar: icons only.");
 };
+// View → Tool bar (or the page row's button): the page row and the tools at the top (default)
+// or as columns on the left or right, like the drawing tablet's dock. Every layout but a
+// phone held upright uses it (style.css); remembered on this device.
+function setLandscapeDock(side) {
+  if (!["top", "left", "right"].includes(side)) side = "top";
+  document.body.dataset.landscapeDock = side;
+  for (const b of document.querySelectorAll("[data-dock-menu]")) b.setAttribute("aria-pressed", String(b.dataset.dockMenu === side));
+  // The page row's own button shows where the bar is now and moves it on: top → left → right.
+  const next = { top: "left", left: "right", right: "top" }[side];
+  $("dockCycle").querySelector("svg").innerHTML = document.querySelector(`[data-dock-menu="${side}"] svg`).innerHTML;
+  $("dockCycle").title = `Tool bar: ${side}. Move it to the ${next} (also View → Tool bar)`;
+  $("dockCycle").setAttribute("aria-label", `Move the tool bar to the ${next}`);
+  try { localStorage.setItem("notecomplete-landscape-dock", side); } catch { /* Optional. */ }
+  if (doc) requestAnimationFrame(resize);
+}
+$("dockCycle").onclick = () => setLandscapeDock({ top: "left", left: "right", right: "top" }[document.body.dataset.landscapeDock] || "left");
+for (const b of document.querySelectorAll("[data-dock-menu]")) b.onclick = () => { setLandscapeDock(b.dataset.dockMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
+try { setLandscapeDock(localStorage.getItem("notecomplete-landscape-dock")); } catch { setLandscapeDock("top"); }
 phoneLayout.addEventListener("change", placeToolbarActions);
 addEventListener("resize", fitTools);
 placeToolbarActions();
