@@ -283,6 +283,8 @@ The Android app ID is `com.notecomplete.viewer`. Its manifest registers ACTION_V
 
 For local builds or GitHub Actions APK artifacts, follow [Installable builds](BUILDS.md#android-apk). That guide covers the bundled reader, the optional hosted-reader override, preview signing and build prerequisites.
 
+**Updates on Android.** **Help → Check for updates…** compares this app with the newest release on GitHub, and with **Check for updates when NoteComplete opens** on it looks by itself shortly after the app opens. When there is a newer version, **Download** opens its APK in the browser: open the download to install it over this app (Android asks to allow installing from the browser the first time). Copies from before 1.1.41 cannot check: install 1.1.41 once by hand.
+
 In Android Files, choose a supported file, select **Open with → NoteComplete**, then **Always** if offered. Android controls that choice; the application cannot silently make itself the default. A running app receives new file and share intents too. The app asks the provider for the file's display name and type, reads it using the provider's URI grant, queues it until the reader is ready, and passes it on under its real name; only a missing extension is filled in, from the MIME type or the file's bytes. Existing unsaved edits still require confirmation before replacement.
 
 Manifest generation and JavaScript bridge tests are validated. No Android SDK/device was available on the development host for APK compilation or an actual default-handler test. Physical-device validation is still required, particularly with opaque `content://` URIs and different file managers.

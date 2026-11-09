@@ -13,6 +13,8 @@ import {readerURL, exportRequest, allowsNavigation} from './connection.mjs';
 // The provider's file names and Share intents come from the app's own module (absent in Expo Go).
 const files = requireOptionalNativeModule('ReaderServer');
 
+// The reader's updater (android-updates.js) needs this app's version to compare releases.
+const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '' })};true;`;
 export default function App() {
  const web = useRef(null), sharing = useRef(false), incoming = useRef(null), driveSession = useRef({generation:0,busy:false});
  const [notice, setNotice] = useState('');
@@ -96,6 +98,7 @@ export default function App() {
    startInLoadingState renderLoading={()=> <View style={[styles.loading,{backgroundColor:background}]}><ActivityIndicator size="large" color="#438ee3"/><Text style={[styles.description,{color:ink}]}>Preparing your workspace…</Text></View>}
    allowsInlineMediaPlayback mediaPlaybackRequiresUserAction bounces={false} allowsBackForwardNavigationGestures={false}
    setSupportMultipleWindows={false} javaScriptEnabled domStorageEnabled textZoom={100}
+   injectedJavaScriptBeforeContentLoaded={appInfo}
   />}
  </SafeAreaView></SafeAreaProvider>;
 }

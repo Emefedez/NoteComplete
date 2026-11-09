@@ -64,6 +64,7 @@ import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { mathField, styleField, mounted, focusField } from "./math-field.js";
 import { audioTrim } from "./audio-trim.js";
+import { androidUpdates } from "./android-updates.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
@@ -5443,7 +5444,8 @@ const quizIndex = allQuizzes({
   },
   exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
 });
-updateNotice({ status });
+// The desktop app's updater, or the Android app's (it says its version: App.js).
+updateNotice({ status, bridge: globalThis.notecompleteUpdates || (globalThis.notecompleteApp?.platform === "android" ? androidUpdates({ app: globalThis.notecompleteApp }) : undefined) });
 // Mic buttons in the Ask AI fields: speak the question, edit it, send it.
 const dictate = dictation({ status });
 dictate.attach($("chatInput"), $("chatSend"));

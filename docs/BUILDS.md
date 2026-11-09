@@ -98,6 +98,7 @@ The desktop app checks GitHub Releases for a newer version when it opens (at mos
 
 - **Linux AppImage**: Update downloads the AppImage for this machine (x86-64 or ARM64), checks it against the release's `SHA256SUMS.txt`, keeps the running copy beside it as `NoteComplete.AppImage.previous`, puts the new one in its place and offers Restart now. A download that does not match its checksum is not installed.
 - **macOS, Windows, and copies not started as an AppImage**: Download opens that release's page.
+- **Android**: the reader asks GitHub itself (`apps/reader/android-updates.js`, with the version the app gives it in `window.notecompleteApp`, App.js) and **Download** opens the release's `NoteComplete-android.apk` in the browser to install; the app cannot replace itself. Version order is the desktop's (`apps/desktop/updater.js`); keep the two in step.
 
 To ship an update, raise `version` in `apps/desktop/package.json` (for example 1.0.1), commit, then tag and push the same version (`git tag v1.0.1 && git push origin v1.0.1`). The release workflow builds every installer, writes the checksums and publishes the pre-release the app finds. Local builds from `tools/update_appimage.py` carry the version in `package.json`, so they are offered only releases newer than that.
 

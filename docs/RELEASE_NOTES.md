@@ -1,4 +1,9 @@
-## What's new in 1.1.40
+## What's new in 1.1.41
+
+- **Fixed: the layout on phones and in the web app.** In 1.1.40 a broken tag in the shape picker put the page row and the pages inside the tool bar, so phones zoomed the whole page out. A test now checks that rows of buttons close every tag.
+- **Updates on Android.** **Help → Check for updates…** now works in the Android app: it compares the app with the newest release, can look by itself when the app opens, and **Download** opens the new APK in the browser to install it over the app. Versions before 1.1.41 cannot check: install this one by hand once.
+
+### In 1.1.40
 
 - **Choose what the quick menu shows.** Hold any item of the quick menu (or right-click it) for its settings: change a colour or width, **Hide from this menu**, or tap an item hidden from the same place to show it again. Remembered on this device.
 - **A smaller Shapes menu.** Graph and Table start hidden in the quick menu (show them again from any shape's settings), and a crowded ring makes its items a little smaller instead of growing.
