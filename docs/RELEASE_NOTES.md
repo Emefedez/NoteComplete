@@ -1,4 +1,8 @@
-## What's new in 1.1.45
+## What's new in 1.1.46
+
+- **Search all of Drive from inside a folder.** In the Google Drive browser, an **All Drive** button next to Search appears once you open a folder. Turn it on and the box finds folders and notes by name anywhere in your Drive, so you no longer have to find the folder first; Back returns to the folder you were in. Off, the box filters the open folder as before.
+
+### In 1.1.45
 
 - **Tool bar on the left or right.** **View → Tool bar** puts the page row and the tools at the top (as before) or as two slim columns on the left or right, like the drawing tablet's dock, on computers, tablets and phones held sideways; a phone held sideways gets the pages' full height. The page row has a button for it too: it shows where the bar is and moves it on (top, left, right). Remembered on this device.
 
