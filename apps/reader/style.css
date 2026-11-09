@@ -520,6 +520,7 @@ input[type="color"]::-webkit-color-swatch {
   background: var(--canvas);
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  will-change: scroll-position;
 }
 #pages {
   min-width: 100%;

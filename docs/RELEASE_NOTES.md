@@ -1,4 +1,8 @@
-## What's new in 1.1.47
+## What's new in 1.1.48
+
+- **Smoother page dragging.** Moving the pages with the wheel button, a finger or the Pan tool writes the scroll position once per frame instead of for every pointer event, working out the current page takes two checks instead of a search through all pages, and changing page no longer walks the whole page list.
+
+### In 1.1.47
 
 - **Recent's filters now work on Internet Archive too, and stay in view.** Type, Modified, Size and the sort apply to Internet Archive listings as well as Drive and Recent, and the filter bar stays at the top while you scroll down to the Cloud section.
 

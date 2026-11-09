@@ -1364,12 +1364,13 @@ function refreshThumbnails() {
     queueThumbnail(panel);
   }
 }
+let markedPage = -1;
 function markPage() {
-  for (const panel of panels) {
-    if (panel.index === page)
-      panel.pageButton?.setAttribute("aria-current", "page");
-    else panel.pageButton?.removeAttribute("aria-current");
-  }
+  panels[markedPage]?.pageButton?.removeAttribute("aria-current");
+  // The list can be rebuilt: clear stray marks only then.
+  if (markedPage < 0) for (const panel of panels) panel.pageButton?.removeAttribute("aria-current");
+  panels[page]?.pageButton?.setAttribute("aria-current", "page");
+  markedPage = page;
 }
 // Phones held upright (narrow) and phones held sideways (short) both get the compact
 // layout: the page list is a drawer over the pages and undo, redo and the panel toggles
@@ -1701,6 +1702,9 @@ $("viewport").onscroll = () => {
   scrollFrame = requestAnimationFrame(() => {
     if (!doc) return;
     const top = $("viewport").getBoundingClientRect().top + 80;
+    // Usually still on the same page (or its neighbour): two reads instead of a search.
+    const here = panels[page]?.el.getBoundingClientRect();
+    if (here && here.bottom >= top && (page === 0 || panels[page - 1].el.getBoundingClientRect().bottom < top)) return;
     let low = 0,
       high = panels.length - 1;
     while (low < high) {
@@ -2363,15 +2367,25 @@ function middlePan(el) {
     el.setPointerCapture(e.pointerId);
     el.classList.add("middle-panning");
   }, true);
+  // Pointer events can outnumber frames: only the latest position is written, once a frame.
+  let frame = 0, latest = null;
+  const apply = () => {
+    frame = 0;
+    if (!drag || !latest) return;
+    el.scrollLeft = drag.left + drag.x - latest[0];
+    el.scrollTop = drag.top + drag.y - latest[1];
+  };
   el.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     e.preventDefault();
     e.stopPropagation();
-    el.scrollLeft = drag.left + drag.x - e.clientX;
-    el.scrollTop = drag.top + drag.y - e.clientY;
+    latest = [e.clientX, e.clientY];
+    if (!frame) frame = requestAnimationFrame(apply);
   }, true);
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
+    if (latest) { cancelAnimationFrame(frame); apply(); }
+    latest = null;
     drag = null;
     el.classList.remove("middle-panning");
   };
@@ -2406,9 +2420,16 @@ function pointerMove(e) {
   if (!gesture || gesture.id !== e.pointerId) return;
   e.preventDefault();
   if (gesture.tool === "pan") {
-    $("viewport").scrollLeft = gesture.left + gesture.x - e.clientX;
-    $("viewport").scrollTop = gesture.top + gesture.y - e.clientY;
     gesture.speed?.add(e.clientX, e.clientY, e.timeStamp);
+    // One write per frame, with the latest position.
+    gesture.at = [e.clientX, e.clientY];
+    if (!gesture.frame) gesture.frame = requestAnimationFrame(() => {
+      const g = gesture;
+      if (!g || g.tool !== "pan" || !g.at) return;
+      g.frame = 0;
+      $("viewport").scrollLeft = g.left + g.x - g.at[0];
+      $("viewport").scrollTop = g.top + g.y - g.at[1];
+    });
   } else appendPoint(e);
 }
 function pointerUp(e) {
@@ -2416,6 +2437,7 @@ function pointerUp(e) {
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.tool === "pan") {
     const g = gesture, v = g.speed?.velocity(e.timeStamp);
+    if (g.at) { cancelAnimationFrame(g.frame); $("viewport").scrollLeft = g.left + g.x - e.clientX; $("viewport").scrollTop = g.top + g.y - e.clientY; }
     cancelGesture();
     if (g.text && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 10) return typeAt(g.panel, g.text);
     if (v) glide.fling(-v.vx, -v.vy);
