@@ -27,7 +27,8 @@ fn math_box(text: &str, math: bool) -> Image {
 #[test]
 fn a_math_box_is_flagged_for_readers_and_marks_where_to_typeset() {
     let mut e = Editor::create_document("Math", &[[600., 800.]], &[]).unwrap();
-    e.add_image(0, math_box(r"\frac{a}{b} = x^2", true)).unwrap();
+    e.add_image(0, math_box(r"\frac{a}{b} = x^2", true))
+        .unwrap();
     e.add_image(0, math_box("Plain $5 price", false)).unwrap();
     let view = e.view(0).unwrap();
     let texts = view["texts"].as_array().unwrap();
@@ -36,7 +37,10 @@ fn a_math_box_is_flagged_for_readers_and_marks_where_to_typeset() {
     // The text's own box, for a reader to lay the formula over (moves and turns included).
     let svg = view["svg"].as_str().unwrap();
     assert!(svg.contains("data-box=\"240 60\""), "{svg}");
-    assert!(svg.contains(r"\frac{a}{b} = x^2"), "the source stays as text underneath");
+    assert!(
+        svg.contains(r"\frac{a}{b} = x^2"),
+        "the source stays as text underneath"
+    );
 }
 
 #[test]
@@ -65,8 +69,11 @@ fn projects_keep_the_flag_and_noteful_gets_the_source() {
 fn a_joined_text_box_is_undone_with_the_lines_before_it() {
     use noteful_core::Line;
     let mut e = Editor::create_document("Graph", &[[600., 800.]], &[]).unwrap();
-    e.add_line(0, Line::new(vec![[0., 0.], [100., 0.]], 1., [0., 0., 0., 1.]))
-        .unwrap();
+    e.add_line(
+        0,
+        Line::new(vec![[0., 0.], [100., 0.]], 1., [0., 0., 0., 1.]),
+    )
+    .unwrap();
     e.add_line(
         0,
         Line {
@@ -75,10 +82,21 @@ fn a_joined_text_box_is_undone_with_the_lines_before_it() {
         },
     )
     .unwrap();
-    e.add_image(0, Image { joined: true, ..math_box("x", false) }).unwrap();
+    e.add_image(
+        0,
+        Image {
+            joined: true,
+            ..math_box("x", false)
+        },
+    )
+    .unwrap();
     assert_eq!(e.view(0).unwrap()["visible_added"], 3);
     e.undo();
-    assert_eq!(e.view(0).unwrap()["visible_added"], 0, "one undo for the whole graph");
+    assert_eq!(
+        e.view(0).unwrap()["visible_added"],
+        0,
+        "one undo for the whole graph"
+    );
     e.redo();
     assert_eq!(e.view(0).unwrap()["visible_added"], 3);
 }

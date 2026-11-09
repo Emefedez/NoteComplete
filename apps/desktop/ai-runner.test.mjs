@@ -103,7 +103,9 @@ test('a provider that writes a complete answer before hanging or dying on exit i
   await writeFile(fake, '#!/bin/sh\nprintf \'{"result":"recovered answer"}\\n\'\nexit 1\n');
   await chmod(fake, 0o755);
   const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
-  const res = await runner.run('w1', { provider: 'claude', prompt: 'x' });
+  // A prompt larger than the pipe's buffer: the tool has exited without reading it, so
+  // writing it always fails with EPIPE, which must not lose the answer.
+  const res = await runner.run('w1', { provider: 'claude', prompt: 'x'.repeat(256 * 1024) });
   assert.equal(res.text, 'recovered answer');
 });
 

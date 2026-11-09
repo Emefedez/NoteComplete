@@ -336,7 +336,11 @@ mod tests {
         assert!(tb.math && tb.text.starts_with("x = \\frac"));
         // Sized for a formula: taller than a line of text.
         assert!(image.bounds[3] >= 16. * 2.2, "{:?}", image.bounds);
-        let plain = annotate(&items(r#"[{"type":"textbox","text":"Score","x":1,"y":1}]"#), 1).unwrap();
+        let plain = annotate(
+            &items(r#"[{"type":"textbox","text":"Score","x":1,"y":1}]"#),
+            1,
+        )
+        .unwrap();
         assert!(!plain.text_boxes[0].text.as_ref().unwrap().math);
     }
 }

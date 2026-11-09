@@ -133,7 +133,10 @@ fn a_star_fills_its_box_point_up_and_takes_a_fill() {
     let mut e = blank();
     e.add_line(0, shape(ShapeKind::Star, Some([1., 0.8, 0., 1.])))
         .unwrap();
-    assert!(e.view(0).unwrap()["svg"].as_str().unwrap().contains("<polygon"));
+    assert!(e.view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .contains("<polygon"));
     // Exported, its inside becomes highlighter bands under the outline.
     let plain = {
         let mut e = blank();

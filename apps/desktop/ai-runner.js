@@ -282,6 +282,10 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
             }
             resolve(out);
           });
+          // A tool that exits before reading its input (a crash, or an answer written and
+          // then a failing exit) closes the pipe: writing the prompt then fails with EPIPE.
+          // That is not the request's error; 'close' above decides from what it wrote.
+          child.stdin.on('error', () => {});
           if (call.stdin != null) child.stdin.end(call.stdin);
           else child.stdin.end();
         });

@@ -39,6 +39,8 @@ function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill }
       else if (code) reject(Error(`${path.basename(binary)} failed: ${(err || out).trim().split('\n').slice(-2).join(' ').slice(0, 300)}`));
       else resolve(out);
     });
+    // A tool that exits without reading its input closes the pipe (EPIPE): 'close' reports it.
+    child.stdin.on('error', () => {});
     child.stdin.end(input ?? undefined);
   });
 }
