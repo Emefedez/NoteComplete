@@ -8,7 +8,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   const $ = id => document.getElementById(id);
   const previews = thumbs || driveThumbnails(client, { library });
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
-  let folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
+  let everywhere = false, folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
   // Views to go back to: entering a folder, searching or filtering pushes the view it leaves.
   // `box` is the search text that produced the current view.
   let history = [], box = '';
@@ -39,7 +39,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     $('driveSignin').hidden = client.connected;
     // While a public folder is open, the instructions shrink to the connect button.
     $('driveSignin').classList?.toggle('compact', !!folder);
-    $('driveSearch').placeholder = folder ? 'Filter this folder' : 'Search names; clear to list the top level';
+    $('driveScope').hidden = !folder;
+    $('driveSearch').placeholder = folder ? (everywhere ? 'Search all of Drive (folders and notes)' : 'Filter this folder') : 'Search names; clear to list the top level';
     $('driveBrowse').hidden = !client.ready;
     $('driveDisconnect').hidden = !client.connected && !loading;
     $('driveDisconnect').disabled = importing || (!client.token && !loading);
@@ -438,8 +439,17 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveSearch').onkeydown = event => {
     if (event.key === 'Enter') { event.preventDefault(); if (!$('driveFind').disabled) $('driveFind').click(); }
   };
+  $('driveScope').onclick = () => {
+    everywhere = !everywhere; $('driveScope').setAttribute('aria-pressed', String(everywhere));
+    $('driveScope').classList.toggle('active', everywhere); controls();
+  };
   $('driveFind').onclick = () => {
     const value = $('driveSearch').value.trim();
+    // "All Drive" from inside a folder: search names everywhere, folders and notes alike.
+    if (folder && everywhere && value) {
+      push(); box = value; search = value; filter = ''; trail = []; folder = null; resetList();
+      return run((signal, valid) => fetchList(signal, valid));
+    }
     // Inside a folder the same box filters its children; at the top it searches names, or lists the top level when cleared.
     if (value === (folder ? filter : search)) return run((signal, valid) => fetchList(signal, valid));
     push(); box = value;
