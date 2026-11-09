@@ -1371,8 +1371,13 @@ function markPage() {
     else panel.pageButton?.removeAttribute("aria-current");
   }
 }
+// Phones held upright (narrow) and phones held sideways (short) both get the compact
+// layout: the page list is a drawer over the pages and undo, redo and the panel toggles
+// share the page row, so the chrome does not eat a short screen.
+const COMPACT = "(max-width:700px), (orientation: landscape) and (max-height:500px)";
+const phoneLayout = matchMedia(COMPACT);
 function syncPagePanel() {
-  const small = matchMedia("(max-width:700px)").matches;
+  const small = phoneLayout.matches;
   $("pagesToggle").setAttribute(
     "aria-expanded",
     String(
@@ -1383,7 +1388,7 @@ function syncPagePanel() {
   );
 }
 $("pagesToggle").onclick = () => {
-  if (matchMedia("(max-width:700px)").matches) {
+  if (phoneLayout.matches) {
     $("pagesPanel").hidden = false;
     $("pagesPanel").classList.toggle("open");
   } else {
@@ -1397,14 +1402,13 @@ $("closePages").onclick = () => {
   syncPagePanel();
   $("pagesToggle").focus();
 };
-matchMedia("(max-width:700px)").addEventListener("change", () => {
+phoneLayout.addEventListener("change", () => {
   $("pagesPanel").hidden = false;
   syncPagePanel();
 });
 // Narrow windows: undo, redo and the panel toggles join the page row, so phones get two
 // bars (pages, tools) instead of three. Wider windows drop the tool labels before the
 // toolbar would wrap or push tools out of sight.
-const phoneLayout = matchMedia("(max-width:700px)");
 function placeToolbarActions() {
   const actions = document.querySelector(".toolbar-actions");
   if (phoneLayout.matches) document.querySelector(".navigation .spacer").after(actions);

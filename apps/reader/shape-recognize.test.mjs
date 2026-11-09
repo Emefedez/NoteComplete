@@ -91,9 +91,54 @@ test('triangles point up, down (a flipped box) or turned', () => {
   assert.equal(down.kind, 'triangle');
   assert.equal(down.rotation, 0);
   assert.ok(down.start[1] > down.end[1], 'box upside down');
-  const turned = recognizeShape(drawn(polygon([[100, 0], [200, 170], [0, 170]]), { seed: 12, angle: 50 }));
+  // Clearly isosceles: a nearly equilateral one has no one point, and is made level instead.
+  const turned = recognizeShape(drawn(polygon([[100, 0], [200, 230], [0, 230]]), { seed: 12, angle: 50 }));
   assert.equal(turned.kind, 'triangle');
   assert.ok(near(turned.rotation, 50, 6), `${turned.rotation}°`);
+});
+
+test('a nearly equilateral triangle keeps a level base', () => {
+  const t = recognizeShape(drawn(polygon([[100, 0], [200, 175], [0, 175]]), { seed: 19, angle: 4 }));
+  assert.equal(t?.kind, 'triangle');
+  assert.equal(t.rotation, 0);
+});
+
+test('what a hand adds: the pen held still at the end, a tick where it lands', () => {
+  // Jitter while the pen is held to snap: a cluster of points round the end.
+  const hold = (points, seed = 1) => {
+    const random = rng(seed), end = points.at(-1);
+    return [...points, ...Array.from({ length: 30 }, () => [end[0] + (random() - 0.5) * 3, end[1] + (random() - 0.5) * 3])];
+  };
+  assert.equal(recognizeShape(hold(drawn([[0, 0], [45, 0]], { seed: 20 })))?.kind, 'line', 'a short line, held');
+  assert.equal(recognizeShape(hold(drawn([[0, 0], [200, 0], [180, -16], [200, 0], [180, 16]], { seed: 21 })))?.kind, 'arrow');
+  const tick = drawn([[0, 0], [160, 0]], { seed: 22 });
+  assert.equal(recognizeShape([[tick[0][0] - 4, tick[0][1] + 5], ...tick])?.kind, 'line', 'a tick where the pen lands');
+});
+
+test('circles and ovals drawn past their start, or not quite closed', () => {
+  const over = recognizeShape(drawn(ellipsePath(120, 80, 1.2), { seed: 23 }));
+  assert.equal(over?.kind, 'ellipse', 'a fifth of a turn too far');
+  const [w, h] = size(over);
+  assert.ok(near(w, 240, 16) && near(h, 160, 14), `${w}×${h}`);
+  assert.equal(recognizeShape(drawn(ellipsePath(120, 80, 0.92), { seed: 24 }))?.kind, 'ellipse', 'a gap at the top');
+  // A wobbly, egg-shaped oval is still an oval.
+  const egg = ellipsePath(110, 70).map(([x, y]) => [x * (1 + 0.06 * Math.sin(Math.atan2(y, x))), y]);
+  assert.equal(recognizeShape(drawn(egg, { seed: 25, wobble: 2.5 }))?.kind, 'ellipse');
+});
+
+test('rectangles and triangles drawn with round corners', () => {
+  const rounded = (corners, r) => {
+    const out = [];
+    for (let i = 0; i <= corners.length; i++) {
+      const a = corners[(i + corners.length - 1) % corners.length], b = corners[i % corners.length], c = corners[(i + 1) % corners.length];
+      const into = Math.hypot(b[0] - a[0], b[1] - a[1]), out_ = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      const p = [b[0] + (a[0] - b[0]) * r / into, b[1] + (a[1] - b[1]) * r / into], q = [b[0] + (c[0] - b[0]) * r / out_, b[1] + (c[1] - b[1]) * r / out_];
+      for (let t = 0; t <= 1; t += 0.25) out.push([(1 - t) ** 2 * p[0] + 2 * (1 - t) * t * b[0] + t * t * q[0], (1 - t) ** 2 * p[1] + 2 * (1 - t) * t * b[1] + t * t * q[1]]);
+    }
+    return out;
+  };
+  assert.equal(recognizeShape(drawn(rounded([[0, 0], [240, 0], [240, 140], [0, 140]], 24), { seed: 26 }))?.kind, 'rectangle');
+  assert.equal(recognizeShape(drawn(rounded([[0, 0], [260, 0], [60, -180]], 18), { seed: 27, angle: 15 }))?.kind, 'triangle', 'a scalene one');
 });
 
 test('stars: a pentagram in one stroke, or the outline of one', () => {
@@ -117,6 +162,12 @@ test('handwriting and loose scribbles stay ink', () => {
   assert.equal(recognizeShape(drawn(zigzag, { seed: 16 })), null);
   const u = [[0, 0], [0, 120], [120, 120], [120, 0]];
   assert.equal(recognizeShape(drawn(u, { seed: 17 })), null);
+  // A loop with a tail ("a", "6", "9"): not an oval.
+  const six = [...ellipsePath(50, 50, 1).map(([x, y]) => [x, y + 50]), [0, 0], [-10, -60], [-20, -110]];
+  assert.equal(recognizeShape(drawn(six, { seed: 28 })), null);
+  // A spiral doubles back over itself without ever closing.
+  const spiral = Array.from({ length: 120 }, (_, i) => { const t = i / 119 * 4 * Math.PI; return [(10 + t * 8) * Math.cos(t), (10 + t * 8) * Math.sin(t)]; });
+  assert.equal(recognizeShape(drawn(spiral, { seed: 29 })), null);
   assert.equal(recognizeShape([[0, 0], [3, 2], [5, 6]]), null, 'too small');
 });
 

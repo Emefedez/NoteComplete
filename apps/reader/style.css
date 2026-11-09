@@ -3014,3 +3014,29 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 /* Online tab: each link with its QR code is its own block, set apart from the next. */
 #collabOnline .collab-pair + .collab-pair { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 #collabOnline .collab-online-actions { margin-top: 16px; }
+
+/* Phones held sideways (a short, wide window): one row of chrome under the menubar, the
+   page row on the left and the tools on the right (icons, scrolling sideways), and the page
+   list as a drawer, so the pages keep most of the screen. app.js treats this as the compact
+   layout too (COMPACT), moving undo, redo and the panel toggles into the page row. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #editor:not([hidden]) { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+  #editor > .navigation { grid-area: 1 / 1; min-width: 0; max-width: 60vw; padding: 2px 6px; gap: 4px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+  #editor > .toolbar { grid-area: 1 / 2; min-width: 0; flex-wrap: nowrap; padding: 2px 6px; gap: 4px; }
+  #editor > .workspace { grid-area: 2 / 1 / 3 / 3; }
+  #editor > #warnings { grid-area: 3 / 1 / 4 / 3; max-height: 15dvh; overflow: auto; }
+  .toolbar .segmented { display: flex; flex: 1 1 auto; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+  .toolbar .segmented button { flex: 0 0 auto; min-width: 36px; min-height: 36px; padding-inline: 7px; }
+  .toolbar .segmented .tool-name { display: none; }
+  .navigation .page-align, .navigation .page-free, .navigation .zoom-controls > :not(#zoomFit), #counts { display: none; }
+  .navigation > button, .navigation #zoomFit { min-height: 36px; }
+  .navigation .toolbar-actions { flex: 0 1 auto; min-width: 0; width: auto; margin: 0; padding: 0 0 0 4px; border: 0; border-left: 1px solid var(--line); display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; }
+  .navigation .toolbar-actions button { width: 34px; min-height: 36px; padding: 6px; }
+  .tool-options { max-height: calc(100dvh - 96px); overflow: auto; }
+  #pages { padding: 10px; gap: 14px; }
+  #pagesPanel { display: none; position: absolute; z-index: 4; top: 0; bottom: 0; left: 0; width: min(250px, 40%); box-shadow: 5px 0 20px #0002; }
+  #pagesPanel.open { display: block; }
+  #closePages { display: inline-flex; }
+  #layersPanel { max-height: 100%; overflow: auto; }
+  .notes-panel { max-width: 50%; }
+}
