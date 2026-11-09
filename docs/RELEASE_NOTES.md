@@ -1,4 +1,8 @@
-## What's new in 1.1.41
+## What's new in 1.1.42
+
+- **Fixed: Ask AI's head in a narrow panel.** On phones (and in the panel's usual width) the AI tool and model lists had shrunk to their arrows beside the search and Small model; they now get a row of their own under the title and the window's buttons.
+
+### In 1.1.41
 
 - **Fixed: the layout on phones and in the web app.** In 1.1.40 a broken tag in the shape picker put the page row and the pages inside the tool bar, so phones zoomed the whole page out. A test now checks that rows of buttons close every tag.
 - **Updates on Android.** **Help → Check for updates…** now works in the Android app: it compares the app with the newest release, can look by itself when the app opens, and **Download** opens the new APK in the browser to install it over the app. Versions before 1.1.41 cannot check: install this one by hand once.
