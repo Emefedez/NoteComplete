@@ -1,4 +1,11 @@
-## What's new in 1.1.39
+## What's new in 1.1.40
+
+- **Choose what the quick menu shows.** Hold any item of the quick menu (or right-click it) for its settings: change a colour or width, **Hide from this menu**, or tap an item hidden from the same place to show it again. Remembered on this device.
+- **A smaller Shapes menu.** Graph and Table start hidden in the quick menu (show them again from any shape's settings), and a crowded ring makes its items a little smaller instead of growing.
+- **Tool bar without names:** **View → Tool names in the tool bar** off shows the tools as icons only.
+- **Star before Graph and Table** among the shapes.
+
+### In 1.1.39
 
 - **Tables.** **Edit → Insert table** (**Shift Y**) or the Shapes tool's **Table** (drag its box): type in a grid of cells, Tab and the arrows move, Tab in the last cell adds a row, and buttons add or delete rows and columns where the cursor is; a bold header row on a tinted band; `$…$` in a cell is math. Select the table to move or resize it, **Edit table…** to change it.
 - **Graphs you can edit.** The graph editor has several functions in their own colours, the x range, y fitted to the curves or set by hand, grid and numbers on or off, and a live preview. Select any part of a graph to move the whole graph, **Edit graph…** to change it (one undo brings the old one back), Delete to remove it. Graph and Table are in the Shapes tool and the quick menu too.

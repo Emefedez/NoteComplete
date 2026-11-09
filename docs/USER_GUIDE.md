@@ -197,7 +197,9 @@ Arrow keys on selection handles adjust geometry; Shift uses larger steps. Right-
 
 ### Quick menu
 
-**View → Tool bar** (**Shift + T**) hides the row of tools and their settings for more room; the quick menu has the same tools. Holding the × in the middle of the quick menu also shows or hides it.
+**View → Tool bar** (**Shift + T**) hides the row of tools and their settings for more room; the quick menu has the same tools. Holding the × in the middle of the quick menu also shows or hides it. **View → Tool names in the tool bar** off shows the tools as icons only (their names are in the tooltips).
+
+**Choose what the quick menu shows.** Hold any item of the quick menu without moving it (or right-click it) for its settings: **Change…** for a colour or a width, **Hide from this menu**, and the items hidden from that ring or row, to tap and show again. Each tool's settings have their own list, and it is remembered on this device; the tool bar is not changed. Graph and Table start hidden among the shapes, so the Shapes ring stays small; a crowded ring makes its items a little smaller rather than growing.
 
 A ring of tools around your pen. Tap a tool to choose it, and its settings appear around it, always in the same places: colours across the top, left to right; sizes along the bottom, small to large; modes (highlighter, tape, shape fill, pen pressure) on the left; undo and redo on the right. Settings apply at once and the menu stays open. Hold a tool, a colour or a setting until it lifts and drag it to reorder; hold a colour without moving it, or right-click it, to change it with the colour picker. Widths work the same way, in the menu and in the tool bar: hold one (or right-click it) to set it in px, from 0.5 to 100. Everything is remembered, and each tool keeps the colour and width it was last used with.
 

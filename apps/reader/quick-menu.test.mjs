@@ -38,7 +38,7 @@ test('settings sit in the same places for every tool: colours on top, sizes belo
     { top: items(5), bottom: items(5), left: items(3), right: items(2) }, // shapes
     { bottom: items(4), right: items(2) },                                // eraser
   ]) {
-    const { radius, positions } = layoutSections(sections);
+    const { radius, positions, size } = layoutSections(sections);
     const xs = (k) => positions[k].map((p) => p.x), ys = (k) => positions[k].map((p) => p.y);
     if (sections.top) {
       assert.deepEqual(xs('top'), [...xs('top')].sort((a, b) => a - b), 'colours left to right');
@@ -50,7 +50,19 @@ test('settings sit in the same places for every tool: colours on top, sizes belo
     if (sections.left) assert.deepEqual(ys('left'), [...ys('left')].sort((a, b) => a - b), 'modes top to bottom');
     const all = Object.values(positions).flat();
     for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++)
-      assert.ok(Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) >= 40, `no overlap (radius ${radius})`);
+      assert.ok(Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) >= size + 2, `no overlap (radius ${radius}, items ${size})`);
   }
   assert.equal(nearest([{ x: 0, y: -90 }, { x: 40, y: -80 }], 35, -70), 1);
+});
+
+test('a crowded ring tightens its items before it grows', () => {
+  const items = (n) => Array.from({ length: n }, (_, i) => ({ key: i }));
+  // Shapes with eight kinds, three fills, five colours, undo and redo.
+  const crowded = { top: items(5), bottom: items(8), left: items(3), right: items(2) };
+  const tight = layoutSections(crowded);
+  assert.equal(tight.size, 32, 'smaller items');
+  assert.ok(tight.radius < 130, `radius ${tight.radius}`);
+  const roomy = layoutSections({ top: items(5), bottom: items(4), left: items(1), right: items(2) });
+  assert.equal(roomy.size, 36, 'a pen keeps its full-size items');
+  assert.equal(roomy.radius, 94);
 });

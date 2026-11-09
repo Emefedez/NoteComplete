@@ -1419,9 +1419,19 @@ function fitTools() {
     const overflowing = phoneLayout.matches
       ? tools.scrollWidth > tools.clientWidth + 1
       : bar.scrollWidth > bar.clientWidth + 1 || tools.getBoundingClientRect().right > bar.getBoundingClientRect().right || actions.offsetTop > tools.offsetTop + 4;
-    bar.classList.toggle("tools-icons", overflowing);
+    bar.classList.toggle("tools-icons", !toolNamesOn() || overflowing);
   });
 }
+// View → Tool names in the tool bar: off, the tools show only their icons (names in tooltips).
+const toolNamesOn = () => $("toolNames").getAttribute("aria-checked") !== "false";
+try { if (localStorage.getItem("notecomplete-tool-names") === "0") $("toolNames").setAttribute("aria-checked", "false"); } catch { /* Optional. */ }
+$("toolNames").onclick = () => {
+  const on = !toolNamesOn();
+  $("toolNames").setAttribute("aria-checked", String(on));
+  try { localStorage.setItem("notecomplete-tool-names", on ? "1" : "0"); } catch { /* Optional. */ }
+  fitTools();
+  status(on ? "Tool names shown when they fit." : "Tool bar: icons only.");
+};
 phoneLayout.addEventListener("change", placeToolbarActions);
 addEventListener("resize", fitTools);
 placeToolbarActions();
@@ -2978,26 +2988,55 @@ const QUICK_SETTINGS = {
   tape: () => ({ top: paletteEntries("tape"), bottom: widthEntries("tape"), left: fromRow("tapeMode") }),
   text: () => ({ top: paletteEntries("text") }),
 };
+// Items hidden from the quick menu (held, or right-clicked: Hide from this menu), per ring:
+// 'inner' for the tools, '<tool>:<section>' for a tool's settings. Graph and Table start
+// hidden among the shapes, so the Shapes ring stays small; they can be shown again there.
+let quickHidden = remembered("notecomplete-quick-hidden", { "shape:bottom": ["graph", "table"] });
+const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
+const hiddenIn = (section) => new Set((quickHidden[hiddenKey(section)] || []).map(String));
+const quickTools = () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] }));
+function quickSettings() {
+  const settings = QUICK_SETTINGS[tool]?.();
+  if (!settings) return {};
+  const out = {};
+  for (const [section, entries] of Object.entries(settings)) out[section] = section === "top" ? entries : ordered(tool, section, entries);
+  out.right = ordered(tool, "right", [
+    { key: "undo", label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
+    { key: "redo", label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
+  ]);
+  return out;
+}
+const shown = (section, entries) => { const hidden = hiddenIn(section); return entries.filter((e) => !hidden.has(String(e.key))); };
 const quick = quickMenu({
   // Holding the × shows or hides the tool bar (View → Tool bar, Shift + T).
   onCentreHold: () => setToolsHidden(!document.body.classList.contains("tools-hidden")),
   // Tapping a tool chooses it and shows its settings around it; one without settings closes.
-  inner: () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] })),
+  inner: () => shown("inner", quickTools()),
   // The outer ring only for a tool with settings (with undo and redo beside them); Pan,
   // Select and the like get the small menu.
-  outer: () => {
-    const settings = QUICK_SETTINGS[tool]?.();
-    if (!settings) return {};
-    const out = {};
-    for (const [section, entries] of Object.entries(settings)) out[section] = section === "top" ? entries : ordered(tool, section, entries);
-    out.right = ordered(tool, "right", [
-      { key: "undo", label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
-      { key: "redo", label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
-    ]);
-    return out;
+  outer: () => Object.fromEntries(Object.entries(quickSettings()).map(([section, entries]) => [section, shown(section, entries)])),
+  // Held (or right-clicked), any item can leave its ring or section, and come back from there.
+  items: {
+    hide(section, key) {
+      const k = hiddenKey(section);
+      quickHidden = { ...quickHidden, [k]: [...new Set([...(quickHidden[k] || []).map(String), String(key)])] };
+      remember("notecomplete-quick-hidden", quickHidden);
+      status("Hidden from the quick menu. Hold another item in the same place to show it again.");
+    },
+    show(section, key) {
+      const k = hiddenKey(section);
+      quickHidden = { ...quickHidden, [k]: (quickHidden[k] || []).map(String).filter((h) => h !== String(key)) };
+      remember("notecomplete-quick-hidden", quickHidden);
+    },
+    hidden(section) {
+      const all = section === "inner" ? quickTools() : quickSettings()[section] || [], hidden = hiddenIn(section);
+      return all.filter((e) => hidden.has(String(e.key)));
+    },
   },
-  // A tool, a colour or a setting dragged to another place: remembered.
-  onReorder: (section, order) => {
+  // A tool, a colour or a setting dragged to another place: remembered. The items hidden
+  // from that place keep theirs, after the shown ones.
+  onReorder: (section, visibleOrder) => {
+    const order = [...visibleOrder, ...[...hiddenIn(section)].filter((k) => !visibleOrder.map(String).includes(k))];
     if (section === "inner") {
       quickOrder = order;
       remember("notecomplete-quick-order", order);
@@ -3005,7 +3044,7 @@ const quick = quickMenu({
       widthPresets[tool] = order.map((k) => widthPresets[tool][Number(k.slice(1))]);
       saveWidths();
     } else if (section === "top" && palettes[tool]) {
-      palettes[tool] = order.map((i) => palettes[tool][Number(i)]);
+      palettes[tool] = order.map((i) => palettes[tool][Number(i)]).filter((c) => c != null);
       remember("notecomplete-palettes", palettes);
     } else {
       (sectionOrder[tool] ||= {})[section] = order;

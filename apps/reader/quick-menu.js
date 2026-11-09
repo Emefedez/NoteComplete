@@ -42,7 +42,17 @@ export const outerRadius = (count) => Math.max(OUTER, Math.ceil((count * (SIZE +
 // (undo, redo) top to bottom on the right. Returns the radius (grown until neighbouring
 // sections cannot meet) and, per section, the positions of its items.
 const CENTRE = { top: -Math.PI / 2, right: 0, bottom: Math.PI / 2, left: Math.PI };
+// A crowded ring (Shapes: kinds, fills, colours) first tightens its items (a little smaller,
+// closer) rather than growing the whole menu; it grows only past that. Returns the item
+// size used, too.
+export const COMPACT = { size: 32, gap: 3 };
 export function layoutSections(sections, base = OUTER, size = SIZE, gap = GAP) {
+  const roomy = placeSections(sections, base, size, gap);
+  if (roomy.radius <= base) return { ...roomy, size };
+  const tight = placeSections(sections, base, COMPACT.size, COMPACT.gap);
+  return tight.radius < roomy.radius ? { ...tight, size: COMPACT.size } : { ...roomy, size };
+}
+function placeSections(sections, base, size, gap) {
   const n = (k) => sections[k]?.length || 0;
   const pairs = [['top', 'right'], ['right', 'bottom'], ['bottom', 'left'], ['left', 'top']];
   const crowd = Math.max(1, ...pairs.map(([a, b]) => n(a) + n(b)));
@@ -70,8 +80,11 @@ const count = (sections) => SECTIONS.reduce((n, k) => n + (sections[k]?.length |
 // and dragged to another place in its own ring or section (onReorder(section, keys)); an
 // item with edit() (a colour) opens it when held without moving, or on a right-click.
 // onCentreHold(): the × held (the tool bar shown or hidden, app.js).
-export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {}, onClose = () => {}, onCentreHold = null }) {
-  let root = null, hovered = null, centre = null, lift = null;
+// `items` (optional): { hide(section, key), show(section, key), hidden(section) → entries } so
+// any item, held (or right-clicked), can be hidden from its ring or section and hidden ones
+// shown again; `section` is 'inner' or top/right/bottom/left.
+export function quickMenu({ inner, outer, items = null, onReorder = () => {}, onOpen = () => {}, onClose = () => {}, onCentreHold = null }) {
+  let root = null, hovered = null, centre = null, lift = null, panel = null;
   const list = (source) => (typeof source === 'function' ? source() : source);
   function draw() {
     const { x, y } = centre;
@@ -80,13 +93,15 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     const full = count(settings) > 0;
     const layout = layoutSections(settings);
     // Only as large as it needs: the outer ring appears when there are settings to show.
-    const radius = (full ? layout.radius : INNER) + SIZE / 2 + 6;
+    const outerSize = layout.size || SIZE;
+    const radius = (full ? layout.radius + outerSize / 2 : INNER + SIZE / 2) + 6;
     const disc = document.createElement('div');
     disc.className = `qm-disc${full ? ' qm-full' : ''}`;
     Object.assign(disc.style, { left: `${x}px`, top: `${y}px`, width: `${radius * 2}px`, height: `${radius * 2}px`, margin: `${-radius}px 0 0 ${-radius}px` });
     disc.style.setProperty('--inner-ring', `${radius - (INNER + (full ? layout.radius : INNER)) / 2}px`);
     root.append(disc);
     const button = (entry, at, name, index, group, positions) => {
+      const size = name === 'outer' ? outerSize : SIZE;
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `qm-item qm-${name}${entry.swatch ? ' qm-swatch' : ''}`;
@@ -97,12 +112,14 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       else if (entry.icon) b.append(entry.icon.cloneNode(true));
       if (entry.active?.()) b.setAttribute('aria-pressed', 'true');
       if (name === 'inner') b.dataset.key = String(index + 1);
-      b.style.left = `${x + at.x - SIZE / 2}px`;
-      b.style.top = `${y + at.y - SIZE / 2}px`;
+      b.style.left = `${x + at.x - size / 2}px`;
+      b.style.top = `${y + at.y - size / 2}px`;
+      if (size !== SIZE) { b.style.width = b.style.height = b.style.minWidth = b.style.minHeight = `${size}px`; b.classList.add('qm-compact'); }
       b.onpointerenter = () => { hovered = entry; };
       b.onpointerleave = () => { if (hovered === entry) hovered = null; };
       b.onclick = (e) => { e.stopPropagation(); if (b.dataset.lifted) return; pick(entry); };
-      if (entry.edit) b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); entry.edit(); });
+      // Right-click: the item's settings (as holding it does).
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(entry, group, b); });
       b.addEventListener('pointerdown', (e) => holdToMove(e, b, entry, index, group, positions));
       root.append(b);
     };
@@ -186,7 +203,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
       setTimeout(() => { delete button.dataset.lifted; }, 0);
       if (!dragged) {
         if (root) draw();
-        if (e.type === 'pointerup') entry.edit?.();
+        if (e.type === 'pointerup') itemMenu(entry, group);
         return;
       }
       const dx = e.clientX - centre.x, dy = e.clientY - centre.y;
@@ -198,6 +215,54 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     addEventListener('pointerup', up, true);
     addEventListener('pointercancel', up, true);
   }
+  // An item's settings, beside it: change it (a colour or a width), hide it from this menu,
+  // and the items hidden from the same ring or section, to show again.
+  function itemMenu(entry, group, anchor = null) {
+    if (!root) return;
+    panel?.remove();
+    const button = anchor || [...root.querySelectorAll('.qm-item')].find((b) => b.title === entry.label);
+    panel = document.createElement('div');
+    panel.className = 'qm-item-menu';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', `${entry.label}: settings`);
+    const action = (label, run, disabled = false) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label, disabled });
+      b.onclick = (e) => { e.stopPropagation(); closePanel(); run(); };
+      return b;
+    };
+    const head = Object.assign(document.createElement('strong'), { textContent: entry.label.replace(/ \(hold.*\)$/, '') });
+    panel.append(head);
+    if (entry.edit) panel.append(action('Change…', () => entry.edit()));
+    if (items && entry.key != null) {
+      const visible = group.items.length;
+      panel.append(action('Hide from this menu', () => { items.hide(group.key, entry.key); if (root) draw(); }, visible <= 1));
+      const hidden = items.hidden(group.key) || [];
+      if (hidden.length) {
+        panel.append(Object.assign(document.createElement('span'), { className: 'qm-hidden-title', textContent: 'Hidden here (tap to show)' }));
+        const row = document.createElement('div');
+        row.className = 'qm-hidden-row';
+        for (const h of hidden) {
+          const b = Object.assign(document.createElement('button'), { type: 'button', className: 'qm-hidden-item', title: `Show ${h.label}` });
+          b.setAttribute('aria-label', `Show ${h.label}`);
+          if (h.swatch) b.style.setProperty('--swatch', h.swatch), b.classList.add('qm-swatch');
+          else if (h.icon) b.append(h.icon.cloneNode(true));
+          b.onclick = (e) => { e.stopPropagation(); items.show(group.key, h.key); closePanel(); if (root) draw(); };
+          row.append(b);
+        }
+        panel.append(row);
+      }
+    }
+    if (panel.children.length < 2) { panel = null; return; }
+    const r = button?.getBoundingClientRect();
+    root.append(panel);
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const left = r ? Math.min(innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2)) : centre.x - w / 2;
+    const top = r ? (r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) : centre.y - h / 2;
+    Object.assign(panel.style, { left: `${left}px`, top: `${top}px` });
+    panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    panel.querySelector('button:not([disabled])')?.focus({ preventScroll: true });
+  }
+  function closePanel() { panel?.remove(); panel = null; }
   function open(x, y) {
     close();
     centre = fitCentre(x, y, 140 + SIZE / 2, { width: innerWidth, height: innerHeight });
@@ -209,7 +274,11 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     root.setAttribute('role', 'menu');
     root.setAttribute('aria-label', 'Quick menu');
     // Anywhere else closes it, without drawing or choosing what is underneath.
-    root.addEventListener('pointerdown', (e) => { if (e.target === root || e.target.classList.contains('qm-disc')) { e.preventDefault(); e.stopPropagation(); close(); } });
+    root.addEventListener('pointerdown', (e) => {
+      // An open item panel closes first; a second press outside closes the menu.
+      if (panel && !panel.contains(e.target)) { closePanel(); if (e.target === root || e.target.classList.contains('qm-disc')) { e.preventDefault(); e.stopPropagation(); } return; }
+      if (e.target === root || e.target.classList.contains('qm-disc')) { e.preventDefault(); e.stopPropagation(); close(); }
+    });
     root.addEventListener('contextmenu', (e) => e.preventDefault());
     root.addEventListener('touchmove', (e) => { if (lift) e.preventDefault(); }, { passive: false });
     draw();
@@ -221,6 +290,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     if (!root) return;
     root.remove();
     root = null;
+    panel = null;
     hovered = null;
     lift = null;
     onClose();
@@ -242,7 +312,7 @@ export function quickMenu({ inner, outer, onReorder = () => {}, onOpen = () => {
     // Keys while open: Esc closes, 1–9 choose an inner item.
     key(e) {
       if (!root) return false;
-      if (e.key === 'Escape') { close(); return true; }
+      if (e.key === 'Escape') { if (panel) closePanel(); else close(); return true; }
       const tools = list(inner);
       if (/^[1-9]$/.test(e.key) && tools[Number(e.key) - 1]) { pick(tools[Number(e.key) - 1]); return true; }
       return false;
