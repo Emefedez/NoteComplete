@@ -2901,7 +2901,8 @@ touchGestures({
 // them. Shift + S (hold, point, let go; or tap and click), Shift + pen, a pen's side
 // button, or two fingers held still on the page open it.
 // Grab is last, so the other tools keep their number keys.
-const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"], ["grab", "Grab"]];
+// Lock (as in the tool bar) comes after it, hidden at first: ten tools crowd the ring.
+const QUICK_TOOLS = [["draw", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"], ["select", "Select"], ["shape", "Shapes"], ["text", "Text"], ["tape", "Tape"], ["pan", "Pan"], ["grab", "Grab"], ["lock", "Lock in place"]];
 const chooseTool = (name) => selectTool(name, { fromMenu: true });
 // The tools' order on the ring (held and dragged in the menu), remembered on this device.
 // Tools missing from a saved order (added since) go at the end.
@@ -2933,23 +2934,35 @@ function setColor(value) {
   $("color").dispatchEvent(new Event("input", { bubbles: true }));
   $("color").dispatchEvent(new Event("change", { bubbles: true }));
 }
-// A colour of the palette, chosen again with the system's colour picker.
-function editPaletteColor(name, index) {
-  const input = Object.assign(document.createElement("input"), { type: "color", value: palettes[name][index] });
+// The system's colour picker, starting at `value`; `chosen(colour)` as it changes.
+function pickColor(value, chosen) {
+  const input = Object.assign(document.createElement("input"), { type: "color", value });
   input.style.cssText = "position:fixed;opacity:0;pointer-events:none;left:50%;top:50%";
   document.body.append(input);
-  const done = () => {
-    palettes[name] = palettes[name].map((c, i) => (i === index ? input.value : c));
-    remember("notecomplete-palettes", palettes);
-    setColor(input.value);
-    quick.redraw();
-  };
-  input.addEventListener("input", done);
-  input.addEventListener("change", () => { done(); input.remove(); });
+  input.addEventListener("input", () => chosen(input.value));
+  input.addEventListener("change", () => { chosen(input.value); input.remove(); });
   input.addEventListener("blur", () => setTimeout(() => input.remove(), 1000));
   input.click();
 }
-const paletteEntries = (name) => palettes[name].map((value, i) => ({
+// A colour of the palette, chosen again with the system's colour picker.
+function editPaletteColor(name, index) {
+  pickColor(palettes[name][index], (value) => {
+    palettes[name] = palettes[name].map((c, i) => (i === index ? value : c));
+    remember("notecomplete-palettes", palettes);
+    setColor(value);
+    quick.redraw();
+  });
+}
+// Any colour, as the tool bar's custom colour: the palette stays as it is.
+const customColorEntry = (name) => ({
+  key: "custom",
+  label: "Any colour…",
+  swatch: "conic-gradient(#d13b2f, #ffdf38, #2a9d63, #246bce, #8a4fd0, #d13b2f)",
+  active: () => !palettes[name].some((c) => c.toLowerCase() === $("color").value.toLowerCase()),
+  run: () => pickColor($("color").value, (value) => { setColor(value); quick.redraw(); }),
+  stay: () => true,
+});
+const paletteEntries = (name) => [...palettes[name].map((value, i) => ({
   key: String(i),
   label: `Colour ${value} (hold or right-click to change it)`,
   swatch: value,
@@ -2957,7 +2970,7 @@ const paletteEntries = (name) => palettes[name].map((value, i) => ({
   run: () => setColor(value),
   edit: () => editPaletteColor(name, i),
   stay: () => true,
-}));
+})), customColorEntry(name)];
 // A tool's other settings, from its own option rows, so the menu and the tool bar agree.
 const fromRow = (id, values) => [...document.querySelectorAll(`.choice-row[data-for="${id}"] button`)]
   .filter((b) => !values || values.includes(b.dataset.value))
@@ -2982,21 +2995,36 @@ const widthEntries = (name) => widthPresets[name].map((value, i) => ({
   edit: () => editWidth(name, i),
   stay: () => true,
 }));
+// Shapes from the pen (the tool bar's three choices) as one item: tapped, the next one.
+const SNAP_NEXT = { hold: "lift", lift: "off", off: "hold" };
+const SNAP_SAID = { hold: "Shapes from the pen: hold the pen still at the end of a stroke.", lift: "Shapes from the pen: clear shapes become shapes when the pen lifts.", off: "Shapes from the pen off: strokes stay as drawn." };
+const snapEntry = {
+  key: "shapeSnap",
+  get label() { return `${document.querySelector(`.choice-row[data-for="shapeSnap"] button[data-value="${shapeSnap()}"]`)?.title || "Shapes from the pen"} (tap for the next)`; },
+  get icon() { return document.querySelector(`.choice-row[data-for="shapeSnap"] button[data-value="${shapeSnap()}"] svg`) || icon("shape"); },
+  active: () => shapeSnap() !== "off",
+  run: () => { $("shapeSnap").value = SNAP_NEXT[shapeSnap()] || "hold"; $("shapeSnap").dispatchEvent(new Event("change")); syncChoices(); status(SNAP_SAID[shapeSnap()]); },
+  stay: () => true,
+};
 const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
 // Every tool's settings in the same places: colours on top, sizes along the bottom (small
 // to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
-  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry] }),
+  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry, snapEntry] }),
   highlight: () => ({ top: paletteEntries("highlight"), bottom: widthEntries("highlight"), left: fromRow("highlightMode") }),
   erase: () => ({ bottom: fromRow("eraserSize") }),
-  shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill") }),
+  // The shapes' widths beside undo and redo, as the bottom holds the kinds of shape.
+  shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill"), right: widthEntries("shape") }),
   tape: () => ({ top: paletteEntries("tape"), bottom: widthEntries("tape"), left: fromRow("tapeMode") }),
   text: () => ({ top: paletteEntries("text") }),
 };
 // Items hidden from the quick menu (held, or right-clicked: Hide from this menu), per ring:
 // 'inner' for the tools, '<tool>:<section>' for a tool's settings. Graph and Table start
 // hidden among the shapes, so the Shapes ring stays small; they can be shown again there.
-let quickHidden = remembered("notecomplete-quick-hidden", { "shape:bottom": ["graph", "table"] });
+// Lock starts hidden among the tools, and the thinnest and thickest shape widths beside
+// undo and redo; a place the user has changed keeps what they chose.
+const QUICK_HIDDEN_DEFAULTS = { inner: ["lock"], "shape:bottom": ["graph", "table"], "shape:right": ["w0", "w3"] };
+let quickHidden = { ...QUICK_HIDDEN_DEFAULTS, ...remembered("notecomplete-quick-hidden", {}) };
 const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
 const hiddenIn = (section) => new Set((quickHidden[hiddenKey(section)] || []).map(String));
 const quickTools = () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] }));
@@ -3006,6 +3034,7 @@ function quickSettings() {
   const out = {};
   for (const [section, entries] of Object.entries(settings)) out[section] = section === "top" ? entries : ordered(tool, section, entries);
   out.right = ordered(tool, "right", [
+    ...(settings.right || []),
     { key: "undo", label: "Undo", icon: icon("undo"), run: () => $("undo").disabled || $("undo").click(), stay: () => true },
     { key: "redo", label: "Redo", icon: icon("redo"), run: () => $("redo").disabled || $("redo").click(), stay: () => true },
   ]);

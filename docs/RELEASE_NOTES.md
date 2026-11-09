@@ -1,4 +1,8 @@
-## What's new in 1.1.43
+## What's new in 1.1.44
+
+- **The quick menu has the tool bar's options.** The pen's ring has **Shapes from the pen** (tap it for Hold, On lift, Off), every tool with colours has **Any colour…** after its palette, the Shapes ring has its widths beside undo and redo (2 and 4 px shown, the others hidden at first), and **Lock in place** is among the tools (hidden at first: hold any tool to show it). On phones, where the tool bar's settings do not show, the quick menu was the only way to reach some of them.
+
+### In 1.1.43
 
 - **Fixed: phones held sideways.** In landscape on a phone the menubar, tool bar and page row took almost half the screen, the page list stayed open beside the pages and the tool bar pushed the window wider, so the whole page was zoomed out. Now the page row and the tools share one row (tools as icons, scrolling sideways), the page list opens as a drawer, and the pages get the full width and about three quarters of the height.
 

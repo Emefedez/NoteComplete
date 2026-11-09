@@ -73,7 +73,7 @@ try {
   assert.ok(layout.colours.every((y) => y < 0), 'colours on top');
   assert.ok(layout.widths.every((y) => y > 0), 'widths along the bottom');
   assert.deepEqual(layout.xs, [...layout.xs].sort((a, b) => a - b), 'widths small to large, left to right');
-  // A colour dragged to another place keeps it; right-click opens the colour picker.
+  // A colour dragged to another place keeps it; right-click, Change… opens the colour picker.
   const sw = async (i) => p.locator(`.quick-menu .qm-swatch >> nth=${i}`).boundingBox();
   const c0 = await sw(0), c2 = await sw(2);
   const firstColour = await p.getAttribute('.quick-menu .qm-swatch >> nth=0', 'aria-label');
@@ -83,6 +83,8 @@ try {
   assert.equal(await p.getAttribute('.quick-menu .qm-swatch >> nth=2', 'aria-label'), firstColour, 'the colour moved');
   assert.equal(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-palettes'))).highlight[2], firstColour.match(/#[0-9a-f]+/i)[0]);
   await p.click('.quick-menu .qm-swatch >> nth=1', { button: 'right' });
+  // Right-click opens the colour's settings (1.1.40); Change… opens the picker.
+  await p.click('.quick-menu .qm-item-menu button:has-text("Change")');
   assert.equal(await p.evaluate(() => !!document.querySelector('body > input[type=color]')), true, 'right-click opens the colour picker');
   await p.evaluate(() => { const input = document.querySelector('body > input[type=color]'); input.value = '#123456'; input.dispatchEvent(new Event('change')); });
   assert.match(await p.getAttribute('.quick-menu .qm-swatch >> nth=1', 'aria-label'), /#123456/, 'the palette colour changed');
@@ -260,6 +262,7 @@ try {
   assert.ok(await p.locator('.quick-menu .qm-outer[aria-label^="3.5 px"]').count(), 'the quick menu shows it');
   const w = await p.locator('.quick-menu .qm-outer[aria-label^="8 px"]').boundingBox();
   await p.mouse.move(w.x + 18, w.y + 18); await p.mouse.down(); await sleep(450); await p.mouse.up();
+  await p.click('.quick-menu .qm-item-menu button:has-text("Change")');
   await p.waitForSelector('#widthDialog[open]');
   await p.fill('#widthValue', '12');
   await p.click('#widthSave');
