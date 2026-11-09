@@ -1,4 +1,8 @@
-## What's new in 1.1.42
+## What's new in 1.1.43
+
+- **Fixed: phones held sideways.** In landscape on a phone the menubar, tool bar and page row took almost half the screen, the page list stayed open beside the pages and the tool bar pushed the window wider, so the whole page was zoomed out. Now the page row and the tools share one row (tools as icons, scrolling sideways), the page list opens as a drawer, and the pages get the full width and about three quarters of the height.
+
+### In 1.1.42
 
 - **Fixed: Ask AI's head in a narrow panel.** On phones (and in the panel's usual width) the AI tool and model lists had shrunk to their arrows beside the search and Small model; they now get a row of their own under the title and the window's buttons.
 
