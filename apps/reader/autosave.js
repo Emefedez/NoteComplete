@@ -45,10 +45,12 @@ export function autosaveStore(backend = idbBackend()) {
   let next = 0;
   return {
     // `mark` ({edits, digest}): where the note's edit history was, so the history up to
-    // this save can later be compacted (File menu).
-    async save({ key, title, project, shared = false, time = Date.now(), mark = null }) {
+    // this save can later be compacted (File menu). `content`: a digest of what the note
+    // holds (its .noteful export), so a note can be recognised as the same whatever its
+    // history, e.g. after a save in another format.
+    async save({ key, title, project, shared = false, time = Date.now(), mark = null, content = null }) {
       const id = `${time}-${next++}-${Math.random().toString(36).slice(2, 8)}`;
-      const slot = { id, key, title: title || 'Untitled note', time, size: project.byteLength, shared, ...(mark ? { edits: mark.edits, digest: mark.digest } : {}) };
+      const slot = { id, key, title: title || 'Untitled note', time, size: project.byteLength, shared, ...(mark ? { edits: mark.edits, digest: mark.digest } : {}), ...(content ? { content } : {}) };
       await backend.putData(id, project);
       await backend.putMeta(slot);
       for (const gone of pruned(await this.list())) await this.remove(gone);

@@ -3132,3 +3132,8 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .menu-content .menu-export { min-height: 34px; }
 .menu-content .menu-export > span { display: flex; align-items: center; min-height: 26px; line-height: 1; }
 .menu-content .menu-export > span .format-help { margin-top: 0; margin-bottom: 0; }
+/* Pen hover preview (app.js): a ring at the pen's tip, its colour and size those of the stroke. */
+#penHover { position: fixed; left: 0; top: 0; z-index: 40; border-radius: 50%; pointer-events: none; border: 1.5px solid var(--hover-color, var(--accent)); background: color-mix(in srgb, var(--hover-color, var(--accent)) 22%, transparent); box-shadow: 0 0 0 1px #ffffff88; will-change: transform; }
+#penHover[data-tool="erase"] { border-style: dashed; background: color-mix(in srgb, #ed6b55 15%, transparent); }
+#penHover[data-tool="highlight"] { border-radius: 3px; opacity: .8; }
+#penHover[hidden] { display: none; }

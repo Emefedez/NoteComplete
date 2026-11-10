@@ -2032,6 +2032,42 @@ const notePen = (e) => {
   }
 };
 for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
+// Pen hover preview: a ring at the pen's tip, as wide as it would draw, while it hovers (pointer
+// events with no button held). An Apple Pencil shows nothing of its own; Samsung and other
+// Android devices draw a system-wide hover pointer, so there it starts off. Per device.
+const appleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let penHoverOn = appleDevice;
+try { const saved = localStorage.getItem("notecomplete-pen-hover"); if (saved === "1" || saved === "0") penHoverOn = saved === "1"; } catch { /* Optional. */ }
+const penHoverRing = document.createElement("div");
+penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
+document.body.append(penHoverRing);
+const hidePenHover = () => { penHoverRing.hidden = true; };
+function showPenHover(e) {
+  if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return hidePenHover();
+  const sheet = e.target.closest?.(".sheet"), p = sheet && panels[Number(sheet.dataset.page)];
+  if (!p || !["draw", "highlight", "erase", "tape"].includes(tool)) return hidePenHover();
+  const scale = p.el.getBoundingClientRect().width / p.size[0];
+  const size = Math.max(6, (tool === "erase" ? eraserRadius() * 2 : Number($("width").value) || 2) * scale);
+  const style = penHoverRing.style;
+  style.width = style.height = `${size}px`;
+  style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
+  penHoverRing.dataset.tool = tool;
+  style.setProperty("--hover-color", tool === "erase" ? "#ed6b55" : $("color").value);
+  penHoverRing.hidden = false;
+}
+window.addEventListener("pointermove", showPenHover, { capture: true, passive: true });
+window.addEventListener("pointerdown", hidePenHover, { capture: true, passive: true });
+window.addEventListener("pointerout", (e) => { if (e.pointerType === "pen" && !e.relatedTarget) hidePenHover(); }, { capture: true, passive: true });
+window.addEventListener("blur", hidePenHover);
+const penHoverSwitch = () => $("penHoverToggle").setAttribute("aria-checked", String(penHoverOn));
+penHoverSwitch();
+$("penHoverToggle").onclick = () => {
+  penHoverOn = !penHoverOn;
+  try { localStorage.setItem("notecomplete-pen-hover", penHoverOn ? "1" : "0"); } catch { /* Optional. */ }
+  if (!penHoverOn) hidePenHover();
+  penHoverSwitch();
+  status(penHoverOn ? "Pen hover preview on: a ring shows where the pen will draw." : "Pen hover preview off.");
+};
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 let viewOnlyToldAt = -Infinity;
@@ -3294,6 +3330,16 @@ $("autosaveToggle").onclick = () => {
   if (autosavePref) autosaveNow();
 };
 autosaveSwitch();
+// What the note holds, apart from its undo history: a digest of its .noteful export (null when
+// it cannot be made). Two copies with the same digest are the same note.
+async function contentDigest() {
+  try {
+    if (!globalThis.crypto?.subtle) return null;
+    const bytes = await call("export", {});
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch { return null; }
+}
 // A copy now, if auto-save is on and the note changed since the last one.
 async function autosaveNow({ force = false } = {}) {
   if (!doc || autosaving || editing || !autosaveOn()) return null;
@@ -3305,8 +3351,9 @@ async function autosaveNow({ force = false } = {}) {
     await notes?.flush?.();
     const project = await call("save");
     const mark = await call("historyMark").catch(() => null);
+    const content = await contentDigest();
     if (note !== epoch) return null;
-    const slot = await autosaves.save({ key, title, project, shared, mark });
+    const slot = await autosaves.save({ key, title, project, shared, mark, content });
     autosavedRevision = at;
     return slot;
   } catch (e) {
@@ -3335,6 +3382,14 @@ async function autosaveOpened(recovered) {
       autosaves.markManual(key).catch(() => {});
       return;
     }
+    // The same content as the note just opened, whatever its history (a note saved as .noteful
+    // comes back with another history): nothing to choose between.
+    if (latest.content && (await contentDigest()) === latest.content) {
+      if (note !== epoch) return;
+      autosaves.markManual(key).catch(() => {});
+      return;
+    }
+    if (note !== epoch) return;
     // The same bytes as the note just opened (its history may be numbered differently after a
     // save in another format): the same note, so nothing to choose between either.
     const [kept, current] = await Promise.all([autosaves.load(latest.id).catch(() => null), call("save").catch(() => null)]);

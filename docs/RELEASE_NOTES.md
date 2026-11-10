@@ -1,4 +1,9 @@
-## What's new in 1.1.54
+## What's new in 1.1.55
+
+- **Pen hover preview.** **View → Pen hover preview** shows a ring at the pen's tip, as wide and as coloured as the stroke it would draw (the eraser's size, dashed, for the eraser), while the pen hovers over a page with the Pen, Highlighter, Eraser or Tape. It is on by default on iPad and Mac with touch (an Apple Pencil shows nothing of its own) and off elsewhere: Samsung and other Android devices already draw a system-wide hover pointer. The choice is remembered per device.
+- **Automatic saves are compared by content.** Each automatic save keeps a digest of what the note holds (its .noteful export), and a note opened from a .noteful is compared with it by content, not by undo history, so an automatic save that is the same note is no longer offered. Automatic saves made before this are compared as before.
+
+### In 1.1.54
 
 - **Export from the ⋯ menu.** On a Recent note, ⋯ has an **Export** row (NF, N+MD, NFE, NC, PDF) that opens the note and exports it; Google Drive and Internet Archive cards have a ⋯ too, which downloads, opens and exports. The File menu's Export row gains **NFE**, the project (.nfedit) with its whole edit history.
 - **Fixed: scrolling a menu with the wheel.** In a narrow window the menu bar scrolled sideways instead of the open menu scrolling down.
