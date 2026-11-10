@@ -29,7 +29,7 @@
           <button data-proxy="homeButton" data-icon="home">Home</button>
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <button id="openFolder" data-icon="folder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
-          <button id="importAny" data-icon="upload" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
+          <button id="importAny" data-icon="import" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
           <button id="openLink" data-icon="link" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
           <button id="driveOpen" data-icon="cloud">Google Drive</button>
           <button id="addDocuments" data-icon="plus" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
@@ -149,7 +149,7 @@
           <button id="studyRetake" data-icon="restart" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
           <hr />
           <button id="studyOpenDeck" data-icon="layers" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
-          <button data-proxy="importAny" data-icon="upload" data-palette="Study: Import quiz or study material…" title="Same as File → Import…: a quiz from Quiz Toolkit (Markdown), a study pack from another NoteComplete, or a flashcard deck">Import quiz or study material…</button>
+          <button data-proxy="importAny" data-icon="import" data-palette="Study: Import quiz or study material…" title="Same as File → Import…: a quiz from Quiz Toolkit (Markdown), a study pack from another NoteComplete, or a flashcard deck">Import quiz or study material…</button>
           <button id="studyExportQuiz" data-icon="export" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
           <input id="studyPackFile" type="file" accept=".ncstudy,.json,.md,.markdown,application/json,text/markdown" hidden />
           <button id="scratchOpen" data-icon="chat" disabled data-palette="Scratchpad…" title="AI conversations kept with this note">Scratchpad…</button>
@@ -699,7 +699,7 @@
             <select id="recording" aria-label="Recording"></select>
             <div id="audioSources" class="audio-sources">
               <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)" aria-label="Record"><span class="label">Record</span></button>
-              <button id="importAudio" type="button" data-icon="upload" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
+              <button id="importAudio" type="button" data-icon="import" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
               <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
             </div>
           </div>
