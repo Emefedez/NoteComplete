@@ -189,3 +189,37 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
     resume() { paused = false; notify(); processQueue(); }
   };
 }
+
+// ⋯ on a Google Drive or Internet Archive card: downloads and opens the note, then exports it
+// (the same formats as the File menu's Export row). `pick(kind)` does the opening.
+export const exportable = (name) => /\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf)$/i.test(name || '');
+const EXPORT_KINDS = [['noteful', 'NF', 'Export Noteful (.noteful)'], ['markdown', 'N+MD', 'Export Noteful + Markdown'], ['project', 'NFE', 'Export the project (.nfedit) with its whole edit history'], ['notecomplete', 'NC', 'Export NoteComplete (.notecomp)'], ['pdf', 'PDF', 'Every page as one PDF']];
+let exportMenu = null;
+const closeExportMenu = () => { if (exportMenu) exportMenu.hidden = true; };
+export function addExportMenu(item, { label, pick }) {
+  const more = document.createElement('button');
+  more.type = 'button'; more.className = 'note-more'; more.textContent = '⋯';
+  more.title = 'Download and export'; more.setAttribute('aria-label', `Download and export ${label}`); more.setAttribute('aria-haspopup', 'menu');
+  more.onclick = (event) => {
+    event.stopPropagation();
+    if (!exportMenu) {
+      exportMenu = document.createElement('div');
+      exportMenu.className = 'note-export cloud-export-menu'; exportMenu.setAttribute('role', 'menu'); exportMenu.hidden = true;
+      document.body.append(exportMenu);
+      document.addEventListener('pointerdown', (e) => { if (!exportMenu.hidden && !exportMenu.contains(e.target) && !e.target.closest?.('.note-more')) closeExportMenu(); }, true);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExportMenu(); }, true);
+    }
+    const title = Object.assign(document.createElement('span'), { textContent: 'Download and export' });
+    exportMenu.replaceChildren(title, ...EXPORT_KINDS.map(([kind, text, hint]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = text; b.title = hint;
+      b.onclick = () => { closeExportMenu(); pick(kind); };
+      return b;
+    }));
+    exportMenu.hidden = false;
+    const r = more.getBoundingClientRect(), w = exportMenu.offsetWidth, h = exportMenu.offsetHeight;
+    exportMenu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
+    exportMenu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+  };
+  item.append(more);
+}

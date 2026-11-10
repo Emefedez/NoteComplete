@@ -1,5 +1,6 @@
 import { ArchiveClient, PRELOADED_ARCHIVE, archiveId, archiveListing } from './archive-client.js';
 import { TYPES } from './note-facts.js';
+import { addExportMenu, exportable } from './download-queue.js';
 
 function documentCoverSvg(name) {
   const isPdf = /\.pdf$/i.test(name);
@@ -12,7 +13,7 @@ function documentCoverSvg(name) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-export function archiveBrowser({ open, client = new ArchiveClient(), library = null, queue = null }) {
+export function archiveBrowser({ open, client = new ArchiveClient(), library = null, queue = null, exportRequest = null }) {
   const $ = id => document.getElementById(id);
   const key = 'notecomplete-archive-sources-v1', lastKey = 'notecomplete-archive-last-v1';
   let added = [];
@@ -196,6 +197,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
         }
       };
       li.append(b);
+      if (exportRequest && exportable(doc.name)) addExportMenu(li, { label: doc.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `archive:${currentRepo}:${doc.path || doc.name}` }); chooseDoc(doc); } });
 
       if (queue) {
         const qBtn = document.createElement('button');

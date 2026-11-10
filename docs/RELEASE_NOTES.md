@@ -1,4 +1,12 @@
-## What's new in 1.1.53
+## What's new in 1.1.54
+
+- **Export from the ⋯ menu.** On a Recent note, ⋯ has an **Export** row (NF, N+MD, NFE, NC, PDF) that opens the note and exports it; Google Drive and Internet Archive cards have a ⋯ too, which downloads, opens and exports. The File menu's Export row gains **NFE**, the project (.nfedit) with its whole edit history.
+- **Fixed: scrolling a menu with the wheel.** In a narrow window the menu bar scrolled sideways instead of the open menu scrolling down.
+- **Fixed: "Delete history up to now".** The size it frees is at the right edge of the row.
+- **Fewer recovery questions.** When the automatic save is byte for byte the note just opened, it is not offered.
+- The File menu's export rows sit on the same centre line.
+
+### In 1.1.53
 
 - **Ask AI and the card practice's AI bar, tidied.** Ask AI's title has the AI spark, New conversation and Close are icons, and what is sent with the question (page, selection, notes) is labelled **Send**. In card practice, the AI tool and model sit in a tinted bar with an AI tag, and the material chips (Page, Source PDF, Notes, Whole note) are on their own row under **Send**; Ask AI has the spark.
 

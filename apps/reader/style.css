@@ -3115,3 +3115,20 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .chat-context-label { font-weight: 600; color: var(--ink); }
 .practice-ask-bar { padding: 4px 6px; border-radius: var(--radius-box); background: var(--accent-soft); }
 .practice-ask-material { flex: 1 0 100%; margin-left: 0; align-items: center; }
+/* "Delete history up to now": full row, the freed size at its right edge. */
+.autosave-list .autosave-now { display: flex; width: 100%; align-items: center; }
+.autosave-list .autosave-now .autosave-saves { margin-left: auto; white-space: nowrap; }
+/* ⋯ menu: the open-and-export row, chips like the File menu's Export row. */
+.note-export { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 10px; }
+.note-export > span { flex: 1 0 100%; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink); }
+.note-export > span svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; color: var(--muted); }
+.note-export > button { min-width: 44px; min-height: 26px; padding: 0 8px; justify-content: center; border: 0; border-radius: var(--radius); background: var(--fill); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.note-export > button:hover { color: var(--accent); background: var(--accent-soft); }
+.note-export[hidden] { display: none; }
+.cloud-export-menu { position: fixed; z-index: 60; min-width: 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); box-shadow: var(--shadow-pop); }
+.cloud-export-menu[hidden] { display: none; }
+.cloud-export-menu > span { flex: 1 0 100%; font-size: 12px; color: var(--muted); }
+/* The File menu's export rows: one height, labels and chips on the same centre line. */
+.menu-content .menu-export { min-height: 34px; }
+.menu-content .menu-export > span { display: flex; align-items: center; min-height: 26px; line-height: 1; }
+.menu-content .menu-export > span .format-help { margin-top: 0; margin-bottom: 0; }

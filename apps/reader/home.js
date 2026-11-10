@@ -12,7 +12,7 @@ import { icon } from './icons.js';
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, groups = null, archive = null }) {
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -287,6 +287,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     };
     $('forgetCut').hidden = !cutHistory || !/\.nfedit$/i.test(entry.name || '');
     $('forgetCut').onclick = () => { close(); cutHistory?.(entry).catch(error => status(error.message, true)); };
+    // Notes (not web pages or loose files) can be opened and exported from here.
+    $('forgetFiles').hidden = !exportNote || entry.source === 'web' || !/\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf)$/i.test(entry.name || '');
+    for (const b of $('forgetFiles').querySelectorAll('button[data-export]')) b.onclick = () => { close(); exportNote?.(entry, b.dataset.export).catch(error => status(error.message, true)); };
     $('forgetExport').hidden = !exportStudy;
     $('forgetExport').onclick = () => { close(); exportStudy?.(entry).catch(error => status(error.message, true)); };
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };

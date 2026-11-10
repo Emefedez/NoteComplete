@@ -2403,6 +2403,8 @@ function sideScroll(el) {
   };
   el.addEventListener("wheel", (e) => {
     if (el.scrollWidth <= el.clientWidth || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    // An open menu scrolls itself: its wheel must not be taken for the row's.
+    if (e.target.closest?.(".menu-content, [role=menu]")) return;
     el.scrollLeft += e.deltaY;
     e.preventDefault();
   }, { passive: false });
@@ -3333,6 +3335,15 @@ async function autosaveOpened(recovered) {
       autosaves.markManual(key).catch(() => {});
       return;
     }
+    // The same bytes as the note just opened (its history may be numbered differently after a
+    // save in another format): the same note, so nothing to choose between either.
+    const [kept, current] = await Promise.all([autosaves.load(latest.id).catch(() => null), call("save").catch(() => null)]);
+    if (note !== epoch) return;
+    const a = kept && new Uint8Array(kept.buffer || kept), b = current && new Uint8Array(current.buffer || current);
+    if (a && b && a.length === b.length && a.every((x, i) => x === b[i])) {
+      autosaves.markManual(key).catch(() => {});
+      return;
+    }
     $("recoverText").textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : "the file you opened"}. Which do you want to open?`;
     $("recoverAuto").textContent = `Automatic save (${when(latest.time)})`;
     $("recoverManual").textContent = manual ? `Manual save (${when(manual)})` : "The file";
@@ -3843,6 +3854,7 @@ $("formatsClose").onclick = () => $("formatsDialog").close();
 $("native").onclick = () => save(true);
 $("nativeMarkdown").onclick = () => save(true, "markdown");
 $("exportNotecomplete").onclick = () => save(true, "notecomplete");
+$("exportProject").onclick = () => save(true, "project");
 // Pages as PDF (every page, in the background) or the current page as an image; the IMG
 // button opens the format list under the row.
 const pageExport = pageExporter({ pageCanvas, call, documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }), currentPage: () => page, filename, download, jobs: { start: (...a) => jobs.start(...a) }, status });
@@ -4273,12 +4285,23 @@ if (clearBtn) {
   clearBtn.onclick = () => downloadQueue.clear();
 }
 
+// A ⋯ export chosen on a Drive or Internet Archive card: the note is exported once it has opened.
+const exportRequest = { kind: "", key: "" };
+async function exportRequested(key, opened) {
+  const { kind, key: wanted } = exportRequest;
+  exportRequest.kind = exportRequest.key = "";
+  if (!opened || !kind || wanted !== key || !doc) return;
+  if (kind === "pdf") return $("exportPdf").click();
+  await save(true, kind);
+}
 const drive = driveBrowser({
   library,
   queue: downloadQueue,
+  exportRequest,
   onCards: () => home?.applyFilters(),
   open: async (file, driveFile) => {
     const opened = await openChosen(file);
+    exportRequested(`drive:${driveFile.id}`, opened).catch((error) => status(error.message, true));
     if (opened) {
       home.rememberCover(library.coverKey(driveFile), file);
       home.rememberFacts(library.coverKey(driveFile), file);
@@ -4318,6 +4341,16 @@ async function cutHistoryOf(entry) {
   if (!doc) return;
   if (!(doc.edit_count > (doc.history_floor || 0) || doc.can_redo)) return status("This note has no edit history to delete.");
   await compactHistory(doc.edit_count || 0, "up to now");
+}
+// ⋯ on a Recent note: opens it and exports it as chosen (the File menu's Export row).
+async function exportNoteOf(entry, kind) {
+  const file = await library.open(entry);
+  if (!file) throw Error(`${entry.name} is no longer kept on this device.`);
+  await library.touch(entry.key);
+  if (!(await openFromLibrary(file, entry))) return;
+  if (!doc) return;
+  if (kind === "pdf") return $("exportPdf").click();
+  await save(true, kind);
 }
 // ⋯ on a Recent note: its decks and quizzes to Anki, without opening it.
 async function exportStudyOf(entry) {
@@ -4524,8 +4557,10 @@ htmlDarkApply();
 const archive = archiveBrowser({
   library,
   queue: downloadQueue,
-  open: async (file) => {
+  exportRequest,
+  open: async (file, entry) => {
     const opened = await openChosen(file);
+    exportRequested(`archive:${entry?.id}:${entry?.path || file.name}`, opened).catch((error) => status(error.message, true));
     if (opened) { notePath = ""; noteEntryKey = ""; }
     return opened;
   },
@@ -4541,6 +4576,7 @@ var home = homeScreen({
   status,
   exportStudy: exportStudyOf,
   cutHistory: cutHistoryOf,
+  exportNote: exportNoteOf,
   current: () => ({
     entryKey: noteEntryKey,
     dirty,
@@ -4724,7 +4760,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .notecomp only.
   for (const id of ["native", "nativeMarkdown"]) {

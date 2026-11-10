@@ -50,6 +50,7 @@
             <span data-icon="export">Export <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></span>
             <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
             <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
+            <button id="exportProject" disabled data-palette="Export NoteComplete project (.nfedit)" title="Export the project (.nfedit): the note with its whole edit history, as Save project writes it.">NFE</button>
             <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note, its notes and recordings, without the undo history (Save as a project keeps it).">NC</button>
           </div>
           <div class="menu-export" role="group" aria-label="Export pages as">
@@ -1099,6 +1100,14 @@
   <hr class="note-menu-sep" />
   <button id="forgetCheck" type="button" role="menuitem" data-icon="cloud" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for updates</button>
   <button id="forgetCut" type="button" role="menuitem" data-icon="trim" title="Open this note and delete its undo history to make the file smaller; the note stays as it is until you save" hidden>Cut history…</button>
+  <div id="forgetFiles" class="note-export" role="group" aria-label="Open and export" hidden>
+    <span data-icon="export" title="Opens the note, then exports it">Export</span>
+    <button type="button" data-export="noteful" title="Export Noteful (.noteful)">NF</button>
+    <button type="button" data-export="markdown" title="Export Noteful + Markdown">N+MD</button>
+    <button type="button" data-export="project" title="Export the project (.nfedit) with its whole edit history">NFE</button>
+    <button type="button" data-export="notecomplete" title="Export NoteComplete (.notecomp): the note, its notes and recordings">NC</button>
+    <button type="button" data-export="pdf" title="Every page as one PDF">PDF</button>
+  </div>
   <button id="forgetExport" type="button" role="menuitem" data-icon="cards" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export to Anki</button>
   <button id="forgetMigrate" type="button" role="menuitem" data-icon="swap" title="Move flashcards, quizzes, Markdown notes and recordings to another note">Migrate content…</button>
   <hr class="note-menu-sep" />

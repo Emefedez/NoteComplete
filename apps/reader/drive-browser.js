@@ -1,10 +1,11 @@
 import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile, DRIVE_WRITE_SCOPE } from './drive-client.js';
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
+import { addExportMenu, exportable } from './download-queue.js';
 
 // The Drive section of the home screen. show()/hide() follow the home screen:
 // hiding cancels listings, downloads, previews and a pending sign-in.
-export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {}, queue = null }) {
+export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {}, queue = null, exportRequest = null }) {
   const $ = id => document.getElementById(id);
   const previews = thumbs || driveThumbnails(client, { library });
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
@@ -268,6 +269,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         return isFolder ? enter(file) : choose(file);
       };
       item.append(button);
+      if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `drive:${file.id}` }); choose(file); } });
 
       if (!isFolder && allowed && queue) {
         const qBtn = document.createElement('button');
