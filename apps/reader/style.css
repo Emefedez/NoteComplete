@@ -3171,3 +3171,10 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .export-dialog .menu-sub { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px 12px; }
 .export-dialog .menu-sub[hidden] { display: none; }
 .export-dialog .format-help { margin-left: 6px; }
+
+/* Ask AI: send and stop as round icon buttons. */
+#chatSend, #chatStop { flex: none; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; }
+#chatSend svg, #chatStop svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#chatStop { color: var(--ink); background: var(--fill); }
+#chatStop svg { fill: currentColor; }
+#chatStop[hidden] { display: none; }

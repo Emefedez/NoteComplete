@@ -49,6 +49,7 @@ const paths = {
  back:'M19 12H5m6-6-6 6 6 6',
  forward:'M5 12h14m-6-6 6 6-6 6',
  up:'M12 19V5m-6 6 6-6 6 6',
+ stop:'M8 8h8v8H8Z',
  down:'M12 5v14m-6-6 6 6 6-6',
  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
  unplug:'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5',
