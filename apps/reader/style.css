@@ -3137,3 +3137,6 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 #penHover[data-tool="erase"] { border-style: dashed; background: color-mix(in srgb, #ed6b55 15%, transparent); }
 #penHover[data-tool="highlight"] { border-radius: 3px; opacity: .8; }
 #penHover[hidden] { display: none; }
+/* A button's name shown by a long press or a hovering pen (app.js), as a computer's tooltip. */
+#touchTip { position: fixed; z-index: 70; max-width: min(260px, calc(100vw - 16px)); padding: 5px 9px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.35; pointer-events: none; box-shadow: 0 2px 8px #0004; }
+#touchTip[hidden] { display: none; }

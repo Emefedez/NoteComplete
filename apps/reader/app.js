@@ -2032,6 +2032,17 @@ const notePen = (e) => {
   }
 };
 for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
+// Pen smoothing on or off (View menu), per device: off, the line follows the pen exactly.
+let smoothingOn = true;
+try { smoothingOn = localStorage.getItem("notecomplete-pen-smoothing") !== "0"; } catch { /* Optional. */ }
+const smoothingSwitch = () => $("penSmoothToggle").setAttribute("aria-checked", String(smoothingOn));
+smoothingSwitch();
+$("penSmoothToggle").onclick = () => {
+  smoothingOn = !smoothingOn;
+  try { localStorage.setItem("notecomplete-pen-smoothing", smoothingOn ? "1" : "0"); } catch { /* Optional. */ }
+  smoothingSwitch();
+  status(smoothingOn ? "Pen smoothing on." : "Pen smoothing off: strokes follow the pen exactly.");
+};
 // Pen hover preview: a ring at the pen's tip, as wide as it would draw, while it hovers (pointer
 // events with no button held). An Apple Pencil shows nothing of its own; Samsung and other
 // Android devices draw a system-wide hover pointer, so there it starts off. Per device.
@@ -2059,6 +2070,53 @@ window.addEventListener("pointermove", showPenHover, { capture: true, passive: t
 window.addEventListener("pointerdown", hidePenHover, { capture: true, passive: true });
 window.addEventListener("pointerout", (e) => { if (e.pointerType === "pen" && !e.relatedTarget) hidePenHover(); }, { capture: true, passive: true });
 window.addEventListener("blur", hidePenHover);
+// What a button does, as on a computer: a mouse hover shows the title natively, but a finger has
+// no hover. Pressing an icon for a moment (or a pen hovering over it) shows its name; a long
+// press that showed it does not also press the button.
+const tip = document.createElement("div");
+tip.id = "touchTip"; tip.setAttribute("role", "tooltip"); tip.hidden = true;
+document.body.append(tip);
+let tipTimer = 0, tipHide = 0, tipFor = null, tipSuppress = null;
+const tipText = (el) => (el.getAttribute("title") || el.getAttribute("aria-label") || "").trim();
+const tipTarget = (node) => {
+  if (!node?.closest || node.closest(".qm-disc, .qm-item-menu, .text-editor, input, textarea, select")) return null;
+  const el = node.closest("button, a, summary, label.icon-toggle, [role=menuitem], [role=radio], [role=tab]");
+  return el && tipText(el) ? el : null;
+};
+const hideTip = () => { clearTimeout(tipTimer); clearTimeout(tipHide); tip.hidden = true; tipFor = null; };
+function showTip(el) {
+  tip.textContent = tipText(el).split("\n")[0];
+  tip.hidden = false; tipFor = el;
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  tip.style.top = `${r.top - h - 8 > 4 ? r.top - h - 8 : r.bottom + 8}px`;
+  clearTimeout(tipHide); tipHide = setTimeout(hideTip, 2800);
+}
+document.addEventListener("pointerdown", (e) => {
+  hideTip();
+  if (e.pointerType === "mouse") return;
+  const el = tipTarget(e.target);
+  if (!el) return;
+  const x = e.clientX, y = e.clientY;
+  tipTimer = setTimeout(() => {
+    showTip(el); tipSuppress = el;
+    setTimeout(() => { if (tipSuppress === el) tipSuppress = null; }, 1500);
+  }, 450);
+  const stop = (m) => { if (m.type !== "pointermove" || Math.hypot(m.clientX - x, m.clientY - y) > 10) { clearTimeout(tipTimer); document.removeEventListener("pointermove", stop, true); document.removeEventListener("pointerup", stop, true); document.removeEventListener("pointercancel", stop, true); } };
+  document.addEventListener("pointermove", stop, true); document.addEventListener("pointerup", stop, true); document.addEventListener("pointercancel", stop, true);
+}, { capture: true, passive: true });
+document.addEventListener("click", (e) => {
+  if (tipSuppress && tipSuppress.contains(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); tipSuppress = null; }
+}, true);
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType !== "pen") return;
+  const el = tipTarget(e.target);
+  if (!el || el === tipFor) return;
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => showTip(el), 400);
+}, { capture: true, passive: true });
+document.addEventListener("pointerout", (e) => { if (e.pointerType === "pen") hideTip(); }, { capture: true, passive: true });
+document.addEventListener("scroll", hideTip, { capture: true, passive: true });
 const penHoverSwitch = () => $("penHoverToggle").setAttribute("aria-checked", String(penHoverOn));
 penHoverSwitch();
 $("penHoverToggle").onclick = () => {
@@ -2202,7 +2260,7 @@ function pointerDown(e, p) {
     // A stylus reports pressure (0–1); a mouse or finger does not.
     pen: e.pointerType === "pen",
     // Strokes are smoothed: most for a stylus or a finger, a little for a mouse.
-    smooth: tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free") ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
+    smooth: smoothingOn && (tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free")) ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
     pressures: [e.pressure],
     // The Shapes tool's kind when the drag started (a graph or table opens its editor at the end).
     kind: tool === "shape" ? $("shape").value : null,

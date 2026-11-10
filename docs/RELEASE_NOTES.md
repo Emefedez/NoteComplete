@@ -1,4 +1,10 @@
-## What's new in 1.1.55
+## What's new in 1.1.56
+
+- **Pen smoothing on or off.** **View → Pen smoothing**: off, the Pen and the free highlighter follow the pen exactly as it moves. Remembered on this device.
+- **What a button does, on a phone or tablet too.** Press and hold an icon for a moment (or hold a pen over it) and its name appears, as the tooltip does with a mouse; that press does not also press the button. The quick menu keeps its own hold.
+- **A fuller welcome notebook on the website.** New pages for drawing, calculation (math text boxes, graphs, tables), reading and finding, listening, and study, a corrected explanation of Online sharing (a temporary Cloudflare link, from the desktop app) and of the files, and more keys. Its notes follow each page.
+
+### In 1.1.55
 
 - **Pen hover preview.** **View → Pen hover preview** shows a ring at the pen's tip, as wide and as coloured as the stroke it would draw (the eraser's size, dashed, for the eraser), while the pen hovers over a page with the Pen, Highlighter, Eraser or Tape. It is on by default on iPad and Mac with touch (an Apple Pencil shows nothing of its own) and off elsewhere: Samsung and other Android devices already draw a system-wide hover pointer. The choice is remembered per device.
 - **Automatic saves are compared by content.** Each automatic save keeps a digest of what the note holds (its .noteful export), and a note opened from a .noteful is compared with it by content, not by undo history, so an automatic save that is the same note is no longer offered. Automatic saves made before this are compared as before.
