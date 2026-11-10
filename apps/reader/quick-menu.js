@@ -104,7 +104,7 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
       const size = name === 'outer' ? outerSize : SIZE;
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = `qm-item qm-${name}${entry.swatch ? ' qm-swatch' : ''}`;
+      b.className = `qm-item qm-${name}${entry.swatch ? ' qm-swatch' : ''}${entry.more ? ' qm-more' : ''}`;
       b.title = entry.label;
       b.setAttribute('aria-label', entry.label);
       b.setAttribute('role', 'menuitem');
@@ -119,7 +119,7 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
       b.onpointerleave = () => { if (hovered === entry) hovered = null; };
       b.onclick = (e) => { e.stopPropagation(); if (b.dataset.lifted) return; pick(entry); };
       // Right-click: the item's settings (as holding it does).
-      b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(entry, group, b); });
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); if (!entry.fixed) itemMenu(entry, group, b); });
       b.addEventListener('pointerdown', (e) => holdToMove(e, b, entry, index, group, positions));
       root.append(b);
     };
@@ -175,7 +175,8 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
   // Holding an item lifts it; dragged, it drops into the nearest place of its own ring or
   // section; let go without moving, an editable item (a colour) opens its editor.
   function holdToMove(down, button, entry, index, group, positions) {
-    if (down.button !== 0) return;
+    // A fixed item (the + that opens a section's other choices) is a control: not moved or hidden.
+    if (down.button !== 0 || entry.fixed) return;
     const start = [down.clientX, down.clientY];
     let dragged = false;
     const timer = setTimeout(() => {
@@ -208,7 +209,8 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
       }
       const dx = e.clientX - centre.x, dy = e.clientY - centre.y;
       const to = group.key === 'inner' ? slotAt(dx, dy, group.items.length) : nearest(positions, dx, dy);
-      if (to !== index && group.items.every((item) => item.key != null)) onReorder(group.key, moved(group.items, index, to).map((item) => item.key));
+      const movable = group.items.filter((item) => !item.fixed);
+      if (to !== index && movable.every((item) => item.key != null)) onReorder(group.key, moved(movable, index, Math.min(to, movable.length - 1)).map((item) => item.key));
       if (root) draw();
     };
     addEventListener('pointermove', move, true);

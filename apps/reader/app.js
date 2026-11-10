@@ -3143,10 +3143,12 @@ const snapEntry = {
   stay: () => true,
 };
 const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
+const smoothEntry = { key: "smoothing", label: "Pen smoothing", icon: icon("smooth"), active: () => smoothingOn, stay: () => true, run: () => $("penSmoothToggle").click() };
+const hoverEntry = { key: "hoverPreview", label: "Pen hover preview", icon: icon("draw"), active: () => penHoverOn, stay: () => true, run: () => $("penHoverToggle").click() };
 // Every tool's settings in the same places: colours on top, sizes along the bottom (small
 // to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
-  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry, snapEntry] }),
+  draw: () => ({ top: paletteEntries("draw"), bottom: widthEntries("draw"), left: [pressureEntry, snapEntry, smoothEntry, hoverEntry] }),
   highlight: () => ({ top: paletteEntries("highlight"), bottom: widthEntries("highlight"), left: fromRow("highlightMode") }),
   erase: () => ({ bottom: fromRow("eraserSize") }),
   // The shapes' widths beside undo and redo, as the bottom holds the kinds of shape.
@@ -3159,8 +3161,22 @@ const QUICK_SETTINGS = {
 // hidden among the shapes, so the Shapes ring stays small; they can be shown again there.
 // Lock starts hidden among the tools, and the thinnest and thickest shape widths beside
 // undo and redo; a place the user has changed keeps what they chose.
-const QUICK_HIDDEN_DEFAULTS = { inner: ["lock"], "shape:bottom": ["graph", "table"], "shape:right": ["w0", "w3"] };
+const QUICK_HIDDEN_DEFAULTS = { inner: ["lock"], "shape:right": ["w0", "w3"] };
 let quickHidden = { ...QUICK_HIDDEN_DEFAULTS, ...remembered("notecomplete-quick-hidden", {}) };
+// Graph and Table are behind the Shapes ring's + now, no longer hidden by default.
+if (quickHidden["shape:bottom"]) quickHidden["shape:bottom"] = quickHidden["shape:bottom"].filter((k) => k !== "graph" && k !== "table");
+// A ring section shows a few items and keeps the rest behind a tinted +, which expands it in
+// place (and − folds it back): the rings stay small, and every choice is still there. The
+// chosen item always shows. Per section, by "<tool>:<section>".
+const QUICK_BASE = { "shape:bottom": ["rectangle", "ellipse", "triangle"], "draw:left": ["pressure", "shapeSnap"], "highlight:top": ["0", "1", "2", "custom"] };
+const quickOpen = {};
+function withMore(section, entries) {
+  const k = `${tool}:${section}`, base = QUICK_BASE[k];
+  if (!base || entries.length <= base.length) return entries;
+  const open = !!quickOpen[k], list = open ? entries : entries.filter((e) => base.includes(String(e.key)) || e.active?.());
+  if (list.length === entries.length && !open) return entries;
+  return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minimize" : "plus"), run: () => { quickOpen[k] = !open; }, stay: () => true }];
+}
 const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
 const hiddenIn = (section) => new Set((quickHidden[hiddenKey(section)] || []).map(String));
 const quickTools = () => quickOrder.map((name) => ({ key: name, label: QUICK_TOOLS.find(([n]) => n === name)[1], icon: icon(name), active: () => tool === name, run: () => chooseTool(name), stay: () => !!QUICK_SETTINGS[name] }));
@@ -3184,7 +3200,7 @@ const quick = quickMenu({
   inner: () => shown("inner", quickTools()),
   // The outer ring only for a tool with settings (with undo and redo beside them); Pan,
   // Select and the like get the small menu.
-  outer: () => Object.fromEntries(Object.entries(quickSettings()).map(([section, entries]) => [section, shown(section, entries)])),
+  outer: () => Object.fromEntries(Object.entries(quickSettings()).map(([section, entries]) => [section, withMore(section, shown(section, entries))])),
   // Held (or right-clicked), any item can leave its ring or section, and come back from there.
   items: {
     hide(section, key) {

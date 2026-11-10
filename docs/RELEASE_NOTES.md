@@ -1,4 +1,8 @@
-## What's new in 1.1.56
+## What's new in 1.1.57
+
+- **A **+** in the quick menu opens the other choices.** The Shapes ring shows Rectangle, Ellipse and Triangle, and a tinted **+** (a control, not a choice) unfolds Line, Arrow, Star, **Graph** and **Table** in place; **−** folds them back, and the chosen shape always shows. The Highlighter's colours show three and a **+** for the rest, and the Pen's modes have **Pen smoothing** and **Pen hover preview** behind a **+**. The rings are smaller, and more can be added the same way.
+
+### In 1.1.56
 
 - **Pen smoothing on or off.** **View → Pen smoothing**: off, the Pen and the free highlighter follow the pen exactly as it moves. Remembered on this device.
 - **What a button does, on a phone or tablet too.** Press and hold an icon for a moment (or hold a pen over it) and its name appears, as the tooltip does with a mouse; that press does not also press the button. The quick menu keeps its own hold.

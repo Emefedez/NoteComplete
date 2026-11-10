@@ -3140,3 +3140,6 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 /* A button's name shown by a long press or a hovering pen (app.js), as a computer's tooltip. */
 #touchTip { position: fixed; z-index: 70; max-width: min(260px, calc(100vw - 16px)); padding: 5px 9px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.35; pointer-events: none; box-shadow: 0 2px 8px #0004; }
 #touchTip[hidden] { display: none; }
+/* The + (or −) that opens a ring section's other choices: tinted, to read as a control. */
+.quick-menu .qm-item.qm-more { background-color: color-mix(in srgb, var(--accent) 24%, var(--menu)); color: var(--accent); }
+.quick-menu .qm-item.qm-more:hover { background-color: color-mix(in srgb, var(--accent) 38%, var(--menu)); }
