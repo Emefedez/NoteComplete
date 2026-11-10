@@ -2767,7 +2767,7 @@ $("color").addEventListener("input", syncChoices);
 // Each drawing tool keeps its own colour and width (remembered on this device), and the
 // highlighter, tape and shape kinds keep theirs.
 const TOOL_DEFAULTS = {
-  draw: { color: "#246bce", width: "2" },
+  draw: { color: "#246bce", width: "4" },
   highlight: { color: "#ffdf38", width: "16" },
   tape: { color: "#e3c6e6", width: "40" },
   shape: { color: "#246bce", width: "2" },
@@ -2783,14 +2783,21 @@ function restoreToolPrefs() {
 // Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
 // one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
 const WIDTH_DEFAULTS = {
-  draw: [1, 2, 4, 8],
+  // The pen: 4 px is the width that reads right next to Noteful's, so it is the second one, with
+  // a slightly thicker finest and a gentle ramp above it.
+  draw: [2, 4, 7, 11],
   highlight: [8, 16, 24, 40],
   tape: [20, 40, 64],
   shape: [1, 2, 4, 8],
 };
 const WIDTH_LADDER = [1, 2, 4, 8, 16, 24, 40, 64];
 let widthPresets = { ...WIDTH_DEFAULTS };
-try { widthPresets = { ...WIDTH_DEFAULTS, ...JSON.parse(localStorage.getItem("notecomplete-widths") || "{}") }; } catch { /* Optional. */ }
+try {
+  const saved = JSON.parse(localStorage.getItem("notecomplete-widths") || "{}");
+  // The pen's earlier untouched presets (1, 2, 4, 8) give way to the new ones; edited ones stay.
+  if (JSON.stringify(saved.draw) === "[1,2,4,8]") delete saved.draw;
+  widthPresets = { ...WIDTH_DEFAULTS, ...saved };
+} catch { /* Optional. */ }
 const widthLabel = (v) => `${Number(v)} px`;
 // The width select holds every value in use; one typed in is added to it.
 function setWidthValue(value) {

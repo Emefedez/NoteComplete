@@ -1,4 +1,8 @@
-## What's new in 1.1.57
+## What's new in 1.1.58
+
+- **New default pen widths: 2, 4, 7 and 11 px** (they were 1, 2, 4 and 8). 4 px is the width that looks right beside Noteful's, so it is the second one and the pen starts at it; the finest is a little thicker and the two above rise gently. Widths you set yourself are kept; a pen still on the old defaults moves to the new ones.
+
+### In 1.1.57
 
 - **A **+** in the quick menu opens the other choices.** The Shapes ring shows Rectangle, Ellipse and Triangle, and a tinted **+** (a control, not a choice) unfolds Line, Arrow, Star, **Graph** and **Table** in place; **−** folds them back, and the chosen shape always shows. The Highlighter's colours show three and a **+** for the rest, and the Pen's modes have **Pen smoothing** and **Pen hover preview** behind a **+**. The rings are smaller, and more can be added the same way.
 
