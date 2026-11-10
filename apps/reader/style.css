@@ -3081,11 +3081,28 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
   body[data-landscape-dock="left"] .tool-options { top: 4px; left: calc(100% + 4px) !important; right: auto; max-width: calc(100vw - 120px); max-height: calc(100% - 8px); }
   body[data-landscape-dock="right"] .tool-options { top: 4px; left: auto !important; right: calc(100% + 4px); max-width: calc(100vw - 120px); max-height: calc(100% - 8px); }
 }
-/* Audio window: the transcript's heading takes the panel's own colour (it showed as a lighter box),
-   and the section arrows are real buttons, level with their range and the Follow switch. */
+/* Audio window: the transcript's heading takes the panel's own colour (it showed as a lighter box). */
 .audio-panel .transcript-panel > summary { position: static; background: transparent; }
 #transcriptNavigation { align-items: center; gap: 8px; margin-top: 6px; }
-#transcriptNavigation button { flex: none; width: 32px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius); background: var(--fill); font-size: 15px; line-height: 1; }
-#transcriptNavigation button:disabled { opacity: .4; }
 #transcriptNavigation #transcriptRange { flex: 1 1 auto; min-width: 0; text-align: center; white-space: nowrap; }
 #transcriptNavigation label { flex: none; margin-left: auto; white-space: nowrap; }
+/* Arrow buttons everywhere share the look of the folders' Back: a round icon on a light fill. */
+button.nav-arrow.icon-button { flex: none; width: 28px; min-height: 28px; height: 28px; padding: 0; border-radius: 99px; background: var(--fill); color: var(--ink); }
+button.nav-arrow.icon-button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+button.nav-arrow.icon-button:disabled { opacity: .4; }
+button.nav-arrow.icon-button[hidden] { display: none; }
+button.nav-arrow svg { width: 16px; height: 16px; }
+/* Transcript tools as icons beside the Transcribe button. */
+.transcript-controls > .icon-button { width: 30px; min-height: 30px; background: var(--fill); color: var(--ink); }
+.transcript-controls > .icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.transcript-controls > .icon-button:hover:not(:disabled) { color: var(--accent); }
+/* The audio window's right-hand icons sit as close as the left-hand ones. */
+.audio-transport > .spacer ~ * + * { margin-left: -2px; }
+/* What the AI does is set apart: a tinted group with an AI tag, in the quiz and in the dialogs. */
+.ai-tag { display: inline-block; padding: 0 5px; border-radius: 4px; background: var(--accent); color: var(--surface); font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 16px; }
+.quiz-actions .ai-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px 2px 6px; border-radius: 8px; background: var(--accent-soft); }
+.quiz-actions .ai-group button { background: transparent; color: var(--accent); }
+.quiz-actions .ai-group button:hover:not(:disabled) { background: var(--fill); }
+.quiz-actions .ai-group [hidden] { display: none; }
+.quiz-actions > button.icon-button { width: 28px; min-height: 28px; padding: 0; justify-content: center; }
+.ai-fieldset legend { display: inline-flex; align-items: center; gap: 6px; }

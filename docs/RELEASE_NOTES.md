@@ -1,4 +1,10 @@
-## What's new in 1.1.50
+## What's new in 1.1.51
+
+- **Arrow buttons look like the folders' Back.** The text arrows (transcript sections ← →, Find ↑ ↓ in notes and text documents, the web page's Back, Internet Archive's Back to repositories and Up) are round icon buttons on a light fill, with tooltips.
+- **Transcript tools are icons.** Edit, Revise with AI, Undo revision and Export sit beside Transcribe as icons (the names show on hover). The audio window's right-hand icons sit as close together as the left-hand ones.
+- **AI is set apart in quizzes and dialogs.** In a quiz, Explain (was Clarify), the saved Explanation and Double check form one tinted AI group, apart from Hint and Dispute; Export to Anki is an icon next to Next. In Generate flashcards, the AI tool and model sit in their own AI box.
+
+### In 1.1.50
 
 - **Voxtype transcripts keep time with the audio.** Voxtype returns text for each 30-second piece without word times, and the words were spread evenly over the whole piece, so the highlight ran ahead or behind wherever the speaker paused or a piece began or ended in silence. The silent stretches are now found with ffmpeg and the words are placed only on the spoken parts, by length. Transcripts made before need **Shift-click on Transcribe** to be made again with this timing.
 - **Audio window.** The transcript heading no longer shows as a lighter box, and the section arrows are proper buttons level with the range and the Follow audio switch.

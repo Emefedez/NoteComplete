@@ -363,8 +363,9 @@ export class TranscriptController {
   // stored with the cached transcript and reach Find and the AI context.
   toggleEdit() {
     this.editing = !this.editing;
-    $('transcriptEdit').setAttribute('aria-pressed', String(this.editing));
-    $('transcriptEdit').textContent = this.editing ? 'Done' : 'Edit';
+    $('transcriptEdit').setAttribute('aria-pressed', String(!!this.editing));
+    $('transcriptEdit').title = this.editing ? 'Done editing' : 'Edit: click a word to correct it';
+    $('transcriptEdit').setAttribute('aria-label', this.editing ? 'Done editing' : 'Edit');
     this.status(this.editing ? 'Click a word to correct it; Enter keeps it, Esc cancels, an empty word is removed.' : 'Corrections saved.');
     this.renderWindow();
   }

@@ -339,8 +339,8 @@
             <div class="drive-heading">
               <h4 id="archiveTitle" class="cloud-panel-title">Internet Archive</h4>
               <div class="drive-actions">
-                <button id="archiveBack" type="button" hidden>← Repositories</button>
-                <button id="archiveFolderUp" type="button" hidden>↑ Up</button>
+                <button id="archiveBack" type="button" class="icon-button nav-arrow" data-icon="back" aria-label="Back to repositories" title="Back to repositories" hidden></button>
+                <button id="archiveFolderUp" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Up one folder" title="Up one folder" hidden></button>
                 <button id="archiveAddBtn" type="button" class="bar-icon" title="Add an Internet Archive repository" aria-label="Add repository">+</button>
               </div>
             </div>
@@ -378,12 +378,12 @@
       <div class="side-body"><div id="htmlGroupSlot" class="group-slot"></div><iframe id="htmlFrame" title="HTML document"></iframe><div id="htmlEditor" class="doc-editor" hidden></div></div>
     </section>
     <section id="webView" hidden>
-      <div class="html-bar chrome"><button id="webSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="webDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="webTitle"></strong><span id="webAddress" class="muted"></span><button id="webBack" type="button" aria-label="Back" title="Back" disabled>←</button><button id="webReload" type="button" data-icon="restart" aria-label="Reload" title="Reload the page"></button><button id="webExternal" type="button" title="Open this page in your web browser">Browser</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="webZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="webZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="webZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="html-bar chrome"><button id="webSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="webDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: darken this page (D)" aria-pressed="false" data-icon="moon"></button><strong id="webTitle"></strong><span id="webAddress" class="muted"></span><button id="webBack" type="button" class="icon-button nav-arrow" data-icon="back" aria-label="Back" title="Back" disabled></button><button id="webReload" type="button" data-icon="restart" aria-label="Reload" title="Reload the page"></button><button id="webExternal" type="button" title="Open this page in your web browser">Browser</button><div class="zoom-controls" role="group" aria-label="Page zoom"><button id="webZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="webZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="webZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
       <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
     </section>
     <section id="textView" hidden>
       <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
-      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" aria-label="Previous match" title="Previous match (Shift Enter)" disabled>↑</button><button id="textFindNext" type="button" aria-label="Next match" title="Next match (Enter)" disabled>↓</button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
+      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button><button id="textFindNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">
@@ -741,20 +741,20 @@
             <div class="transcript-controls">
               <button id="transcribeAudio" type="button" class="primary" title="Shift-click to transcribe again instead of loading the saved transcript">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
-              <button id="transcriptEdit" type="button" aria-pressed="false" hidden title="Click a word to correct it">Edit</button>
-              <button id="transcriptRevise" type="button" hidden title="Let your AI tool correct misheard words and punctuation; every word keeps its time">Revise with AI</button>
-              <button id="transcriptRestore" type="button" hidden title="Bring back the automatic transcript from before the AI revision">Undo revision</button>
+              <button id="transcriptEdit" type="button" class="icon-button" data-icon="draw" aria-pressed="false" aria-label="Edit" hidden title="Edit: click a word to correct it"></button>
+              <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation; every word keeps its time"></button>
+              <button id="transcriptRestore" type="button" class="icon-button" data-icon="undo" aria-label="Undo revision" hidden title="Undo revision: bring back the automatic transcript from before the AI revision"></button>
               <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">Text</option><option value="srt">SRT subtitles</option><option value="vtt">WebVTT</option><option value="json">JSON (word times)</option></select>
-              <button id="downloadTranscript" type="button" hidden>Export</button>
+              <button id="downloadTranscript" type="button" class="icon-button" data-icon="export" aria-label="Export transcript" hidden title="Export the transcript in the chosen format"></button>
               <button id="hideTranscript" type="button" hidden>Hide</button>
             </div>
             <p id="transcriptStatus" role="status">Whisper downloads its model on first use. Audio stays on this device.</p>
             <progress id="transcriptProgress" max="100" hidden aria-label="Transcription progress"></progress>
             <div id="transcriptWords" aria-label="Transcript words"></div>
             <div id="transcriptNavigation" class="transcript-controls" hidden>
-              <button id="transcriptPrevious" type="button" aria-label="Previous transcript section">←</button>
+              <button id="transcriptPrevious" type="button" class="icon-button nav-arrow" data-icon="back" aria-label="Previous transcript section" title="Previous section"></button>
               <output id="transcriptRange"></output>
-              <button id="transcriptNext" type="button" aria-label="Next transcript section">→</button>
+              <button id="transcriptNext" type="button" class="icon-button nav-arrow" data-icon="forward" aria-label="Next transcript section" title="Next section"></button>
               <label><input id="transcriptFollow" type="checkbox" checked /> Follow audio</label>
             </div>
           </details>
@@ -774,7 +774,7 @@
               <div class="quiz-actions"><span class="spacer"></span><button id="quizCheckCancel" type="button">Cancel</button><button id="quizCheckSave" type="button" class="primary">Save as correct answer</button></div>
             </div>
             <div id="quizExplainBox"></div>
-            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizClarify" type="button" title="Ask AI to explain this question with your notes (C)">Clarify<kbd>C</kbd></button><button id="quizExplainedToggle" type="button" class="has-caret" aria-expanded="false" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><button id="quizCheck" type="button" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button><span class="spacer"></span><button id="quizAnki" type="button" title="Export this quiz to Anki: each question becomes a card">Export to Anki</button><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
+            <div class="quiz-actions"><button id="quizHintButton" type="button" title="Show where the notes answer it; a correct answer then scores 1 instead of 2 (H)">Hint<kbd>H</kbd></button><button id="quizWhere" type="button" title="Go to that part of the note" hidden></button><button id="quizDispute" type="button" title="The quiz is wrong: stop counting this question (press twice, X)" hidden>Dispute</button><span class="ai-group" role="group" aria-label="AI"><span class="ai-tag" aria-hidden="true">AI</span><button id="quizClarify" type="button" data-icon="spark" title="Ask AI to explain this question with your notes (C)">Explain<kbd>C</kbd></button><button id="quizExplainedToggle" type="button" class="has-caret" aria-expanded="false" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="quizCheck" type="button" data-icon="spark" title="Ask AI again and correct the answer yourself (V)" hidden>Double check<kbd>V</kbd></button></span><span class="spacer"></span><button id="quizAnki" type="button" class="icon-button" data-icon="cards" aria-label="Export this quiz to Anki" title="Export this quiz to Anki: each question becomes a card"></button><button id="quizRestart" type="button" hidden>Start again</button><button id="quizNextButton" type="button" class="primary" hidden>Next<kbd>Enter</kbd></button></div>
           </div>
         </aside>
         <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
@@ -793,8 +793,8 @@
           <div class="find-row">
             <input id="findInput" type="search" aria-label="Find in note" placeholder="Find in note: text, PDF, OCR, audio" autocomplete="off" />
             <span id="findCount" class="find-count" aria-live="polite"></span>
-            <button id="findPrev" type="button" aria-label="Previous match" title="Previous match (Shift Enter)" disabled>↑</button>
-            <button id="findNext" type="button" aria-label="Next match" title="Next match (Enter)" disabled>↓</button>
+            <button id="findPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button>
+            <button id="findNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button>
             <button id="findListToggle" type="button" aria-label="Show all matches" title="Show all matches">☰</button>
             <button id="findClose" type="button" aria-label="Close find" title="Close (Esc)">×</button>
           </div>
@@ -951,9 +951,11 @@
     <label><input type="radio" name="studyScope" value="range" /> <span id="studyScopeRange">Pages</span> <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
     <label><input type="radio" name="studyScope" value="all" /> <span id="studyScopeAll">Whole note</span></label></div>
   </fieldset>
+  <fieldset class="ocr-scope ai-fieldset"><legend><span class="ai-tag" aria-hidden="true">AI</span> Written by</legend>
   <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
   <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
   <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+  </fieldset>
   <div class="study-row">
     <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>1</option><option>2</option><option selected>4</option><option>6</option><option>8</option><option>10</option><option>15</option><option>20</option></select></label>
     <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>
@@ -985,7 +987,7 @@
     <details id="practiceExplained" class="practice-explained" hidden>
       <summary>Explanation <span id="practiceExplainedMeta" class="muted"></span></summary>
       <div id="practiceExplainedText" class="practice-ask-answer chat-body"></div>
-      <div id="practiceExplainedTools" class="quiz-actions"><button id="practiceExplainedChange" type="button">Edit</button><button id="practiceExplainedAsk" type="button">Continue with AI<kbd>C</kbd></button></div>
+      <div id="practiceExplainedTools" class="quiz-actions"><button id="practiceExplainedChange" type="button">Edit</button><button id="practiceExplainedAsk" type="button" data-icon="spark">Continue with AI<kbd>C</kbd></button></div>
       <div id="practiceExplainedEdit" class="practice-explained-edit" hidden>
         <textarea id="practiceExplainedArea" rows="3" aria-label="Explanation; you can correct it"></textarea>
         <div class="quiz-actions"><span class="spacer"></span><button id="practiceExplainedCancel" type="button">Cancel</button><button id="practiceExplainedSave" type="button" class="primary">Save</button></div>
