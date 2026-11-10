@@ -3,6 +3,7 @@
 // rewrites that entry. View → Scratchpad… shows them (Markdown and formulas), each with
 // Add to notes, Copy and Delete. Kept per note (`scratch:<fingerprint>`).
 import { renderMarkdown } from './rich-text.js';
+import { icon } from './icons.js';
 const $ = id => document.getElementById(id);
 
 // The button under an answer; `snapshot()` gives { id, title, messages } at click time.
@@ -41,16 +42,21 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
       head.className = 'scratch-head'; when.className = 'muted';
       title.textContent = entry.title; when.textContent = new Date(entry.at).toLocaleString();
       if (markdown) renderMarkdown(title, String(entry.title || '').replace(/\n+/g, ' '), markdown).catch(() => { title.textContent = entry.title; });
-      const button = (text, onclick, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = cls; b.onclick = onclick; return b; };
-      const remove = button('Delete', async () => {
-        if (remove.dataset.armed !== '1') { remove.dataset.armed = '1'; remove.textContent = 'Press again to delete'; return; }
+      // Icon buttons: the name is the hover text and the screen-reader label.
+      const button = (name, label, onclick, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.className = `icon-button ${cls}`.trim(); b.title = label; b.setAttribute('aria-label', label); b.append(icon(name)); b.onclick = onclick; return b; };
+      const remove = button('trash', 'Delete', async () => {
+        if (remove.dataset.armed !== '1') {
+          remove.dataset.armed = '1'; remove.title = 'Press again to delete'; remove.setAttribute('aria-label', 'Press again to delete');
+          remove.replaceChildren(icon('check'));
+          return;
+        }
         await store.set('settings', key(), (await read()).filter(e => e.id !== entry.id));
         render();
       }, 'scratch-delete');
       head.append(title, when, document.createElement('span'),
         // Text documents have no Markdown notes beside them.
-        ...(canNote() ? [button('Add to notes', async () => { await notes(`### ${entry.title}\n\n${entry.text}`); status('Added to the Markdown notes.'); })] : []),
-        button('Copy', () => navigator.clipboard.writeText(entry.text).then(() => status('Copied.'), () => status('The clipboard is not available here.', true))),
+        ...(canNote() ? [button('note', 'Add to notes', async () => { await notes(`### ${entry.title}\n\n${entry.text}`); status('Added to the Markdown notes.'); })] : []),
+        button('copy', 'Copy', () => navigator.clipboard.writeText(entry.text).then(() => status('Copied.'), () => status('The clipboard is not available here.', true))),
         remove);
       head.children[2].className = 'spacer';
       const body = document.createElement('div');

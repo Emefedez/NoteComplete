@@ -2203,8 +2203,10 @@ body.bar-compact .tab { height: 22px; }
 .scratch-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; }
 .scratch-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scratch-head .muted { flex: none; font-size: 11px; }
-.scratch-head button { min-height: 24px; padding: 0 8px; font-size: 12px; background: var(--fill); }
-.scratch-head .scratch-delete[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
+.scratch-head .icon-button { flex: none; width: 28px; min-height: 28px; padding: 0; background: transparent; }
+.scratch-head .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.scratch-head .icon-button:hover { background: var(--accent-soft); color: var(--accent); }
+.scratch-head .scratch-delete:hover, .scratch-head .scratch-delete[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
 .scratch-body { font-size: 13px; }
 .chat-actions .scratch-keep { width: auto; padding: 0 8px; font-size: 11px; }
 /* Dictation: the mic beside Ask lights up in the accent while listening. */
