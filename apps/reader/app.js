@@ -4292,15 +4292,27 @@ function recordingState() {
   if (r && !r.paused) clockTimer = setTimeout(recordingState, 500);
   $("removeAudio").hidden = !audio.selected?.added;
 }
+let startingRecording = false;
 async function startRecording() {
-  if (addedStore.recording) return;
+  if (addedStore.recording || startingRecording) return;
+  startingRecording = true;
+  // A browser asks for the microphone in its own prompt, and until it is answered nothing shows:
+  // say so, and what to do when no prompt appears (Safari on an iPad, a home screen app).
+  status("Waiting for the microphone: allow it when the browser asks.");
+  const slow = setTimeout(() => status("Still waiting for the microphone. If no question appeared, allow it for this site in the browser's settings (Safari: aA → Website Settings → Microphone), then try again.", true), 6000);
   try {
     await addedStore.start();
     audio.audio.pause();
     status("Recording. Stop keeps it in this note.");
   } catch (e) {
-    status(e.name === "NotAllowedError" ? "Microphone access was refused." : e.name === "NotFoundError" ? "No microphone found." : e.message, true);
-  }
+    const said = {
+      NotAllowedError: "The microphone is blocked for this site. Allow it in the browser's settings (Safari: aA → Website Settings → Microphone; a home screen app: Settings → Safari → Microphone), then try again.",
+      SecurityError: "The browser does not allow the microphone here: it needs a secure (https) page.",
+      NotFoundError: "No microphone found.",
+      NotReadableError: "The microphone is in use by another app.",
+    }[e.name];
+    status(said || `Could not record: ${e.message || e.name}`, true);
+  } finally { clearTimeout(slow); startingRecording = false; }
   recordingState();
 }
 async function stopRecording() {

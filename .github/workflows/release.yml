@@ -97,4 +97,6 @@ jobs:
             gh release create "$RELEASE_TAG" "${where[@]}" --draft --title "NoteComplete $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md --generate-notes
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          # Published as the latest release (not a pre-release): the site and the README link to
+          # releases/latest, which skips pre-releases and so stayed on the last one that was not.
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest

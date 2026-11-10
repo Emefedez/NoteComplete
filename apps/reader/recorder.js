@@ -58,9 +58,15 @@ export function addedAudio({ store, now = () => Date.now() }) {
   async function start() {
     if (recorder) return;
     if (!navigator.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) throw Error('This device cannot record audio here.');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+    // Raw audio is best for transcribing, but a browser that does not know those settings (Safari
+    // on an iPad has refused them) is asked again with none; a refusal by the user is final.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } })
+      .catch(error => (['NotAllowedError', 'SecurityError', 'NotFoundError'].includes(error.name) ? Promise.reject(error) : navigator.mediaDevices.getUserMedia({ audio: true })));
     const mime = recordingMime();
-    const media = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : {});
+    // The same for the recorder: a type or bit rate it rejects falls back to its own choice.
+    let media;
+    try { media = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : {}); }
+    catch { media = new MediaRecorder(stream); }
     const chunks = [], take = { fp: fingerprint, media, stream, started: now(), paused: 0, pausedAt: 0 };
     media.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     take.done = new Promise((resolve, reject) => {
