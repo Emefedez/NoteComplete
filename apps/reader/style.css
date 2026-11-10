@@ -1441,6 +1441,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .window-head { min-width: 0; overflow: hidden; }
 .window-head > :is(button, a, .icon-button) { flex: none; }
 .window-head > :is(select, input, h2, strong, span) { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-head > h2 { flex: 1 1 0; }
 .chat-head select { width: auto; max-width: 9.5em; }
 .chat-head > strong { flex: none; }
 .deck-head > input { flex: 1 1 4em; }

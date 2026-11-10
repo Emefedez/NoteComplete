@@ -1,4 +1,8 @@
-## What's new in 1.1.51
+## What's new in 1.1.52
+
+- **Fixed: the audio window's buttons now stay at the right edge.** Download, minimize, restore and close followed the title and left empty space beside them when the window was made wider; the title now takes the free room.
+
+### In 1.1.51
 
 - **Arrow buttons look like the folders' Back.** The text arrows (transcript sections ← →, Find ↑ ↓ in notes and text documents, the web page's Back, Internet Archive's Back to repositories and Up) are round icon buttons on a light fill, with tooltips.
 - **Transcript tools are icons.** Edit, Revise with AI, Undo revision and Export sit beside Transcribe as icons (the names show on hover). The audio window's right-hand icons sit as close together as the left-hand ones.
