@@ -6068,7 +6068,7 @@ async function importStudyFile(file) {
       const first = pack.quizzes[0];
       await quizzes.add(first);
       quizzes.open(first);
-      status(`Imported ${questions} questions into this note and started “${first.title}”. Later: Study → Resume quiz or Saved decks and quizzes.${skipped ? ` ${skipped} skipped${skippedNoAnswer ? `: ${skippedNoAnswer} have no recorded answer, ${skipped - skippedNoAnswer} are matching, blanks or have several correct answers` : ": not single-answer multiple choice"}.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`);
+      status(`Imported ${questions} questions into this note and started “${first.title}”. Later: Study → Resume quiz or Saved decks and quizzes.${skipped ? ` ${skipped} skipped${skippedNoAnswer ? `: ${skippedNoAnswer} have no recorded answer, ${skipped - skippedNoAnswer} are matching, blanks, numeric or short answer` : ": not multiple choice"}.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`);
       return;
     } else pack = readPack(text);
     const { merged } = await importPack(library.store, pack);

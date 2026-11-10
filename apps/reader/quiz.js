@@ -53,14 +53,24 @@ export function prepareQuestions(value, pages, random = Math.random) {
 
 // A question's accepted answer: the student's correction wins over the AI's.
 export const correctOf = q => q.correction?.answer ?? q.answer;
+// "Choose all that apply": a question with several right options (`answers`, kept with `answer` = the first).
+// The student's correction wins here too.
+export const correctSet = q => q.correction?.answers?.length ? q.correction.answers : q.correction?.answer !== undefined ? [q.correction.answer] : q.answers?.length > 1 ? q.answers : [q.answer];
+export const isMulti = q => q.multi === true || q.answers?.length > 1 || q.correction?.answers?.length > 1;
+// What the student chose for a question (one option, or several), and whether it is exactly the right set.
+export const chosenOf = a => Array.isArray(a?.choices) ? a.choices : [a?.choice];
+export const isRight = (q, a) => {
+  if (!q || !a) return false;
+  const got = [...chosenOf(a)].sort(), want = [...correctSet(q)].sort();
+  return got.length === want.length && got.every((v, i) => v === want[i]);
+};
 // A quiz as flashcards (Anki, like decks): the question with lettered options on
 // the front; the accepted answer, the student's correction note and a saved
 // explanation on the back. Disputed questions are left out.
 export function quizCards(quiz) {
   const letter = i => String.fromCharCode(65 + i);
   return quiz.questions.filter(q => !q.disputed).map(q => {
-    const right = correctOf(q);
-    const back = [`${letter(right)}. ${q.options[right]}`];
+    const back = correctSet(q).map(i => `${letter(i)}. ${q.options[i]}`);
     if (q.correction?.note) back.push(`Correction: ${q.correction.note}`);
     if (q.explanation?.text) back.push(q.explanation.text);
     return { front: [q.question, '', ...q.options.map((o, i) => `${letter(i)}. ${o}`)].join('\n'), back: back.join('\n\n'), page: q.source?.page };
@@ -73,7 +83,7 @@ export function barStates(quiz) {
     const a = quiz.answers?.[i];
     if (q.disputed) return 'disputed';
     if (!a) return '';
-    if (a.choice !== correctOf(q)) return 'wrong';
+    if (!isRight(q, a)) return 'wrong';
     return a.hinted ? 'hinted' : 'right';
   });
 }
@@ -86,7 +96,7 @@ export function score(quiz) {
     const a = quiz.answers?.[i];
     if (!a) return;
     answered++;
-    if (a.choice === correctOf(q)) points += a.hinted ? 1 : 2;
+    if (isRight(q, a)) points += a.hinted ? 1 : 2;
   });
   return { points, answered, max: counted * 2 };
 }
@@ -95,7 +105,7 @@ export function wrongQuestions(quizzes) {
   const seen = new Set();
   return quizzes.flatMap(quiz => quiz.questions.filter((q, i) => {
     const a = quiz.answers?.[i];
-    if (!a || q.disputed || a.choice === correctOf(q) || seen.has(q.question)) return false;
+    if (!a || q.disputed || isRight(q, a) || seen.has(q.question)) return false;
     seen.add(q.question);
     return true;
   })).map(q => ({ ...q }));
@@ -115,7 +125,7 @@ export function clarifyPrompt(q, { answered = null, history = [], question = '',
   const options = q.options.map((o, i) => `${i + 1}. ${o}`).join('\n');
   return [
     `A student taking a quiz on their own notes does not fully understand this question${answered ? ' and its answer' : ''}${withImage ? ' (the attached image is the part of the notes that answers it)' : ''}. Explain the idea it tests using the notes, clearly and briefly, in the question's language; a short example or steps help.${answered ? '' : ' Do not say which option is correct: they have not answered yet.'}`,
-    `Question: ${q.question}\nOptions:\n${options}${answered ? `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.` : ''}`,
+    `Question: ${q.question}\nOptions:\n${options}${answered ? (answered.corrects?.length > 1 ? `\nCorrect answers (choose all that apply): ${answered.corrects.map(i => i + 1).join(', ')}. The student chose ${answered.choices.map(i => i + 1).join(', ')}.` : `\nCorrect answer: ${answered.correct + 1}. The student chose ${answered.choice + 1}.`) : ''}`,
     talk && `Conversation so far:\n${talk}`,
     question && `Student: ${question}`,
   ].filter(Boolean).join('\n\n');
@@ -188,16 +198,31 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
       return img;
     });
     $('quizPanelQuestion').replaceChildren(renderAnswer(q.question), ...pictures);
-    $('quizPanelOptions').replaceChildren(...q.options.map((option, i) => {
+    const multi = isMulti(q), right = new Set(correctSet(q)), picks = new Set(answer ? chosenOf(answer) : quiz.picks?.[quiz.at] || []);
+    const buttons = q.options.map((option, i) => {
       const button = document.createElement('button');
       button.type = 'button';
       const key = document.createElement('kbd');
       key.textContent = String(i + 1);
       button.append(key, ' ', option);
-      if (answer) button.dataset.result = i === correctOf(q) ? 'right' : i === answer.choice ? 'wrong' : '';
-      button.onclick = () => choose(i);
+      if (multi) { button.dataset.multi = '1'; if (!answer && picks.has(i)) button.dataset.picked = '1'; button.setAttribute('aria-pressed', String(picks.has(i))); }
+      if (answer) button.dataset.result = right.has(i) ? (picks.has(i) ? 'right' : 'missed') : picks.has(i) ? 'wrong' : '';
+      button.onclick = () => multi ? toggle(i) : choose(i);
       return button;
-    }));
+    });
+    if (multi) {
+      const note = document.createElement('p');
+      note.className = 'quiz-multi-note';
+      note.textContent = answer ? (isRight(q, answer) ? 'All the right options chosen.' : 'Right options are in green; a dashed green one was missed.') : 'Choose all that apply, then check.';
+      buttons.unshift(note);
+      if (!answer) {
+        const submit = document.createElement('button');
+        submit.type = 'button'; submit.className = 'primary quiz-submit'; submit.textContent = 'Check answer'; submit.disabled = !picks.size;
+        submit.onclick = submitPicks;
+        buttons.push(submit);
+      }
+    }
+    $('quizPanelOptions').replaceChildren(...buttons);
     // The hint stays hidden until asked for, also after answering (then it costs nothing).
     $('quizHintButton').hidden = !q.source;
     $('quizClarify').hidden = false;
@@ -209,7 +234,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizDispute').textContent = q.disputed ? 'Disputed: not counted' : 'Dispute';
     $('quizDispute').dataset.armed = '';
     $('quizCorrection').hidden = !q.correction?.note && q.correction?.answer === undefined;
-    $('quizCorrection').textContent = q.correction ? `Your correction: option ${q.correction.answer + 1}${q.correction.note ? ` · ${q.correction.note}` : ''}` : '';
+    $('quizCorrection').textContent = q.correction ? `Your correction: option${q.correction.answers?.length > 1 ? 's' : ''} ${(q.correction.answers?.length ? q.correction.answers : [q.correction.answer]).map(i => i + 1).join(', ')}${q.correction.note ? ` · ${q.correction.note}` : ''}` : '';
   }
   async function revealHint(counts = true) {
     const q = quiz.questions[quiz.at];
@@ -244,9 +269,29 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const q = quiz.questions[quiz.at];
     if (!q || quiz.answers[quiz.at]) return;
     quiz.answers[quiz.at] = { choice: i, hinted: !!quiz.hinted?.[quiz.at] };
-    if (i !== correctOf(q)) status('Not right. If you think the quiz is wrong: Dispute (X) or Double check (V).');
+    if (!isRight(q, quiz.answers[quiz.at])) status('Not right. If you think the quiz is wrong: Dispute (X) or Double check (V).');
     save();
     show();
+  }
+  // Choose all that apply: options toggle, then Check answer (Enter) scores the whole set.
+  function toggle(i) {
+    const q = quiz.questions[quiz.at];
+    if (!q || quiz.answers[quiz.at]) return;
+    quiz.picks ||= {};
+    const now = new Set(quiz.picks[quiz.at] || []);
+    now.has(i) ? now.delete(i) : now.add(i);
+    quiz.picks[quiz.at] = [...now].sort((a, b) => a - b);
+    show();
+  }
+  function submitPicks() {
+    const q = quiz.questions[quiz.at], picks = quiz.picks?.[quiz.at] || [];
+    if (!q || quiz.answers[quiz.at] || !picks.length) return false;
+    quiz.answers[quiz.at] = { choices: picks, choice: picks[0], hinted: !!quiz.hinted?.[quiz.at] };
+    delete quiz.picks[quiz.at];
+    if (!isRight(q, quiz.answers[quiz.at])) status('Not right. If you think the quiz is wrong: Dispute (X) or Double check (V).');
+    save();
+    show();
+    return true;
   }
   function next() { if (quiz && quiz.answers[quiz.at]) { quiz.at++; save(); show(); } }
   function open(value) {
@@ -261,7 +306,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   $('quizNextButton').onclick = next;
   $('quizWhere').onclick = () => { const q = quiz.questions[quiz.at]; if (q?.source) { jump(q.source.page - 1, q.source.quote); highlight(q.source.page - 1, q.source.box); } };
   // Clarify in the quiz itself, like Ask AI on flashcards; the answer is kept with the question.
-  const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, correct: correctOf(q) } : null; };
+  const answerOf = q => { const i = quiz?.questions.indexOf(q) ?? -1, a = quiz?.answers[i]; return a ? { choice: a.choice, choices: chosenOf(a), correct: correctOf(q), corrects: correctSet(q) } : null; };
   const dataUrlImage = async (url, label) => ({ bytes: new Uint8Array(await (await fetch(url)).arrayBuffer()), type: 'image/jpeg', label });
   const explain = explainBox({
     ai, markdown, notePath, status, tag: 'quiz-clarify', label: 'question', keep, titleOf: q => `From the quiz: ${q.question}`, toggle: $('quizExplainedToggle'), growWindow: grow,
@@ -301,7 +346,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const url = hint || (q.source ? await capture(q.source).catch(() => null) : null);
     const answer = quiz.answers[quiz.at];
     clarify({
-      question: `I don't understand this quiz question${answer ? ' and its answer' : ''}. Explain the idea it tests, using my notes${q.source ? ` (page ${q.source.page}; the attached image is that region)` : ''}.\n\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answer ? `\nCorrect answer: ${q.answer + 1}. I chose ${answer.choice + 1}.` : ''}`,
+      question: `I don't understand this quiz question${answer ? ' and its answer' : ''}. Explain the idea it tests, using my notes${q.source ? ` (page ${q.source.page}; the attached image is that region)` : ''}.\n\nQuestion: ${q.question}\nOptions:\n${q.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}${answer ? `\n${correctSet(q).length > 1 ? `Correct answers (choose all that apply): ${correctSet(q).map(i => i + 1).join(', ')}. I chose ${answer.choices.map(i => i + 1).join(', ')}.` : `Correct answer: ${q.answer + 1}. I chose ${answer.choice + 1}.`}` : ''}`,
       image: url,
     });
   };
@@ -322,7 +367,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizCheckText').value = 'Asking your AI tool…';
     $('quizCheckOptions').replaceChildren(...q.options.map((option, i) => {
       const label = document.createElement('label'), radio = document.createElement('input');
-      radio.type = 'radio'; radio.name = 'quizCheckAnswer'; radio.value = String(i); radio.checked = i === correctOf(q);
+      radio.type = isMulti(q) ? 'checkbox' : 'radio'; radio.name = 'quizCheckAnswer'; radio.value = String(i); radio.checked = correctSet(q).includes(i);
       label.append(radio, ` ${i + 1}. ${option}`);
       return label;
     }));
@@ -338,8 +383,10 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   };
   $('quizCheckSave').onclick = async () => {
     const q = quiz.questions[quiz.at];
-    const picked = document.querySelector('input[name="quizCheckAnswer"]:checked');
-    q.correction = { answer: picked ? Number(picked.value) : correctOf(q), note: $('quizCheckText').value.trim().slice(0, 1200) };
+    const all = [...document.querySelectorAll('input[name="quizCheckAnswer"]:checked')].map(r => Number(r.value));
+    const picked = all[0];
+    q.correction = { answer: picked ?? correctOf(q), note: $('quizCheckText').value.trim().slice(0, 1200) };
+    if (isMulti(q) && all.length) q.correction.answers = all;
     await save();
     status('Correction saved with this note’s quizzes.');
     show();
@@ -371,12 +418,12 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     const k = event.key.toLowerCase();
     if (k === 'm') { $('quizPanel').classList.toggle('minimized'); return true; }
     if ($('quizPanel').classList.contains('minimized')) return false;
-    if (/^[1-9]$/.test(k) && Number(k) <= (quiz.questions[quiz.at]?.options.length || 0)) { choose(Number(k) - 1); return true; }
+    if (/^[1-9]$/.test(k) && Number(k) <= (quiz.questions[quiz.at]?.options.length || 0)) { isMulti(quiz.questions[quiz.at]) ? toggle(Number(k) - 1) : choose(Number(k) - 1); return true; }
     if (k === 'h') { revealHint(); return true; }
     if (k === 'c') { $('quizClarify').click(); return true; }
     if (k === 'x' && !$('quizDispute').hidden) { $('quizDispute').click(); return true; }
     if (k === 'v' && !$('quizCheck').hidden) { $('quizCheck').click(); return true; }
-    if (k === 'enter' || k === 'arrowright') { next(); return true; }
+    if (k === 'enter' || k === 'arrowright') { if (isMulti(quiz.questions[quiz.at]) && !quiz.answers[quiz.at] && k === 'enter') { submitPicks(); return true; } next(); return true; }
     if (k === 'escape') { if (explain.open) explain.close(); else $('quizPanel').classList.add('minimized'); return true; }
     return false;
   }

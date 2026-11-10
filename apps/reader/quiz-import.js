@@ -1,7 +1,7 @@
 // A quiz from the Markdown that Quiz Toolkit exports ("Save for NoteComplete"): one quiz per
 // "## N. Title" section, one question per "### Qn · kind — badge" heading, the stem in bold,
 // options as "- A. text" with ✅ on the right one, and ![](image) lines (data URLs) that become the
-// question's `images`. Only single-answer multiple choice (2–9 options) can be a quiz question;
+// question's `images`. Multiple choice (2–9 options, one or several ✅) can be a quiz question;
 // matching, blanks and the like are counted as skipped.
 import { PACK_FORMAT, PACK_VERSION } from './study-pack.js';
 
@@ -31,10 +31,11 @@ export function parseQuestion(block) {
   }
   const question = unbold(stem.join('\n').trim());
   if (!question) return { skip: 'type' };
-  // Options but no marked answer: nothing to grade with. No options (match, blanks, …) or several answers: not a quiz question.
+  // Options but no marked answer: nothing to grade with. No options (match, blanks, …) or no usable answer: not a quiz question.
   if (options.length >= 2 && options.length <= 9 && right.length === 0) return { skip: 'no answer' };
-  if (options.length < 2 || options.length > 9 || right.length !== 1) return { skip: 'type' };
+  if (options.length < 2 || options.length > 9 || !right.length) return { skip: 'type' };
   const out = { question, options, answer: right[0] };
+  if (right.length > 1) { out.answers = right; out.multi = true; }
   if (images.length) out.images = images;
   if (notes.join('').trim()) out.explanation = { text: notes.join('\n').trim() };
   return { question: out };

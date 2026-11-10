@@ -68,3 +68,11 @@ test('pictures kept as separate files are counted as left out', () => {
   assert.equal(r.missingImages, 1);
   assert.deepEqual(r.pack.quizzes[0].questions[0].images, ['data:image/png;base64,BBBB']);
 });
+
+test('a question with several marked answers becomes a choose-all question', () => {
+  const m = '## 1. Q\n\n### Q1 · multichoice — ✅ verified\n\n**¿Cuáles?**\n\n- A. ✅ **a**\n- B. b\n- C. ✅ **c**\n';
+  const q = quizzesFromMarkdown(m).quizzes[0].questions[0];
+  assert.deepEqual(q.answers, [0, 2]);
+  assert.equal(q.answer, 0);
+  assert.equal(q.multi, true);
+});

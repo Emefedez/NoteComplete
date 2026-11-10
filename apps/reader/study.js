@@ -4,7 +4,7 @@
 // and exported to Anki's text import.
 import { factCheckPrompt, cleanFindings, findingsMarkdown, referenceText } from './fact-check.js';
 import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages, canvasImage } from './ai-context.js';
-import { quizPrompt, prepareQuestions, quizCards, DEFAULT_QUIZ_PROMPT } from './quiz.js';
+import { quizPrompt, prepareQuestions, quizCards, isRight, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
@@ -847,7 +847,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     })));
     $('quizPicker').replaceChildren(...saved.map(q => {
       const answered = Object.keys(q.answers || {}).length;
-      const points = Object.entries(q.answers || {}).reduce((n, [i, a]) => n + (a.choice === q.questions[i]?.answer ? (a.hinted ? 1 : 2) : 0), 0);
+      const points = Object.entries(q.answers || {}).reduce((n, [i, a]) => n + (isRight(q.questions[i], a) ? (a.hinted ? 1 : 2) : 0), 0);
       return row({ kind: 'quiz', title: q.title, detail: `${answered}/${q.questions.length} answered · ${points} points`, run: () => quizzes.open(q), exportTo: () => exportQuiz(q), remove: () => quizzes.remove(q.id), restore: () => quizzes.restore(q) });
     }));
     if (!$('deckPickerDialog').open) $('deckPickerDialog').showModal();

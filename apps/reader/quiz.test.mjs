@@ -78,3 +78,22 @@ test('the progress bar shows right, right with the hint, wrong and disputed', ()
     answers: { 0: { choice: 0 }, 1: { choice: 1, hinted: true }, 2: { choice: 1 }, 3: { choice: 0 }, 4: { choice: 0 } } };
   assert.deepEqual(barStates(quiz), ['right', 'hinted', 'wrong', 'disputed', 'right', '']);
 });
+
+import { isMulti, isRight, correctSet } from './quiz.js';
+test('choose-all-that-apply: only the exact set is right, scored like any question', () => {
+  const q = { question: 'q', options: ['a', 'b', 'c', 'd'], answer: 0, answers: [0, 2], multi: true };
+  assert.ok(isMulti(q));
+  assert.deepEqual(correctSet(q), [0, 2]);
+  assert.ok(isRight(q, { choices: [2, 0] }));
+  assert.ok(!isRight(q, { choices: [0] }));
+  assert.ok(!isRight(q, { choices: [0, 1, 2] }));
+  const quiz = { questions: [q, { question: 's', options: ['a', 'b'], answer: 1 }], answers: { 0: { choices: [0, 2], choice: 0 }, 1: { choice: 1, hinted: true } } };
+  assert.deepEqual(score(quiz), { points: 3, answered: 2, max: 4 });
+  assert.deepEqual(barStates(quiz), ['right', 'hinted']);
+  assert.ok(isRight({ ...q, correction: { answer: 1, answers: [1, 3] } }, { choices: [1, 3] }));
+  assert.ok(!isMulti({ question: 's', options: ['a', 'b'], answer: 1 }));
+});
+test('a multi-answer question on the back of a card lists every right option', () => {
+  const [card] = quizCards({ questions: [{ question: 'q', options: ['a', 'b', 'c'], answer: 0, answers: [0, 2], multi: true }] });
+  assert.match(card.back, /A\. a\n\nC\. c/);
+});
