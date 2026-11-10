@@ -3107,3 +3107,11 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .quiz-actions .ai-group [hidden] { display: none; }
 .quiz-actions > button.icon-button { width: 28px; min-height: 28px; padding: 0; justify-content: center; }
 .ai-fieldset legend { display: inline-flex; align-items: center; gap: 6px; }
+/* Ask AI and the card practice's AI bar: icon buttons for the window, an AI tag before the tool
+   and model, and what is sent labelled and on its own row. */
+.chat-head > strong { display: inline-flex; align-items: center; gap: 6px; }
+.chat-head > strong svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chat-head > button.icon-button { width: 26px; min-height: 26px; padding: 0; flex: none; }
+.chat-context-label { font-weight: 600; color: var(--ink); }
+.practice-ask-bar { padding: 4px 6px; border-radius: var(--radius-box); background: var(--accent-soft); }
+.practice-ask-material { flex: 1 0 100%; margin-left: 0; align-items: center; }

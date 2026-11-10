@@ -778,8 +778,8 @@
           </div>
         </aside>
         <aside id="chatPanel" class="chat-panel side-panel" aria-label="Ask AI" hidden>
-          <div class="chat-head"><strong>Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><select id="chatModel" data-native aria-label="Model" title="Model"></select><button id="chatClear" type="button" title="New conversation">New</button><button id="chatClose" type="button" aria-label="Close">×</button></div><input id="chatModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
-          <div class="chat-context">
+          <div class="chat-head"><strong data-icon="spark">Ask AI</strong><select id="chatProvider" data-native aria-label="AI tool"></select><select id="chatModel" data-native aria-label="Model" title="Model"></select><button id="chatClear" type="button" class="icon-button" data-icon="plus" aria-label="New conversation" title="New conversation"></button><button id="chatClose" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div><input id="chatModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+          <div class="chat-context"><span class="chat-context-label">Send</span>
             <label><input id="chatPage" type="checkbox" checked /> <span id="chatPageLabel">This page</span></label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
             <label title="Your Markdown notes for this document" data-material="notes"><input id="chatNotes" type="checkbox" /> My notes</label>
@@ -995,10 +995,10 @@
     </details>
     <div id="practiceAskBox" class="practice-ask" hidden>
       <div class="practice-ask-bar">
-        <select id="practiceAskProvider" data-native aria-label="AI tool"></select>
+        <span class="ai-tag" aria-hidden="true">AI</span><select id="practiceAskProvider" data-native aria-label="AI tool"></select>
         <select id="practiceAskModel" data-native aria-label="Model"></select>
         <input id="practiceAskModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name" aria-label="Other model" hidden />
-        <span class="practice-ask-material" role="group" aria-label="Send with the question">
+        <span class="practice-ask-material" role="group" aria-label="Send with the question"><span class="chat-context-label">Send</span>
           <button id="practiceAskPage" type="button" class="chip" data-material="page" aria-pressed="true" title="The card's page as an image, with its text">Page</button>
           <button id="practiceAskPdf" type="button" class="chip" data-material="pdf" aria-pressed="false" title="The PDF this page comes from">Source PDF</button>
           <button id="practiceAskNotes" type="button" class="chip" data-material="notes" aria-pressed="false" title="Your Markdown notes for this document">Notes</button>
@@ -1008,7 +1008,7 @@
       <div id="practiceAskThread" class="practice-ask-thread" role="log" aria-live="polite" aria-label="AI explanation"></div>
       <form id="practiceAskForm" class="practice-ask-form"><input id="practiceAskInput" type="text" autocomplete="off" placeholder="Ask a follow-up (it continues in Ask AI)" aria-label="Follow-up question" /><button type="submit" class="icon-button" data-icon="enter" aria-label="Ask" title="Ask (Enter)"></button><button id="practiceAskStop" type="button" hidden>Stop</button><button id="practiceAskAgain" type="button" class="icon-button" data-icon="spark" aria-label="Ask again" title="Ask again: a new explanation that replaces the saved one"></button><button id="practiceAskClose" type="button" class="icon-button" aria-label="Close" title="Close">×</button></form>
     </div>
-    <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceAsk" type="button" title="Ask AI to explain this card with its page (C)" hidden>Ask AI<kbd>C</kbd></button><button id="practiceExplainedToggle" type="button" class="has-caret" aria-expanded="false" aria-controls="practiceExplained" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
+    <div class="ocr-actions practice-actions"><button id="practicePage" type="button" hidden></button><button id="practiceAsk" type="button" data-icon="spark" title="Ask AI to explain this card with its page (C)" hidden>Ask AI<kbd>C</kbd></button><button id="practiceExplainedToggle" type="button" class="has-caret" aria-expanded="false" aria-controls="practiceExplained" title="Show the saved explanation" hidden>Explanation<span class="caret"></span></button><button id="practiceEdit" type="button" title="Correct this card yourself (E)" hidden>Edit<kbd>E</kbd></button><button id="practiceCheck" type="button" title="Ask AI to check this card against its page, then correct it (V)" hidden>Double check<kbd>V</kbd></button><button id="practiceDiscard" type="button" title="The card is wrong or useless: remove it from the deck (press twice, X)" hidden>Discard</button><span class="spacer"></span><button id="practiceBackToList" type="button">Back to cards</button><button id="practiceReveal" type="button" class="primary">Show answer</button><button id="practiceAgain" type="button" hidden>Not yet</button><button id="practiceKnow" type="button" class="primary" hidden>I knew it</button></div>
   </div>
 </dialog>
 

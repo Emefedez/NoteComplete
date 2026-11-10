@@ -1,4 +1,8 @@
-## What's new in 1.1.52
+## What's new in 1.1.53
+
+- **Ask AI and the card practice's AI bar, tidied.** Ask AI's title has the AI spark, New conversation and Close are icons, and what is sent with the question (page, selection, notes) is labelled **Send**. In card practice, the AI tool and model sit in a tinted bar with an AI tag, and the material chips (Page, Source PDF, Notes, Whole note) are on their own row under **Send**; Ask AI has the spark.
+
+### In 1.1.52
 
 - **Fixed: the audio window's buttons now stay at the right edge.** Download, minimize, restore and close followed the title and left empty space beside them when the window was made wider; the title now takes the free room.
 
