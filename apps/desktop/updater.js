@@ -107,6 +107,8 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     skip: version => remember({ skip: version }),
     setCheckOnOpen: on => remember({ checkOnOpen: !!on }),
     settings: async () => ({ checkOnOpen: (await state()).checkOnOpen !== false, current: app.getVersion() }),
-    restart: () => { app.relaunch(appImage ? { execPath: appImage } : undefined); app.exit(0); },
+    // The old process still holds the single-instance lock while it exits: free it, or the
+    // relaunched app takes itself for a second copy and quits at once.
+    restart: () => { app.releaseSingleInstanceLock?.(); app.relaunch(appImage ? { execPath: appImage } : undefined); app.exit(0); },
   };
 }
