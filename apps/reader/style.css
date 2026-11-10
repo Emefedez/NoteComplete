@@ -3143,3 +3143,8 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 /* The + (or −) that opens a ring section's other choices: tinted, to read as a control. */
 .quick-menu .qm-item.qm-more { background-color: color-mix(in srgb, var(--accent) 24%, var(--menu)); color: var(--accent); }
 .quick-menu .qm-item.qm-more:hover { background-color: color-mix(in srgb, var(--accent) 38%, var(--menu)); }
+/* Phones: the tools sit in the middle of their bar (they filled it from one end), unless the bar
+   holds more than fits, when they scroll from the start. Not for the left and right docks. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 500px) {
+  body:not([data-landscape-dock="left"]):not([data-landscape-dock="right"]) .toolbar .segmented { justify-content: safe center; }
+}

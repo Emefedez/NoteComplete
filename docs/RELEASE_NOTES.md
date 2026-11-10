@@ -1,4 +1,9 @@
-## What's new in 1.1.58
+## What's new in 1.1.59
+
+- **The same + in every ring.** Colours show the first three, **Any colour** and the **+** in the Pen, Highlighter, Shapes, Tape and Text rings; the shape kinds start with Rectangle, Ellipse and Triangle; the Pen's modes with pressure and shapes from the pen. The **+** is always last, and what unfolds comes after what is already there, in the same places, so nothing jumps when it opens. The Pen's and Text's rings stay at the base size, the Highlighter's and Shapes' shrink (112 → 101 px of radius). Dragging colours into a new order no longer drops the ones folded behind the **+**.
+- **Tools centred in the compact tool bar on phones.** In a phone's tool bar the tools sit in the middle of their bar instead of from one end; if they do not all fit they still scroll from the start.
+
+### In 1.1.58
 
 - **New default pen widths: 2, 4, 7 and 11 px** (they were 1, 2, 4 and 8). 4 px is the width that looks right beside Noteful's, so it is the second one and the pen starts at it; the finest is a little thicker and the two above rise gently. Widths you set yourself are kept; a pen still on the old defaults moves to the new ones.
 

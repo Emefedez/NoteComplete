@@ -3175,13 +3175,26 @@ if (quickHidden["shape:bottom"]) quickHidden["shape:bottom"] = quickHidden["shap
 // A ring section shows a few items and keeps the rest behind a tinted +, which expands it in
 // place (and − folds it back): the rings stay small, and every choice is still there. The
 // chosen item always shows. Per section, by "<tool>:<section>".
-const QUICK_BASE = { "shape:bottom": ["rectangle", "ellipse", "triangle"], "draw:left": ["pressure", "shapeSnap"], "highlight:top": ["0", "1", "2", "custom"] };
+// The same rule in every ring: colours are the first three, Any colour and the +; the shape
+// kinds start with the three basic ones; the pen's modes with pressure and shapes from the pen.
+// The + is always last, and what unfolds comes after the items already shown, in the same
+// places, so nothing jumps when it opens. Measured with layoutSections: the pen's and tape's
+// rings stay at the base radius (94), the highlighter's and shapes' go from 112 to 101.
+const COLOUR_BASE = ["0", "1", "2", "custom"];
+const QUICK_BASE = {
+  "draw:top": COLOUR_BASE, "highlight:top": COLOUR_BASE, "shape:top": COLOUR_BASE, "tape:top": COLOUR_BASE, "text:top": COLOUR_BASE,
+  "shape:bottom": ["rectangle", "ellipse", "triangle"], "draw:left": ["pressure", "shapeSnap"],
+};
 const quickOpen = {};
 function withMore(section, entries) {
   const k = `${tool}:${section}`, base = QUICK_BASE[k];
   if (!base || entries.length <= base.length) return entries;
-  const open = !!quickOpen[k], list = open ? entries : entries.filter((e) => base.includes(String(e.key)) || e.active?.());
-  if (list.length === entries.length && !open) return entries;
+  const open = !!quickOpen[k];
+  // The basic items first, in their own order, then the rest in theirs (unless the user dragged
+  // this section into an order of their own).
+  const first = sectionOrder[tool]?.[section] || section === "top" ? entries : [...base.map((key) => entries.find((e) => String(e.key) === key)).filter(Boolean), ...entries.filter((e) => !base.includes(String(e.key)))];
+  const list = open ? first : first.filter((e) => base.includes(String(e.key)) || e.active?.());
+  if (list.length === entries.length && !open) return first;
   return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minimize" : "plus"), run: () => { quickOpen[k] = !open; }, stay: () => true }];
 }
 const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
@@ -3237,7 +3250,10 @@ const quick = quickMenu({
       widthPresets[tool] = order.map((k) => widthPresets[tool][Number(k.slice(1))]);
       saveWidths();
     } else if (section === "top" && palettes[tool]) {
-      palettes[tool] = order.map((i) => palettes[tool][Number(i)]).filter((c) => c != null);
+      // Colours folded behind the + are not in the dragged order: they keep their places after it.
+      const shownColours = order.filter((k) => /^\d+$/.test(k)).map(Number);
+      const folded = palettes[tool].map((_, i) => i).filter((i) => !shownColours.includes(i));
+      palettes[tool] = [...shownColours, ...folded].map((i) => palettes[tool][i]).filter((c) => c != null);
       remember("notecomplete-palettes", palettes);
     } else {
       (sectionOrder[tool] ||= {})[section] = order;
