@@ -1,4 +1,8 @@
-## What's new in 1.1.60
+## What's new in 1.1.61
+
+- **Shapes from the pen, **On lift**, made clearer and easier to trigger.** Holding the pen still now works in **On lift** as well (in that mode it did nothing, which made the setting look broken), so a stroke the lift test passes over can still be snapped by holding. The message after a lift says what happened (*Rectangle made from your stroke. Undo removes it*) instead of asking you to lift a pen that already has. The test on lift is a little less strict (tolerance 0.026 → 0.03, lines from 120 units instead of 150). Large, clean strokes only: a big O is still an ellipse. The choices say what they do: **Hold**, **On lift** (holding still works too) and **No shapes**.
+
+### In 1.1.60
 
 - **Fixed: File → Export no longer crowds its row.** With NFE added the four formats did not fit the menu's 250 px, so the row was squeezed against the label; the File menu is wider on computers (300 px), and the Export, Pages as and Study as chips share one size and end at the same edge.
 

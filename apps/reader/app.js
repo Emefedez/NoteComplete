@@ -2390,7 +2390,8 @@ $("shapeSnapMenu").onclick = () => {
 };
 // The timer restarts whenever the pen moves more than a few pixels.
 function watchHold(g, e) {
-  if (g.tool !== "draw" || shapeSnap() !== "hold") return;
+  // Holding still works in both modes: "On lift" adds shapes made as the pen lifts.
+  if (g.tool !== "draw" || shapeSnap() === "off") return;
   if (g.still && Math.hypot(e.clientX - g.still[0], e.clientY - g.still[1]) <= 4) return;
   g.still = [e.clientX, e.clientY];
   clearTimeout(g.holdTimer);
@@ -2402,14 +2403,15 @@ function watchHold(g, e) {
 }
 const SHAPE_NAMES = { line: "Line", arrow: "Arrow", rectangle: "Rectangle", ellipse: "Ellipse", triangle: "Triangle", star: "Star" };
 // The stroke on screen becomes the shape; moving on before lifting resizes it.
-function snapTo(g, shape) {
+function snapTo(g, shape, lifted = false) {
   const [x0, y0] = shape.start, [x1, y1] = shape.end;
   const square = ["rectangle", "ellipse"].includes(shape.kind) && Math.abs(Math.abs(x1 - x0) - Math.abs(y1 - y0)) < 1e-6;
   g.snapped = { ...shape, from: g.raw || g.points.at(-1), end0: shape.end };
   // A stylus stroke drawn meanwhile took its pressure's average width; the shape has the pen's.
   g.el.setAttribute("stroke-width", g.width);
   showSnapped(g);
-  status(`${square ? (shape.kind === "ellipse" ? "Circle" : "Square") : SHAPE_NAMES[shape.kind]}: lift to keep it, or move to resize it.`);
+  const name = square ? (shape.kind === "ellipse" ? "Circle" : "Square") : SHAPE_NAMES[shape.kind];
+  status(lifted ? `${name} made from your stroke. Undo removes it; Shapes from the pen is in the Pen's settings.` : `${name}: lift to keep it, or move to resize it.`);
 }
 // The far corner follows the pen, in the shape's own frame when it is turned.
 function resizeSnapped(g, at) {
@@ -2580,7 +2582,7 @@ function pointerUp(e) {
   // On lift (opt-in): a stroke that is clearly a shape becomes one.
   if (!g.snapped && g.tool === "draw" && shapeSnap() === "lift") {
     const shape = recognizeShape(g.points, { strict: true });
-    if (shape) snapTo(g, shape);
+    if (shape) snapTo(g, shape, true);
   }
   if (g.snapped) return commitSnapped(g);
   // The Shapes tool's Graph and Table: the box dragged is where the object goes, after its editor.
@@ -3140,7 +3142,7 @@ const widthEntries = (name) => widthPresets[name].map((value, i) => ({
 }));
 // Shapes from the pen (the tool bar's three choices) as one item: tapped, the next one.
 const SNAP_NEXT = { hold: "lift", lift: "off", off: "hold" };
-const SNAP_SAID = { hold: "Shapes from the pen: hold the pen still at the end of a stroke.", lift: "Shapes from the pen: clear shapes become shapes when the pen lifts.", off: "Shapes from the pen off: strokes stay as drawn." };
+const SNAP_SAID = { hold: "Shapes from the pen: hold the pen still at the end of a stroke.", lift: "Shapes from the pen: large, clean shapes become shapes as the pen lifts; holding still works too.", off: "Shapes from the pen off: strokes stay as drawn." };
 const snapEntry = {
   key: "shapeSnap",
   get label() { return `${document.querySelector(`.choice-row[data-for="shapeSnap"] button[data-value="${shapeSnap()}"]`)?.title || "Shapes from the pen"} (tap for the next)`; },

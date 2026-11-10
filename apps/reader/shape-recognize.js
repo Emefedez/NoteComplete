@@ -164,8 +164,8 @@ function levelled(rect) {
   return { deg, w, h };
 }
 
-// `strict` (shapes made on lift, without the pen held): only large, very clean shapes, and
-// no lines, so handwriting stays handwriting.
+// `strict` (shapes made on lift, without the pen held): only large, clean shapes, and only
+// long straight lines, so handwriting stays handwriting.
 export function recognizeShape(points, { strict = false } = {}) {
   const raw = points.filter((p, i) => i === 0 || dist(p, points[i - 1]) > 0.01);
   if (raw.length < 3) return null;
@@ -184,7 +184,7 @@ export function recognizeShape(points, { strict = false } = {}) {
   const chord = dist(first, last);
   const off = chord > 0 ? Math.max(...clean.map((p) => Math.abs((last[0] - first[0]) * (first[1] - p[1]) - (first[0] - p[0]) * (last[1] - first[1])) / chord)) : Infinity;
   if (off <= (strict ? 0.035 : 0.07) * chord && chord / pathLength(resample(clean, 16)) >= 0.9) {
-    if (strict && dist(first, last) < 150) return null;
+    if (strict && dist(first, last) < 120) return null;
     const angle = snapAngle(Math.atan2(last[1] - first[1], last[0] - first[0]) * DEG, 45, 6) / DEG, d = dist(first, last);
     return { kind: "line", start: first, end: [first[0] + d * Math.cos(angle), first[1] + d * Math.sin(angle)], rotation: 0 };
   }
@@ -235,7 +235,7 @@ export function recognizeShape(points, { strict = false } = {}) {
     { kind: "ellipse", err: misfit(r2, ellOutline) - (k <= 2 ? 0.006 : 0) },
     { kind: "triangle", err: tri ? tri.err - (k === 3 ? 0.006 : 0) : Infinity },
   ].sort((x, y) => x.err - y.err);
-  const best = fits[0], limit = strict ? 0.026 : 0.036;
+  const best = fits[0], limit = strict ? 0.03 : 0.036;
   if (!(best.err < limit)) return null;
   if (best.kind === "triangle") return triangleOf(tri.points);
   const fit = best.kind === "rectangle" ? box4 : ell;
