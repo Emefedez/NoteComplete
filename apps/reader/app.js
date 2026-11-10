@@ -6043,6 +6043,8 @@ $("studyShare").onclick = async () => {
   closeMenus();
   try { const { openStudyShare } = await (collabLoading ||= import("./collab.js")); await openStudyShare(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }
 };
+// The note on screen (the same one Study → All quizzes calls current).
+const quizIndexFp = () => (doc && !$("editor").hidden ? find.fingerprint : studyText() && textView.visible ? sideFp : "");
 // Study material (a .ncstudy file, or a quiz in the Markdown Quiz Toolkit exports) kept on this device.
 async function importStudyFile(file) {
   try {
@@ -6051,12 +6053,24 @@ async function importStudyFile(file) {
     const text = await file.text();
     let pack, skipped = 0;
     if (/\.(md|markdown)$/i.test(file.name)) {
+      // A quiz from Quiz Toolkit belongs to no note, so it is kept with the open one, where Study lists it.
+      const fp = quizIndexFp();
+      if (!fp) throw Error("Open a note first: imported quizzes are kept with the open note (Study → Resume quiz).");
       const { packFromMarkdown } = await import("./quiz-import.js");
-      ({ pack, skipped } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
+      let missingImages;
+      ({ pack, skipped, missingImages } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
       pack = readPack(pack);
+      const have = (await library.store.get("settings", `quizzes:${fp}`).catch(() => null)) || [];
+      await library.store.set("settings", `quizzes:${fp}`, [...pack.quizzes, ...have.filter((x) => !pack.quizzes.some((n) => n.id === x?.id))]);
+      const questions = pack.quizzes.reduce((n, z) => n + z.questions.length, 0);
+      const first = pack.quizzes[0];
+      await quizzes.add(first);
+      quizzes.open(first);
+      status(`Imported ${pack.quizzes.length} quiz${pack.quizzes.length === 1 ? "" : "zes"} (${questions} questions) into this note and started “${first.title}”. Later: Study → Resume quiz or Saved decks and quizzes.${skipped ? ` ${skipped} skipped: only single-answer multiple choice can be a quiz.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`);
+      return;
     } else pack = readPack(text);
     const { merged } = await importPack(library.store, pack);
-    status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}${skipped ? ` (${skipped} question${skipped === 1 ? "" : "s"} skipped: only single-answer multiple choice can be a quiz)` : ""}.`);
+    status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}.`);
   } catch (e) { status(e.message, true); }
 }
 $("studyPackFile").onchange = () => {

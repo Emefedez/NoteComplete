@@ -61,3 +61,10 @@ test('pack and empty input', () => {
   assert.equal(packFromMarkdown(md).pack.quizzes.length, 1);
   assert.throws(() => packFromMarkdown('# nothing'));
 });
+
+test('pictures kept as separate files are counted as left out', () => {
+  const m = md.replace('![](data:image/png;base64,AAAA)', '![](images/img-001.png)\n\n![](data:image/png;base64,BBBB)');
+  const r = packFromMarkdown(m);
+  assert.equal(r.missingImages, 1);
+  assert.deepEqual(r.pack.quizzes[0].questions[0].images, ['data:image/png;base64,BBBB']);
+});

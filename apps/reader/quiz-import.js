@@ -23,7 +23,7 @@ export function parseQuestion(block) {
       options.push(text);
       continue;
     }
-    for (const m of line.matchAll(IMAGE)) images.push(m[1]);
+    for (const m of line.matchAll(IMAGE)) if (/^(data:image\/|https?:)/.test(m[1])) images.push(m[1]);
     if (/^\s*!\[/.test(line)) continue;
     if (line.startsWith('>')) { notes.push(line.replace(/^>\s?/, '')); continue; }
     if (inStem && line.trim()) stem.push(line.replace(/\s{2}$/, ''));
@@ -57,5 +57,7 @@ export function quizzesFromMarkdown(md, { now = Date.now() } = {}) {
 export function packFromMarkdown(md, title = 'Imported quizzes') {
   const { quizzes, skipped } = quizzesFromMarkdown(md);
   if (!quizzes.length) throw Error('No multiple-choice questions with a marked answer were found in this Markdown.');
-  return { pack: { format: PACK_FORMAT, version: PACK_VERSION, title, created: Date.now(), quizzes }, skipped };
+  // Pictures saved as separate files (Quiz Toolkit's Save All .md) cannot come along: only inline ones do.
+  const missingImages = [...String(md).matchAll(/!\[[^\]]*\]\((?!data:|https?:)[^)]+\)/g)].length;
+  return { pack: { format: PACK_FORMAT, version: PACK_VERSION, title, created: Date.now(), quizzes }, skipped, missingImages };
 }
