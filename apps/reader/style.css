@@ -3081,3 +3081,11 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
   body[data-landscape-dock="left"] .tool-options { top: 4px; left: calc(100% + 4px) !important; right: auto; max-width: calc(100vw - 120px); max-height: calc(100% - 8px); }
   body[data-landscape-dock="right"] .tool-options { top: 4px; left: auto !important; right: calc(100% + 4px); max-width: calc(100vw - 120px); max-height: calc(100% - 8px); }
 }
+/* Audio window: the transcript's heading takes the panel's own colour (it showed as a lighter box),
+   and the section arrows are real buttons, level with their range and the Follow switch. */
+.audio-panel .transcript-panel > summary { position: static; background: transparent; }
+#transcriptNavigation { align-items: center; gap: 8px; margin-top: 6px; }
+#transcriptNavigation button { flex: none; width: 32px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius); background: var(--fill); font-size: 15px; line-height: 1; }
+#transcriptNavigation button:disabled { opacity: .4; }
+#transcriptNavigation #transcriptRange { flex: 1 1 auto; min-width: 0; text-align: center; white-space: nowrap; }
+#transcriptNavigation label { flex: none; margin-left: auto; white-space: nowrap; }

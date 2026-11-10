@@ -1,4 +1,9 @@
-## What's new in 1.1.49
+## What's new in 1.1.50
+
+- **Voxtype transcripts keep time with the audio.** Voxtype returns text for each 30-second piece without word times, and the words were spread evenly over the whole piece, so the highlight ran ahead or behind wherever the speaker paused or a piece began or ended in silence. The silent stretches are now found with ffmpeg and the words are placed only on the spoken parts, by length. Transcripts made before need **Shift-click on Transcribe** to be made again with this timing.
+- **Audio window.** The transcript heading no longer shows as a lighter box, and the section arrows are proper buttons level with the range and the Follow audio switch.
+
+### In 1.1.49
 
 - **Fixed: Restart after an update closed the app without reopening it.** The old window still held the app's single-instance lock, so the new one quit at once; the lock is now released first.
 - **Fixed: the filter bar's background.** It is drawn in the page's own colour, with a thin line below, and sits flush at the top of the scroll area.

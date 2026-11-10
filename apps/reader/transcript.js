@@ -77,7 +77,7 @@ export class TranscriptController {
     $('transcriptPrevious').onclick = () => this.browse(-1);
     $('transcriptNext').onclick = () => this.browse(1);
     $('transcriptFollow').onchange = () => this.update();
-    $('transcribeAudio').onclick = () => this.start();
+    $('transcribeAudio').onclick = event => this.start({ again: event?.shiftKey });
     $('cancelTranscript').onclick = () => this.cancel();
     $('transcriptRevise').onclick = () => this.revise();
     $('transcriptRestore').onclick = () => this.restore();
@@ -305,7 +305,8 @@ export class TranscriptController {
     return words;
   }
   // One transcription at a time, kept as a background job with a chip in the bar.
-  async start() {
+  // `again` (Shift-click) transcribes anew instead of loading the saved transcript.
+  async start({ again = false } = {}) {
     if (!this.asset || this.job) return;
     const asset = this.asset, backend = this.backend();
     const name = this.audio.label?.(this.audio.entries.find(e => e.asset?.id === asset.id)) || 'recording';
@@ -323,7 +324,7 @@ export class TranscriptController {
       if (!alive()) return;
       const { buffer, language, model, settings, key } = await this.key(asset, bytes);
       this.keys.set(asset.id, key);
-      const cached = key ? await storedTranscript(key).catch(() => null) : null;
+      const cached = key && !again ? await storedTranscript(key).catch(() => null) : null;
       if (!alive()) return;
       if (cached) return this.finish(cached, asset, job);
       let words;

@@ -33,3 +33,15 @@ test('a Voxtype piece with invalid UTF-8 is cut in two and retried; the language
   assert.match(readFileSync(log, 'utf8'), /--language es transcribe/);
   assert.equal(updates.at(-1)[3], 0);
 });
+
+import { voicedSpans, voicedSegments } from './transcriber.js';
+test('Voxtype words go to the voiced stretches of a piece, not across its pauses', () => {
+  const log = 'silence_start: 0\nsilence_end: 4.2 | silence_duration: 4.2\nsilence_start: 12.5\nsilence_end: 14 | silence_duration: 1.5\nsilence_start: 27.5\n';
+  const spans = voicedSpans(log, 30);
+  assert.deepEqual(spans, [{ start: 4.2, end: 12.5 }, { start: 14, end: 27.5 }]);
+  const segments = voicedSegments('uno dos tres cuatro cinco seis siete ocho nueve diez', spans, 60, 30);
+  assert.equal(segments.length, 2);
+  assert.ok(segments[0].start >= 64.2 && segments[1].end <= 87.5);
+  assert.equal(segments.map(s => s.text).join(' '), 'uno dos tres cuatro cinco seis siete ocho nueve diez');
+  assert.deepEqual(voicedSegments('hola', [], 0, 30), [{ start: 0, end: 30, text: 'hola' }]);
+});

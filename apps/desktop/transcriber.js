@@ -24,7 +24,7 @@ function terminateProcess(child, graceMs = 4000) {
   child.once('close', () => clearTimeout(timer));
 }
 
-function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill } = {}) {
+function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill, stderr = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { cwd, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
     kill?.(child);
@@ -37,7 +37,7 @@ function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill }
       clearTimeout(timer);
       if (signal) reject(Error('Transcription stopped.'));
       else if (code) reject(Error(`${path.basename(binary)} failed: ${(err || out).trim().split('\n').slice(-2).join(' ').slice(0, 300)}`));
-      else resolve(out);
+      else resolve(stderr ? err : out);
     });
     // A tool that exits without reading its input closes the pipe (EPIPE): 'close' reports it.
     child.stdin.on('error', () => {});
@@ -57,6 +57,49 @@ export function geminiSegments(response, offset) {
   const value = JSON.parse(json);
   return (value.segments || []).filter(s => typeof s?.text === 'string' && s.text.trim() && Number.isFinite(s.start))
     .map(s => ({ start: offset + s.start, end: offset + (Number.isFinite(s.end) ? s.end : s.start), text: s.text.trim() }));
+}
+
+// Voxtype gives text for a whole piece, not word times. Spreading the words over all 30 s
+// drifts whenever the speaker pauses or the piece starts or ends in silence, so the pauses
+// found by ffmpeg's silencedetect are left out and the words go to the voiced stretches.
+export function voicedSpans(log, length, { minPause = 0.4, minSpan = 0.2 } = {}) {
+  const silences = [];
+  let open = null;
+  for (const line of String(log).split('\n')) {
+    const start = /silence_start:\s*(-?[\d.]+)/.exec(line), end = /silence_end:\s*(-?[\d.]+)/.exec(line);
+    if (start) open = Math.max(0, Number(start[1]));
+    else if (end && open !== null) { silences.push([open, Math.min(length, Number(end[1]))]); open = null; }
+  }
+  if (open !== null) silences.push([open, length]);
+  const spans = [];
+  let at = 0;
+  for (const [from, to] of silences.filter(([a, b]) => b - a >= minPause).sort((a, b) => a[0] - b[0])) {
+    if (from - at >= minSpan) spans.push({ start: at, end: from });
+    at = Math.max(at, to);
+  }
+  if (length - at >= minSpan) spans.push({ start: at, end: length });
+  return spans;
+}
+// The piece's text shared out over its voiced spans by length of speech; segments in seconds
+// from the recording's start. No spans (silence, or detection failed): the whole piece.
+export function voicedSegments(text, spans, offset, length) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!spans.length || words.length < 2) {
+    if (spans.length === 1 || (spans.length && words.length)) return [{ start: offset + spans[0].start, end: offset + spans.at(-1).end, text }];
+    return [{ start: offset, end: offset + length, text }];
+  }
+  const total = spans.reduce((sum, x) => sum + x.end - x.start, 0), weight = words.reduce((sum, w) => sum + w.length + 1, 0);
+  const out = [];
+  let used = 0, index = 0, spoken = 0;
+  for (const [k, span] of spans.entries()) {
+    spoken += span.end - span.start;
+    const share = k === spans.length - 1 ? weight : (spoken / total) * weight, part = [];
+    while (index < words.length && (k === spans.length - 1 || used + words[index].length + 1 <= share + (words[index].length + 1) / 2)) {
+      part.push(words[index]); used += words[index++].length + 1;
+    }
+    if (part.length) out.push({ start: offset + span.start, end: offset + span.end, text: part.join(' ') });
+  }
+  return out;
 }
 
 export function transcriber({ tools }) {
@@ -91,7 +134,10 @@ export function transcriber({ tools }) {
       const voxPiece = async (file, offset, length, depth = 0) => {
         try {
           const text = voxtypeText(await run(binary, voxArgs(file), { cwd: dir, kill }));
-          return text ? [{ start: offset, end: offset + length, text }] : [];
+          if (!text) return [];
+          // Where the speech is inside the piece; any trouble finding out keeps the whole piece.
+          const log = await run(found.ffmpeg, ['-nostats', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.4', '-f', 'null', '-'], { cwd: dir, kill, stderr: true }).catch(() => '');
+          return voicedSegments(text, voicedSpans(log, length), offset, length);
         } catch (error) {
           if (!/Invalid UTF-8/i.test(error.message) || length < 4) { if (/stopped/.test(error.message)) throw error; skipped++; return []; }
           if (depth >= 2) { skipped++; return []; }
