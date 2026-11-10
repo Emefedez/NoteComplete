@@ -2,7 +2,7 @@
   "expo": {
     "name": "NoteComplete - a RE noteful viewer",
     "slug": "notecomplete",
-    "version": "1.1.59",
+    "version": "1.1.60",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "android": {

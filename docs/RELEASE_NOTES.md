@@ -1,4 +1,8 @@
-## What's new in 1.1.59
+## What's new in 1.1.60
+
+- **Fixed: File → Export no longer crowds its row.** With NFE added the four formats did not fit the menu's 250 px, so the row was squeezed against the label; the File menu is wider on computers (300 px), and the Export, Pages as and Study as chips share one size and end at the same edge.
+
+### In 1.1.59
 
 - **The same + in every ring.** Colours show the first three, **Any colour** and the **+** in the Pen, Highlighter, Shapes, Tape and Text rings; the shape kinds start with Rectangle, Ellipse and Triangle; the Pen's modes with pressure and shapes from the pen. The **+** is always last, and what unfolds comes after what is already there, in the same places, so nothing jumps when it opens. The Pen's and Text's rings stay at the base size, the Highlighter's and Shapes' shrink (112 → 101 px of radius). Dragging colours into a new order no longer drops the ones folded behind the **+**.
 - **Tools centred in the compact tool bar on phones.** In a phone's tool bar the tools sit in the middle of their bar instead of from one end; if they do not all fit they still scroll from the start.

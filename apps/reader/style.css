@@ -3148,3 +3148,10 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 @media (max-width: 700px), (orientation: landscape) and (max-height: 500px) {
   body:not([data-landscape-dock="left"]):not([data-landscape-dock="right"]) .toolbar .segmented { justify-content: safe center; }
 }
+/* File → Export has four formats now (NF, N+MD, NFE, NC): the menu is wide enough for the label,
+   the ? and all four, and the chips keep one size, so the rows end at the same edge. */
+@media (min-width: 701px) { #fileMenu .menu-content { width: 300px; } }
+.menu-content .menu-export button { min-width: 38px; padding: 0 7px; }
+.menu-content .menu-export > span { white-space: nowrap; }
+.bar-menu .menu-content .menu-export button:not(.format-help):not(.menu-icon) { min-width: 40px; padding: 0 7px; }
+.bar-menu .menu-content .menu-export { gap: 4px; }
