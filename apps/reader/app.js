@@ -6057,16 +6057,18 @@ async function importStudyFile(file) {
       const fp = quizIndexFp();
       if (!fp) throw Error("Open a note first: imported quizzes are kept with the open note (Study → Resume quiz).");
       const { packFromMarkdown } = await import("./quiz-import.js");
-      let missingImages;
-      ({ pack, skipped, missingImages } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
+      let missingImages, skippedNoAnswer;
+      ({ pack, skipped, skippedNoAnswer, missingImages } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
       pack = readPack(pack);
+      // One file is one battery: all its tests together as a single quiz, named after the file.
+      if (pack.quizzes.length > 1) pack.quizzes = [{ ...pack.quizzes[0], title: pack.title, questions: pack.quizzes.flatMap((z) => z.questions) }];
       const have = (await library.store.get("settings", `quizzes:${fp}`).catch(() => null)) || [];
       await library.store.set("settings", `quizzes:${fp}`, [...pack.quizzes, ...have.filter((x) => !pack.quizzes.some((n) => n.id === x?.id))]);
       const questions = pack.quizzes.reduce((n, z) => n + z.questions.length, 0);
       const first = pack.quizzes[0];
       await quizzes.add(first);
       quizzes.open(first);
-      status(`Imported ${pack.quizzes.length} quiz${pack.quizzes.length === 1 ? "" : "zes"} (${questions} questions) into this note and started “${first.title}”. Later: Study → Resume quiz or Saved decks and quizzes.${skipped ? ` ${skipped} skipped: only single-answer multiple choice can be a quiz.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`);
+      status(`Imported ${questions} questions into this note and started “${first.title}”. Later: Study → Resume quiz or Saved decks and quizzes.${skipped ? ` ${skipped} skipped${skippedNoAnswer ? `: ${skippedNoAnswer} have no recorded answer, ${skipped - skippedNoAnswer} are matching, blanks or have several correct answers` : ": not single-answer multiple choice"}.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`);
       return;
     } else pack = readPack(text);
     const { merged } = await importPack(library.store, pack);
