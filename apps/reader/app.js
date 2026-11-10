@@ -3197,7 +3197,7 @@ function withMore(section, entries) {
   const first = sectionOrder[tool]?.[section] || section === "top" ? entries : [...base.map((key) => entries.find((e) => String(e.key) === key)).filter(Boolean), ...entries.filter((e) => !base.includes(String(e.key)))];
   const list = open ? first : first.filter((e) => base.includes(String(e.key)) || e.active?.());
   if (list.length === entries.length && !open) return first;
-  return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minimize" : "plus"), run: () => { quickOpen[k] = !open; }, stay: () => true }];
+  return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minus" : "plus"), run: () => { quickOpen[k] = !open; }, stay: () => true }];
 }
 const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
 const hiddenIn = (section) => new Set((quickHidden[hiddenKey(section)] || []).map(String));
@@ -3845,11 +3845,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("open").onclick = $("emptyOpen").onclick = () => openLocal();
-$("file").onchange = (e) => {
-  if (e.target.files[0] && !busy() && canReplace()) {
+function openFileObject(file) {
+  if (file && !busy() && canReplace()) {
     notePath = noteEntryKey = "";
-    load(e.target.files[0]).then(() => setDocMember(null)).catch(() => {});
+    load(file).then(() => setDocMember(null)).catch(() => {});
   }
+}
+$("file").onchange = (e) => {
+  openFileObject(e.target.files[0]);
   e.target.value = "";
 };
 $("importImage").onclick = () => $("imageFile").click();
@@ -6040,23 +6043,56 @@ $("studyShare").onclick = async () => {
   closeMenus();
   try { const { openStudyShare } = await (collabLoading ||= import("./collab.js")); await openStudyShare(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }
 };
-$("studyPackFile").onchange = async () => {
-  const [file] = $("studyPackFile").files;
-  $("studyPackFile").value = "";
-  if (!file) return;
+// Study material (a .ncstudy file, or a quiz in the Markdown Quiz Toolkit exports) kept on this device.
+async function importStudyFile(file) {
   try {
     const { readPack, importPack, describePack } = await import("./study-pack.js");
     if (file.size > 24 * 1024 * 1024) throw Error("That file is too large to be study material.");
-    const pack = readPack(await file.text());
+    const text = await file.text();
+    let pack, skipped = 0;
+    if (/\.(md|markdown)$/i.test(file.name)) {
+      const { packFromMarkdown } = await import("./quiz-import.js");
+      ({ pack, skipped } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
+      pack = readPack(pack);
+    } else pack = readPack(text);
     const { merged } = await importPack(library.store, pack);
-    status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}.`);
+    status(`Imported ${describePack(pack)}${merged ? ` into “${pack.title}”` : `: kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” in Study → All quizzes and decks`}${skipped ? ` (${skipped} question${skipped === 1 ? "" : "s"} skipped: only single-answer multiple choice can be a quiz)` : ""}.`);
   } catch (e) { status(e.message, true); }
+}
+$("studyPackFile").onchange = () => {
+  const [file] = $("studyPackFile").files;
+  $("studyPackFile").value = "";
+  if (file) importStudyFile(file);
 };
+// File → Import…: whatever the file is, it goes where it belongs (import-route.js).
+$("importAny").onclick = () => { closeMenus(); $("importAnyFile").click(); };
+$("importAnyFile").onchange = async () => {
+  const [file] = $("importAnyFile").files;
+  $("importAnyFile").value = "";
+  if (!file) return;
+  const { classifyImport } = await import("./import-route.js");
+  const kind = await classifyImport(file);
+  if (kind === "study-pack" || kind === "quiz-markdown") return importStudyFile(file);
+  if (kind === "deck") {
+    // The deck importer lives with the flashcards: hand it the file as if chosen there.
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    $("deckFile").files = transfer.files;
+    return $("deckFile").onchange();
+  }
+  openFileObject(file);
+};
+// Export and share: one dialog; it closes after a choice, except the ones that open more choices.
+$("exportOpen").onclick = () => { closeMenus(); $("exportDialog").showModal(); };
+$("exportClose").onclick = () => $("exportDialog").close();
+$("exportDialog").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.id === "exportImage" || b.id === "exportClose" || b.hasAttribute("data-format-help")) return;
+  setTimeout(() => $("exportDialog").close(), 0);
+});
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");
 $("joinNotes").onclick = () => startCollab("join-notes");
-// Share in the bar: the desktop shares (or shows its session); elsewhere it offers the ways to join.
-$("shareButton").onclick = () => startCollab(window.notecompleteCollab ? "host" : "share-menu");
 // Opened from an invite (/join#… or /tablet#…, served by the host's computer).
 if (/^\/(join|tablet|send)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");

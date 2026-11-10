@@ -179,7 +179,15 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     $('quizRestart').hidden = true;
     $('quizCheckBox').hidden = true;
     const answer = quiz.answers[quiz.at];
-    $('quizPanelQuestion').replaceChildren(renderAnswer(q.question));
+    // Images that belong to the question itself (imported quizzes): part of the question, so showing them costs nothing.
+    const pictures = (q.images || []).filter(src => typeof src === 'string' && /^(data:image\/|https?:)/.test(src)).map(src => {
+      const img = document.createElement('img');
+      img.src = src; img.alt = 'Question image'; img.className = 'quiz-question-image'; img.tabIndex = 0; img.title = 'Show large';
+      img.onclick = () => showLarge(src, img.alt);
+      img.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); showLarge(src, img.alt); } };
+      return img;
+    });
+    $('quizPanelQuestion').replaceChildren(renderAnswer(q.question), ...pictures);
     $('quizPanelOptions').replaceChildren(...q.options.map((option, i) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -271,6 +279,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     prompt: (q, { history, question, withImage }) => clarifyPrompt(q, { answered: answerOf(q), history, question, withImage }),
     async context(q, want) {
       const out = { images: [], text: '', notes: [], savedFlags: { withAnswer: !!answerOf(q) } };
+      for (const src of q.images || []) if (/^data:image\//.test(src)) out.images.push(await dataUrlImage(src, 'question-image'));
       const page = q.source ? q.source.page - 1 : null;
       if (want.page && q.source) {
         const url = hint || await capture(q.source).catch(() => null);

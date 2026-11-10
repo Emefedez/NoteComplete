@@ -206,7 +206,7 @@ Study material, notes and recordings tied to the old copy's fingerprint are carr
 
 A phone or tablet joins a desktop NoteComplete as a drawing surface for the note open in the sharing tab.
 
-- **Pairing**: File → *Share and draw on a tablet…* shows a QR code (the tablet link, `http://<LAN address>:<port>/tablet#<session>.<token>`) and a 6-digit code with the address. The device scans the QR with its camera (opens the reader in its browser, served by the computer), or in NoteComplete (app or browser) uses File → *Join as drawing tablet…* and types the address and code.
+- **Pairing**: File → Export and share… → *Share live, or draw on a tablet…* shows a QR code (the tablet link, `http://<LAN address>:<port>/tablet#<session>.<token>`) and a 6-digit code with the address. The device scans the QR with its camera (opens the reader in its browser, served by the computer), or in NoteComplete (app or browser) uses File → *Join as drawing tablet…* and types the address and code.
   - The code lasts 10 minutes and is used up after 5 wrong tries (*New code* makes another). A device that paired with the code receives the tablet token and reconnects with it.
   - Removing a tablet replaces the tablet link and code, so it cannot come back with the old ones.
 - **On the device**: the note and a tool dock, nothing else. The dock: pen, highlighter, shapes (their kinds and fill while chosen), tape, text, eraser, move, five colours, three widths, pen pressure on/off, undo, redo, fit width, *new page*, *move the bar to the other side* (remembered), disconnect, and a status dot.

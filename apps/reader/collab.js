@@ -89,7 +89,7 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
   } });
   try { link.value = localStorage.getItem('notecomplete-collab-address') || ''; } catch { /* Optional. */ }
   const build = () => buildPack({ title: material.title, fingerprint: material.fingerprint, from: who.value.trim(), study: material.study, include: Object.fromEntries(KINDS.map(([kind]) => [kind, boxes[kind].input.checked])) });
-  const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with Study → Import study material', onclick: async () => {
+  const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with File → Import…', onclick: async () => {
     try { const pack = build(); await host.download(JSON.stringify(pack), `${material.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - study.ncstudy`, 'application/json'); state.textContent = `Saved: ${describePack(pack)}.`; } catch (e) { state.textContent = e.message; }
   } });
   const send = el('button', { type: 'button', className: 'primary', textContent: 'Send' });
@@ -267,7 +267,7 @@ function joinDialog(host, role) {
     buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), go));
   dialog(tablet ? 'Join as drawing tablet' : 'Join shared notes',
     el('p', { textContent: tablet
-      ? 'On the computer: File → Share and draw on a tablet. Scan its QR code with the camera, or enter the address and the 6-digit PIN it shows.'
+      ? 'On the computer: File → Export and share… → Share live, or draw on a tablet. Scan its QR code with the camera, or enter the address and the 6-digit PIN it shows.'
       : 'Paste the invite link the host gave you, or enter the address and the 6-digit PIN the computer shows (File → Share…).' }),
     form);
   (link.value ? code : link).focus();

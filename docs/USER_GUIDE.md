@@ -122,7 +122,7 @@ Misread words are corrected with word lists of the chosen languages (every langu
 
 ## Share notes and draw on a tablet
 
-In the desktop app, **Share** in the top bar (or **File → Share and draw on a tablet…**) starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
+In the desktop app, **File → Export and share… → Share live, or draw on a tablet…** starts sharing the note open in this tab with people and devices on the same network. Choose whether guests can edit the notes, only view them, or whether only drawing tablets join; **Start sharing** shows:
 
 - **Drawing tablet**: a QR code, the computer's address and a 6-digit code (valid 10 minutes; **New PIN** (the circular arrow) makes another).
 - **Notes invite**: a link (and its QR code) to send to people; the copy icon.
@@ -288,3 +288,5 @@ For local builds or GitHub Actions APK artifacts, follow [Installable builds](BU
 In Android Files, choose a supported file, select **Open with → NoteComplete**, then **Always** if offered. Android controls that choice; the application cannot silently make itself the default. A running app receives new file and share intents too. The app asks the provider for the file's display name and type, reads it using the provider's URI grant, queues it until the reader is ready, and passes it on under its real name; only a missing extension is filled in, from the MIME type or the file's bytes. Existing unsaved edits still require confirmation before replacement.
 
 Manifest generation and JavaScript bridge tests are validated. No Android SDK/device was available on the development host for APK compilation or an actual default-handler test. Physical-device validation is still required, particularly with opaque `content://` URIs and different file managers.
+
+**Import, export and share.** **File → Import…** is the one place to bring things in: pick any file and NoteComplete decides what it is: study material from another NoteComplete (.ncstudy), a quiz from Quiz Toolkit (Markdown, with its pictures: they show with the question and cost no points), a flashcard deck (JSON) or a note or document to open. **File → Export and share…** is the one place to send things out: pages as PDF, image or SVG; the note as a NoteComplete, project, Noteful or Noteful + Markdown file; flashcards and quizzes to Anki; and sharing with others (send or receive study material, share live, join someone's notes, use a device as a drawing tablet).

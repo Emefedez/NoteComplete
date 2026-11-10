@@ -29,6 +29,7 @@
           <button data-proxy="homeButton" data-icon="home">Home</button>
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <button id="openFolder" data-icon="folder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
+          <button id="importAny" data-icon="upload" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
           <button id="openLink" data-icon="link" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
           <button id="driveOpen" data-icon="cloud">Google Drive</button>
           <button id="addDocuments" data-icon="plus" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
@@ -39,31 +40,11 @@
           <button id="newWithAi" data-icon="spark" data-palette="New note with AI…" title="Your AI tool writes a note about a topic or from what you paste, as handwriting" hidden>New note with AI…</button>
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
           <hr />
-          <button id="shareSession" data-icon="share" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden>Share and draw on a tablet…</button>
-          <button id="joinTablet" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer">Join as drawing tablet…</button>
-          <button id="joinNotes" data-icon="enter" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)">Join shared notes…</button>
           <hr />
           <button id="save" data-icon="save" disabled><span class="menu-label">Save project</span><kbd>Ctrl S</kbd></button>
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
-          <div class="menu-export" role="group" aria-label="Export">
-            <span data-icon="export">Export <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></span>
-            <button id="native" disabled data-palette="Export Noteful (.noteful)" title="Export Noteful (.noteful): the note for Noteful, with your edits. Experimental.">NF</button>
-            <button id="nativeMarkdown" disabled data-palette="Export Noteful + Markdown" title="Export Noteful + Markdown: the .noteful file and the notes as a .md file, with page breaks marked.">N+MD</button>
-            <button id="exportProject" disabled data-palette="Export NoteComplete project (.nfedit)" title="Export the project (.nfedit): the note with its whole edit history, as Save project writes it.">NFE</button>
-            <button id="exportNotecomplete" disabled data-palette="Export NoteComplete (.notecomp)" title="Export NoteComplete (.notecomp): one file with the note, its notes and recordings, without the undo history (Save as a project keeps it).">NC</button>
-          </div>
-          <div class="menu-export" role="group" aria-label="Export pages as">
-            <span data-icon="image">Pages as</span>
-            <button id="svg" disabled data-palette="Export page as SVG" title="This page as SVG (vector)">SVG</button>
-            <button id="exportPdf" disabled data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)">PDF</button>
-            <button id="exportImage" disabled class="has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format">IMG<span class="caret"></span></button>
-          </div>
-          <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
-          <div class="menu-export" role="group" aria-label="Export study material as">
-            <span data-icon="cards">Study as</span>
-            <button id="exportStudy" disabled data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Anki</button>
-          </div>
+          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="PDF, images, Noteful and NoteComplete files, Anki, and sharing with other people and devices">Export and share…</button>
           <hr />
           <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
         </div>
@@ -170,8 +151,7 @@
           <hr />
           <button id="studyOpenDeck" data-icon="layers" disabled>Saved decks and quizzes…<kbd>Shift D</kbd></button>
           <button id="studyExportQuiz" data-icon="export" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
-          <button id="studyShare" data-icon="share" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)">Share study material…</button>
-          <input id="studyPackFile" type="file" accept=".ncstudy,.json,application/json" hidden />
+          <input id="studyPackFile" type="file" accept=".ncstudy,.json,.md,.markdown,application/json,text/markdown" hidden />
           <button id="studyAllQuizzes" data-icon="cards" title="Every quiz and flashcard deck on this device, with its document">All quizzes and decks…</button>
           <hr />
           <button id="chatOpen" data-icon="spark" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
@@ -195,6 +175,36 @@
           </div>
         </div>
       </details>
+          <input id="importAnyFile" type="file" hidden />
+      <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle">
+        <h2 id="exportTitle">Export and share</h2>
+        <section aria-labelledby="exportPages">
+          <h3 id="exportPages">Pages</h3>
+          <button id="exportPdf" disabled class="export-item" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
+          <button id="exportImage" disabled class="export-item has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
+          <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+          <button id="svg" disabled class="export-item" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
+        </section>
+        <section aria-labelledby="exportFiles">
+          <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
+          <button id="exportNotecomplete" disabled class="export-item" data-palette="Export NoteComplete (.notecomp)" title="One file with the note, its notes and recordings, without the undo history."><b>NoteComplete file</b><small>.notecomp · note, notes and recordings</small></button>
+          <button id="exportProject" disabled class="export-item" data-palette="Export NoteComplete project (.nfedit)" title="The note with its whole edit history, as Save project writes it."><b>Project with history</b><small>.nfedit · every edit, with undo</small></button>
+          <button id="native" disabled class="export-item" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits. Experimental."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
+          <button id="nativeMarkdown" disabled class="export-item" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
+        </section>
+        <section aria-labelledby="exportStudyHead">
+          <h3 id="exportStudyHead">Study</h3>
+          <button id="exportStudy" disabled class="export-item" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
+        </section>
+        <section aria-labelledby="exportShareHead">
+          <h3 id="exportShareHead">Share with others</h3>
+          <button id="studyShare" class="export-item" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
+          <button id="shareSession" class="export-item" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
+          <button id="joinNotes" class="export-item" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
+          <button id="joinTablet" class="export-item" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
+        </section>
+        <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
+      </dialog>
     </nav>
     <div class="brand">
       <p id="title">Home</p>
@@ -203,7 +213,7 @@
     </div>
     <div id="jobArea" class="job-area"></div>
     <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
-    <div id="collabSlot" class="collab-slot"><button id="shareButton" class="bar-share" type="button" data-icon="share" title="Share the notes or pair a drawing tablet; join someone's session" aria-haspopup="dialog"><span>Share</span></button></div>
+    <div id="collabSlot" class="collab-slot"></div>
     <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
     <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
     <div hidden>
@@ -1232,12 +1242,12 @@
       <tr><th>Noteful<br><span class="muted">.noteful</span></th><td>Pages, ink, PDFs, images and text, as Noteful stores them. No undo history; notes stay in NoteComplete.</td><td>Notes you also open in Noteful on the iPad.</td></tr>
     </tbody>
   </table>
-  <p><strong>Export</strong> (File menu) makes other files and never changes your note:</p>
+  <p><strong>File → Export and share…</strong> makes other files and never changes your note:</p>
   <ul>
-    <li><b>NF</b> a .noteful copy. No undo history.</li>
-    <li><b>N+MD</b> the .noteful and its notes as a .md file.</li>
-    <li><b>NC</b> one <b>.notecomp</b> file with the note, its Markdown notes, the text of the handwriting and added recordings, to send to someone. It is flattened: <b>no undo history</b>, shapes become outlines and locked ink is unlocked. Save as a project (.nfedit) to keep the history.</li>
-    <li>Pages as SVG, PDF or images · study decks for Anki.</li>
+    <li><b>Noteful file</b> a .noteful copy. No undo history.</li>
+    <li><b>Noteful + Markdown</b> the .noteful and its notes as a .md file.</li>
+    <li><b>NoteComplete file</b> one <b>.notecomp</b> file with the note, its Markdown notes, the text of the handwriting and added recordings, to send to someone. It is flattened: <b>no undo history</b>, shapes become outlines and locked ink is unlocked. Choose <b>Project with history</b> (.nfedit) to keep the history.</li>
+    <li>Pages as SVG, PDF or images · study decks for Anki · sending study material to another NoteComplete. <b>File → Import…</b> brings any of these back, and quizzes from Quiz Toolkit.</li>
   </ul>
   <p class="muted">NoteComplete opens .notecomp and .notepart files as well.</p>
   <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
