@@ -20,6 +20,20 @@ export { newId };
 export function conversationMarkdown(messages) {
   return messages.map(m => (m.role === 'user' ? `**${String(m.content).trim().replace(/\*\*/g, '').replace(/\n+/g, ' ')}**` : String(m.content).trim())).filter(Boolean).join('\n\n');
 }
+// A conversation back from its Markdown (entries kept before messages were stored): a paragraph
+// that is one bold line is a question, what follows it is the answer.
+export function parseConversation(text) {
+  const out = [];
+  for (const block of String(text || '').split(/\n{2,}/)) {
+    const q = /^\*\*([^\n]+)\*\*$/.exec(block.trim());
+    if (q) out.push({ role: 'user', content: q[1] });
+    else if (block.trim()) {
+      const last = out[out.length - 1];
+      if (last?.role === 'assistant') last.content += `\n\n${block.trim()}`; else out.push({ role: 'assistant', content: block.trim() });
+    }
+  }
+  return out;
+}
 // Same conversation: replace its entry (now up to the answer picked last); else add it on top.
 export function keepEntry(list, entry) {
   return [entry, ...list.filter(e => e.id !== entry.id)];
@@ -30,7 +44,7 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
   async function keep({ id, title, messages }) {
     if (!key()) return status('Open a note first.', true);
     const list = await read(), had = list.some(e => e.id === id);
-    await store.set('settings', key(), keepEntry(list, { id, title: String(title || 'Ask AI').slice(0, 160), text: conversationMarkdown(messages), at: Date.now() }));
+    await store.set('settings', key(), keepEntry(list, { id, title: String(title || 'Ask AI').slice(0, 160), text: conversationMarkdown(messages), messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: String(m.content) })), at: Date.now() }));
     status(had ? 'Scratchpad entry rewritten up to this answer.' : 'Kept in this note’s scratchpad (View → Scratchpad…).');
     if ($('scratchDialog').open) render();
   }
@@ -59,9 +73,21 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
         button('copy', 'Copy', () => navigator.clipboard.writeText(entry.text).then(() => status('Copied.'), () => status('The clipboard is not available here.', true))),
         remove);
       head.children[2].className = 'spacer';
-      const body = document.createElement('div');
-      body.className = 'chat-body scratch-body';
-      renderMarkdown(body, entry.text, markdown).catch(() => { body.textContent = entry.text; });
+      // Bubbles as in Ask AI: your questions on the right, the answers on the left.
+      const body = document.createElement('ul');
+      body.className = 'scratch-chat';
+      for (const m of Array.isArray(entry.messages) && entry.messages.length ? entry.messages : parseConversation(entry.text)) {
+        const bubble = document.createElement('li');
+        bubble.className = m.role === 'user' ? 'chat-user' : 'chat-assistant';
+        if (m.role === 'user') bubble.textContent = m.content;
+        else {
+          const inner = document.createElement('div');
+          inner.className = 'chat-body scratch-body';
+          bubble.append(inner);
+          renderMarkdown(inner, m.content, markdown).catch(() => { inner.textContent = m.content; });
+        }
+        body.append(bubble);
+      }
       item.append(head, body);
       return item;
     }));
