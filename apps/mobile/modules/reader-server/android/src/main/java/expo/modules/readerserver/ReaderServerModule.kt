@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.AssetManager
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Base64
 import android.webkit.MimeTypeMap
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -38,6 +39,17 @@ class ReaderServerModule : Module() {
       val mime = if (parsed.scheme == "content") context.contentResolver.getType(parsed)
         else MimeTypeMap.getSingleton().getMimeTypeFromExtension(MimeTypeMap.getFileExtensionFromUrl(uri))
       mapOf("name" to name, "mime" to mime)
+    }
+    // The bytes of a file another app handed over, as base64. Expo's file system rejects most
+    // providers' content:// URIs (WhatsApp, Gmail, Drive), so they are read through the
+    // ContentResolver, which honours the URI grant that came with the intent.
+    AsyncFunction("read") { uri: String ->
+      val context = requireNotNull(appContext.reactContext)
+      val parsed = Uri.parse(uri)
+      if (parsed.scheme != "content" && parsed.scheme != "file") throw IllegalArgumentException("Unsupported scheme: ${parsed.scheme}")
+      val bytes = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+        ?: throw java.io.FileNotFoundException("The other app did not provide the file.")
+      Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
     // Files shared to the app (Share → NoteComplete). Linking only reports VIEW intents, so
     // the launch intent's streams are read here once, and later shares arrive as events.

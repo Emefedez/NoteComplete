@@ -33,7 +33,7 @@ export default function App() {
  let uri, configError;
  try { uri = bundled ? localUri : readerURL(process.env.EXPO_PUBLIC_READER_URL, Constants.expoConfig?.hostUri, Constants.expoConfig?.extra?.readerPort); }
  catch (e) { configError = e.message; }
- if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message),describe:files?.describe?uri=>files.describe(uri):null});
+ if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>files?.read?files.read(uri):FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message),describe:files?.describe?uri=>files.describe(uri):null});
  useEffect(()=>{const subscription=Linking.addEventListener('url',event=>incoming.current.open(event.url));Linking.getInitialURL().then(url=>incoming.current.open(url)).catch(e=>setError(e.message));
   // Share → NoteComplete: the launch's files, then any shared while open.
   let shared;try{for(const u of files?.takeShared?.()||[])incoming.current.open(u);shared=files?.addListener?.('onShared',event=>{for(const u of event?.uris||[])incoming.current.open(u);});}catch(e){setNotice('Could not open the shared file: '+e.message);}
