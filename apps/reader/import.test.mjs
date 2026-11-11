@@ -35,3 +35,15 @@ test('an Office file shared from Android opens under its own name',async()=>{
  assert.deepEqual(opened,['Informe.docx']);
  delete globalThis.window;delete globalThis.document;
 });
+test('large native files are fetched from the app by their loopback path only',async()=>{
+ const listeners={},opened=[],fetched=[];
+ globalThis.window={ReactNativeWebView:{postMessage:()=>{}},addEventListener:(type,fn)=>listeners[type]=fn};
+ globalThis.document={addEventListener:()=>{}};
+ const realFetch=globalThis.fetch;globalThis.fetch=async url=>{fetched.push(url);return new Response(new Uint8Array([37,80,68,70,45]));};
+ receiveNativeFiles({open:async file=>opened.push({name:file.name,size:file.size}),canReplace:()=>true,isBusy:()=>false,status:()=>{}});
+ const token='0123456789abcdef0123456789abcdef';
+ await listeners.message({data:JSON.stringify({type:'noteful-import',id:1,name:'Apuntes.pdf',url:'/incoming/'+token})});
+ await listeners.message({data:JSON.stringify({type:'noteful-import',id:2,name:'x.pdf',url:'https://example.com/x.pdf'})});
+ assert.deepEqual(fetched,['/incoming/'+token]);assert.deepEqual(opened,[{name:'Apuntes.pdf',size:5}]);
+ globalThis.fetch=realFetch;delete globalThis.window;delete globalThis.document;
+});

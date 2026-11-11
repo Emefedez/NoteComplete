@@ -13,6 +13,16 @@ import {readerURL, exportRequest, allowsNavigation} from './connection.mjs';
 // The provider's file names and Share intents come from the app's own module (absent in Expo Go).
 const files = requireOptionalNativeModule('ReaderServer');
 
+// Another app's file is first streamed into the cache by the native module (Expo's file system
+// rejects most providers' content:// URIs). The bundled reader then fetches it from the
+// loopback server; a hosted reader still gets base64. Expo Go has no module and reads directly.
+async function readIncoming(uri, bundled) {
+ if(!files?.stage)return FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64});
+ const token=await files.stage(uri);
+ if(bundled)return {url:`/incoming/${token}`,token};
+ try{return await FileSystem.readAsStringAsync(`${FileSystem.cacheDirectory}incoming/${token}`,{encoding:FileSystem.EncodingType.Base64});}
+ finally{files.release(token);}
+}
 // The reader's updater (android-updates.js) needs this app's version to compare releases.
 const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '' })};true;`;
 export default function App() {
@@ -33,7 +43,7 @@ export default function App() {
  let uri, configError;
  try { uri = bundled ? localUri : readerURL(process.env.EXPO_PUBLIC_READER_URL, Constants.expoConfig?.hostUri, Constants.expoConfig?.extra?.readerPort); }
  catch (e) { configError = e.message; }
- if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>files?.read?files.read(uri):FileSystem.readAsStringAsync(uri,{encoding:FileSystem.EncodingType.Base64}),post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message),describe:files?.describe?uri=>files.describe(uri):null});
+ if(!incoming.current)incoming.current=new IncomingFiles({read:uri=>readIncoming(uri,bundled),release:file=>{if(file.data?.token)files?.release?.(file.data.token);},post:message=>web.current?.postMessage(JSON.stringify(message)),error:e=>setNotice('Could not open that file: '+e.message),describe:files?.describe?uri=>files.describe(uri):null});
  useEffect(()=>{const subscription=Linking.addEventListener('url',event=>incoming.current.open(event.url));Linking.getInitialURL().then(url=>incoming.current.open(url)).catch(e=>setError(e.message));
   // Share → NoteComplete: the launch's files, then any shared while open.
   let shared;try{for(const u of files?.takeShared?.()||[])incoming.current.open(u);shared=files?.addListener?.('onShared',event=>{for(const u of event?.uris||[])incoming.current.open(u);});}catch(e){setNotice('Could not open the shared file: '+e.message);}
