@@ -82,7 +82,7 @@ export function matches(note, filters) {
 export const SIZES = { small: ['Under 10 MB', 0, 10e6], medium: ['10–100 MB', 10e6, 100e6], large: ['Over 100 MB', 100e6, Infinity] };
 const inSize = (bytes, key) => Number.isFinite(Number(bytes)) && Number(bytes) >= SIZES[key][1] && Number(bytes) < SIZES[key][2];
 // Sorting: natural A–Z by default ("Tema 2" before "Tema 10").
-export const SORTS = { name: 'A–Z', opened: 'Last opened', favourites: 'Favourites first', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
+export const SORTS = { name: 'A – Z', opened: 'Last opened', favourites: 'Favourites first', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 export function compareNotes(sort = 'name') {
   return (a, b) => {

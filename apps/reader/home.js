@@ -9,6 +9,7 @@ import { entryTitle, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { icon } from './icons.js';
+const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
@@ -381,8 +382,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     ];
   }
   const TOGGLES = [
-    { id: 'favourites', label: '★ Favourites', title: 'Only notes you starred' },
-    { id: 'audio', label: '♪ With audio', title: 'Only notes with recordings' },
+    { id: 'favourites', label: 'Favourites', icon: 'star', title: 'Only notes you starred' },
+    { id: 'audio', label: 'With audio', icon: 'headphones', title: 'Only notes with recordings' },
   ];
   const isActive = () => filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
   function renderFilters() {
@@ -392,11 +393,11 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       b.type = 'button'; b.className = `chip filter-drop${picked.length ? ' has-value' : ''}`; b.dataset.category = c.id;
       b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', String(openCategory === c.id));
       const value = picked.length === 1 ? picked[0].label : picked.length ? String(picked.length) : '';
-      b.append(c.label, ...(value ? [Object.assign(document.createElement('span'), { className: 'filter-value', textContent: value })] : []), Object.assign(document.createElement('span'), { className: 'filter-caret', ariaHidden: 'true' }));
+      b.append(icon(CATEGORY_ICONS[c.id]), c.label, ...(value ? [Object.assign(document.createElement('span'), { className: 'filter-value', textContent: value })] : []), Object.assign(document.createElement('span'), { className: 'filter-caret', ariaHidden: 'true' }));
       b.onclick = () => (openCategory === c.id ? closeFilterMenu() : showFilterMenu(c.id));
       return b;
     });
-    for (const t of TOGGLES) nodes.push(chip(t.label, !!filters[t.id], () => { filters[t.id] = !filters[t.id]; changed(); }));
+    for (const t of TOGGLES) { const b = chip(t.label, !!filters[t.id], () => { filters[t.id] = !filters[t.id]; changed(); }); b.prepend(icon(t.icon)); nodes.push(b); }
     $('filterBar').replaceChildren(...nodes);
     for (const [i, t] of TOGGLES.entries()) nodes[nodes.length - TOGGLES.length + i].title = t.title;
     $('filtersClear').hidden = !isActive();

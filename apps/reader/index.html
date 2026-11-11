@@ -242,13 +242,13 @@
           <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive.</p>
         </div>
         <div class="home-actions">
-          <button id="homeBack" hidden>Back to document</button>
+          <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
           <button id="emptyOpen" class="primary" data-icon="open" title="Open a note, PDF, HTML page, text file or image (Ctrl O)" disabled>File</button>
           <button id="emptyOpenFolder" data-icon="folder" title="Open a folder: its notes and files as a group, listed beside the document" hidden>Folder</button>
         </div>
       </div>
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
-        <label class="filter-group sort-group"><span class="filter-label">Sort</span><select id="homeSort" data-native aria-label="Sort notes"></select></label>
+        <label class="filter-group sort-group" data-icon="sort" title="Sort notes"><select id="homeSort" data-native aria-label="Sort notes"></select><span class="filter-caret" aria-hidden="true"></span></label>
         <div class="home-view" role="radiogroup" aria-label="Show notes as"><button type="button" role="radio" data-home-view="cards" title="Cards with covers" aria-label="Cards with covers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button><button type="button" role="radio" data-home-view="list" title="Quick list: no covers, nothing read from the files" aria-label="Quick list without covers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
         <div id="filterBar" class="filter-bar" role="group" aria-label="Filters"></div>
         <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
@@ -382,9 +382,9 @@
       </section>
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
-        <button id="libraryChoose" type="button" hidden>Change folder…</button>
+        <button id="libraryChoose" type="button" data-icon="folder" hidden>Change folder…</button>
         <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · Text · Markdown · PNG · JPEG · WebP · Your documents stay on this device.</span>
-        <span id="homeVersion" class="home-version">v1.1.37</span>
+        <span id="homeVersion" class="home-version" hidden></span>
       </footer>
     </section>
     <section id="htmlView" hidden>

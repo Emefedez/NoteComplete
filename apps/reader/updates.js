@@ -56,7 +56,7 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
   bridge.settings().then(s => {
     $('updateOnOpen').setAttribute('aria-checked', String(s.checkOnOpen));
     $('updateVersion').textContent = `This is version ${s.current}`;
-    if ($('homeVersion') && s.current) $('homeVersion').textContent = `v${s.current}`;
+    if ($('homeVersion') && s.current) Object.assign($('homeVersion'), { textContent: `v${s.current}`, hidden: false });
   }).catch(() => {});
   // On open: shortly after start, so it never slows the first paint.
   setTimeout(() => check(false), 3000);
