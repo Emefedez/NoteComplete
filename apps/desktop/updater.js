@@ -4,6 +4,8 @@
 // .previous); elsewhere the release page opens.
 import { createHash } from 'node:crypto';
 import { chmod, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
+import { spawn as spawnProcess } from 'node:child_process';
+import { homedir } from 'node:os';
 
 export const REPOSITORY = 'Emefedez/NoteComplete';
 // Checks on open are skipped for an hour after one that found nothing (GitHub allows 60
@@ -50,7 +52,7 @@ export function parseSums(text) {
   return sums;
 }
 
-export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = process.env.APPIMAGE || '', platform = process.platform, arch = process.arch, now = () => Date.now() }) {
+export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = process.env.APPIMAGE || '', platform = process.platform, arch = process.arch, now = () => Date.now(), spawn = spawnProcess, pid = process.pid, env = process.env }) {
   let found = null;
   const state = async () => { try { return JSON.parse(await readFile(stateFile, 'utf8')); } catch { return {}; } };
   const remember = async patch => { await writeFile(stateFile, JSON.stringify({ ...(await state()), ...patch })).catch(() => {}); };
@@ -109,6 +111,19 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     settings: async () => ({ checkOnOpen: (await state()).checkOnOpen !== false, current: app.getVersion() }),
     // The old process still holds the single-instance lock while it exits: free it, or the
     // relaunched app takes itself for a second copy and quits at once.
-    restart: () => { app.releaseSingleInstanceLock?.(); app.relaunch(appImage ? { execPath: appImage } : undefined); app.exit(0); },
+    // An AppImage is not relaunched with app.relaunch: its helper runs from the AppImage's
+    // FUSE mount, which goes away with this process, so the helper died and the app just
+    // closed. A shell outside the mount waits for this process to end (10 s at most) and
+    // starts the new AppImage, without the old mount's variables.
+    restart: () => {
+      app.releaseSingleInstanceLock?.();
+      if (platform === 'linux' && appImage) {
+        const clean = { ...env };
+        for (const name of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete clean[name];
+        const wait = 'i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.2; i=$((i+1)); done; exec "$0"';
+        spawn('/bin/sh', ['-c', wait, appImage, String(pid)], { detached: true, stdio: 'ignore', env: clean, cwd: homedir() }).unref();
+      } else app.relaunch();
+      app.exit(0);
+    },
   };
 }

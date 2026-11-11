@@ -74,3 +74,24 @@ test('a release published soon after an empty check is found on the next open, a
   const found = await u.check();
   assert.deepEqual([found.version, found.install, asked], ['1.1.0', 'page', 2]);
 });
+
+test('an AppImage restarts through a shell outside its mount, after this process ends', () => {
+  const calls = [], spawned = [];
+  const app = { getVersion: () => '1.0.0', releaseSingleInstanceLock: () => calls.push('unlock'), relaunch: () => calls.push('relaunch'), exit: code => calls.push(`exit ${code}`) };
+  const spawn = (cmd, args, options) => { spawned.push({ cmd, args, options }); return { unref: () => calls.push('unref') }; };
+  const env = { APPDIR: '/tmp/.mount_x', APPIMAGE: '/a/N.AppImage', ARGV0: 'N', OWD: '/w', ELECTRON_OZONE_PLATFORM_HINT: 'auto' };
+  updater({ app, stateFile: '/nonexistent', appImage: '/a/N.AppImage', platform: 'linux', spawn, pid: 4242, env }).restart();
+  assert.deepEqual(calls, ['unlock', 'unref', 'exit 0']);
+  const [{ cmd, args, options }] = spawned;
+  assert.equal(cmd, '/bin/sh');
+  assert.deepEqual(args.slice(2), ['/a/N.AppImage', '4242']);
+  assert.equal(options.detached, true);
+  assert.deepEqual(options.env, { ELECTRON_OZONE_PLATFORM_HINT: 'auto' });
+});
+
+test('elsewhere the app restarts with app.relaunch', () => {
+  const calls = [];
+  const app = { getVersion: () => '1.0.0', relaunch: () => calls.push('relaunch'), exit: code => calls.push(`exit ${code}`) };
+  updater({ app, stateFile: '/nonexistent', appImage: '', platform: 'darwin', spawn: () => assert.fail('no shell') }).restart();
+  assert.deepEqual(calls, ['relaunch', 'exit 0']);
+});
