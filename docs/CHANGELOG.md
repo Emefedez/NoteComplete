@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.64
+
+- **Fixed: files from WhatsApp open on Android.** Opening a `.notecomplete` (or any note, PDF or image) that WhatsApp, Gmail or Drive hands over failed with *Unsupported scheme*; the app now reads those files through Android's own content provider, for both Open with and Share.
+
 ## 1.1.63
 
 - **Open with and Share, fixed.** On Linux the app now registers its file types and menu entry on launch, so `.noteful`, `.nfedit`, `.notecomp`, `.notecomplete` and `.notepart` open in NoteComplete by double-click.

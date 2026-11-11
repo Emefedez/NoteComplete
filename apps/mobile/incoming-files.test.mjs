@@ -58,3 +58,11 @@ test('app.json offers every supported type for VIEW and SEND, and own extensions
   assert.ok(octet.data.some(d=>d.scheme===scheme&&d.pathPattern===`.*\\.${ext}`),`${scheme} ${ext}`);
  for(const f of filters)assert.ok(f.category.includes('DEFAULT'));
 });
+test('large files go to the reader as a loopback path, and their copy is released once taken',async()=>{
+ const sent=[],released=[];
+ const queue=new IncomingFiles({read:async()=>({url:'/incoming/'+'a'.repeat(32),token:'a'.repeat(32)}),post:m=>sent.push(m),error:()=>{},release:f=>released.push(f.data.token)});
+ queue.open('content://com.whatsapp.provider.media/item/1');queue.setReady(true);await settle();
+ assert.equal(sent[0].url,'/incoming/'+'a'.repeat(32));assert.equal(sent[0].base64,undefined);
+ queue.setReady(false);queue.setReady(true);assert.equal(sent.length,2,'a reload is sent the same path');assert.deepEqual(released,[]);
+ queue.acknowledge(1);assert.deepEqual(released,['a'.repeat(32)]);
+});

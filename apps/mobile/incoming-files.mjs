@@ -51,23 +51,25 @@ export function incomingFile(uri) {
  return {uri, name: incomingName(uri)};
 }
 // describe(uri) (optional): the provider's {name, mime}, read before the bytes.
+// read(uri): the file as base64, or {url} where the reader fetches it (large files never cross
+// the bridge). release(file) (optional): the reader has it, or gave up; drop any copy.
 export class IncomingFiles {
- constructor({read,post,error,describe}) { Object.assign(this,{read,post,error,describe}); this.queue=[]; this.sequence=0; this.ready=false; this.busy=false; this.current=null; }
+ constructor({read,post,error,describe,release}) { Object.assign(this,{read,post,error,describe,release}); this.queue=[]; this.sequence=0; this.ready=false; this.busy=false; this.current=null; }
  open(uri) {
   const file=incomingFile(uri); if (!file || this.current?.uri===uri || this.queue.some(f=>f.uri===uri)) return;
   this.queue.push({...file,id:++this.sequence}); this.flush();
  }
- setReady(ready) { this.ready=ready; if (ready) { if(this.current?.base64) this.post(this.message()); else this.flush(); } }
- message() { const {id,name,base64}=this.current; return {type:'noteful-import',id,name,base64}; }
+ setReady(ready) { this.ready=ready; if (ready) { if(this.current?.data) this.post(this.message()); else this.flush(); } }
+ message() { const {id,name,data}=this.current; return {type:'noteful-import',id,name,...data}; }
  async flush() {
   if(!this.ready || this.busy || this.current || !this.queue.length) return;
   this.busy=true; this.current=this.queue.shift();
   try {
    if (this.describe) { try { this.current.name=incomingName(this.current.uri, await this.describe(this.current.uri) || {}); } catch { /* Keep the URI's name. */ } }
-   this.current.base64=await this.read(this.current.uri); if(this.ready)this.post(this.message());
+   const data=await this.read(this.current.uri); this.current.data=typeof data==='string'?{base64:data}:data; if(this.ready)this.post(this.message());
   }
   catch(error) { this.error(error); this.current=null; }
   finally { this.busy=false; if(!this.current)this.flush(); }
  }
- acknowledge(id) { if(this.current?.id!==id)return; this.current=null;this.flush(); }
+ acknowledge(id) { if(this.current?.id!==id)return; const done=this.current; this.current=null; try { this.release?.(done); } catch { /* A stale copy is cleared on the next launch. */ } this.flush(); }
 }
