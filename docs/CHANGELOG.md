@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.63
+
+- **Open with and Share, fixed.** On Linux the app now registers its file types and menu entry on launch, so `.noteful`, `.nfedit`, `.notecomp`, `.notecomplete` and `.notepart` open in NoteComplete by double-click.
+- **Android lists NoteComplete in Share and Open with** for the generic types WhatsApp and file managers attach to files (octet-stream, zip, gzip).
+- **`.tar` files open too**, since `.notecomplete` packages are tar archives: from the file picker, Open with, and Share.
+
 ## 1.1.62
 
 - **Releases are published as the latest release.** Since 1.1.43 they were published as pre-releases, and the links on the website and in the README (`releases/latest`) skip those, so they still led to 1.1.42. The apps' own update check already looked at pre-releases too, and keeps working.
