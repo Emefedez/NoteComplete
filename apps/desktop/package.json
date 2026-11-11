@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.1.62",
+  "version": "1.1.63",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -126,6 +126,14 @@
             "webp"
           ],
           "name": "WebP image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "tar"
+          ],
+          "name": "Tar archive (NoteComplete package)",
           "role": "Viewer",
           "rank": "Alternate"
         },
@@ -293,6 +301,7 @@
         "image/png",
         "image/jpeg",
         "image/webp",
+        "application/x-tar",
         "text/markdown",
         "text/plain",
         "text/html",

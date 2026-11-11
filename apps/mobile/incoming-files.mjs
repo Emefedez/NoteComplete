@@ -9,6 +9,7 @@ export const OPEN_TYPES = {
  'image/png':['png'],
  'image/jpeg':['jpg','jpeg'],
  'image/webp':['webp'],
+ 'application/x-tar':['tar'],
  'text/markdown':['md','markdown'],
  'text/x-markdown':['md'],
  'text/plain':['txt'],
@@ -23,7 +24,7 @@ export const OPEN_TYPES = {
 };
 // Generic types other apps (WhatsApp, mail, file managers) attach to files they cannot name:
 // declared for sharing and opening, but never used to guess a file name.
-export const CARRIER_TYPES = ['application/octet-stream','application/x-tar','application/zip','application/x-zip-compressed','application/gzip','application/x-gzip'];
+export const CARRIER_TYPES = ['application/octet-stream','application/zip','application/x-zip-compressed','application/gzip','application/x-gzip'];
 export const OWN_EXTENSIONS = ['noteful','nfedit','notecomp','notecomplete','notepart'];
 const SUPPORTED = new RegExp(`\\.(${[...new Set(Object.values(OPEN_TYPES).flat())].join('|')})$`,'i');
 

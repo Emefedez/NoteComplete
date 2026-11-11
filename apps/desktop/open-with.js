@@ -16,6 +16,7 @@ export const OTHER_TYPES = [
   { ext: ['png'], name: 'PNG image', mimeType: 'image/png' },
   { ext: ['jpg', 'jpeg'], name: 'JPEG image', mimeType: 'image/jpeg' },
   { ext: ['webp'], name: 'WebP image', mimeType: 'image/webp' },
+  { ext: ['tar'], name: 'Tar archive (NoteComplete package)', mimeType: 'application/x-tar' },
   { ext: ['md', 'markdown'], name: 'Markdown document', mimeType: 'text/markdown' },
   { ext: ['txt'], name: 'Plain text', mimeType: 'text/plain' },
   { ext: ['html', 'htm'], name: 'HTML page', mimeType: 'text/html' },

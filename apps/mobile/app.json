@@ -2,7 +2,7 @@
   "expo": {
     "name": "NoteComplete - a RE noteful viewer",
     "slug": "notecomplete",
-    "version": "1.1.62",
+    "version": "1.1.63",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "android": {
@@ -51,6 +51,9 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "application/x-tar"
+            },
+            {
               "mimeType": "text/markdown"
             },
             {
@@ -85,9 +88,6 @@
             },
             {
               "mimeType": "application/octet-stream"
-            },
-            {
-              "mimeType": "application/x-tar"
             },
             {
               "mimeType": "application/zip"
@@ -134,6 +134,9 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "application/x-tar"
+            },
+            {
               "mimeType": "text/markdown"
             },
             {
@@ -168,9 +171,6 @@
             },
             {
               "mimeType": "application/octet-stream"
-            },
-            {
-              "mimeType": "application/x-tar"
             },
             {
               "mimeType": "application/zip"
@@ -217,6 +217,9 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "application/x-tar"
+            },
+            {
               "mimeType": "text/markdown"
             },
             {
@@ -251,9 +254,6 @@
             },
             {
               "mimeType": "application/octet-stream"
-            },
-            {
-              "mimeType": "application/x-tar"
             },
             {
               "mimeType": "application/zip"

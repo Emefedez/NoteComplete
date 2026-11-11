@@ -94,7 +94,7 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             # From main the tag does not exist yet: it is created here, at the commit just built.
             if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null; then where=(--verify-tag); else where=(--target "$GITHUB_SHA"); fi
-            gh release create "$RELEASE_TAG" "${where[@]}" --draft --title "NoteComplete $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md --generate-notes
+            gh release create "$RELEASE_TAG" "${where[@]}" --draft --title "NoteComplete $RELEASE_TAG" --notes-file docs/RELEASE_NOTES.md
           fi
           gh release upload "$RELEASE_TAG" release-assets/* --clobber
           # Published as the latest release (not a pre-release): the site and the README link to
