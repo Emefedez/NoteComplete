@@ -82,6 +82,24 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "mimeType": "application/x-tar"
+            },
+            {
+              "mimeType": "application/zip"
+            },
+            {
+              "mimeType": "application/x-zip-compressed"
+            },
+            {
+              "mimeType": "application/gzip"
+            },
+            {
+              "mimeType": "application/x-gzip"
             }
           ]
         },
@@ -150,6 +168,21 @@
             },
             {
               "mimeType": "application/octet-stream"
+            },
+            {
+              "mimeType": "application/x-tar"
+            },
+            {
+              "mimeType": "application/zip"
+            },
+            {
+              "mimeType": "application/x-zip-compressed"
+            },
+            {
+              "mimeType": "application/gzip"
+            },
+            {
+              "mimeType": "application/x-gzip"
             }
           ]
         },
@@ -218,6 +251,21 @@
             },
             {
               "mimeType": "application/octet-stream"
+            },
+            {
+              "mimeType": "application/x-tar"
+            },
+            {
+              "mimeType": "application/zip"
+            },
+            {
+              "mimeType": "application/x-zip-compressed"
+            },
+            {
+              "mimeType": "application/gzip"
+            },
+            {
+              "mimeType": "application/x-gzip"
             }
           ]
         },

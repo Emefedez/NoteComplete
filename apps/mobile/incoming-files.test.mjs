@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {IncomingFiles,incomingFile,incomingName,OPEN_TYPES,OWN_EXTENSIONS} from './incoming-files.mjs';
+import {IncomingFiles,incomingFile,incomingName,OPEN_TYPES,OWN_EXTENSIONS,CARRIER_TYPES} from './incoming-files.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('file intents accept local grants and reject remote or malformed links',()=>{
  assert.deepEqual(incomingFile('content://downloads/42'),{uri:'content://downloads/42',name:'Imported file'});
@@ -51,8 +51,8 @@ test('app.json offers every supported type for VIEW and SEND, and own extensions
  const mimesOf=f=>f.data.map(d=>d.mimeType).filter(Boolean);
  const view=filters.find(f=>f.action==='VIEW'&&f.data.some(d=>d.mimeType==='application/pdf'));
  assert.deepEqual(view.data.filter(d=>d.scheme).map(d=>d.scheme),['content','file']);
- for(const action of ['SEND','SEND_MULTIPLE'])assert.deepEqual(mimesOf(filters.find(f=>f.action===action)),Object.keys(OPEN_TYPES));
- assert.deepEqual(mimesOf(view),Object.keys(OPEN_TYPES));
+ for(const action of ['SEND','SEND_MULTIPLE'])assert.deepEqual(mimesOf(filters.find(f=>f.action===action)),[...Object.keys(OPEN_TYPES),...CARRIER_TYPES]);
+ assert.deepEqual(mimesOf(view),[...Object.keys(OPEN_TYPES),...CARRIER_TYPES]);
  const octet=filters.find(f=>f.data.some(d=>d.mimeType==='application/octet-stream'&&d.pathPattern));
  for(const ext of OWN_EXTENSIONS)for(const scheme of ['content','file'])
   assert.ok(octet.data.some(d=>d.scheme===scheme&&d.pathPattern===`.*\\.${ext}`),`${scheme} ${ext}`);
