@@ -29,6 +29,7 @@
       "asset-path.js",
       "library-files.js",
       "open-with.js",
+      "linux-integration.js",
       "ai-runner.js",
       "transcriber.js",
       "tabs.js",

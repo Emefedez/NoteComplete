@@ -6,6 +6,7 @@ import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { libraryFiles } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
+import { integrateLinux } from './linux-integration.js';
 import { aiRunner } from './ai-runner.js';
 import { agentSetup, stableBinary } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
@@ -283,6 +284,7 @@ app.on('second-instance', (_event, argv, workingDirectory) => {
 });
 app.whenReady().then(async () => {
   if (!primary) return;
+  integrateLinux().catch(() => { /* Best effort: the app works without file associations. */ });
   try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
   // Two web permissions, for the reader itself only: writing text to the clipboard (Grab → Copy text)
   // and the microphone (Record in the audio panel); never the camera.

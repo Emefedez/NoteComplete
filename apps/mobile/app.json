@@ -147,6 +147,9 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "application/octet-stream"
             }
           ]
         },
@@ -212,6 +215,9 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "application/octet-stream"
             }
           ]
         },
