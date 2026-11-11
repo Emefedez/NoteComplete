@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.65
+
+- **Fixed: large files from WhatsApp open on Android.** 1.1.64 read a shared file whole into memory, so big ones (a long PDF, a note with audio) failed with *OutOfMemoryError*. The file is now copied to the app's cache a piece at a time and the reader loads it from there, whatever its size; the copy is deleted once the file is open.
+
 ## 1.1.64
 
 - **Fixed: files from WhatsApp open on Android.** Opening a `.notecomplete` (or any note, PDF or image) that WhatsApp, Gmail or Drive hands over failed with *Unsupported scheme*; the app now reads those files through Android's own content provider, for both Open with and Share.

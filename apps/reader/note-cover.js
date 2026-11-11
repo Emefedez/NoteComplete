@@ -73,6 +73,26 @@ export async function noteCover(read, size) {
   return mime ? { bytes: bytes.slice(), mime } : null;
 }
 
+// A .notecomp/.notepart file is a tar holding note.noteful: walk the 512-byte headers with
+// ranged reads to find that member, then read its cover in place. Null if not a tar or no note.
+export async function archiveCover(read, size) {
+  const text = bytes => new TextDecoder().decode(bytes).replace(/\0.*$/s, '');
+  for (let at = 0, members = 0; at + 512 <= size && members < 256; members++) {
+    const header = await read(at, at + 512);
+    if (header.length < 512 || header.every(b => b === 0)) return null;
+    if (text(header.subarray(257, 262)) !== 'ustar') return null;
+    const length = parseInt(text(header.subarray(124, 136)).trim() || '0', 8);
+    if (!Number.isFinite(length) || length < 0) return null;
+    const prefix = text(header.subarray(345, 500)), name = text(header.subarray(0, 100));
+    const path = prefix ? `${prefix}/${name}` : name, type = header[156];
+    const start = at + 512;
+    if ((type === 0 || type === 0x30) && /\.noteful$/i.test(path) && start + length <= size)
+      return noteCover((a, b) => read(start + a, start + b), length);
+    at = start + Math.ceil(length / 512) * 512;
+  }
+  return null;
+}
+
 // Local files read the same way through Blob.slice, without loading the archive.
 export function blobReader(blob) {
   return async (start, end) => new Uint8Array(await blob.slice(start, end).arrayBuffer());

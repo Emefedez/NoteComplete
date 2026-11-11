@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { noteCover, fields } from './note-cover.js';
+import { noteCover, archiveCover, fields } from './note-cover.js';
 
 const folder = new URL('../../samples/', import.meta.url);
 const samples = readdirSync(folder).filter(n => n.endsWith('.noteful'));
@@ -50,4 +50,33 @@ test('field walker reads strings, arrays, nested records and clocks', () => {
   const parsed = fields(record);
   assert.deepEqual(parsed.get(10), ['n:x']);
   assert.equal(parsed.get(3), 9);
+});
+
+// A minimal ustar member, as the core writes .notecomp/.notepart packages.
+function tarMember(name, data) {
+  const header = new Uint8Array(512), put = (s, at) => header.set(new TextEncoder().encode(s), at);
+  put(name, 0); put('0000644\0', 100); put(data.length.toString(8).padStart(11, '0') + '\0', 124);
+  put('0', 156); put('ustar\0', 257); put('00', 263);
+  put('        ', 148);
+  put(header.reduce((n, b) => n + b, 0).toString(8).padStart(6, '0') + '\0 ', 148);
+  const padded = new Uint8Array(Math.ceil(data.length / 512) * 512);
+  padded.set(data);
+  return [header, padded];
+}
+
+test('a .notecomp package shows the cover of the note inside it, read by ranges', async () => {
+  const note = new Uint8Array(readFileSync(new URL('Practice%20book%20(vol.%201).noteful', folder)));
+  const parts = [...tarMember('manifest.json', new TextEncoder().encode('{"format":"notecomplete"}')), ...tarMember('note.noteful', note), new Uint8Array(1024)];
+  const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  parts.reduce((at, p) => (bytes.set(p, at), at + p.length), 0);
+  const { calls, read } = ranged(bytes);
+  const cover = await archiveCover(read, bytes.length);
+  assert.equal(cover.mime, 'image/jpeg');
+  assert.deepEqual(cover, await noteCover(async (a, b) => note.slice(a, b), note.length));
+  assert.ok(calls.reduce((n, [a, b]) => n + b - a, 0) < note.length / 2);
+});
+
+test('files that are not tar packages have no archive cover', async () => {
+  const bytes = new Uint8Array(readFileSync(new URL('Practice%20book%20(vol.%201).noteful', folder)));
+  assert.equal(await archiveCover(async (a, b) => bytes.slice(a, b), bytes.length), null);
 });

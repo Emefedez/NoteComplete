@@ -1,6 +1,6 @@
 // Home screen: recent notes kept on this device, the Drive section and the
 // downloads-folder footer. The open document stays loaded while home is shown.
-import { noteCover, blobReader } from './note-cover.js';
+import { noteCover, archiveCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { openPdf } from './pdf-background.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
@@ -575,10 +575,10 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
         return;
       }
-      if (/\.noteful$/i.test(file.name)) {
-        const cover = await noteCover(blobReader(file), file.size);
-        if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
-      }
+      // Noteful notes, and NoteComplete's tar packages (.notecomp, .notepart, .tar) holding one.
+      const cover = /\.noteful$/i.test(file.name) ? await noteCover(blobReader(file), file.size)
+        : /\.(notecomp|notecomplete|notepart|tar)$/i.test(file.name) ? await archiveCover(blobReader(file), file.size) : null;
+      if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
     } catch { /* A missing cover only affects the Recent card. */ }
   }
   // Cards with covers, or a quick list that reads nothing from the files (remembered).
