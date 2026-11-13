@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 /target/
-/work/
+work/
 /apps/reader/node_modules/
 /apps/reader/pkg/
 /apps/reader/vendor/
