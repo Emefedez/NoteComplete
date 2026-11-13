@@ -8,9 +8,10 @@ Status (2026-11-01): **Phases 1–6, 8 and 9 implemented** in `crates/noteful-co
 `design_tools.rs`), `noteful convert` (with `--export pdf|png|svg`) and the reader (File → New
 from Markdown, Pages → Insert handwritten pages; WASM `compose_preview`, `create_handwritten`,
 `insert_handwritten`). The desktop app ships the server and registers it with the user's AI tools
-(Help → Connect AI tools). User-facing docs are in [MCP.md](MCP.md). Not done yet: the
-reader GUI work of Phase 7 (text box format bar, reflow handles,
-editing imported text, shape auto-fill).
+(Help → Connect AI tools). User-facing docs are in [MCP.md](MCP.md). Of Phase 7, the
+text box format bar (font, size, bold, italic, colour) and shape fill are built. Not done yet:
+editing imported text, reflow handles, alignment and decorations in the format bar, and native
+filled objects ([REQUESTS.md](REQUESTS.md), 1.1 and 1.2).
 
 Where the implementation differs from the plan below:
 
@@ -26,7 +27,7 @@ Where the implementation differs from the plan below:
 - Tape is native tape ink, not a washi PNG.
 - The bundled examples are translated to English.
 - `TextBox` gained `align`, `underline` and `strikethrough` (keys 8, 4, 5 in pool 8), written
-  only when set; the rich multi-run model and `Edit::RetextObject` are left for Phase 7.
+  only when set; the rich multi-run model and editing native text objects are not built.
 - New notebooks keep package version 1.0 (`create_document_with` takes the version).
 - Design copy (Phase 8) is pure Rust: the tracer implements Zhang-Suen thinning, a chamfer
   distance transform, grey closing, connected components, Douglas-Peucker and median-cut colour

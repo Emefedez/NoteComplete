@@ -6,64 +6,29 @@
 
 ## 1. Active Implementation Priorities
 
-### 1.1 Text Box Parity with Full GUI Implementation (`[ ]` In Progress)
+### 1.1 Text Box Parity (`[ ]` Partly built)
 - **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8](INK-WRITING.md).
-- **Core Engine & Wire Format:**
-  - Full reverse-engineered support for Noteful native Kind-2 objects in `set/5/0[]`.
-  - Attributed rich text (`payload tag 4`) encoding/decoding: run strings, attribute counts, delta keys, and pools 5–10 (family, bold/italic, color RGBA, underline/strikethrough/alignment, font size/line spacing).
-  - Rich text data model in `crates/noteful-core`: `TextBox` with `runs: Vec<TextRun>`, `alignment: u64`, `underline: bool`, `strikethrough: bool`, `wrap_width: Option<f64>`.
-  - In-place kind-2 object modification via `Edit::RetextObject` in `crates/noteful-core/src/export.rs`.
-- **Reader GUI & Canvas Overlay (`apps/reader/app.js` & `index.html`):**
-  - **Unblock Imported Text:** Remove the restriction blocking edits on imported `object:N` text boxes. Double-click or single-click with Text tool (`W`) enters inline editing.
-  - **Floating Format Bar (`#textFormatBar`):**
-    - Font Family picker (`Helvetica`, `Times New Roman`, `Courier New`, `Noteworthy`).
-    - Font Size stepper / dropdown (8 to 72 pt).
-    - Style buttons: Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough.
-    - Alignment group: Left, Center, Right (`align: 0, 1, 2`).
-    - Swatches + custom hex color picker for text color and optional box background fill.
-  - **Interactive Transform & Reflow Handles:**
-    - Corner handles (`nw`, `ne`, `se`, `sw`): Proportional geometric scaling.
-    - Top rotation handle (`rot`): Rotates text box.
-    - Horizontal side handles (`e`, `w`): Adjusts `wrap_width` with automatic soft line wrapping without changing font size.
-- **MCP Integration & Markdown Converter:**
-  - `write_on_page` supports item `"type": "textbox"` with full styling attributes.
-  - `page_layout` returns existing typed text boxes with bounds and text content.
-  - `compose_markdown` / `noteful convert` adds `--mode typed` to generate native typed text boxes instead of handwriting.
+- **Built:** `TextBox` keeps font, size, bold, italic, colour, `align`, `underline`, `strikethrough` and `math` (`crates/noteful-core/src/imports.rs`); text boxes made here are edited in place (`Edit::Retext`, `edit_text`); the format bar `#textFormat` has font, size, bold, italic, math, swatches and a custom colour, and can dock in the tool bar; `write_on_page` takes `"type": "textbox"` with those styles and `page_layout` returns text boxes with bounds and text (`crates/noteful-core/src/ink/annotate.rs`, `layout.rs`).
+- **Missing:**
+  - Editing text that came from Noteful: `openTextEditor` in `apps/reader/app.js` still answers "Text from Noteful cannot be edited here yet", and the core has no edit that rewrites a native kind-2 object.
+  - Several styles in one box: `TextBox` has one style; runs (`TextRun`) are only decoded.
+  - Underline, strikethrough, alignment and a box background in the format bar, and `Ctrl+B` / `Ctrl+I` / `Ctrl+U`.
+  - Side handles that change the wrap width: there is no `wrap_width` in the core and the editor does not wrap.
+  - `noteful convert --mode typed` (typed text boxes instead of handwriting).
 
-### 1.2 Shapes Auto-Fill Toggle (`[!]` Built 2026-11-01; native filled objects pending)
-- **Built:** `Shape.fill` (rectangle, ellipse, triangle), validated and kept on resize; Fill picker (outline / tint 25% / solid) in the shape settings and the tablet dock, **F** cycles it; live filled preview; projects keep it; `.noteful` export writes the inside as highlighter bands under the outline.
-- **Pending:** native Kind-3/Kind-6 filled objects for iPad parity (below) and a custom fill swatch.
-- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8.7](INK-WRITING.md).
-- **Reader GUI (`apps/reader/`):**
-  - Add `#shapeAutoFill` toggle button to `#shapeOptions` with pale accent highlight when active.
-  - Keyboard shortcut **F** toggles auto-fill when Shape tool (`R`) is active.
-  - Fill options dropdown: Tint (25% opacity matching stroke), Solid (100%), or custom swatch.
-  - Real-time 60fps canvas preview rendering both stroke and fill during interactive dragging.
-- **Core Data Model & Export Parity (`crates/noteful-core`):**
-  - `Shape` and `Line` structs extended with `fill: Option<[f64; 4]>`.
-  - Stored in `.nfedit` edit history and project state.
-  - Export parity with native Noteful Kind-3 (rounded rectangle) and Kind-6 (ellipse) objects where `payload["5"]["1"]["0"] = [r, g, b, a]`.
-  - Reopened in iPad Noteful as native filled shapes editable via Noteful's shape tool.
-
-### 1.4 Infinite Canvas (`[D]` First slice)
-- **Done:** File → New document → *Canvas*: one page that grows right and down (800-unit steps) when ink, pictures or text boxes come within 300 units of its edge. Each growth is its own undo step, under the stroke that caused it, and the page keeps its place on screen. Kept as a flag in projects (version 7) and `.notecomp`/`.notepart` (`"canvas": true` in the manifest). The flag survives sharing and tablets, because every copy grows the same way from the same edits.
-- **Never a `.noteful` file:** Noteful has no infinite page. The core refuses `export_noteful` for a canvas, so the app, the CLI and the MCP tools all refuse it. New document turns off Noteful for a canvas, and the NF and N+MD exports are off. A canvas takes no inserted pages.
-- **Pending:** growing to the left and up, an overview zoom, and a canvas from the MCP tools.
+### 1.2 Shapes Fill (`[!]` Built 2026-11-01; native filled objects pending)
+- **Built:** `Shape.fill` (rectangle, ellipse, triangle, star), validated and kept on resize; Fill picker `#shapeFill` (outline / tint 25% / solid) in the shape settings and the tablet dock, **F** cycles it; live filled preview; projects keep it; `.noteful` export writes the inside as highlighter bands under the outline.
+- **Pending:** export as native Kind-3/Kind-6 filled objects ([`docs/INK-WRITING.md` Section 8.7](INK-WRITING.md)) and a custom fill swatch.
 
 ### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; `design_mockup` not yet run with a real key)
 - **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
 - **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts, design copy (`design_mockup`, `mockup_grid`, `design_page` with tracing), `noteful convert` with `--export pdf|png|svg`, the in-app converter (File → New from Markdown, Pages → Insert handwritten pages), and Help → Connect AI tools (the server ships with the desktop app).
 - **Pending:** `design_mockup` with a real Gemini key.
-- **Core Engine:**
-  - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
-  - True 3-value per-point pressure encoding (`new_stroke` flags = 1).
-  - Under-ink highlight placement (`add_line_under`) that preserves existing handwriting.
-  - Greek letters, super/subscripts, mathematical symbols, and calligraphic hands.
-  - Study-note layout generator (titles, cards, multi-columns, sticky notes, SVG diagrams).
-- **MCP Tools:**
-  - `create_notebook`, `add_pages`, `clean_copy`, `write_on_page`, `page_layout`, `example_pages`.
-  - Safe export workflows (writes to copies by default; `.bak` for in-place edits).
-  - Multi-format export chaining (Markdown → `.noteful` → PDF / PNG / SVG).
+
+### 1.4 Infinite Canvas (`[D]` First slice)
+- **Done:** File → New document → *Canvas*: one page that grows right and down (800-unit steps) when ink, pictures or text boxes come within 300 units of its edge. Each growth is its own undo step, under the stroke that caused it, and the page keeps its place on screen. Kept as a flag in projects (version 7) and `.notecomp`/`.notepart` (`"canvas": true` in the manifest). The flag survives sharing and tablets, because every copy grows the same way from the same edits.
+- **Never a `.noteful` file:** Noteful has no infinite page. The core refuses `export_noteful` for a canvas, so the app, the CLI and the MCP tools all refuse it. New document turns off Noteful for a canvas, and the NF and N+MD exports are off. A canvas takes no inserted pages.
+- **Pending:** growing to the left and up, an overview zoom, and a canvas from the MCP tools.
 
 ---
 
@@ -82,12 +47,12 @@
 
 ## 3. Planned Future Roadmap (`[ ]`)
 
-- [ ] **Reorder Pages in Any Note:** Drag thumbnails in Pages panel, keyboard commands (*Move page up/down*), automatic reference renumbering (flashcards, quizzes, page markers, audio).
+- [ ] **Reorder Pages in Any Note:** Drag thumbnails in Pages panel, keyboard commands (*Move page up/down*), automatic reference renumbering (flashcards, quizzes, page markers, audio). Not started: the core has `InsertPages` and `ResizePage` but no edit that moves or removes a page.
 - [ ] **Collaborative Notes, remaining:** linked documents (download, changed copies, per-page merge, proposing versions) and resuming sessions ([COLLABORATION.md](COLLABORATION.md), Phases 1, 4–8).
 - [ ] **Document Format Tiers:** Three distinct formats (`.noteful` for iPad parity, `.notepart` for partial patches, `.notecomp` for complete bundles). Today `.notecomp` holds the note, notes, added recordings and the text of written handwriting ([layout](../spec/nfedit-v1.md#notecomp-archives)); `.notepart` is still written the same way; study material is not packed yet.
-- [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all).
-- [ ] **Library Sources:** Home switch for Recent · Google Drive · GitHub Repositories (with Git LFS support).
-- [ ] **Ask AI on HTML Pages:** Extract text and run study/quiz generation on opened HTML documents.
+- [ ] **Multi-Page Export Selector:** SVG, PDF, and image export with page range picker (single, range, list, or all). Today PDF is every page, image and SVG the current page (`apps/reader/page-export.js`).
+- [ ] **Library Sources:** GitHub Repositories (with Git LFS support) on Home. Recent, Google Drive and Internet Archive are there; GitHub is not started.
+- [ ] **Ask AI on HTML Pages:** Extract text and run study/quiz generation on opened HTML documents. Text and Markdown documents have it (`apps/reader/text-study.js`); HTML pages do not.
 
 ---
 

@@ -449,7 +449,7 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 ### Phase 6: per-page merge
 
-- [ ] Needs *Reorder pages* (`REQUESTS.md`, *Future: pages*) to be done first or alongside: it is how merged pages are put in order.
+- [ ] Needs *Reorder pages* (`REQUESTS.md`, section 3) to be done first or alongside: it is how merged pages are put in order.
 - [ ] Core: a document from chosen pages of two `.noteful` documents, resources brought along; Rust tests round-trip it through the native export.
 - [ ] Core: PDF page copying (`lopdf`); text line hunks (`similar`).
 - [ ] Keep the base version on binding (previous version in the library, or page hashes); three-way page and hunk diff (base → mine, base → shared) with conflicts only where both sides changed the same base page.
@@ -480,7 +480,7 @@ Each phase ends with something usable and tested. Tests follow the repo's style:
 
 - **Proposing versions back (Phase 7)**: either way is fine. It is a session option the host turns on (*Guests may propose versions*, off by default); otherwise only the host changes the shared version.
 - **Linked file sizes**: no limit. Downloads (and proposed uploads) are resumable instead.
-- **Keep both**: mine first. Any other order is set afterwards with *Reorder pages*, a general reader feature (`REQUESTS.md`, *Future: pages*).
+- **Keep both**: mine first. Any other order is set afterwards with *Reorder pages*, a general reader feature (`REQUESTS.md`, section 3).
 - **Guest names**: *Guest N* is filled in; joining shows a name field in the middle of the screen that can be typed over and confirmed with Enter or **OK** (the button stays). See *Guest experience*.
 - **Cursors for view-only guests**: yes, if it is not hard (it is not: same awareness channel). Names appear in the top bar beside the file name; clicking one scrolls to that person's cursor.
 - **Ending the session**: closing the host's app asks *Minimize* / *End session and close* / *Cancel*. Ending tells everyone to save first. See *Ending a session*.
