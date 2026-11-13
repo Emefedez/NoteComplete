@@ -27,6 +27,7 @@
     "files": [
       "main.js",
       "asset-path.js",
+      "archive-download.js",
       "library-files.js",
       "open-with.js",
       "linux-integration.js",

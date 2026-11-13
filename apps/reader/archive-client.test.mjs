@@ -33,3 +33,42 @@ test('downloads encode the path and the metadata call reports missing items', as
   // In a web page the file comes from /cors/, the path Internet Archive serves with CORS headers.
   assert.equal(seen.at(-1), 'https://archive.org/cors/id/A%20B/a.pdf');
 });
+
+test('on the desktop the download goes through the app and can be cancelled', async () => {
+  const calls = [];
+  let cancelled = 0, settle;
+  globalThis.notecompleteFiles = {
+    downloadUrl: (url, onProgress, onCancel) => {
+      calls.push(url);
+      onProgress(2, 0);
+      onCancel(() => { cancelled += 1; settle.reject(Error("Error invoking remote method 'files:download-url': AbortError: Download cancelled.")); });
+      return new Promise((resolve, reject) => { settle = { resolve, reject }; });
+    },
+  };
+  try {
+    const client = new ArchiveClient(async () => assert.fail('fetched in the page'));
+    const progress = [];
+    const done = client.download('id', { name: 'a.pdf', path: 'P/a.pdf', size: 9 }, new AbortController().signal, (received, total) => progress.push([received, total]));
+    settle.resolve(new Uint8Array([1, 2, 3]));
+    const file = await done;
+    assert.equal(file.name, 'a.pdf');
+    assert.equal(file.type, 'application/pdf');
+    assert.equal(file.size, 3);
+    assert.deepEqual(calls, ['https://archive.org/download/id/P/a.pdf']);
+    assert.deepEqual(progress, [[2, 9]]);
+
+    // Aborting tells the app to stop, and the caller sees an AbortError as with fetch.
+    const controller = new AbortController();
+    const pending = client.download('id', { name: 'b.noteful', path: 'b.noteful' }, controller.signal);
+    controller.abort();
+    await assert.rejects(pending, { name: 'AbortError' });
+    assert.equal(cancelled, 1);
+    // A signal that fired earlier starts nothing.
+    await assert.rejects(client.download('id', { name: 'c.pdf', path: 'c.pdf' }, controller.signal), { name: 'AbortError' });
+    assert.equal(calls.length, 2);
+    // Other failures pass through, and no signal at all still downloads.
+    const failing = client.download('id', { name: 'd.pdf', path: 'd.pdf' });
+    settle.reject(Error('Download answered 404'));
+    await assert.rejects(failing, /answered 404/);
+  } finally { delete globalThis.notecompleteFiles; }
+});

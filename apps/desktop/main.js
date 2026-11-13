@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCredentials, desktopSignIn } from './google-auth.js';
 import { assetPath } from './asset-path.js';
+import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
 import { integrateLinux } from './linux-integration.js';
@@ -372,28 +373,20 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
+  // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
+  // by the reader's cancel message or when its tab goes away (archive-download.js).
+  const downloads = downloadRegistry();
   ipcMain.handle('files:download-url', guarded(async (event, url, streamId) => {
-    const res = await net.fetch(url);
-    if (!res.ok) throw Error(`Download answered ${res.status}`);
-    const total = Number(res.headers.get('content-length')) || 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.length;
-      if (streamId) event.sender.send(`download:progress:${streamId}`, { received, total });
-    }
-    const combined = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return combined;
+    const tab = event.sender.id, id = typeof streamId === 'string' && /^[\w-]{1,60}$/.test(streamId) ? streamId : null;
+    const controller = id ? downloads.open(tab, id) : new AbortController();
+    try {
+      return await archiveDownload({
+        request: options => net.request(options), url, signal: controller.signal,
+        onProgress: (received, total) => { if (id && !event.sender.isDestroyed()) event.sender.send(`download:progress:${id}`, { received, total }); },
+      });
+    } finally { if (id) downloads.close(tab, id); }
   }));
+  ipcMain.on('files:download-cancel', (event, streamId) => { if (trusted(event) && typeof streamId === 'string') downloads.cancel(event.sender.id, streamId); });
   ipcMain.handle('files:pick', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, PDFs, HTML pages, text, Office files and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];
@@ -426,7 +419,7 @@ app.whenReady().then(async () => {
   const asr = transcriber({ tools: () => ai.tools() });
   // Closing a tab or window stops its AI requests and transcriptions: no child process
   // (claude, agy, codex, ffmpeg, voxtype) keeps running for a reader that is gone.
-  tabGone = id => { ai.cancel(id); asr.cancel(id); };
+  tabGone = id => { ai.cancel(id); asr.cancel(id); downloads.cancelTab(id); };
   ipcMain.handle('asr:backends', guarded(() => asr.backends()));
   ipcMain.handle('asr:run', guarded((event, request) => asr.run(event.sender.id, request, (done, total, segments, skipped) => {
     if (!event.sender.isDestroyed()) event.sender.send('asr:progress', { done, total, segments, skipped });

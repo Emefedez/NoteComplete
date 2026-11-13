@@ -47,10 +47,19 @@ export class ArchiveClient {
   async download(id, document, signal, onProgress = () => {}) {
     const url = archiveUrl(id, document.path);
     if (globalThis.notecompleteFiles?.downloadUrl) {
-      const bytes = await globalThis.notecompleteFiles.downloadUrl(url, (received, total) => {
-        onProgress(received, total || document.size || 0);
-      });
-      return new File([bytes], document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
+      // The desktop app downloads in its main process, which is told to stop when the
+      // signal fires; the failure is then reported as fetch would, as an AbortError.
+      const abortError = () => signal.reason instanceof Error ? signal.reason : new DOMException('The download was cancelled.', 'AbortError');
+      if (signal?.aborted) throw abortError();
+      let stop = null;
+      try {
+        const bytes = await globalThis.notecompleteFiles.downloadUrl(url, (received, total) => {
+          onProgress(received, total || document.size || 0);
+        }, cancel => { stop = () => cancel(); signal?.addEventListener('abort', stop, { once: true }); });
+        return new File([bytes], document.name, { type: /\.pdf$/i.test(document.name) ? 'application/pdf' : '' });
+      } catch (error) {
+        throw signal?.aborted ? abortError() : error;
+      } finally { if (stop) signal?.removeEventListener('abort', stop); }
     }
     const response = await this.fetcher(archiveCorsUrl(id, document.path), { signal });
     if (!response.ok) throw Error(`Internet Archive answered ${response.status}.`);

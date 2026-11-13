@@ -17,13 +17,17 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   saveCopy: (file, options) => ipcRenderer.invoke('files:save-copy', file, options),
   renameOpened: (file, name) => ipcRenderer.invoke('files:rename-opened', file, name),
   trashOpened: (file) => ipcRenderer.invoke('files:trash-opened', file),
-  downloadUrl: (url, onProgress) => {
+  // onCancel(cancel) hands the caller a function that stops the download. A function, not an
+  // AbortSignal: only functions and plain values cross from the page to this script.
+  downloadUrl: (url, onProgress, onCancel) => {
     const streamId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const listener = (_event, data) => onProgress?.(data.received, data.total);
     ipcRenderer.on(`download:progress:${streamId}`, listener);
-    return ipcRenderer.invoke('files:download-url', url, streamId).finally(() => {
+    const result = ipcRenderer.invoke('files:download-url', url, streamId).finally(() => {
       ipcRenderer.removeListener(`download:progress:${streamId}`, listener);
     });
+    if (typeof onCancel === 'function') onCancel(() => ipcRenderer.send('files:download-cancel', streamId));
+    return result;
   },
 });
 // Connecting the user's AI tools to the bundled note server (agent-setup.js).
