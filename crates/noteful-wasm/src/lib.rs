@@ -316,16 +316,11 @@ impl EditorSession {
         self.inner.save_project().map_err(js_error)
     }
     /// Keeps text recognized in the handwriting (OCR) of page slots, so it is saved with
-    /// the note: `pages` is JSON {slot: [{text, bounds}]}.
-    pub fn set_recognized_text(&mut self, pages: &str) -> Result<(), JsValue> {
-        let pages: std::collections::BTreeMap<usize, Vec<noteful_core::InkWord>> =
-            serde_json::from_str(pages).map_err(js_error)?;
-        for (slot, words) in pages {
-            self.inner
-                .set_recognized_words(slot, words)
-                .map_err(js_error)?;
-        }
-        Ok(())
+    /// the note: `pages` is JSON {slot: [{text, bounds}]}. A page the note refuses (a slot
+    /// it does not have, or words that are not valid) is skipped and the others are kept;
+    /// returns how many pages were kept.
+    pub fn set_recognized_text(&mut self, pages: &str) -> Result<usize, JsValue> {
+        keep_recognized_text(&mut self.inner, pages).map_err(js_error)
     }
     pub fn history_digest(&self) -> Result<String, JsValue> {
         self.inner.history_digest().map_err(js_error)
@@ -356,6 +351,25 @@ impl EditorSession {
     pub fn audio_bytes(&self, id: &str) -> Result<Vec<u8>, JsValue> {
         Ok(self.inner.audio_bytes(id).map_err(js_error)?.to_vec())
     }
+}
+
+/// Sets the recognized text of every page in `pages` (JSON {slot: [word…]}) that the
+/// note accepts, and returns how many it accepted. Only JSON that is not such a map fails.
+fn keep_recognized_text(
+    editor: &mut noteful_core::Editor,
+    pages: &str,
+) -> serde_json::Result<usize> {
+    let pages: std::collections::BTreeMap<String, serde_json::Value> = serde_json::from_str(pages)?;
+    let mut kept = 0;
+    for (slot, words) in pages {
+        let (Ok(slot), Ok(words)) = (slot.parse::<usize>(), serde_json::from_value(words)) else {
+            continue;
+        };
+        if editor.set_recognized_words(slot, words).is_ok() {
+            kept += 1;
+        }
+    }
+    Ok(kept)
 }
 
 fn get(fields: &[Field], tag: u16) -> Option<&WireValue> {
@@ -498,5 +512,50 @@ mod tests {
         assert_eq!(value["strokes"], 2008);
         assert_eq!(value["objects"], 74);
         assert_eq!(value["title"], "Examen wuolah");
+    }
+    #[test]
+    fn a_refused_page_does_not_drop_the_recognized_text_of_the_others() {
+        let mut e = noteful_core::Editor::create_document(
+            "Text",
+            &[[600., 800.], [600., 800.], [600., 800.]],
+            &[],
+        )
+        .unwrap();
+        let word = |x: f64| serde_json::json!({"text": "mitosis", "bounds": [x, 10., 60., 20.]});
+        // Slot 9 is not a page, slot 1 has a word with no text, "x" is not a slot and
+        // slot 0's words are not a list: the good page among them is still kept.
+        let pages = serde_json::json!({
+            "0": "words",
+            "1": [{"text": "", "bounds": [0., 0., 60., 20.]}],
+            "2": [word(10.), word(80.)],
+            "9": [word(10.)],
+            "x": [word(10.)],
+        });
+        e.set_recognized_words(1, vec![serde_json::from_value(word(5.)).unwrap()])
+            .unwrap();
+        assert_eq!(
+            super::keep_recognized_text(&mut e, &pages.to_string()).unwrap(),
+            1
+        );
+        assert_eq!(e.recognized_words(2).len(), 2);
+        assert_eq!(
+            e.recognized_words(1).len(),
+            1,
+            "a refused page keeps what it had"
+        );
+        let all = serde_json::json!({"0": [word(1.)], "1": [], "2": [word(2.)]});
+        assert_eq!(
+            super::keep_recognized_text(&mut e, &all.to_string()).unwrap(),
+            3
+        );
+        assert!(
+            e.recognized_words(1).is_empty(),
+            "an empty list clears a page"
+        );
+        assert_eq!(e.recognized_words(0).len(), 1);
+        // JSON that is not a map of pages is still an error, and changes nothing.
+        assert!(super::keep_recognized_text(&mut e, "[1, 2").is_err());
+        assert!(super::keep_recognized_text(&mut e, "[]").is_err());
+        assert_eq!(e.recognized_words(2).len(), 1);
     }
 }
