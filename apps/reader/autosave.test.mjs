@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { autosaveStore, memoryBackend, pruned, offerRecovery, when, SLOTS } from './autosave.js';
+import { autosaveStore, memoryBackend, pruned, offerRecovery, when, projectSize, sizeLabel, SLOTS } from './autosave.js';
 
 const bytes = (text) => new TextEncoder().encode(text);
 
@@ -36,4 +36,29 @@ test('slot times read as today, yesterday or a date', () => {
   assert.match(when(new Date(2026, 10, 2, 10, 32).getTime(), now), /^Today /);
   assert.match(when(new Date(2026, 10, 1, 18, 5).getTime(), now), /^Yesterday /);
   assert.doesNotMatch(when(new Date(2026, 9, 20, 9, 0).getTime(), now), /Today|Yesterday/);
+});
+
+test('a slot records the size of a project given as text, in UTF-8 bytes', async () => {
+  const store = autosaveStore(memoryBackend());
+  // The reader's case: the engine's `save` answers with a string.
+  const text = '{"title":"Año","ink":"…"}';
+  const slot = await store.save({ key: 'exam', title: 'Exam', project: text, time: 1000 });
+  assert.equal(slot.size, bytes(text).length);
+  assert.ok(slot.size > text.length, 'counted in bytes, not characters');
+  assert.equal((await store.list('exam'))[0].size, slot.size);
+  assert.equal(await store.load(slot.id), text, 'the project is stored as given');
+  const binary = await store.save({ key: 'exam', project: bytes('abcd'), time: 2000 });
+  assert.equal(binary.size, 4);
+});
+
+test('sizes of strings, bytes, buffers and blobs; a row never reads NaN', () => {
+  assert.equal(projectSize(''), 0);
+  assert.equal(projectSize('é'), 2);
+  assert.equal(projectSize(new Uint8Array(7)), 7);
+  assert.equal(projectSize(new ArrayBuffer(9)), 9);
+  assert.equal(projectSize(new Blob(['abc'])), 3);
+  assert.equal(projectSize(null), 0);
+  assert.equal(sizeLabel(1572864), ' · 1.5 MB');
+  assert.equal(sizeLabel(0), ' · 0.0 MB');
+  assert.equal(sizeLabel(undefined), '', 'a slot saved without a size shows none');
 });

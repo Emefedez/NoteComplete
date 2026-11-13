@@ -69,7 +69,7 @@ import { androidUpdates } from "./android-updates.js";
 import { tabStrip } from "./tab-strip.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
-import { autosaveStore, offerRecovery, when, EVERY_MS } from "./autosave.js";
+import { autosaveStore, offerRecovery, when, sizeLabel, EVERY_MS } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
@@ -3612,7 +3612,7 @@ async function openAutosaves() {
   $("autosavesAll").replaceChildren(...(slots.length ? slots.map((slot) => {
     const li = document.createElement("li");
     const name = document.createElement("span");
-    name.textContent = `${slot.shared ? "Shared · " : ""}${slot.title} · ${when(slot.time)} · ${(slot.size / 1048576).toFixed(1)} MB`;
+    name.textContent = `${slot.shared ? "Shared · " : ""}${slot.title} · ${when(slot.time)}${sizeLabel(slot.size)}`;
     const open = Object.assign(document.createElement("button"), { type: "button", textContent: "Open", onclick: () => { $("autosavesDialog").close(); openAutosave(slot); } });
     const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "Delete", onclick: async () => { await autosaves.remove(slot.id); li.remove(); } });
     li.append(name, open, remove);

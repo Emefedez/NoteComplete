@@ -40,6 +40,20 @@ export function when(time, now = Date.now()) {
   return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${clock}`;
 }
 
+// A project's size in bytes. The reader passes the project as text (the engine's `save`
+// answers with a string), so its UTF-8 length is counted; bytes and Blobs give their own.
+export function projectSize(project) {
+  if (typeof project === 'string') return new TextEncoder().encode(project).length;
+  const size = project?.byteLength ?? project?.size;
+  return Number.isFinite(size) ? size : 0;
+}
+
+// " · 1.2 MB" for a slot's row in the File menu; nothing for a slot saved before sizes
+// were recorded for text projects.
+export function sizeLabel(size) {
+  return Number.isFinite(size) ? ` · ${(size / 1048576).toFixed(1)} MB` : '';
+}
+
 // The slots: metadata in `meta` (small, listed for the menu), bytes in `data`.
 export function autosaveStore(backend = idbBackend()) {
   let next = 0;
@@ -50,7 +64,7 @@ export function autosaveStore(backend = idbBackend()) {
     // history, e.g. after a save in another format.
     async save({ key, title, project, shared = false, time = Date.now(), mark = null, content = null }) {
       const id = `${time}-${next++}-${Math.random().toString(36).slice(2, 8)}`;
-      const slot = { id, key, title: title || 'Untitled note', time, size: project.byteLength, shared, ...(mark ? { edits: mark.edits, digest: mark.digest } : {}), ...(content ? { content } : {}) };
+      const slot = { id, key, title: title || 'Untitled note', time, size: projectSize(project), shared, ...(mark ? { edits: mark.edits, digest: mark.digest } : {}), ...(content ? { content } : {}) };
       await backend.putData(id, project);
       await backend.putMeta(slot);
       for (const gone of pruned(await this.list())) await this.remove(gone);
