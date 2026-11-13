@@ -1,7 +1,7 @@
 use noteful_core::{Editor, Line};
 use serde_json::Value;
 fn exam() -> Editor {
-    Editor::open(include_bytes!("../../../samples/Examen wuolah.noteful")).unwrap()
+    Editor::open(crate::samples::EXAM).unwrap()
 }
 fn line() -> Line {
     Line {
@@ -73,7 +73,7 @@ fn draw_swept_erase_undo_redo_and_project_round_trip() {
 }
 #[test]
 fn erase_imported_ink_keeps_images_and_restores_original() {
-    let data = include_bytes!("../../../samples/Examen wuolah.noteful");
+    let data = crate::samples::EXAM;
     let p = noteful_core::Package::parse(data).unwrap();
     let mut e = exam();
     let mut changed = false;
@@ -127,10 +127,7 @@ fn malformed_edits_and_projects_leave_state_intact() {
 
 #[test]
 fn straight_line_object_can_be_erased_and_undone() {
-    let mut e = Editor::open(include_bytes!(
-        "../../../samples/nota_herramientalinea.noteful"
-    ))
-    .unwrap();
+    let mut e = Editor::open(crate::samples::LINE_TOOL).unwrap();
     assert_eq!(e.view(0).unwrap()["visible_imported"], 1);
     assert_eq!(
         e.erase_path(0, &[[299.6000737915465, 439.85772508134784]], 1.)

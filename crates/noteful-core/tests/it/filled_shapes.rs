@@ -15,7 +15,7 @@ fn shape(kind: ShapeKind, fill: Option<[f64; 4]>) -> Line {
     }
 }
 fn blank() -> Editor {
-    Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap()
+    Editor::open(crate::samples::BLANK).unwrap()
 }
 fn strokes(data: &[u8]) -> usize {
     Package::parse(data)

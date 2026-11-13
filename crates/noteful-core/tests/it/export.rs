@@ -16,7 +16,7 @@ fn line(layer: u32, tool: u16) -> Line {
 }
 #[test]
 fn native_export_preserves_resources_and_applies_visible_history() {
-    let source = include_bytes!("../../../samples/Practice book (vol. 1).noteful");
+    let source = crate::samples::PRACTICE_BOOK;
     let original = Package::parse(source).unwrap();
     let mut editor = Editor::open(source).unwrap();
     assert_eq!(editor.export_noteful().unwrap(), source);
@@ -64,7 +64,7 @@ fn native_export_preserves_resources_and_applies_visible_history() {
 }
 #[test]
 fn layers_export_lock_visibility_and_old_projects() {
-    let mut e = Editor::open(include_bytes!("../../../samples/texto.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::TEXT).unwrap();
     let layer = Layer {
         id: 1,
         name: "Highlights".into(),
@@ -88,15 +88,12 @@ fn layers_export_lock_visibility_and_old_projects() {
     locked.locked = true;
     e.set_layer(locked).unwrap();
     assert_eq!(e.erase_path(0, &[[10., 10.]], 1.).unwrap(), 0);
-    let old = include_str!("../../../tests/fixtures/editing-demo.nfedit");
+    let old = crate::samples::EDITING_DEMO;
     assert!(Editor::open_project(old).is_ok());
 }
 #[test]
 fn native_export_removes_straight_line_object_and_keeps_unknown_metadata() {
-    let mut e = Editor::open(include_bytes!(
-        "../../../samples/nota_herramientalinea.noteful"
-    ))
-    .unwrap();
+    let mut e = Editor::open(crate::samples::LINE_TOOL).unwrap();
     e.erase_path(0, &[[299.6000737915465, 439.85772508134784]], 1.)
         .unwrap();
     let data = e.export_noteful().unwrap();
@@ -106,7 +103,7 @@ fn native_export_removes_straight_line_object_and_keeps_unknown_metadata() {
 }
 #[test]
 fn empty_note_gets_a_new_editable_block_and_index_entry() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     e.add_line(0, line(0, 0)).unwrap();
     let data = e.export_noteful().unwrap();
     let read = Editor::open(&data).unwrap();
@@ -116,7 +113,7 @@ fn empty_note_gets_a_new_editable_block_and_index_entry() {
 #[test]
 fn shape_corners_resize_undo_project_reload_and_native_geometry() {
     use noteful_core::{Shape, ShapeKind};
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     let mut l = line(0, 0);
     l.shape = Some(Shape {
         fill: None,
@@ -183,7 +180,7 @@ fn shape_corners_resize_undo_project_reload_and_native_geometry() {
 
 #[test]
 fn square_highlight_bands_have_square_ends_and_stay_inside_their_box_in_noteful() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     let band = Line {
         part: None,
         points: vec![[100., 200.], [300., 200.]],

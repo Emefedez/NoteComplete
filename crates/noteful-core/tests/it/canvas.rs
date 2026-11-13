@@ -34,11 +34,7 @@ fn only_one_page_notes_are_canvases_and_the_flag_is_kept() {
     assert!(Editor::open_notecomplete(&e.export_notecomplete().unwrap())
         .unwrap()
         .is_canvas());
-    assert!(
-        !Editor::open(include_bytes!("../../../samples/nota_vacia.noteful"))
-            .unwrap()
-            .is_canvas()
-    );
+    assert!(!Editor::open(crate::samples::BLANK).unwrap().is_canvas());
 }
 
 #[test]
@@ -80,6 +76,6 @@ fn new_ink_near_the_edge_grows_the_canvas_in_one_undo_step() {
     e.undo();
     assert_eq!(e.view(0).unwrap()["size"][1].as_f64().unwrap(), 1500.);
     // Other notes never grow.
-    let mut plain = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut plain = Editor::open(crate::samples::BLANK).unwrap();
     assert!(!plain.grow_canvas_for([10., 1e5, 10., 10.]).unwrap());
 }

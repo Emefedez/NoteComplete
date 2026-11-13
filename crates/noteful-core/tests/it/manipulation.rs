@@ -28,7 +28,7 @@ fn adjustment() -> Adjustment {
 }
 #[test]
 fn added_items_transform_style_hit_erase_and_undo_as_one_operation() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     e.add_line(0, line()).unwrap();
     e.adjust_item(0, "new:0", adjustment()).unwrap();
     let patch = e.item_patch(0, "new:0").unwrap();
@@ -69,10 +69,7 @@ fn added_items_transform_style_hit_erase_and_undo_as_one_operation() {
 }
 #[test]
 fn imported_ink_keeps_identity_audio_pressure_and_auxiliary_after_native_export() {
-    for bytes in [
-        include_bytes!("../../../samples/Practice book (vol. 1).noteful").as_slice(),
-        include_bytes!("../../../samples/Examen wuolah.noteful").as_slice(),
-    ] {
+    for bytes in [crate::samples::PRACTICE_BOOK, crate::samples::EXAM] {
         let mut e = Editor::open(bytes).unwrap();
         let page = if e.scene.pages.len() > 100 { 8 } else { 0 };
         let before = Package::parse(bytes).unwrap();
@@ -132,9 +129,9 @@ fn imported_ink_keeps_identity_audio_pressure_and_auxiliary_after_native_export(
 #[test]
 fn imported_shapes_images_and_text_keep_native_objects_and_can_be_removed() {
     for bytes in [
-        include_bytes!("../../../samples/nota_herramientalinea.noteful").as_slice(),
-        include_bytes!("../../../samples/nota_imagen.noteful").as_slice(),
-        include_bytes!("../../../samples/texto.noteful").as_slice(),
+        crate::samples::LINE_TOOL,
+        crate::samples::IMAGE,
+        crate::samples::TEXT,
     ] {
         let mut e = Editor::open(bytes).unwrap();
         let info = e.selection(0, "object:0").unwrap();
@@ -174,7 +171,7 @@ fn imported_shapes_images_and_text_keep_native_objects_and_can_be_removed() {
 }
 #[test]
 fn locked_deleted_and_invalid_adjustments_do_not_change_history() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     e.add_line(0, line()).unwrap();
     let initial = e.save_project().unwrap();
     let mut bad = adjustment();
@@ -194,7 +191,7 @@ fn locked_deleted_and_invalid_adjustments_do_not_change_history() {
 
 #[test]
 fn locking_in_place_blocks_edits_until_unlocked_and_survives_reload() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_vacia.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
     e.add_line(0, line()).unwrap();
     e.set_locked(0, "new:0", true).unwrap();
     // Locked: not picked for selection, not moved, not erased, not removed.
@@ -230,7 +227,7 @@ fn locking_in_place_blocks_edits_until_unlocked_and_survives_reload() {
 
 #[test]
 fn cropping_an_image_shows_part_of_it_and_survives_export() {
-    let mut e = Editor::open(include_bytes!("../../../samples/nota_imagen.noteful")).unwrap();
+    let mut e = Editor::open(crate::samples::IMAGE).unwrap();
     let info = e.selection(0, "object:0").unwrap();
     assert_eq!(info["kind"], "image");
     let [sw, sh]: [f64; 2] = serde_json::from_value(info["native"].clone()).unwrap();

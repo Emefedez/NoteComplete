@@ -1,7 +1,7 @@
 use noteful_core::{audio_kind, encode_fields, Editor, Package, WireValue, MAGIC};
 #[test]
 fn synthetic_audio_stays_exact_through_project_and_package() {
-    let data = include_bytes!("../../../tests/fixtures/audio-synthetic.noteful");
+    let data = crate::samples::AUDIO;
     let p = Package::parse(data).unwrap();
     assert_eq!(p.rebuild().unwrap(), data);
     let e = Editor::open(data).unwrap();
@@ -14,7 +14,7 @@ fn synthetic_audio_stays_exact_through_project_and_package() {
 }
 #[test]
 fn binary_resource_larger_than_previous_limit_has_no_size_ceiling() {
-    let source = include_bytes!("../../../samples/nota_vacia.noteful");
+    let source = crate::samples::BLANK;
     let p = Package::parse(source).unwrap();
     let offset = p.index_offset;
     let size = 65 * 1024 * 1024;
@@ -54,7 +54,7 @@ fn binary_resource_larger_than_previous_limit_has_no_size_ceiling() {
 
 #[test]
 fn real_recording_pdf_pages_and_pen_down_times() {
-    let data = include_bytes!("../../../samples/Practice book (vol. 1).noteful");
+    let data = crate::samples::PRACTICE_BOOK;
     let e = Editor::open(data).unwrap();
     assert_eq!(e.scene.pages.len(), 193);
     assert_eq!(e.scene.audio.len(), 1);
@@ -86,7 +86,7 @@ fn real_recording_pdf_pages_and_pen_down_times() {
         assert_eq!(timing.opacity(start), 1.0);
         assert_eq!(timing.opacity(end), 1.0);
     }
-    let text = Editor::open(include_bytes!("../../../samples/texto.noteful")).unwrap();
+    let text = Editor::open(crate::samples::TEXT).unwrap();
     let bg = text.scene.pages[0].pdf_background.as_ref().unwrap();
     assert_eq!(bg.resource_id, "7E4F4DC52177415AB2E508D2F46B8B09");
     assert_eq!(bg.page_index, 0);
@@ -94,7 +94,7 @@ fn real_recording_pdf_pages_and_pen_down_times() {
 
 #[test]
 fn multiple_recordings_have_independent_clocks_and_preserve_every_asset() {
-    let data = include_bytes!("../../../tests/fixtures/multi-audio-synthetic.noteful");
+    let data = crate::samples::MULTI_AUDIO;
     let mut e = Editor::open(data).unwrap();
     assert_eq!(e.scene.audio.len(), 2);
     assert_eq!(e.scene.recordings.len(), 2);

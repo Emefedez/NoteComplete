@@ -72,15 +72,14 @@ fn a_new_notebook_keeps_its_text_through_projects_and_notecomp_files() {
     let unpacked = Editor::open_notecomplete(&packed).unwrap();
     assert_eq!(words(&unpacked, 0), words(&editor, 0));
     // Notes without written text stay version 5 or lower and have no page text.
-    let plain = Editor::open(include_bytes!("../../../samples/Examen wuolah.noteful")).unwrap();
+    let plain = Editor::open(crate::samples::EXAM).unwrap();
     assert!(plain.ink_words(0).is_empty());
     assert!(!plain.save_project().unwrap().contains("ink_text"));
 }
 
 #[test]
 fn inserted_handwritten_pages_follow_undo_redo_and_flattening() {
-    let mut editor =
-        Editor::open(include_bytes!("../../../samples/Examen wuolah.noteful")).unwrap();
+    let mut editor = Editor::open(crate::samples::EXAM).unwrap();
     let (pages, _) = compose(
         "## Repaso\n\nVectores propios y valores propios.",
         &ComposeOptions::default(),

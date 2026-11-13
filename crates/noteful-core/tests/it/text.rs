@@ -2,7 +2,7 @@ use noteful_core::{decode_rich_text, text_svg, Editor};
 use serde_json::json;
 #[test]
 fn real_text_note_has_content_sizes_and_font_traits() {
-    let e = Editor::open(include_bytes!("../../../samples/texto.noteful")).unwrap();
+    let e = Editor::open(crate::samples::TEXT).unwrap();
     let v = e.view(0).unwrap();
     assert_eq!(v["visible_imported"], 3);
     assert_eq!(v["warnings"], json!([]));

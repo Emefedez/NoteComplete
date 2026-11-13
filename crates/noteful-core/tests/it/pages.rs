@@ -29,7 +29,7 @@ fn sizes(editor: &Editor) -> Vec<[f64; 2]> {
 
 #[test]
 fn inserted_pages_keep_earlier_edits_on_their_pages_through_undo_project_and_export() {
-    let source = include_bytes!("../../../samples/Examen wuolah.noteful");
+    let source = crate::samples::EXAM;
     let mut editor = Editor::open(source).unwrap();
     let original = sizes(&editor);
     assert_eq!(original.len(), 3);
@@ -168,7 +168,7 @@ fn invalid_insertions_are_rejected_without_changing_history() {
 
 #[test]
 fn resized_pages_keep_their_pdf_in_place_through_undo_project_and_export() {
-    let source = include_bytes!("../../../samples/Examen wuolah.noteful");
+    let source = crate::samples::EXAM;
     let mut editor = Editor::open(source).unwrap();
     let original = sizes(&editor);
     let [w, h] = original[0];

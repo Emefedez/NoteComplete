@@ -1,7 +1,7 @@
 use noteful_core::{Adjustment, Editor, Line};
 
 fn exam() -> Editor {
-    Editor::open(include_bytes!("../../../samples/Examen wuolah.noteful")).unwrap()
+    Editor::open(crate::samples::EXAM).unwrap()
 }
 fn stroke(n: usize) -> Line {
     let y = 40. + n as f64 * 3.;
