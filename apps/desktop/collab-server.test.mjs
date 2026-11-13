@@ -10,7 +10,7 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { gunzipSync, brotliDecompressSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
-import { startServer, lanAddress, lanAddresses, readerFile, firewallHint, pickEncoding } from './collab-server.js';
+import { startServer, lanAddress, lanAddresses, readerFile, firewallHint, pickEncoding, hostSized, HOST_MAX_PAYLOAD } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
 
 const yjs = { Y, sync, awareness, encoding, decoding };
@@ -820,5 +820,69 @@ test('the send link admits senders only: a token that cannot make a guest or a t
     // And no other token makes a sender except the local guest, tablet and PIN ones.
     assert.match(await closedWith(client(server, { token: 'nope', role: 'sender' })), /not valid/);
     sender.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('only a connection that can still become the host may send messages of the host’s size', () => {
+  assert.equal(HOST_MAX_PAYLOAD, 1024 ** 3);
+  for (const from of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '127.0.0.53']) assert.equal(hostSized({ from, remote: false, hostPresent: false }), true, from);
+  // Another device, the tunnel (cloudflared connects from loopback too), or a host already there.
+  for (const from of ['192.168.1.20', '::ffff:192.168.1.20', '10.0.0.7', 'fe80::1', '1127.0.0.1', '127.0.0.1.evil', '', undefined]) assert.equal(hostSized({ from, remote: false, hostPresent: false }), false, String(from));
+  assert.equal(hostSized({ from: '127.0.0.1', remote: true, hostPresent: false }), false);
+  assert.equal(hostSized({ from: '127.0.0.1', remote: false, hostPresent: true }), false);
+});
+
+test('a big message from anyone but the host is refused before it is held in memory; the host still sends a large note', async () => {
+  const { default: WebSocket } = await import('ws');
+  const { EventEmitter } = await import('node:events');
+  const limit = 1024, big = 512 * 1024;
+  const server = await startServer({ root: await reader(), host: '127.0.0.1', address: '127.0.0.1', port: 0, hubOptions: { maxMessage: limit } });
+  // What reaches the hub: an oversized message must be stopped by the socket, not after it.
+  const sizes = [];
+  const receive = server.hub.receive.bind(server.hub);
+  server.hub.receive = (peer, data, binary) => { sizes.push(typeof data === 'string' ? data.length : data.byteLength); return receive(peer, data, binary); };
+  // Connects, optionally says hello, sends `bytes` of binary and resolves with the close code.
+  const flood = ({ headers, hello, bytes = big }) => new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/sync`, { headers });
+    const timer = setTimeout(() => { ws.terminate(); reject(Error('The oversized message was accepted.')); }, 5000);
+    let welcomed = false;
+    const send = () => ws.send(Buffer.alloc(bytes, 1), () => {});
+    ws.on('open', () => (hello ? ws.send(JSON.stringify({ t: 'hello', ...hello })) : send()));
+    ws.on('message', (data, binary) => { if (!binary && JSON.parse(data.toString()).t === 'welcome') { welcomed = true; send(); } });
+    ws.on('error', () => {});
+    ws.on('close', (code) => { clearTimeout(timer); resolve({ code, welcomed }); });
+  });
+  try {
+    // Before the host is there, a connection from this computer has the host's allowance,
+    // but one that says hello as a guest is held to the guests' limit by the hub.
+    const local = await flood({ hello: { token: server.hub.tokens.guest, name: 'Local guest' } });
+    assert.deepEqual(local, { code: 1009, welcomed: true });
+    assert.equal(sizes.filter((n) => n > limit).length, 1, 'the hub saw it and closed the connection');
+    sizes.length = 0;
+
+    const mine = new Replica();
+    mine.history.push(randomBytes(big).toString('base64')); mine.cursor = 1;
+    const h = host(server, mine);
+    await welcomed(h);
+    // With the host connected nobody else gets its allowance, hello or not.
+    assert.equal((await flood({})).welcomed, false);
+    assert.equal((await flood({ hello: { token: server.hub.tokens.guest, name: 'Guest' } })).welcomed, true);
+    // Through the online link: the same, whatever the address the connection comes from.
+    const spawn = () => { const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter(); c.kill = () => c.emit('exit', 0); setTimeout(() => c.stderr.emit('data', Buffer.from('https://quiet-forest-1234.trycloudflare.com')), 5); return c; };
+    const online = (await server.goOnline({ binary: 'x', spawn })).split('.').pop();
+    const headers = { Host: 'quiet-forest-1234.trycloudflare.com' };
+    assert.equal((await flood({ headers })).welcomed, false);
+    assert.equal((await flood({ headers, hello: { token: online, name: 'Far guest' } })).welcomed, true);
+    // A message just over the socket's own limit is refused as well.
+    assert.equal((await flood({ bytes: limit * 3 + 1 })).welcomed, false);
+    assert.deepEqual(sizes.filter((n) => n > limit), [], 'none of those reached the hub');
+
+    // The host's snapshot, far above the guests' limit, still goes through.
+    h.documentChanged({ open: true, title: 'Large note' });
+    const t = tablet(server, { token: server.hub.tokens.tablet });
+    await until(() => t.client.loaded, 'the large snapshot', 20000);
+    assert.equal(t.replica.digest(), mine.digest());
+    assert.ok(sizes.some((n) => n > big), 'the host sent it in one large message');
+    t.client.close(); h.close();
   } finally { await server.stop(); }
 });

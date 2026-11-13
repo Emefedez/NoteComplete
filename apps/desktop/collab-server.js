@@ -119,6 +119,16 @@ async function warm(root, compressed, stopped) {
 const etag = (info, encoding) => `"${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}${encoding ? '-' + encoding : ''}"`;
 const matches = (header, tag) => !!header && String(header).split(',').some((t) => t.trim().replace(/^W\//, '') === tag);
 
+// The most the host may send in one message: a whole note as a snapshot.
+export const HOST_MAX_PAYLOAD = 1024 * 1024 * 1024;
+// Whether a new connection may send messages of the host's size: only one that can still
+// become the host. The host's reader connects from this computer (loopback), not through
+// the tunnel (cloudflared also connects from loopback), and there is one host at a time.
+export function hostSized({ from, remote, hostPresent }) {
+  const address = String(from || '').replace(/^::ffff:/i, '');
+  return !remote && !hostPresent && (address === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(address));
+}
+
 // Starts a session. Returns its links and tokens, `stop()`, and the hub.
 export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port = DEFAULT_PORT, address, maxPeers = 10, onEnded = () => {}, hubOptions = {} }) {
   const addresses = address ? [address] : lanAddresses(undefined, await routeAddress());
@@ -160,13 +170,20 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
       res.end();
     }
   });
-  // Only the host sends big messages; the hub enforces the guests' limit (maxMessage).
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 * 1024, perMessageDeflate: false });
+  // Only the host sends big messages (snapshots, images it places), so only its connection
+  // may: `ws` holds a whole message in memory before the hub sees it, and with one large
+  // limit for all any device on the network could make this computer allocate it before
+  // saying hello. Everyone else gets the hub's own limit (counted in characters there, so
+  // up to three bytes each here); the hub still applies it to whoever is not the host.
+  const socketOptions = { noServer: true, perMessageDeflate: false };
+  const guestSockets = new WebSocketServer({ ...socketOptions, maxPayload: hub.maxMessage * 3 });
+  const hostSockets = new WebSocketServer({ ...socketOptions, maxPayload: HOST_MAX_PAYLOAD });
   server.on('upgrade', (req, socket, head) => {
     if (new URL(req.url, 'http://x').pathname !== '/sync' || stopping) return socket.destroy();
     const remote = cameFromTunnel(req);
     // Online access off: nothing from outside this network gets a session.
     if (remote && !tunnel) return socket.destroy();
+    const sockets = hostSized({ from: req.socket.remoteAddress, remote, hostPresent: !!hub.host }) ? hostSockets : guestSockets;
     sockets.handleUpgrade(req, socket, head, (ws) => {
       const peer = hub.connect({ send: (data) => ws.send(data), close: (code, reason) => ws.close(code, reason), buffered: () => ws.bufferedAmount }, { remote });
       // A connection that never says hello is closed.
@@ -229,8 +246,10 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     stopOnline();
     stopping ||= new Promise((resolve) => {
       hub.dispose();
-      for (const ws of sockets.clients) ws.terminate();
-      sockets.close();
+      for (const sockets of [guestSockets, hostSockets]) {
+        for (const ws of sockets.clients) ws.terminate();
+        sockets.close();
+      }
       server.close(() => resolve());
       server.closeAllConnections?.();
     });
