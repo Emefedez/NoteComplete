@@ -43,7 +43,9 @@ def main():
     vendor=ROOT/'apps/reader/vendor/pdfjs'
     if vendor.exists(): shutil.rmtree(vendor)
     (vendor/'build').mkdir(parents=True,exist_ok=True)
-    for name in ['pdf.mjs','pdf.worker.mjs']: shutil.copy2(pdfjs/'build'/name,vendor/'build'/name)
+    # The minified builds (1.7 MB instead of 3.1 MB), under the names the reader loads
+    # (pdf-background.js imports pdf.mjs and names pdf.worker.mjs as its worker).
+    for name in ['pdf.mjs','pdf.worker.mjs']: shutil.copy2(pdfjs/'build'/name.replace('.mjs','.min.mjs'),vendor/'build'/name)
     for folder in ['cmaps','standard_fonts','wasm']:
         shutil.copytree(pdfjs/folder,vendor/folder,dirs_exist_ok=True)
     shutil.copy2(pdfjs/'LICENSE',vendor/'LICENSE')
