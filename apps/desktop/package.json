@@ -33,6 +33,7 @@
       "linux-integration.js",
       "ai-runner.js",
       "transcriber.js",
+      "terminate-process.js",
       "tabs.js",
       "updater.js",
       "app-menu.js",

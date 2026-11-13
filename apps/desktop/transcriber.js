@@ -7,22 +7,12 @@ import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { terminateProcess } from './terminate-process.js';
 
 const PIECE = { voxtype: 30, antigravity: 600 };
 // The reader's language names as Whisper codes (Voxtype's --language).
 const CODES = { spanish: 'es', galician: 'gl', english: 'en', catalan: 'ca', french: 'fr', german: 'de', italian: 'it', portuguese: 'pt' };
 const PARALLEL = { voxtype: 1, antigravity: 3 };
-
-function terminateProcess(child, graceMs = 4000) {
-  if (!child) return;
-  try { child.kill('SIGTERM'); } catch {}
-  const timer = setTimeout(() => {
-    try {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    } catch {}
-  }, graceMs);
-  child.once('close', () => clearTimeout(timer));
-}
 
 function run(binary, args, { cwd, timeout = 15 * 60 * 1000, input = null, kill, stderr = false } = {}) {
   return new Promise((resolve, reject) => {

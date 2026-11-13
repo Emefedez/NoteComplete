@@ -11,6 +11,7 @@ import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
+import { terminateProcess } from './terminate-process.js';
 
 export const PROVIDERS = {
   claude: { label: 'Claude Code', names: ['claude'] },
@@ -159,19 +160,6 @@ async function listModels(provider, binary, home = homedir()) {
 
 const lastFinal = (provider, out) => out.split('\n').map(l => streamLine(provider, l).final).filter(f => typeof f === 'string').at(-1);
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
-
-// Stop a child process cleanly with SIGTERM, then escalate to SIGKILL if
-// it hangs or deadlocks during shutdown.
-function terminateProcess(child, graceMs = 4000) {
-  if (!child) return;
-  try { child.kill('SIGTERM'); } catch {}
-  const timer = setTimeout(() => {
-    try {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    } catch {}
-  }, graceMs);
-  child.once('close', () => clearTimeout(timer));
-}
 
 export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
   let found;
