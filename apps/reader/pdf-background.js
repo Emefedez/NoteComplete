@@ -203,14 +203,7 @@ export class PdfBackgrounds {
     }
     if (this.drawing.has(key)) return this.drawing.get(key);
     const job = (async () => {
-      const doc = await this.document(background.resource_id);
-      const page = await doc.getPage(background.page_index + 1);
-      const original = page.getViewport({ scale: 1 });
-      const target = rasterTarget(original, displayWidth, undefined, settings);
-      const viewport = page.getViewport({ scale: target.scale });
-      const canvas = document.createElement("canvas");
-      canvas.width = target.width;
-      canvas.height = target.height;
+      const { page, target, viewport, canvas } = await this.blankCanvas(background, displayWidth, settings);
       let shown;
       try {
         await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
@@ -269,6 +262,18 @@ export class PdfBackgrounds {
       );
     return this.documents.get(id);
   }
+  // A background's PDF page and an empty canvas of the size it is drawn at for
+  // `displayWidth`. The caller renders, then frees the canvas and calls page.cleanup().
+  async blankCanvas(background, displayWidth, settings) {
+    const doc = await this.document(background.resource_id);
+    const page = await doc.getPage(background.page_index + 1);
+    const target = rasterTarget(page.getViewport({ scale: 1 }), displayWidth, undefined, settings);
+    const viewport = page.getViewport({ scale: target.scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = target.width;
+    canvas.height = target.height;
+    return { page, target, viewport, canvas };
+  }
   async image(background, size, displayWidth = size[0], settings) {
     const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings]);
     // Least recently used goes first: the page being written on asks for its thumbnail's
@@ -279,14 +284,7 @@ export class PdfBackgrounds {
       this.images.set(key, url);
       return url;
     }
-    const doc = await this.document(background.resource_id);
-    const page = await doc.getPage(background.page_index + 1);
-    const original = page.getViewport({ scale: 1 });
-    const target = rasterTarget(original, displayWidth, undefined, settings);
-    const viewport = page.getViewport({ scale: target.scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = target.width;
-    canvas.height = target.height;
+    const { page, viewport, canvas } = await this.blankCanvas(background, displayWidth, settings);
     try {
       await page.render({ canvasContext: canvas.getContext("2d"), viewport })
         .promise;

@@ -3,26 +3,13 @@ import { TEXT_NAME, OFFICE_NAME } from './text-types.js';
 // title and recordings from the n: and d: blocks (d:/7/0: recordings with a
 // duration in tag 6), and Noteful tags from the editable sets (object kind 19,
 // names in payload tag 14) when those sets are small enough to fetch.
-import { fields } from './note-cover.js';
+import { fields, noteIndex } from './note-cover.js';
 
-const HEAD = 256 * 1024, TAIL = 64 * 1024, SET_BUDGET = 3 * 1024 * 1024;
-const MAGIC = [0xaa, 0xbb, 0xcc, 0xde];
+const SET_BUDGET = 3 * 1024 * 1024;
 const get = (map, ...path) => path.reduce((v, k) => (v instanceof Map ? v.get(k) : undefined), map);
 
 export async function noteFacts(read, size) {
-  if (!(size >= 20)) throw Error('Not a Noteful archive');
-  const tailStart = Math.max(0, size - TAIL);
-  const [head, tail] = await Promise.all([read(0, Math.min(HEAD, size)), read(tailStart, size)]);
-  const slice = async (start, length) => {
-    if (start + length <= head.length) return head.subarray(start, start + length);
-    if (start >= tailStart) return tail.subarray(start - tailStart, start - tailStart + length);
-    return read(start, start + length);
-  };
-  const trailer = new DataView(tail.buffer, tail.byteOffset + tail.length - 16, 16);
-  if (MAGIC.some((b, i) => trailer.getUint8(i) !== b) || MAGIC.some((b, i) => head[i] !== b)) throw Error('Not a Noteful archive');
-  const index = fields(await slice(Number(trailer.getBigUint64(4)), trailer.getUint32(12)));
-  const keys = index.get(10) || [], offsets = index.get(11) || [], lengths = index.get(12) || [];
-  const extent = id => { const i = keys.indexOf(id); return i < 0 ? null : [offsets[i], lengths[i]]; };
+  const { index, keys, extent, slice } = await noteIndex(read, size);
   const facts = { title: '', pages: 0, audio: { count: 0, seconds: 0 }, tags: [] };
   const meta = keys.find(k => typeof k === 'string' && k.startsWith('n:'));
   if (meta) facts.title = fields(await slice(...extent(meta))).get(3) || '';

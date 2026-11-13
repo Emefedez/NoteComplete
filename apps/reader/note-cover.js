@@ -46,8 +46,11 @@ export function fields(bytes) {
   return out;
 }
 
+// The archive's index, from a head and a tail read: `index` (its fields), `keys` (block
+// names), `extent(id)` ([offset, length] of a block, or null) and `slice(start, length)`
+// (bytes from what was already read when possible, otherwise another ranged read).
 // `read(start, end)` returns bytes [start, end) and may be called concurrently.
-export async function noteCover(read, size) {
+export async function noteIndex(read, size) {
   if (!(size >= 20)) throw Error('Not a Noteful archive');
   const tailStart = Math.max(0, size - TAIL);
   const [head, tail] = await Promise.all([read(0, Math.min(HEAD, size)), read(tailStart, size)]);
@@ -62,7 +65,12 @@ export async function noteCover(read, size) {
   if (indexAt + indexSize !== size - 16) throw Error('Invalid index extent');
   const index = fields(await slice(indexAt, indexSize));
   const keys = index.get(10) || [], offsets = index.get(11) || [], lengths = index.get(12) || [];
-  const block = id => { const i = keys.indexOf(id); return i < 0 ? null : [offsets[i], lengths[i]]; };
+  const extent = id => { const i = keys.indexOf(id); return i < 0 ? null : [offsets[i], lengths[i]]; };
+  return { index, keys, extent, slice };
+}
+
+export async function noteCover(read, size) {
+  const { keys, extent: block, slice } = await noteIndex(read, size);
   const meta = keys.find(k => typeof k === 'string' && k.startsWith('n:'));
   if (!meta) return null;
   const cover = fields(await slice(...block(meta))).get(7)?.get?.(1);
