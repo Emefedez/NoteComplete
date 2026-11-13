@@ -4,204 +4,150 @@ let session;
 ready
   .then(() => postMessage({ ready: true }))
   .catch((e) => postMessage({ fatal: String(e) }));
+// Every operation the reader can ask for, by name. A handler gets the message's arguments
+// and its page and returns the reply's result; a name that is not here is answered with an
+// error, so a misspelt operation cannot pass for a page view.
+
+// The page as it now is: what `view` and every edit answer with.
+const view = (page) => JSON.parse(session.view(page));
+// An edit: the change, then the page's view after it.
+const edit = (change) => (args, page) => { change(args, page); return view(page); };
+// Undoing inserted pages can take away the page in view: show the last one left.
+const lastPageLeft = (step) => (args, page) => {
+  step();
+  for (;;) {
+    try { return view(page); }
+    catch (e) { if (page <= 0) throw e; page--; }
+  }
+};
+
+// Operations that need no open document.
+const standalone = {
+  open(args) {
+    const bytes = new Uint8Array(args.bytes);
+    let candidate;
+    try {
+      candidate = args.notecomplete
+        ? EditorSession.open_notecomplete(bytes)
+        : args.markdown != null
+        ? EditorSession.create_handwritten(args.title, args.markdown, JSON.stringify(args.options || {}))
+        : args.sizes
+        ? EditorSession.create_document(
+            args.title,
+            JSON.stringify(args.sizes),
+            bytes,
+          )
+        : args.project
+          ? EditorSession.load_project(
+              new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+            )
+          : new EditorSession(bytes);
+      if (args.canvas) candidate.set_canvas(true);
+      if (args.image) candidate.add_image(0, JSON.stringify(args.image));
+      const result = JSON.parse(candidate.view(0));
+      // Recordings added in NoteComplete travel inside .notecomp files.
+      if (args.notecomplete)
+        result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
+      session?.free();
+      session = candidate;
+      candidate = undefined;
+      return result;
+    } finally {
+      candidate?.free();
+    }
+  },
+  markdownHtml: (args) => markdown_html(args.text),
+  dialect: () => handwriting_dialect(),
+  // The document was closed in the reader: release its archive and scene now.
+  close() {
+    session?.free();
+    session = undefined;
+    return true;
+  },
+  // Handwriting preview of Markdown; needs no open document.
+  composePreview: (args) => JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)),
+  md5: (args) => md5_hex(new Uint8Array(args.bytes)),
+  jpegPagesPdf: (args) => jpeg_pages_pdf(args.data, args.layout, args.title),
+};
+
+// Operations on the open document.
+const onDocument = {
+  view: (args, page) => view(page),
+  save: () => session.save_project(),
+  pick: (args, page) => JSON.parse(session.pick_item(page, args.x, args.y, args.tolerance)),
+  pickLock: (args, page) => JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)),
+  selection: (args, page) => JSON.parse(session.selection(page, args.itemId)),
+  crop: (args, page) => JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))),
+  adjust: (args, page) => JSON.parse(session.adjust_item(page, args.itemId, JSON.stringify(args.adjustment))),
+  // Markdown notes: kept in the session (saved with projects and .notecomplete).
+  getMarkdown: () => session.markdown(),
+  setMarkdown(args) {
+    session.set_markdown(args.text);
+    return session.markdown();
+  },
+  exportMarkdown: (args) => markdown_export(session.markdown(), args.title || ""),
+  exportNotecomplete: (args) => session.export_notecomplete(new Uint8Array(args.audioData || []), args.audioLayout || ""),
+  export: () => session.export_noteful(),
+  audio: (args) => session.audio_bytes(args.resource),
+  pdf: (args) => session.pdf_bytes(args.resource),
+  recognized(args) {
+    session.set_recognized_text(JSON.stringify(args.pages || {}));
+    return true;
+  },
+  digest: () => session.history_digest(),
+  historyMark: () => JSON.parse(session.history_mark()),
+  prefixDigest: (args) => session.prefix_digest(args.edits),
+  // The history compacted up to `upto` edits: the report, with the page view after it.
+  compactPreview: (args) => JSON.parse(session.compact_preview(args.upto)),
+  compactHistory(args, page) {
+    const report = JSON.parse(session.compact_history(args.upto));
+    return { report, view: view(page) };
+  },
+
+  remove: edit((args, page) => session.remove_item(page, args.itemId)),
+  lock: edit((args, page) => session.set_locked(page, args.itemId, args.locked)),
+  resizePage: edit((args, page) => session.resize_page(page, args.size[0], args.size[1], args.pdfRect ? JSON.stringify(args.pdfRect) : undefined)),
+  resizePages: edit((args) => session.resize_pages(JSON.stringify(args.pages.map((p) => ({ page: p.page, size: p.size, pdf_rect: p.pdfRect || null }))))),
+  editText: edit((args, page) => session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height)),
+  resize: edit((args, page) => session.resize_shape(page, args.shapeId, JSON.stringify(args.shape))),
+  layer: edit((args) => session.set_layer(JSON.stringify(args.layer))),
+  draw: edit((args, page) => {
+    session.draw(page, JSON.stringify(args.line));
+    // A shape recognised at an angle (shape-recognize.js) is added level, then turned about
+    // its centre in the same step: one undo removes both, and every copy in a sharing
+    // session does the same, since the op travels with its arguments.
+    if (Number.isFinite(args.turn) && args.turn) {
+      const id = `new:${view(page).edit_count - 1}`;
+      session.adjust_item(page, id, JSON.stringify({ translation: [0, 0], scale: [1, 1], rotation: args.turn, joined: true }));
+    }
+  }),
+  image: edit((args, page) => session.add_image(page, JSON.stringify(args.image))),
+  // Several lines, then typed text boxes, as one undo step (graph.js: an inserted graph).
+  drawMany: edit((args, page) => {
+    // `replace`: the items of a graph or table drawn again, removed first in the same step.
+    let first = true;
+    if (Array.isArray(args.replace) && args.replace.length) { session.remove_items(page, JSON.stringify(args.replace), false); first = false; }
+    for (const line of args.lines || []) { session.draw(page, JSON.stringify({ ...line, joined: !first })); first = false; }
+    for (const image of args.images || []) { session.add_image(page, JSON.stringify({ ...image, joined: !first })); first = false; }
+  }),
+  erase: edit((args, page) => session.erase(page, JSON.stringify(args.points), args.radius)),
+  insertHandwritten: edit((args) => session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}))),
+  insertPages: edit((args) => session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
+  undo: lastPageLeft(() => session.undo()),
+  redo: lastPageLeft(() => session.redo()),
+};
+
+// Replies that are bytes made for this message: their buffer is handed over, not copied.
+const TRANSFERRED = new Set(["jpegPagesPdf", "exportNotecomplete", "export", "audio", "pdf"]);
+
 self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
   try {
     await ready;
-    if (op === "open") {
-      const bytes = new Uint8Array(args.bytes);
-      let candidate;
-      try {
-        candidate = args.notecomplete
-          ? EditorSession.open_notecomplete(bytes)
-          : args.markdown != null
-          ? EditorSession.create_handwritten(args.title, args.markdown, JSON.stringify(args.options || {}))
-          : args.sizes
-          ? EditorSession.create_document(
-              args.title,
-              JSON.stringify(args.sizes),
-              bytes,
-            )
-          : args.project
-            ? EditorSession.load_project(
-                new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-              )
-            : new EditorSession(bytes);
-        if (args.canvas) candidate.set_canvas(true);
-        if (args.image) candidate.add_image(0, JSON.stringify(args.image));
-        const result = JSON.parse(candidate.view(0));
-        // Recordings added in NoteComplete travel inside .notecomp files.
-        if (args.notecomplete)
-          result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
-        session?.free();
-        session = candidate;
-        candidate = undefined;
-        postMessage({ id, result });
-        return;
-      } finally {
-        candidate?.free();
-      }
-    } else if (op === "markdownHtml") {
-      postMessage({ id, result: markdown_html(args.text) });
-      return;
-    } else if (op === "dialect") {
-      postMessage({ id, result: handwriting_dialect() });
-      return;
-    } else if (op === "close") {
-      // The document was closed in the reader: release its archive and scene now.
-      session?.free();
-      session = undefined;
-      postMessage({ id, result: true });
-      return;
-    } else if (op === "composePreview") {
-      // Handwriting preview of Markdown; needs no open document.
-      postMessage({ id, result: JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)) });
-      return;
-    } else if (op === "md5") {
-      postMessage({ id, result: md5_hex(new Uint8Array(args.bytes)) });
-      return;
-    } else if (op === "jpegPagesPdf") {
-      const result = jpeg_pages_pdf(args.data, args.layout, args.title);
-      postMessage({ id, result }, [result.buffer]);
-      return;
-    } else if (!session) {
-      throw Error("Open a document first.");
-    }
-    if (op === "pick") {
-      postMessage({
-        id,
-        result: JSON.parse(
-          session.pick_item(page, args.x, args.y, args.tolerance),
-        ),
-      });
-      return;
-    }
-    // Markdown notes: kept in the session (saved with projects and .notecomplete).
-    if (op === "getMarkdown" || op === "setMarkdown" || op === "exportMarkdown") {
-      if (op === "setMarkdown") session.set_markdown(args.text);
-      const text = session.markdown();
-      postMessage({ id, result: op === "exportMarkdown" ? markdown_export(text, args.title || "") : text });
-      return;
-    }
-    if (op === "exportNotecomplete") {
-      const bytes = session.export_notecomplete(new Uint8Array(args.audioData || []), args.audioLayout || "");
-      postMessage({ id, result: bytes }, [bytes.buffer]);
-      return;
-    }
-    if (op === "pickLock") {
-      postMessage({ id, result: JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)) });
-      return;
-    }
-    if (op === "selection") {
-      postMessage({
-        id,
-        result: JSON.parse(session.selection(page, args.itemId)),
-      });
-      return;
-    }
-    if (op === "crop") {
-      postMessage({ id, result: JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))) });
-      return;
-    }
-    if (op === "adjust") {
-      postMessage({
-        id,
-        result: JSON.parse(
-          session.adjust_item(
-            page,
-            args.itemId,
-            JSON.stringify(args.adjustment),
-          ),
-        ),
-      });
-      return;
-    }
-    if (op === "remove") session.remove_item(page, args.itemId);
-    if (op === "lock") session.set_locked(page, args.itemId, args.locked);
-    if (op === "resizePage") session.resize_page(page, args.size[0], args.size[1], args.pdfRect ? JSON.stringify(args.pdfRect) : undefined);
-    if (op === "resizePages") session.resize_pages(JSON.stringify(args.pages.map((p) => ({ page: p.page, size: p.size, pdf_rect: p.pdfRect || null }))));
-    if (op === "editText") session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height);
-    if (op === "export") {
-      const bytes = session.export_noteful();
-      postMessage({ id, result: bytes }, [bytes.buffer]);
-      return;
-    }
-    if (op === "resize")
-      session.resize_shape(page, args.shapeId, JSON.stringify(args.shape));
-    if (op === "layer") session.set_layer(JSON.stringify(args.layer));
-    if (op === "draw") {
-      session.draw(page, JSON.stringify(args.line));
-      // A shape recognised at an angle (shape-recognize.js) is added level, then turned about
-      // its centre in the same step: one undo removes both, and every copy in a sharing
-      // session does the same, since the op travels with its arguments.
-      if (Number.isFinite(args.turn) && args.turn) {
-        const id = `new:${JSON.parse(session.view(page)).edit_count - 1}`;
-        session.adjust_item(page, id, JSON.stringify({ translation: [0, 0], scale: [1, 1], rotation: args.turn, joined: true }));
-      }
-    }
-    if (op === "image") session.add_image(page, JSON.stringify(args.image));
-    // Several lines, then typed text boxes, as one undo step (graph.js: an inserted graph).
-    if (op === "drawMany") {
-      // `replace`: the items of a graph or table drawn again, removed first in the same step.
-      let first = true;
-      if (Array.isArray(args.replace) && args.replace.length) { session.remove_items(page, JSON.stringify(args.replace), false); first = false; }
-      for (const line of args.lines || []) { session.draw(page, JSON.stringify({ ...line, joined: !first })); first = false; }
-      for (const image of args.images || []) { session.add_image(page, JSON.stringify({ ...image, joined: !first })); first = false; }
-    }
-    if (op === "erase")
-      session.erase(page, JSON.stringify(args.points), args.radius);
-    if (op === "insertHandwritten")
-      session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}));
-    if (op === "insertPages")
-      session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined);
-    if (op === "recognized") {
-      session.set_recognized_text(JSON.stringify(args.pages || {}));
-      postMessage({ id, result: true });
-      return;
-    }
-    if (op === "digest") {
-      postMessage({ id, result: session.history_digest() });
-      return;
-    }
-    if (op === "historyMark") {
-      postMessage({ id, result: JSON.parse(session.history_mark()) });
-      return;
-    }
-    if (op === "prefixDigest") {
-      postMessage({ id, result: session.prefix_digest(args.edits) });
-      return;
-    }
-    // The history compacted up to `upto` edits: the report, with the page view after it.
-    if (op === "compactPreview") {
-      postMessage({ id, result: JSON.parse(session.compact_preview(args.upto)) });
-      return;
-    }
-    if (op === "compactHistory") {
-      const report = JSON.parse(session.compact_history(args.upto));
-      postMessage({ id, result: { report, view: JSON.parse(session.view(page)) } });
-      return;
-    }
-    if (op === "undo") session.undo();
-    if (op === "redo") session.redo();
-    // Undoing inserted pages can take away the page in view: show the last one left.
-    if (op === "undo" || op === "redo") {
-      for (;;) {
-        try { postMessage({ id, result: JSON.parse(session.view(page)) }); return; }
-        catch (e) { if (page <= 0) throw e; page--; }
-      }
-    }
-    if (op === "audio" || op === "pdf") {
-      const bytes =
-        op === "audio"
-          ? session.audio_bytes(args.resource)
-          : session.pdf_bytes(args.resource);
-      postMessage({ id, result: bytes }, [bytes.buffer]);
-      return;
-    }
-    postMessage({
-      id,
-      result:
-        op === "save" ? session.save_project() : JSON.parse(session.view(page)),
-    });
+    const needsDocument = !Object.hasOwn(standalone, op);
+    if (needsDocument && !Object.hasOwn(onDocument, op)) throw Error(`Unknown engine operation: ${op}`);
+    if (needsDocument && !session) throw Error("Open a document first.");
+    const result = (needsDocument ? onDocument : standalone)[op](args, page);
+    postMessage({ id, result }, TRANSFERRED.has(op) ? [result.buffer] : []);
   } catch (e) {
     postMessage({ id, error: String(e) });
   }
