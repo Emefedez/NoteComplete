@@ -19,7 +19,7 @@ Selection gestures preview one SVG item at most once per animation frame and sen
 
 ## Format research
 
-The format work behind the core (Ghidra scripts and static-analysis evidence, the independent Python parser/renderer oracle, the legacy comparison viewer, corpus analysis and Rust/Python parity checks, and the evidence-to-implementation procedure) lives on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. New format variants found in real notes are analysed and documented there first; this branch carries the [specification](spec/noteful-v0.1.md) the core implements and synthetic regression tests for each variant (for example `crates/noteful-core/tests/page_geometry.rs`).
+The format work behind the core (Ghidra scripts and static-analysis evidence, the independent Python parser/renderer oracle, the legacy comparison viewer, corpus analysis and Rust/Python parity checks, and the evidence-to-implementation procedure) lives on the [`reverse-engineering`](https://github.com/Emefedez/noteful-re/tree/reverse-engineering) branch. New format variants found in real notes are analysed and documented there first; this branch carries the [specification](spec/noteful-v0.1.md) the core implements and synthetic regression tests for each variant (for example `crates/noteful-core/tests/it/page_geometry.rs`).
 
 ## Documentation map
 

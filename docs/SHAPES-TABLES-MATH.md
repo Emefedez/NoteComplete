@@ -40,7 +40,7 @@ fill (the even-odd band fill in `ink::shape_fill` handles its concave outline). 
 `shapes.js` computes the same points; `CLOSED_SHAPES` there is the one list of shapes with an
 inside. It exports as ink, like the other new shapes.
 
-Tests: `crates/noteful-core/tests/filled_shapes.rs` (`a_star_fills_its_box…`),
+Tests: `crates/noteful-core/tests/it/filled_shapes.rs` (`a_star_fills_its_box…`),
 `apps/reader/shape-recognize.test.mjs` (the JS points match the box).
 
 ## S2 Shape recognition
@@ -273,7 +273,7 @@ check on an iPhone or iPad.
 - `node tools/shapes_e2e.mjs` (Chromium; `CHROMIUM=/path` uses a system browser): pen
   rectangle, turned triangle and its single undo, resize after the snap, scribble kept as ink,
   star with handles.
-- `cargo test -p noteful-core --test filled_shapes --test math_text`.
+- `cargo test -p noteful-core --test it filled_shapes math_text`.
 - `cargo test -p noteful-cli` for the MCP `textbox` with `math`.
 - In the reader: draw each shape and hold; check the selection handles, rotation, undo (one
   step), export and reopen.

@@ -17,7 +17,9 @@ Baseline on that day: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo te
 
 ## Security and bugs
 
-### S1 Remote file names are written as HTML `[ ]`
+### S1 Remote file names are written as HTML `[!]`
+
+Done in `8bb0902` (`queue-controls.js`); covered by unit tests, not yet seen in the app.
 
 `renderQueueList` in `apps/reader/app.js` builds each download-queue row with `innerHTML`
 and the file's name. The name comes from Google Drive and Internet Archive listings, so a
@@ -36,7 +38,9 @@ WebAssembly, workers and the hosts it really uses (Google sign-in and Drive, Int
 Archive, jsDelivr, Hugging Face), and refuses inline script. Check in the browser that
 OCR, speech, PDF, the local model, Drive and sharing still load.
 
-### S3 `files:download-url` fetches any address `[ ]`
+### S3 `files:download-url` fetches any address `[!]`
+
+Done in `98c51b9` (`archive-download.js`): Internet Archive only, redirects checked, 2 GiB limit, cancel. Tested with a stand-in for Electron's network; a real download and a real cancel are still to try in the app. Left: the download is held in memory and copied twice on its way to the page; writing it to disk would be the real fix.
 
 `apps/desktop/main.js` gives the reader's URL to `net.fetch`, which also reads `file://`.
 It keeps the whole answer in memory with no limit, and the reader's abort signal is not
@@ -46,23 +50,31 @@ passed on, so an Internet Archive download cannot be cancelled on the desktop.
 - Stop above a size limit; add a cancel message (`preload.cjs`, `archive-client.js`).
 - Test the allowlist and the limit as a pure function.
 
-### S4 Automatic saves have no size `[ ]`
+### S4 Automatic saves have no size `[D]`
+
+Done in `c3c1f44`. Slots saved before it have no size and show none.
 
 `autosave.js` stores `project.byteLength`, but the reader passes the project as text, so
 the File menu shows "NaN MB". Store the text's length in bytes; test with a string.
 
-### S5 The sharing server accepts 1 GiB messages before hello `[ ]`
+### S5 The sharing server accepts 1 GiB messages before hello `[!]`
+
+Done in `cb92395`: only the first loopback connection gets the large limit. Tested over loopback, not with a second device or the tunnel. Left: until the host's reader has connected, a program on the host computer itself still gets the large limit; closing that needs the host token when the connection is made, which changes the protocol.
 
 `collab-server.js` sets `maxPayload` to 1 GiB for every socket; the hub's guest limit only
 applies once the message is in memory. Keep a small limit until the peer is the host
 (loopback, host token), then raise it for that socket.
 
-### S6 Unknown engine operations answer with a page view `[ ]`
+### S6 Unknown engine operations answer with a page view `[D]`
+
+Done in `f5f606e`; the old and new worker gave the same replies to 49 messages on a sample note.
 
 `worker.js` falls through to `view` for any name it does not know. Turn the chain into a
 table of operations and refuse unknown names.
 
-### S7 One bad page drops the recognized text of the rest `[ ]`
+### S7 One bad page drops the recognized text of the rest `[D]`
+
+Done in `09f71de`.
 
 `set_recognized_text` (`noteful-wasm`) stops at the first page the core refuses, and the
 reader ignores the error. Skip the page, keep the others, and report how many were kept.
@@ -70,6 +82,8 @@ reader ignores the error. Skip the page, keep the others, and report how many we
 ## Performance
 
 ### P1 Every edit re-renders the whole page `[ ]`
+
+Steps 1 and 2 done in `4fc659b` (`view.rs`; the old code stays as a test-only reference and every sample is compared against it). In WebAssembly, with the page already drawn once, `view` after one more stroke went from 21 ms to 2.3 ms at 500 strokes, 34 to 3.1 at 1000 and 138 to 9.2 at 4000. Step 3 is still to do: what is left is copying and parsing the whole page for one stroke.
 
 After each edit the core builds the page's whole SVG (`Editor::view`) and the reader
 replaces the page with `innerHTML`. Measured on `samples/Examen wuolah.noteful`, adding
@@ -105,13 +119,17 @@ Each minute with changes: `save` (the whole source as base64) and then `export` 
 hash it. Hash the content in the core without building the export in JavaScript, and skip
 the export when the history mark has not moved. Measure on a note of 200 MB or more first.
 
-### P4 pdf.js is shipped unminified `[ ]`
+### P4 pdf.js is shipped unminified `[!]`
+
+Done in `95d8fbb`; the shell went from 8.2 MB to 6.5 MB with P5. Still to do: open a PDF in the rebuilt reader.
 
 `tools/build_web.py` copies `pdf.mjs` and `pdf.worker.mjs` (3.09 MB). The `.min.mjs`
 builds are 1.72 MB. Copy those (under the names the reader loads, or change the names in
 `pdf-background.js` and wherever the worker is named) and check a PDF opens.
 
-### P5 No release profile for the WebAssembly build `[ ]`
+### P5 No release profile for the WebAssembly build `[D]`
+
+Done in `83886dd`: the module is 2.48 MB (was 2.78 MB), the CLI 3.67 MB (was 4.92 MB). A full release build of the CLI now takes about 75 s.
 
 `[profile.release]` with `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`: the module
 went from 2.85 MB to 2.56 MB in a trial. Check the CLI still builds and runs as before
@@ -119,20 +137,26 @@ went from 2.85 MB to 2.56 MB in a trial. Check the CLI still builds and runs as 
 
 ## Repetition
 
-### R1 The download-queue button, three times `[ ]`
+### R1 The download-queue button, three times `[!]`
+
+Done in `9a4639e` (`queue-controls.js`); markup unchanged and pinned by tests, not yet seen in the app. The icons stay in that module: `icons.js` cannot draw circles or other stroke widths.
 
 `archive-browser.js` and `drive-browser.js` each write the queue button, its three states,
 the selection check box and `updateQueueControls`; `app.js` has the same three icons
 again. One module for the button and the controls, icons in `icons.js`.
 
-### R2 The snapshot frame, twice `[ ]`
+### R2 The snapshot frame, twice `[D]`
+
+Done in `848d88e`: a test packs with each and unpacks with the other. They were identical.
 
 `packSnapshot`/`unpackSnapshot` are in `apps/reader/sync.js` and
 `apps/desktop/collab-hub.js`. It is the wire format, so the two must not drift. Either one
 file used by both (the desktop app already ships the reader's files) or a test that packs
 with one and unpacks with the other, both ways.
 
-### R3 Small copies `[ ]`
+### R3 Small copies `[D]`
+
+Done in `4e149aa`, `e8231a0` and `8427595`. Found on the way: both updaters ignore a fourth version number.
 
 - `terminateProcess` in `ai-runner.js` and `transcriber.js`: one module (add it to
   `build.files` in `apps/desktop/package.json`).
@@ -140,12 +164,16 @@ with one and unpacks with the other, both ways.
   a cross-check test, as they live in different packages.
 - `note-cover.js`/`note-facts.js` and the two rasterising paths in `pdf-background.js`.
 
-### R4 The e2e scripts' opening lines `[ ]`
+### R4 The e2e scripts' opening lines `[!]`
+
+Done in `4460762` (`tools/e2e_common.mjs`, 20 scripts). Playwright is not installed on this machine, so the scripts were checked for syntax only: run them once where it is.
 
 About 13 scripts in `tools/` start with the same 8 to 13 lines (server, browser, page).
 One `tools/e2e_common.mjs`.
 
-### R5 The WebAssembly adapter `[ ]`
+### R5 The WebAssembly adapter `[D]`
+
+Done in `400ce8c`; the generated JavaScript is the same apart from `set_recognized_text` returning a count.
 
 `crates/noteful-wasm/src/lib.rs`: `slot(page).map_err(js_error)?` about 20 times,
 `pick_item` and `pick_lockable` alike, two compact reports written by hand. A small error
@@ -153,7 +181,9 @@ conversion, one helper for the page, `Serialize` on the report.
 
 ## Code quality
 
-### Q1 `Editor::view` ends in one 1,590-character line `[ ]`
+### Q1 `Editor::view` ends in one 1,590-character line `[D]`
+
+Done with P1 in `4fc659b`.
 
 `crates/noteful-core/src/editor.rs`: split the final `json!` into named values (shapes,
 tapes, page sizes, timings), so `rustfmt` formats them. Goes with P1.
@@ -170,13 +200,17 @@ window, page export wiring, the text box editor. No behaviour change; one commit
 the code already uses, `/* Optional. */`), and report the rest with `console.warn` or the
 status line.
 
-### Q4 Stale comments `[ ]`
+### Q4 Stale comments `[D]`
+
+Done in `8d3eb54`.
 
 The two doc lines above `compose_with` in `noteful-wasm` belong to functions that moved.
 
 ## Tests
 
-### T1 Fewer test programs, no repeated tests `[ ]`
+### T1 Fewer test programs, no repeated tests `[D]`
+
+Done in `8ef147a`: one program, samples embedded once. Building the tests after a change to the core went from 2.45 s to 1.58 s, and from nothing from 8.9 s to 7.8 s. No test was removed: every one was read and none repeats another.
 
 `crates/noteful-core/tests/` has 16 files, and Cargo compiles and links each as its own
 program against the core, which is most of the time `cargo test` spends building.
@@ -201,7 +235,9 @@ accident (the ignore rule covered only the root `work/`). Removed, and `work/` i
 ignored everywhere. They are still in the history: taking them out of it needs a rewrite
 and a forced push, which is a separate decision.
 
-### H2 Documents `[ ]`
+### H2 Documents `[D]`
+
+Done in `a68240c`.
 
 - `docs/REQUESTS.md` and the "Next steps" of `DEVELOPMENT.md`: each open item checked
   against the code and the changelog, and marked as it really is.
