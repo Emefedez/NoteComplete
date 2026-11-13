@@ -2,6 +2,7 @@ import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile, DRIVE_WR
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 // The Drive section of the home screen. show()/hide() follow the home screen:
 // hiding cancels listings, downloads, previews and a pending sign-in.
@@ -81,42 +82,11 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     $('driveList').replaceChildren();
   }
   function updateQueueControls() {
-    const qMode = $('driveQueueMode');
-    const qDl = $('driveQueueDownload');
-    const qCancel = $('driveQueueCancel');
-    const qAll = $('driveQueueAll');
-    const list = $('driveList');
     const downloadable = currentFiles.filter(f => f.mimeType !== FOLDER_MIME && supportedDriveFile(f) && f.capabilities?.canDownload !== false);
-
-    if (!queue || !downloadable.length) {
-      if (qMode) qMode.hidden = true;
-      if (qDl) qDl.hidden = true;
-      if (qCancel) qCancel.hidden = true;
-      if (qAll) qAll.hidden = true;
-      list?.classList?.remove?.('queue-selecting');
-      return;
-    }
-
-    if (selectingQueue) {
-      if (qMode) qMode.hidden = true;
-      if (qAll) qAll.hidden = true;
-      if (qDl) {
-        qDl.hidden = false;
-        qDl.textContent = `Download (${selectedFiles.size})`;
-        qDl.disabled = selectedFiles.size === 0;
-      }
-      if (qCancel) qCancel.hidden = false;
-      list?.classList?.add?.('queue-selecting');
-    } else {
-      if (qMode) qMode.hidden = false;
-      if (qAll) {
-        qAll.hidden = false;
-        qAll.textContent = `Queue all (${downloadable.length})`;
-      }
-      if (qDl) qDl.hidden = true;
-      if (qCancel) qCancel.hidden = true;
-      list?.classList?.remove?.('queue-selecting');
-    }
+    queueControls(
+      { mode: $('driveQueueMode'), download: $('driveQueueDownload'), cancel: $('driveQueueCancel'), all: $('driveQueueAll'), list: $('driveList') },
+      { available: !!queue, count: downloadable.length, selecting: selectingQueue, selected: selectedFiles.size },
+    );
   }
 
   const qMode = $('driveQueueMode');
@@ -247,10 +217,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         badge(entry, file);
       }
       if (!isFolder && allowed) {
-        const check = document.createElement('span');
-        check.className = 'note-select-check';
-        check.setAttribute('aria-hidden', 'true');
-        check.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`;
+        const check = selectionCheck();
         button.append(check);
         if (selectedFiles.has(file.id)) button.classList?.add?.('is-selected');
       }
@@ -272,46 +239,13 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `drive:${file.id}` }); choose(file); } });
 
       if (!isFolder && allowed && queue) {
-        const qBtn = document.createElement('button');
-        qBtn.type = 'button';
-        qBtn.className = 'card-queue-btn';
         const fileId = `drive:${file.id}`;
-        const updateQBtn = (isDone) => {
-          const st = isDone ? 'done' : queue.statusOf(fileId);
-          if (st === 'done') {
-            qBtn.className = 'card-queue-btn is-done';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
-            qBtn.title = 'Downloaded to library';
-          } else if (st === 'downloading' || st === 'queued') {
-            qBtn.className = 'card-queue-btn is-queued';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`;
-            qBtn.title = 'Queued for download (click to remove)';
-          } else {
-            qBtn.className = 'card-queue-btn';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14"/></svg>`;
-            qBtn.title = 'Queue for download';
-          }
-        };
-        updateQBtn(false);
-        library?.cached(file).then(hit => { if (hit) updateQBtn(true); }).catch(() => {});
-        qBtn.onclick = (e) => {
-          e.stopPropagation();
-          const st = queue.statusOf(fileId);
-          if (st === 'queued' || st === 'downloading') {
-            queue.cancel(fileId);
-            updateQBtn(false);
-          } else {
-            queue.enqueue({
-              source: 'drive',
-              id: fileId,
-              name: file.name,
-              size: Number(file.size) || 0,
-              doc: file,
-              client
-            });
-            updateQBtn(false);
-          }
-        };
+        const qBtn = queueButton({
+          queue,
+          id: fileId,
+          item: () => ({ source: 'drive', id: fileId, name: file.name, size: Number(file.size) || 0, doc: file, client }),
+          kept: library?.cached(file),
+        });
         item.append(qBtn);
       }
 
@@ -525,13 +459,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     for (const [entry, file] of cards) {
       if (file.id === item.doc?.id || `drive:${file.id}` === item.id) {
         badge(entry, file);
-        const li = entry.closest('li');
-        const qBtn = li?.querySelector('.card-queue-btn');
-        if (qBtn) {
-          qBtn.className = 'card-queue-btn is-done';
-          qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
-          qBtn.title = 'Downloaded to library';
-        }
+        markQueueDone(entry.closest('li')?.querySelector('.card-queue-btn'));
       }
     }
   }

@@ -1,6 +1,7 @@
 import { ArchiveClient, PRELOADED_ARCHIVE, archiveId, archiveListing } from './archive-client.js';
 import { TYPES } from './note-facts.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 function documentCoverSvg(name) {
   const isPdf = /\.pdf$/i.test(name);
@@ -176,10 +177,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       const isSelected = selectedDocs.has(docKey);
       if (isSelected) b.classList?.add?.('is-selected');
 
-      const check = document.createElement('span');
-      check.className = 'note-select-check';
-      check.setAttribute('aria-hidden', 'true');
-      check.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`;
+      const check = selectionCheck();
 
       b.append(cover, meta, check);
       b.onclick = () => {
@@ -200,50 +198,12 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       if (exportRequest && exportable(doc.name)) addExportMenu(li, { label: doc.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `archive:${currentRepo}:${doc.path || doc.name}` }); chooseDoc(doc); } });
 
       if (queue) {
-        const qBtn = document.createElement('button');
-        qBtn.type = 'button';
-        qBtn.className = 'card-queue-btn';
-        const docId = `archive:${currentRepo}:${doc.path || doc.name}`;
-        const updateQBtn = (isDone) => {
-          const st = isDone ? 'done' : queue.statusOf(docId);
-          if (st === 'done') {
-            qBtn.className = 'card-queue-btn is-done';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
-            qBtn.title = 'Downloaded to library';
-          } else if (st === 'downloading' || st === 'queued') {
-            qBtn.className = 'card-queue-btn is-queued';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`;
-            qBtn.title = 'Queued for download (click to remove)';
-          } else {
-            qBtn.className = 'card-queue-btn';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14"/></svg>`;
-            qBtn.title = 'Queue for download';
-          }
-        };
-        updateQBtn(false);
-        if (library) {
-          library.entry({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name }).then(hit => {
-            if (hit) updateQBtn(true);
-          }).catch(() => {});
-        }
-        qBtn.onclick = (e) => {
-          e.stopPropagation();
-          const st = queue.statusOf(docId);
-          if (st === 'queued' || st === 'downloading') {
-            queue.cancel(docId);
-            updateQBtn(false);
-          } else {
-            queue.enqueue({
-              source: 'archive',
-              sourceId: currentRepo,
-              name: doc.name,
-              size: Number(doc.size) || 0,
-              doc,
-              client
-            });
-            updateQBtn(false);
-          }
-        };
+        const qBtn = queueButton({
+          queue,
+          id: `archive:${currentRepo}:${doc.path || doc.name}`,
+          item: () => ({ source: 'archive', sourceId: currentRepo, name: doc.name, size: Number(doc.size) || 0, doc, client }),
+          kept: library ? library.entry({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name }) : null,
+        });
         li.append(qBtn);
       }
 
@@ -342,41 +302,10 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
   }
 
   function updateQueueControls(visibleDocs = []) {
-    const qMode = $('archiveQueueMode');
-    const qDl = $('archiveQueueDownload');
-    const qCancel = $('archiveQueueCancel');
-    const qAll = $('archiveQueueAll');
-    const list = $('archiveList');
-
-    if (!queue || !visibleDocs.length) {
-      if (qMode) qMode.hidden = true;
-      if (qDl) qDl.hidden = true;
-      if (qCancel) qCancel.hidden = true;
-      if (qAll) qAll.hidden = true;
-      list?.classList?.remove?.('queue-selecting');
-      return;
-    }
-
-    if (selectingQueue) {
-      if (qMode) qMode.hidden = true;
-      if (qAll) qAll.hidden = true;
-      if (qDl) {
-        qDl.hidden = false;
-        qDl.textContent = `Download (${selectedDocs.size})`;
-        qDl.disabled = selectedDocs.size === 0;
-      }
-      if (qCancel) qCancel.hidden = false;
-      list?.classList?.add?.('queue-selecting');
-    } else {
-      if (qMode) qMode.hidden = false;
-      if (qAll) {
-        qAll.hidden = false;
-        qAll.textContent = `Queue all (${visibleDocs.length})`;
-      }
-      if (qDl) qDl.hidden = true;
-      if (qCancel) qCancel.hidden = true;
-      list?.classList?.remove?.('queue-selecting');
-    }
+    queueControls(
+      { mode: $('archiveQueueMode'), download: $('archiveQueueDownload'), cancel: $('archiveQueueCancel'), all: $('archiveQueueAll'), list: $('archiveList') },
+      { available: !!queue, count: visibleDocs.length, selecting: selectingQueue, selected: selectedDocs.size },
+    );
   }
 
   // Wiring buttons
@@ -518,12 +447,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       for (const li of $('archiveList').children) {
         const b = li.querySelector('.note-card');
         if (b && (b.querySelector('strong')?.textContent === item.name)) {
-          const qBtn = li.querySelector('.card-queue-btn');
-          if (qBtn) {
-            qBtn.className = 'card-queue-btn is-done';
-            qBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
-            qBtn.title = 'Downloaded to library';
-          }
+          markQueueDone(li.querySelector('.card-queue-btn'));
         }
       }
     },
