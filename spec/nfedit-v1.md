@@ -149,7 +149,7 @@ A page without an editable block receives one and its page/index references are 
 
 Regression coverage includes empty-note creation, imported stroke removal, straight-line object removal, new highlighter ink, five outline shapes, multiple layers, undo/redo cursor handling, preservation of every media resource, and reopening the output through Rust/WASM and the Python oracle.
 
-**Interoperability is experimental.** Modified output has not yet been imported into the official Noteful app. Native CRDT merge behavior, tombstone semantics, layer flags and thumbnail invalidation require controlled native round-trip samples. The existing thumbnail is preserved and may remain stale until another app regenerates it. Newly drawn shapes export as stroke outlines. Adjusted imported shapes remain native parametric objects. No unsupported field is intentionally discarded, but byte preservation alone does not prove every application-specific invariant.
+**Writer limits.** Native CRDT merge behavior, tombstone semantics, layer flags and thumbnail invalidation require controlled native round-trip samples. The existing thumbnail is preserved and may remain stale until another app regenerates it. Newly drawn shapes export as stroke outlines. Adjusted imported shapes remain native parametric objects. No unsupported field is intentionally discarded, but byte preservation alone does not prove every application-specific invariant.
 
 ## Adjusted items
 

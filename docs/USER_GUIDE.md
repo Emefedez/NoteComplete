@@ -249,7 +249,7 @@ completion or cancellation; page thumbnails retain small bitmaps only.
 ## Save and export
 
 - **Save project .nfedit** keeps unchanged source bytes, edits and undo/redo history.
-- **Export .noteful** flattens applied edits into a new native archive. It is experimental; see [writer limitations](../spec/nfedit-v1.md#native-export).
+- **Export .noteful** flattens applied edits into a new native archive; see [writer limitations](../spec/nfedit-v1.md#native-export).
 - **Export page SVG** includes the rendered PDF background and current layers/audio appearance. Wait for the PDF page to finish rendering.
 
 Files download as new files; originals are not overwritten. Replacing a dirty document prompts before discarding edits. Native export does not mark the richer project as saved. Fonts resolve from the device; Apple fonts are not bundled. Exact native ink smoothing, advanced text layout and some object variants remain incomplete.

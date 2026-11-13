@@ -13,7 +13,7 @@ This is the current development and validation guide for the NoteComplete client
 | `apps/desktop/` | Electron wrapper: bundled reader assets, sandboxed renderer and restricted custom asset protocol. |
 | `tools/`, `.github/workflows/` | Builds, serving, evidence checks, regression checks and installable package workflows. |
 
-Source bytes remain immutable during editing. `.nfedit` stores the original archive plus edit/redo state; native export flattens applied edits while preserving supported unknown fields and original resources. New shapes export as ink; adjusted supported parametric shapes remain objects. Official Noteful import of modified exports is still unverified.
+Source bytes remain immutable during editing. `.nfedit` stores the original archive plus edit/redo state; native export flattens applied edits while preserving supported unknown fields and original resources. New shapes export as ink; adjusted supported parametric shapes remain objects.
 
 Selection gestures preview one SVG item at most once per animation frame and send one adjustment when the gesture ends. Item patches retain PDF/audio nodes. Hidden and locked layers are excluded from editing.
 
@@ -71,7 +71,7 @@ Status 2026-10-27. Done in this sprint: wire type 0x23 (PDF rect on widened page
 
 ## Remaining validation
 
-Import modified exports into official Noteful; obtain native multiple-recording, pause/splice and decorated-text samples; validate layer merge/tombstone behavior; improve native ink smoothing and advanced text layout; validate file selection, codecs, sharing and performance on physical devices. Unknown auxiliary channels, unsupported object variants, stale exported thumbnails and incomplete CRDT semantics remain explicit limitations. Generated Whisper word boundaries are estimates and need their own accuracy assessment.
+Obtain native multiple-recording, pause/splice and decorated-text samples; validate layer merge/tombstone behavior; improve native ink smoothing and advanced text layout; validate file selection, codecs, sharing and performance on physical devices. Unknown auxiliary channels, unsupported object variants, stale exported thumbnails and incomplete CRDT semantics remain explicit limitations. Generated Whisper word boundaries are estimates and need their own accuracy assessment.
 
 Complete the first native package workflow runs and installed-app checks before claiming successful delivery for each target. Packaging automation is distinct from signed production distribution.
 

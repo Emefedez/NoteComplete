@@ -25,6 +25,8 @@ This document details the memory footprint, scaling characteristics, and identif
 | 4 | Orphaned child processes, `running` Map | **Fixed**: tab destruction cancels AI and transcription work; empty owners are dropped (tested in `ai-runner.test.mjs`) |
 | 5 | "Unbounded undo history" | **Not a bug, no change** (see below) |
 | 6 | Buffer duplication on open | Open (needs a streaming or transferable open path) |
+| 7 | Whole page re-rendered after every edit | Open: measured 2026-11-13, see [docs/CLEANUP-PLAN.md](docs/CLEANUP-PLAN.md#p1-every-edit-re-renders-the-whole-page) |
+| 8 | Auto-save serialises the note twice a minute | Open: see [docs/CLEANUP-PLAN.md](docs/CLEANUP-PLAN.md#p3-auto-save-serialises-the-note-twice) |
 
 Peak memory while a *new* large note opens (old and new session coexist until the new one validates) is unchanged.
 

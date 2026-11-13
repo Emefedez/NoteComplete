@@ -7,7 +7,7 @@
 ## 1. Active Implementation Priorities
 
 ### 1.1 Text Box Parity with Full GUI Implementation (`[ ]` In Progress)
-- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
+- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8](INK-WRITING.md).
 - **Core Engine & Wire Format:**
   - Full reverse-engineered support for Noteful native Kind-2 objects in `set/5/0[]`.
   - Attributed rich text (`payload tag 4`) encoding/decoding: run strings, attribute counts, delta keys, and pools 5–10 (family, bold/italic, color RGBA, underline/strikethrough/alignment, font size/line spacing).
@@ -32,8 +32,8 @@
 
 ### 1.2 Shapes Auto-Fill Toggle (`[!]` Built 2026-11-01; native filled objects pending)
 - **Built:** `Shape.fill` (rectangle, ellipse, triangle), validated and kept on resize; Fill picker (outline / tint 25% / solid) in the shape settings and the tablet dock, **F** cycles it; live filled preview; projects keep it; `.noteful` export writes the inside as highlighter bands under the outline.
-- **Pending:** native Kind-3/Kind-6 filled objects for iPad parity (below), a custom fill swatch, and an iPad import check.
-- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8.7](file:///home/m1-max/Documents/noteful-re/docs/INK-WRITING.md).
+- **Pending:** native Kind-3/Kind-6 filled objects for iPad parity (below) and a custom fill swatch.
+- **Detailed Specification:** See [`docs/INK-WRITING.md` Section 8.7](INK-WRITING.md).
 - **Reader GUI (`apps/reader/`):**
   - Add `#shapeAutoFill` toggle button to `#shapeOptions` with pale accent highlight when active.
   - Keyboard shortcut **F** toggles auto-fill when Shape tool (`R`) is active.
@@ -50,10 +50,10 @@
 - **Never a `.noteful` file:** Noteful has no infinite page. The core refuses `export_noteful` for a canvas, so the app, the CLI and the MCP tools all refuse it. New document turns off Noteful for a canvas, and the NF and N+MD exports are off. A canvas takes no inserted pages.
 - **Pending:** growing to the left and up, an overview zoom, and a canvas from the MCP tools.
 
-### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; iPad import check pending)
+### 1.3 MCP Vector Ink Writing & Page Generation (`[!]` Implemented; `design_mockup` not yet run with a real key)
 - **Detailed Specification:** See [`docs/INK-WRITING.md`](INK-WRITING.md) and [`docs/MCP.md`](MCP.md).
 - **Done:** pressure and under-ink in the core, handwriting engine, classic and study looks, SVG → ink, paper, `create_notebook`, `add_pages`, `clean_copy`, `write_on_page` (including native text boxes), `page_layout`, `example_pages`, resources, prompts, design copy (`design_mockup`, `mockup_grid`, `design_page` with tracing), `noteful convert` with `--export pdf|png|svg`, the in-app converter (File → New from Markdown, Pages → Insert handwritten pages), and Help → Connect AI tools (the server ships with the desktop app).
-- **Pending:** open written files in Noteful on the iPad (Phase 0); `design_mockup` with a real Gemini key.
+- **Pending:** `design_mockup` with a real Gemini key.
 - **Core Engine:**
   - Vector ink synthesis engine in Rust core modeled on `openninoor/noteful-mcp` (pinned commit `175e8d7`).
   - True 3-value per-point pressure encoding (`new_stroke` flags = 1).
@@ -74,7 +74,6 @@
 - [!] **Interface Scaling & Floating Windows:** Scaling with `Ctrl+Shift+-/+/0` across all windows; tray minimization (`_`), maximize (`□`), close (`×`) on floating Ask AI / Quiz / Audio windows.
 - [!] **Drive Version Comparison:** Newer-version check on open and side-by-side comparison with study material migration.
 - [!] **Desktop Audio Recording:** Real microphone recording in Electron desktop app; type filter on live Google Drive.
-- [!] **Image Crop Export:** Validate imported image crops in physical iPad Noteful.
 - [!] **Sharing and drawing tablets:** shared Markdown notes (Yjs) with guest names, presence, cursors and ending; a phone or tablet as the computer's drawing surface (QR or 6-digit code, tool dock left/right with pen, highlighter, shapes and fill, own zoom, live strokes with pen pressure, shared undo). Tested in Node and headless Chromium (`tools/collab_e2e.mjs`); still to try on real devices, a real stylus, a real Wi-Fi network and the packaged apps ([COLLABORATION.md](COLLABORATION.md#not-yet-verified)).
 - [!] **Handwriting text and New note with AI:** handwriting written from Markdown keeps its words with their boxes (projects version 6, `ink-text.json` in `.notecomp`), so Find searches it at once without OCR; File → New note with AI… has the user's AI tool write the Markdown (streamed into the preview). Tested with a stand-in AI tool (`tools/ink_features_e2e.mjs`); still to try with the real CLIs. `.noteful` files do not carry the text.
 - [!] **Narrow windows and phones:** the menubar, tools and page row scroll sideways with the mouse wheel and a faded edge instead of hiding buttons; dark pages and Fit stay in the phone page row; the page number box fits its digits; opened menus look as on the desktop. Checked in Chromium at 320–480 px, not yet on a phone.

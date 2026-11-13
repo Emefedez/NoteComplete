@@ -131,5 +131,5 @@ Transcripts made in the reader still stay in its browser storage.
 
 ## Not yet
 
-- Files written here have not yet been imported on an iPad (the compatibility check in INK-WRITING.md, Phase 0). They open in NoteComplete; text boxes keep the layout confirmed from Noteful's own files, and alignment, underline and strikethrough use attribute keys read from the decompiled app.
+- Text boxes keep the layout confirmed from Noteful's own files, and alignment, underline and strikethrough use attribute keys read from the decompiled app.
 - `trace` follows outlines a few pixels wide; hair-thin anti-aliased lines in a small picture may be missed (zoom or use a larger mockup).

@@ -8,8 +8,8 @@ Status (2026-11-01): **Phases 1–6, 8 and 9 implemented** in `crates/noteful-co
 `design_tools.rs`), `noteful convert` (with `--export pdf|png|svg`) and the reader (File → New
 from Markdown, Pages → Insert handwritten pages; WASM `compose_preview`, `create_handwritten`,
 `insert_handwritten`). The desktop app ships the server and registers it with the user's AI tools
-(Help → Connect AI tools). User-facing docs are in [MCP.md](MCP.md). Not done yet: the Phase 0
-iPad import check, and the reader GUI work of Phase 7 (text box format bar, reflow handles,
+(Help → Connect AI tools). User-facing docs are in [MCP.md](MCP.md). Not done yet: the
+reader GUI work of Phase 7 (text box format bar, reflow handles,
 editing imported text, shape auto-fill).
 
 Where the implementation differs from the plan below:
@@ -27,8 +27,7 @@ Where the implementation differs from the plan below:
 - The bundled examples are translated to English.
 - `TextBox` gained `align`, `underline` and `strikethrough` (keys 8, 4, 5 in pool 8), written
   only when set; the rich multi-run model and `Edit::RetextObject` are left for Phase 7.
-- New notebooks keep package version 1.0 (`create_document_with` takes the version) until the
-  Phase 0 check picks one.
+- New notebooks keep package version 1.0 (`create_document_with` takes the version).
 - Design copy (Phase 8) is pure Rust: the tracer implements Zhang-Suen thinning, a chamfer
   distance transform, grey closing, connected components, Douglas-Peucker and median-cut colour
   clustering instead of SciPy/scikit-image; mockups are decoded by the CLI (`image` crate) and
@@ -115,9 +114,7 @@ Decisions:
 1. **Editing an existing file preserves its version.** `export_noteful` already keeps the
    source index; do not rewrite tag 1.
 2. **New files get an explicit version.** Add `DocumentOptions::format_version`; keep `1.0`
-   as the default until the compatibility spike (Phase 0) says otherwise, then change the
-   default to whichever version Noteful accepts. `1.2` is the leading candidate because it is
-   the only version with field reports from upstream users.
+   as the default. `1.2` is the alternative with field reports from upstream users.
 3. **Never emit a version we have not tested.** The spike matrix is `1.0`, `1.2`, `1.19`,
    `1.21` × paper strategy.
 
@@ -510,7 +507,6 @@ body, a colour per section, pill clutter, stacked full-width boxes).
 | `crates/noteful-cli/Cargo.toml` | `image` (PNG grid), optional `ureq` |
 | `crates/noteful-wasm/src/lib.rs` | `compose_markdown`, `create_handwritten_document` |
 | `docs/MCP.md` | Write tools, output folder, safety, examples |
-| `spec/noteful-v0.1.md` | Phase 0 compatibility results |
 
 `manipulation.rs` detail: if `a.width` is set and `line.pressure` is present, scale each
 pressure by `new_width / old_width` and clamp to `0..=1`; if the line has no pressure, keep
@@ -1362,7 +1358,7 @@ noteful convert lecture.md --export png --dpi 300 -o ./dist/
 ### 9.3 Output format defaults
 
 - Page size: A4 (1091.34 × 1543.46) unless the source notebook or caller says otherwise.
-- New notebooks: PDF paper, `format_version` from Phase 0.
+- New notebooks: PDF paper, `format_version` 1.0.
 - Inserted pages: inherit the notebook's paper mechanism and page size.
 - Deterministic seed derived from `title + page index` when the caller omits it, so a retry
   produces the same page.
@@ -1372,25 +1368,6 @@ noteful convert lecture.md --export png --dpi 300 -o ./dist/
 ## 10. Phased plan
 
 Effort assumes one developer familiar with the codebase; calendar time may be longer.
-
-### Phase 0 — Compatibility spike (2–3 days) **gate**
-
-Write four minimal packages from a test harness (one page, one ballpoint pressure stroke, one
-fineliner, one highlighter under it, one image, one tape):
-
-| Axis | Values |
-|---|---|
-| Package version | `1.0`, `1.2`, `1.19`, `1.21` |
-| Paper | JSON template, generated PDF |
-| Page size | A4, letter |
-
-Open each in Noteful on iPad (import via Files) and record: does it open, are pages listed,
-is ink visible and editable, is pressure respected, is the highlighter under the ink, does
-the paper render, does the image/tape survive, does re-export from Noteful keep working.
-Write results into `spec/noteful-v0.1.md` under a "writer compatibility" section.
-
-Exit criteria: one version × paper combination that imports cleanly and is editable.
-Everything below assumes that combination.
 
 ### Phase 1 — Pressure, ordering, paper, batch API (4–6 days)
 
@@ -1523,8 +1500,6 @@ Total: roughly **8–10 weeks** for Phases 0–7 and 9; Phase 8 (Design Copy) is
 6. **WASM**: compose and export in a browser test; re-open the result.
 7. **MCP**: JSON-RPC tool listing, schema validation, error results, output path safety,
    overwrite refusal, preview image content type.
-8. **Compatibility (manual)**: the Phase 0 matrix, repeated before each release that changes
-   the writer.
 9. **Visual**: render PNGs for the examples and inspect; keep them in `docs/images/` only
    when stable, not as pixel-diff CI (font rasterisation differs by platform).
 
@@ -1537,7 +1512,7 @@ page ≤ 250 ms, export a 10-page notebook ≤ 1 s, WASM compose ≤ 600 ms per 
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Noteful rejects our package version | Blocks everything | Phase 0 gate; preserve source version on edit; fall back to upstream's 1.2 |
+| Noteful rejects our package version | Blocks everything | Preserve source version on edit; fall back to upstream's 1.2 |
 | JSON paper ignored on import | Blank pages in Noteful | Default to PDF paper; keep JSON behind an option |
 | Under-ink prepend corrupts existing ink | Data loss | Only prepend when needed; byte-identical round-trip test; keep `.bak` |
 | Pressure flag misread as eraser | Garbled strokes | Encode exactly `flags = 1`; test decode of our own output |
@@ -1552,7 +1527,7 @@ page ≤ 250 ms, export a 10-page notebook ≤ 1 s, WASM compose ≤ 600 ms per 
 
 ## 14. Decisions needed before coding
 
-1. **Package version default** for new notebooks after Phase 0: `1.2` (upstream) or the
+1. **Package version default** for new notebooks: `1.2` (upstream) or the
    version Noteful currently writes (1.21)?
 2. **Paper default**: PDF (proven, larger) or JSON (small, unproven)?
 3. **Scope of Phase 8**: ship `design_mockup` (network + Google key) or only
@@ -1578,8 +1553,7 @@ native tape.
   and exported back to `.noteful` without corrupting its native format.
 - The desktop app can do both without an agent, and export the result to PDF/PNG/SVG.
 - Existing read tools and existing edited files are unchanged.
-- `cargo test`, WASM tests and MCP protocol tests pass; the Phase 0 compatibility matrix is
-  recorded in `spec/noteful-v0.1.md`.
+- `cargo test`, WASM tests and MCP protocol tests pass.
 
 ---
 

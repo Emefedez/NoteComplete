@@ -19,7 +19,7 @@ NoteComplete saves a note in two formats of its own. This page records why both 
 
 ## The assessment
 
-- `.nfedit` is the only format that never re-encodes the original. Every other save goes through the native Noteful writer, which is still experimental: edited exports have not been verified in Noteful itself.
+- `.nfedit` is the only format that never re-encodes the original. Every other save goes through the native Noteful writer ([its limits](../spec/nfedit-v1.md#native-export)).
 - `.notecomp` is the one to share and keep everyday notes in: one file, with notes, recordings and handwriting text, readable by other tools.
 - Neither replaces the other today. A user who wants their undo history, or wants a copy that cannot be harmed by a writer bug, needs `.nfedit`; a user who wants one file with everything needs `.notecomp`.
 
