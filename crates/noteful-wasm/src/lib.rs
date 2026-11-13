@@ -422,8 +422,8 @@ fn summary(data: &[u8]) -> noteful_core::Result<String> {
     )
 }
 
-/// Versioned, JavaScript-safe summary. Input is a Uint8Array; result is JSON text.
-/// Preview HTML for Markdown notes (raw HTML shown as text; see markdown.rs).
+/// Markdown composed into handwritten pages with their warnings; `options` is the JSON
+/// of `create_handwritten` (empty for the defaults).
 fn compose_with(
     title: &str,
     markdown: &str,
@@ -451,6 +451,7 @@ pub fn compose_preview(markdown: &str, options: &str, max_pages: usize) -> Resul
         .map_err(js_error)?;
     Ok(json!({"pages":svgs,"total":pages.len(),"warnings":warnings}).to_string())
 }
+/// Preview HTML for Markdown notes (raw HTML shown as text; see markdown.rs).
 #[wasm_bindgen]
 pub fn markdown_html(src: &str) -> String {
     noteful_core::markdown_html(src)
@@ -485,6 +486,7 @@ pub fn notecomplete_audio(data: &[u8]) -> Result<String, JsValue> {
 pub fn is_notecomplete(data: &[u8]) -> bool {
     noteful_core::is_notecomplete(data)
 }
+/// Versioned, JavaScript-safe summary. Input is a Uint8Array; result is JSON text.
 #[wasm_bindgen]
 pub fn inspect_document(data: &[u8]) -> Result<String, JsValue> {
     summary(data).map_err(|error| JsValue::from_str(&error.to_string()))
