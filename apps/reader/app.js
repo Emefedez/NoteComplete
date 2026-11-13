@@ -20,6 +20,7 @@ import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
+import { queueRow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
@@ -4019,7 +4020,8 @@ $("exportPdf").onclick = () => { closeMenus(); if (!busy()) pageExport.pdf(); };
 $("imageTypes").replaceChildren(...IMAGE_TYPES.map((t) => {
   const b = document.createElement("button");
   b.type = "button"; b.setAttribute("role", "menuitem"); b.dataset.palette = `Export page as ${t.label}`;
-  b.innerHTML = `<span>${t.label}</span><span class="muted">${t.hint}</span>`;
+  const hint = Object.assign(document.createElement("span"), { className: "muted", textContent: t.hint });
+  b.append(Object.assign(document.createElement("span"), { textContent: t.label }), hint);
   b.onclick = () => { closeMenus(); pageExport.image(t.id); };
   return b;
 }));
@@ -4353,41 +4355,10 @@ window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.p
 // and its Recent entry, so removing it can first upload unsaved changes to Drive.
 let notePath = "", noteEntryKey = "";
 
-const mb = (size) => `${(Number(size) / 1048576).toFixed(1)} MB`;
-
-function queueStatusIcon(status) {
-  if (status === "done") {
-    return `<svg class="queue-status-svg is-done" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>`;
-  }
-  if (status === "downloading") {
-    return `<svg class="queue-status-svg is-downloading" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m-4-4 4 4 4-4M5 20h14"/></svg>`;
-  }
-  if (status === "error") {
-    return `<svg class="queue-status-svg is-error" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`;
-  }
-  return `<svg class="queue-status-svg is-queued" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" stroke-dasharray="2 3"/><path d="M12 7v5l3 3"/></svg>`;
-}
-
+// File names in the queue come from Drive and Internet Archive listings: queueRow
+// (queue-controls.js) writes them as text.
 function renderQueueList(stats, listEl) {
-  listEl.replaceChildren(
-    ...stats.items.map((item) => {
-      const li = document.createElement("li");
-      li.className = "cloud-queue-item";
-      const info = document.createElement("span");
-      info.className = "cloud-queue-item-info";
-      info.innerHTML = `${queueStatusIcon(item.status)}<span>${item.name}${item.size ? ` (${mb(item.size)})` : ""}</span>`;
-      if (item.error) info.title = item.error;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "item-remove";
-      remove.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
-      remove.title = "Remove from queue";
-      remove.setAttribute("aria-label", `Remove ${item.name}`);
-      remove.onclick = () => downloadQueue.cancel(item.id);
-      li.append(info, remove);
-      return li;
-    })
-  );
+  listEl.replaceChildren(...stats.items.map((item) => queueRow(item, { onRemove: (it) => downloadQueue.cancel(it.id) })));
 }
 
 const downloadQueue = createDownloadQueue({
