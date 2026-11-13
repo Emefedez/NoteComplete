@@ -8,6 +8,9 @@ pub use compact::Compacted;
 pub mod ink;
 mod markdown;
 mod page_pdf;
+mod view;
+#[cfg(test)]
+mod view_reference;
 pub use page_pdf::jpeg_pages_pdf;
 
 /// MD5 of a file's bytes, as hex: Google Drive reports the same checksum, so a kept

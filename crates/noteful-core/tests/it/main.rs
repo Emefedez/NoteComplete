@@ -33,3 +33,4 @@ mod pages;
 mod recognized_text;
 mod tape_on_top;
 mod text;
+mod view_bench;
