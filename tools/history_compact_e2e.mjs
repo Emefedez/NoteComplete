@@ -3,20 +3,16 @@
 // ✂ beside that save deletes the history up to it (the page draws the same, only the
 // later strokes can be undone), and "Delete history up to now" deletes the rest.
 //   node tools/history_compact_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1300, height: 950 } })).newPage();
 const errors = []; p.on('pageerror', e => errors.push(e.message));
 const dialogs = []; p.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
-await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
+await openReader(p, server.origin);
 await p.evaluate(() => localStorage.setItem('notecomplete-autosave', '1'));
-await p.setInputFiles('#file', fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url)));
+await p.setInputFiles('#file', samplePath('Examen wuolah.noteful'));
 await p.waitForSelector('.sheet[data-page="0"] .render svg');
 const sheet = await p.locator('.sheet[data-page="0"]').boundingBox();
 const settle = () => p.waitForFunction(() => !document.querySelector('.pending-ink'), null, { timeout: 20000 }).then(() => p.waitForTimeout(900));

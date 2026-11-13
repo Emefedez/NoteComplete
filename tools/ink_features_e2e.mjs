@@ -3,18 +3,14 @@
 // once (no OCR), a filled rectangle (F cycles the fill), and a drawing tablet drawing a
 // solid ellipse from its dock that appears on the computer.
 //   node tools/ink_features_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
 if (DIR) mkdirSync(DIR, { recursive: true });
 (async () => {
-  const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null });
+  const server = await startReader();
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1400, height: 860 } });
   const info = { hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: '', tabletLink: server.tabletLink(), address: server.address, port: server.port, ...server.code() };
@@ -31,8 +27,7 @@ if (DIR) mkdirSync(DIR, { recursive: true });
   }, info);
   const p = await ctx.newPage();
   const errors = []; p.on('pageerror', e => errors.push(e.message));
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   // 1. New note with AI.
   assert.equal(await p.evaluate(() => document.getElementById('newWithAi').hidden), false);
   await p.evaluate(() => document.getElementById('newWithAi').click());

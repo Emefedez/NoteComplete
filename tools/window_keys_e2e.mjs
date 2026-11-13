@@ -4,18 +4,14 @@
 // remembered, a drag that starts on a button does not press it, and text fields keep
 // their own clicks.
 //   node tools/window_keys_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1300, height: 900 } })).newPage();
 const errors = []; p.on('pageerror', e => errors.push(e.message));
-await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
-await p.setInputFiles('#file', fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url)));
+await openReader(p, server.origin);
+await p.setInputFiles('#file', samplePath('Examen wuolah.noteful'));
 await p.waitForSelector('.sheet[data-page="0"] .render svg');
 await p.evaluate(() => { const c = document.getElementById('chatPanel'); c.hidden = false; c.classList.remove('compact'); });
 await p.waitForFunction(() => document.getElementById('chatPanel').classList.contains('screen-window'));

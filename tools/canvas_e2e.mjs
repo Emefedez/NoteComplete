@@ -3,25 +3,20 @@
 // the stroke), it is never a .noteful (Noteful is off in the dialog and the NF exports),
 // and a .notecomp keeps it a canvas.
 //   node tools/canvas_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
 if (DIR) mkdirSync(DIR, { recursive: true });
 (async () => {
-  const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null });
+  const server = await startReader();
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
   const p = await ctx.newPage();
   const errors = []; p.on('pageerror', e => errors.push(e.message));
   p.on('dialog', (d) => d.accept());
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   await p.evaluate(() => document.getElementById('newDocument').click());
   await p.waitForSelector('#newDialog[open]');
   await p.fill('#newName', 'Mapa');

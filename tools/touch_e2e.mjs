@@ -3,14 +3,10 @@
 // redoes, two fingers pinch-zoom and scroll, a finger selects and moves a stroke, and a
 // long menu scrolls on a short screen; a two-finger flick glides on; pen pressure turns off.
 //   node tools/touch_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 try {
@@ -21,9 +17,8 @@ try {
   const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
   const drag = async (from, to, steps = 8) => { await touch('touchStart', [from]); for (let i = 1; i <= steps; i++) { await touch('touchMove', [[from[0] + (to[0] - from[0]) * i / steps, from[1] + (to[1] - from[1]) * i / steps]]); await sleep(16); } await touch('touchEnd', []); };
   const added = (n) => p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] [data-item^="new:"]').length === n, n, { timeout: 8000 });
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
-  await p.setInputFiles('#file', fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url)));
+  await openReader(p, server.origin);
+  await p.setInputFiles('#file', samplePath('Examen wuolah.noteful'));
   await p.waitForFunction(() => document.querySelectorAll('.sheet [data-item]').length > 10);
   await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
   const s = await p.locator('.sheet').first().boundingBox();

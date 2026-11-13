@@ -3,21 +3,17 @@
 // its pictures shown, and Save keeps a copy (.md, or .zip with the pictures folder), never
 // over the original. The Word and spreadsheet readers are fetched only when needed.
 //   node tools/office_import_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader } from './e2e_common.mjs';
 import { docx, odt, workbook, CSV } from '../tests/fixtures/office-files.mjs';
 import { zipEntry } from '../apps/reader/office.js';
 // A one-pixel PNG.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
 if (DIR) mkdirSync(DIR, { recursive: true });
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null });
+const server = await startReader();
 const b = await chromium.launch();
 try {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true });
@@ -26,8 +22,7 @@ try {
   p.on('pageerror', (e) => errors.push(e.message));
   p.on('request', (r) => { if (/vendor\/(mammoth|sheetjs)\//.test(r.url())) vendor.push(r.url().split('/vendor/')[1]); });
   p.on('dialog', (d) => d.accept());
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   assert.deepEqual(vendor, [], 'nothing of the office readers is fetched at startup');
 
   const open = async (name, bytes, mimeType = 'application/octet-stream') => {

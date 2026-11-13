@@ -2,14 +2,10 @@
 // tool: the whole note is checked in the background, the findings go into the Markdown
 // notes under page badges with their corrections, and a badge jumps to its page.
 //   node tools/fact_check_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
 await ctx.addInitScript(() => {
@@ -28,8 +24,8 @@ await ctx.addInitScript(() => {
 });
 const p = await ctx.newPage();
 const errors = []; p.on('pageerror', e => errors.push(e.message));
-await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
-await p.setInputFiles('#file', fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url)));
+await openReader(p, server.origin);
+await p.setInputFiles('#file', samplePath('Examen wuolah.noteful'));
 await p.waitForSelector('.sheet[data-page="0"] .render svg');
 
 // Shift + F opens the dialog, titled for the check, without an amount.

@@ -2,17 +2,12 @@
 // the × at the box's corner throw it away, and finished text never leaves the screen
 // before the page's render has it, on a blank page and on PDF pages.
 //   node tools/text_box_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath as sample } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const sample = (name) => fileURLToPath(new URL(`../samples/${name}`, import.meta.url));
 // Messages to the engine's worker can be held back (window.slowEngine, in ms), so the
 // edit and the page's render take long enough to see what is on screen meanwhile.
 const slowEngine = () => {
@@ -27,8 +22,7 @@ async function open(file) {
   const p = await b.newPage({ viewport: { width: 1200, height: 800 } });
   p.on('pageerror', (e) => errors.push(e.message));
   await p.addInitScript(slowEngine);
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   await p.setInputFiles('#file', sample(file));
   await p.waitForSelector('.sheet[data-page="0"] .render');
   await sleep(800);

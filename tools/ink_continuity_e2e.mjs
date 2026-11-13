@@ -3,15 +3,9 @@
 // engine answers slowly. Alone, on a PDF page and on a blank one; and in a sharing session,
 // where each side also watches the other's strokes go from live line to render.
 //   node tools/ink_continuity_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath as sample } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const root = fileURLToPath(new URL('../apps/reader/', import.meta.url));
-const sample = (name) => fileURLToPath(new URL(`../samples/${name}`, import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const step = (text) => console.log('·', text);
 const errors = [];
@@ -76,7 +70,7 @@ async function settle(p, what) {
 }
 const pen = (p) => p.evaluate(() => document.querySelector('#toolbar [data-tool="draw"], [data-tool="draw"]').click());
 
-const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', notes: 'edit', port: 0 });
+const server = await startReader({ notes: 'edit', port: 0 });
 const browser = await chromium.launch();
 try {
   // Alone: a PDF page and a blank page.
@@ -84,8 +78,7 @@ try {
     const p = await browser.newPage({ viewport: { width: 1200, height: 900 } });
     p.on('pageerror', (e) => errors.push(e.message));
     await p.addInitScript(slowEngine);
-    await p.goto(server.origin + '/');
-    await p.waitForFunction(() => !document.getElementById('open').disabled);
+    await openReader(p, server.origin);
     await p.setInputFiles('#file', sample(file));
     await p.waitForSelector('.sheet[data-page="0"] .render');
     await sleep(800);
@@ -109,8 +102,7 @@ try {
   await hostContext.addInitScript(slowEngine);
   const host = await hostContext.newPage();
   host.on('pageerror', (e) => errors.push('host: ' + e.message));
-  await host.goto(server.origin + '/');
-  await host.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(host, server.origin);
   await host.setInputFiles('#file', sample('Examen wuolah.noteful'));
   await host.waitForFunction(() => document.querySelectorAll('.sheet').length === 3);
   await host.evaluate(() => document.getElementById('shareSession').click());

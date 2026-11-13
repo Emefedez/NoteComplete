@@ -4,21 +4,16 @@
 // Esc closes; a pen's side button opens it without removing anything; two fingers held
 // still open it on a touch screen and do not undo.
 //   node tools/quick_menu_e2e.mjs [screenshot-dir]
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const shots = process.argv[2];
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const sample = fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url));
+const sample = samplePath('Examen wuolah.noteful');
 const openNote = async (p) => {
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   await p.setInputFiles('#file', sample);
   await p.waitForFunction(() => document.querySelectorAll('.sheet [data-item]').length > 10);
 };

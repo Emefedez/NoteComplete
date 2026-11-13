@@ -2,16 +2,12 @@
 // after a web build): launchQueue (file_handlers in the manifest), before and after the
 // engine is ready, and the share target (a POST through sw.js).
 //   node tools/open_with_e2e.mjs
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const note = readFileSync(new URL('../samples/nota_1linea.noteful', import.meta.url));
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null });
+const server = await startReader();
 const b = await chromium.launch();
 try {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 860 } });

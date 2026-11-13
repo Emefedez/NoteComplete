@@ -4,18 +4,14 @@
 // and high quality, with the Spanish word lists; Find then finds the words, Chinese by
 // characters.
 //   node tools/ocr_quality_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+import { chromium, startReader, openReader } from './e2e_common.mjs';
 const cache = join(tmpdir(), 'notecomplete-ocr-data'); mkdirSync(cache, { recursive: true });
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1300, height: 950 } });
 const fetched = [];
@@ -40,7 +36,7 @@ await art.screenshot({ path: png, fullPage: true }); await art.close();
 
 const p = await ctx.newPage();
 const errors = []; p.on('pageerror', e => errors.push(e.message));
-await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
+await openReader(p, server.origin);
 await p.setInputFiles('#file', png);
 await p.waitForSelector('.sheet[data-page="0"] .render svg');
 const recognize = async (quality, during = null) => {

@@ -3,18 +3,14 @@
 // brings them all back. Resizing the group (highlighter boxes and ink over them) leaves
 // every item where the preview showed it, and the Grab menu's Erase clears the region.
 //   node tools/group_move_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1200, height: 900 } })).newPage();
 const errors = []; p.on('pageerror', e => errors.push(e.message));
-await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
-await p.setInputFiles('#file', fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url)));
+await openReader(p, server.origin);
+await p.setInputFiles('#file', samplePath('Examen wuolah.noteful'));
 await p.waitForFunction(() => document.querySelectorAll('.sheet [data-item]').length > 10);
 const s = await p.locator('.sheet').first().boundingBox();
 const rect = { x: s.x + s.width * 0.05, y: s.y + s.height * 0.1, w: s.width * 0.4, h: s.height * 0.12 };

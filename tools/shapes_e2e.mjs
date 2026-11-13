@@ -4,17 +4,13 @@
 // after the snap resizes the shape, a scribble held still stays ink, and a star from the
 // Shapes tool is a shape with corner handles.
 //   node tools/shapes_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
 if (DIR) mkdirSync(DIR, { recursive: true });
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 // CHROMIUM: a browser of the system's, where Playwright's own is not installed.
 const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -22,9 +18,8 @@ const errors = [];
 try {
   const p = await b.newPage({ viewport: { width: 1200, height: 900 } });
   p.on('pageerror', (e) => errors.push(e.message));
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
-  await p.setInputFiles('#file', fileURLToPath(new URL('../samples/nota_vacia.noteful', import.meta.url)));
+  await openReader(p, server.origin);
+  await p.setInputFiles('#file', samplePath('nota_vacia.noteful'));
   await p.waitForSelector('.sheet[data-page="0"] .render');
   await sleep(600);
   const sheet = await p.locator('.sheet').first().boundingBox();

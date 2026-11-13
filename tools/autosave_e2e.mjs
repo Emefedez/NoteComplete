@@ -3,23 +3,18 @@
 // automatic save brings the edit back, unsaved; File lists the slots; a manual save stops
 // the question; the switch turns it off.
 //   node tools/autosave_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const sample = fileURLToPath(new URL('../samples/nota_1linea.noteful', import.meta.url));
+const sample = samplePath('nota_1linea.noteful');
 try {
   const ctx = await b.newContext({ viewport: { width: 1200, height: 800 }, acceptDownloads: true });
   const p = await ctx.newPage();
   const errors = []; p.on('pageerror', (e) => errors.push(e.message));
-  await p.goto(server.origin + '/');
-  await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   const items = () => p.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length);
   const open = async () => {
     await p.setInputFiles('#file', sample);

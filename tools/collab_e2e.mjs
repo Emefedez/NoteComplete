@@ -3,22 +3,17 @@
 // with touch and a pressure-sensitive pen, and a notes guest. Needs a web build
 // (python tools/build_web.py) and Playwright with Chromium:
 //   node tools/collab_e2e.mjs [screenshots folder]
-import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
+import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const root = fileURLToPath(new URL('../apps/reader/', import.meta.url));
-const sample = fileURLToPath(new URL('../samples/Examen wuolah.noteful', import.meta.url));
+const sample = samplePath('Examen wuolah.noteful');
 const shots = process.argv[2];
 if (shots) mkdirSync(shots, { recursive: true });
 const shot = (page, name) => shots && page.screenshot({ path: `${shots}/${name}.png` });
 const step = (text) => console.log('·', text);
 
-const server = await startServer({ root, host: '127.0.0.1', address: '127.0.0.1', notes: 'edit' });
+const server = await startReader({ notes: 'edit' });
 const browser = await chromium.launch();
 try {
   const info = { hostUrl: server.hostUrl, hostToken: server.hostToken, guestLink: server.guestLink, tabletLink: server.tabletLink(), address: server.address, port: server.port, ...server.code() };
@@ -29,8 +24,7 @@ try {
   }, info);
   const host = await hostContext.newPage();
   host.on('pageerror', (e) => console.error('host error:', e.message));
-  await host.goto(server.origin + '/');
-  await host.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(host, server.origin);
   await host.setInputFiles('#file', sample);
   await host.waitForFunction(() => document.querySelectorAll('.sheet').length === 3);
   step('host opened the note');
@@ -60,8 +54,7 @@ try {
   });
   const tablet = await tabletContext.newPage();
   tablet.on('pageerror', (e) => console.error('tablet error:', e.message));
-  await tablet.goto(server.origin + '/');
-  await tablet.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(tablet, server.origin);
   await tablet.evaluate(() => document.getElementById('joinTablet').click());
   await tablet.fill('.collab-join input[type=text]', `127.0.0.1:${server.port}`);
   await tablet.fill('.collab-join input[inputmode=numeric]', `${code.slice(0, 3)} ${code.slice(3)}`);

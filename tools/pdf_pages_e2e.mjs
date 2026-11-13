@@ -3,21 +3,16 @@
 // page is still being drawn; and at the largest zoom the PDF is still shown, as a picture
 // once it is larger than a canvas some tablets can show (4096 px a side).
 //   node tools/pdf_pages_e2e.mjs
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { startServer } from '../apps/desktop/collab-server.js';
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const server = await startServer({ root: fileURLToPath(new URL('../apps/reader/', import.meta.url)), host: '127.0.0.1', address: '127.0.0.1', notes: null, port: 0 });
+import { chromium, startReader, openReader, samplePath as sample } from './e2e_common.mjs';
+const server = await startReader({ port: 0 });
 const b = await chromium.launch();
-const sample = (name) => fileURLToPath(new URL(`../samples/${name}`, import.meta.url));
 const errors = [];
 async function open(name, options = {}) {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 800 }, ...options });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errors.push(e.message)); p.on('dialog', (d) => d.accept());
-  await p.goto(server.origin + '/'); await p.waitForFunction(() => !document.getElementById('open').disabled);
+  await openReader(p, server.origin);
   await p.setInputFiles('#file', sample(name));
   await p.waitForFunction(() => document.querySelector('.sheet .pdf-raster, .sheet [data-background] > image'), null, { timeout: 30000 });
   return { p, ctx };
