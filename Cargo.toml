@@ -9,3 +9,10 @@ rust-version = "1.93"
 
 [workspace.dependencies]
 serde_json = { version = "1", features = ["float_roundtrip"] }
+
+# Smaller and faster release builds, above all the WebAssembly module (2.85 MB to 2.56 MB
+# in a trial). Nothing in the workspace catches a panic, so a panic may abort.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
