@@ -39,4 +39,12 @@ assert.equal(controller.setRate(1.5),1.5);assert.equal(elements.get('audio').pla
 assert.equal(controller.stepRate(1),1.75);assert.equal(controller.stepRate(-1),1.5);
 assert.equal(controller.setRate(9),3);assert.equal(controller.stepRate(1),3);assert.equal(controller.setRate(0.1),0.5);assert.equal(controller.stepRate(-1),0.5);
 speed.value='2';speed.onchange();assert.equal(controller.rate,2);assert.equal(speed.dataset.rate,'2');
-console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking, disabled sync and playback speed passed.');
+// Playback volume and mute toggle: bounded to 0–1, updates percentage and mute button, restores previous volume on unmute.
+assert.equal(controller.volume,1);assert.equal(controller.muted,false);assert.equal(elements.get('audioVolumeValue').textContent,'100%');
+assert.equal(controller.setVolume(0.65),0.65);assert.equal(elements.get('audio').volume,0.65);assert.equal(elements.get('audioVolume').value,'0.65');assert.equal(elements.get('audioVolumeValue').textContent,'65%');assert.equal(elements.get('audioMute').dataset.muted,'false');
+elements.get('audioMute').onclick();assert.equal(controller.muted,true);assert.equal(elements.get('audioVolume').value,'0');assert.equal(elements.get('audioVolumeValue').textContent,'0%');assert.equal(elements.get('audioMute').dataset.muted,'true');
+elements.get('audioMute').onclick();assert.equal(controller.muted,false);assert.equal(controller.volume,0.65);assert.equal(elements.get('audioVolume').value,'0.65');assert.equal(elements.get('audioVolumeValue').textContent,'65%');
+elements.get('audioVolume').value='0';elements.get('audioVolume').oninput();assert.equal(controller.muted,true);assert.equal(elements.get('audioMute').dataset.muted,'true');
+elements.get('audioMute').onclick();assert.equal(controller.muted,false);assert.equal(controller.volume,0.65);
+assert.equal(controller.setVolume(5),1);assert.equal(controller.setVolume(-2),0);
+console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking, disabled sync, playback speed and volume passed.');

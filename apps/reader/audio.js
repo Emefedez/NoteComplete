@@ -22,6 +22,9 @@ export class AudioController {
   // Playback speed, the same for every recording and remembered; the pitch stays natural.
   const speed=$('audioSpeed');
   if(speed){let saved=1;try{saved=Number(globalThis.localStorage?.getItem('notecomplete-audio-speed'))||1;}catch{/* Optional. */}speed.onchange=()=>this.setRate(Number(speed.value));this.setRate(saved,false);}
+  // Playback volume, remembered across recordings and sessions.
+  const vol=$('audioVolume');
+  if(vol){let saved=1;try{const raw=globalThis.localStorage?.getItem('notecomplete-audio-volume');if(raw!==null&&raw!==undefined&&raw!=='')saved=Number(raw);}catch{/* Optional. */}vol.oninput=()=>this.setVolume(Number(vol.value));if($('audioMute'))$('audioMute').onclick=()=>this.setMuted(!this.muted);this.setVolume(Number.isFinite(saved)?saved:1,false);}
   $('audioPage').onclick=()=>{const target=this.entries[this.index]?.recording?.pages?.[0];if(target!==undefined)this.jump(Number(target));};
   $('syncEnabled').onchange=()=>this.changed();
   // While playing, tick() repaints; timeupdate (4 times a second) only matters when paused.
@@ -45,6 +48,29 @@ export class AudioController {
  }
  // One step up or down the speed menu ([ and ]).
  stepRate(direction){const steps=[0.5,0.75,1,1.25,1.5,1.75,2,2.5,3],at=steps.findIndex(s=>s>=this.rate-1e-6);return this.setRate(steps[Math.max(0,Math.min(steps.length-1,(at<0?steps.length-1:at)+direction))]);}
+ get volume(){return Number.isFinite(this.audio.volume)?this.audio.volume:1;}
+ get muted(){return Boolean(this.audio.muted||this.volume===0);}
+ syncVolume(){
+  const effective=this.audio.muted?0:this.volume,pct=`${Math.round(effective*100)}%`,off=effective===0;
+  if($('audioVolume'))$('audioVolume').value=String(effective);
+  if($('audioVolumeValue'))$('audioVolumeValue').textContent=pct;
+  const btn=$('audioMute');
+  if(btn){btn.dataset.muted=String(off);btn.setAttribute('aria-pressed',String(off));btn.setAttribute('aria-label',off?'Unmute':'Mute');}
+ }
+ setVolume(vol,save=true){
+  vol=Math.min(1,Math.max(0,Number.isFinite(Number(vol))?Number(vol):1));
+  if(vol>0){this.lastVolume=vol;this.audio.muted=false;}
+  this.audio.volume=vol;
+  this.syncVolume();
+  if(globalThis.localStorage&&save)try{localStorage.setItem('notecomplete-audio-volume',String(vol));}catch{/* Optional. */}
+  return vol;
+ }
+ setMuted(muted){
+  if(muted){if(this.volume>0)this.lastVolume=this.volume;this.audio.muted=true;this.syncVolume();return true;}
+  this.audio.muted=false;
+  if(this.volume===0)this.setVolume(this.lastVolume||1);else this.syncVolume();
+  return false;
+ }
  // While playing: the time and position bar every frame are cheap; the ink and the transcript
  // (which walk many elements) about ten times a second, enough to follow speech even at 3×.
  tick(now=0){if(!this.lastTick||now-this.lastTick>=100){this.lastTick=now;this.paint();this.changed();this.transcript?.update();}if(!this.audio.paused)this.frame=requestAnimationFrame(time=>this.tick(time));}
@@ -100,7 +126,7 @@ export class AudioController {
    const asset=entry.asset;
    if(!this.urls.has(asset.id)){const bytes=await this.read(asset.id);if(token!==this.token)return;this.urls.set(asset.id,URL.createObjectURL(new Blob([bytes],{type:asset.mime})));}
    if(token!==this.token)return;const url=this.urls.get(asset.id);
-   const ready=()=>{this.audio.playbackRate=this.rate;this.audio.currentTime=Math.min(this.positions.get(entry.asset.id)||0,this.audio.duration||0);$('playAudio').disabled=false;$('audioSeek').disabled=!Number.isFinite(this.audio.duration);$('audioSeek').max=this.audio.duration||0;$('audioState').textContent='';this.update();};
+   const ready=()=>{this.audio.playbackRate=this.rate;this.audio.volume=this.volume;this.audio.currentTime=Math.min(this.positions.get(entry.asset.id)||0,this.audio.duration||0);$('playAudio').disabled=false;$('audioSeek').disabled=!Number.isFinite(this.audio.duration);$('audioSeek').max=this.audio.duration||0;$('audioState').textContent='';this.update();};
    // Browser recordings (WebM) carry no duration: seeking past the end makes the element find it.
    this.audio.onloadedmetadata=()=>{if(token!==this.token)return;if(this.audio.duration!==Infinity)return ready();this.audio.ondurationchange=()=>{if(token!==this.token||!Number.isFinite(this.audio.duration))return;this.audio.ondurationchange=null;ready();};this.audio.currentTime=1e101;};
    this.audio.src=url;$('audioDownload').href=url;$('audioDownload').download=`audio-${index+1}.${asset.kind}`;$('audioDownload').hidden=false;

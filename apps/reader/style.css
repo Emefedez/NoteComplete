@@ -1494,9 +1494,12 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .icon-toggle:has(input:checked) { background: var(--accent-soft); color: var(--accent); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; padding: 0; border-radius: var(--radius); color: var(--muted); }
 .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.audio-seek { display: flex; align-items: center; gap: 8px; }
-.audio-seek output { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.audio-panel .audio-seek #audioSeek { flex: 1; width: auto; min-width: 0; }
+.audio-seek, .audio-volume { display: flex; align-items: center; gap: 8px; }
+.audio-seek output, .audio-volume output { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.audio-volume output { min-width: 3.5ch; text-align: right; }
+.audio-panel .audio-seek #audioSeek, .audio-panel .audio-volume #audioVolume { flex: 1; width: auto; min-width: 0; accent-color: var(--accent); }
+#audioMute { width: 24px; min-height: 24px; flex: none; }
+#audioMute[data-muted="false"] .icon-vol-off, #audioMute[data-muted="true"] .icon-vol-on { display: none; }
 #transcriptWords.provisional { color: var(--muted); }
 #transcriptWords.provisional button { cursor: default; }
 /* Dark pages: invert lightness but keep hues, for the pages and their previews. */
@@ -2104,7 +2107,7 @@ body.bar-compact .tab { height: 22px; }
 #audioToggle.recording::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: rec-pulse 1.4s ease-in-out infinite; }
 #audioToggle.recording.paused::after { animation: none; opacity: .4; }
 /* A note without audio shows only the way to add some. */
-.audio-panel.no-audio :is(.audio-transport, .audio-seek, .transcript-panel, #speechSettings) { display: none !important; }
+.audio-panel.no-audio :is(.audio-transport, .audio-seek, .audio-volume, .transcript-panel, #speechSettings) { display: none !important; }
 @media (prefers-reduced-motion: reduce) { .rec-dot, #audioToggle.recording::after { animation: none; } }
 .menu-content .menu-export button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 

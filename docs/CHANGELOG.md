@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.69
+
+- **Mouse Back and Forward buttons.** Mouse buttons 4 and 5 (plus `BrowserBack` / `BrowserForward` and `Alt+←` / `Alt+→`) navigate back and forward across page jumps, between an open document and Home, across grouped documents, inside Home, Google Drive and Internet Archive folders, and in web links (which also gain a Forward button in their bar).
+- **Fixed: Home and the current tab on desktop.** Opening Home while a document is open highlights the Home button and unselects the tab; clicking the tab, clicking Home again, switching back from another tab, or clicking the open document's card in Recent returns to the open document without reloading it, and keyboard scrolling works on Home while a note is loaded.
+- **Consistent `h:mm:ss` audio times and cut-audio transcripts.** Audio times are shown as hours, minutes and seconds (`0:00:00`) in both the position bar and the segment cutter, and text transcribed from a cut audio segment is also placed into the Transcript dropdown (`#transcriptPanel`) with click-to-seek.
+
 ## 1.1.68
 
 - **Fast drawing on pages with many strokes.** Added lines keep their formatted SVG in the engine, the edit history is read in a single pass, and drawing a stroke sends and inserts only the new element into the page on screen instead of rebuilding the whole page SVG after every stroke.

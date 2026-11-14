@@ -731,6 +731,7 @@
             <p class="muted">Used when transcribing. Gain and voice filter also apply to playback.</p>
           </div>
           <div class="audio-seek"><input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled /><output id="audioTime">0:00:00 / 0:00:00</output></div>
+          <div class="audio-volume"><button id="audioMute" type="button" class="icon-button" data-muted="false" aria-pressed="false" aria-label="Mute" title="Mute / unmute"><svg class="icon-vol-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg><svg class="icon-vol-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/></svg></button><input id="audioVolume" type="range" min="0" max="1" step=".01" value="1" aria-label="Volume" title="Playback volume" /><output id="audioVolumeValue">100%</output></div>
           <p id="audioState" role="status"></p>
           <details id="transcriptPanel" class="transcript-panel" open>
             <summary><span>Transcript</span><span id="transcriptSummaryMeta" class="muted">on this device</span></summary>
