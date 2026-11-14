@@ -71,7 +71,7 @@ import { tabStrip } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
-import { autosaveStore, offerRecovery, when, sizeLabel, contentDigestCache, EVERY_MS } from "./autosave.js";
+import { autosaveController } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
@@ -470,8 +470,7 @@ async function load(file, preparedDocument = null) {
   status("Opening document…");
   try {
     // A recovered automatic save keeps the note it belongs to (its notes, recordings, slots).
-    const recovering = recoveringKey;
-    recoveringKey = null;
+    const recovering = autosave.takeRecoveringKey();
     const fingerprint = recovering ? Promise.resolve(recovering) : noteFingerprint(file).catch(() => "");
     const prepared = preparedDocument || await prepareDocument(file);
     // HTML pages and text/Markdown files have their own views instead of the page editor.
@@ -551,7 +550,7 @@ async function load(file, preparedDocument = null) {
     await renderPage(panels[0], result);
     status("Document opened.");
     collab?.documentChanged();
-    autosaveOpened(recovering);
+    autosave.opened(recovering);
   } catch (e) {
     status("Could not open: " + e.message, true);
     throw e;
@@ -3480,223 +3479,42 @@ $("redo").onclick = () => {
   cancelGesture();
   action("redo");
 };
-// Auto-save (autosave.js): every minute, while the note has changed, a lossless copy goes
-// into automatic slots on this device, never over the saved file. File lists this note's
-// slots; opening a note with a newer automatic save than the last manual one asks which to
-// keep. In a sharing session the host's switch decides for everyone (collab.js).
-const autosaves = autosaveStore();
-let autosavePref = true, sharedAutosave = null, recoveringKey = null, autosavedRevision = -1, openedRevision = 0, autosaving = false;
-try { autosavePref = localStorage.getItem("notecomplete-autosave") !== "0"; } catch { /* Optional. */ }
-const following = () => !!collab && collab.role !== "host";
-const autosaveOn = () => (following() ? !!sharedAutosave : autosavePref);
-// A note's slots belong to its file; a shared note's to the session's note title.
-const autosaveKey = () => (following() ? `shared:${collab.docTitle || $("title").textContent}` : find.fingerprint || `title:${$("title").textContent}`);
-function autosaveSwitch() {
-  const b = $("autosaveToggle");
-  b.setAttribute("aria-checked", String(autosaveOn()));
-  b.disabled = following();
-  b.title = following() ? "Set by the person sharing this note" : "Copies the note every minute into automatic slots on this device, never over your file";
-}
-$("autosaveToggle").onclick = () => {
-  if (following()) return;
-  autosavePref = !autosavePref;
-  try { localStorage.setItem("notecomplete-autosave", autosavePref ? "1" : "0"); } catch { /* Optional. */ }
-  autosaveSwitch();
-  collab?.settingsChanged?.();
-  status(autosavePref ? "Auto-save on: a copy every minute, in File → automatic saves." : "Auto-save off.");
-  if (autosavePref) autosaveNow();
-};
-autosaveSwitch();
-// What the note holds, apart from its undo history: a digest of its .noteful export (null when
-// it cannot be made), hashed in the core and reused while the history mark has not moved.
-const contentDigest = contentDigestCache(() => call("contentDigest"));
-// A copy now, if auto-save is on and the note changed since the last one.
-async function autosaveNow({ force = false } = {}) {
-  if (!doc || autosaving || editing || !autosaveOn()) return null;
-  if (!force && (revision === autosavedRevision || revision === openedRevision)) return null;
-  autosaving = true;
-  // Read now: a session may end while the copy is being made.
-  const at = revision, note = epoch, key = autosaveKey(), title = $("title").textContent, shared = following();
-  try {
-    await notes?.flush?.();
-    const project = await call("save");
-    const mark = await call("historyMark").catch(() => null);
-    const content = await contentDigest(mark, note);
-    if (note !== epoch) return null;
-    const slot = await autosaves.save({ key, title, project, shared, mark, content });
-    autosavedRevision = at;
-    return slot;
-  } catch (e) {
-    console.warn("Auto-save:", e);
-    return null;
-  } finally { autosaving = false; }
-}
-setInterval(() => { autosaveNow(); }, EVERY_MS);
-// Leaving the page or switching away: one more copy (best effort; the browser may not wait).
-addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") autosaveNow(); });
-addEventListener("pagehide", () => { autosaveNow(); });
-// A note just opened: offer its newer automatic save, unless this is that save.
-async function autosaveOpened(recovered) {
-  openedRevision = revision;
-  autosavedRevision = -1;
-  if (recovered || following() || !doc) return;
-  const key = autosaveKey(), note = epoch;
-  try {
-    const [latest] = await autosaves.list(key);
-    const manual = await autosaves.manualAt(key);
-    if (note !== epoch || !offerRecovery(latest, manual)) return;
-    // Same edit history as the note just opened: nothing to choose between, so do not ask.
-    const mark = await call("historyMark").catch(() => null);
-    if (note !== epoch) return;
-    if (mark && latest.digest && latest.edits === mark.edits && latest.digest === mark.digest) {
-      autosaves.markManual(key).catch(() => { /* Optional. */ });
-      return;
-    }
-    // The same content as the note just opened, whatever its history (a note saved as .noteful
-    // comes back with another history): nothing to choose between.
-    if (latest.content && (await contentDigest(mark, note)) === latest.content) {
-      if (note !== epoch) return;
-      autosaves.markManual(key).catch(() => { /* Optional. */ });
-      return;
-    }
-    if (note !== epoch) return;
-    // The same bytes as the note just opened (its history may be numbered differently after a
-    // save in another format): the same note, so nothing to choose between either.
-    const [kept, current] = await Promise.all([autosaves.load(latest.id).catch(() => null), call("save").catch(() => null)]);
-    if (note !== epoch) return;
-    const a = kept && new Uint8Array(kept.buffer || kept), b = current && new Uint8Array(current.buffer || current);
-    if (a && b && a.length === b.length && a.every((x, i) => x === b[i])) {
-      autosaves.markManual(key).catch(() => { /* Optional. */ });
-      return;
-    }
-    $("recoverText").textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : "the file you opened"}. Which do you want to open?`;
-    $("recoverAuto").textContent = `Automatic save (${when(latest.time)})`;
-    $("recoverManual").textContent = manual ? `Manual save (${when(manual)})` : "The file";
-    $("recoverAuto").onclick = () => { $("recoverDialog").close(); openAutosave(latest); };
-    $("recoverManual").onclick = () => { $("recoverDialog").close(); autosaves.markManual(key).catch(() => { /* Optional. */ }); };
-    $("recoverDialog").showModal();
-  } catch { /* No storage: nothing to offer. */ }
-}
-// Opens an automatic save as a copy of its note: unsaved until the user saves it.
-async function openAutosave(slot) {
-  closeMenus();
-  if (!canReplace()) return;
-  const bytes = await autosaves.load(slot.id);
-  if (!bytes) return status("That automatic save is gone.", true);
-  const keepSaveAs = slot.key === autosaveKey() ? saveAs : null;
-  recoveringKey = slot.key.startsWith("shared:") || slot.key.startsWith("title:") ? null : slot.key;
-  await load(new File([bytes], `${slot.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.nfedit`, { type: "application/json" }));
-  if (!doc) return;
-  saveAs = keepSaveAs;
-  saveLabel();
-  dirty = changed = true;
-  savedState();
-  status(`Opened the automatic save from ${when(slot.time)}. Save it to keep it.`);
-}
-// File menu: this note's automatic saves, newest first, and all of them. Beside each, ✂
-// deletes the edit history up to that save (compact.rs), and the last ✂ up to now: the
-// note stays as it is, its file gets smaller, and undo stops there.
-const bytesText = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-// The bytes a cut up to `upto` edits would free (null when it cannot be told), one at a time.
-let previewQueue = Promise.resolve();
-const previewed = new Map();
-function previewCut(upto) {
-  const key = `${epoch}:${revision}:${upto}`;
-  if (!previewed.has(key)) {
-    if (previewed.size > 40) previewed.clear();
-    const run = () => (doc && !busy() ? call("compactPreview", { upto }).then((r) => r.bytes_before - r.bytes_after).catch(() => null) : Promise.resolve(null));
-    previewed.set(key, (previewQueue = previewQueue.then(run, run)));
-  }
-  return previewed.get(key);
-}
-async function drawAutosaveList() {
-  const list = $("autosaveList");
-  const slots = doc ? await autosaves.list(autosaveKey()).catch(() => []) : [];
-  const all = await autosaves.list().catch(() => []);
-  list.hidden = !all.length && !doc;
-  if (list.hidden) return list.replaceChildren();
-  const label = document.createElement("span");
-  label.className = "autosave-label";
-  label.textContent = slots.length ? "Automatic saves" : "No automatic saves of this note";
-  const floor = doc?.history_floor || 0, edits = doc?.edit_count || 0;
-  const trim = (title, run) => Object.assign(document.createElement("button"), { type: "button", className: "autosave-trim", title, ariaLabel: title, onclick: run });
-  // How much space a cut frees, worked out one at a time in the background (it measures the
-  // note before and after) and written into the tooltip when ready.
-  const tell = (button, text, upto, apply) => {
-    button.title = `${text}\nWorking out how much space this frees…`;
-    previewCut(upto).then((freed) => { apply?.(freed); button.title = `${text}\n${freed == null ? "Could not work out the space it frees." : freed > 0 ? `Frees about ${bytesText(freed)} once saved.` : "Nothing to free: every edit still shapes the note."}`; });
-  };
-  const items = await Promise.all(slots.map(async (slot) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = when(slot.time);
-    b.title = `Open the automatic save of “${slot.title}” from ${when(slot.time)}`;
-    b.onclick = () => openAutosave(slot);
-    const pair = document.createElement("span");
-    pair.className = "autosave-slot";
-    pair.append(b);
-    // Offered when the save is part of this note's history as it is now, with edits before it.
-    const usable = slot.edits > floor && slot.edits <= edits && (await call("prefixDigest", { edits: slot.edits }).catch(() => "")) === slot.digest;
-    if (usable) {
-      const text = `Delete the history up to this save (${when(slot.time)}): undo stops there; the note stays as it is.`;
-      const t = trim(text, () => compactHistory(slot.edits, `up to the automatic save of ${when(slot.time)}`));
-      t.append(icon("trim"));
-      tell(t, text, slot.edits);
-      pair.append(t);
-    }
-    return pair;
-  }));
-  const now = Object.assign(document.createElement("button"), { type: "button", className: "autosave-now", textContent: "Delete history up to now", title: "Delete the whole undo history: the note stays as it is and its file gets smaller", disabled: !doc || (edits <= floor && !doc.can_redo), onclick: () => compactHistory(edits, "up to now") });
-  now.prepend(icon("trim"));
-  if (!now.disabled) tell(now, "Delete the whole undo history: the note stays as it is and its file gets smaller.", edits, (freed) => { if (freed > 0) now.append(Object.assign(document.createElement("span"), { className: "autosave-saves", textContent: `−${bytesText(freed)}` })); });
-  list.replaceChildren(label, ...items, Object.assign(document.createElement("button"), { type: "button", textContent: "All automatic saves…", onclick: openAutosaves }), now);
-}
-// Deletes the edit history up to `upto` edits (an automatic save's point, or now): the
-// edits that no longer shape the note go (strokes drawn and erased, superseded moves, what
-// was undone), and undo stops there. The engine checks every page still draws the same.
-async function compactHistory(upto, label) {
-  closeMenus();
-  if (!doc) return;
-  if (collab) return status("The history cannot be deleted while sharing: every copy of the note keeps the same history. Stop sharing first.", true);
-  if (busy()) return status("Wait for the edit in progress to finish, then try again.", true);
-  const freed = await previewCut(upto);
-  const frees = freed > 0 ? `its file gets about ${bytesText(freed)} smaller once saved` : "its file gets smaller once saved";
-  if (!confirm(`Delete the edit history ${label}?\n\nThe note stays exactly as it is, and ${frees}. You will not be able to undo past this point.`)) return;
-  try {
-    const { report, view } = await call("compactHistory", { upto });
-    const removed = report.edits_before - report.edits_after, saved = report.bytes_before - report.bytes_after;
+// Auto-save, recovery dialog and history compaction (autosave.js).
+const autosave = autosaveController({
+  state: {
+    doc: () => doc,
+    editing: () => editing,
+    busy,
+    revision: () => revision,
+    epoch: () => epoch,
+    collab: () => collab,
+    fingerprint: () => find.fingerprint,
+  },
+  call,
+  notes: () => notes,
+  status,
+  closeMenus,
+  canReplace,
+  icon,
+  $,
+  openSlotFile: async (slot, bytes, { sameKey, label }) => {
+    const keepSaveAs = sameKey ? saveAs : null;
+    await load(new File([bytes], `${slot.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.nfedit`, { type: "application/json" }));
+    if (!doc) return;
+    saveAs = keepSaveAs;
+    saveLabel();
+    dirty = changed = true;
+    savedState();
+    status(`Opened the automatic save from ${label}. Save it to keep it.`);
+  },
+  onCompacted: (view, message) => {
     revision++;
     dirty = changed = true;
     doc = view;
     savedState();
-    const size = bytesText(saved);
-    restructure(view, page, removed ? `History deleted ${label}: ${removed} ${removed === 1 ? "edit" : "edits"} fewer, ${size} smaller. Save to keep it.` : `Nothing to delete ${label}: every edit still shapes the note. Undo now stops there.`);
-  } catch (e) {
-    status(`Could not delete the history: ${e.message}`, true);
-  }
-}
-$("fileMenu").addEventListener("toggle", () => { if ($("fileMenu").open) { autosaveSwitch(); drawAutosaveList(); } });
-async function openAutosaves() {
-  closeMenus();
-  const slots = await autosaves.list().catch(() => []);
-  $("autosavesAll").replaceChildren(...(slots.length ? slots.map((slot) => {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    name.textContent = `${slot.shared ? "Shared · " : ""}${slot.title} · ${when(slot.time)}${sizeLabel(slot.size)}`;
-    const open = Object.assign(document.createElement("button"), { type: "button", textContent: "Open", onclick: () => { $("autosavesDialog").close(); openAutosave(slot); } });
-    const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "Delete", onclick: async () => { await autosaves.remove(slot.id); li.remove(); } });
-    li.append(name, open, remove);
-    return li;
-  }) : [Object.assign(document.createElement("li"), { className: "muted", textContent: "None yet." })]));
-  $("autosavesDialog").showModal();
-}
-$("autosavesClose").onclick = () => $("autosavesDialog").close();
-$("autosavesClear").onclick = async () => {
-  if (!confirm("Delete every automatic save on this device?")) return;
-  await autosaves.clear();
-  $("autosavesDialog").close();
-  status("Automatic saves deleted.");
-};
+    restructure(view, page, message);
+  },
+});
 // View → Tool bar (Shift + T): hides the row of tools and their settings, for more room
 // when the quick menu is used instead. Undo, redo and the panel buttons stay. Remembered.
 function setToolsHidden(hidden, announce = true) {
@@ -3985,9 +3803,7 @@ async function save(native, as = native ? "noteful" : "project") {
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
     if (!delivery.shared) {
-      autosaves.markManual(autosaveKey()).catch(() => { /* Optional. */ });
-      // Just saved by hand: an automatic copy of exactly this state would only be a duplicate.
-      autosavedRevision = revision;
+      autosave.markManual();
     }
     if (as === saveAs && !delivery.shared) {
       dirty = changed = false;
@@ -4558,7 +4374,7 @@ async function cutHistoryOf(entry) {
   if (!(await openFromLibrary(file, entry))) return;
   if (!doc) return;
   if (!(doc.edit_count > (doc.history_floor || 0) || doc.can_redo)) return status("This note has no edit history to delete.");
-  await compactHistory(doc.edit_count || 0, "up to now");
+  await autosave.compact(doc.edit_count || 0, "up to now");
 }
 // ⋯ on a Recent note: opens it and exports it as chosen (the File menu's Export row).
 async function exportNoteOf(entry, kind) {
@@ -6146,15 +5962,10 @@ const collabHost = {
   closeDocument: () => reset(),
   openFile: (file) => load(file),
   // Auto-save in a session: the host's switch, followed by everyone else.
-  autosaveOn: () => autosavePref,
-  setSharedAutosave(on) { sharedAutosave = !!on; autosaveSwitch(); },
+  autosaveOn: () => autosave.pref(),
+  setSharedAutosave: (on) => autosave.setShared(on),
   // A copy of the shared note before it closes (a guest or tablet losing the session).
-  async keepCopy() {
-    const slot = await autosaveNow({ force: true });
-    sharedAutosave = null;
-    autosaveSwitch();
-    return slot && { ...slot, open: () => openAutosave(slot), label: when(slot.time) };
-  },
+  keepCopy: () => autosave.keepCopy(),
 };
 async function startCollab(mode) {
   try {

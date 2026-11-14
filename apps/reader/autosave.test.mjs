@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { autosaveStore, memoryBackend, pruned, offerRecovery, when, projectSize, sizeLabel, contentDigestCache, SLOTS } from './autosave.js';
+import { autosaveStore, autosaveController, memoryBackend, pruned, offerRecovery, when, projectSize, sizeLabel, bytesText, contentDigestCache, SLOTS } from './autosave.js';
 
 const bytes = (text) => new TextEncoder().encode(text);
 
@@ -75,4 +75,79 @@ test('contentDigestCache skips recomputing when the history mark has not moved',
 
   const failing = contentDigestCache(async () => { throw Error('canvas'); });
   assert.equal(await failing({ edits: 0, digest: 'm0' }, 1), null);
+});
+
+test('autosaveController saves changed notes, offers recovery only when different, and compacts history', async () => {
+  const store = autosaveStore(memoryBackend());
+  let doc = { edit_count: 2, history_floor: 0, can_redo: false };
+  let revision = 1, epoch = 1, mark = { edits: 2, digest: 'h1' }, content = 'c1', project = '{"v":1}';
+  const elements = new Map();
+  const makeEl = () => ({
+    textContent: '', title: '', hidden: false, disabled: false, open: false,
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    getAttribute(k) { return this.attrs[k]; },
+    addEventListener() {},
+    replaceChildren() {},
+    showModal() { this.shown = true; },
+    close() { this.shown = false; },
+  });
+  for (const id of ['title', 'autosaveToggle', 'recoverDialog', 'recoverText', 'recoverAuto', 'recoverManual']) {
+    elements.set(id, makeEl());
+  }
+  elements.get('title').textContent = 'Physics';
+  const statuses = [];
+  let compacted = null;
+
+  const ctrl = autosaveController({
+    store,
+    state: {
+      doc: () => doc,
+      editing: () => false,
+      busy: () => false,
+      revision: () => revision,
+      epoch: () => epoch,
+      collab: () => null,
+      fingerprint: () => 'fp-physics',
+    },
+    call: async (op) => {
+      if (op === 'save') return project;
+      if (op === 'historyMark') return mark;
+      if (op === 'contentDigest') return content;
+      if (op === 'compactPreview') return { bytes_before: 20480, bytes_after: 10240 };
+      if (op === 'compactHistory') return { report: { edits_before: 2, edits_after: 1, bytes_before: 20480, bytes_after: 10240 }, view: { edit_count: 1 } };
+      return null;
+    },
+    status: (msg) => statuses.push(msg),
+    $: (id) => elements.get(id) || null,
+    win: null,
+    storage: null,
+    confirmFn: () => true,
+    intervalMs: 0,
+    onCompacted: (view, msg) => { compacted = { view, msg }; },
+  });
+
+  await ctrl.opened(null);
+  assert.equal(await ctrl.now(), null, 'no save when revision has not changed since open');
+  revision = 2;
+  const saved = await ctrl.now();
+  assert.equal(saved.key, 'fp-physics');
+  assert.equal(saved.content, 'c1');
+  assert.equal(await ctrl.now(), null, 'no duplicate save at the same revision');
+
+  // Reopening with the same content digest suppresses the recovery dialog.
+  mark = { edits: 0, digest: 'reopened' };
+  project = '{"v":2}';
+  await ctrl.opened(null);
+  assert.ok(!elements.get('recoverDialog').shown);
+
+  // A newer slot with different content offers recovery.
+  await store.save({ key: 'fp-physics', title: 'Physics', project: '{"v":3}', time: Date.now() + 5000, mark: { edits: 4, digest: 'h4' }, content: 'c4' });
+  await ctrl.opened(null);
+  assert.equal(elements.get('recoverDialog').shown, true);
+
+  await ctrl.compact(2, 'up to now');
+  assert.equal(compacted.view.edit_count, 1);
+  assert.match(compacted.msg, /1 edit fewer, 10 KB smaller/);
+  assert.equal(bytesText(1572864), '1.5 MB');
 });
