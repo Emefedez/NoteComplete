@@ -1413,7 +1413,16 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .ocr-dialog p { font-size: 13px; line-height: 1.5; margin: 0 0 12px; }
 /* A field row: its name on the left, the control on the right. */
 .ocr-scope, .ocr-languages { display: grid; grid-template-columns: 8.5em minmax(0, 1fr); align-items: center; column-gap: 12px; margin: 0 0 10px; font-size: 13px; }
-.ocr-languages > :is(select, input, span:not(.muted)) { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; }
+.ocr-languages > :is(select, input, span:not(.muted), .model-controls) { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; }
+.ocr-languages > .model-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.model-controls > select { flex: 1 1 160px; min-width: 0; max-width: 100%; }
+.model-controls > .model-search { margin-left: 0; }
+.model-controls > .small-model { margin-left: 2px; }
+.model-controls > .text-only-badge { margin-left: 0; }
+.model-controls > .model-other { flex: 1 0 100%; }
+.model-controls > [hidden] { display: none; }
+.study-model-row { align-items: start; }
+.study-model-row > label { padding-top: 6px; }
 .ocr-languages > input[type="number"] { justify-self: start; width: 80px; }
 .ocr-languages > span.muted { grid-column: 1; grid-row: 2; font-size: 11px; }
 /* Page scope: radios shown as a row of filled choices, the chosen one in the pale accent. */
@@ -1724,8 +1733,8 @@ body.bar-compact .job-chip button { padding: 0 8px; font-size: 11px; }
 body.bar-compact .job-ready { min-height: 22px; padding: 0 8px; font-size: 11px; }
 @media (max-width: 860px) { .job-chip #jobLabel, .job-chip > span:first-child { max-width: 120px; } .job-ready { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 /* Study dialogs */
-.study-row { display: flex; gap: 16px; } .study-row > label { flex: 1; grid-template-columns: auto minmax(0, 1fr); }
-.study-row > label:first-child { grid-template-columns: 8.5em minmax(0, 1fr); }
+.study-row { display: flex; flex-wrap: wrap; column-gap: 16px; } .study-row > label { flex: 1 1 200px; grid-template-columns: auto minmax(0, 1fr); }
+.study-row > label:first-child, #studyDialog:has(#studyAmountLabel[hidden]) .study-row > label { grid-template-columns: 8.5em minmax(0, 1fr); }
 .ocr-dialog input[type="text"] { width: 100%; }
 .deck-dialog { width: min(800px, calc(100vw - 24px)); max-height: calc(100dvh - 40px); border: 1px solid var(--line); border-radius: var(--radius-box); padding: 18px 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-dialog); }
 .deck-dialog::backdrop { background: #0006; }
@@ -2902,8 +2911,15 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 #pageLabel { white-space: nowrap; }
 /* Very narrow phones: the page row's buttons get a little narrower, and the row never pushes
    the window wider (what does not fit scrolls, like the tools). */
-@media (max-width: 700px) { .navigation { min-width: 0; } .navigation .toolbar-actions { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; } }
-@media (max-width: 400px) { .navigation { gap: 2px; } .navigation .toolbar-actions button { width: 32px; min-width: 32px; padding: 7px 5px; } }
+@media (max-width: 700px) { .navigation { min-width: 0; gap: 4px; padding: 2px 6px; } .navigation .toolbar-actions { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-inline: 2px; border-right: 1px solid var(--line); } }
+@media (max-width: 520px) {
+  .navigation { gap: 3px; padding: 2px 4px; }
+  .navigation > button { min-width: 32px; width: 32px; padding: 6px; }
+  .navigation label { font-size: 0; gap: 3px; }
+  .navigation #pageLabel { font-size: 12px; color: var(--muted); }
+  .navigation .toolbar-actions button { width: 28px; min-width: 28px; padding: 6px 4px; }
+}
+@media (max-width: 400px) { .navigation { gap: 2px; } .navigation .toolbar-actions button { width: 28px; min-width: 28px; padding: 6px 4px; } }
 /* Menus in the bar: the focus ring is drawn inside (the narrow bar scrolls and would clip it
    to two side strokes), and a click or tap shows only the open state, as on the desktop. */
 .bar-menu > summary:focus-visible { outline-offset: -2px; }
@@ -2913,10 +2929,10 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
   .navigation .pages-dark-toggle { display: inline-flex; flex: none; }
   .navigation .zoom-controls { display: flex; flex: none; }
   .navigation .zoom-controls > :not(#zoomFit) { display: none; }
-  .navigation #zoomFit { min-width: 40px; min-height: 40px; padding: 0 8px; }
+  .navigation #zoomFit { min-width: 36px; min-height: 40px; padding: 0 6px; }
 }
 @media (max-width: 700px) { .navigation .toolbar-actions { justify-content: safe flex-end; } }
-@media (max-width: 400px) { .navigation .pages-dark-toggle { width: 34px; min-width: 34px; padding: 6px; } .navigation #zoomFit { min-width: 36px; padding: 0 6px; } .navigation label { gap: 2px; } }
+@media (max-width: 400px) { .navigation .pages-dark-toggle { width: 32px; min-width: 32px; padding: 6px; } .navigation #zoomFit { min-width: 34px; padding: 0 5px; } .navigation label { gap: 2px; } }
 
 /* Handwritten pages from Markdown (convert.js) */
 .handwriting-dialog { width: min(1040px, calc(100vw - 24px)); }
@@ -3136,7 +3152,7 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
   .chat-head > strong { order: 0; }
   .chat-head::before { content: ""; order: 2; flex-basis: 100%; height: 0; }
   .chat-head > select, .chat-head > input, .chat-head > .model-search, .chat-head > .small-model, .chat-head > .text-only-badge { order: 3; }
-  .chat-head > select { flex: 1 1 0; min-width: 0; max-width: none; }
+  .chat-head > select { flex: 1 1 110px; min-width: 0; max-width: none; }
   .chat-head > .small-model { margin-left: 2px; }
 }
 
@@ -3331,7 +3347,25 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .quiz-actions .ai-group button:hover:not(:disabled) { background: var(--fill); }
 .quiz-actions .ai-group [hidden] { display: none; }
 .quiz-actions > button.icon-button { width: 28px; min-height: 28px; padding: 0; justify-content: center; }
-.ai-fieldset legend { display: inline-flex; align-items: center; gap: 6px; }
+.ai-fieldset { margin: 0 0 12px; padding: 10px 12px 2px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: var(--radius-box); background: color-mix(in srgb, var(--accent-soft) 42%, transparent); min-width: 0; }
+.ai-fieldset > legend { display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; font-size: 12px; font-weight: 600; }
+.ai-fieldset > .ocr-languages { grid-template-columns: calc(8.5em - 13px) minmax(0, 1fr); }
+@media (max-width: 540px) {
+  .ocr-scope, .ocr-languages, .ai-fieldset > .ocr-languages, .study-row > label, .study-row > label:first-child, #studyDialog:has(#studyAmountLabel[hidden]) .study-row > label {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+  }
+  .ocr-scope > div,
+  .ocr-languages > :is(select, input, span:not(.muted), .model-controls) {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .ocr-languages > input[type="number"] { width: 80px; }
+  .study-model-row > label { padding-top: 0; }
+  .ocr-actions { flex-wrap: wrap; }
+}
 /* Ask AI and the card practice's AI bar: icon buttons for the window, an AI tag before the tool
    and model, and what is sent labelled and on its own row. */
 .chat-head > strong { display: inline-flex; align-items: center; gap: 6px; }

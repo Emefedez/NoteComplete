@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.72
+
+- **One-tap Find button on mobile and desktop.** Added a search icon (`#findToggle`) to the toolbar actions (which moves into the mobile navigation strip) and a search toggle (`#textFindToggle`) to the text viewer bar so `Ctrl+F` find is one tap away without opening Home or menus.
+- **Undoable page reordering.** Pages can now be reordered by dragging page cards or clicking Up/Down arrows in the Pages sidebar, or from `Move page up` / `Move page down` in the Pages menu, with full undo/redo, `.nfedit` project persistence, and `.noteful` export support.
+- **Icons in the Share / Export dialog.** Every option in the Share / Export dialog now displays a matching icon alongside its title and description.
+- **Study export actions in the File menu.** Added `Share or export study material…` and `Export study to Anki` directly to the File menu and Command Palette.
+
 ## 1.1.71
 
 - **Redesigned Layers sidebar with clear lock/visibility icons and reordering.** Clicking anywhere on a layer card selects it with the accent color; Lock and Visibility use clear padlock and eye icons with an amber `"Locked"` badge and toolbar indicator when a layer is locked; locking or hiding the active layer automatically switches tools to an editable layer so drawing and text tools never silently stall; and layers can be reordered by dragging or with Up/Down arrow buttons.

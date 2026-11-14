@@ -982,10 +982,15 @@
     <label><input type="radio" name="studyScope" value="range" /> <span id="studyScopeRange">Pages</span> <input id="studyFrom" type="number" min="1" value="1" aria-label="From page" /> to <input id="studyTo" type="number" min="1" value="1" aria-label="To page" /></label>
     <label><input type="radio" name="studyScope" value="all" /> <span id="studyScopeAll">Whole note</span></label></div>
   </fieldset>
-  <fieldset class="ocr-scope ai-fieldset"><legend><span class="ai-tag" aria-hidden="true">AI</span> Written by</legend>
+  <fieldset class="ai-fieldset"><legend><span class="ai-tag" aria-hidden="true">AI</span> Written by</legend>
   <label class="ocr-languages">AI tool<select id="studyProvider" data-native></select></label>
-  <label class="ocr-languages">Model<select id="studyModel" data-native></select></label>
-  <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+  <div class="ocr-languages study-model-row">
+    <label for="studyModel">Model</label>
+    <div class="model-controls">
+      <select id="studyModel" data-native></select>
+      <input id="studyModelOther" class="model-other" type="text" autocomplete="off" placeholder="Model name, as the tool expects it" aria-label="Other model" hidden />
+    </div>
+  </div>
   </fieldset>
   <div class="study-row">
     <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>1</option><option>2</option><option selected>4</option><option>6</option><option>8</option><option>10</option><option>15</option><option>20</option></select></label>
