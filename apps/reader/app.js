@@ -55,6 +55,7 @@ import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
 import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { Engine } from "./engine.js";
+import { applyDrawPatch, placeDrawnItem } from "./draw-patch.js";
 import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
@@ -319,7 +320,32 @@ function call(op, args = {}) {
 let collab = null, sharedText = false;
 function mutate(op, args = {}) {
   if (collab?.readOnly) return Promise.reject(Error("This note is shared view-only: you can read it and follow along."));
-  return collab?.ink ? collab.submit(op, args) : call(op, args);
+  if (collab?.ink) return collab.submit(op, args);
+  return op === "draw" ? call(op, args).then(viewAfter) : call(op, args);
+}
+// The engine answers a drawn line with the new item alone (worker.js `draw`), not with the
+// page as it answers every other edit. Here that becomes the page's view again: the item
+// put into the view the page holds, when that view shows the note just before the line
+// (draw-patch.js), and otherwise the view asked from the engine, as before. `drawnItems`
+// keeps, by the view made, the line's id, and the item with the view it was put into, so
+// the page can add that one element instead of drawing everything again (addDrawn).
+const drawnItems = new WeakMap();
+async function viewAfter(reply) {
+  const drawn = reply?.drawn;
+  if (!drawn) return reply;
+  const p = panels[drawn.page];
+  // The page's newest view: the one waiting for the pen to pause (laterRender), or the
+  // one on screen.
+  for (const base of [p?.pendingView, p?.view]) {
+    const next = base && applyDrawPatch(base, drawn);
+    if (next) {
+      drawnItems.set(next, { id: drawn.id, drawn, base });
+      return next;
+    }
+  }
+  const view = await call("view", { page: drawn.page });
+  drawnItems.set(view, { id: drawn.id });
+  return view;
 }
 // Notes of 32 MB and more replace the engine's worker when they close (engine.js).
 const engine = new Engine({
@@ -1541,7 +1567,8 @@ async function renderPage(p, provided) {
     const displayWidth = p.el.clientWidth || p.size[0];
     // At another width the old raster (placed in page units) stays as a
     // placeholder until the sharper one arrives.
-    const kind = result.pdf_background && (inkCount(result.svg) > INK_HEAVY ? "url" : "canvas");
+    const inkItems = result.pdf_background ? inkCount(result.svg) : null;
+    const kind = result.pdf_background && (inkItems > INK_HEAVY ? "url" : "canvas");
     const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality, globalThis.devicePixelRatio || 1, kind]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
       ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image") : null;
@@ -1563,6 +1590,9 @@ async function renderPage(p, provided) {
     keepHeld(p, shows, true);
     const typing = textEditor?.p === p && (document.activeElement === textEditor.area || (textEditor.field && document.activeElement === textEditor.field));
     p.el.replaceChildren(render, overlay, lockMarks(result));
+    // What the page now shows, for a line added to it without a redraw (addDrawn).
+    p.shown = result;
+    p.inkItems = inkItems;
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     // Typed text is not lost to a redraw (another screen's edit, a zoom): finished text
     // waiting for its own render stays, and so does the box being typed in.
@@ -1795,7 +1825,7 @@ async function action(op, args = {}, hold = null) {
     // A new shape is selected to adjust it, except on a drawing tablet (it keeps drawing shapes).
     if (op === "draw" && args.line.shape && !args.recognized && !gesture && collab?.role !== "tablet") {
       document.querySelector("[data-tool=select]").click();
-      selection.selectId(args.page ?? page, `new:${result.edit_count - 1}`);
+      selection.selectId(args.page ?? page, drawnItems.get(result)?.id ?? `new:${result.edit_count - 1}`);
     } else if (selection.item) {
       selection.selectId(selection.item.page, selection.item.id);
     }
@@ -1857,9 +1887,42 @@ function showEdit(op, args, result) {
     // Strokes in quick succession: the page is redrawn once the pen pauses. Until then the
     // strokes stay on screen as drawn, and the next one starts at once instead of waiting
     // for the whole page to be rebuilt.
+    if (op === "draw" && p.index === result.page && addDrawn(p, result)) continue;
     if (op === "draw" && !args.line?.shape && p.index === result.page) laterRender(p, result);
     else renderPage(p, p.index === result.page ? result : undefined);
   }
+}
+// A drawn line joins the page on screen as one element, and the page is not drawn again,
+// when the page shows exactly the view the line was put into (viewAfter). False, with
+// nothing changed, in every other case, and the page is then drawn from the whole view as
+// before: no such view, the page being drawn or not on screen, a stroke in progress on it
+// (its render waits for the pen, renderPage), the element's place not found (a layer's
+// first tape, a page with no tape stripes yet), or a PDF page that with this line passes
+// INK_HEAVY and changes how its PDF is shown.
+function addDrawn(p, view) {
+  const made = drawnItems.get(view);
+  if (!made?.drawn || made.base !== p.view || p.shown !== p.view || p.loading || gesture?.panel === p) return false;
+  const svg = p.render?.isConnected && p.render.parentNode === p.el ? p.render.querySelector(":scope > svg") : null;
+  if (!svg || (view.pdf_background && p.inkItems === INK_HEAVY)) return false;
+  const holder = document.createElementNS(ns, "g");
+  holder.innerHTML = made.drawn.item;
+  if (holder.childElementCount !== 1 || !placeDrawnItem(svg, made.drawn, holder.firstElementChild)) return false;
+  // The view on screen becomes the new one in place: what is working from it (find.js
+  // checks the page still has the view it started with) goes on.
+  Object.assign(p.view, view);
+  p.viewRevision = revision;
+  clearTimeout(p.renderTimer);
+  p.pendingView = null;
+  if (p.inkItems != null) p.inkItems++;
+  if (made.drawn.tape) {
+    paintTapes(p.render, p.index);
+    applyTapes(p);
+  }
+  // The stroke kept on screen as drawn gives way to the element, as after a render.
+  keepHeld(p, revision, true);
+  shapeHandles(p);
+  updatePagePreview(p);
+  return true;
 }
 const RENDER_PAUSE = 300;
 function laterRender(p, result) {
@@ -1882,7 +1945,7 @@ function laterRender(p, result) {
 async function applyShared({ op, args }, mine, live = null) {
   let held = false;
   try {
-    const result = await call(op, args);
+    const result = await viewAfter(await call(op, args));
     if (!mine && doc && !edited(op, args, result)) {
       if (live && panels[args.page]) {
         holdInk(panels[args.page], live).revision = revision;

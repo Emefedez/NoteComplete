@@ -2,7 +2,7 @@
 use crate::{
     editor::{added_svg, Edit, Line},
     manipulation::{adjusted_line, bounds, item_svg},
-    Adjustment, Editor, Image, Layer, Page, PdfBackground, Result,
+    Adjustment, Editor, Error, Image, Layer, Page, Part, PdfBackground, Result,
 };
 use serde_json::{json, Value};
 use std::{
@@ -51,6 +51,40 @@ fn added_fragment<'k>(
         (Some(a), ..) => Cow::Owned(added_svg(&adjusted_line(added.line, a))),
         (None, ..) => Cow::Owned(added_svg(added.line)),
     }
+}
+
+/// An added line as the page's SVG has it. Tape is drawn twice, the second time with its
+/// stripes. `view` and `drawn` both write it here, so a host that adds the item `drawn`
+/// gives to the page it holds has the text `view` would have sent.
+fn write_added(out: &mut String, id: &str, svg: &str, tape: bool) {
+    // Writing to a String cannot fail, so the results of `write!` are dropped.
+    let _ = if tape {
+        write!(
+            out,
+            "<g data-item=\"{id}\" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\">{}</g>",
+            crate::scene::tape_with_pattern(svg)
+        )
+    } else {
+        write!(out, "<g data-item=\"{id}\">{svg}</g>")
+    };
+}
+/// An added line that is part of a graph or table, as `view` lists it in `parts`.
+fn part_entry(item: &str, part: &Part) -> Value {
+    json!({"item": item, "id": part.id, "kind": part.kind, "spec": part.spec})
+}
+/// An added shape, as `view` lists it in `shapes`.
+fn shape_entry(id: &str, line: &Line) -> Value {
+    json!({"id": id, "line": line})
+}
+/// An added strip of tape, as `view` lists it in `tapes`.
+fn tape_entry(id: &str, line: &Line) -> Value {
+    let [x, y, w, h] = bounds(&line.points);
+    let r = line.width / 2.;
+    json!({
+        "id": id,
+        "bounds": [x - r, y - r, w + 2. * r, h + 2. * r],
+        "revealed": false,
+    })
 }
 
 impl Editor {
@@ -194,7 +228,7 @@ impl Editor {
             // Under-ink additions (highlighter fills) go below the layer's ink.
             for a in added_in_layer(true) {
                 let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                let _ = write!(content, "<g data-item=\"{}\">{svg}</g>", a.id);
+                write_added(&mut content, &a.id, &svg, false);
                 added += 1;
             }
             for item in p.items.iter().filter(|i| i.layer == layer.id) {
@@ -221,15 +255,10 @@ impl Editor {
             }
             for a in added_in_layer(false) {
                 let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                let id = &a.id;
                 if a.line.tool == 2 {
-                    let _ = write!(
-                        layer_tapes,
-                        "<g data-item=\"{id}\" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\">{}</g>",
-                        crate::scene::tape_with_pattern(&svg)
-                    );
+                    write_added(&mut layer_tapes, &a.id, &svg, true);
                 } else {
-                    let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
+                    write_added(&mut content, &a.id, &svg, false);
                 }
                 added += 1;
             }
@@ -316,10 +345,7 @@ impl Editor {
         let parts: Vec<Value> = line_parts
             .chain(image_parts)
             .filter(|(id, _)| shown(id))
-            .filter_map(|(item, part)| {
-                let p = part.as_ref()?;
-                Some(json!({"item": item, "id": p.id, "kind": p.kind, "spec": p.spec}))
-            })
+            .filter_map(|(item, part)| Some(part_entry(item, part.as_ref()?)))
             .collect();
 
         // Shapes the reader can resize by their corners.
@@ -331,7 +357,7 @@ impl Editor {
                     && shown(&a.id)
                     && layers.iter().any(|l| l.id == a.line.layer && l.visible)
             })
-            .map(|a| json!({"id": a.id, "line": a.line}))
+            .map(|a| shape_entry(&a.id, a.line))
             .collect();
 
         let imported_tapes = p.items.iter().filter(|i| shown(&i.id)).filter_map(|i| {
@@ -342,15 +368,7 @@ impl Editor {
             .added
             .iter()
             .filter(|a| a.line.tool == 2 && shown(&a.id))
-            .map(|a| {
-                let [x, y, w, h] = bounds(&a.line.points);
-                let r = a.line.width / 2.;
-                json!({
-                    "id": a.id,
-                    "bounds": [x - r, y - r, w + 2. * r, h + 2. * r],
-                    "revealed": false,
-                })
-            });
+            .map(|a| tape_entry(&a.id, a.line));
         let tapes: Vec<Value> = imported_tapes.chain(added_tapes).collect();
 
         let timings: Vec<_> = p.timings.iter().filter(|t| shown(&t.item_id)).collect();
@@ -386,6 +404,96 @@ impl Editor {
             "recognized_text": self.recognized_words(page),
             "canvas": self.canvas,
         }))
+    }
+
+    /// What changed on `page` when the last edit added a line to it (`add_line`), so that
+    /// a host holding the page's view from just before need not be sent the whole page
+    /// again: with `item` and the fields beside it, that view becomes the one `view`
+    /// gives now.
+    ///
+    /// `id` is always there. The rest is left out when the host should ask for the view
+    /// (tape laid under the ink, which is listed as tape but drawn as ink).
+    ///
+    /// - `item`: the line's `<g data-item>` element, as it is in the view's `svg`.
+    /// - `layer`, and where the element goes: `tape` in the layer's `data-tapes` group
+    ///   (last), `under` in the layer's group before the item `before` (last when there
+    ///   is none), otherwise last in the layer's group.
+    /// - `shape`, `tape_entry`, `part`: what the view's `shapes` and `tapes` end with now,
+    ///   and what `parts` has after its other lines.
+    /// - `edit_count`, `can_undo`, `can_redo` as in the view; `visible_added` is one more.
+    pub fn drawn(&self, page: usize) -> Result<Value> {
+        let not_a_line = || Error::new(0, "The last edit did not add a line to this page");
+        let index = self.cursor.checked_sub(1).ok_or_else(not_a_line)?;
+        let line = match &self.history[index] {
+            Edit::Add { page: p, line } if *p == page => line,
+            _ => return Err(not_a_line()),
+        };
+        let id = format!("new:{index}");
+        let mut out = json!({"id": id, "page": page, "slot": page});
+        let tape = line.tool == 2;
+        if tape && line.under {
+            return Ok(out);
+        }
+        // The element that follows a line under the ink: the layer's first imported item,
+        // else its first picture or text box, else its first line over the ink.
+        let before = if line.under {
+            let facts = self.page_facts(page)?;
+            let shown = |id: &str| !facts.deleted.contains(id);
+            let in_layer = |layer: u32| layer == line.layer;
+            let p = self.page(page)?;
+            let imported = p
+                .items
+                .iter()
+                .find(|i| in_layer(i.layer) && i.tape().is_none() && shown(&i.id))
+                .map(|i| i.id.clone());
+            let image = || {
+                let found = facts.images.iter();
+                found
+                    .filter(|(id, image)| in_layer(image.layer) && shown(id))
+                    .map(|(id, _)| id.clone())
+                    .next()
+            };
+            let over = || {
+                let found = facts.added.iter();
+                found
+                    .filter(|a| {
+                        in_layer(a.line.layer) && !a.line.under && a.line.tool != 2 && shown(&a.id)
+                    })
+                    .map(|a| a.id.clone())
+                    .next()
+            };
+            imported.or_else(image).or_else(over)
+        } else {
+            None
+        };
+        let mut item = String::new();
+        {
+            // Kept for the next view, which then does not format the line again.
+            let mut kept = self.added_svg.borrow_mut();
+            if kept.len() < self.cursor {
+                kept.resize(self.cursor, None);
+            }
+            let svg = kept[index].get_or_insert_with(|| added_svg(line).into());
+            write_added(&mut item, &id, svg, tape);
+        }
+        out["item"] = json!(item);
+        out["layer"] = json!(line.layer);
+        out["under"] = json!(line.under);
+        out["tape"] = json!(tape);
+        out["before"] = json!(before);
+        if line.shape.is_some() {
+            out["shape"] = shape_entry(&id, line);
+        }
+        if tape {
+            out["tape_entry"] = tape_entry(&id, line);
+        }
+        if let Some(part) = &line.part {
+            out["part"] = part_entry(&id, part);
+        }
+        out["edit_count"] = json!(self.cursor);
+        out["can_undo"] = json!(self.cursor > self.floor);
+        out["can_redo"] = json!(self.cursor < self.history.len());
+        Ok(out)
     }
 
     /// Items locked in place on a page, with their current bounds.
@@ -700,6 +808,316 @@ mod tests {
         e.undo();
         e.add_line(0, pen(520.)).unwrap();
         same_as_before(e, "a line after compacting", true);
+    }
+
+    /// What the reader does with `drawn` (apps/reader/draw-patch.js), written again here:
+    /// the view from before the line with the new item put in. None when it cannot be done.
+    fn with_drawn(view: &serde_json::Value, d: &serde_json::Value) -> Option<serde_json::Value> {
+        let item = d["item"].as_str()?;
+        let svg = view["svg"].as_str()?;
+        if view["slot"] != d["slot"] || !svg.ends_with("</svg>") {
+            return None;
+        }
+        let layer = d["layer"].as_u64()?;
+        let closing = svg.len() - "</svg>".len();
+        // A group ends where the next one starts, or where the page does.
+        let end_of = |start: usize, next: &[&str]| {
+            let rest = &svg[start + 1..];
+            let found = next.iter().find_map(|n| rest.find(n));
+            found.map_or(closing, |i| start + 1 + i)
+        };
+        let at = if d["tape"] == true {
+            if !svg.contains("nc-tape-pattern") {
+                return None;
+            }
+            let start = svg.find(&format!("<g data-tapes=\"{layer}\" "))?;
+            end_of(start, &["<g data-tapes=\""]) - 4
+        } else {
+            let start = svg.find(&format!("<g data-layer=\"{layer}\" "))?;
+            let end = end_of(start, &["<g data-layer=\"", "<g data-tapes=\""]);
+            match d["before"].as_str() {
+                Some(id) => start + svg[start..end].find(&format!("<g data-item=\"{id}\">"))?,
+                None => end - 4,
+            }
+        };
+        if d["before"].is_null() && &svg[at..at + 4] != "</g>" {
+            return None;
+        }
+        let mut next = view.clone();
+        next["svg"] = format!("{}{item}{}", &svg[..at], &svg[at..]).into();
+        next["visible_added"] = (view["visible_added"].as_u64()? + 1).into();
+        for key in ["edit_count", "can_undo", "can_redo"] {
+            next[key] = d[key].clone();
+        }
+        if !d["shape"].is_null() {
+            next["shapes"].as_array_mut()?.push(d["shape"].clone());
+        }
+        if !d["tape_entry"].is_null() {
+            next["tapes"].as_array_mut()?.push(d["tape_entry"].clone());
+        }
+        if !d["part"].is_null() {
+            // Lines' parts come before those of pictures and text boxes.
+            let parts = next["parts"].as_array_mut()?;
+            let images = |p: &serde_json::Value| p["item"].as_str().unwrap().starts_with("image:");
+            let at = parts.iter().position(images).unwrap_or(parts.len());
+            parts.insert(at, d["part"].clone());
+        }
+        Some(next)
+    }
+
+    /// Adds `line` to the page and checks what `drawn` answers against the views before
+    /// and after. Returns whether the reader could have put the item in by itself.
+    fn draw_checked(e: &mut Editor, slot: usize, line: Line, name: &str) -> bool {
+        let before = e.view(slot).unwrap();
+        e.add_line(slot, line.clone()).unwrap();
+        // Asked before the next view, as the reader's engine does: nothing is kept yet.
+        let d = e.drawn(slot).unwrap();
+        let after = e.view(slot).unwrap();
+        let id = format!("new:{}", after["edit_count"].as_u64().unwrap() - 1);
+        assert_eq!(d["id"], id.as_str(), "{name}");
+        assert_eq!(d["slot"], slot, "{name}");
+        assert_eq!(
+            d,
+            e.drawn(slot).unwrap(),
+            "{name}: the same answer after a view"
+        );
+        let Some(item) = d["item"].as_str() else {
+            assert!(line.under && line.tool == 2, "{name}: no item");
+            return false;
+        };
+        // The item is, byte for byte, the line's element in the full view.
+        let svg = after["svg"].as_str().unwrap();
+        let opening = format!("<g data-item=\"{id}\"");
+        let at = svg
+            .find(&opening)
+            .unwrap_or_else(|| panic!("{name}: not in the view"));
+        assert!(svg[at..].starts_with(item), "{name}: the item differs");
+        assert_eq!(svg.matches(&opening).count(), 1, "{name}");
+        assert!(
+            item.starts_with(&opening) && item.ends_with("</g>"),
+            "{name}"
+        );
+        match with_drawn(&before, &d) {
+            Some(patched) => {
+                for (key, value) in after.as_object().unwrap() {
+                    assert!(patched[key] == *value, "{name}: \"{key}\" differs");
+                }
+                assert_eq!(patched, after, "{name}");
+                true
+            }
+            None => {
+                // Only the page's first tape, or a layer's first, needs the whole view.
+                let had = before["svg"].as_str().unwrap();
+                let group = format!("<g data-tapes=\"{}\" ", line.layer);
+                assert!(
+                    line.tool == 2 && (!had.contains("nc-tape-pattern") || !had.contains(&group)),
+                    "{name}: the item could not be put in"
+                );
+                false
+            }
+        }
+    }
+
+    /// Every kind of line, drawn on `layer` of a page.
+    fn lines(layer: u32, y: f64) -> Vec<(&'static str, Line)> {
+        let on = |line: Line| Line { layer, ..line };
+        let shape = |kind, fill| {
+            let shape = Shape {
+                kind,
+                start: [100., y],
+                end: [260., y + 90.],
+                fill,
+            };
+            on(Line {
+                points: shape.points(),
+                shape: Some(shape),
+                ..pen(0.)
+            })
+        };
+        let highlighter = on(Line {
+            tool: 1,
+            width: 14.,
+            ..pen(y + 10.)
+        });
+        let band = Line {
+            square: true,
+            ..Line::new(vec![[100., y], [300., y]], 120., [1., 0.9, 0., 1.])
+        };
+        let tape = on(Line {
+            tool: 2,
+            width: 30.,
+            ..pen(y + 30.)
+        });
+        vec![
+            ("pen", on(pen(y))),
+            (
+                "pen, one point",
+                on(Line::new(vec![[50., y]], 3., [0., 0., 0., 1.])),
+            ),
+            (
+                "pressure pen",
+                on(Line {
+                    pressure: Some(vec![0.8, 1.4, 1.1]),
+                    ..pen(y + 5.)
+                }),
+            ),
+            ("highlighter", highlighter.clone()),
+            (
+                "highlighter under the ink",
+                Line {
+                    under: true,
+                    ..highlighter.clone()
+                },
+            ),
+            (
+                "band under the ink",
+                on(Line {
+                    tool: 1,
+                    under: true,
+                    ..band
+                }),
+            ),
+            (
+                "pen under the ink",
+                on(Line {
+                    under: true,
+                    ..pen(y + 15.)
+                }),
+            ),
+            ("shape", shape(ShapeKind::Rectangle, None)),
+            (
+                "filled shape",
+                shape(ShapeKind::Rectangle, Some([1., 0.8, 0., 0.25])),
+            ),
+            (
+                "ellipse",
+                shape(ShapeKind::Ellipse, Some([0., 0.5, 1., 1.])),
+            ),
+            ("line shape", shape(ShapeKind::Line, None)),
+            ("tape", tape.clone()),
+            (
+                "tape again",
+                Line {
+                    width: 12.,
+                    ..tape.clone()
+                },
+            ),
+            (
+                "tape under the ink",
+                Line {
+                    under: true,
+                    ..tape
+                },
+            ),
+            (
+                "graph part",
+                on(Line {
+                    part: Some(Part {
+                        id: "g1".into(),
+                        kind: "graph".into(),
+                        spec: Some(r#"{"x":[-5,5]}"#.into()),
+                    }),
+                    ..pen(y + 40.)
+                }),
+            ),
+            ("pen after everything", on(pen(y + 50.))),
+        ]
+    }
+
+    #[test]
+    fn a_drawn_line_patches_the_previous_view_into_the_next() {
+        let samples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples");
+        for name in [
+            "Examen wuolah",
+            "Practice book (vol. 1)",
+            "nota_herramientalinea",
+            "nota_imagen",
+            "texto",
+            "nota_vacia",
+        ] {
+            let data = std::fs::read(samples.join(format!("{name}.noteful"))).unwrap();
+            let mut e = Editor::open(&data).unwrap();
+            let last = e.scene.pages.len() - 1;
+            let mut patched = 0;
+            let mut all = |e: &mut Editor, slot: usize, layer: u32, step: &str| {
+                for (kind, line) in lines(layer, 100.) {
+                    let label = format!("{name}, slot {slot}, {step}: {kind}");
+                    patched += usize::from(draw_checked(e, slot, line, &label));
+                }
+            };
+            assert!(e.drawn(0).is_err(), "nothing was drawn yet");
+            all(&mut e, 0, 0, "first lines");
+            assert!(e.drawn(usize::MAX).is_err() && (last == 0 || e.drawn(last).is_err()));
+            all(&mut e, last, 0, "last page");
+
+            // After erasing, moving, resizing and undoing: the places of later lines hold.
+            assert!(e.erase_path(0, &[[80., 90.], [80., 115.]], 2.).unwrap() > 0);
+            assert!(e.drawn(0).is_err(), "an erasure is not a drawn line");
+            let first = e.cursor;
+            all(&mut e, 0, 0, "after an erasure");
+            e.adjust_item(0, &format!("new:{first}"), moved(30.))
+                .unwrap();
+            e.undo();
+            e.undo();
+            e.redo();
+            all(&mut e, 0, 0, "after a move, undo and redo");
+            e.undo();
+            all(&mut e, 0, 0, "where an undone line was");
+
+            // A text box and a picture part: lines over the ink come after them, lines
+            // under it before them, and a line's part before a text box's.
+            let mut label = text_box("Hola", false);
+            label.part = Some(Part {
+                id: "g1".into(),
+                kind: "graph".into(),
+                spec: None,
+            });
+            e.add_image(0, label).unwrap();
+            all(&mut e, 0, 0, "with a text box");
+
+            // A second layer over the first, then with the first hidden, then dimmed.
+            let mut top = Layer {
+                id: 7,
+                name: "Top".into(),
+                ..Default::default()
+            };
+            e.set_layer(top.clone()).unwrap();
+            all(&mut e, 0, 7, "new layer");
+            all(&mut e, 0, 0, "layer under another");
+            top.opacity = 0.5;
+            e.set_layer(top.clone()).unwrap();
+            all(&mut e, 0, 7, "dimmed layer");
+            let mut base = e.layers().into_iter().find(|l| l.id == 0).unwrap();
+            base.visible = false;
+            e.set_layer(base.clone()).unwrap();
+            all(&mut e, 0, 7, "over a hidden layer");
+            base.visible = true;
+            e.set_layer(base).unwrap();
+
+            // An inserted page, and the pages after a project is opened again or compacted.
+            let blank = NewPage {
+                words: vec![],
+                size: [500., 700.],
+                pdf: None,
+            };
+            e.insert_pages(1, vec![blank], None).unwrap();
+            let inserted = e.slot(1).unwrap();
+            all(&mut e, inserted, 0, "inserted page");
+            all(&mut e, inserted, 7, "inserted page, top layer");
+            let mut reopened = Editor::open_project(&e.save_project().unwrap()).unwrap();
+            all(&mut reopened, 0, 0, "reopened project");
+            // Compacted: undo stops where the history was cut, and lines are still added.
+            let mut cut = Editor::open(&data).unwrap();
+            all(&mut cut, 0, 0, "before compacting");
+            cut.compact_history(cut.cursor).unwrap();
+            all(&mut cut, 0, 0, "compacted");
+            cut.undo();
+            all(&mut cut, last, 0, "compacted, after an undo");
+
+            // Most lines were put in without the view; the first tapes and tape under the
+            // ink were not.
+            assert!(patched > 150, "{name}: {patched} lines patched");
+        }
     }
 
     #[test]

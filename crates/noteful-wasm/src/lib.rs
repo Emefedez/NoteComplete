@@ -129,9 +129,14 @@ impl EditorSession {
     pub fn view(&self, page: usize) -> Result<String, Failure> {
         Ok(self.inner.view(self.slot(page)?)?.to_string())
     }
-    pub fn draw(&mut self, page: usize, line: &str) -> Result<(), Failure> {
-        let page = self.slot(page)?;
+    /// Adds a line and answers, as JSON, with its `id` and, when the page changed by that
+    /// line alone, what a reader holding the page's view needs to bring it up to date
+    /// (`Editor::drawn`: `item` and the fields beside it). With only `id`, the reader asks
+    /// for the view: an infinite canvas grew, which is a second edit and another page size.
+    pub fn draw(&mut self, page: usize, line: &str) -> Result<String, Failure> {
+        let slot = self.slot(page)?;
         let line: noteful_core::Line = serde_json::from_str(line)?;
+        let mut grew = false;
         if self.inner.is_canvas() {
             let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
             for p in &line.points {
@@ -142,7 +147,7 @@ impl EditorSession {
             }
             if lo[0] <= hi[0] {
                 let pad = line.width / 2.;
-                self.inner.grow_canvas_for([
+                grew = self.inner.grow_canvas_for([
                     lo[0],
                     lo[1],
                     hi[0] - lo[0] + pad,
@@ -150,7 +155,13 @@ impl EditorSession {
                 ])?;
             }
         }
-        Ok(self.inner.add_line(page, line)?)
+        self.inner.add_line(slot, line)?;
+        let drawn = on_page(self.inner.drawn(slot)?, page);
+        Ok(if grew {
+            json!({"id": drawn["id"]}).to_string()
+        } else {
+            drawn.to_string()
+        })
     }
     /// Make this one-page note an infinite canvas (it grows as you write).
     pub fn set_canvas(&mut self, on: bool) -> Result<(), Failure> {

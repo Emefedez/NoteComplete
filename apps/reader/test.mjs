@@ -31,6 +31,65 @@ session.undo();assert.equal(view(0).svg,original);
 assert.throws(()=>session.draw(0,JSON.stringify({points:[],width:2,rgba:[0,0,1,1]})));
 loaded.free();session.free();
 console.log('WASM editor: 2082 imported elements, draw, swept erase, undo/redo, project reload, invalid edit rejection passed.');
+// A drawn line answers with the new item alone. Put into the view from before it by the
+// reader's own code (draw-patch.js), it gives the view the engine gives afterwards.
+{
+ const {applyDrawPatch}=await import('./draw-patch.js');
+ const strokes=(layer,y)=>{
+  const points=[[40,y],[120,y+8],[200,y]],pen={points,width:3,rgba:[.1,.2,.7,1],layer};
+  const shape=(kind,fill)=>({...pen,points:[],shape:{kind,start:[100,y],end:[260,y+90],...(fill?{fill}:{})}});
+  return [['pen',pen],['dot',{...pen,points:[[50,y]]}],['pressure pen',{...pen,pressure:[.8,1.4,1.1]}],['highlighter',{...pen,tool:1,width:14}],
+   ['highlighter under the ink',{...pen,tool:1,width:14,under:true}],['band under the ink',{...pen,points:[[100,y],[300,y]],tool:1,width:120,square:true,under:true}],
+   ['shape',shape('rectangle')],['filled shape',shape('rectangle',[1,.8,0,.25])],['ellipse',shape('ellipse',[0,.5,1,1])],
+   ['tape',{...pen,tool:2,width:30}],['tape again',{...pen,tool:2,width:12}],['tape under the ink',{...pen,tool:2,width:30,under:true}],
+   ['graph part',{...pen,part:{id:'g1',kind:'graph',spec:'{"x":[-5,5]}'}}],['pen after everything',pen]];
+ };
+ let checked=0,patched=0;
+ for(const name of ['Examen wuolah','nota_imagen','texto','nota_vacia','Practice book (vol. 1)']){
+  const e=new EditorSession(readFileSync(new URL(`../../samples/${encodeURIComponent(name)}.noteful`,import.meta.url)));
+  let state=7;
+  const full=page=>({...JSON.parse(e.view(page)),engine_state:state});
+  const all=(page,layer,step)=>{
+   for(const [kind,line] of strokes(layer,100)){
+    const before=full(page),label=`${name}, page ${page}, ${step}: ${kind}`;
+    const drawn={...JSON.parse(e.draw(page,JSON.stringify(line))),base_state:state,engine_state:++state};
+    const after=full(page),id=`new:${after.edit_count-1}`;
+    assert.equal(drawn.id,id,label);assert.equal(drawn.page,page,label);
+    checked++;
+    if(!drawn.item){assert.equal(kind,'tape under the ink',label);continue;}
+    assert.ok(after.svg.includes(drawn.item),label);
+    const next=applyDrawPatch(before,drawn);
+    if(!next){
+     // The page's first tape, or a layer's first.
+     assert.ok(line.tool===2&&(!before.svg.includes('nc-tape-pattern')||!before.svg.includes(`<g data-tapes="${layer}" `)),label);
+     continue;
+    }
+    assert.equal(next.svg,after.svg,label);assert.deepEqual(next,after,label);
+    patched++;
+   }
+  };
+  const last=full(0).pages-1;
+  all(0,0,'first lines');all(last,0,'last page');
+  assert.ok(e.erase(0,JSON.stringify([[80,90],[80,115]]),2)>0);all(0,0,'after an erasure');
+  e.undo();e.undo();e.redo();all(0,0,'after undo and redo');
+  e.add_image(0,JSON.stringify({base64:'',mime:'',bounds:[100,420,240,60],layer:0,text:{text:'Hola',font_size:20,rgba:[0,0,0,1],bold:false,italic:false,font:'Helvetica',align:0,underline:false,strikethrough:false,math:false},part:{id:'g1',kind:'graph'}}));
+  all(0,0,'with a text box');
+  e.set_layer(JSON.stringify({id:7,name:'Top',visible:true,locked:false,opacity:1}));all(0,7,'new layer');all(0,0,'layer under another');
+  e.set_layer(JSON.stringify({id:7,name:'Top',visible:true,locked:false,opacity:.5}));all(0,7,'dimmed layer');
+  // An inserted page moves the first one: the answer names the page where it is shown.
+  e.insert_pages(0,JSON.stringify([{size:[500,700]}]));all(0,0,'inserted page');all(1,7,'page moved by an insertion');
+  const reopened=EditorSession.load_project(e.save_project());assert.deepEqual(JSON.parse(reopened.view(1)),JSON.parse(e.view(1)),name);reopened.free();
+  e.free();
+ }
+ assert.equal(checked,5*10*14);assert.ok(patched>checked*.8,`${patched} of ${checked}`);
+ // A canvas that grows answers with the id alone: the page's size changed too.
+ const canvas=EditorSession.create_document('Canvas','[[600,800]]',new Uint8Array());canvas.set_canvas(true);
+ const inside=JSON.parse(canvas.draw(0,JSON.stringify({points:[[10,10],[100,100]],width:2,rgba:[0,0,1,1]})));
+ assert.equal(inside.id,'new:0');assert.ok(inside.item);
+ const grew=JSON.parse(canvas.draw(0,JSON.stringify({points:[[10,10],[100,790]],width:2,rgba:[0,0,1,1]})));
+ assert.deepEqual(grew,{id:'new:2'});assert.ok(JSON.parse(canvas.view(0)).size[1]>800);canvas.free();
+ console.log(`WASM drawn lines: ${patched} of ${checked} lines put into the previous view give the next view exactly; the others ask for it.`);
+}
 const textSession=new EditorSession(readFileSync(new URL('../../samples/texto.noteful',import.meta.url)));
 const textView=JSON.parse(textSession.view(0));assert.equal(textView.texts.length,3);assert.deepEqual(textView.warnings,[]);
 for(const [content,size,bold,italic] of [['texto texto ',16,false,false],['Bocadillo',16,true,false],['Hola',12,false,true]]){
@@ -96,7 +155,34 @@ await import('./worker.js');
 const send=async data=>{await self.onmessage({data});return responses.findLast(r=>r.id===data.id);};
 const source=readFileSync(new URL('../../samples/nota_vacia.noteful',import.meta.url));
 assert.ok((await send({id:1,op:'open',bytes:source})).result);
-await send({id:2,op:'draw',line:{points:[[10,10],[100,100]],width:2,rgba:[0,0,1,1]}});
+// A line answers with itself, for the view of the state before it; a turned shape with the view.
+{
+ const {applyDrawPatch}=await import('./draw-patch.js');
+ const opened=responses.findLast(r=>r.id===1).result,line={points:[[10,10],[100,100]],width:2,rgba:[0,0,1,1]};
+ assert.ok(Number.isSafeInteger(opened.engine_state));
+ const first=(await send({id:2,op:'draw',line})).result;
+ assert.deepEqual(Object.keys(first),['drawn']);assert.equal(first.drawn.id,'new:0');assert.equal(first.drawn.base_state,opened.engine_state);
+ const shown=(await send({id:20,op:'view'})).result;
+ assert.equal(shown.engine_state,first.drawn.engine_state,'a view does not move the state on');
+ assert.deepEqual(applyDrawPatch(opened,first.drawn),shown);
+ // Read-only operations in between leave the view good for the next line.
+ await send({id:21,op:'save'});await send({id:22,op:'pick',x:1,y:1,tolerance:1});await send({id:23,op:'historyMark'});await send({id:24,op:'digest'});
+ const second=(await send({id:25,op:'draw',line})).result.drawn;
+ assert.deepEqual(applyDrawPatch(shown,second),(await send({id:26,op:'view'})).result);
+ // Any edit in between, also one that is refused, and the view from before is not used.
+ const third=(await send({id:27,op:'draw',line})).result.drawn;
+ assert.equal(applyDrawPatch(shown,third),null);
+ const current=(await send({id:28,op:'view'})).result;
+ assert.ok((await send({id:29,op:'draw',line:{...line,points:[]}})).error);
+ const fourth=(await send({id:30,op:'draw',line})).result.drawn;
+ assert.equal(applyDrawPatch(current,fourth),null);
+ const undone=(await send({id:31,op:'undo'})).result;assert.equal(undone.edit_count,3);
+ assert.equal(applyDrawPatch(current,(await send({id:32,op:'draw',line})).result.drawn),null,'the same number of edits, another state');
+ const turned=(await send({id:33,op:'draw',turn:30,line:{...line,points:[],shape:{kind:'rectangle',start:[100,100],end:[200,160]}}})).result;
+ assert.equal(turned.edit_count,6);assert.equal(turned.shapes.at(-1).id,'new:4');assert.ok(turned.svg.includes('<g data-item="new:4">'));
+ assert.equal((await send({id:35,op:'selection',itemId:'new:4'})).result.adjustment.rotation,30);
+ assert.ok((await send({id:34,op:'nothing'})).error);
+}
 const before=(await send({id:3,op:'save'})).result;
 assert.ok((await send({id:4,op:'open',project:true,bytes:new TextEncoder().encode('{"invalid":true}')})).error);
 assert.equal((await send({id:5,op:'save'})).result,before);

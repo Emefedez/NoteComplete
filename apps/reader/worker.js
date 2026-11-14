@@ -8,8 +8,18 @@ ready
 // and its page and returns the reply's result; a name that is not here is answered with an
 // error, so a misspelt operation cannot pass for a page view.
 
-// The page as it now is: what `view` and every edit answer with.
-const view = (page) => JSON.parse(session.view(page));
+// The engine's state has a number, and every operation that may change the note gives it
+// the next one. A view says which state it shows (`engine_state`), and a drawn line which
+// state it was added to (`base_state`): the reader puts the line into a view it holds only
+// when that view shows exactly that state, and asks for the view otherwise. The numbers
+// start somewhere else in every worker, so a view from a worker that was replaced
+// (engine.js) never passes for one of this worker's.
+let state = Math.floor(Math.random() * 2 ** 40);
+// Operations that leave the note as it is. Any other, also one that fails, moves the state on.
+const READS = new Set(["view", "save", "pick", "pickLock", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+
+// The page as it now is: what `view` and every edit but a drawn line answer with.
+const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
 // An edit: the change, then the page's view after it.
 const edit = (change) => (args, page) => { change(args, page); return view(page); };
 // Undoing inserted pages can take away the page in view: show the last one left.
@@ -44,7 +54,7 @@ const standalone = {
           : new EditorSession(bytes);
       if (args.canvas) candidate.set_canvas(true);
       if (args.image) candidate.add_image(0, JSON.stringify(args.image));
-      const result = JSON.parse(candidate.view(0));
+      const result = Object.assign(JSON.parse(candidate.view(0)), { engine_state: state });
       // Recordings added in NoteComplete travel inside .notecomp files.
       if (args.notecomplete)
         result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
@@ -111,16 +121,21 @@ const onDocument = {
   editText: edit((args, page) => session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height)),
   resize: edit((args, page) => session.resize_shape(page, args.shapeId, JSON.stringify(args.shape))),
   layer: edit((args) => session.set_layer(JSON.stringify(args.layer))),
-  draw: edit((args, page) => {
-    session.draw(page, JSON.stringify(args.line));
+  // A line answers with itself alone (`drawn`: the new item and the few fields of the view
+  // that change), not with the page: the reader adds it to the view it holds
+  // (draw-patch.js), or asks for the view when it holds none of the state before.
+  draw(args, page) {
+    const drawn = JSON.parse(session.draw(page, JSON.stringify(args.line)));
     // A shape recognised at an angle (shape-recognize.js) is added level, then turned about
     // its centre in the same step: one undo removes both, and every copy in a sharing
     // session does the same, since the op travels with its arguments.
     if (Number.isFinite(args.turn) && args.turn) {
-      const id = `new:${view(page).edit_count - 1}`;
-      session.adjust_item(page, id, JSON.stringify({ translation: [0, 0], scale: [1, 1], rotation: args.turn, joined: true }));
+      session.adjust_item(page, drawn.id, JSON.stringify({ translation: [0, 0], scale: [1, 1], rotation: args.turn, joined: true }));
+      return view(page);
     }
-  }),
+    // Without `item` the page changed by more than the line (a canvas that grew).
+    return drawn.item ? { drawn: { ...drawn, base_state: state - 1, engine_state: state } } : view(page);
+  },
   image: edit((args, page) => session.add_image(page, JSON.stringify(args.image))),
   // Several lines, then typed text boxes, as one undo step (graph.js: an inserted graph).
   drawMany: edit((args, page) => {
@@ -146,6 +161,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     const needsDocument = !Object.hasOwn(standalone, op);
     if (needsDocument && !Object.hasOwn(onDocument, op)) throw Error(`Unknown engine operation: ${op}`);
     if (needsDocument && !session) throw Error("Open a document first.");
+    if (!READS.has(op)) state++;
     const result = (needsDocument ? onDocument : standalone)[op](args, page);
     postMessage({ id, result }, TRANSFERRED.has(op) ? [result.buffer] : []);
   } catch (e) {

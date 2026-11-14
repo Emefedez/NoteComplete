@@ -30,7 +30,9 @@ holds the file and AI bridges.
 - Check every other `innerHTML` that takes a value not written in the source.
 - Test: a name with markup appears as text.
 
-### S2 The reader page has no Content-Security-Policy `[ ]`
+### S2 The reader page has no Content-Security-Policy `[!]`
+
+Done in `9c6bbe7` (`tools/reader-csp.mjs`); covered by unit tests, not yet run in a browser.
 
 Second layer for S1. Add a policy to `index.html` and `tabs.html` (and the same header in
 the desktop protocol handler and the sharing server) that allows the app's own scripts,
@@ -81,9 +83,9 @@ reader ignores the error. Skip the page, keep the others, and report how many we
 
 ## Performance
 
-### P1 Every edit re-renders the whole page `[ ]`
+### P1 Every edit re-renders the whole page `[!]`
 
-Steps 1 and 2 done in `4fc659b` (`view.rs`; the old code stays as a test-only reference and every sample is compared against it). In WebAssembly, with the page already drawn once, `view` after one more stroke went from 21 ms to 2.3 ms at 500 strokes, 34 to 3.1 at 1000 and 138 to 9.2 at 4000. Step 3 is still to do: what is left is copying and parsing the whole page for one stroke.
+Steps 1 and 2 done in `4fc659b` (`view.rs`; the old code stays as a test-only reference and every sample is compared against it). In WebAssembly, with the page already drawn once, `view` after one more stroke went from 21 ms to 2.3 ms at 500 strokes, 34 to 3.1 at 1000 and 138 to 9.2 at 4000. Step 3 is done in `Editor::drawn` (`view.rs`), `EditorSession::draw` (`noteful-wasm`), `worker.js`, `draw-patch.js` and `addDrawn` (`app.js`): a drawn line answers with the new `<g data-item>` element and the few fields of the view that change, which the reader puts into the view it holds and into the `<svg>` on screen without rebuilding the page (the full view stays the fallback for a page's or layer's first tape, tape under the ink, a canvas that grew, or another edit in between).
 
 After each edit the core builds the page's whole SVG (`Editor::view`) and the reader
 replaces the page with `innerHTML`. Measured on `samples/Examen wuolah.noteful`, adding
@@ -108,7 +110,9 @@ In order:
 
 Check: the bench above again, `tools/perf_bench.mjs`, and the ink e2e scripts.
 
-### P2 Rotated shapes render the page twice `[ ]`
+### P2 Rotated shapes render the page twice `[D]`
+
+Done with P1 step 3: `EditorSession::draw` returns the new item's `id`, which `worker.js` passes to `adjust_item` without building an intermediate view.
 
 `draw` with `turn` in `worker.js` parses a whole view to read `edit_count`. Have `draw`
 return the new item's id.
