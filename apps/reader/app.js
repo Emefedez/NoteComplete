@@ -35,7 +35,7 @@ import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
-import { pageExporter, IMAGE_TYPES } from "./page-export.js";
+import { pageExporter } from "./page-export.js";
 import { versionChooser, carryStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
@@ -1231,28 +1231,6 @@ function underPaper(render) {
   render.style.backgroundColor = render.dataset.paper;
   paper.setAttribute("fill", "none");
   svg.style.isolation = "auto";
-}
-// The page's SVG to save as a file, as it is in the note: the paper and the PDF inside it.
-async function pageSvg(p) {
-  const svg = p.render.firstElementChild.cloneNode(true);
-  if (p.render.dataset.paper) {
-    svg.querySelector("[data-background] > rect")?.setAttribute("fill", p.render.dataset.paper);
-    svg.style.isolation = "isolate";
-  }
-  const raster = p.render.querySelector(":scope > canvas.pdf-raster");
-  if (raster && p.view?.pdf_background)
-    svg.querySelector("[data-background]")?.append(pdfImage(raster.toDataURL("image/png"), backgroundPlacement(p.view.pdf_background, p.size)));
-  // A blob: URL means nothing outside this window.
-  for (const image of svg.querySelectorAll('image[href^="blob:"]')) {
-    const blob = await (await fetch(image.getAttribute("href"))).blob();
-    image.setAttribute("href", await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    }));
-  }
-  return svg;
 }
 // The raster a page shows (a canvas, or a picture's URL), to release.
 const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raster") || render?.querySelector("[data-background] > image")?.getAttribute("href");
@@ -3900,36 +3878,28 @@ $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
 $("newWithAi").hidden = !sharedAI();
 $("newWithAi").onclick = () => { closeMenus(); converter.open({ withAi: true }); };
 $("insertHandwritten").onclick = () => { closeMenus(); if (doc) converter.open({ insert: true }); };
-// The "?" beside Save as (New document) and Export: what each format keeps.
-for (const help of document.querySelectorAll("[data-format-help]")) help.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeMenus(); $("formatsDialog").showModal(); };
-$("formatsClose").onclick = () => $("formatsDialog").close();
-$("native").onclick = () => save(true);
-$("nativeMarkdown").onclick = () => save(true, "markdown");
-$("exportNotecomplete").onclick = () => save(true, "notecomplete");
-$("exportProject").onclick = () => save(true, "project");
-// Pages as PDF (every page, in the background) or the current page as an image; the IMG
-// button opens the format list under the row.
-const pageExport = pageExporter({ pageCanvas, call, documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }), currentPage: () => page, filename, download, jobs: { start: (...a) => jobs.start(...a) }, status });
-$("exportPdf").onclick = () => { closeMenus(); if (!busy()) pageExport.pdf(); };
-$("imageTypes").replaceChildren(...IMAGE_TYPES.map((t) => {
-  const b = document.createElement("button");
-  b.type = "button"; b.setAttribute("role", "menuitem"); b.dataset.palette = `Export page as ${t.label}`;
-  const hint = Object.assign(document.createElement("span"), { className: "muted", textContent: t.hint });
-  b.append(Object.assign(document.createElement("span"), { textContent: t.label }), hint);
-  b.onclick = () => { closeMenus(); pageExport.image(t.id); };
-  return b;
-}));
-$("exportImage").onclick = (e) => {
-  e.stopPropagation();
-  const open = $("imageTypes").hidden;
-  $("imageTypes").hidden = !open;
-  $("exportImage").setAttribute("aria-expanded", String(open));
-};
 function closeMenus() {
   for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
   $("imageTypes").hidden = true;
   $("exportImage").setAttribute("aria-expanded", "false");
 }
+const { exportRequest, exportRequested } = pageExporter({
+  pageCanvas,
+  call,
+  documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }),
+  currentPage: () => page,
+  currentPanel: () => panels[page],
+  pdfImage,
+  backgroundPlacement,
+  filename,
+  download,
+  jobs: { start: (...a) => jobs.start(...a) },
+  status,
+  save,
+  busy,
+  closeMenus,
+  $,
+});
 // Notes panel: Markdown beside the pages (notes.js, loaded on first use).
 let notes = null, notesLoading = null;
 function notesApi() {
@@ -3970,16 +3940,6 @@ $("notesResize").onpointerdown = (down) => {
     try { localStorage.setItem("notecomplete-notes-width", String($("notesPanel").offsetWidth)); } catch { /* Optional. */ }
     resize();
   };
-};
-$("svg").onclick = async () => {
-  const p = panels[page];
-  if (p?.pdfReady && !busy()) {
-    try {
-      await download(new XMLSerializer().serializeToString(await pageSvg(p)), `${filename()}-p${page + 1}.svg`, "image/svg+xml");
-    } catch (e) {
-      status(e.message, true);
-    }
-  }
 };
 window.addEventListener("beforeunload", (e) => {
   if (dirty && changed) {
@@ -4259,15 +4219,6 @@ const downloadQueue = createDownloadQueue({
   onUpdate: (stats) => queueView.update(stats),
 });
 
-// A ⋯ export chosen on a Drive or Internet Archive card: the note is exported once it has opened.
-const exportRequest = { kind: "", key: "" };
-async function exportRequested(key, opened) {
-  const { kind, key: wanted } = exportRequest;
-  exportRequest.kind = exportRequest.key = "";
-  if (!opened || !kind || wanted !== key || !doc) return;
-  if (kind === "pdf") return $("exportPdf").click();
-  await save(true, kind);
-}
 const drive = driveBrowser({
   library,
   queue: downloadQueue,
@@ -5975,14 +5926,6 @@ $("importAnyFile").onchange = async () => {
   }
   openFileObject(file);
 };
-// Export and share: one dialog; it closes after a choice, except the ones that open more choices.
-$("exportOpen").onclick = () => { closeMenus(); $("exportDialog").showModal(); };
-$("exportClose").onclick = () => $("exportDialog").close();
-$("exportDialog").addEventListener("click", (e) => {
-  const b = e.target.closest("button");
-  if (!b || b.id === "exportImage" || b.id === "exportClose" || b.hasAttribute("data-format-help")) return;
-  setTimeout(() => $("exportDialog").close(), 0);
-});
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");

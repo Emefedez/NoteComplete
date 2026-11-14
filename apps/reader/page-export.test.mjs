@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { packPages, IMAGE_TYPES } from './page-export.js';
+import { packPages, IMAGE_TYPES, pageExporter, pageSvg } from './page-export.js';
 
 test('pages are packed one after another with the layout the core reads', () => {
   const a = Uint8Array.of(0xff, 0xd8, 1), b = Uint8Array.of(0xff, 0xd8, 2, 3);
@@ -18,4 +18,131 @@ test('pages are packed one after another with the layout the core reads', () => 
 test('image formats: compressed ones first, PNG for lossless', () => {
   assert.deepEqual(IMAGE_TYPES.map(t => t.id), ['jpeg', 'webp', 'png']);
   assert.ok(IMAGE_TYPES.every(t => t.mime.startsWith('image/') && t.ext));
+});
+
+test('pageSvg restores paper colour and embeds the PDF raster when present', async () => {
+  const rect = { fill: 'none', setAttribute(k, v) { if (k === 'fill') this.fill = v; } };
+  const bg = {
+    children: [],
+    append(el) { this.children.push(el); },
+  };
+  const clonedSvg = {
+    style: { isolation: 'auto' },
+    querySelector(sel) {
+      if (sel === '[data-background] > rect') return rect;
+      if (sel === '[data-background]') return bg;
+      return null;
+    },
+    querySelectorAll() { return []; },
+  };
+  const panel = {
+    size: [595, 842],
+    view: { pdf_background: { index: 0 } },
+    render: {
+      dataset: { paper: '#faf8f2' },
+      firstElementChild: { cloneNode: () => clonedSvg },
+      querySelector(sel) {
+        if (sel === ':scope > canvas.pdf-raster') return { toDataURL: () => 'data:image/png;base64,AAA=' };
+        return null;
+      },
+    },
+  };
+  const svg = await pageSvg(panel, {
+    pdfImage: (href, place) => ({ href, place }),
+    backgroundPlacement: (pdfBg, size) => ({ pdfBg, size }),
+  });
+  assert.equal(svg, clonedSvg);
+  assert.equal(rect.fill, '#faf8f2');
+  assert.equal(clonedSvg.style.isolation, 'isolate');
+  assert.equal(bg.children.length, 1);
+  assert.equal(bg.children[0].href, 'data:image/png;base64,AAA=');
+});
+
+test('pageExporter wires export buttons, image menu and exportRequested', async () => {
+  const els = new Map();
+  const makeEl = (id = '') => ({
+    id,
+    hidden: id === 'imageTypes',
+    dataset: {},
+    attrs: {},
+    children: [],
+    onclick: null,
+    setAttribute(k, v) { this.attrs[k] = v; },
+    hasAttribute(k) { return k in this.attrs; },
+    append(...nodes) { this.children.push(...nodes); },
+    replaceChildren(...nodes) { this.children = nodes; },
+    showModal() { this.open = true; },
+    close() { this.open = false; },
+    click() { this.onclick?.({ stopPropagation() {}, preventDefault() {} }); },
+    addEventListener(type, fn) { this[`on_${type}`] = fn; },
+  });
+  for (const id of ['formatsDialog', 'formatsClose', 'native', 'nativeMarkdown', 'exportNotecomplete', 'exportProject', 'exportPdf', 'imageTypes', 'exportImage', 'svg', 'exportOpen', 'exportClose', 'exportDialog']) {
+    els.set(id, makeEl(id));
+  }
+  const doc = {
+    createElement: (tag) => makeEl(tag),
+    querySelectorAll: () => [],
+  };
+  const saved = [];
+  const downloads = [];
+  let closedMenus = 0;
+
+  const exporter = pageExporter({
+    pageCanvas: async () => ({
+      scale: 2,
+      canvas: {
+        width: 1200,
+        height: 1600,
+        toBlob: (cb, mime) => cb(new Blob([Uint8Array.of(1, 2, 3, 4)], { type: mime })),
+      },
+    }),
+    call: async (op) => {
+      assert.equal(op, 'jpegPagesPdf');
+      return Uint8Array.of(0x25, 0x50, 0x44, 0x46);
+    },
+    documentInfo: () => ({ pages: 1, title: 'Sample' }),
+    currentPage: () => 0,
+    filename: () => 'Sample',
+    download: async (data, name, mime) => { downloads.push({ data, name, mime }); },
+    jobs: {
+      start: () => ({
+        prepared() {},
+        set() {},
+        finish() {},
+        fail(msg) { throw Error(msg); },
+      }),
+    },
+    status: () => {},
+    save: async (native, kind) => { saved.push({ native, kind }); },
+    closeMenus: () => { closedMenus++; },
+    $: (id) => els.get(id),
+    doc,
+  });
+
+  assert.equal(els.get('imageTypes').children.length, IMAGE_TYPES.length);
+  els.get('exportImage').click();
+  assert.equal(els.get('imageTypes').hidden, false);
+  assert.equal(els.get('exportImage').attrs['aria-expanded'], 'true');
+
+  els.get('native').click();
+  els.get('nativeMarkdown').click();
+  els.get('exportNotecomplete').click();
+  els.get('exportProject').click();
+  assert.deepEqual(saved, [
+    { native: true, kind: undefined },
+    { native: true, kind: 'markdown' },
+    { native: true, kind: 'notecomplete' },
+    { native: true, kind: 'project' },
+  ]);
+
+  await exporter.image('png');
+  assert.equal(downloads.at(-1).name, 'Sample-p1.png');
+  assert.equal(downloads.at(-1).mime, 'image/png');
+
+  exporter.exportRequest.kind = 'notecomplete';
+  exporter.exportRequest.key = 'drive:1';
+  await exporter.exportRequested('drive:1', true);
+  assert.deepEqual(saved.at(-1), { native: true, kind: 'notecomplete' });
+  assert.equal(exporter.exportRequest.kind, '');
+  assert.ok(closedMenus >= 0);
 });
