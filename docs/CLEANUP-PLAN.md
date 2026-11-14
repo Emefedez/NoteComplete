@@ -194,7 +194,9 @@ Done with P1 in `4fc659b`.
 `crates/noteful-core/src/editor.rs`: split the final `json!` into named values (shapes,
 tapes, page sizes, timings), so `rustfmt` formats them. Goes with P1.
 
-### Q2 `app.js` is 6,114 lines `[ ]`
+### Q2 `app.js` is 6,114 lines `[D]`
+
+Done in four commits (`f989e9e`, `2f7e953`, `abe5334`, and the `text-box.js` commit): auto-save and history compaction controller moved into `autosave.js`, the download queue window into `queue-controls.js`, page/note export wiring into `page-export.js`, and the text box editor (`textBoxController`, `textBoxSize`, `wrapText`, `holdInk`, `letGo`, `keepHeld`) into `text-box.js`, each with unit tests (`autosave.test.mjs`, `queue-controls.test.mjs`, `page-export.test.mjs`, `text-box.test.mjs`). `app.js` dropped by ~700 lines to 5,498 lines.
 
 59 module-level variables, 217 functions, 167 click handlers. Move out, one at a time and
 each with its tests, the parts that have a clear edge: auto-save, the download queue's
