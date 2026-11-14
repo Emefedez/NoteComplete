@@ -137,7 +137,9 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   const hub = new CollabHub({ notes, maxPeers, ...hubOptions, onEnded: (result) => { onEnded(result); stop(); } });
   const compressed = compressedFiles();
   const server = http.createServer(async (req, res) => {
-    const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Referrer-Policy': 'no-referrer' };
+    // The reader's pages carry their Content-Security-Policy in a meta tag (tools/reader-csp.mjs),
+    // which cannot say who may frame them: no other site may show a session's page in a frame.
+    const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "frame-ancestors 'self'" };
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, headers); return res.end(); }
     const file = readerFile(root, new URL(req.url, 'http://x').pathname);
     let info;

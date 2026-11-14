@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {frameAncestors,strictHeader} from './reader-csp.mjs';
 export const root=fileURLToPath(new URL('../apps/reader/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8',
  '.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.noteful':'application/octet-stream'};
@@ -31,7 +32,11 @@ export function readerServer(){return http.createServer(async(req,res)=>{
   if(!file.startsWith(root)||rel.split(/[\\/]/).some(p=>p.startsWith('.')||p==='node_modules')||rel.endsWith('.map')){res.writeHead(403);return res.end();}
   const info=await stat(file);if(!info.isFile()){res.writeHead(404);return res.end();}
   const body=rel==='precache.json'?await currentManifest(file):null;
-  res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':body?body.length:info.size,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'credentialless'});
+  // Pages carry their policy in a meta tag (reader-csp.mjs). Sent here: what a meta tag cannot
+  // say (who may frame the page), and the policy aimed at (no inline script, no eval) as
+  // report-only, so this server's console shows "[Report Only] Refused to…" for what it would stop.
+  const page=path.extname(file)==='.html'?{'Content-Security-Policy':frameAncestors,'Content-Security-Policy-Report-Only':`${strictHeader}; ${frameAncestors}`}:{};
+  res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':body?body.length:info.size,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'credentialless',...page});
   if(req.method==='HEAD'||body)return res.end(req.method==='HEAD'?undefined:body);
   const stream=createReadStream(file);stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);
  }catch{res.writeHead(404);res.end('Not found');}

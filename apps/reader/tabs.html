@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-title" content="NoteComplete" />
 <!-- The reader each tab opens; the website build points this at app.html. -->
 <meta name="notecomplete-reader" content="./index.html" />
+<!-- Copied from tools/reader-csp.mjs (node tools/reader-csp.mjs prints it); a test keeps them equal. Delete this meta tag to switch the policy off. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: data: blob:; worker-src 'self' blob:; frame-src 'self' https://accounts.google.com/gsi/; object-src 'none'; base-uri 'none'" />
 <title>NoteComplete</title>
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon.svg" />
@@ -19,26 +21,4 @@
   #tabs iframe[hidden] { display: none; }
 </style>
 <div id="tabs"></div>
-<script type="module">
-  import { tabHost } from './tab-host.js';
-  const reader = document.querySelector('meta[name="notecomplete-reader"]').content;
-  const host = tabHost({ container: document.getElementById('tabs'), reader });
-  // Each reader frame finds its bridge here (app.js, before its tab strip starts).
-  window.notecompleteTabHost = host;
-  // The browser's install prompt comes to this page (the top one); a tab asks for it.
-  let deferred = null;
-  addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferred = event; });
-  host.install = async () => {
-    if (!deferred) return null;
-    const event = deferred; deferred = null;
-    await event.prompt();
-    return (await event.userChoice).outcome;
-  };
-  // The website opens with its welcome notebook in front and Home beside it (site.json).
-  const site = await fetch('./site.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  if (site?.welcome) {
-    host.open({ title: site.title || 'Welcome', open: site.welcome, notes: site.notes ? 1 : null });
-    host.open({}, { activate: false });
-  } else host.open();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
-</script>
+<script type="module" src="./tabs-main.js"></script>
