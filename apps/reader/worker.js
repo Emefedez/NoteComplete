@@ -151,6 +151,7 @@ const onDocument = {
   erase: edit((args, page) => session.erase(page, JSON.stringify(args.points), args.radius)),
   insertHandwritten: edit((args) => session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}))),
   insertPages: edit((args) => session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
+  movePage: edit((args) => session.move_page(args.from, args.to)),
   undo: lastPageLeft(() => session.undo()),
   redo: lastPageLeft(() => session.redo()),
 };

@@ -301,11 +301,13 @@ impl Editor {
     /// Add records for inserted pages to the page collection (d:/2). Their tag-5
     /// order keys fall between the display neighbours' keys, so native sorting by
     /// that string reproduces the display order without touching existing pages.
+    /// When `reordered` is true, sequential order keys are written directly.
     fn insert_page_records(
         &self,
         collection: &mut [Field],
         order: &[usize],
         page_assets: &HashMap<String, String>,
+        reordered: bool,
         time: u64,
     ) -> Result<()> {
         let originals = self.scene.pages.len();
@@ -327,13 +329,17 @@ impl Editor {
                 previous = key_of(&records, &page.id);
                 continue;
             }
-            let next = order[i + 1..]
-                .iter()
-                .find(|&&s| s < originals)
-                .map(|&s| self.page(s).map(|p| key_of(&records, &p.id)))
-                .transpose()?;
-            let key = crate::pages::order_between(&previous, next.as_deref())
-                .ok_or_else(|| Error::new(0, "No order key between neighbouring pages"))?;
+            let key = if reordered {
+                format!("{i:020}")
+            } else {
+                let next = order[i + 1..]
+                    .iter()
+                    .find(|&&s| s < originals)
+                    .map(|&s| self.page(s).map(|p| key_of(&records, &p.id)))
+                    .transpose()?;
+                crate::pages::order_between(&previous, next.as_deref())
+                    .ok_or_else(|| Error::new(0, "No order key between neighbouring pages"))?
+            };
             let mut spec = self
                 .inserted_spec(slot)
                 .ok_or_else(|| Error::new(0, "Inserted page missing"))?
@@ -745,6 +751,9 @@ impl Editor {
             .iter()
             .any(|e| matches!(e, Edit::Layer { .. }));
         let pages_inserted = order.iter().any(|&s| s >= originals);
+        let pages_reordered = self.history[..self.cursor]
+            .iter()
+            .any(|e| matches!(e, Edit::MovePage { .. }));
         let resized: Vec<usize> = order
             .iter()
             .copied()
@@ -765,7 +774,12 @@ impl Editor {
                 blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
             }
         }
-        if !page_assets.is_empty() || layers_changed || pages_inserted || !resized.is_empty() {
+        if !page_assets.is_empty()
+            || layers_changed
+            || pages_inserted
+            || pages_reordered
+            || !resized.is_empty()
+        {
             for b in package
                 .blocks
                 .iter()
@@ -802,7 +816,39 @@ impl Editor {
                     }
                 }
                 if pages_inserted {
-                    self.insert_page_records(nested(&mut fields, 2)?, &order, &page_assets, time)?;
+                    self.insert_page_records(
+                        nested(&mut fields, 2)?,
+                        &order,
+                        &page_assets,
+                        pages_reordered,
+                        time,
+                    )?;
+                }
+                if pages_reordered {
+                    let page_collection = nested(&mut fields, 2)?;
+                    let mut rank_by_id = HashMap::new();
+                    for (i, &slot) in order.iter().enumerate() {
+                        rank_by_id.insert(self.page(slot)?.id.clone(), format!("{i:020}"));
+                    }
+                    for v in array(page_collection, 0)? {
+                        if let V::Fields(fs) = v {
+                            if let Some(rank) = field(fs, 1)
+                                .and_then(V::as_text)
+                                .and_then(|id| rank_by_id.get(id))
+                            {
+                                set(fs, 5, 5, V::Text(rank.clone()), time);
+                            }
+                        }
+                    }
+                    let keys = array(page_collection, 1)?.clone();
+                    let clocks = array(page_collection, 2)?;
+                    for (idx, key) in keys.iter().enumerate() {
+                        if key.as_text().is_some_and(|id| rank_by_id.contains_key(id)) {
+                            if let Some(c) = clocks.get_mut(idx) {
+                                *c = V::UInt(time);
+                            }
+                        }
+                    }
                 }
                 if layers_changed {
                     let collection = nested(&mut fields, 3)?;

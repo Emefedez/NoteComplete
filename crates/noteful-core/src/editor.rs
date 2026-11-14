@@ -113,6 +113,10 @@ pub(crate) enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pdf: Option<crate::NewPdf>,
     },
+    MovePage {
+        from: usize,
+        to: usize,
+    },
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -735,6 +739,7 @@ impl Editor {
                     }
                 }
                 Edit::InsertPages { at, pages, pdf } => editor.insert_pages(at, pages, pdf)?,
+                Edit::MovePage { from, to } => editor.move_page(from, to)?,
                 Edit::ResizePage {
                     page,
                     size,

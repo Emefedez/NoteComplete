@@ -340,6 +340,10 @@ impl EditorSession {
         let pdf = pdf.map(|p| serde_json::from_str(&p)).transpose()?;
         Ok(self.inner.insert_pages(at, pages, pdf)?)
     }
+    /// Move the page at display position `from` to display position `to`.
+    pub fn move_page(&mut self, from: usize, to: usize) -> Result<(), Failure> {
+        Ok(self.inner.move_page(from, to)?)
+    }
     pub fn undo(&mut self) {
         self.inner.undo();
     }

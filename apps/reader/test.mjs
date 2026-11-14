@@ -217,7 +217,25 @@ console.log('WASM imports: PDF pages, image undo/reload and failed document repl
  const exam=new EditorSession(readFileSync(new URL('../../samples/Examen%20wuolah.noteful',import.meta.url)));
  const added=JSON.parse(exam.insert_handwritten(1,'## Added\n- one',JSON.stringify({look:'classic'})));
  assert.deepEqual(added.pages,[1]);assert.equal(JSON.parse(exam.view(1)).pages,4);
- const reopened=new EditorSession(exam.export_noteful());assert.equal(JSON.parse(reopened.view(1)).pages,4);
+ exam.move_page(0,3);
+ const movedView=JSON.parse(exam.view(0));
+ assert.deepEqual(movedView.page_order,[3,1,2,0]);
+ exam.undo();
+ const undoneMove=JSON.parse(exam.view(0));
+ assert.deepEqual(undoneMove.page_order,[0,3,1,2]);
+ exam.redo();
+ const redoneMove=JSON.parse(exam.view(0));
+ assert.deepEqual(redoneMove.page_order,[3,1,2,0]);
+ const reopened=new EditorSession(exam.export_noteful());
+ const reopenedView=JSON.parse(reopened.view(3));
+ assert.equal(reopenedView.pages,4);
+ assert.deepEqual(reopenedView.page_order,[0,1,2,3]);
+ assert.deepEqual(reopenedView.page_sizes,redoneMove.page_sizes);
+ assert.ok((await send({id:300,op:'open',bytes:readFileSync(new URL('../../samples/Examen%20wuolah.noteful',import.meta.url))})).result);
+ assert.deepEqual((await send({id:301,op:'movePage',from:2,to:0})).result.page_order,[2,0,1]);
+ assert.deepEqual((await send({id:302,op:'undo'})).result.page_order,[0,1,2]);
+ assert.deepEqual((await send({id:303,op:'redo'})).result.page_order,[2,0,1]);
+ assert.ok((await send({id:304,op:'movePage',from:0,to:99})).error);
  hw.free();exam.free();reopened.free();
- console.log('WASM handwriting: preview, new notebook and inserted pages passed.');
+ console.log('WASM handwriting: preview, new notebook, inserted pages and page reordering passed.');
 }

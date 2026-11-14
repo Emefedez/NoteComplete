@@ -239,6 +239,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   function open() {
     if (!documentInfo().pages) return;
     $('findBar').hidden = false;
+    $('findToggle')?.setAttribute('aria-expanded', 'true');
     $('findInput').focus(); $('findInput').select();
     build();
     run();
@@ -246,6 +247,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   function close() {
     $('findBar').hidden = true;
     $('findResults').hidden = true;
+    $('findToggle')?.setAttribute('aria-expanded', 'false');
     for (const p of panels()) paint(p);
   }
   $('findInput').oninput = () => { clearTimeout(debounce); debounce = setTimeout(() => { current = 0; run(); $('findResults').hidden = !hits.length; }, 120); };

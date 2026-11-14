@@ -47,6 +47,8 @@
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="PDF, images, Noteful and NoteComplete files, Anki, and sharing with other people and devices">Export and share…</button>
+          <button data-proxy="studyShare" data-icon="share" data-palette="Share or export study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or save them as a .ncstudy file">Share or export study material…</button>
+          <button data-proxy="exportStudy" data-icon="cards" data-palette="Export study to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export study to Anki</button>
           <hr />
           <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
         </div>
@@ -132,6 +134,9 @@
           <button id="gotoPage" data-icon="hash" disabled>Go to page…<kbd>Shift G</kbd></button>
           <button id="ocrOpen" data-icon="grab" disabled>Recognize text (OCR)…<kbd>Shift O</kbd></button>
           <hr />
+          <button id="movePageUp" data-icon="arrowUp" disabled>Move page up</button>
+          <button id="movePageDown" data-icon="arrowDown" disabled>Move page down</button>
+          <hr />
           <button id="insertBlank" data-icon="plus" disabled>Insert blank page…<kbd>Shift B</kbd></button>
           <button id="insertPdf" data-icon="note" disabled>Insert PDF pages…</button>
           <button id="insertHandwritten" data-icon="draw" disabled data-palette="Insert handwritten pages from Markdown…" title="Write Markdown as real handwriting ink on new pages">Insert handwritten pages…</button>
@@ -183,28 +188,28 @@
         <h2 id="exportTitle">Export and share</h2>
         <section aria-labelledby="exportPages">
           <h3 id="exportPages">Pages</h3>
-          <button id="exportPdf" disabled class="export-item" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
-          <button id="exportImage" disabled class="export-item has-caret" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
+          <button id="exportPdf" disabled class="export-item" data-icon="pages" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
+          <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
           <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
-          <button id="svg" disabled class="export-item" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
+          <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
         </section>
         <section aria-labelledby="exportFiles">
           <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
-          <button id="exportNotecomplete" disabled class="export-item" data-palette="Export NoteComplete (.notecomp)" title="One file with the note, its notes and recordings, without the undo history."><b>NoteComplete file</b><small>.notecomp · note, notes and recordings</small></button>
-          <button id="exportProject" disabled class="export-item" data-palette="Export NoteComplete project (.nfedit)" title="The note with its whole edit history, as Save project writes it."><b>Project with history</b><small>.nfedit · every edit, with undo</small></button>
-          <button id="native" disabled class="export-item" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
-          <button id="nativeMarkdown" disabled class="export-item" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
+          <button id="exportNotecomplete" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.notecomp)" title="One file with the note, its notes and recordings, without the undo history."><b>NoteComplete file</b><small>.notecomp · note, notes and recordings</small></button>
+          <button id="exportProject" disabled class="export-item" data-icon="clock" data-palette="Export NoteComplete project (.nfedit)" title="The note with its whole edit history, as Save project writes it."><b>Project with history</b><small>.nfedit · every edit, with undo</small></button>
+          <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
+          <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
         </section>
         <section aria-labelledby="exportStudyHead">
           <h3 id="exportStudyHead">Study</h3>
-          <button id="exportStudy" disabled class="export-item" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
+          <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
         </section>
         <section aria-labelledby="exportShareHead">
           <h3 id="exportShareHead">Share with others</h3>
-          <button id="studyShare" class="export-item" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
-          <button id="shareSession" class="export-item" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
-          <button id="joinNotes" class="export-item" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
-          <button id="joinTablet" class="export-item" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
+          <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
+          <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
+          <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
+          <button id="joinTablet" class="export-item" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
         </section>
         <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
       </dialog>
@@ -398,7 +403,7 @@
       <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
     </section>
     <section id="textView" hidden>
-      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textFindToggle" type="button" data-icon="search" aria-label="Find in document" title="Find in document (Ctrl F)" aria-expanded="false"></button><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
       <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button><button id="textFindNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
     </section>
     <section id="editor" hidden>
@@ -445,6 +450,13 @@
             title="Ctrl/⌘ Shift Z"
             aria-label="Redo"
             data-icon="redo"
+          ></button
+          ><button
+            id="findToggle"
+            aria-label="Find in note"
+            title="Find in note (Ctrl F)"
+            data-icon="search"
+            aria-expanded="false"
           ></button
           ><button
             id="audioToggle"

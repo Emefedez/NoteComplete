@@ -99,12 +99,14 @@ export function textFind({ bar, input, count, prev, next, close: closeButton, ro
   }
   function open() {
     bar.hidden = false;
+    document.getElementById('textFindToggle')?.setAttribute('aria-expanded', 'true');
     input.focus(); input.select();
     run();
     watch(true);
   }
   function close() {
     bar.hidden = true;
+    document.getElementById('textFindToggle')?.setAttribute('aria-expanded', 'false');
     clearTimeout(debounce);
     watch(false);
     clearMarks();

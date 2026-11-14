@@ -634,6 +634,7 @@ function buildPages(sizes) {
     el.style.aspectRatio = size.join("/");
     const p = {
       index,
+      slot: doc?.page_order?.[index] ?? index,
       size,
       el,
       view: null,
@@ -739,10 +740,26 @@ function buildPages(sizes) {
   );
   for (const p of panels) observer.observe(p.el);
 }
+async function movePage(from, to) {
+  if (!doc || doc.canvas || editing || busy()) return;
+  if (from < 0 || to < 0 || from >= doc.pages || to >= doc.pages || from === to) return;
+  selection.clear();
+  await action("movePage", { from, to, focus: to });
+}
+function syncPageMoveMenus() {
+  const ok = !!doc && !doc.canvas && panels.length > 1;
+  if ($("movePageUp")) $("movePageUp").disabled = !ok || page <= 0;
+  if ($("movePageDown")) $("movePageDown").disabled = !ok || page >= panels.length - 1;
+}
 function buildPageList() {
+  const canReorder = !doc?.canvas && panels.length > 1;
   const fragment = document.createDocumentFragment();
   for (const panel of panels) {
+    const item = document.createElement("div");
+    item.className = "page-item";
+    item.dataset.pageIndex = String(panel.index);
     const button = document.createElement("button");
+    button.type = "button";
     button.className = "page-link";
     button.setAttribute("aria-label", `Page ${panel.index + 1}`);
     const thumb = document.createElement("span");
@@ -752,17 +769,56 @@ function buildPageList() {
     fallback.className = "thumb-fallback";
     fallback.textContent = panel.index + 1;
     thumb.append(fallback);
-    const label = document.createElement("span");
-    label.className = "page-label";
-    label.textContent = `Page ${panel.index + 1}`;
-    button.append(thumb, label);
+    button.append(thumb);
     button.onclick = () => {
       jump(panel.index);
       $("pagesPanel").classList.remove("open");
       syncPagePanel();
     };
-    panel.pageButton = button;
-    fragment.append(button);
+    const meta = document.createElement("div");
+    meta.className = "page-meta";
+    if (canReorder) {
+      const grip = document.createElement("span");
+      grip.className = "page-grip";
+      grip.title = "Drag to reorder page";
+      grip.append(icon("grip"));
+      meta.append(grip);
+    }
+    const label = document.createElement("span");
+    label.className = "page-label";
+    label.textContent = `Page ${panel.index + 1}`;
+    meta.append(label);
+    if (canReorder) {
+      const actions = document.createElement("div");
+      actions.className = "page-actions";
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "icon-button page-move";
+      up.disabled = panel.index === 0;
+      up.title = "Move page up";
+      up.setAttribute("aria-label", `Move page ${panel.index + 1} up`);
+      up.append(icon("arrowUp"));
+      up.onclick = (e) => {
+        e.stopPropagation();
+        movePage(panel.index, panel.index - 1);
+      };
+      const down = document.createElement("button");
+      down.type = "button";
+      down.className = "icon-button page-move";
+      down.disabled = panel.index === panels.length - 1;
+      down.title = "Move page down";
+      down.setAttribute("aria-label", `Move page ${panel.index + 1} down`);
+      down.append(icon("arrowDown"));
+      down.onclick = (e) => {
+        e.stopPropagation();
+        movePage(panel.index, panel.index + 1);
+      };
+      actions.append(up, down);
+      meta.append(actions);
+    }
+    item.append(button, meta);
+    panel.pageButton = item;
+    fragment.append(item);
   }
   $("pageList").replaceChildren(fragment);
   thumbnailObserver?.disconnect();
@@ -781,6 +837,59 @@ function buildPageList() {
   for (const panel of panels) thumbnailObserver.observe(panel.pageButton);
   markPage();
 }
+// Drag a page card vertically in #pageList (by its grip on touch/pen, or anywhere on mouse) to reorder pages.
+$("pageList").addEventListener("pointerdown", (down) => {
+  if (!doc || doc.canvas || panels.length < 2 || editing || busy()) return;
+  const item = down.target.closest(".page-item");
+  if (!item || down.button !== 0 || down.target.closest(".page-move")) return;
+  const touch = down.pointerType === "touch" || down.pointerType === "pen";
+  if (touch && !down.target.closest(".page-grip")) return;
+  const container = $("pageList");
+  const from = Number(item.dataset.pageIndex);
+  const startY = down.clientY, pointer = down.pointerId;
+  let dragging = false, grab = 0;
+  const siblings = () => [...container.querySelectorAll(".page-item")];
+  const move = (event) => {
+    if (event.pointerId !== pointer) return;
+    if (!dragging) {
+      if (Math.abs(event.clientY - startY) < (touch ? 4 : 6)) return;
+      dragging = true;
+      grab = startY - item.getBoundingClientRect().top;
+      item.classList.add("dragging");
+      try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
+    }
+    item.style.transform = "";
+    const others = siblings().filter((el) => el !== item);
+    const top = event.clientY - grab, centre = top + item.offsetHeight / 2;
+    const index = others.filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.top + r.height / 2 < centre;
+    }).length;
+    const ref = others[index];
+    if (ref ? item.nextElementSibling !== ref : others.at(-1)?.nextElementSibling !== item) {
+      if (ref) container.insertBefore(item, ref);
+      else others.at(-1)?.after(item);
+    }
+    item.style.transform = `translateY(${top - item.getBoundingClientRect().top}px)`;
+  };
+  const finish = (event) => {
+    if (event.pointerId !== pointer) return;
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", finish);
+    removeEventListener("pointercancel", finish);
+    item.classList.remove("dragging");
+    item.style.transform = "";
+    if (!dragging) return;
+    const swallow = (e) => { e.stopPropagation(); e.preventDefault(); };
+    container.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => container.removeEventListener("click", swallow, true), 50);
+    const to = siblings().indexOf(item);
+    if (to >= 0 && to !== from) movePage(from, to);
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", finish);
+  addEventListener("pointercancel", finish);
+});
 // Paper stays underneath so widened pages show blank paper beside the PDF.
 const textBox = textBoxController({
   call,
@@ -994,6 +1103,7 @@ function markPage() {
   if (markedPage < 0) for (const panel of panels) panel.pageButton?.removeAttribute("aria-current");
   panels[page]?.pageButton?.setAttribute("aria-current", "page");
   markedPage = page;
+  syncPageMoveMenus();
 }
 // Phones held upright (narrow) and phones held sideways (short) both get the compact
 // layout: the page list is a drawer over the pages and undo, redo and the panel toggles
@@ -1458,8 +1568,19 @@ function edited(op, args, result) {
     resize();
     return false;
   }
-  if (result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
-    restructure(result, args.focus ?? Math.min(page, result.pages - 1), op === "resizePage" ? "Page resized. You can undo this change." : op === "resizePages" ? `All ${result.pages} pages resized. One undo restores them.` : undefined);
+  const orderChanged = Array.isArray(result.page_order) && (result.page_order.length !== panels.length || result.page_order.some((slot, i) => slot !== panels[i].slot));
+  if (orderChanged || result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
+    let focus = args.focus;
+    if (focus === undefined) {
+      const currentSlot = panels[page]?.slot;
+      const movedTo = currentSlot !== undefined && Array.isArray(result.page_order) ? result.page_order.indexOf(currentSlot) : -1;
+      focus = movedTo >= 0 ? movedTo : Math.min(page, result.pages - 1);
+    }
+    const msg = op === "resizePage" ? "Page resized. You can undo this change."
+      : op === "resizePages" ? `All ${result.pages} pages resized. One undo restores them.`
+      : op === "movePage" ? "Page moved. You can undo this change."
+      : undefined;
+    restructure(result, focus, msg);
     return true;
   }
   return false;
@@ -3313,7 +3434,7 @@ const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase"
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
   ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
-  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesToggle": "⇧P", "#importImage": "⇧I", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
+  "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesToggle": "⇧P", "#findToggle": "/", "#importImage": "⇧I", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
 };
@@ -4549,6 +4670,7 @@ function documentControls() {
   for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   if (!open) $("svg").disabled = true;
+  syncPageMoveMenus();
 }
 // Menu items that mirror toolbar controls share their handler and state.
 const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #commandBar [data-proxy-tool]")];
@@ -4558,6 +4680,7 @@ function proxyTarget(item) {
     : document.querySelector(`#toolbar button[data-tool="${item.dataset.proxyTool}"]`);
 }
 function syncMenus() {
+  syncPageMoveMenus();
   for (const item of proxies) {
     const target = proxyTarget(item);
     const inEditor = target?.closest("#editor");
@@ -4745,6 +4868,10 @@ $("tapeReveal").onclick = () => { tapeAllLifted = true; setTapeMode("revealed");
 $("tapeCover").onclick = () => { tapeAllLifted = false; setTapeMode("covered"); };
 $("tapeNote").onclick = () => setTapeMode("note");
 $("findOpen").onclick = () => { showDocument(); if (!doc && textView.hasDocument) textFinder.open(); else find.open(); };
+$("findToggle").onclick = () => { if (!doc) return; showDocument(); if ($("findBar").hidden) find.open(); else find.close(); };
+$("textFindToggle").onclick = () => { if (!textView.hasDocument) return; if ($("textFindBar").hidden) textFinder.open(); else textFinder.close(); };
+$("movePageUp").onclick = () => movePage(page, page - 1);
+$("movePageDown").onclick = () => movePage(page, page + 1);
 $("ocrOpen").onclick = () => find.openOcr(page);
 // Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.
 function restructure(result, focus, message) {

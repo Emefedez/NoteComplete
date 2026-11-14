@@ -137,6 +137,12 @@ impl Editor {
                     order.splice(at..at, next_slot..next_slot + pages.len());
                     next_slot += pages.len();
                 }
+                Edit::MovePage { from, to } => {
+                    if *from < order.len() && *to < order.len() && from != to {
+                        let slot = order.remove(*from);
+                        order.insert(*to, slot);
+                    }
+                }
                 Edit::ResizePage {
                     page: slot,
                     size: s,
@@ -374,6 +380,7 @@ impl Editor {
             "pages": order.len(),
             "page": display(page),
             "slot": page,
+            "page_order": order,
             "size": facts.size,
             "base_size": p.size,
             "svg": svg,

@@ -231,3 +231,94 @@ fn resized_pages_keep_their_pdf_in_place_through_undo_project_and_export() {
     editor.undo();
     assert_eq!(sizes(&editor), original);
 }
+
+#[test]
+fn moving_pages_reorders_pages_through_undo_project_and_export() {
+    let source = crate::samples::EXAM;
+    let mut editor = Editor::open(source).unwrap();
+    let original_sizes = sizes(&editor);
+    let baseline_imported: Vec<usize> = (0..3)
+        .map(|p| {
+            editor.view(p).unwrap()["visible_imported"]
+                .as_u64()
+                .unwrap() as usize
+        })
+        .collect();
+    assert_eq!(editor.page_order(), vec![0, 1, 2]);
+
+    // Out-of-bounds moves fail; a same-index move is a no-op.
+    assert!(editor.move_page(0, 3).is_err());
+    assert!(editor.move_page(3, 0).is_err());
+    editor.move_page(1, 1).unwrap();
+    assert_eq!(editor.page_order(), vec![0, 1, 2]);
+
+    // Mark original pages 0 and 2, insert a uniquely sized blank page, and mark it too.
+    editor.add_line(0, line()).unwrap();
+    editor.add_line(2, line()).unwrap();
+    editor
+        .insert_pages(1, vec![blank(2000., 1000.)], None)
+        .unwrap();
+    assert_eq!(editor.page_order(), vec![0, 3, 1, 2]);
+    editor.add_line(3, line()).unwrap();
+
+    // Reorder twice: [0, 3, 1, 2] -> [3, 1, 0, 2] -> [3, 2, 1, 0].
+    editor.move_page(0, 2).unwrap();
+    assert_eq!(editor.page_order(), vec![3, 1, 0, 2]);
+    editor.move_page(3, 1).unwrap();
+    assert_eq!(editor.page_order(), vec![3, 2, 1, 0]);
+    assert_eq!(editor.slot(0).unwrap(), 3);
+    assert_eq!(editor.slot(3).unwrap(), 0);
+    assert_eq!(
+        editor.view(0).unwrap()["page_order"],
+        serde_json::json!([3, 2, 1, 0])
+    );
+
+    // Undo and redo restore page order.
+    editor.undo();
+    assert_eq!(editor.page_order(), vec![3, 1, 0, 2]);
+    editor.redo();
+    assert_eq!(editor.page_order(), vec![3, 2, 1, 0]);
+
+    // Project save/load preserves the reordered pages and their edits.
+    let reloaded = Editor::open_project(&editor.save_project().unwrap()).unwrap();
+    assert_eq!(reloaded.page_order(), vec![3, 2, 1, 0]);
+    assert_eq!(
+        sizes(&reloaded),
+        vec![
+            [2000., 1000.],
+            original_sizes[2],
+            original_sizes[1],
+            original_sizes[0],
+        ]
+    );
+    assert_eq!(reloaded.view(3).unwrap()["visible_added"], 1);
+    assert_eq!(reloaded.view(2).unwrap()["visible_added"], 1);
+    assert_eq!(reloaded.view(1).unwrap()["visible_added"], 0);
+    assert_eq!(reloaded.view(0).unwrap()["visible_added"], 1);
+
+    // Native export writes pages in display order with all strokes intact.
+    let exported = Editor::open(&editor.export_noteful().unwrap()).unwrap();
+    assert_eq!(exported.page_order(), vec![0, 1, 2, 3]);
+    assert_eq!(
+        sizes(&exported),
+        vec![
+            [2000., 1000.],
+            original_sizes[2],
+            original_sizes[1],
+            original_sizes[0],
+        ]
+    );
+    assert_eq!(exported.view(0).unwrap()["visible_imported"], 1);
+    assert_eq!(
+        exported.view(1).unwrap()["visible_imported"],
+        baseline_imported[2] + 1
+    );
+    assert_eq!(
+        exported.view(2).unwrap()["visible_imported"],
+        baseline_imported[1]
+    );
+    assert_eq!(
+        exported.view(3).unwrap()["visible_imported"],
+        baseline_imported[0] + 1
+    );
+}

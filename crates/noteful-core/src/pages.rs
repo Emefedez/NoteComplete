@@ -135,14 +135,40 @@ impl Editor {
         let mut order: Vec<usize> = (0..self.original_pages()).collect();
         let mut next = self.original_pages();
         for edit in &self.history[..self.cursor] {
-            if let Edit::InsertPages { at, pages, .. } = edit {
-                let at = (*at).min(order.len());
-                let slots: Vec<usize> = (next..next + pages.len()).collect();
-                order.splice(at..at, slots);
-                next += pages.len();
+            match edit {
+                Edit::InsertPages { at, pages, .. } => {
+                    let at = (*at).min(order.len());
+                    let slots: Vec<usize> = (next..next + pages.len()).collect();
+                    order.splice(at..at, slots);
+                    next += pages.len();
+                }
+                Edit::MovePage { from, to } => {
+                    if *from < order.len() && *to < order.len() && from != to {
+                        let slot = order.remove(*from);
+                        order.insert(*to, slot);
+                    }
+                }
+                _ => {}
             }
         }
         order
+    }
+    /// Move the page at display position `from` to display position `to`, as one undoable edit.
+    pub fn move_page(&mut self, from: usize, to: usize) -> Result<()> {
+        if self.canvas {
+            return Err(Error::new(
+                0,
+                "An infinite canvas is one page; it cannot reorder pages",
+            ));
+        }
+        let count = self.page_order().len();
+        if from >= count || to >= count {
+            return Err(Error::new(0, "Page outside document"));
+        }
+        if from == to {
+            return Ok(());
+        }
+        self.commit(Edit::MovePage { from, to })
     }
     /// The slot shown at a display position.
     pub fn slot(&self, display: usize) -> Result<usize> {
