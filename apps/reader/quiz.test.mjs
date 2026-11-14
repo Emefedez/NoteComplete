@@ -79,7 +79,7 @@ test('the progress bar shows right, right with the hint, wrong and disputed', ()
   assert.deepEqual(barStates(quiz), ['right', 'hinted', 'wrong', 'disputed', 'right', '']);
 });
 
-import { isMulti, isRight, correctSet } from './quiz.js';
+import { isMulti, isRight, correctSet, reorderQuizQuestions } from './quiz.js';
 test('choose-all-that-apply: only the exact set is right, scored like any question', () => {
   const q = { question: 'q', options: ['a', 'b', 'c', 'd'], answer: 0, answers: [0, 2], multi: true };
   assert.ok(isMulti(q));
@@ -96,4 +96,18 @@ test('choose-all-that-apply: only the exact set is right, scored like any questi
 test('a multi-answer question on the back of a card lists every right option', () => {
   const [card] = quizCards({ questions: [{ question: 'q', options: ['a', 'b', 'c'], answer: 0, answers: [0, 2], multi: true }] });
   assert.match(card.back, /A\. a\n\nC\. c/);
+});
+test('reorderQuizQuestions shuffles and restores original question order while keeping answers and current question', () => {
+  const quiz = {
+    questions: [{ question: 'Q0', answer: 0 }, { question: 'Q1', answer: 1 }, { question: 'Q2', answer: 2 }],
+    answers: { 0: { choice: 0 }, 2: { choice: 1 } },
+    at: 0,
+  };
+  reorderQuizQuestions(quiz, true, () => 0);
+  assert.deepEqual(quiz.questions.map(q => q.question), ['Q1', 'Q2', 'Q0']);
+  assert.deepEqual(quiz.answers[quiz.questions.findIndex(q => q.question === 'Q0')], { choice: 0 });
+  assert.deepEqual(quiz.answers[quiz.questions.findIndex(q => q.question === 'Q2')], { choice: 1 });
+  reorderQuizQuestions(quiz, false);
+  assert.deepEqual(quiz.questions.map(q => q.question), ['Q0', 'Q1', 'Q2']);
+  assert.deepEqual(quiz.answers, { 0: { choice: 0 }, 2: { choice: 1 } });
 });

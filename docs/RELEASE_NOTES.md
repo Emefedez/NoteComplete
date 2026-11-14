@@ -1,7 +1,8 @@
-## What's new in 1.1.70
+## What's new in 1.1.71
 
-- **Audio volume slider and mute button.** The audio window now has a volume slider (`0%` to `100%`) and a mute/unmute button below the position bar, remembered across recordings and sessions.
-- **Faster auto-save hashing on large notes.** Auto-save now computes content digests directly in the Rust/WASM core (sampling large embedded PDFs and audio while hashing all structured and stroke blocks in full) and reuses the digest when the edit history mark has not moved, avoiding a second `.noteful` export and 250 MB buffer transfer on every auto-save tick.
-- **Reader cleanup.** Split auto-save, the download queue window, page/note export wiring and the text box editor out of `app.js` into dedicated tested modules, and audited promise rejection handling across the reader.
+- **Redesigned Layers sidebar with clear lock/visibility icons and reordering.** Clicking anywhere on a layer card selects it with the accent color; Lock and Visibility use clear padlock and eye icons with an amber `"Locked"` badge and toolbar indicator when a layer is locked; locking or hiding the active layer automatically switches tools to an editable layer so drawing and text tools never silently stall; and layers can be reordered by dragging or with Up/Down arrow buttons.
+- **Fixed: Tap on stroke to jump to audio/transcript time across layers.** Tapping a timed stroke with `Audio tap` (or `Pan` / `Select`) now jumps to its recording timestamp even when the timed stroke's layer is locked, when an item is locked, or when another layer or shape sits above it.
+- **Hold Forward or Back in audio to skip faster.** Pressing and holding the Forward (`+10s`) or Back (`-10s`) transport buttons (or holding `L` / `J`) continuously repeats and accelerates skipping through recordings.
+- **Random order (Shuffle) toggle for Anki flashcards and quizzes.** Both the Quiz window and the Flashcards study dialog now have a Shuffle toggle button in their header to ask questions and cards in random order or in note/deck order.
 
 Earlier versions: [changelog](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; SHA256SUMS.txt has the checksums. Not signed or notarized; see docs/BUILDS.md.

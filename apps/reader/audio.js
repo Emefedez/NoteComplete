@@ -13,8 +13,8 @@ export class AudioController {
   this.jump=jump;this.changed=changed;this.audio=$('audio');this.token=0;this.urls=new Map();this.positions=new Map();this.entries=[];
   $('recording').onchange=()=>this.select(Number($('recording').value));
   $('playAudio').onclick=async()=>{if(this.audio.paused){try{await this.processing?.resume();await this.audio.play();}catch(e){$('audioState').textContent=e.message;}}else this.audio.pause();};
-  $('backAudio').onclick=()=>this.seek(Math.max(0,this.audio.currentTime-10));
-  $('forwardAudio').onclick=()=>this.seek(Math.min(this.audio.duration||0,this.audio.currentTime+10));
+  this.bindSkipButton($('backAudio'),-1);
+  this.bindSkipButton($('forwardAudio'),1);
   // Dragging the position bar: the time label follows at once, the element seeks at most once a frame
   // (each seek in a long WebM or MP3 is costly; seeking on every input event made dragging lag).
   $('audioSeek').oninput=()=>{this.dragTo=Number($('audioSeek').value);$('audioTime').textContent=`${clock(this.dragTo)} / ${clock(this.audio.duration||0)}`;if(!this.dragFrame)this.dragFrame=requestAnimationFrame(()=>{this.dragFrame=0;this.seek(this.dragTo);});};
@@ -48,6 +48,36 @@ export class AudioController {
  }
  // One step up or down the speed menu ([ and ]).
  stepRate(direction){const steps=[0.5,0.75,1,1.25,1.5,1.75,2,2.5,3],at=steps.findIndex(s=>s>=this.rate-1e-6);return this.setRate(steps[Math.max(0,Math.min(steps.length-1,(at<0?steps.length-1:at)+direction))]);}
+ // Tap jumps 10 s; holding the button (or key) repeats and accelerates up to 60 s per step.
+ skip(direction,held=false){
+  const dir=direction<0?-1:1;
+  if(!held){this.skipSteps=0;}else{this.skipSteps=(this.skipSteps||0)+1;}
+  const delta=held?Math.min(60,5+Math.floor(this.skipSteps/3)*5):10;
+  const target=dir<0?Math.max(0,(this.audio.currentTime||0)-delta):Math.min(this.audio.duration||0,(this.audio.currentTime||0)+delta);
+  this.seek(target);
+  return target;
+ }
+ stopSkipHold(){
+  clearTimeout(this.skipHoldTimer);
+  clearInterval(this.skipHoldInterval);
+  this.skipHoldTimer=this.skipHoldInterval=0;
+ }
+ bindSkipButton(btn,direction){
+  if(!btn)return;
+  btn.onclick=()=>{if(this.skipHeld){this.skipHeld=false;return;}this.skip(direction,false);};
+  btn.onpointerdown=e=>{
+   if(e?.button&&e.button!==0)return;
+   this.stopSkipHold();
+   this.skipHeld=false;
+   this.skipHoldTimer=setTimeout(()=>{
+    this.skipHeld=true;
+    this.skipSteps=0;
+    this.skip(direction,true);
+    this.skipHoldInterval=setInterval(()=>this.skip(direction,true),90);
+   },220);
+  };
+  btn.onpointerup=btn.onpointercancel=btn.onpointerleave=btn.onblur=()=>this.stopSkipHold();
+ }
  get volume(){return Number.isFinite(this.audio.volume)?this.audio.volume:1;}
  get muted(){return Boolean(this.audio.muted||this.volume===0);}
  syncVolume(){
@@ -86,7 +116,7 @@ export class AudioController {
   await this.select(index);
   return true;
  }
- reset(){this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;$('audioBar').hidden=true;$('audioToggle').hidden=true;$('audioToggle').setAttribute('aria-expanded','false');}
+ reset(){this.stopSkipHold();this.skipHeld=false;this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;$('audioBar').hidden=true;$('audioToggle').hidden=true;$('audioToggle').setAttribute('aria-expanded','false');}
  // The audio button is always there with a note open: recording and importing start from the panel.
  open(assets,recordings,added=[]){
   this.reset();this.entries=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id)}));

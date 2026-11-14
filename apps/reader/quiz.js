@@ -111,6 +111,36 @@ export function wrongQuestions(quizzes) {
   })).map(q => ({ ...q }));
 }
 
+// Shuffle or restore original question order from `quiz.at` onwards, keeping any state on those indices.
+export function reorderQuizQuestions(quiz, shuffleOn, random = Math.random) {
+  if (!quiz?.questions?.length) return quiz;
+  quiz.questions.forEach((q, i) => { if (!Number.isInteger(q._order)) q._order = i; });
+  const from = Math.min(Math.max(0, quiz.at || 0), quiz.questions.length);
+  const tail = quiz.questions.slice(from);
+  if (tail.length <= 1) return quiz;
+  const oldIndex = new Map(tail.map((q, idx) => [q, from + idx]));
+  const nextTail = [...tail];
+  if (shuffleOn) {
+    for (let i = nextTail.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [nextTail[i], nextTail[j]] = [nextTail[j], nextTail[i]];
+    }
+  } else {
+    nextTail.sort((a, b) => a._order - b._order);
+  }
+  quiz.questions.splice(from, tail.length, ...nextTail);
+  for (const field of ['answers', 'hinted', 'picks']) {
+    if (!quiz[field]) continue;
+    const prev = { ...quiz[field] };
+    for (let i = from; i < quiz.questions.length; i++) delete quiz[field][i];
+    nextTail.forEach((q, idx) => {
+      const was = oldIndex.get(q);
+      if (prev[was] !== undefined) quiz[field][from + idx] = prev[was];
+    });
+  }
+  return quiz;
+}
+
 // A hint image shown large, fitted to the window.
 function showLarge(url, alt) {
   const dialog = $('imageViewer'), img = $('imageViewerImage');
@@ -294,10 +324,33 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     return true;
   }
   function next() { if (quiz && quiz.answers[quiz.at]) { quiz.at++; save(); show(); } }
+  let shuffleOn = false;
+  try { shuffleOn = localStorage.getItem('notecomplete-quiz-shuffle') === '1'; } catch { /* Optional. */ }
+  const syncShuffle = () => {
+    const btn = $('quizShuffle');
+    if (btn) btn.setAttribute('aria-pressed', String(shuffleOn));
+  };
+  syncShuffle();
+  if ($('quizShuffle')) {
+    $('quizShuffle').onclick = () => {
+      shuffleOn = !shuffleOn;
+      try { localStorage.setItem('notecomplete-quiz-shuffle', shuffleOn ? '1' : '0'); } catch { /* Optional. */ }
+      syncShuffle();
+      if (quiz) {
+        reorderQuizQuestions(quiz, shuffleOn);
+        save();
+        show();
+      }
+      status(shuffleOn ? 'Random question order on.' : 'Questions in note order.');
+    };
+  }
   function open(value) {
     quiz = value;
     quiz.answers ||= {};
+    quiz.questions?.forEach((q, i) => { if (!Number.isInteger(q._order)) q._order = i; });
     quiz.at = Math.min(quiz.at || 0, quiz.questions.length);
+    if (shuffleOn && quiz.at === 0 && !Object.keys(quiz.answers).length) reorderQuizQuestions(quiz, true);
+    syncShuffle();
     $('quizPanel').hidden = false;
     $('quizPanel').classList.remove('minimized', 'in-tray');
     show();
@@ -395,7 +448,7 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
   $('quizMinimize').onclick = () => $('quizPanel').classList.toggle('minimized');
   $('quizMini').onclick = () => $('quizPanel').classList.remove('minimized');
   $('quizPanelClose').onclick = () => { save(); $('quizPanel').hidden = true; };
-  const restart = () => { quiz.answers = {}; quiz.hinted = {}; quiz.at = 0; quiz.done = false; save(); show(); };
+  const restart = () => { quiz.answers = {}; quiz.hinted = {}; quiz.at = 0; quiz.done = false; reorderQuizQuestions(quiz, shuffleOn); save(); show(); };
   $('quizRestart').onclick = restart;
   // The circling arrow in the head: clearing the answers asks for a second press.
   let disarm = 0;

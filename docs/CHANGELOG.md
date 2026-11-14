@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.70
+
+- **Audio volume slider and mute button.** The audio window now has a volume slider (`0%` to `100%`) and a mute/unmute button below the position bar, remembered across recordings and sessions.
+- **Faster auto-save hashing on large notes.** Auto-save now computes content digests directly in the Rust/WASM core (sampling large embedded PDFs and audio while hashing all structured and stroke blocks in full) and reuses the digest when the edit history mark has not moved, avoiding a second `.noteful` export and 250 MB buffer transfer on every auto-save tick.
+- **Reader cleanup.** Split auto-save, the download queue window, page/note export wiring and the text box editor out of `app.js` into dedicated tested modules, and audited promise rejection handling across the reader.
+
 ## 1.1.69
 
 - **Mouse Back and Forward buttons.** Mouse buttons 4 and 5 (plus `BrowserBack` / `BrowserForward` and `Alt+←` / `Alt+→`) navigate back and forward across page jumps, between an open document and Home, across grouped documents, inside Home, Google Drive and Internet Archive folders, and in web links (which also gain a Forward button in their bar).

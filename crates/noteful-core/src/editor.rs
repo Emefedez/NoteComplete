@@ -81,6 +81,8 @@ pub(crate) enum Edit {
     },
     Layer {
         layer: crate::Layer,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        order: Option<Vec<u32>>,
     },
     Add {
         page: usize,
@@ -138,6 +140,25 @@ struct Project {
 }
 fn is_zero(n: &usize) -> bool {
     *n == 0
+}
+pub(crate) fn apply_layer_edit(
+    layers: &mut Vec<crate::Layer>,
+    layer: &crate::Layer,
+    order: Option<&[u32]>,
+) {
+    if let Some(l) = layers.iter_mut().find(|l| l.id == layer.id) {
+        *l = layer.clone();
+    } else {
+        layers.push(layer.clone());
+    }
+    if let Some(order) = order {
+        layers.sort_by_key(|l| {
+            order
+                .iter()
+                .position(|&id| id == l.id)
+                .unwrap_or(usize::MAX)
+        });
+    }
 }
 impl Edit {
     fn joined(&self) -> bool {
@@ -308,12 +329,8 @@ impl Editor {
     pub fn layers(&self) -> Vec<crate::Layer> {
         let mut layers = self.scene.layers.clone();
         for edit in &self.history[..self.cursor] {
-            if let Edit::Layer { layer } = edit {
-                if let Some(l) = layers.iter_mut().find(|l| l.id == layer.id) {
-                    *l = layer.clone();
-                } else {
-                    layers.push(layer.clone());
-                }
+            if let Edit::Layer { layer, order } = edit {
+                apply_layer_edit(&mut layers, layer, order.as_deref());
             }
         }
         layers
@@ -325,7 +342,29 @@ impl Editor {
         {
             return Err(Error::new(0, "Invalid layer"));
         }
-        self.commit(Edit::Layer { layer })
+        self.commit(Edit::Layer { layer, order: None })
+    }
+    pub fn reorder_layers(&mut self, order: Vec<u32>) -> Result<()> {
+        let layers = self.layers();
+        let unique: HashSet<u32> = order.iter().copied().collect();
+        if order.len() != layers.len()
+            || unique.len() != layers.len()
+            || !layers.iter().all(|l| unique.contains(&l.id))
+        {
+            return Err(Error::new(0, "Invalid layer order"));
+        }
+        if layers.iter().map(|l| l.id).eq(order.iter().copied()) {
+            return Ok(());
+        }
+        let first_id = order[0];
+        let layer = layers
+            .into_iter()
+            .find(|l| l.id == first_id)
+            .ok_or_else(|| Error::new(0, "Invalid layer order"))?;
+        self.commit(Edit::Layer {
+            layer,
+            order: Some(order),
+        })
     }
     pub fn add_line(&mut self, page: usize, line: Line) -> Result<()> {
         self.add_lines(page, vec![line])
@@ -679,7 +718,22 @@ impl Editor {
                         .ok_or_else(|| Error::new(0, "Missing replacement shape"))?;
                     editor.resize_shape(page, &id, shape)?;
                 }
-                Edit::Layer { layer } => editor.set_layer(layer)?,
+                Edit::Layer { layer, order } => {
+                    editor.set_layer(layer)?;
+                    if let Some(order) = order {
+                        let layers = editor.layers();
+                        let unique: HashSet<u32> = order.iter().copied().collect();
+                        if order.len() != layers.len()
+                            || unique.len() != layers.len()
+                            || !layers.iter().all(|l| unique.contains(&l.id))
+                        {
+                            return Err(Error::new(0, "Invalid layer order"));
+                        }
+                        if let Some(Edit::Layer { order: slot, .. }) = editor.history.last_mut() {
+                            *slot = Some(order);
+                        }
+                    }
+                }
                 Edit::InsertPages { at, pages, pdf } => editor.insert_pages(at, pages, pdf)?,
                 Edit::ResizePage {
                     page,

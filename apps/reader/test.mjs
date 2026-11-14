@@ -113,6 +113,15 @@ for(const file of ['../../samples/Practice book (vol. 1).noteful','../../tests/f
  const restored=EditorSession.load_project(e.save_project());
  for(const asset of v.audio)assert.deepEqual(restored.audio_bytes(asset.id),e.audio_bytes(asset.id));
  assert.deepEqual(restored.pdf_bytes(v.pdf_background.resource_id),e.pdf_bytes(v.pdf_background.resource_id));
+ // Timed stroke hit-testing works even when its layer is locked or covered by an untimed layer, and layers can be reordered.
+ const [bx,by,bw,bh]=JSON.parse(e.selection(8,v.timings[0].item_id)).bounds,cx=bx+bw/2,cy=by+bh/2;
+ e.set_layer(JSON.stringify({id:0,name:'Capa 1',visible:true,locked:true,opacity:1}));
+ e.set_layer(JSON.stringify({id:1,name:'Layer 2',visible:true,locked:false,opacity:1}));
+ e.draw(8,JSON.stringify({points:[[cx-20,cy],[cx+20,cy]],width:8,rgba:[1,0,0,1],layer:1}));
+ assert.equal(JSON.parse(e.pick_item(8,cx,cy,50)).id,'new:2','normal pick hits the unlocked top layer');
+ assert.equal(JSON.parse(e.pick_timed(8,cx,cy,50)),v.timings[0].item_id,'pick_timed finds the timed stroke on the locked layer below');
+ e.reorder_layers(JSON.stringify([1,0]));
+ assert.deepEqual(JSON.parse(e.view(8)).layers.map(l=>l.id),[1,0]);
  restored.free();e.free();
 }
 assert.equal(inkOpacity(undefined,0),1);

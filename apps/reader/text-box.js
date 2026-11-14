@@ -528,5 +528,6 @@ export function textBoxController({
     isTypingOn,
     restoreOnRender,
     answerToTextBox,
+    mathKeys,
   };
 }

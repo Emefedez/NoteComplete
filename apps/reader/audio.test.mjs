@@ -47,4 +47,13 @@ elements.get('audioMute').onclick();assert.equal(controller.muted,false);assert.
 elements.get('audioVolume').value='0';elements.get('audioVolume').oninput();assert.equal(controller.muted,true);assert.equal(elements.get('audioMute').dataset.muted,'true');
 elements.get('audioMute').onclick();assert.equal(controller.muted,false);assert.equal(controller.volume,0.65);
 assert.equal(controller.setVolume(5),1);assert.equal(controller.setVolume(-2),0);
-console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking, disabled sync, playback speed and volume passed.');
+// Skip forward/backward: single tap jumps 10s; holding accelerates.
+controller.open([{id:'a',mime:'audio/mp4',kind:'m4a'}],[{id:'r1',asset_id:'a',name:'Lecture one',start_us:'0',pages:[0]}]);
+await new Promise(r=>setTimeout(r,0));
+elements.get('audio').duration=600;elements.get('audio').onloadedmetadata();controller.seek(100);
+controller.skip(1,false);assert.equal(controller.time,110);
+controller.skip(-1,false);assert.equal(controller.time,100);
+controller.skip(1,true);const afterHold1=controller.time;assert.ok(afterHold1>100);
+for(let i=0;i<6;i++)controller.skip(1,true);
+assert.ok(controller.time-afterHold1>30,'holding accelerates skip steps');
+console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking, disabled sync, playback speed, volume and hold-to-skip passed.');

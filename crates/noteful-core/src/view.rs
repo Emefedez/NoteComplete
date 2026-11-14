@@ -129,12 +129,8 @@ impl Editor {
                 Edit::Retext { page: p, id, image } if *p == page => {
                     retexts.insert(id.as_str(), image);
                 }
-                Edit::Layer { layer } => {
-                    if let Some(l) = layers.iter_mut().find(|l| l.id == layer.id) {
-                        *l = layer.clone();
-                    } else {
-                        layers.push(layer.clone());
-                    }
+                Edit::Layer { layer, order } => {
+                    crate::editor::apply_layer_edit(&mut layers, layer, order.as_deref());
                 }
                 Edit::InsertPages { at, pages, .. } => {
                     let at = (*at).min(order.len());

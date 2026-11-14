@@ -428,8 +428,29 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   }
   $('deckMinimize').onclick = () => $('deckDialog').classList.toggle('minimized');
   $('deckFloatClose').onclick = () => $('deckDialog').close();
+  let cardShuffle = false;
+  try { cardShuffle = localStorage.getItem('notecomplete-cards-shuffle') === '1'; } catch { /* Optional. */ }
+  const syncCardShuffle = () => {
+    const btn = $('deckShuffle');
+    if (btn) btn.setAttribute('aria-pressed', String(cardShuffle));
+  };
+  syncCardShuffle();
+  if ($('deckShuffle')) {
+    $('deckShuffle').onclick = () => {
+      cardShuffle = !cardShuffle;
+      try { localStorage.setItem('notecomplete-cards-shuffle', cardShuffle ? '1' : '0'); } catch { /* Optional. */ }
+      syncCardShuffle();
+      if (!$('deckPractice').hidden && practice?.queue?.length > 1) {
+        if (cardShuffle) practice.queue.sort(() => Math.random() - 0.5);
+        else practice.queue.sort((a, b) => (deck?.cards.indexOf(a) ?? 0) - (deck?.cards.indexOf(b) ?? 0));
+        showCard();
+      }
+      status(cardShuffle ? 'Random card order on.' : 'Cards in deck order.');
+    };
+  }
   $('deckPracticeStart').onclick = () => {
-    const queue = deck.cards.filter(c => c.front.trim() && c.back.trim()).sort(() => Math.random() - 0.5);
+    const clean = deck.cards.filter(c => c.front.trim() && c.back.trim());
+    const queue = cardShuffle ? [...clean].sort(() => Math.random() - 0.5) : [...clean];
     if (!queue.length) return;
     practice = { queue, known: 0, seen: 0, total: queue.length, again: new Set() };
     $('deckList').hidden = true; $('deckPractice').hidden = false;

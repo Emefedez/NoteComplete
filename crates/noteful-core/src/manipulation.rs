@@ -566,6 +566,49 @@ impl Editor {
             json!({"id": id, "page": page, "locked": locked, "bounds": self.current_bounds(page, &id).ok()})
         }))
     }
+    /// The topmost visible timed stroke under a point, including strokes on locked layers
+    /// or locked in place, for jumping to the audio recorded when it was written.
+    pub fn pick_timed(&self, page: usize, p: [f64; 2], tolerance: f64) -> Result<Option<String>> {
+        if p.iter().any(|n| !n.is_finite())
+            || !tolerance.is_finite()
+            || !(0.0..=100.).contains(&tolerance)
+        {
+            return Err(Error::new(0, "Invalid selection point"));
+        }
+        let page_ref = self.page(page)?;
+        let timed: std::collections::HashSet<&str> = page_ref
+            .timings
+            .iter()
+            .map(|t| t.item_id.as_str())
+            .collect();
+        if timed.is_empty() {
+            return Ok(None);
+        }
+        let adjustments = self.adjustments(page);
+        let deleted = self.deleted(page);
+        for layer in self.layers().iter().rev().filter(|l| l.visible) {
+            for item in page_ref
+                .items
+                .iter()
+                .rev()
+                .filter(|i| i.layer == layer.id && timed.contains(i.id.as_str()))
+            {
+                if !deleted.contains(item.id.as_str())
+                    && hit_geometry(
+                        p,
+                        tolerance,
+                        &item_geometry(item),
+                        item.hit_points(),
+                        adjustments.get(item.id.as_str()).copied(),
+                        false,
+                    )
+                {
+                    return Ok(Some(item.id.clone()));
+                }
+            }
+        }
+        Ok(None)
+    }
     /// Axis-aligned bounds of an item as it now sits (adjustments applied).
     pub(crate) fn current_bounds(&self, page: usize, id: &str) -> Result<[f64; 4]> {
         let g = self.geometry(page, id)?;

@@ -189,6 +189,21 @@ impl EditorSession {
     ) -> Result<String, Failure> {
         self.pick(page, [x, y], tolerance, true)
     }
+    /// The topmost visible timed stroke under a point, locked layers and items included.
+    pub fn pick_timed(
+        &self,
+        page: usize,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+    ) -> Result<String, Failure> {
+        let slot = self.slot(page)?;
+        Ok(serde_json::to_string(&self.inner.pick_timed(
+            slot,
+            [x, y],
+            tolerance,
+        )?)?)
+    }
     /// Replace a text box's content; `text` is a TextBox, `size` its new [w, h].
     pub fn edit_text(
         &mut self,
@@ -339,6 +354,9 @@ impl EditorSession {
     }
     pub fn set_layer(&mut self, layer: &str) -> Result<(), Failure> {
         Ok(self.inner.set_layer(serde_json::from_str(layer)?)?)
+    }
+    pub fn reorder_layers(&mut self, order: &str) -> Result<(), Failure> {
+        Ok(self.inner.reorder_layers(serde_json::from_str(order)?)?)
     }
     pub fn export_noteful(&self) -> Result<Vec<u8>, Failure> {
         Ok(self.inner.export_noteful()?)

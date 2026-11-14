@@ -60,7 +60,7 @@ import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
-import { textBoxController, holdInk, letGo, keepHeld } from "./text-box.js";
+import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.js";
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
@@ -696,10 +696,11 @@ function buildPages(sizes) {
       p.audioTap = null;
       const note = epoch, [x, y] = point(event, p);
       try {
-        const item = await call("pick", { page: p.index, x, y,
+        const directId = event.target.closest?.("[data-timed-ink]")?.dataset.item;
+        const itemId = directId || await call("pickTimed", { page: p.index, x, y,
           tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width });
         if (note !== epoch || tool !== "pan") return;
-        const timing = p.view?.timings.find(t => t.item_id === item?.id);
+        const timing = p.view?.timings.find(t => t.item_id === itemId);
         if (timing && await audio.seekRecording(timing.recording_id, timing.start)) {
           refreshSelects();
           status(`Audio positioned at ${timing.start.toFixed(1)} seconds.`);
@@ -788,7 +789,7 @@ const textBox = textBoxController({
   selection,
   swatches: SWATCHES,
   getDoc: () => doc,
-  getActiveLayer: () => activeLayer,
+  getActiveLayer: () => ensureEditableLayer()?.id ?? activeLayer,
   getTool: () => tool,
   getPanels: () => panels,
   getPage: () => page,
@@ -1559,41 +1560,156 @@ function syncInk() {
     if (p.view && (!recording || p.near !== false)) updateTimedInk(p.ink || [], recording?.id, time);
   }
 }
+function syncActiveLayerHighlight() {
+  for (const el of $("layersList").querySelectorAll(".layer")) {
+    const active = Number(el.dataset.layerId) === activeLayer;
+    el.classList.toggle("active", active);
+    el.setAttribute("aria-selected", String(active));
+  }
+  const current = doc?.layers?.find((l) => l.id === activeLayer);
+  if ($("layersToggle")) {
+    if (current?.locked) $("layersToggle").dataset.locked = "true";
+    else delete $("layersToggle").dataset.locked;
+  }
+}
+function ensureEditableLayer() {
+  if (!doc?.layers?.length) return null;
+  let layer = doc.layers.find((l) => l.id === activeLayer);
+  if (layer?.visible && !layer.locked) return layer;
+  const fallback = doc.layers.findLast((l) => l.visible && !l.locked);
+  if (fallback) {
+    activeLayer = fallback.id;
+    syncActiveLayerHighlight();
+    return fallback;
+  }
+  status(
+    layer?.locked
+      ? "Layer is locked. Click the padlock icon in Layers (Shift+L) to unlock it."
+      : "Layer is hidden. Click the eye icon in Layers (Shift+L) to show it.",
+    true,
+  );
+  return null;
+}
 function layerPanel(layers) {
-  if (!layers.some((l) => l.id === activeLayer))
-    activeLayer = layers[0]?.id || 0;
+  const current = layers.find((l) => l.id === activeLayer);
+  if (!current || !current.visible || current.locked) {
+    const unlocked = layers.findLast((l) => l.visible && !l.locked);
+    if (unlocked) activeLayer = unlocked.id;
+    else if (!current) activeLayer = layers[0]?.id || 0;
+  }
   $("layersList").replaceChildren();
-  for (const layer of layers) {
+  const moveLayer = (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= layers.length || fromIndex === toIndex) return;
+    const order = layers.map((l) => l.id);
+    const [moved] = order.splice(fromIndex, 1);
+    order.splice(toIndex, 0, moved);
+    action("reorderLayers", { order });
+  };
+  layers.forEach((layer, index) => {
     const row = document.createElement("div");
-    row.className = "layer" + (layer.id === activeLayer ? " active" : "");
+    row.className =
+      "layer" +
+      (layer.id === activeLayer ? " active" : "") +
+      (layer.locked ? " locked" : "") +
+      (!layer.visible ? " hidden-layer" : "");
+    row.dataset.layerId = String(layer.id);
+    row.tabIndex = 0;
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(layer.id === activeLayer));
+    row.setAttribute("aria-label", `Select ${layer.name}`);
+    const chooseThisLayer = () => {
+      if (activeLayer === layer.id) return;
+      activeLayer = layer.id;
+      syncActiveLayerHighlight();
+    };
+    row.onclick = (e) => {
+      if (e.target.closest("button, input[type='range']")) return;
+      chooseThisLayer();
+    };
+    row.onkeydown = (e) => {
+      if (e.target !== row) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        chooseThisLayer();
+      } else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        moveLayer(index, index + (e.key === "ArrowUp" ? -1 : 1));
+      }
+    };
     const controls = document.createElement("div");
     controls.className = "layer-controls";
-    const select = document.createElement("button");
-    select.textContent = layer.id === activeLayer ? "●" : "○";
-    select.setAttribute("aria-label", `Select ${layer.name}`);
-    select.setAttribute("aria-pressed", String(layer.id === activeLayer));
-    select.onclick = () => {
-      activeLayer = layer.id;
-      layerPanel(layers);
-    };
+    const grip = document.createElement("span");
+    grip.className = "layer-grip";
+    grip.title = "Drag to reorder layer";
+    grip.append(icon("grip"));
     const name = document.createElement("input");
     name.className = "layer-title";
     name.value = layer.name;
     name.setAttribute("aria-label", `Layer name ${layer.id + 1}`);
+    name.onfocus = chooseThisLayer;
     name.onchange = () =>
       action("layer", { layer: { ...layer, name: name.value } });
-    const visible = document.createElement("input");
-    visible.type = "checkbox";
-    visible.checked = layer.visible;
-    visible.setAttribute("aria-label", `Show ${layer.name}`);
-    visible.onchange = () =>
-      action("layer", { layer: { ...layer, visible: visible.checked } });
+    const actions = document.createElement("div");
+    actions.className = "layer-actions";
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "icon-button layer-move";
+    up.disabled = index === 0;
+    up.title = "Move layer up";
+    up.setAttribute("aria-label", `Move ${layer.name} up`);
+    up.append(icon("arrowUp"));
+    up.onclick = (e) => {
+      e.stopPropagation();
+      moveLayer(index, index - 1);
+    };
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "icon-button layer-move";
+    down.disabled = index === layers.length - 1;
+    down.title = "Move layer down";
+    down.setAttribute("aria-label", `Move ${layer.name} down`);
+    down.append(icon("arrowDown"));
+    down.onclick = (e) => {
+      e.stopPropagation();
+      moveLayer(index, index + 1);
+    };
+    const visible = document.createElement("button");
+    visible.type = "button";
+    visible.className = "icon-button layer-visible";
+    visible.setAttribute("aria-label", layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`);
+    visible.setAttribute("aria-pressed", String(layer.visible));
+    visible.title = layer.visible ? "Visible (click to hide)" : "Hidden (click to show)";
+    visible.append(icon(layer.visible ? "eye" : "eyeOff"));
+    visible.onclick = (e) => {
+      e.stopPropagation();
+      action("layer", { layer: { ...layer, visible: !layer.visible } });
+    };
     const lock = document.createElement("button");
-    lock.textContent = layer.locked ? "Locked" : "Lock";
-    lock.setAttribute("aria-label", `Lock ${layer.name}`);
+    lock.type = "button";
+    lock.className = "icon-button layer-lock";
+    lock.setAttribute("aria-label", `${layer.locked ? "Unlock" : "Lock"} ${layer.name}`);
     lock.setAttribute("aria-pressed", String(layer.locked));
-    lock.onclick = () =>
+    lock.title = layer.locked ? "Locked (click to unlock)" : "Unlocked (click to lock)";
+    lock.append(icon(layer.locked ? "lock" : "unlock"));
+    lock.onclick = (e) => {
+      e.stopPropagation();
       action("layer", { layer: { ...layer, locked: !layer.locked } });
+    };
+    actions.append(up, down, visible, lock);
+    controls.append(grip, name, actions);
+    const meta = document.createElement("div");
+    meta.className = "layer-opacity-row";
+    if (layer.locked) {
+      const badge = document.createElement("span");
+      badge.className = "layer-badge locked";
+      badge.textContent = "Locked";
+      meta.append(badge);
+    } else if (!layer.visible) {
+      const badge = document.createElement("span");
+      badge.className = "layer-badge muted";
+      badge.textContent = "Hidden";
+      meta.append(badge);
+    }
     const opacity = document.createElement("input");
     opacity.type = "range";
     opacity.min = 0;
@@ -1601,13 +1717,69 @@ function layerPanel(layers) {
     opacity.step = 0.05;
     opacity.value = layer.opacity;
     opacity.setAttribute("aria-label", `Opacity ${layer.name}`);
+    const pct = document.createElement("output");
+    pct.className = "layer-opacity-value";
+    pct.textContent = `${Math.round(layer.opacity * 100)}%`;
+    opacity.oninput = () => {
+      pct.textContent = `${Math.round(Number(opacity.value) * 100)}%`;
+    };
     opacity.onchange = () =>
       action("layer", { layer: { ...layer, opacity: Number(opacity.value) } });
-    controls.append(select, name, visible);
-    row.append(controls, lock, opacity);
+    meta.append(opacity, pct);
+    row.append(controls, meta);
     $("layersList").append(row);
-  }
+  });
+  syncActiveLayerHighlight();
 }
+// Drag a layer card vertically to reorder layers.
+$("layersList").addEventListener("pointerdown", (down) => {
+  const item = down.target.closest(".layer");
+  if (!item || down.button !== 0 || down.target.closest("button, input")) return;
+  const container = $("layersList");
+  const startY = down.clientY, pointer = down.pointerId;
+  let dragging = false, grab = 0;
+  const siblings = () => [...container.querySelectorAll(".layer")];
+  const initialOrder = siblings().map((el) => Number(el.dataset.layerId));
+  const move = (event) => {
+    if (event.pointerId !== pointer) return;
+    if (!dragging) {
+      if (Math.abs(event.clientY - startY) < 6) return;
+      dragging = true;
+      grab = startY - item.getBoundingClientRect().top;
+      item.classList.add("dragging");
+      try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
+    }
+    item.style.transform = "";
+    const others = siblings().filter((el) => el !== item);
+    const top = event.clientY - grab, centre = top + item.offsetHeight / 2;
+    const index = others.filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.top + r.height / 2 < centre;
+    }).length;
+    const ref = others[index];
+    if (ref ? item.nextElementSibling !== ref : others.at(-1)?.nextElementSibling !== item) {
+      if (ref) container.insertBefore(item, ref);
+      else others.at(-1)?.after(item);
+    }
+    item.style.transform = `translateY(${top - item.getBoundingClientRect().top}px)`;
+  };
+  const finish = (event) => {
+    if (event.pointerId !== pointer) return;
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", finish);
+    removeEventListener("pointercancel", finish);
+    item.classList.remove("dragging");
+    item.style.transform = "";
+    if (!dragging) return;
+    const nextOrder = siblings().map((el) => Number(el.dataset.layerId));
+    if (nextOrder.some((id, i) => id !== initialOrder[i])) {
+      action("reorderLayers", { order: nextOrder });
+    }
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", finish);
+  addEventListener("pointercancel", finish);
+});
 $("closeLayers").onclick = () => {
   $("layersPanel").hidden = true;
   $("layersToggle").setAttribute("aria-expanded", "false");
@@ -1869,9 +2041,7 @@ function pointerDown(e, p) {
     p.el.setPointerCapture(e.pointerId);
     return;
   }
-  const layer = doc.layers.find((l) => l.id === activeLayer);
-  if (tool !== "erase" && (!layer?.visible || layer.locked)) {
-    status("Select a visible, unlocked layer.", true);
+  if (tool !== "erase" && !ensureEditableLayer()) {
     return;
   }
   e.preventDefault();
@@ -3190,8 +3360,8 @@ function shortcut(e) {
   if (k === "R" && !$("audioToggle").hidden) return (addedStore.recording ? stopRecording() : (toggleAudio(true), startRecording())), true;
   if (k === "i" && !$("audioToggle").hidden) return $("syncEnabled").click(), true;
   if (!$("audioToggle").hidden && ["j", "k", "l"].includes(k)) {
-    if (k === "k") $("playAudio").click();
-    else (k === "j" ? $("backAudio") : $("forwardAudio")).click();
+    if (k === "k") { if (!e.repeat) $("playAudio").click(); }
+    else audio.skip(k === "j" ? -1 : 1, e.repeat);
     return true;
   }
   // Playback speed one step slower / faster.
@@ -4786,9 +4956,8 @@ function compoundBox(p, kind, box = null) {
 // The editor for a new graph or table, then the object in `box` (one undo step).
 async function insertCompound(p, kind, box = null, spec = {}) {
   if (!doc || !p) return false;
-  const layer = doc.layers.find((l) => l.id === activeLayer);
-  if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
-  const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: mathKeys }) : await editTable({ spec });
+  if (!ensureEditableLayer()) return false;
+  const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec });
   if (!chosen) return false;
   let items;
   try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
@@ -4811,7 +4980,7 @@ async function editCompound(item) {
   if (!c || !doc) return;
   let spec = {};
   try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
-  const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: mathKeys }) : await editTable({ spec, editing: true });
+  const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec, editing: true });
   if (!chosen) return;
   let items;
   try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
@@ -5002,7 +5171,7 @@ const chat = chatController({ ...studyDeps, selection, selectedText: () => textS
 const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
-const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => answerToTextBox(text) });
+const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
 audio.transcript.context = () => ({ title: doc?.title || "" });
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {

@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "pick", "pickLock", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+const READS = new Set(["view", "save", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -86,6 +86,7 @@ const onDocument = {
   save: () => session.save_project(),
   pick: (args, page) => JSON.parse(session.pick_item(page, args.x, args.y, args.tolerance)),
   pickLock: (args, page) => JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)),
+  pickTimed: (args, page) => JSON.parse(session.pick_timed(page, args.x, args.y, args.tolerance)),
   selection: (args, page) => JSON.parse(session.selection(page, args.itemId)),
   crop: (args, page) => JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))),
   adjust: (args, page) => JSON.parse(session.adjust_item(page, args.itemId, JSON.stringify(args.adjustment))),
@@ -122,6 +123,7 @@ const onDocument = {
   editText: edit((args, page) => session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height)),
   resize: edit((args, page) => session.resize_shape(page, args.shapeId, JSON.stringify(args.shape))),
   layer: edit((args) => session.set_layer(JSON.stringify(args.layer))),
+  reorderLayers: edit((args) => session.reorder_layers(JSON.stringify(args.order))),
   // A line answers with itself alone (`drawn`: the new item and the few fields of the view
   // that change), not with the page: the reader adds it to the view it holds
   // (draw-patch.js), or asks for the view when it holds none of the state before.
