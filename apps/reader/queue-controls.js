@@ -124,3 +124,56 @@ export function updateQueueControls({ mode, download, cancel, all, list }, { ava
   if (selecting) list?.classList?.add?.("queue-selecting");
   else list?.classList?.remove?.("queue-selecting");
 }
+
+// Wires the Cloud queue bar (#cloudQueueBar) to a download queue.
+export function queueWindow({ queue, $ = (id) => document.getElementById(id), doc = document } = {}) {
+  function renderList(stats, listEl) {
+    listEl.replaceChildren(...stats.items.map((item) => queueRow(item, { doc, onRemove: (it) => queue().cancel(it.id) })));
+  }
+  function update(stats) {
+    const bar = $("cloudQueueBar");
+    if (!bar) return;
+    if (stats.total === 0) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    const countEl = $("cloudQueueCount");
+    if (countEl) countEl.textContent = `Queue (${stats.completed}/${stats.total})`;
+    const progEl = $("cloudQueueProgress");
+    if (progEl) progEl.value = stats.overallProgress;
+    const iconEl = bar.querySelector?.(".cloud-queue-icon");
+    if (iconEl) {
+      iconEl.innerHTML = stats.completed === stats.total && stats.total > 0 && !stats.isBusy
+        ? `<path d="M5 13l4 4L19 7"/>`
+        : `<path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/>`;
+    }
+    const statusEl = $("cloudQueueStatus");
+    if (statusEl) {
+      if (stats.activeItem) {
+        const pct = stats.activeItem.progress ? ` (${Math.round(stats.activeItem.progress * 100)}%)` : "";
+        statusEl.textContent = `Downloading ${stats.completed + 1} of ${stats.total}: ${stats.activeItem.name}${pct}`;
+      } else if (stats.pending > 0) {
+        statusEl.textContent = `${stats.pending} item${stats.pending === 1 ? "" : "s"} waiting in queue…`;
+      } else {
+        statusEl.textContent = `Batch download complete (${stats.completed} files saved to library)`;
+      }
+    }
+    const listEl = $("cloudQueueList");
+    if (listEl && !listEl.hidden) renderList(stats, listEl);
+  }
+  const toggleBtn = $("cloudQueueToggle");
+  if (toggleBtn) {
+    toggleBtn.onclick = () => {
+      const listEl = $("cloudQueueList");
+      if (!listEl) return;
+      const willOpen = listEl.hidden;
+      listEl.hidden = !willOpen;
+      toggleBtn.setAttribute("aria-expanded", String(willOpen));
+      if (willOpen) renderList(queue().stats(), listEl);
+    };
+  }
+  const clearBtn = $("cloudQueueClear");
+  if (clearBtn) clearBtn.onclick = () => queue().clear();
+  return { update };
+}

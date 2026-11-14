@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { queueRow, queueItemLabel, queueStatusIcon, queueButtonState, setQueueButton, markQueueDone, queueButton, selectionCheck, updateQueueControls } from './queue-controls.js';
+import { queueRow, queueItemLabel, queueStatusIcon, queueButtonState, setQueueButton, markQueueDone, queueButton, selectionCheck, updateQueueControls, queueWindow } from './queue-controls.js';
 
 // A stand-in for the page: elements that record what is set on them. Setting `innerHTML`
 // keeps the string as given, so a test can see whether a value was ever written as markup.
@@ -180,4 +180,53 @@ test('missing buttons and a list without classes are tolerated', () => {
   assert.doesNotThrow(() => updateQueueControls({}, { available: true, count: 2, selecting: true, selected: 1 }));
   assert.doesNotThrow(() => updateQueueControls({ list: {} }, { available: true, count: 2, selecting: false, selected: 0 }));
   assert.doesNotThrow(() => updateQueueControls({ mode: null, list: null }, { available: false, count: 0, selecting: false, selected: 0 }));
+});
+
+test('queueWindow updates progress, toggles the list and clears the queue', () => {
+  const iconEl = { innerHTML: '' };
+  const els = new Map([
+    ['cloudQueueBar', { hidden: true, querySelector: () => iconEl }],
+    ['cloudQueueCount', { textContent: '' }],
+    ['cloudQueueProgress', { value: 0 }],
+    ['cloudQueueStatus', { textContent: '' }],
+    ['cloudQueueList', { hidden: true, items: [], replaceChildren(...nodes) { this.items = nodes; } }],
+    ['cloudQueueToggle', { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }],
+    ['cloudQueueClear', {}],
+  ]);
+  let cleared = 0;
+  const cancelled = [];
+  let currentStats = {
+    total: 2, completed: 0, pending: 1, overallProgress: 0.4, isBusy: true,
+    activeItem: { name: 'Lecture 1.pdf', progress: 0.4 },
+    items: [{ id: 'd:1', name: 'Lecture 1.pdf', status: 'downloading' }, { id: 'd:2', name: 'Lecture 2.pdf', status: 'queued' }],
+  };
+  const win = queueWindow({
+    queue: () => ({ stats: () => currentStats, cancel: (id) => cancelled.push(id), clear: () => { cleared++; } }),
+    $: (id) => els.get(id) || null,
+    doc: fakeDocument(),
+  });
+
+  win.update(currentStats);
+  assert.equal(els.get('cloudQueueBar').hidden, false);
+  assert.equal(els.get('cloudQueueCount').textContent, 'Queue (0/2)');
+  assert.equal(els.get('cloudQueueStatus').textContent, 'Downloading 1 of 2: Lecture 1.pdf (40%)');
+  assert.equal(els.get('cloudQueueList').items.length, 0, 'list is not rendered while hidden');
+
+  els.get('cloudQueueToggle').onclick();
+  assert.equal(els.get('cloudQueueList').hidden, false);
+  assert.equal(els.get('cloudQueueToggle').attrs['aria-expanded'], 'true');
+  assert.equal(els.get('cloudQueueList').items.length, 2);
+  els.get('cloudQueueList').items[0].children[1].onclick();
+  assert.deepEqual(cancelled, ['d:1']);
+
+  currentStats = { total: 2, completed: 2, pending: 0, overallProgress: 1, isBusy: false, activeItem: null, items: [] };
+  win.update(currentStats);
+  assert.equal(els.get('cloudQueueStatus').textContent, 'Batch download complete (2 files saved to library)');
+  assert.ok(iconEl.innerHTML.includes('M5 13l4 4L19 7'));
+
+  els.get('cloudQueueClear').onclick();
+  assert.equal(cleared, 1);
+
+  win.update({ total: 0 });
+  assert.equal(els.get('cloudQueueBar').hidden, true);
 });

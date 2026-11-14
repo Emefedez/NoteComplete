@@ -20,7 +20,7 @@ import { Library } from "./library.js";
 import { homeScreen } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
-import { queueRow } from "./queue-controls.js";
+import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
@@ -4249,75 +4249,15 @@ window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.p
 // and its Recent entry, so removing it can first upload unsaved changes to Drive.
 let notePath = "", noteEntryKey = "";
 
-// File names in the queue come from Drive and Internet Archive listings: queueRow
-// (queue-controls.js) writes them as text.
-function renderQueueList(stats, listEl) {
-  listEl.replaceChildren(...stats.items.map((item) => queueRow(item, { onRemove: (it) => downloadQueue.cancel(it.id) })));
-}
-
+const queueView = queueWindow({ queue: () => downloadQueue, $ });
 const downloadQueue = createDownloadQueue({
   library,
   onItemDone: (item) => {
     drive?.onQueueItemDone?.(item);
     archive?.onQueueItemDone?.(item);
   },
-  onUpdate: (stats) => {
-    const bar = $("cloudQueueBar");
-    if (!bar) return;
-    if (stats.total === 0) {
-      bar.hidden = true;
-      return;
-    }
-    bar.hidden = false;
-    const countEl = $("cloudQueueCount");
-    if (countEl) countEl.textContent = `Queue (${stats.completed}/${stats.total})`;
-    const progEl = $("cloudQueueProgress");
-    if (progEl) progEl.value = stats.overallProgress;
-
-    const iconEl = bar.querySelector(".cloud-queue-icon");
-    if (iconEl) {
-      if (stats.completed === stats.total && stats.total > 0 && !stats.isBusy) {
-        iconEl.innerHTML = `<path d="M5 13l4 4L19 7"/>`;
-      } else {
-        iconEl.innerHTML = `<path d="M12 3v13m-5-5 5 5 5-5M4 20h16"/>`;
-      }
-    }
-
-    const statusEl = $("cloudQueueStatus");
-    if (statusEl) {
-      if (stats.activeItem) {
-        const pct = stats.activeItem.progress ? ` (${Math.round(stats.activeItem.progress * 100)}%)` : "";
-        statusEl.textContent = `Downloading ${stats.completed + 1} of ${stats.total}: ${stats.activeItem.name}${pct}`;
-      } else if (stats.pending > 0) {
-        statusEl.textContent = `${stats.pending} item${stats.pending === 1 ? "" : "s"} waiting in queue…`;
-      } else {
-        statusEl.textContent = `Batch download complete (${stats.completed} files saved to library)`;
-      }
-    }
-
-    const listEl = $("cloudQueueList");
-    if (listEl && !listEl.hidden) {
-      renderQueueList(stats, listEl);
-    }
-  },
+  onUpdate: (stats) => queueView.update(stats),
 });
-
-const toggleBtn = $("cloudQueueToggle");
-if (toggleBtn) {
-  toggleBtn.onclick = () => {
-    const listEl = $("cloudQueueList");
-    if (!listEl) return;
-    const willOpen = listEl.hidden;
-    listEl.hidden = !willOpen;
-    toggleBtn.setAttribute("aria-expanded", String(willOpen));
-    if (willOpen) renderQueueList(downloadQueue.stats(), listEl);
-  };
-}
-
-const clearBtn = $("cloudQueueClear");
-if (clearBtn) {
-  clearBtn.onclick = () => downloadQueue.clear();
-}
 
 // A ⋯ export chosen on a Drive or Internet Archive card: the note is exported once it has opened.
 const exportRequest = { kind: "", key: "" };
