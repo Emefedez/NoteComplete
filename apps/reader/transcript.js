@@ -105,6 +105,8 @@ export class TranscriptController {
   describe() {
     const b = this.backend();
     $('transcriptModelRow').hidden = b !== 'whisper';
+    const meta = $('transcriptSummaryMeta');
+    if (meta) meta.textContent = b === 'antigravity' ? 'Gemini · cloud' : b === 'voxtype' ? 'Voxtype · this computer' : 'Whisper · this device';
     if (!this.job) this.status(b === 'antigravity' ? 'Gemini transcribes through your Antigravity account: the audio is sent to Google.' : b === 'voxtype' ? 'Voxtype transcribes on this computer with whisper.cpp, piece by piece.' : 'Whisper runs on this device and downloads its model on first use.');
   }
   status(message) { $('transcriptStatus').textContent = message; }

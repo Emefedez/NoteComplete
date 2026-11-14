@@ -699,7 +699,7 @@
             <select id="recording" aria-label="Recording"></select>
             <div id="audioSources" class="audio-sources">
               <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)" aria-label="Record"><span class="label">Record</span></button>
-              <button id="importAudio" type="button" data-icon="import" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
+              <button id="importAudio" type="button" data-icon="folder" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
               <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
             </div>
           </div>
@@ -714,10 +714,11 @@
             <button id="backAudio" type="button" aria-label="Back 10 seconds" title="Back 10 s (J)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7 5 12l6 5V7Zm8 0-6 5 6 5V7Z"/></svg></button>
             <button id="playAudio" type="button" class="play" data-state="paused" aria-label="Play" title="Play / pause (K)" disabled><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
             <button id="forwardAudio" type="button" aria-label="Forward 10 seconds" title="Forward 10 s (L)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 7 6 5-6 5V7ZM5 7l6 5-6 5V7Z"/></svg></button>
+            <select id="audioSpeed" data-native data-rate="1" aria-label="Playback speed" title="Playback speed ([ slower, ] faster)"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option><option value="2.5">2.5×</option><option value="3">3×</option></select>
             <span class="spacer"></span>
-            <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
-            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording"><input id="syncEnabled" type="checkbox" /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
-            <button id="speechSettingsToggle" type="button" class="icon-button has-caret" aria-expanded="false" aria-controls="speechSettings" title="Audio for transcription: gain, voice filter, normalize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="caret" aria-hidden="true"></span><span class="sr-only">Audio for transcription</span></button>
+            <button id="audioPage" type="button" class="icon-button" title="Go to the page where this recording starts (Shift A)" aria-label="Go to the page where this recording starts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></button>
+            <label class="icon-toggle" title="Dim handwriting not yet written at this point of the recording (I)"><input id="syncEnabled" type="checkbox" /><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3-5 5-9 8-9s3 5 8-2"/><path d="M14 17c2-1 4-1 6 0" opacity=".35"/></svg><span class="sr-only">Dim handwriting not yet written</span></label>
+            <button id="speechSettingsToggle" type="button" class="icon-button has-caret" aria-expanded="false" aria-controls="speechSettings" title="Audio adjustment: gain, voice filter, normalize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="caret" aria-hidden="true"></span><span class="sr-only">Audio adjustment</span></button>
           </div>
           <div id="speechSettings" class="speech-settings" hidden>
             <div class="transcript-controls">
@@ -730,9 +731,16 @@
           <div class="audio-seek"><input id="audioSeek" type="range" min="0" max="0" step=".01" value="0" aria-label="Audio position" disabled /><output id="audioTime">0:00 / 0:00</output></div>
           <p id="audioState" role="status"></p>
           <details id="transcriptPanel" class="transcript-panel" open>
-            <summary>Transcript <span class="muted">on this device</span></summary>
-            <div class="transcript-controls">
+            <summary><span>Transcript</span><span id="transcriptSummaryMeta" class="muted">on this device</span></summary>
+            <div class="transcript-controls transcript-setup">
               <select id="transcriptBackend" data-native aria-label="Transcription engine"><option value="whisper">Whisper on this device</option></select>
+              <span id="transcriptModelRow" class="transcript-model-wrap">
+                <select id="transcriptModel" data-native aria-label="Whisper model">
+                  <option value="tiny">Tiny · fastest</option>
+                  <option value="base" selected>Base · balanced</option>
+                  <option value="small">Small · more accurate</option>
+                </select>
+              </span>
               <select id="transcriptLanguage" data-native aria-label="Spoken language">
                 <option value="">Detect language</option>
                 <option value="spanish" selected>Castellano</option>
@@ -745,20 +753,14 @@
                 <option value="portuguese">Português</option>
               </select>
             </div>
-            <div id="transcriptModelRow" class="transcript-controls">
-              <select id="transcriptModel" data-native aria-label="Whisper model">
-                <option value="tiny">Tiny · fastest</option>
-                <option value="base" selected>Base · balanced</option>
-                <option value="small">Small · more accurate</option>
-              </select>
-            </div>
-            <div class="transcript-controls">
-              <button id="transcribeAudio" type="button" class="primary" title="Shift-click to transcribe again instead of loading the saved transcript">Transcribe</button>
+            <div class="transcript-controls transcript-actions">
+              <button id="transcribeAudio" type="button" class="primary" title="Transcribe this recording. Shift-click to transcribe again instead of loading the saved transcript">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
               <button id="transcriptEdit" type="button" class="icon-button" data-icon="draw" aria-pressed="false" aria-label="Edit" hidden title="Edit: click a word to correct it"></button>
               <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation; every word keeps its time"></button>
               <button id="transcriptRestore" type="button" class="icon-button" data-icon="undo" aria-label="Undo revision" hidden title="Undo revision: bring back the automatic transcript from before the AI revision"></button>
-              <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">Text</option><option value="srt">SRT subtitles</option><option value="vtt">WebVTT</option><option value="json">JSON (word times)</option></select>
+              <span class="spacer"></span>
+              <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">TXT</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="json">JSON</option></select>
               <button id="downloadTranscript" type="button" class="icon-button" data-icon="export" aria-label="Export transcript" hidden title="Export the transcript in the chosen format"></button>
               <button id="hideTranscript" type="button" hidden>Hide</button>
             </div>

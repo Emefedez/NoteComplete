@@ -3205,3 +3205,61 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .quiz-options button[data-result="missed"] { background: transparent; box-shadow: inset 0 0 0 1.5px #2f9e6a; border-style: dashed; color: inherit; }
 .quiz-options .quiz-submit { margin-top: 4px; justify-content: center; }
 .quiz-options .quiz-submit:disabled { opacity: .5; }
+
+/* Audio window, tidied: one rhythm of 8px between rows, the speed beside the transport, and the
+   transcript as its own card that fills the rest of the window (its words scroll inside it, the
+   engine row and actions stay in view). */
+.audio-panel .panel-body { gap: 8px; padding: 10px 12px 12px; }
+.audio-panel.has-body .audio-head { padding: 8px 8px 0 12px; min-height: 40px; }
+.audio-head h2 { font-size: 13px; font-weight: 600; }
+.audio-transport #audioSpeed { appearance: none; -webkit-appearance: none; flex: none; width: auto; min-width: 0; min-height: var(--control); margin-left: 2px; padding: 0 7px; border: 0; border-radius: var(--radius); background: var(--fill); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; cursor: pointer; }
+.audio-transport #audioSpeed:not([data-rate="1"]) { background: var(--accent-soft); color: var(--accent); }
+.audio-transport #audioSpeed:hover { background: var(--accent-hover); }
+.audio-panel #backAudio, .audio-panel #forwardAudio, .audio-panel #playAudio { min-width: 0; }
+@container audio-panel (max-width: 340px) {
+  .audio-transport { gap: 2px; }
+  .audio-transport button, .audio-transport .icon-toggle { width: 25px; }
+  .audio-transport .play { width: 32px; }
+  .audio-transport #audioSpeed { margin-left: 0; padding: 0 5px; font-size: 11px; }
+}
+.audio-panel .trim-panel { margin: 0; }
+.audio-seek { min-height: 24px; }
+.audio-seek output { min-width: 7.5em; text-align: right; }
+.speech-settings { border-radius: var(--radius-box); background: var(--surface); }
+.speech-settings .transcript-controls { align-items: center; gap: 10px; }
+#audioState { margin: 0; font-size: 12px; color: var(--muted); }
+
+.audio-panel .transcript-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; padding: 8px 0 0; border-top: 1px solid var(--line); }
+.audio-panel .transcript-panel[open] { flex: 1 1 auto; min-height: 220px; }
+.audio-panel .transcript-panel::details-content { display: contents; }
+.audio-panel .transcript-panel > summary { justify-content: flex-start; gap: 8px; min-height: 26px; padding: 0 2px; font-size: 13px; font-weight: 600; border-radius: var(--radius); }
+.audio-panel .transcript-panel > summary .muted { font-weight: 400; }
+.audio-panel .transcript-panel > summary::after { margin-left: auto; }
+.audio-panel .transcript-controls { align-items: center; gap: 6px; margin: 0; }
+/* Engine, model and language: one tidy row of equal fields that wraps when narrow. */
+.audio-panel .transcript-setup { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.audio-panel .transcript-setup select, .audio-panel .transcript-model-wrap select { width: 100%; min-width: 0; text-overflow: ellipsis; }
+.audio-panel .transcript-model-wrap { display: block; min-width: 0; }
+.audio-panel .transcript-model-wrap[hidden] { display: none; }
+.audio-panel .transcript-actions { flex-wrap: nowrap; }
+.audio-panel .transcript-actions > .spacer { flex: 1 1 0; min-width: 0; }
+.audio-panel .transcript-actions > button.primary { padding: 0 14px; }
+.audio-panel #transcriptFormat { flex: none; width: auto; min-width: 0; padding: 0 4px; font-size: 11px; }
+.audio-panel #hideTranscript { display: none; }
+.audio-panel #transcriptStatus { margin: 0; font-size: 12px; line-height: 1.4; }
+.audio-panel #transcriptProgress { margin: 0; }
+/* The words: reading text in a card, not a grid of buttons. */
+.audio-panel #transcriptWords { flex: 1 1 auto; min-height: 120px; max-height: none; overflow: auto; overscroll-behavior: contain; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.audio-panel #transcriptWords:empty { display: none; }
+.audio-panel #transcriptWords button { display: inline; min-height: 0; margin: 0 -1px; padding: 1px 2px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; line-height: inherit; text-align: left; vertical-align: baseline; cursor: pointer; }
+.audio-panel #transcriptWords button:hover { background: var(--fill); }
+.audio-panel #transcriptWords button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.audio-panel #transcriptWords.provisional { color: var(--muted); font-style: italic; }
+.audio-panel #transcriptNavigation { flex-wrap: nowrap; margin: 0; font-size: 12px; }
+.audio-panel #transcriptNavigation label { gap: 4px; color: var(--muted); }
+/* Browsers whose <details> cannot lay out its content (no ::details-content): the words grow and
+   the window body scrolls instead. */
+@supports not selector(::details-content) {
+  .audio-panel .transcript-panel[open] { min-height: 0; }
+  .audio-panel #transcriptWords { flex: none; }
+}

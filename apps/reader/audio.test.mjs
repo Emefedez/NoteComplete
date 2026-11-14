@@ -30,4 +30,11 @@ assert.equal(elements.get('recordingTitle').textContent,'My take');assert.equal(
 assert.deepEqual([...await controller.read('added:t1')],[9,9]);assert.deepEqual(reads,['a','b']);
 controller.setAdded([]);assert.equal(controller.selected.recording.id,'r1');
 controller.open([],[],[]);assert.equal(controller.entries.length,0);assert.equal(elements.get('audioToggle').hidden,false);assert.ok(elements.get('audioBar').classList.contains('no-audio'));
-controller.reset();assert.ok(elements.get('audioBar').hidden);console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking and disabled sync passed.');
+controller.reset();assert.ok(elements.get('audioBar').hidden);
+// Playback speed: bounded to 0.5×–3×, steps through the menu, survives a new recording, keeps the pitch.
+const speed=elements.get('audioSpeed');speed.options=[0.5,0.75,1,1.25,1.5,1.75,2,2.5,3].map(v=>({value:String(v)}));
+assert.equal(controller.setRate(1.5),1.5);assert.equal(elements.get('audio').playbackRate,1.5);assert.equal(elements.get('audio').defaultPlaybackRate,1.5);assert.equal(speed.value,'1.5');
+assert.equal(controller.stepRate(1),1.75);assert.equal(controller.stepRate(-1),1.5);
+assert.equal(controller.setRate(9),3);assert.equal(controller.stepRate(1),3);assert.equal(controller.setRate(0.1),0.5);assert.equal(controller.stepRate(-1),0.5);
+speed.value='2';speed.onchange();assert.equal(controller.rate,2);assert.equal(speed.dataset.rate,'2');
+console.log('Audio transport: real names, positions, resource cache, page jumps, timed-stroke seeking, disabled sync and playback speed passed.');
