@@ -71,7 +71,7 @@ import { tabStrip } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
-import { autosaveStore, offerRecovery, when, sizeLabel, EVERY_MS } from "./autosave.js";
+import { autosaveStore, offerRecovery, when, sizeLabel, contentDigestCache, EVERY_MS } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
@@ -3508,15 +3508,8 @@ $("autosaveToggle").onclick = () => {
 };
 autosaveSwitch();
 // What the note holds, apart from its undo history: a digest of its .noteful export (null when
-// it cannot be made). Two copies with the same digest are the same note.
-async function contentDigest() {
-  try {
-    if (!globalThis.crypto?.subtle) return null;
-    const bytes = await call("export", {});
-    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-    return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
-  } catch { return null; }
-}
+// it cannot be made), hashed in the core and reused while the history mark has not moved.
+const contentDigest = contentDigestCache(() => call("contentDigest"));
 // A copy now, if auto-save is on and the note changed since the last one.
 async function autosaveNow({ force = false } = {}) {
   if (!doc || autosaving || editing || !autosaveOn()) return null;
@@ -3528,7 +3521,7 @@ async function autosaveNow({ force = false } = {}) {
     await notes?.flush?.();
     const project = await call("save");
     const mark = await call("historyMark").catch(() => null);
-    const content = await contentDigest();
+    const content = await contentDigest(mark, note);
     if (note !== epoch) return null;
     const slot = await autosaves.save({ key, title, project, shared, mark, content });
     autosavedRevision = at;
@@ -3561,7 +3554,7 @@ async function autosaveOpened(recovered) {
     }
     // The same content as the note just opened, whatever its history (a note saved as .noteful
     // comes back with another history): nothing to choose between.
-    if (latest.content && (await contentDigest()) === latest.content) {
+    if (latest.content && (await contentDigest(mark, note)) === latest.content) {
       if (note !== epoch) return;
       autosaves.markManual(key).catch(() => {});
       return;

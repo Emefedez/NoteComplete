@@ -230,3 +230,39 @@ fn square_highlight_bands_have_square_ends_and_stay_inside_their_box_in_noteful(
     let restored = Editor::open_project(&e.save_project().unwrap()).unwrap();
     assert_eq!(restored.view(0).unwrap(), e.view(0).unwrap());
 }
+
+#[test]
+fn content_digest_matches_noteful_export_before_and_after_edits() {
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
+    let initial = e.content_digest().unwrap();
+    assert_eq!(initial.len(), 32);
+
+    e.add_line(
+        0,
+        Line {
+            part: None,
+            points: vec![[20., 30.], [80., 90.]],
+            width: 3.,
+            rgba: [0.1, 0.2, 0.3, 1.],
+            tool: 0,
+            layer: 0,
+            shape: None,
+            square: false,
+            pressure: None,
+            under: false,
+            joined: false,
+        },
+    )
+    .unwrap();
+    let edited = e.content_digest().unwrap();
+    assert_ne!(edited, initial);
+    let exported = e.export_noteful().unwrap();
+    let reopened = Editor::open(&exported).unwrap();
+    assert_eq!(reopened.content_digest().unwrap(), edited);
+
+    e.undo();
+    assert_eq!(e.content_digest().unwrap(), initial);
+
+    e.set_canvas(true).unwrap();
+    assert!(e.content_digest().is_err());
+}

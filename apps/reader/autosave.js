@@ -54,6 +54,25 @@ export function sizeLabel(size) {
   return Number.isFinite(size) ? ` · ${(size / 1048576).toFixed(1)} MB` : '';
 }
 
+// Reuses the last content digest while the note (`epoch`) and its history mark
+// (`{edits, digest}`) have not moved, so a note whose only change is in its Markdown
+// notes (or a forced save with no new edits) does not rebuild its .noteful export.
+export function contentDigestCache(compute) {
+  let last = null;
+  return async (mark, epoch = 0) => {
+    if (mark && last && last.epoch === epoch && last.edits === mark.edits && last.digest === mark.digest) {
+      return last.content;
+    }
+    try {
+      const content = (await compute()) || null;
+      if (mark && content) last = { epoch, edits: mark.edits, digest: mark.digest, content };
+      return content;
+    } catch {
+      return null;
+    }
+  };
+}
+
 // The slots: metadata in `meta` (small, listed for the menu), bytes in `data`.
 export function autosaveStore(backend = idbBackend()) {
   let next = 0;

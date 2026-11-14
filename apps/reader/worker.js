@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "pick", "pickLock", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+const READS = new Set(["view", "save", "pick", "pickLock", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -98,6 +98,7 @@ const onDocument = {
   exportMarkdown: (args) => markdown_export(session.markdown(), args.title || ""),
   exportNotecomplete: (args) => session.export_notecomplete(new Uint8Array(args.audioData || []), args.audioLayout || ""),
   export: () => session.export_noteful(),
+  contentDigest: () => session.content_digest(),
   audio: (args) => session.audio_bytes(args.resource),
   pdf: (args) => session.pdf_bytes(args.resource),
   recognized(args) {

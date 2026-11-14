@@ -3,7 +3,22 @@ use crate::{
     editor::Edit, wire::field, Editor, Error, Field, Line, Package, Result, Style, WireValue as V,
     MAGIC,
 };
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+fn hash_block(hasher: &mut md5::Md5, bytes: &[u8]) {
+    use md5::Digest;
+    const SAMPLE: usize = 32 * 1024;
+    let is_media = bytes.starts_with(b"%PDF-")
+        || bytes.starts_with(b"\xff\xd8\xff")
+        || bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+        || crate::audio_kind(bytes).is_some();
+    if is_media && bytes.len() > SAMPLE * 2 {
+        hasher.update(&bytes[..SAMPLE]);
+        hasher.update(&bytes[bytes.len() - SAMPLE..]);
+    } else {
+        hasher.update(bytes);
+    }
+}
 pub(crate) fn f(tag: u16, wire_type: u16, value: V) -> Field {
     Field {
         tag,
@@ -363,16 +378,93 @@ impl Editor {
         }
         self.noteful_bytes()
     }
+    /// Digest of the `.noteful` export without building a contiguous export buffer.
+    /// Structured blocks and the index trailer (block IDs, offsets and sizes) are hashed in
+    /// full; media resources above 64 KiB sample their head and tail so a 250 MB PDF or
+    /// recording is not hashed byte-by-byte in WebAssembly on every auto-save.
+    pub fn content_digest(&self) -> Result<String> {
+        if self.canvas {
+            return Err(Error::new(
+                0,
+                "An infinite canvas cannot be a .noteful file; save it as .notecomp or .notepart",
+            ));
+        }
+        use md5::{Digest, Md5};
+        let mut hasher = Md5::new();
+        hasher.update(MAGIC);
+        if self.cursor == 0 {
+            let data = &self.source;
+            if data.len() < 20 {
+                return Err(Error::new(0, "Noteful start/end magic missing"));
+            }
+            let index_offset = usize::try_from(u64::from_be_bytes(
+                data[data.len() - 12..data.len() - 4].try_into().unwrap(),
+            ))
+            .map_err(|_| Error::new(0, "Offset exceeds target address space"))?;
+            let index = crate::decode_fields(&data[index_offset..data.len() - 16], index_offset)?;
+            let keys = field(&index, 10)
+                .and_then(V::as_array)
+                .ok_or_else(|| Error::new(index_offset, "Missing keys"))?;
+            let offsets = field(&index, 11)
+                .and_then(V::as_array)
+                .ok_or_else(|| Error::new(index_offset, "Missing offsets"))?;
+            let sizes = field(&index, 12)
+                .and_then(V::as_array)
+                .ok_or_else(|| Error::new(index_offset, "Missing sizes"))?;
+            let mut entries = Vec::with_capacity(keys.len());
+            for ((key, offset), size) in keys.iter().zip(offsets).zip(sizes) {
+                let id = key
+                    .as_text()
+                    .ok_or_else(|| Error::new(index_offset, "Invalid block ID"))?
+                    .to_owned();
+                let offset = offset.as_uint().unwrap_or(0) as usize;
+                let size = size.as_uint().unwrap_or(0) as usize;
+                hash_block(&mut hasher, &data[offset..offset + size]);
+                entries.push((id, size));
+            }
+            let trailer = canonical_trailer(index, entries.into_iter())?;
+            hasher.update(&trailer);
+        } else {
+            let (blocks, trailer) = self.noteful_parts()?;
+            for (_, bytes) in &blocks {
+                hash_block(&mut hasher, bytes.as_ref());
+            }
+            hasher.update(&trailer);
+        }
+        Ok(hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect())
+    }
     /// The Noteful package itself, also for a canvas (inside its `.notecomp`).
     pub(crate) fn noteful_bytes(&self) -> Result<Vec<u8>> {
         if self.cursor == 0 {
             return Ok(self.source.clone());
         }
+        let (blocks, trailer) = self.noteful_parts()?;
+        let body: usize = blocks.iter().map(|(_, b)| b.len()).sum();
+        let mut out = Vec::with_capacity(MAGIC.len() + body + trailer.len());
+        out.extend_from_slice(&MAGIC);
+        for (_, bytes) in blocks {
+            out.extend_from_slice(&bytes);
+        }
+        out.extend_from_slice(&trailer);
+        Package::parse(&out)?;
+        Ok(out)
+    }
+    #[allow(clippy::type_complexity)]
+    fn noteful_parts(&self) -> Result<(Vec<(String, Cow<'_, [u8]>)>, Vec<u8>)> {
         let package = Package::parse(&self.source)?;
-        let mut blocks: Vec<(String, Vec<u8>)> = package
+        let mut blocks: Vec<(String, Cow<'_, [u8]>)> = package
             .blocks
             .iter()
-            .map(|b| (b.id.clone(), package.resource(&b.id).unwrap().to_vec()))
+            .map(|b| {
+                (
+                    b.id.clone(),
+                    Cow::Borrowed(package.resource(&b.id).unwrap()),
+                )
+            })
             .collect();
         let mut index = package.index.clone();
         let max_clock = package
@@ -542,7 +634,7 @@ impl Editor {
                 // Text boxes are self-contained objects; pictures add a resource.
                 if image.text.is_none() {
                     array(&mut index, 3)?.push(V::Text(resource.clone()));
-                    blocks.push((resource, image.bytes()?));
+                    blocks.push((resource, Cow::Owned(image.bytes()?)));
                 }
             }
             for (_, line) in added {
@@ -627,7 +719,7 @@ impl Editor {
             }
             let encoded = crate::encode_fields(&fields)?;
             if let Some(b) = existing {
-                blocks.iter_mut().find(|(id, _)| id == &b.id).unwrap().1 = encoded;
+                blocks.iter_mut().find(|(id, _)| id == &b.id).unwrap().1 = Cow::Owned(encoded);
             } else {
                 let mut suffix = 0;
                 let id = loop {
@@ -646,7 +738,7 @@ impl Editor {
                 }
                 array(&mut index, 4)?.push(V::Text(id.clone()));
                 page_assets.insert(page.id.clone(), id.clone());
-                blocks.push((id, encoded));
+                blocks.push((id, Cow::Owned(encoded)));
             }
         }
         let layers_changed = self.history[..self.cursor]
@@ -670,7 +762,7 @@ impl Editor {
                     .added_pdf(&pdf.id)
                     .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
                 array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
-                blocks.push((pdf.id.clone(), bytes.to_vec()));
+                blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
             }
         }
         if !page_assets.is_empty() || layers_changed || pages_inserted || !resized.is_empty() {
@@ -761,31 +853,40 @@ impl Editor {
                     );
                 }
                 blocks.iter_mut().find(|(id, _)| id == &b.id).unwrap().1 =
-                    crate::encode_fields(&fields)?;
+                    Cow::Owned(crate::encode_fields(&fields)?);
             }
         }
-        let mut out = MAGIC.to_vec();
-        let mut keys = Vec::new();
-        let mut offsets = Vec::new();
-        let mut sizes = Vec::new();
-        for (id, bytes) in blocks {
-            keys.push(V::Text(id));
-            offsets.push(V::UInt(out.len() as u64));
-            sizes.push(V::UInt(bytes.len() as u64));
-            out.extend(bytes);
-        }
-        for (tag, values) in [(10, keys), (11, offsets), (12, sizes)] {
-            array(&mut index, tag)?.clone_from(&values);
-        }
-        let at = out.len();
-        let encoded = crate::encode_fields(&index)?;
-        let size =
-            u32::try_from(encoded.len()).map_err(|_| Error::new(0, "Index exceeds wire length"))?;
-        out.extend(encoded);
-        out.extend(MAGIC);
-        out.extend((at as u64).to_be_bytes());
-        out.extend(size.to_be_bytes());
-        Package::parse(&out)?;
-        Ok(out)
+        let trailer = canonical_trailer(
+            index,
+            blocks.iter().map(|(id, bytes)| (id.clone(), bytes.len())),
+        )?;
+        Ok((blocks, trailer))
     }
+}
+fn canonical_trailer(
+    mut index: Vec<Field>,
+    blocks: impl Iterator<Item = (String, usize)>,
+) -> Result<Vec<u8>> {
+    let mut at = MAGIC.len();
+    let mut keys = Vec::new();
+    let mut offsets = Vec::new();
+    let mut sizes = Vec::new();
+    for (id, len) in blocks {
+        keys.push(V::Text(id));
+        offsets.push(V::UInt(at as u64));
+        sizes.push(V::UInt(len as u64));
+        at += len;
+    }
+    for (tag, values) in [(10, keys), (11, offsets), (12, sizes)] {
+        array(&mut index, tag)?.clone_from(&values);
+    }
+    let encoded = crate::encode_fields(&index)?;
+    let size =
+        u32::try_from(encoded.len()).map_err(|_| Error::new(0, "Index exceeds wire length"))?;
+    let mut trailer = Vec::with_capacity(encoded.len() + MAGIC.len() + 12);
+    trailer.extend_from_slice(&encoded);
+    trailer.extend_from_slice(&MAGIC);
+    trailer.extend_from_slice(&(at as u64).to_be_bytes());
+    trailer.extend_from_slice(&size.to_be_bytes());
+    Ok(trailer)
 }

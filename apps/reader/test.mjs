@@ -167,6 +167,8 @@ assert.ok((await send({id:1,op:'open',bytes:source})).result);
  assert.deepEqual(applyDrawPatch(opened,first.drawn),shown);
  // Read-only operations in between leave the view good for the next line.
  await send({id:21,op:'save'});await send({id:22,op:'pick',x:1,y:1,tolerance:1});await send({id:23,op:'historyMark'});await send({id:24,op:'digest'});
+ const cd=(await send({id:240,op:'contentDigest'})).result,ex=(await send({id:241,op:'export'})).result;
+ const re=new EditorSession(ex);assert.equal(re.content_digest(),cd);re.free();
  const second=(await send({id:25,op:'draw',line})).result.drawn;
  assert.deepEqual(applyDrawPatch(shown,second),(await send({id:26,op:'view'})).result);
  // Any edit in between, also one that is refused, and the view from before is not used.

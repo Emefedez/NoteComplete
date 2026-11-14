@@ -26,7 +26,7 @@ This document details the memory footprint, scaling characteristics, and identif
 | 5 | "Unbounded undo history" | **Not a bug, no change** (see below) |
 | 6 | Buffer duplication on open | Open (needs a streaming or transferable open path) |
 | 7 | Whole page re-rendered after every edit | **Fixed**: added-line SVG cached and history walked once (`view.rs`), and `draw` answers with the new item alone (`Editor::drawn`, `draw-patch.js`, `addDrawn` in `app.js`); see [docs/CLEANUP-PLAN.md](docs/CLEANUP-PLAN.md#p1-every-edit-re-renders-the-whole-page) |
-| 8 | Auto-save serialises the note twice a minute | Open: see [docs/CLEANUP-PLAN.md](docs/CLEANUP-PLAN.md#p3-auto-save-serialises-the-note-twice) |
+| 8 | Auto-save serialises the note twice a minute | **Fixed**: `Editor::content_digest` hashes the export in the core without allocating or transferring the `.noteful` buffer, and `contentDigestCache` skips recomputing when the history mark has not moved; see [docs/CLEANUP-PLAN.md](docs/CLEANUP-PLAN.md#p3-auto-save-serialises-the-note-twice) |
 
 Peak memory while a *new* large note opens (old and new session coexist until the new one validates) is unchanged.
 

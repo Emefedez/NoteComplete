@@ -343,6 +343,9 @@ impl EditorSession {
     pub fn export_noteful(&self) -> Result<Vec<u8>, Failure> {
         Ok(self.inner.export_noteful()?)
     }
+    pub fn content_digest(&self) -> Result<String, Failure> {
+        Ok(self.inner.content_digest()?)
+    }
     pub fn save_project(&self) -> Result<String, Failure> {
         Ok(self.inner.save_project()?)
     }

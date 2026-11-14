@@ -117,7 +117,9 @@ Done with P1 step 3: `EditorSession::draw` returns the new item's `id`, which `w
 `draw` with `turn` in `worker.js` parses a whole view to read `edit_count`. Have `draw`
 return the new item's id.
 
-### P3 Auto-save serialises the note twice `[ ]`
+### P3 Auto-save serialises the note twice `[D]`
+
+Done in `Editor::content_digest` (`export.rs`), `EditorSession::content_digest` (`noteful-wasm`), `worker.js` and `contentDigestCache` (`autosave.js`, `app.js`). Unchanged resource blocks are borrowed with `Cow::Borrowed` instead of cloned, the digest is computed in the core without building or transferring a contiguous `.noteful` export buffer to JavaScript, and `contentDigestCache` reuses the last digest whenever `(epoch, edits, digest)` has not moved. Measured on `Memoria 1.noteful` (247 MB, 206 pages): content hashing dropped from 176 ms + 247 MB transferred (unmodified) / 204 ms + 2×247 MB allocated and transferred (after 1 stroke) to 7.4 ms / 19.1 ms with 0 MB transferred, and 0 ms when the history mark has not moved (`export_noteful` itself went from 166 ms to 63 ms).
 
 Each minute with changes: `save` (the whole source as base64) and then `export` only to
 hash it. Hash the content in the core without building the export in JavaScript, and skip

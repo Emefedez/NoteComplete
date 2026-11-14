@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { autosaveStore, memoryBackend, pruned, offerRecovery, when, projectSize, sizeLabel, SLOTS } from './autosave.js';
+import { autosaveStore, memoryBackend, pruned, offerRecovery, when, projectSize, sizeLabel, contentDigestCache, SLOTS } from './autosave.js';
 
 const bytes = (text) => new TextEncoder().encode(text);
 
@@ -61,4 +61,18 @@ test('sizes of strings, bytes, buffers and blobs; a row never reads NaN', () => 
   assert.equal(sizeLabel(1572864), ' · 1.5 MB');
   assert.equal(sizeLabel(0), ' · 0.0 MB');
   assert.equal(sizeLabel(undefined), '', 'a slot saved without a size shows none');
+});
+
+test('contentDigestCache skips recomputing when the history mark has not moved', async () => {
+  let calls = 0;
+  const digest = contentDigestCache(async () => `d${++calls}`);
+  assert.equal(await digest({ edits: 2, digest: 'm1' }, 1), 'd1');
+  assert.equal(await digest({ edits: 2, digest: 'm1' }, 1), 'd1', 'same mark and epoch reuse the digest');
+  assert.equal(calls, 1);
+  assert.equal(await digest({ edits: 3, digest: 'm2' }, 1), 'd2', 'new history mark recomputes');
+  assert.equal(await digest({ edits: 3, digest: 'm2' }, 2), 'd3', 'new note epoch recomputes');
+  assert.equal(calls, 3);
+
+  const failing = contentDigestCache(async () => { throw Error('canvas'); });
+  assert.equal(await failing({ edits: 0, digest: 'm0' }, 1), null);
 });
