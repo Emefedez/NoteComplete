@@ -68,6 +68,7 @@ import { mathField, styleField, mounted, focusField } from "./math-field.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
 import { tabStrip } from "./tab-strip.js";
+import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
 import { autosaveStore, offerRecovery, when, sizeLabel, EVERY_MS } from "./autosave.js";
@@ -130,7 +131,12 @@ if (!window.notecompleteTabs && tabParams.has("tab") && window.parent !== window
   try { window.notecompleteTabs = window.parent.notecompleteTabHost?.bridge(tabParams.get("tab")) || undefined; } catch { /* Another origin. */ }
 }
 // Desktop tabs: the strip in the top bar; title and unsaved state go to the window.
-const tabBar = tabStrip(window.notecompleteTabs || null, { dirty: () => !!doc && dirty, beforeClose: () => collab?.beforeClose?.() ?? true });
+const navHistory = new NavHistory();
+const tabBar = tabStrip(window.notecompleteTabs || null, {
+  dirty: () => Boolean((doc || textView?.hasDocument || htmlView?.hasDocument) && dirty && changed),
+  beforeClose: () => collab?.beforeClose?.() ?? true,
+  onCurrent: () => { if (home?.visible && (doc || sideView())) showDocument(); },
+});
 if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
@@ -1695,6 +1701,8 @@ function setPage(index) {
 function jump(index, box) {
   if (!doc || !Number.isInteger(index) || index < 0 || index >= doc.pages)
     return;
+  if (!home?.visible && index !== page)
+    navHistory.record(currentStop(), { view: "doc", key: docMember?.key || noteEntryKey || find.fingerprint || "open", member: docMember, page: index });
   cancelGesture();
   setPage(index);
   const viewport = $("viewport"), rect = panels[index].el.getBoundingClientRect();
@@ -1704,6 +1712,7 @@ function jump(index, box) {
 }
 // Shift scrolls three times as far (fast scrolling with the keyboard).
 function scrollViewport(key, fast = false) {
+  if ($("editor").hidden) return false;
   const viewport = $("viewport"), times = fast ? 3 : 1,
     vertical = Math.max(48, Math.round(viewport.clientHeight * 0.8)) * times,
     horizontal = Math.max(48, Math.round(viewport.clientWidth * 0.8)) * times;
@@ -3758,6 +3767,7 @@ function toggleKeyHints() {
   status(on ? "Keys shown on buttons. Press ? again to hide them; Help lists them all." : "Key hints hidden.");
 }
 function shortcut(e) {
+  if (home?.visible) return false;
   const k = e.key;
   // Text documents have the study keys too (flashcards, quizzes, saved decks).
   const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), F: () => study.check(), D: () => study.saved(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
@@ -3896,6 +3906,11 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
     return;
+  const navDir = keyNavDirection(e);
+  if (navDir) {
+    if (navigateHistory(navDir, e.target)) e.preventDefault();
+    return;
+  }
   if (!e.metaKey && !e.ctrlKey && !e.altKey && shortcut(e)) {
     e.preventDefault();
     return;
@@ -4605,7 +4620,7 @@ const htmlView = htmlViewer({
 });
 // Web links (web-view.js): a page in a sandboxed <webview> on the desktop, the browser elsewhere.
 const webView = webViewer({
-  root: $("webView"), host: $("webHost"), title: $("webTitle"), address: $("webAddress"), back: $("webBack"), reload: $("webReload"),
+  root: $("webView"), host: $("webHost"), title: $("webTitle"), address: $("webAddress"), back: $("webBack"), forward: $("webForward"), reload: $("webReload"),
   external: $("webExternal"), fallback: $("webFallback"), status,
   onTitle: (name, url) => {
     $("title").textContent = name;
@@ -4731,6 +4746,7 @@ async function openWeb(member) {
   showDocument();
   documentControls();
   const entry = await library.rememberWeb(member.url, member.name);
+  noteEntryKey = entry.key;
   const host = linkTitle(member.url).split("/")[0], esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   if (!(await library.cover(entry.key))) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320"><rect width="240" height="320" fill="#ffffff"/><g font-family="system-ui, sans-serif"><text x="22" y="150" font-size="13" font-weight="700" fill="#1d2433">${esc(member.name.slice(0, 30))}</text><text x="22" y="172" font-size="11" fill="#5b6478">${esc(host)}</text></g></svg>`;
@@ -4789,7 +4805,9 @@ var home = homeScreen({
   exportNote: exportNoteOf,
   current: () => ({
     entryKey: noteEntryKey,
-    dirty,
+    webUrl: webView.hasDocument ? webView.url : "",
+    dirty: Boolean((doc || textView.hasDocument || htmlView.hasDocument) && dirty && changed),
+    show: () => (doc || sideView()) && showDocument(),
     exportBlob: async () => new Blob([await call("export")], { type: "application/octet-stream" }),
   }),
 });
@@ -4810,8 +4828,8 @@ async function openLocal() {
 }
 async function openedLocal(path, name, file) {
   notePath = path;
-  noteEntryKey = "";
   const entry = await library.rememberLocal(path, name, file.size);
+  noteEntryKey = entry.key;
   rememberDocument(entry.key);
   home.rememberCover(entry.key, file);
   home.rememberFacts(entry.key, file);
@@ -4888,6 +4906,8 @@ function setDocMember(member) {
   return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch(() => {});
 }
 async function openMember(member) {
+  if ((doc || sideView()) && docMember && docMember.key !== member.key)
+    navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
   if (member.source === "web") return openWeb(member);
   if (busy() || !canReplace()) return;
   if (member.source === "local") {
@@ -4940,7 +4960,14 @@ function notesPanelTo(side) {
   if (panel.parentElement === host) return;
   if (view) host.append(panel); else $("layersPanel").before(panel);
 }
+function currentStop() {
+  if (home?.visible) return { view: "home", folderId: home.folder?.id || null };
+  if (doc || sideView()) return { view: "doc", key: docMember?.key || noteEntryKey || find.fingerprint || sideFp || "open", member: docMember, page: doc ? page : 0, scrollTop: doc ? $("viewport").scrollTop : 0 };
+  return { view: "home", folderId: home?.folder?.id || null };
+}
 function showDocument() {
+  if (home?.visible && (doc || sideView()))
+    navHistory.record(currentStop(), { view: "doc", key: docMember?.key || noteEntryKey || find.fingerprint || sideFp || "open", member: docMember, page: doc ? page : 0 });
   home.hide();
   const side = sideView();
   studyPanelsTo(side === textView);
@@ -4957,12 +4984,77 @@ function showDocument() {
   }
 }
 function showHome() {
+  if (!home?.visible && (doc || sideView()))
+    navHistory.record(currentStop(), { view: "home", folderId: home?.folder?.id || null });
   if (!$("editor").hidden && doc) $("editor").hidden = true;
   sideView()?.hide();
   home.show(Boolean(doc || sideView()));
 }
-$("homeButton").onclick = showHome;
+$("homeButton").onclick = () => (home.visible && (doc || sideView()) ? showDocument() : showHome());
 $("homeBack").onclick = () => (doc || sideView()) && showDocument();
+let lastNavAt = 0;
+function navigateHistory(direction, target = null) {
+  const now = Date.now();
+  if (now - lastNavAt < 60) return true;
+  lastNavAt = now;
+  if (direction < 0) {
+    if ($("migrateDialog")?.open && !$("migrateBack")?.hidden) return $("migrateBack").click(), true;
+    if ($("practiceDialog")?.open && !$("practiceBackToList")?.hidden) return $("practiceBackToList").click(), true;
+  }
+  if (document.querySelector("dialog[open]:not(.floating)")) return false;
+  if (webView.visible) {
+    if (direction < 0 && webView.back()) return true;
+    if (direction > 0 && webView.forward()) return true;
+  }
+  if (home.visible) {
+    if (target?.closest?.("#driveSection")) {
+      if (direction < 0 && drive.back()) return true;
+      if (direction > 0 && drive.forward()) return true;
+    } else if (target?.closest?.("#archiveSection")) {
+      if (direction < 0 && archive.back()) return true;
+      if (direction > 0 && archive.forward()) return true;
+    }
+    if (direction < 0 && home.back()) return true;
+    if (direction > 0 && home.forward()) return true;
+    if (!$("cloudContent")?.hidden && !$("driveSection")?.hidden && (direction < 0 ? drive.back() : drive.forward())) return true;
+    if (!$("cloudContent")?.hidden && !$("archiveSection")?.hidden && (direction < 0 ? archive.back() : archive.forward())) return true;
+  }
+  const stop = direction < 0 ? navHistory.back(currentStop()) : navHistory.forward(currentStop());
+  if (stop) {
+    navHistory.navigating = true;
+    try {
+      if (stop.view === "home") {
+        showHome();
+      } else if (stop.view === "doc") {
+        const activeKey = docMember?.key || noteEntryKey || find.fingerprint || sideFp || "open";
+        if (stop.member && stop.key && stop.key !== activeKey && (!doc && !sideView() || stop.member.key !== docMember?.key)) {
+          openMember(stop.member).then(() => {
+            if (doc && Number.isInteger(stop.page)) jump(stop.page);
+          }).catch((e) => status(e.message, true));
+        } else if (doc || sideView()) {
+          showDocument();
+          if (doc && Number.isInteger(stop.page) && stop.page !== page) jump(stop.page);
+          if (doc && Number.isFinite(stop.scrollTop)) $("viewport").scrollTop = stop.scrollTop;
+        }
+      }
+    } finally {
+      navHistory.navigating = false;
+    }
+    return true;
+  }
+  if (direction < 0 && !home.visible && (doc || sideView())) return showHome(), true;
+  if (direction > 0 && home.visible && (doc || sideView())) return showDocument(), true;
+  return false;
+}
+for (const type of ["mousedown", "mouseup", "auxclick"]) {
+  window.addEventListener(type, (e) => {
+    const dir = mouseNavDirection(e);
+    if (!dir) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (type === "mouseup") navigateHistory(dir, e.target);
+  }, true);
+}
 $("driveOpen").onclick = () => {
   showHome();
   $("driveSection").scrollIntoView({ behavior: "smooth", block: "start" });

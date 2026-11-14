@@ -22,7 +22,7 @@ export function recordingTitle(created, locale = 'en') {
   return `Recording · ${when.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}`;
 }
 
-export const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+export const clock = s => { const t = Math.max(0, Math.floor(s)); return `${Math.floor(t / 3600)}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
 
 // Recordings that came with an opened .notecomp, added to the kept ones once (by id).
 export function mergeAdded(kept, incoming) {

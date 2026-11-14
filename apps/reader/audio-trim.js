@@ -19,7 +19,7 @@ export function parseClock(text) {
 export function formatClock(t) {
   const tenths = Math.round(Math.max(0, t) * 10), s = tenths / 10, h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
   const sec = (s % 60).toFixed(1).padStart(4, '0');
-  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+  return `${h}:${String(m).padStart(2, '0')}:${sec}`;
 }
 // A valid segment inside the recording: ordered, at least MIN long.
 export function clampRange(start, end, duration) {
@@ -100,7 +100,7 @@ export function audioTrim({ audio, status = () => {}, toNotes, toTextBox }) {
   const field = (label) => {
     const input = Object.assign(document.createElement('input'), { type: 'text', inputMode: 'decimal', spellcheck: false, className: 'trim-time' });
     input.setAttribute('aria-label', label);
-    input.title = `${label} (m:ss)`;
+    input.title = `${label} (h:mm:ss)`;
     return input;
   };
   const startField = field('Segment start'), endField = field('Segment end');
@@ -156,7 +156,7 @@ export function audioTrim({ audio, status = () => {}, toNotes, toTextBox }) {
   for (const [input, i] of [[startField, 0], [endField, 1]]) {
     input.onchange = () => {
       const t = parseClock(input.value);
-      if (!Number.isFinite(t)) { say('Type a time as m:ss, for example 1:30.'); return set(...range); }
+      if (!Number.isFinite(t)) { say('Type a time as h:mm:ss or m:ss, for example 0:01:30.'); return set(...range); }
       set(i ? range[0] : t, i ? t : range[1]);
     };
     input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') input.onchange(); };
@@ -191,7 +191,7 @@ export function audioTrim({ audio, status = () => {}, toNotes, toTextBox }) {
     // From the playing position, 30 s long, inside the recording.
     const at = audio.time;
     set(Math.min(at, Math.max(0, duration() - 30)), at + 30);
-    say(transcript()?.results?.has(transcript()?.asset?.id) ? 'The transcript covers this recording: the text comes at once.' : 'Only this part will be transcribed, with the engine and language above.');
+    say(transcript()?.full?.has(transcript()?.asset?.id) ? 'The transcript covers this recording: the text comes at once.' : 'Only this part will be transcribed, with the engine and language above.');
   }
   function close() {
     cancel();

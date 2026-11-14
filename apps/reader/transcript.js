@@ -47,6 +47,11 @@ export function segmentWords(segments) {
     return parts.map((t, i) => ({ text: t, start: start + (span * i) / parts.length, end: start + (span * (i + 1)) / parts.length }));
   });
 }
+// Words transcribed from a cut segment [start, end] replace any earlier words in that span and stay ordered.
+export function mergeRangeWords(existing = [], words = [], start, end) {
+  const kept = existing.filter(w => (w.end ?? w.start) <= start || w.start >= end);
+  return [...kept, ...words].sort((a, b) => a.start - b.start || (a.end ?? a.start) - (b.end ?? b.start));
+}
 const MIME = { txt: 'text/plain', srt: 'application/x-subrip', vtt: 'text/vtt', json: 'application/json' };
 // Whisper in its own worker over 16 kHz samples: timed words. `job.worker` holds the worker so
 // a cancel can stop it; `progress(share, label, text)` reports loading and transcribing.
@@ -70,6 +75,7 @@ export class TranscriptController {
     this.audio = audio;
     this.words = [];
     this.results = new Map();
+    this.full = new Set();
     this.keys = new Map();
     this.job = null;
     $('hideTranscript').onclick = () => { $('transcriptPanel').open = false; };
@@ -138,14 +144,34 @@ export class TranscriptController {
     this.controls();
     this.status('Transcription cancelled.');
   }
-  reset() { this.cancel(); this.select(null); this.results.clear(); }
+  reset() { this.cancel(); this.select(null); this.results.clear(); this.full.clear(); }
+  // Show a segment's words inside the Transcript dropdown as well as the cut-audio box.
+  showRangeWords(asset, allWords, rangeWords, from) {
+    if (this.asset?.id !== asset.id) return;
+    $('transcriptPanel').open = true;
+    this.render(allWords);
+    if (rangeWords.length) {
+      const first = allWords.indexOf(rangeWords[0]);
+      if (first >= 0) {
+        this.offset = Math.floor(first / 100) * 100;
+        this.renderWindow();
+      }
+    }
+    this.update();
+    this.status(rangeWords.length ? (from === 'transcript' ? 'Showing segment in transcript. Click a word to seek.' : 'Segment transcript ready. Click a word to seek.') : 'No speech detected in this segment.');
+  }
   // Only [start, end] of a recording (audio-trim.js): the words of the whole transcript when
   // there is one, or that part of the audio alone transcribed with the panel's engine and
-  // settings. Neither the whole transcript nor its cache changes. `job` (cancelled, worker,
-  // external) lets the caller stop it; `progress(share, label)` reports.
+  // settings. Segment words are also placed into the Transcript dropdown. `job` (cancelled,
+  // worker, external) lets the caller stop it; `progress(share, label)` reports.
   async transcribeRange(asset, start, end, progress = () => {}, job = {}) {
-    const whole = this.results.get(asset.id) || await this.cached(asset).catch(() => null);
-    if (whole?.length) return { words: wordsInRange(whole, start, end), from: 'transcript' };
+    const whole = (this.full.has(asset.id) ? this.results.get(asset.id) : null) || await this.cached(asset).catch(() => null);
+    if (whole?.length) {
+      const words = wordsInRange(whole, start, end);
+      this.onwords?.(asset, whole);
+      this.showRangeWords(asset, whole, words, 'transcript');
+      return { words, from: 'transcript' };
+    }
     const bytes = await this.audio.read(asset.id);
     const { buffer, language, model, settings } = await this.key(asset, bytes);
     progress(0.02, 'Preparing audio');
@@ -153,13 +179,20 @@ export class TranscriptController {
     const part = sliceSamples(samples, RATE, start, end);
     if (job.cancelled) throw Error('Cancelled');
     const backend = this.backend();
+    let shifted;
     if (backend === 'whisper') {
       const words = await whisperWords(part, part.length / RATE, { language, model }, job, progress);
-      return { words: shiftWords(words, start), from: 'audio' };
+      shifted = shiftWords(words, start);
+    } else {
+      job.external = true;
+      const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: wavBytes(part, RATE), language }, ({ done, total }) => progress(done / total, 'Transcribing'));
+      shifted = shiftWords(segmentWords(segments), start);
     }
-    job.external = true;
-    const segments = await globalThis.notecompleteTranscribe.run({ backend, bytes: wavBytes(part, RATE), language }, ({ done, total }) => progress(done / total, 'Transcribing'));
-    return { words: shiftWords(segmentWords(segments), start), from: 'audio' };
+    const merged = mergeRangeWords(this.results.get(asset.id), shifted, start, end);
+    this.results.set(asset.id, merged);
+    this.onwords?.(asset, merged);
+    this.showRangeWords(asset, merged, shifted, 'audio');
+    return { words: shifted, from: 'audio' };
   }
   // Switching recordings keeps a running transcription going in the background.
   select(asset) {
@@ -175,7 +208,7 @@ export class TranscriptController {
   // transcribing again (also making Export available). Only while the panel shows.
   lookup() {
     const asset = this.asset;
-    if (!asset || this.results.has(asset.id) || this.job?.asset.id === asset.id || $('audioBar')?.hidden) return;
+    if (!asset || this.full.has(asset.id) || this.job?.asset.id === asset.id || $('audioBar')?.hidden) return;
     this.cached(asset).then(words => {
       if (!words?.length || this.asset?.id !== asset.id || this.job?.asset.id === asset.id) return;
       this.onwords?.(asset, words);
@@ -299,11 +332,11 @@ export class TranscriptController {
   }
   // A transcript made earlier with the current settings, without transcribing.
   async cached(asset) {
-    if (this.results.has(asset.id)) return this.results.get(asset.id);
+    if (this.full.has(asset.id) && this.results.has(asset.id)) return this.results.get(asset.id);
     const { key } = await this.key(asset, await this.audio.read(asset.id));
     this.keys.set(asset.id, key);
     const words = key ? await storedTranscript(key) : null;
-    if (words) this.results.set(asset.id, words);
+    if (words) { this.results.set(asset.id, words); this.full.add(asset.id); }
     return words;
   }
   // One transcription at a time, kept as a background job with a chip in the bar.
@@ -320,7 +353,7 @@ export class TranscriptController {
     const alive = () => this.job === job;
     const shows = () => this.asset?.id === asset.id;
     // Partial text, shown greyed while the rest is being transcribed.
-    const partial = words => { job.partial = words; if (shows() && !this.results.has(asset.id)) this.render(words, true); };
+    const partial = words => { job.partial = words; if (shows() && !this.full.has(asset.id)) this.render(words, true); };
     try {
       const bytes = await this.audio.read(asset.id);
       if (!alive()) return;
@@ -400,6 +433,7 @@ export class TranscriptController {
   finish(words, asset, job = this.job) {
     if (job && this.job === job) this.job = null;
     this.results.set(asset.id, words);
+    this.full.add(asset.id);
     this.onwords?.(asset, words);
     job?.chip?.finish(words.length ? `Transcript ready: ${words.length} words.` : 'No speech detected.');
     if (this.asset?.id === asset.id) {

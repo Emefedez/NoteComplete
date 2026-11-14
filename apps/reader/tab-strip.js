@@ -8,12 +8,16 @@ import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
 
-export function tabStrip(bridge, { dirty, beforeClose = () => true }) {
+export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = null } = {}) {
   if (!bridge) return { update() {} };
   const strip = $('tabStrip');
-  let tabs = [];
+  let tabs = [], wasActive = null;
   function render(list) {
     tabs = list;
+    const self = tabs.find(t => t.current);
+    const nowActive = self ? Boolean(self.active ?? self.current) : false;
+    const switchedIn = wasActive === false && nowActive === true;
+    wasActive = self ? nowActive : null;
     document.body.classList.toggle('has-tabs', tabs.length > 0);
     strip.hidden = false;
     const items = tabs.length > 0 ? tabs.map(tab => {
@@ -33,7 +37,7 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true }) {
       close.setAttribute('aria-label', `Close ${tab.title}`);
       close.onclick = event => { event.stopPropagation(); bridge.close(tab.id); };
       el.append(label, close);
-      el.onclick = () => tab.current || bridge.activate(tab.id);
+      el.onclick = () => (tab.current ? onCurrent?.() : bridge.activate(tab.id));
       el.onauxclick = event => event.button === 1 && bridge.close(tab.id);
       return el;
     }) : [];
@@ -50,6 +54,7 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true }) {
     count.textContent = String(tabs.length);
     count.title = `${tabs.length} open ${tabs.length === 1 ? 'tab' : 'tabs'}`;
     if (!menu.hidden) fillMenu();
+    if (switchedIn) onCurrent?.();
   }
   // Narrow windows: the count opens the list (switch, close, new tab).
   const count = $('tabCount'), menu = $('tabMenu');
@@ -63,7 +68,7 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true }) {
       go.setAttribute('role', 'menuitemradio');
       go.setAttribute('aria-checked', String(tab.current));
       go.textContent = (tab.dirty ? '• ' : '') + tab.title;
-      go.onclick = () => { closeMenu(); if (!tab.current) bridge.activate(tab.id); };
+      go.onclick = () => { closeMenu(); if (tab.current) onCurrent?.(); else bridge.activate(tab.id); };
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'tab-close';

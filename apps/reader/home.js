@@ -31,7 +31,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // Identical copies kept before checksums existed are merged once per session.
   let merging = null;
   // Folders (groups.js): the folder open on Home shows its documents in place of Recent.
-  let shownFolder = null;
+  let shownFolder = null, lastFolder = null;
   async function folderEntries(group) {
     const members = await groups.members(group);
     return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { key: m.key, source: m.source, path: m.path, url: m.url, name: m.name, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred })));
@@ -65,10 +65,23 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   }
   function showFolder(group) {
     shownFolder = group;
+    lastFolder = null;
     groups.touch(group).catch(() => {});
     renderRecent();
   }
-  $('folderBack').onclick = () => { shownFolder = null; renderRecent(); };
+  function leaveFolder() {
+    if (!shownFolder) return false;
+    lastFolder = shownFolder;
+    shownFolder = null;
+    renderRecent();
+    return true;
+  }
+  function reopenFolder() {
+    if (shownFolder || !lastFolder) return false;
+    showFolder(lastFolder);
+    return true;
+  }
+  $('folderBack').onclick = leaveFolder;
   function inlineName(row, input, value, done) {
     row.hidden = false;
     input.value = value;
@@ -206,7 +219,16 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       }
       button.onclick = async () => {
         try {
-          if (entry.source === 'web') { await library.touch(entry.key); return openLink?.(entry); }
+          const now = current();
+          if (entry.source === 'web') {
+            await library.touch(entry.key);
+            if (((now.entryKey && now.entryKey === entry.key) || (now.webUrl && now.webUrl === entry.url)) && now.show) return now.show();
+            return openLink?.(entry);
+          }
+          if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive') {
+            await library.touch(entry.key);
+            return now.show();
+          }
           const file = await library.open(entry);
           // A file listed in a folder but never opened joins Recent now.
           if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
@@ -217,6 +239,10 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
           }
           // A Drive note may have a newer version there: the user picks first.
           if (await versions?.openRecent(entry, file)) return renderRecent();
+          if (now.entryKey && now.entryKey === entry.key && now.show) {
+            await library.touch(entry.key);
+            return now.show();
+          }
           await library.touch(entry.key);
           await open(file, entry);
         } catch (error) { status(error.message, true); }
@@ -595,14 +621,28 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   let shown = false;
   return {
     showFolder,
+    back: leaveFolder,
+    forward: reopenFolder,
+    get folder() { return shownFolder; },
     show(hasDocument) {
       $('empty').hidden = false;
       $('homeBack').hidden = !hasDocument;
+      document.body?.classList?.toggle('home-open', true);
+      document.body?.classList?.toggle('home-over-tab', Boolean(hasDocument));
+      if ($('homeButton')) {
+        $('homeButton').setAttribute('aria-pressed', 'true');
+        $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and Google Drive';
+      }
       if (!shown) { shown = true; drive.show(); archive?.show(); }
       renderRecent(); renderFolder();
     },
     hide() {
       $('empty').hidden = true;
+      document.body?.classList?.remove('home-open', 'home-over-tab');
+      if ($('homeButton')) {
+        $('homeButton').setAttribute('aria-pressed', 'false');
+        $('homeButton').title = 'Home: recent notes and Google Drive';
+      }
       if (shown) { shown = false; drive.hide(); archive?.hide(); }
     },
     get visible() { return !$('empty').hidden; },

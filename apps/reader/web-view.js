@@ -16,9 +16,13 @@ export function normalizeLink(text) {
 
 export const linkTitle = (url) => { try { const u = new URL(url); return `${u.hostname.replace(/^www\./, '')}${u.pathname === '/' ? '' : u.pathname}`.replace(/\/$/, ''); } catch { return url; } };
 
-export function webViewer({ root, host, title, address, back, reload, external, fallback, onTitle = () => {}, status = () => {} }) {
+export function webViewer({ root, host, title, address, back, forward = null, reload, external, fallback, onTitle = () => {}, status = () => {} }) {
   let view = null, url = '', name = '', zoom = 1, dark = false, darkScript = null;
   const desktop = Boolean(globalThis.notecompleteFiles);
+  const syncButtons = () => {
+    if (back) back.disabled = !view?.canGoBack?.();
+    if (forward) forward.disabled = !view?.canGoForward?.();
+  };
   async function applyDark() {
     if (!view || !darkScript) return;
     const script = await darkScript().catch(() => null);
@@ -33,12 +37,15 @@ export function webViewer({ root, host, title, address, back, reload, external, 
     view.setAttribute('partition', WEB_SESSION);
     view.setAttribute('allowpopups', '');
     view.addEventListener('page-title-updated', (event) => { name = event.title || name; title.textContent = name; onTitle(name, url); });
-    view.addEventListener('did-navigate', (event) => { url = event.url; address.textContent = linkTitle(url); address.title = url; back.disabled = !view.canGoBack(); });
-    view.addEventListener('did-navigate-in-page', (event) => { if (event.isMainFrame) { url = event.url; address.textContent = linkTitle(url); } });
-    view.addEventListener('dom-ready', () => { view.setZoomFactor(zoom); if (dark) applyDark(); back.disabled = !view.canGoBack(); });
+    view.addEventListener('did-navigate', (event) => { url = event.url; address.textContent = linkTitle(url); address.title = url; syncButtons(); });
+    view.addEventListener('did-navigate-in-page', (event) => { if (event.isMainFrame) { url = event.url; address.textContent = linkTitle(url); syncButtons(); } });
+    view.addEventListener('dom-ready', () => { view.setZoomFactor(zoom); if (dark) applyDark(); syncButtons(); });
     view.addEventListener('did-fail-load', (event) => { if (event.isMainFrame && event.errorCode !== -3) status(`${linkTitle(event.validatedURL)} could not be loaded: ${event.errorDescription}`, true); });
   }
-  back.onclick = () => view?.canGoBack() && view.goBack();
+  const goBack = () => { if (!view?.canGoBack?.()) return false; view.goBack(); return true; };
+  const goForward = () => { if (!view?.canGoForward?.()) return false; view.goForward(); return true; };
+  back.onclick = goBack;
+  if (forward) forward.onclick = goForward;
   reload.onclick = () => view?.reload();
   external.onclick = () => url && window.open(url, '_blank', 'noopener');
   return {
@@ -49,6 +56,7 @@ export function webViewer({ root, host, title, address, back, reload, external, 
       address.title = link;
       root.hidden = false;
       back.disabled = true;
+      if (forward) forward.disabled = true;
       if (!desktop) {
         host.replaceChildren();
         fallback.hidden = false;
@@ -65,6 +73,10 @@ export function webViewer({ root, host, title, address, back, reload, external, 
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
     close() { root.hidden = true; host.replaceChildren(); view = null; url = ''; name = ''; },
+    back: goBack,
+    forward: goForward,
+    canGoBack: () => Boolean(view?.canGoBack?.()),
+    canGoForward: () => Boolean(view?.canGoForward?.()),
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(url); },
     get name() { return name; },

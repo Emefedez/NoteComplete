@@ -22,7 +22,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
   const save = () => { try { localStorage.setItem(key, JSON.stringify(added)); } catch { /* Optional. */ } };
   const sources = () => [...PRELOADED_ARCHIVE, ...added.filter(s => !PRELOADED_ARCHIVE.some(p => p.id === s.id))];
 
-  let currentRepo = null, itemData = null, trail = [], controller = null, busy = false, visible = false;
+  let currentRepo = null, itemData = null, trail = [], forwardHistory = [], controller = null, busy = false, visible = false;
   let filterText = '';
   let selectingQueue = false;
   const selectedDocs = new Set();
@@ -131,6 +131,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       meta.append(name, detail);
       b.append(meta);
       b.onclick = () => {
+        forwardHistory = [];
         trail = [...trail, folderName];
         selectingQueue = false;
         selectedDocs.clear();
@@ -220,10 +221,11 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
     );
   }
 
-  async function openRepo(id) {
+  async function openRepo(id, initialTrail = [], keepForward = false) {
     cancel();
+    if (!keepForward) forwardHistory = [];
     currentRepo = id;
-    trail = [];
+    trail = [...initialTrail];
     itemData = null;
     filterText = '';
     if ($('archiveSearch')) $('archiveSearch').value = '';
@@ -364,7 +366,9 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
     };
   }
 
-  $('archiveBack').onclick = () => {
+  function leaveRepo() {
+    if (!currentRepo) return false;
+    forwardHistory.push({ repo: currentRepo, itemData, trail: [...trail] });
     cancel();
     trail = [];
     currentRepo = null;
@@ -372,16 +376,48 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
     selectingQueue = false;
     selectedDocs.clear();
     renderRepositories();
-  };
+    return true;
+  }
 
-  $('archiveFolderUp').onclick = () => {
-    if (trail.length > 0) {
-      trail.pop();
-      selectingQueue = false;
-      selectedDocs.clear();
+  function upFolder() {
+    if (trail.length === 0) return false;
+    forwardHistory.push({ repo: currentRepo, itemData, trail: [...trail] });
+    trail.pop();
+    selectingQueue = false;
+    selectedDocs.clear();
+    renderListing();
+    return true;
+  }
+
+  function back() {
+    if (trail.length > 0) return upFolder();
+    if (currentRepo) return leaveRepo();
+    return false;
+  }
+
+  function forward() {
+    const next = forwardHistory.pop();
+    if (!next) return false;
+    selectingQueue = false;
+    selectedDocs.clear();
+    if (currentRepo === next.repo && itemData) {
+      trail = [...next.trail];
       renderListing();
+      return true;
     }
-  };
+    if (next.itemData) {
+      currentRepo = next.repo;
+      itemData = next.itemData;
+      trail = [...next.trail];
+      renderListing();
+      return true;
+    }
+    openRepo(next.repo, next.trail, true);
+    return true;
+  }
+
+  $('archiveBack').onclick = leaveRepo;
+  $('archiveFolderUp').onclick = upFolder;
 
   if ($('archiveSearch')) {
     $('archiveSearch').oninput = () => {
@@ -452,6 +488,10 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       }
     },
     get visible() { return visible; },
+    canGoBack: () => Boolean(currentRepo),
+    canGoForward: () => forwardHistory.length > 0,
+    back,
+    forward,
     openRepo,
   };
 }

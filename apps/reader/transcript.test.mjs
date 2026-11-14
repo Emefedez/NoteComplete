@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 globalThis.window = { addEventListener() {} };
 globalThis.document = { addEventListener() {} };
-const { TranscriptController } = await import('./transcript.js');
+const { TranscriptController, mergeRangeWords } = await import('./transcript.js');
 
 function element() {
   const classes = new Set();
@@ -90,4 +90,39 @@ test('transcription progress fills the bar and the job chip, and hides for other
   assert.equal(nodes.get('transcriptProgress').hidden, true);
   controller.cancel();
   assert.equal(nodes.get('transcriptProgress').hidden, true);
+});
+test('cut audio text is merged and shown in the transcript dropdown', async () => {
+  const nodes = new Map();
+  globalThis.document = {
+    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); },
+    createElement: element, createDocumentFragment: element, createTextNode: text => text,
+  };
+  assert.deepEqual(
+    mergeRangeWords([{ text: 'uno', start: 2, end: 3 }, { text: 'viejo', start: 12, end: 13 }, { text: 'fin', start: 25, end: 26 }], [{ text: 'nuevo', start: 11, end: 12 }], 10, 20),
+    [{ text: 'uno', start: 2, end: 3 }, { text: 'nuevo', start: 11, end: 12 }, { text: 'fin', start: 25, end: 26 }],
+  );
+  const audio = { time: 0, audio: { paused: true }, seek() {} };
+  const controller = new TranscriptController(audio);
+  const reported = [];
+  controller.onwords = (asset, words) => reported.push([asset.id, words.map(w => w.text)]);
+  controller.select({ id: 'a' });
+  nodes.get('transcriptPanel').open = false;
+  // Simulate segment words being shown in the transcript dropdown (from audio cut).
+  const seg = [{ text: 'corte', start: 10, end: 11 }, { text: 'aquí', start: 11, end: 12 }];
+  controller.results.set('a', seg);
+  controller.showRangeWords({ id: 'a' }, seg, seg, 'audio');
+  assert.equal(nodes.get('transcriptPanel').open, true);
+  assert.deepEqual(controller.words.map(w => w.text), ['corte', 'aquí']);
+  assert.equal(controller.buttons.length, 2);
+  assert.equal(controller.full.has('a'), false);
+  // When a full transcript is present, transcribeRange pulls the range and scrolls the dropdown to that window.
+  const many = Array.from({ length: 250 }, (_, i) => ({ text: `w${i}`, start: i, end: i + 0.8 }));
+  controller.finish(many, { id: 'a' });
+  assert.equal(controller.full.has('a'), true);
+  nodes.get('transcriptPanel').open = false;
+  const res = await controller.transcribeRange({ id: 'a' }, 150, 152);
+  assert.equal(res.from, 'transcript');
+  assert.deepEqual(res.words.map(w => w.text), ['w150', 'w151']);
+  assert.equal(nodes.get('transcriptPanel').open, true);
+  assert.equal(controller.offset, 100);
 });

@@ -13,9 +13,9 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   let everywhere = false, folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
   // Views to go back to: entering a folder, searching or filtering pushes the view it leaves.
   // `box` is the search text that produced the current view.
-  let history = [], box = '';
+  let history = [], forwardHistory = [], box = '';
   const view = () => ({ trail: [...trail], folder, search, filter, box });
-  const push = () => { history.push(view()); if (history.length > 50) history.shift(); };
+  const push = () => { history.push(view()); if (history.length > 50) history.shift(); forwardHistory = []; };
   const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1';
   const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
   const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
@@ -368,7 +368,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     }
   };
   $('driveDisconnect').onclick = () => {
-    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = ''; history = []; box = '';
+    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = ''; history = []; forwardHistory = []; box = '';
     config.connected = false; saveConfig();
     message('Disconnected on this device. No files were changed in Drive. Notes kept on this device stay available under Recent.'); controls();
   };
@@ -398,14 +398,29 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     if (!valid()) return;
     if (folder || client.connected) push(); folder = selected; trail = [selected]; filter = ''; box = ''; $('driveSearch').value = ''; resetList(); remember(); await fetchList(signal, valid);
   });
-  // Back returns to the previous view (before a search, filter or folder); without one it goes up a folder.
-  $('driveBack').onclick = () => {
+  const canGoBack = () => !loading && Boolean(history.length || (folder && !(client.publicAccess && trail.length <= 1)));
+  const canGoForward = () => !loading && forwardHistory.length > 0;
+  function back() {
+    if (!canGoBack()) return false;
+    forwardHistory.push(view());
     const previous = history.pop();
     if (previous) ({ trail, folder, search, filter, box } = { ...previous, trail: [...previous.trail] });
     else { trail.pop(); folder = trail.at(-1) || null; filter = ''; box = ''; }
     $('driveSearch').value = box;
     resetList(); remember(); run((signal, valid) => fetchList(signal, valid));
-  };
+    return true;
+  }
+  function forward() {
+    if (!canGoForward()) return false;
+    history.push(view());
+    const next = forwardHistory.pop();
+    ({ trail, folder, search, filter, box } = { ...next, trail: [...next.trail] });
+    $('driveSearch').value = box;
+    resetList(); remember(); run((signal, valid) => fetchList(signal, valid));
+    return true;
+  }
+  // Back returns to the previous view (before a search, filter or folder); without one it goes up a folder.
+  $('driveBack').onclick = back;
   $('driveRefresh').onclick = () => run((signal, valid) => fetchList(signal, valid));
   $('driveMore').onclick = () => run((signal, valid) => fetchList(signal, valid, true));
   controls();
@@ -485,5 +500,5 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     shared.onSession?.(adopt);
     shared.session().then(adopt, () => {});
   }
-  return { show, hide, update, trash, setQuick, newest, onQueueItemDone, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
+  return { show, hide, update, trash, setQuick, newest, onQueueItemDone, back, forward, canGoBack, canGoForward, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
 }

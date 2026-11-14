@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.68
+
+- **Fast drawing on pages with many strokes.** Added lines keep their formatted SVG in the engine, the edit history is read in a single pass, and drawing a stroke sends and inserts only the new element into the page on screen instead of rebuilding the whole page SVG after every stroke.
+- **Audio playback speed, smoother seeking and lighter ink sync.** A speed control in the audio bar (0.5× to 3×, `[` and `]` step it, remembered across launches, pitch preserved), dragging the position bar seeks at most once a frame, timed ink is dimmed only on pages in view (and not at all while sync is off), and the transcript panel names its backend.
+- **Smaller builds and fixes from the November audit.** Release builds use fat LTO and minified `pdf.js` (about 1.7 MB smaller in the app shell); automatic saves made from text show their size instead of `NaN MB`; recognized text on valid pages is kept if one page is refused; desktop Internet Archive downloads can be cancelled and enforce a 2 GiB limit; and the reader pages carry a Content-Security-Policy.
+
 ## 1.1.67
 
 - **Fixed: Restart now reopens the app after an update** on Linux. The app closed and stayed closed; it now comes back on the new version. (The restart is run by the version you update *from*, so this takes effect on the update after this one.)

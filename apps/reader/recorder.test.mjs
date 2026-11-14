@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordingMime, extensionOf, mergeAdded, packAdded, addedAudio, recordingTitle } from './recorder.js';
+import { recordingMime, extensionOf, mergeAdded, packAdded, addedAudio, recordingTitle, clock } from './recorder.js';
+
+test('formats recording clock as h:mm:ss', () => {
+  assert.equal(clock(0), '0:00:00');
+  assert.equal(clock(90), '0:01:30');
+  assert.equal(clock(3723.9), '1:02:03');
+});
 
 test('records in the first format the engine supports', () => {
   assert.equal(recordingMime(t => t === 'audio/mp4'), 'audio/mp4');

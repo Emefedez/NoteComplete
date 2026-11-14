@@ -4,7 +4,9 @@ const elements=new Map();
 function element(){return {value:'',checked:true,hidden:false,disabled:false,textContent:'',options:[],append(v){this.options.push(v);},replaceChildren(){this.options=[];},removeAttribute(){},setAttribute(){},dataset:{},classList:{names:new Set(),toggle(c,on){on?this.names.add(c):this.names.delete(c);},contains(c){return this.names.has(c);}},pause(){this.paused=true;},load(){this.currentTime=0;},currentTime:0,duration:13.467574,paused:true,readyState:4};}
 globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element};
 globalThis.cancelAnimationFrame=()=>{};globalThis.requestAnimationFrame=()=>1;
-const {AudioController}=await import('./audio.js');
+const {AudioController,clock}=await import('./audio.js');
+assert.equal(clock(0),'0:00:00');
+assert.equal(clock(85*60+9),'1:25:09');
 const jumps=[],reads=[],changes=[];
 const controller=new AudioController(async id=>{reads.push(id);return new Uint8Array([1,2,3]);},page=>jumps.push(page),()=>changes.push(true));
 controller.open([{id:'a',mime:'audio/mp4',kind:'m4a'},{id:'b',mime:'audio/mp4',kind:'m4a'}],[{id:'r1',asset_id:'a',name:'Lecture one',start_us:'811003055158749',pages:[8]},{id:'r2',asset_id:'b',name:'Questions',start_us:'811003075158749',pages:[12]}]);

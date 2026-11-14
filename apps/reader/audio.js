@@ -5,7 +5,7 @@ function recordingName(recording,index,added){
  if(recording?.start_us){const date=new Date((Number(BigInt(recording.start_us)/1000n)+978307200000));if(Number.isFinite(date.getTime()))return `Recording ${index+1} · ${date.toLocaleString('en',{dateStyle:'medium',timeStyle:'short'})}`;}
  return `Audio ${index+1}`;
 }
-const clock=t=>Number.isFinite(t)?`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`:'0:00';
+export const clock=t=>{if(!Number.isFinite(t))return '0:00:00';const s=Math.max(0,Math.floor(t));return `${Math.floor(s/3600)}:${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;};
 export class AudioController {
  constructor(read,jump,changed){
   // Recordings added in NoteComplete (recorder.js) are read from their kept blobs.

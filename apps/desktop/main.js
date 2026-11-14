@@ -224,6 +224,14 @@ function createWindow({ tab = true, files = [] } = {}) {
   const id = win.id;
   windows.set(id, win);
   win.on('resize', () => layout(win));
+  win.on('app-command', (event, cmd) => {
+    if (cmd !== 'browser-backward' && cmd !== 'browser-forward') return;
+    event.preventDefault();
+    const activeId = tabs.active(id), view = views.get(activeId);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.sendInputEvent({ type: 'keyDown', keyCode: cmd === 'browser-backward' ? 'BrowserBack' : 'BrowserForward' });
+    }
+  });
   win.on('close', event => {
     const choice = sharingPrompt(win);
     if (choice !== 'close') {

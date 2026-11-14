@@ -43,7 +43,7 @@ export function tabHost({ container, reader = './index.html', documentTitle = 'N
   const list = new TabList(), frames = new Map(), listeners = new Map(), closers = new Map();
   const broadcast = () => {
     const tabs = list.list();
-    for (const [id, callback] of listeners) if (frames.has(id)) callback(tabs);
+    for (const [id, callback] of listeners) if (frames.has(id)) callback(tabs.map((t) => ({ ...t, active: t.current, current: t.id === id })));
     const current = list.get(list.current);
     document.title = current && current.title !== 'Home' ? `${current.title} — ${documentTitle}` : documentTitle;
   };
@@ -80,7 +80,7 @@ export function tabHost({ container, reader = './index.html', documentTitle = 'N
   function bridge(id) {
     id = Number(id);
     return {
-      list: async () => list.list(),
+      list: async () => list.list().map((t) => ({ ...t, active: t.current, current: t.id === id })),
       open: async () => { open(); },
       activate: async (tab) => { list.activate(Number(tab)); show(); },
       // Asks the tab first (unsaved changes, a sharing session); it closes itself.

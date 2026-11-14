@@ -10,7 +10,7 @@ import { textLayer } from './text-layer.js';
 const $ = id => document.getElementById(id);
 const ns = 'http://www.w3.org/2000/svg';
 const BADGE = { text: 'Text', pdf: 'PDF', ocr: 'OCR', audio: 'Audio' };
-const clock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+const clock = seconds => { const s = Math.max(0, Math.floor(seconds)); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 
 // Cheap content fingerprint: size plus the first and last 64 KiB (the index).
 export async function noteFingerprint(file) {

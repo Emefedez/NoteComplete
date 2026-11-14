@@ -8,7 +8,7 @@ test('times typed as m:ss, h:mm:ss or seconds, and shown back', () => {
   assert.equal(parseClock('45,5'), 45.5);
   assert.ok(Number.isNaN(parseClock('1:xx')));
   assert.ok(Number.isNaN(parseClock('')));
-  assert.equal(formatClock(90), '1:30.0');
+  assert.equal(formatClock(90), '0:01:30.0');
   assert.equal(formatClock(3723.5), '1:02:03.5');
 });
 
