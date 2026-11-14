@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.67
+
+- **Fixed: Restart now reopens the app after an update** on Linux. The app closed and stayed closed; it now comes back on the new version. (The restart is run by the version you update *from*, so this takes effect on the update after this one.)
+- **Home polish.** The File, Folder and Back to document buttons are no longer cut off by the filter bar; section titles line up with their content; Sort is a chip like the filters (A – Z); filters, Favourites, With audio, Back to document and Change folder… have icons.
+
 ## 1.1.66
 
 - **Fixed: `.notecomp` and `.notepart` files get their cover in Recent.** Opened with File… (or from Drive), these packages showed a blank card; the cover is now read from the note inside the package, without loading the whole file.
