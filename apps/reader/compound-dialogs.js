@@ -111,7 +111,7 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
     }
     value.functions.forEach(addRow);
     let katex = null;
-    loadKatex().then((k) => { katex = k; refresh(); }).catch(() => {});
+    loadKatex().then((k) => { katex = k; refresh(); }).catch(() => { /* Optional. */ });
     function read() {
       const range = (a, b) => [Number(a.value), Number(b.value)];
       return graphSpec({

@@ -202,7 +202,7 @@ export function audioTrim({ audio, status = () => {}, toNotes, toTextBox }) {
   function play() {
     audio.seek(range[0]);
     playingTo = range[1];
-    audio.audio.play().catch(() => {});
+    audio.audio.play().catch((e) => status(e.message, true));
   }
   audio.audio.addEventListener('timeupdate', () => {
     if (playingTo != null && audio.time >= playingTo) { audio.audio.pause(); playingTo = null; }

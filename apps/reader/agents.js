@@ -65,7 +65,7 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
           } catch (e) {
             message = e.message;
           }
-          await render().catch(() => {});
+          await render().catch((e) => console.warn("Agents status:", e));
           note.textContent = message;
         };
         row.append(button);

@@ -79,7 +79,7 @@ export function queueButton({ queue, id, item, kept = null, doc = document }) {
   button.className = "card-queue-btn";
   const show = () => setQueueButton(button, queue.statusOf(id));
   show();
-  kept?.then((hit) => { if (hit) markQueueDone(button); }).catch(() => {});
+  kept?.then((hit) => { if (hit) markQueueDone(button); }).catch(() => { /* Optional. */ });
   button.onclick = (e) => {
     e.stopPropagation();
     const status = queue.statusOf(id);

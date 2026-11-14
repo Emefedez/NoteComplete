@@ -332,7 +332,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const shut = () => {
       const w = worker;
       worker = null;
-      return w ? busy.catch(() => {}).then(() => w.terminate()).catch(() => {}) : Promise.resolve();
+      return w ? busy.catch(() => { /* Optional. */ }).then(() => w.terminate()).catch(() => { /* Optional. */ }) : Promise.resolve();
     };
     const read = (canvas, scale, options) => (busy = recognizePage(worker, canvas, scale, options));
     ocrRun = { cancel() { cancelled = true; stop(); shut(); } };

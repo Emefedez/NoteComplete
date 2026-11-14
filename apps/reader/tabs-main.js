@@ -20,4 +20,4 @@ if (site?.welcome) {
   host.open({ title: site.title || 'Welcome', open: site.welcome, notes: site.notes ? 1 : null });
   host.open({}, { activate: false });
 } else host.open();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => { /* Optional. */ });

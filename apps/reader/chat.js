@@ -94,7 +94,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     await model.load(select.value);
     $('chatNoteLabel').hidden = !notePath();
     // My notes is on when the note has Markdown notes.
-    notesText().then(text => { if (!$('chatNotes').dataset.touched) $('chatNotes').checked = !!String(text || '').trim(); }).catch(() => {});
+    notesText().then(text => { if (!$('chatNotes').dataset.touched) $('chatNotes').checked = !!String(text || '').trim(); }).catch(() => { /* Optional. */ });
     $('chatPanel').hidden = false;
     $('chatPageLabel').textContent = sectioned() ? 'This part' : 'This page';
     $('chatPage').parentElement.title = sectioned() ? 'The part of the document you are reading' : '';

@@ -290,7 +290,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       if (bar) bar.hidden = true;
 
       if (library && file) {
-        await library.keep({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name, name: doc.name, size: file.size }, file).catch(() => {});
+        await library.keep({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name, name: doc.name, size: file.size }, file).catch((e) => console.warn('Archive keep:', e));
       }
 
       const opened = await open(file, { source: 'archive', id: currentRepo, path: doc.path });

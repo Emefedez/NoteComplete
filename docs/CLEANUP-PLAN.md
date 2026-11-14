@@ -200,7 +200,9 @@ tapes, page sizes, timings), so `rustfmt` formats them. Goes with P1.
 each with its tests, the parts that have a clear edge: auto-save, the download queue's
 window, page export wiring, the text box editor. No behaviour change; one commit each.
 
-### Q3 Errors that are dropped `[ ]`
+### Q3 Errors that are dropped `[D]`
+
+Done: every bare `.catch(() => {})` in `apps/reader/` either documents why it is optional (`/* Optional. */`, `/* Reported by load(). */`, `/* Handled via race. */`, `/* Returned to caller. */`) or reports the failure via `console.warn` or `status(..., true)`.
 
 61 `.catch(() => {})` in the reader. Keep those that are truly optional (with the comment
 the code already uses, `/* Optional. */`), and report the rest with `console.warn` or the

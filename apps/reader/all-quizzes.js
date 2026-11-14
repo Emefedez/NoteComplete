@@ -50,7 +50,7 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
       if (!missing.has(fp)) continue;
       const doc = { title: entry.name.replace(/\.[^.]+$/, ''), entryKey: entry.key, at: entry.openedAt || 0 };
       docs.set(fp, doc); missing.delete(fp);
-      await library.store.set('settings', `doc:${fp}`, doc).catch(() => {});
+      await library.store.set('settings', `doc:${fp}`, doc).catch(() => { /* Optional. */ });
     }
   }
   // Opened from a note: that note's material first, All notes on request; from Home: all.

@@ -72,7 +72,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
     clearTimeout(saveTimer);
     saveTimer = 0;
     if (core) await call('setMarkdown', { text }).catch(error => status(error.message, true));
-    if (key) await store.set('settings', key, text).catch(() => {});
+    if (key) await store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
   }
   // Marker lines are HTML blocks to the editor: tag them so they show as
   // chips, and a click on one shows its page.
@@ -158,8 +158,8 @@ export function notesController({ call, jump, currentPage, store, status }) {
       const inFile = core ? await call('getMarkdown').catch(() => '') : '';
       const kept = key ? await store.get('settings', key).catch(() => '') : '';
       text = inFile || kept || '';
-      if (core && text && !inFile) await call('setMarkdown', { text }).catch(() => {});
-      if (text && inFile && key && kept !== inFile) store.set('settings', key, text).catch(() => {});
+      if (core && text && !inFile) await call('setMarkdown', { text }).catch((e) => console.warn('Set markdown:', e));
+      if (text && inFile && key && kept !== inFile) store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
       // The placeholder differs between notes and pages: the editor is made again for it.
       if (editor && placeholderChanged) { unmount(); if (!panel.hidden && !previewing) await mount().catch(error => status(error.message, true)); }
       else if (editor) { editor.setContent(text); requestAnimationFrame(markLines); }

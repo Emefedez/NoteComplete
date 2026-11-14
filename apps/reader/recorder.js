@@ -110,7 +110,7 @@ export function addedAudio({ store, now = () => Date.now() }) {
       let kept = await read(fingerprint);
       if (incoming.length) {
         const merged = mergeAdded(kept, incoming);
-        if (merged.length !== kept.length) { await write(fingerprint, merged).catch(() => {}); kept = merged; }
+        if (merged.length !== kept.length) { await write(fingerprint, merged).catch((e) => console.warn('Save recordings:', e)); kept = merged; }
       }
       if (fingerprint === (fp || '')) list = kept;
       return list;

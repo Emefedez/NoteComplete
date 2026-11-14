@@ -50,7 +50,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     name.textContent = group.name;
     name.title = group.folder || group.name;
     detail.textContent = group.folder ? 'Folder on disk' : 'In NoteComplete';
-    groups.members(group).then(m => { detail.textContent = `${m.length} document${m.length === 1 ? '' : 's'} · ${group.folder ? 'on disk' : 'in NoteComplete'}`; }).catch(() => {});
+    groups.members(group).then(m => { detail.textContent = `${m.length} document${m.length === 1 ? '' : 's'} · ${group.folder ? 'on disk' : 'in NoteComplete'}`; }).catch(() => { /* Optional. */ });
     meta.className = 'folder-meta';
     meta.append(name, detail);
     button.append(icon('folder'), meta);
@@ -66,7 +66,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   function showFolder(group) {
     shownFolder = group;
     lastFolder = null;
-    groups.touch(group).catch(() => {});
+    groups.touch(group).catch(() => { /* Optional. */ });
     renderRecent();
   }
   function leaveFolder() {
@@ -149,7 +149,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     }
   }
   async function renderRecent() {
-    merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch(() => {});
+    merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch((e) => console.warn('Merge duplicates:', e));
     renderFolders();
     let entries = [];
     try {

@@ -57,7 +57,7 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
     $('updateOnOpen').setAttribute('aria-checked', String(s.checkOnOpen));
     $('updateVersion').textContent = `This is version ${s.current}`;
     if ($('homeVersion') && s.current) $('homeVersion').textContent = `v${s.current}`;
-  }).catch(() => {});
+  }).catch(() => { /* Optional. */ });
   // On open: shortly after start, so it never slows the first paint.
   setTimeout(() => check(false), 3000);
   // Left open for days: look again every six hours (the offer stays until answered).

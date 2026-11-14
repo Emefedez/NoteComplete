@@ -251,9 +251,9 @@ export class TranscriptController {
         onProgress: (done, total) => chip?.set(done / total, `${done} of ${total} parts`),
       });
       const key = this.keys.get(asset.id);
-      if (key && !(await this.originalOf(asset))) await storedTranscript(`${key}:original`, words).catch(() => {});
+      if (key && !(await this.originalOf(asset))) await storedTranscript(`${key}:original`, words).catch((e) => console.warn('Save transcript:', e));
       if (this.asset?.id === asset.id) { this.words = result.words; this.saveEdits(); this.render(result.words); }
-      else { this.results.set(asset.id, result.words); this.onwords?.(asset, result.words); if (key) storedTranscript(key, result.words).catch(() => {}); }
+      else { this.results.set(asset.id, result.words); this.onwords?.(asset, result.words); if (key) storedTranscript(key, result.words).catch((e) => console.warn('Save transcript:', e)); }
       chip?.finish(`Transcript revised: ${result.changed} of ${result.segments} parts changed.`);
       if (this.asset?.id === asset.id) this.status(`Revised by AI: ${result.changed} of ${result.segments} parts changed. Undo revision brings back the automatic text.`);
     } catch (error) {

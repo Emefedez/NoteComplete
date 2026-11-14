@@ -236,14 +236,14 @@ export async function loadWebLLM({ fetchImpl = globalThis.fetch, cacheStorage = 
   const kept = await cache?.match(WEBLLM_URL).catch(() => null);
   if (kept) {
     bytes = new Uint8Array(await kept.arrayBuffer());
-    if (await sha256(bytes) !== WEBLLM_SHA256) { bytes = null; await cache.delete(WEBLLM_URL).catch(() => {}); }
+    if (await sha256(bytes) !== WEBLLM_SHA256) { bytes = null; await cache.delete(WEBLLM_URL).catch(() => { /* Optional. */ }); }
   }
   if (!bytes) {
     const response = await fetchImpl(WEBLLM_URL, { mode: 'cors', credentials: 'omit' }).catch(() => null);
     if (!response?.ok) throw Error('Could not download the AI engine (WebLLM). Check the connection and try again.');
     bytes = new Uint8Array(await response.arrayBuffer());
     if (await sha256(bytes) !== WEBLLM_SHA256) throw Error('The downloaded AI engine is not the expected version, so it was not run.');
-    await cache?.put(WEBLLM_URL, new Response(bytes, { headers: { 'content-type': 'text/javascript' } })).catch(() => {});
+    await cache?.put(WEBLLM_URL, new Response(bytes, { headers: { 'content-type': 'text/javascript' } })).catch(() => { /* Optional. */ });
   }
   const url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
   return { module: await import(/* @vite-ignore */ url), url };
@@ -337,7 +337,7 @@ export function createLocalRuntime({
   async function ensure(choice, gpuInfo) {
     let chip = null;
     const stopped = new Promise((_, reject) => { abort = reject; });
-    stopped.catch(() => {});
+    stopped.catch(() => { /* Handled via race. */ });
     const race = promise => Promise.race([promise, stopped]);
     try {
       if (!library) chip = progress.start('AI engine', () => cancel());
@@ -423,7 +423,7 @@ export function createLocalRuntime({
     const entry = { tag: String(request?.tag || ''), cancelled: false, stage: 'queued' };
     entries.add(entry);
     const job = tail.then(() => execute(entry, request, typeof onDelta === 'function' ? onDelta : null));
-    tail = job.catch(() => {});
+    tail = job.catch(() => { /* Returned to caller. */ });
     return job.finally(() => {
       entries.delete(entry);
       if (!entries.size && engine) { clearTimeout(idle); idle = setTimeout(() => { if (!entries.size) teardown(); }, idleMs); idle?.unref?.(); }
@@ -469,7 +469,7 @@ export function createLocalRuntime({
   }
   async function removeAll() {
     reset();
-    for (const name of [...MODEL_CACHES, LIBRARY_CACHE]) await globalThis.caches?.delete(name).catch(() => {});
+    for (const name of [...MODEL_CACHES, LIBRARY_CACHE]) await globalThis.caches?.delete(name).catch(() => { /* Optional. */ });
     writeDownloaded(storage, new Set());
   }
 

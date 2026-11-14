@@ -101,11 +101,11 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = 
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) { strip.scrollLeft += event.deltaY; event.preventDefault(); }
   }, { passive: false });
   bridge.onList(render);
-  bridge.list().then(render).catch(() => {});
+  bridge.list().then(render).catch(() => { /* Optional. */ });
   // beforeClose: a sharing session asks first (it may end the session or cancel).
   bridge.onCloseRequest(async () => {
     if (!(await beforeClose())) return;
     if (!dirty() || confirm('This tab has unsaved changes. Close it and discard them?')) bridge.closeSelf();
   });
-  return { update: state => bridge.update(state).catch(() => {}) };
+  return { update: state => bridge.update(state).catch(() => { /* Optional. */ }) };
 }

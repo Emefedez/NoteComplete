@@ -75,7 +75,7 @@ function directoryFolder(handle, kind, label) {
     },
     async remove(name) {
       if (!(await permitted(true))) return;
-      await handle.removeEntry(name).catch(() => {});
+      await handle.removeEntry(name).catch(() => { /* Optional. */ });
     },
     async write(name, blob) {
       if (!(await permitted(true))) throw Error('NoteComplete no longer has access to the downloads folder. Choose it again.');
@@ -119,7 +119,7 @@ export class Library {
     const handle = await this.store.get('settings', 'directory').catch(() => null);
     if (handle) return (this.folder = directoryFolder(handle, 'directory', handle.name));
     if (this.storage?.getDirectory) {
-      this.storage.persist?.().catch(() => {});
+      this.storage.persist?.().catch(() => { /* Optional. */ });
       return (this.folder = directoryFolder(await this.storage.getDirectory(), 'browser', 'Browser storage'));
     }
     return (this.folder = { kind: 'none', label: 'Not available', read: async () => null, write: async () => { throw Error('This browser cannot keep downloaded notes.'); } });
@@ -311,9 +311,9 @@ export class Library {
   cover(key) { return this.store.get('covers', key).catch(() => null); }
   // Filter facts (recordings, tags) per file version, like covers.
   facts(key) { return this.store.get('settings', `facts:${key}`).catch(() => null); }
-  saveFacts(key, value) { return this.store.set('settings', `facts:${key}`, value).catch(() => {}); }
+  saveFacts(key, value) { return this.store.set('settings', `facts:${key}`, value).catch(() => { /* Optional. */ }); }
   // Extracted PDF text and OCR results, keyed by a fingerprint of the note's bytes.
   searchData(fingerprint) { return this.store.get('search', fingerprint).catch(() => null); }
-  saveSearchData(fingerprint, value) { return this.store.set('search', fingerprint, value).catch(() => {}); }
-  saveCover(key, url) { return this.store.set('covers', key, url).catch(() => {}); }
+  saveSearchData(fingerprint, value) { return this.store.set('search', fingerprint, value).catch(() => { /* Optional. */ }); }
+  saveCover(key, url) { return this.store.set('covers', key, url).catch(() => { /* Optional. */ }); }
 }

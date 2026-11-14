@@ -492,7 +492,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     })().catch(error => { providersLoaded = null; throw error; });
   }
   async function aiChoice() {
-    await loadProviders().catch(() => {});
+    await loadProviders().catch((e) => console.warn('AI providers:', e));
     const provider = $('practiceAskProvider').value || 'claude';
     return { provider, model: cardModel?.value || '', label: $('practiceAskProvider').selectedOptions[0]?.textContent || 'your AI tool' };
   }

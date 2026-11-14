@@ -466,7 +466,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   async function newest(entry) {
     const parent = entry.parent || (client.connected ? await client.parentOf(entry.driveId).catch(() => null) : null) || (client.publicAccess ? folder?.id : null);
     if (!parent && !client.connected) return [];
-    if (parent && !entry.parent) { entry.parent = parent; await library?.store.set('entries', entry.key, entry).catch(() => {}); }
+    if (parent && !entry.parent) { entry.parent = parent; await library?.store.set('entries', entry.key, entry).catch(() => { /* Optional. */ }); }
     return (await client.sameName(entry.name, parent)).filter(f => supportedDriveFile(f));
   }
   function onQueueItemDone(item) {

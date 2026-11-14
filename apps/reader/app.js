@@ -3549,14 +3549,14 @@ async function autosaveOpened(recovered) {
     const mark = await call("historyMark").catch(() => null);
     if (note !== epoch) return;
     if (mark && latest.digest && latest.edits === mark.edits && latest.digest === mark.digest) {
-      autosaves.markManual(key).catch(() => {});
+      autosaves.markManual(key).catch(() => { /* Optional. */ });
       return;
     }
     // The same content as the note just opened, whatever its history (a note saved as .noteful
     // comes back with another history): nothing to choose between.
     if (latest.content && (await contentDigest(mark, note)) === latest.content) {
       if (note !== epoch) return;
-      autosaves.markManual(key).catch(() => {});
+      autosaves.markManual(key).catch(() => { /* Optional. */ });
       return;
     }
     if (note !== epoch) return;
@@ -3566,14 +3566,14 @@ async function autosaveOpened(recovered) {
     if (note !== epoch) return;
     const a = kept && new Uint8Array(kept.buffer || kept), b = current && new Uint8Array(current.buffer || current);
     if (a && b && a.length === b.length && a.every((x, i) => x === b[i])) {
-      autosaves.markManual(key).catch(() => {});
+      autosaves.markManual(key).catch(() => { /* Optional. */ });
       return;
     }
     $("recoverText").textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : "the file you opened"}. Which do you want to open?`;
     $("recoverAuto").textContent = `Automatic save (${when(latest.time)})`;
     $("recoverManual").textContent = manual ? `Manual save (${when(manual)})` : "The file";
     $("recoverAuto").onclick = () => { $("recoverDialog").close(); openAutosave(latest); };
-    $("recoverManual").onclick = () => { $("recoverDialog").close(); autosaves.markManual(key).catch(() => {}); };
+    $("recoverManual").onclick = () => { $("recoverDialog").close(); autosaves.markManual(key).catch(() => { /* Optional. */ }); };
     $("recoverDialog").showModal();
   } catch { /* No storage: nothing to offer. */ }
 }
@@ -3927,7 +3927,7 @@ $("open").onclick = $("emptyOpen").onclick = () => openLocal();
 function openFileObject(file) {
   if (file && !busy() && canReplace()) {
     notePath = noteEntryKey = "";
-    load(file).then(() => setDocMember(null)).catch(() => {});
+    load(file).then(() => setDocMember(null)).catch(() => { /* Reported by load(). */ });
   }
 }
 $("file").onchange = (e) => {
@@ -3970,7 +3970,7 @@ async function save(native, as = native ? "noteful" : "project") {
     await notes?.flush();
     // Text recognized in the handwriting goes with the note, so other tools (the MCP
     // server) and other copies find it. .noteful files have no place for it.
-    if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch(() => {});
+    if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
     const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
     const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
     if (token !== epoch) return;
@@ -3985,7 +3985,7 @@ async function save(native, as = native ? "noteful" : "project") {
       await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
     }
     if (!delivery.shared) {
-      autosaves.markManual(autosaveKey()).catch(() => {});
+      autosaves.markManual(autosaveKey()).catch(() => { /* Optional. */ });
       // Just saved by hand: an automatic copy of exactly this state would only be a duplicate.
       autosavedRevision = revision;
     }
@@ -4174,7 +4174,7 @@ window.addEventListener("beforeunload", (e) => {
 // A device opening an invite (/join, /tablet) loads the shared note first: the offline copy of
 // the app (sw.js) is made once the note is open, or after a minute, not while it downloads.
 if ("serviceWorker" in navigator) {
-  const register = () => navigator.serviceWorker.register("./sw.js").catch(() => {});
+  const register = () => navigator.serviceWorker.register("./sw.js").catch(() => { /* Optional. */ });
   if (/^\/(join|tablet|send)$/.test(location.pathname)) {
     const later = setTimeout(register, 60000);
     addEventListener("notecomplete:joined", () => { clearTimeout(later); setTimeout(register, 2000); }, { once: true });
@@ -4547,7 +4547,7 @@ async function rememberDocument(entryKey = "") {
   const fp = (doc && find.fingerprint) || (sideView() && sideFp);
   if (!fp) return;
   const before = await library.store.get("settings", `doc:${fp}`).catch(() => null);
-  await library.store.set("settings", `doc:${fp}`, { title: doc?.title || sideView()?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => {});
+  await library.store.set("settings", `doc:${fp}`, { title: doc?.title || sideView()?.name || $("title").textContent, entryKey: entryKey || before?.entryKey || "", at: Date.now() }).catch(() => { /* Optional. */ });
 }
 // ⋯ on a Recent note: opens it and deletes its whole edit history (asking first, saying how
 // much space that frees); the note stays unsaved until the user saves.
@@ -4619,7 +4619,7 @@ const webView = webViewer({
     $("title").textContent = name;
     document.title = `${name} — NoteComplete`;
     tabBar.update({ title: name, dirty: false });
-    if (url === docMember?.url) library.rememberWeb(docMember.url, name).catch(() => {});
+    if (url === docMember?.url) library.rememberWeb(docMember.url, name).catch((e) => console.warn("Remember web:", e));
   },
 });
 $("webFallbackOpen").onclick = () => $("webExternal").click();
@@ -4677,7 +4677,7 @@ async function saveConvertedCopy() {
       const original = docMember?.source === "local" ? docMember.path : null;
       const saved = await bridge.saveCopy(original, { name, text, images: used.map(({ name: file, bytes }) => ({ name: file, bytes })), folder: convertedFolder, replace: copyTarget });
       copyTarget = saved;
-      await library.rememberLocal(saved.path, saved.name, saved.size).catch(() => {});
+      await library.rememberLocal(saved.path, saved.name, saved.size).catch((e) => console.warn("Remember local:", e));
       message = `Saved a copy as ${saved.name}${original ? "" : " in your downloads folder"}${saved.folder ? `, with its pictures in ${saved.folder}` : ""}. The original is untouched.`;
     } else if (used.length) {
       const zipName = `${textView.name}.zip`;
@@ -4743,7 +4743,7 @@ async function openWeb(member) {
   const host = linkTitle(member.url).split("/")[0], esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   if (!(await library.cover(entry.key))) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320"><rect width="240" height="320" fill="#ffffff"/><g font-family="system-ui, sans-serif"><text x="22" y="150" font-size="13" font-weight="700" fill="#1d2433">${esc(member.name.slice(0, 30))}</text><text x="22" y="172" font-size="11" fill="#5b6478">${esc(host)}</text></g></svg>`;
-    await library.saveCover(entry.key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`).catch(() => {});
+    await library.saveCover(entry.key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`).catch(() => { /* Optional. */ });
   }
   setDocMember(member);
   status(window.notecompleteFiles ? `Opened ${host}.` : "Web pages open inside the desktop app; here, use Open in browser.");
@@ -4896,7 +4896,7 @@ function setDocMember(member) {
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
   // Opening a document of a folder brings that folder to the front of Home's Folders.
-  return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch(() => {});
+  return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch((e) => console.warn("Group panel:", e));
 }
 async function openMember(member) {
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
@@ -5862,7 +5862,7 @@ const agents = agentConnector({ status });
 if (agents) {
   $("agentsOpen").hidden = false;
   $("agentsOpen").onclick = () => { closeMenus(); agents.open(); };
-  setTimeout(() => { if (!document.querySelector("dialog[open]")) agents.offer().catch(() => {}); }, 4000);
+  setTimeout(() => { if (!document.querySelector("dialog[open]")) agents.offer().catch(() => { /* Optional. */ }); }, 4000);
 }
 $("shortcutsOpen").onclick = () => {
   $("shortcutsList").replaceChildren(...SHORTCUTS.map(([keys, what]) => {
@@ -6056,7 +6056,7 @@ $("newWindow").onclick = () => (windows ? windows.open() : window.open(location.
 // Interface size (desktop app; browsers have their own zoom).
 if (windows?.zoom) {
   $("uiSizeItems").hidden = false;
-  const size = (step) => windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch(() => {});
+  const size = (step) => windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch((e) => status(e.message, true));
   $("uiSmaller").onclick = () => size(-1);
   $("uiLarger").onclick = () => size(1);
   $("uiReset").onclick = () => size(0);

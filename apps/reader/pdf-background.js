@@ -19,7 +19,7 @@ export async function openPdf(data) {
   try {
     return await task.promise;
   } catch (error) {
-    await task.destroy().catch(() => {});
+    await task.destroy().catch(() => { /* Optional. */ });
     throw error;
   }
 }
@@ -314,7 +314,7 @@ export class PdfBackgrounds {
     this.closed = true;
     this.clear();
     for (const task of this.documents.values())
-      task.then((d) => d.loadingTask.destroy()).catch(() => {});
+      task.then((d) => d.loadingTask.destroy()).catch(() => { /* Optional. */ });
     this.documents.clear();
   }
 }

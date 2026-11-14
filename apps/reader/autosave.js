@@ -96,7 +96,7 @@ export function autosaveStore(backend = idbBackend()) {
     },
     load: (id) => backend.getData(id),
     async remove(id) { await backend.deleteMeta(id); await backend.deleteData(id); },
-    async clear() { for (const m of await backend.allMeta()) { await backend.deleteMeta(m.id); await backend.deleteData(m.id).catch(() => {}); } },
+    async clear() { for (const m of await backend.allMeta()) { await backend.deleteMeta(m.id); await backend.deleteData(m.id).catch(() => { /* Optional. */ }); } },
     // When the note was last saved by hand (or opened from its file).
     async markManual(key, time = Date.now()) { await backend.putMeta({ id: `manual:${key}`, key, manual: true, time }); },
     async manualAt(key) { return (await backend.allMeta()).find((m) => m.id === `manual:${key}`)?.time || 0; },

@@ -48,7 +48,7 @@ export class Engine {
     const big = this.size >= this.threshold;
     this.size = 0;
     if (!big) {
-      this.call({ op: 'close' }).catch(() => {});
+      this.call({ op: 'close' }).catch(() => { /* Optional. */ });
       return false;
     }
     const old = this.worker;

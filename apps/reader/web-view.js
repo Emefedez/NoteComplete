@@ -29,7 +29,7 @@ export function webViewer({ root, host, title, address, back, forward = null, re
     if (!script || !view) return;
     const on = dark ? 'DarkReader.enable({ brightness: 100, contrast: 100, sepia: 0, darkSchemeBackgroundColor: "#15171b", darkSchemeTextColor: "#e5e8ed" })' : 'DarkReader.disable()';
     // Runs inside the web page: Dark Reader is added there once, then switched.
-    view.executeJavaScript(`${dark ? `if (!window.DarkReader) { ${script} }` : ''};window.DarkReader && ${on};`).catch(() => {});
+    view.executeJavaScript(`${dark ? `if (!window.DarkReader) { ${script} }` : ''};window.DarkReader && ${on};`).catch(() => { /* Optional. */ });
   }
   function create() {
     view = document.createElement('webview');

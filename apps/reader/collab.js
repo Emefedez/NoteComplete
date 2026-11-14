@@ -790,7 +790,7 @@ class Session {
     return new Promise((resolve) => {
       this.ended = resolve;
       this.client.end();
-      setTimeout(() => { window.notecompleteCollab?.stop().catch(() => {}); this.finish('Sharing ended.', null); }, 5000);
+      setTimeout(() => { window.notecompleteCollab?.stop().catch((e) => console.warn('Collab stop:', e)); this.finish('Sharing ended.', null); }, 5000);
     });
   }
 
@@ -846,8 +846,8 @@ class Session {
     this.copied = text;
     const name = `${(this.docTitle || 'Notes').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - shared notes.md`;
     this.copyName = name;
-    this.host.library?.store.set('settings', `collab-copy:${this.client.id}:${Date.now()}`, { name, text, at: Date.now() }).catch(() => {});
-    this.host.download(text, name, 'text/markdown').catch(() => {});
+    this.host.library?.store.set('settings', `collab-copy:${this.client.id}:${Date.now()}`, { name, text, at: Date.now() }).catch((e) => console.warn('Collab copy:', e));
+    this.host.download(text, name, 'text/markdown').catch((e) => console.warn('Collab download:', e));
   }
 
   // Notes -------------------------------------------------------------------------------
@@ -1217,7 +1217,7 @@ class Session {
     if (this.finished) return;
     this.finished = true;
     const host = this.host;
-    if (this.role === 'host') window.notecompleteCollab?.stop().catch(() => {});
+    if (this.role === 'host') window.notecompleteCollab?.stop().catch((e) => console.warn('Collab stop:', e));
     for (const key of [...this.live.keys()]) this.dropLive(key);
     // The host writes the final notes where they live (project, notes:<fp>) before letting go.
     if (this.role === 'host') this.notes?.flush();
@@ -1242,7 +1242,7 @@ class Session {
     session = null;
     kept.then((copy) => {
       if (this.role === 'tablet' && host.doc) host.closeDocument();
-      if (this.role === 'guest') host.notesApi().then((n) => n.close()).then(() => host.closeDocument()).catch(() => {});
+      if (this.role === 'guest') host.notesApi().then((n) => n.close()).then(() => host.closeDocument()).catch((e) => console.warn('Collab close:', e));
       closeDialog();
       this.ended?.();
       if (refused || this.role === 'host' || (!this.copied && !copy)) return host.status(message, refused);

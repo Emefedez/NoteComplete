@@ -153,7 +153,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     const started = Date.now();
     let streamed = '';
     try {
-      await loadProviders().catch(() => {});
+      await loadProviders().catch((e) => console.warn('AI providers:', e));
       const tool = provider.value || 'claude', name = provider.selectedOptions[0]?.textContent || 'your AI tool', want = material();
       const waiting = () => { if (!streamed) reply.textContent = `Asking ${name}… ${Math.round((Date.now() - started) / 1000)} s`; };
       waiting(); run.clock = setInterval(waiting, 1000);
@@ -202,7 +202,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       await save(current, { ...before, text: before?.text ? `${before.text}\n\n**${question}**\n\n${answer}` : `**${question}**\n\n${answer}`, provider: before?.provider || 'Ask AI', at: Date.now() });
       if (item === current && box.hidden) showSaved(current);
     };
-    Promise.resolve(handoff({ item: current, history, question: q, onAnswer, extraImages, useNote: material().note })).catch(() => {});
+    Promise.resolve(handoff({ item: current, history, question: q, onAnswer, extraImages, useNote: material().note })).catch((e) => console.warn('Explain handoff:', e));
   };
   again.onclick = () => ask(asking?.item || item, '', { fresh: true });
   stop.onclick = () => ai?.cancel(tag);
