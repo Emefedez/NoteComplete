@@ -127,6 +127,10 @@ pub(crate) enum Edit {
     DeleteAudio {
         asset_id: String,
     },
+    /// Strips embedded native Noteful audio bytes while keeping its recording timeline as animation.
+    StripAudioMedia {
+        asset_id: String,
+    },
 }
 
 /// Added recording bundled inside a `.nfedit` v11 project.
@@ -401,15 +405,40 @@ impl Editor {
             })
             .collect()
     }
-    /// Deletes an embedded native Noteful recording (undoable until compacted).
+    pub(crate) fn stripped_audio_media(&self) -> HashSet<&str> {
+        self.history[..self.cursor]
+            .iter()
+            .filter_map(|e| match e {
+                Edit::StripAudioMedia { asset_id } => Some(asset_id.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+    /// Deletes an embedded native Noteful recording or animation (undoable until compacted).
     pub fn delete_audio(&mut self, asset_id: &str) -> Result<()> {
-        if !self.scene.audio.iter().any(|a| a.id == asset_id) {
+        let known = self.scene.audio.iter().any(|a| a.id == asset_id)
+            || self.scene.recordings.iter().any(|r| r.asset_id == asset_id);
+        if !known {
             return Err(Error::new(0, "Audio resource not found"));
         }
         if self.deleted_audio().contains(asset_id) {
             return Err(Error::new(0, "Audio recording already deleted"));
         }
         self.commit(Edit::DeleteAudio {
+            asset_id: asset_id.to_owned(),
+        })
+    }
+    /// Strips audio bytes from an embedded recording while preserving stroke timings as animation.
+    pub fn strip_audio_media(&mut self, asset_id: &str) -> Result<()> {
+        if !self.scene.audio.iter().any(|a| a.id == asset_id)
+            || self.deleted_audio().contains(asset_id)
+        {
+            return Err(Error::new(0, "Audio resource not found"));
+        }
+        if self.stripped_audio_media().contains(asset_id) {
+            return Err(Error::new(0, "Audio already converted to animation"));
+        }
+        self.commit(Edit::StripAudioMedia {
             asset_id: asset_id.to_owned(),
         })
     }
@@ -883,11 +912,14 @@ impl Editor {
                 .count();
         let pdf_bytes = b64_len(orig_pdf_raw) + added_pdf_b64;
         let deleted_audio = self.deleted_audio();
+        let stripped_audio = self.stripped_audio_media();
         let active_audio: Vec<_> = self
             .scene
             .audio
             .iter()
-            .filter(|a| !deleted_audio.contains(a.id.as_str()))
+            .filter(|a| {
+                !deleted_audio.contains(a.id.as_str()) && !stripped_audio.contains(a.id.as_str())
+            })
             .collect();
         let native_audio_count = active_audio.len();
         let native_audio_bytes = b64_len(active_audio.iter().map(|a| a.bytes).sum());
@@ -1066,7 +1098,7 @@ impl Editor {
         Ok(&self.source[asset.offset..asset.offset + asset.bytes])
     }
     pub fn audio_bytes(&self, id: &str) -> Result<&[u8]> {
-        if self.deleted_audio().contains(id) {
+        if self.deleted_audio().contains(id) || self.stripped_audio_media().contains(id) {
             return Err(Error::new(0, "Audio resource not found"));
         }
         let asset = self
@@ -1154,6 +1186,7 @@ impl Editor {
                     editor.set_page_backgrounds(pages, pdf)?
                 }
                 Edit::DeleteAudio { asset_id } => editor.delete_audio(&asset_id)?,
+                Edit::StripAudioMedia { asset_id } => editor.strip_audio_media(&asset_id)?,
                 Edit::MovePage { from, to } => editor.move_page(from, to)?,
                 Edit::ResizePage {
                     page,

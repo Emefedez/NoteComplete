@@ -20,6 +20,43 @@ const LABELS = { look: "Look", theme: "Page", paper: "Paper", font: "Handwriting
 const STORE = "notecomplete-handwriting";
 export const SAMPLE = "# MY **TOPIC**\n_Subject · week 1_\n## First idea\nWrite **key terms** in colour and ==highlight== what matters.\n- a point\n- another point\n> [sky] DEFINITION: a card for the main idea ((a detail in grey))\n!stat 42 a number worth remembering";
 
+export const CHEATSHEET = [
+  {
+    group: "Headings & Doodles",
+    items: [
+      { label: "Title + doodle", code: "# **CARDIAC** CYCLE :heart:", hint: "sun, star, atom, drop, bolt, cloud, leaf" },
+      { label: "Two-line title", code: "# SOLAR & TERRESTRIAL // RADIATION", hint: "Second line on marker band" },
+      { label: "Subtitle", code: "_Subject · week 1_", hint: "Thin rule below title" },
+      { label: "Section", code: "## **SMOOTH** MUSCLE", hint: "Coloured capitals + rule" },
+      { label: "Sub-label", code: "### Key step", hint: "Small accent heading" },
+    ],
+  },
+  {
+    group: "Text & Emphasis",
+    items: [
+      { label: "Accent term", code: "**important term**", hint: "Active accent colour" },
+      { label: "Highlight", code: "=={pink}key phrase==", hint: "pastel fill behind text" },
+      { label: "Tag pill & grey", code: "[[tag]] ((grey detail))", hint: "Pill badge & note aside" },
+      { label: "Math & symbols", code: "CO_2 · T^4 · λ_{max} → ∞ ± 5%", hint: "Greek letters, sub/superscript" },
+      { label: "Bullets & arrows", code: "- dot\n* star\n-> implies\n1. step one\n[ ] task", hint: "List markers" },
+    ],
+  },
+  {
+    group: "Cards, Zones & Diagrams",
+    items: [
+      { label: "Card", code: "> [sky] IDEA: main takeaway ((detail))", hint: "Pastel card box" },
+      { label: "2-col cards", code: ">> CAUSE: X happened || EFFECT: Y followed", hint: "Side-by-side cards" },
+      { label: "Sticky note", code: "!sticky [yellow] EXAM TIP: check units!", hint: "Taped tilted sticky" },
+      { label: "Big stat", code: "!stat 30 % reflected (albedo)", hint: "Hero metric" },
+      { label: "Band zone", code: "!zone [teal]\n## Topic\n- summary\n!end", hint: "Full-width tinted band" },
+      { label: "Two columns", code: "!columns 55\nLeft text\n!col\nRight text\n!end", hint: "55% / 45% split" },
+      { label: "Tree map", code: "!map TOPIC | Main branch\n- Subtopic A\n  - Detail 1", hint: "Branching concept map" },
+      { label: "Ink SVG diagram", code: '!draw 480\n<svg viewBox="0 0 400 220">\n  <rect x="20" y="30" width="140" height="80" rx="10" fill="#bae6fd" stroke="#1f2233" stroke-width="2"/>\n  <text x="90" y="75" font-size="20" text-anchor="middle">Input</text>\n  <line x1="160" y1="70" x2="230" y2="70" stroke="#1f2233" stroke-width="2"/>\n  <rect x="230" y="30" width="140" height="80" rx="10" fill="#fde68a" stroke="#1f2233" stroke-width="2"/>\n  <text x="300" y="75" font-size="20" text-anchor="middle">Output</text>\n</svg>\n!end', hint: "Hand-drawn SVG diagram" },
+      { label: "Tape & break", code: "!tape [mint]\n---\n\\pagebreak", hint: "Washi tape, rule, new page" },
+    ],
+  },
+];
+
 // What the AI tool is asked for: study notes about a topic (or from pasted material) in
 // the handwriting dialect, so the answer goes straight into the preview.
 export function aiPrompt({ request, dialect, look = "study" }) {
@@ -121,15 +158,15 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
             <div class="hw-ai-row"><button id="hwWrite" type="button" class="primary">Write the note</button></div>
           </div>
           <div id="hwMarkdownPanel" class="hw-import" role="tabpanel">
-            <button id="hwOpenFile" type="button">Open a Markdown file…</button><input id="hwFile" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
-            <button id="hwEnrich" type="button" title="Your AI tool rewrites this Markdown with highlights, cards, colours and drawings, keeping what it says">Make it richer with AI</button>
+            <button id="hwOpenFile" type="button"></button><input id="hwFile" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
+            <button id="hwEnrich" type="button" title="Your AI tool rewrites this Markdown with highlights, cards, colours and drawings, keeping what it says"></button>
           </div>
           <div id="hwAiTools" class="hw-ai-row hw-tools"${ai ? "" : " hidden"}><select id="hwTool" data-native aria-label="AI tool"></select><select id="hwModel" data-native aria-label="Model"></select><input id="hwModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden /></div>
           <p id="hwAiStatus" class="muted hw-ai-status" role="status"></p>
           <label class="ocr-languages">Name<input id="hwName" type="text" spellcheck="false" /></label>
-          <div class="hw-edit-bar"><span class="muted">Markdown</span><button id="hwUndo" type="button" disabled aria-label="Undo" title="Undo the last change to the Markdown (an AI write, an opened file or your typing)"></button><button id="hwRedo" type="button" disabled aria-label="Redo" title="Redo the change"></button></div>
-          <textarea id="hwMarkdown" spellcheck="false" aria-label="Markdown" rows="14"></textarea>
-          <details class="hw-help"><summary>Markdown for handwriting</summary><p class="muted"><code># TITLE</code>, <code>## Section</code>, <code>**term**</code>, <code>==highlight==</code>, <code>[[tag]]</code>, <code>((grey detail))</code>, <code>- item</code>, <code>1. step</code>, <code>&gt; [sky] CARD: text</code>, <code>&gt;&gt; A: … || B: …</code>, <code>!columns 55</code> … <code>!col</code> … <code>!end</code>, <code>!zone [mint]</code> … <code>!end</code>, <code>!sticky [yellow] TITLE: text</code>, <code>!stat 42 label</code>, <code>!draw 480</code> &lt;svg…&gt; <code>!end</code>, <code>\\pagebreak</code>. Greek letters, <code>T^4</code> and <code>CO_2</code> are drawn by hand.</p></details>
+          <div class="hw-edit-bar"><span class="muted">Markdown</span><button id="hwCheatsheetBtn" type="button" class="hw-cheat-btn" aria-expanded="false" title="Show interactive Markdown syntax cheatsheet (click any snippet to insert)"></button><button id="hwUndo" type="button" disabled aria-label="Undo" title="Undo the last change to the Markdown (an AI write, an opened file or your typing)"></button><button id="hwRedo" type="button" disabled aria-label="Redo" title="Redo the change"></button></div>
+          <div id="hwCheatsheet" class="hw-cheatsheet" hidden></div>
+          <textarea id="hwMarkdown" spellcheck="false" aria-label="Markdown" rows="16"></textarea>
           <div class="hw-fields">${selects}<label class="ocr-languages">Text size<input id="hwSize" type="number" min="4" max="60" step="0.5" value="11" /></label></div>
         </div>
         <div class="hw-preview" aria-live="polite"><div id="hwPages" class="hw-pages"></div><p id="hwStatus" class="muted" role="status"></p></div>
@@ -137,10 +174,62 @@ export function handwritingConverter({ call, status, onCreate, onInsert, sourceT
       <div class="ocr-actions">
         <label id="hwWhereLabel" class="hw-where">Insert<select id="hwWhere" data-native><option value="after">after this page</option><option value="before">before this page</option><option value="end">at the end</option></select></label>
         <button id="hwCancel" type="button">Cancel</button>
-        <button id="hwInsert" type="button">Insert into this note</button>
-        <button id="hwCreate" type="button" class="primary">Create note</button>
+        <button id="hwInsert" type="button"></button>
+        <button id="hwCreate" type="button" class="primary"></button>
       </div>`;
     document.body.append(dialog);
+    const setBtnIcon = (id, name, label) => el(id).replaceChildren(icon(name), document.createTextNode(" " + label));
+    setBtnIcon("hwOpenFile", "open", "Open Markdown…");
+    setBtnIcon("hwEnrich", "spark", "Make it richer with AI");
+    setBtnIcon("hwWrite", "spark", "Write the note");
+    setBtnIcon("hwCheatsheetBtn", "help", "Cheatsheet");
+    setBtnIcon("hwInsert", "plus", "Insert page into this note");
+    setBtnIcon("hwCreate", "note", "Create note");
+
+    // Interactive Markdown cheatsheet: click any snippet to insert at cursor.
+    const sheet = el("hwCheatsheet");
+    sheet.replaceChildren(...CHEATSHEET.map((sec) => {
+      const box = document.createElement("div");
+      box.className = "hw-cheat-sec";
+      const h = document.createElement("strong");
+      h.textContent = sec.group;
+      const grid = document.createElement("div");
+      grid.className = "hw-cheat-grid";
+      for (const item of sec.items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "hw-cheat-chip";
+        b.title = `${item.hint}\n\nClick to insert:\n${item.code}`;
+        const t = document.createElement("span");
+        t.textContent = item.label;
+        const c = document.createElement("code");
+        c.textContent = item.code.split("\n")[0];
+        b.append(t, c);
+        b.onclick = () => {
+          const area = el("hwMarkdown");
+          snapshot();
+          const start = area.selectionStart ?? area.value.length;
+          const end = area.selectionEnd ?? start;
+          const before = area.value.slice(0, start);
+          const prefix = before && !before.endsWith("\n") ? "\n" : "";
+          const suffix = area.value.slice(end).startsWith("\n") || !area.value.slice(end) ? "" : "\n";
+          const insert = `${prefix}${item.code}${suffix}`;
+          area.value = before + insert + area.value.slice(end);
+          area.selectionStart = area.selectionEnd = before.length + insert.length;
+          area.focus();
+          snapshot();
+          schedule();
+        };
+        grid.append(b);
+      }
+      box.append(h, grid);
+      return box;
+    }));
+    el("hwCheatsheetBtn").onclick = () => {
+      const open = sheet.hidden;
+      sheet.hidden = !open;
+      el("hwCheatsheetBtn").setAttribute("aria-expanded", String(open));
+    };
     el("hwCancel").onclick = () => dialog.close();
     dialog.addEventListener("close", () => stopWriting());
     // Undo and redo for the Markdown: every AI write, opened file and pause in typing is a step.

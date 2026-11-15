@@ -9,6 +9,7 @@ import { SyncClient, parseInvite, applyTextDiff, sendPack } from './sync.js';
 import { icon } from './icons.js';
 import { base64UrlDecode, base64UrlEncode, renderQrSvg, showQrTransfer, QrReceiver, describeQrEnvelope } from './qr-transfer.js';
 import { createWebRtcNoteSender, createWebRtcNoteReceiver, isWebRtcSignal } from './p2p-share.js';
+import { canScanQr } from './qr-scan.js';
 
 const $ = (id) => document.getElementById(id);
 const LOCAL = Symbol('local notes edit');
@@ -61,6 +62,9 @@ function dialog(title, ...body) {
 }
 function closeDialog() { $('collabDialog')?.close(); }
 function buttons(...list) { return el('div', { className: 'dialog-actions' }, ...list); }
+function iconBtn(glyph, label, props = {}) {
+  return el('button', { type: 'button', ...props }, ...(glyph ? [icon(glyph)] : []), el('span', { textContent: label }));
+}
 
 // Study → Send study material…: the open note's flashcard decks, quizzes and Markdown notes, to
 // another NoteComplete that is sharing (address and PIN, or its link, on this network or online),
@@ -69,7 +73,7 @@ export const openStudySend = (host, aimed = null) => openStudyShare(host, { aime
 export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) {
   const { buildPack, describePack, summary, KINDS } = await import('./study-pack.js');
   const material = await host.studyMaterial();
-  if (!material) return studyDialog(host, el('div', { className: 'collab-panel' }, el('p', { textContent: 'Open a note that has flashcards, quizzes or notes to send them. Receiving does not need one.' }), buttons(el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }))), tab === 'receive' ? 'receive' : 'send');
+  if (!material) return studyDialog(host, el('div', { className: 'collab-panel' }, el('p', { textContent: 'Open a note that has flashcards, quizzes or notes to send them. Receiving does not need one.' }), buttons(iconBtn('close', 'Close', { onclick: closeDialog }))), tab === 'receive' ? 'receive' : 'send');
   const have = summary({ decks: material.study.decks, quizzes: material.study.quizzes, notes: material.study.notes });
   const counts = { decks: have.decks ? `${have.decks} · ${have.cards} card${have.cards === 1 ? '' : 's'}` : '', quizzes: have.quizzes ? `${have.quizzes} · ${have.questions} question${have.questions === 1 ? '' : 's'}` : '', notes: have.notes ? 'the notes panel' : '' };
   const boxes = Object.fromEntries(KINDS.map(([kind, label]) => {
@@ -80,16 +84,16 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
   const code = el('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', placeholder: '123 456', maxLength: 7, 'aria-label': 'PIN' });
   const who = el('input', { type: 'text', maxLength: 40, value: remembered(), placeholder: 'Your name (they see it)', 'aria-label': 'Your name' });
   const state = el('p', { className: 'muted', role: 'status', textContent: '' });
-  // Scan the other NoteComplete's QR code with this device's camera (where the browser can read QR codes).
-  const scan = el('button', { type: 'button', textContent: 'Scan its QR code', hidden: !('BarcodeDetector' in globalThis) || !navigator.mediaDevices?.getUserMedia, onclick: async () => {
+  // Scan the other NoteComplete's QR code with this device's camera.
+  const scan = iconBtn('qr', 'Scan its QR code', { hidden: !canScanQr(), onclick: async () => {
     try { const { scanQr } = await import('./qr-scan.js'); const text = await scanQr(state); link.value = text; state.textContent = 'Scanned. Type the PIN if the code did not include one, then Send.'; } catch (e) { state.textContent = e.message; }
   } });
   try { link.value = localStorage.getItem('notecomplete-collab-address') || ''; } catch { /* Optional. */ }
   const build = () => buildPack({ title: material.title, fingerprint: material.fingerprint, from: who.value.trim(), study: material.study, include: Object.fromEntries(KINDS.map(([kind]) => [kind, boxes[kind].input.checked])) });
-  const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with File → Import…', onclick: async () => {
+  const save = iconBtn('save', 'Save as a file', { title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with File → Import…', onclick: async () => {
     try { const pack = build(); await host.download(JSON.stringify(pack), `${material.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - study.ncstudy`, 'application/json'); state.textContent = `Saved: ${describePack(pack)}.`; } catch (e) { state.textContent = e.message; }
   } });
-  const sendQr = el('button', { type: 'button', textContent: 'Show QR stream', title: 'Transmit quizzes, flashcards and notes directly via offline progressive QR codes with progress', onclick: async () => {
+  const sendQr = iconBtn('qr', 'Show QR stream', { title: 'Transmit quizzes, flashcards and notes directly via offline progressive QR codes with progress', onclick: async () => {
     try {
       const pack = build();
       closeDialog();
@@ -103,7 +107,7 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
       });
     } catch (e) { state.textContent = e.message; }
   } });
-  const send = el('button', { type: 'button', className: 'primary', textContent: 'Send' });
+  const send = iconBtn('forward', 'Send', { className: 'primary' });
   send.onclick = async () => {
     send.disabled = true;
     try {
@@ -127,7 +131,7 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
     aimed ? '' : el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link. Or scan the QR code it shows: Study → Receive study material… on the other computer.' }),
     aimed ? el('p', {}, el('strong', { textContent: 'To: ' }), `the NoteComplete at ${new URL(aimed.url).host.replace(/^ws/, '')} (from the QR code)`) : '',
     el('div', { className: 'collab-join' }, ...(aimed ? [] : [el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), scan]), el('label', {}, el('span', { textContent: 'Your name' }), who)),
-    state, buttons(save, sendQr, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
+    state, buttons(save, sendQr, iconBtn('close', 'Cancel', { onclick: closeDialog }), send));
   studyDialog(host, sendPanel, tab === 'receive' ? 'receive' : 'send', aimed);
   (aimed ? who : link.value ? code : link).focus();
 }
@@ -144,7 +148,7 @@ function studyDialog(host, sendPanel, tab, aimed = null) {
     }
     if (id === 'receive') fillReceive(host, receivePanel);
   };
-  for (const [id, label] of [['send', 'Send'], ['receive', 'Receive']]) bar.append(el('button', { type: 'button', role: 'tab', id: `studyTab-${id}`, textContent: label, onclick: () => show(id) }));
+  for (const [id, label, glyph] of [['send', 'Send', 'upload'], ['receive', 'Receive', 'import']]) bar.append(iconBtn(glyph, label, { role: 'tab', id: `studyTab-${id}`, onclick: () => show(id) }));
   const d = dialog('Share study material', bar, sendPanel, receivePanel);
   d.addEventListener('close', () => { if (session?.codeClock) clearInterval(session.codeClock); }, { once: true });
   show(aimed ? 'send' : tab);
@@ -206,14 +210,12 @@ async function receiveViaQrStream(host, stateEl) {
 }
 
 async function fillReceive(host, panel) {
-  const close = el('button', { type: 'button', textContent: 'Close', onclick: closeDialog });
-  const importFile = el('button', { type: 'button', textContent: 'Import a file…', title: 'A .ncstudy file from another NoteComplete', onclick: () => { closeDialog(); host.importStudyFile(); } });
+  const close = iconBtn('close', 'Close', { onclick: closeDialog });
+  const importFile = iconBtn('import', 'Import a file…', { title: 'A .ncstudy file from another NoteComplete', onclick: () => { closeDialog(); host.importStudyFile(); } });
   const state = el('p', { className: 'muted', role: 'status', textContent: '' });
-  const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
-  const scanStream = el('button', {
-    type: 'button',
+  const canScan = canScanQr();
+  const scanStream = iconBtn('qr', 'Scan QR stream', {
     className: window.notecompleteCollab ? '' : 'primary',
-    textContent: 'Scan QR stream',
     hidden: !canScan,
     title: 'Scan single or animated multi-frame QR codes directly from another NoteComplete',
     onclick: async () => {
@@ -231,7 +233,7 @@ async function fillReceive(host, panel) {
     return;
   }
   if (session?.role !== 'host') {
-    const start = el('button', { className: 'primary', type: 'button', textContent: 'Start receiving' });
+    const start = iconBtn('import', 'Start receiving', { className: 'primary' });
     start.onclick = async () => {
       start.disabled = true;
       try {
@@ -274,7 +276,7 @@ async function askAboutPack(session, id, pack, from) {
       el('h2', { id: 'packTitle', textContent: `${from} sends you study material` }),
       el('p', {}, el('strong', { textContent: pack.title }), `: ${describePack(pack)}.`),
       el('p', { className: 'muted', textContent: 'It is added to the same note here when you have it; otherwise it is kept as a note of its own in Study → All quizzes and decks.' }),
-      buttons(el('button', { type: 'button', textContent: 'Decline', onclick: finish(false) }), el('button', { type: 'button', className: 'primary', textContent: 'Accept', onclick: finish(true) })));
+      buttons(iconBtn('close', 'Decline', { onclick: finish(false) }), iconBtn('check', 'Accept', { className: 'primary', onclick: finish(true) })));
     d.addEventListener('cancel', (event) => { event.preventDefault(); finish(false)(); });
     document.body.append(d);
     d.addEventListener('close', () => d.remove());
@@ -361,10 +363,8 @@ export async function openShareNoteQr(host) {
   const bridge = noteShareBridge();
   let mode = bridge ? 'link' : 'p2p';
   const stage = el('div', { className: 'collab-panel' });
-  const customizeBtn = el('button', {
-    type: 'button',
+  const customizeBtn = iconBtn('settings', 'Choose what .nfedit includes…', {
     className: 'nfedit-customize-btn',
-    textContent: 'Choose what .nfedit includes…',
     onclick: async () => {
       const next = await host.pickProjectOptions?.(projectOptions);
       if (next) {
@@ -394,15 +394,13 @@ export async function openShareNoteQr(host) {
 
   const tabs = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Note QR transfer method' });
   const tabDefs = bridge
-    ? [['link', 'Wi-Fi / Link QR'], ['p2p', 'Web / iOS P2P QR']]
-    : [['p2p', 'Web / iOS P2P QR'], ['offline', 'Offline QR stream']];
-  if (bridge) tabDefs.push(['offline', 'Offline QR stream']);
+    ? [['link', 'Wi-Fi / Link QR', 'link'], ['p2p', 'Web / iOS P2P QR', 'share']]
+    : [['p2p', 'Web / iOS P2P QR', 'share'], ['offline', 'Offline QR stream', 'qr']];
+  if (bridge) tabDefs.push(['offline', 'Offline QR stream', 'qr']);
   const tabButtons = {};
-  for (const [id, label] of tabDefs) {
-    const btn = el('button', {
-      type: 'button',
+  for (const [id, label, glyph] of tabDefs) {
+    const btn = iconBtn(glyph, label, {
       role: 'tab',
-      textContent: label,
       'aria-selected': String(mode === id),
       onclick: () => {
         if (mode === id) return;
@@ -462,11 +460,9 @@ export async function openShareNoteQr(host) {
         state.textContent = e.message;
       }
     };
-    const connectBtn = el('button', { type: 'button', className: 'primary', textContent: 'Send file', onclick: () => { void connectWithReply(replyInput.value); } });
-    const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
-    const scanBtn = el('button', {
-      type: 'button',
-      textContent: 'Scan reply QR',
+    const connectBtn = iconBtn('forward', 'Send file', { className: 'primary', onclick: () => { void connectWithReply(replyInput.value); } });
+    const canScan = canScanQr();
+    const scanBtn = iconBtn('qr', 'Scan reply QR', {
       hidden: !canScan,
       onclick: async () => {
         scanBtn.disabled = true;
@@ -495,45 +491,42 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(
       el('div', { className: 'collab-pair' }, qrBox, meta),
       buttons(
-        el('button', { type: 'button', textContent: 'Save / share file', onclick: async () => { closeDialog(); await host.exportAndDownload(format, format === 'project' ? projectOptions : undefined); } }),
+        iconBtn('save', 'Save / share file', { onclick: async () => { closeDialog(); await host.exportAndDownload(format, format === 'project' ? projectOptions : undefined); } }),
         scanBtn,
-        el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+        iconBtn('close', 'Close', { onclick: closeDialog }),
         connectBtn));
   }
 
   async function renderOfflineNote(exported) {
+    const launchOfflineQr = async () => {
+      closeDialog();
+      await showQrTransfer({
+        title: `Share “${exported.name}” offline via QR`,
+        subtitle: 'Receiver opens Export & share… → Receive note via QR / P2P… → Scan QR stream.',
+        payload: { kind: 'note', name: exported.name, mime: exported.mime, base64: base64UrlEncode(exported.bytes) },
+        onDownloadFallback: () => host.exportAndDownload(format, format === 'project' ? projectOptions : undefined),
+        fallbackLabel: 'Save file instead',
+        status: host.status,
+      });
+    };
     if (exported.bytes.byteLength > MAX_OFFLINE_NOTE_BYTES) {
       stage.replaceChildren(
         el('p', {}, el('strong', { textContent: exported.name }), ` is ${formatByteSize(exported.bytes.byteLength)}.`),
         el('p', { className: 'muted', textContent: `Pure offline visual QR frames work best up to ${Math.round(MAX_OFFLINE_NOTE_BYTES / 1024)} KB (smaller ink/Markdown notes or study packs). Strip PDFs/media in .nfedit, or use Web / iOS P2P QR.` }),
         buttons(
-          ...(format === 'project' && host.pickProjectOptions ? [el('button', { type: 'button', textContent: 'Strip PDFs / media…', onclick: () => customizeBtn.click() })] : []),
-          el('button', { type: 'button', className: 'primary', textContent: 'Use Web / iOS P2P QR', onclick: () => tabButtons.p2p.click() }),
-          el('button', { type: 'button', textContent: 'Share quizzes & decks (QR)…', onclick: () => { closeDialog(); void openStudyShare(host); } }),
-          el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+          ...(format === 'project' && host.pickProjectOptions ? [iconBtn('trim', 'Strip PDFs / media…', { onclick: () => customizeBtn.click() })] : []),
+          iconBtn('share', 'Use Web / iOS P2P QR', { className: 'primary', onclick: () => tabButtons.p2p.click() }),
+          iconBtn('cards', 'Share quizzes & decks (QR)…', { onclick: () => { closeDialog(); void openStudyShare(host); } }),
+          iconBtn('qr', 'Force QR stream (not recommended)', { className: 'danger', title: 'Export this large note as an offline QR stream anyway — takes many QR frames to scan', onclick: launchOfflineQr }),
+          iconBtn('close', 'Close', { onclick: closeDialog }),
         ));
       return;
     }
-    const startOffline = el('button', {
-      type: 'button',
-      className: 'primary',
-      textContent: 'Show offline QR stream',
-      onclick: async () => {
-        closeDialog();
-        await showQrTransfer({
-          title: `Share “${exported.name}” offline via QR`,
-          subtitle: 'Receiver opens Export & share… → Receive note via QR / P2P… → Scan QR stream.',
-          payload: { kind: 'note', name: exported.name, mime: exported.mime, base64: base64UrlEncode(exported.bytes) },
-          onDownloadFallback: () => host.exportAndDownload(format, format === 'project' ? projectOptions : undefined),
-          fallbackLabel: 'Save file instead',
-          status: host.status,
-        });
-      },
-    });
+    const startOffline = iconBtn('qr', 'Show offline QR stream', { className: 'primary', onclick: launchOfflineQr });
     stage.replaceChildren(
       el('p', {}, el('strong', { textContent: exported.name }), ` (${formatByteSize(exported.bytes.byteLength)}) fits cleanly inside offline QR frames with zero internet needed.`),
       buttons(
-        el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+        iconBtn('close', 'Close', { onclick: closeDialog }),
         startOffline));
   }
 
@@ -585,9 +578,7 @@ export async function openShareNoteQr(host) {
     }
 
     const actions = [];
-    actions.push(el('button', {
-      type: 'button',
-      textContent: 'Stop link',
+    actions.push(iconBtn('stop', 'Stop link', {
       onclick: async () => {
         if (sharedId) await bridge.unshareFile(sharedId).catch(() => {});
         sharedId = null;
@@ -595,15 +586,11 @@ export async function openShareNoteQr(host) {
         host.status('Stopped note download link.');
       },
     }));
-    actions.push(el('button', {
-      type: 'button',
-      textContent: 'Save file copy',
+    actions.push(iconBtn('save', 'Save file copy', {
       onclick: async () => { closeDialog(); await host.exportAndDownload(format); },
     }));
     if (bridge.canOnline) {
-      const onlineBtn = el('button', {
-        type: 'button',
-        textContent: sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…',
+      const onlineBtn = iconBtn('cloud', sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…', {
         onclick: async () => {
           onlineBtn.disabled = true;
           try {
@@ -615,7 +602,7 @@ export async function openShareNoteQr(host) {
       });
       actions.push(onlineBtn);
     }
-    actions.push(el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog }));
+    actions.push(iconBtn('check', 'Done', { className: 'primary', onclick: closeDialog }));
     const noteLine = el('p', { className: 'muted', textContent: 'Download link stays active until you click Stop link or quit NoteComplete.' });
     const firewall = sharedMeta.firewall?.command
       ? el('div', { className: 'collab-firewall' }, el('p', { textContent: `Blocked by ${sharedMeta.firewall.name}? Allow port ${sharedMeta.port} once:` }), linkRowEl(sharedMeta.firewall.command, 'Firewall command copied.'))
@@ -676,7 +663,7 @@ export async function openReceiveNoteQr(host) {
           copyRow,
           progress,
           rxState)),
-        buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog })));
+        buttons(iconBtn('close', 'Cancel', { onclick: closeDialog })));
 
       const result = await rx.receive(({ received, total, name }) => {
         progress.hidden = false;
@@ -695,12 +682,10 @@ export async function openReceiveNoteQr(host) {
     }
   };
 
-  const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
+  const canScan = canScanQr();
   const offlineRx = new QrReceiver();
-  const scanBtn = el('button', {
-    type: 'button',
+  const scanBtn = iconBtn('qr', 'Scan sender QR', {
     className: 'primary',
-    textContent: 'Scan sender QR',
     hidden: !canScan,
     onclick: async () => {
       scanBtn.disabled = connectBtn.disabled = true;
@@ -738,10 +723,8 @@ export async function openReceiveNoteQr(host) {
     },
   });
 
-  const connectBtn = el('button', {
-    type: 'button',
+  const connectBtn = iconBtn('forward', 'Connect with code', {
     className: canScan ? '' : 'primary',
-    textContent: 'Connect with code',
     onclick: () => { void startWebRtcAnswer(offerInput.value); },
   });
 
@@ -749,7 +732,7 @@ export async function openReceiveNoteQr(host) {
     el('p', { className: 'muted', textContent: 'Accept a full note from Web, iOS Safari, Android, or desktop with no Cloudflare account or storage server.' }),
     el('label', { className: 'p2p-reply-label' }, el('span', { textContent: 'Sender’s WebRTC offer code (or scan their QR)' }), offerInput),
     state,
-    buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), scanBtn, connectBtn));
+    buttons(iconBtn('close', 'Cancel', { onclick: closeDialog }), scanBtn, connectBtn));
 
   const d = dialog('Receive note via QR / P2P', stage);
   d.addEventListener('close', cleanup, { once: true });

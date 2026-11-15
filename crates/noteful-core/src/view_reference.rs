@@ -2,6 +2,7 @@
 //! one walk (view.rs). Kept, unchanged, only so a test can compare the two.
 use crate::{editor::added_svg, Editor, Result};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 
 impl Editor {
     pub(crate) fn view_reference(&self, page: usize) -> Result<Value> {
@@ -148,6 +149,23 @@ impl Editor {
             .collect();
         let order = self.page_order();
         let deleted_audio = self.deleted_audio();
+        let stripped_audio = self.stripped_audio_media();
+        let audio: Vec<_> = self
+            .scene
+            .audio
+            .iter()
+            .filter(|a| {
+                !deleted_audio.contains(a.id.as_str()) && !stripped_audio.contains(a.id.as_str())
+            })
+            .collect();
+        let active_audio: HashSet<&str> = audio.iter().map(|a| a.id.as_str()).collect();
+        let deleted_recordings: HashSet<&str> = self
+            .scene
+            .recordings
+            .iter()
+            .filter(|r| deleted_audio.contains(r.asset_id.as_str()))
+            .map(|r| r.id.as_str())
+            .collect();
         // Recording page lists are slots; the host navigates by display position.
         let recordings: Vec<_> = self
             .scene
@@ -155,7 +173,11 @@ impl Editor {
             .iter()
             .filter(|r| !deleted_audio.contains(r.asset_id.as_str()))
             .map(|r| {
+                let is_animation = !active_audio.contains(r.asset_id.as_str());
                 let mut r = serde_json::to_value(r).unwrap_or(Value::Null);
+                if is_animation {
+                    r["animation"] = json!(true);
+                }
                 if let Some(pages) = r["pages"].as_array_mut() {
                     for p in pages.iter_mut() {
                         if let Some(d) = p.as_u64().and_then(|s| self.display_index(s as usize)) {
@@ -184,7 +206,7 @@ impl Editor {
         };
         let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {w} {h}\" width=\"{w}\" height=\"{h}\" style=\"isolation:isolate\">{defs}{content}</svg>");
         Ok(
-            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"page_order":order,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"parts":parts,"audio":self.scene.audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items_reference(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>self.floor,"history_floor":self.floor,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page),"recognized_text":self.recognized_words(page),"canvas":self.canvas}),
+            json!({"title":self.scene.title,"pages":order.len(),"page":self.display_index(page),"slot":page,"page_order":order,"size":size,"base_size":p.size,"svg":svg,"warnings":p.warnings,"texts":texts,"parts":parts,"audio":audio,"recordings":recordings,"layers":layers,"shapes":self.additions(page).filter(|(id,l)| l.shape.is_some()&&!deleted.contains(id.as_str())&&layers.iter().any(|layer|layer.id==l.layer&&layer.visible)).map(|(id,l)|json!({"id":id,"line":l})).collect::<Vec<_>>(),"page_sizes":order.iter().map(|s| self.page_geometry(*s).map(|g| g.0)).collect::<Result<Vec<_>>>()?,"pdf_background":pdf_background,"tapes":p.items.iter().filter(|i| !deleted.contains(i.id.as_str())).filter_map(|i| i.tape().map(|open| json!({"id":i.id,"bounds":i.bounds,"revealed":open}))).chain(additions.iter().filter(|(id, l)| l.tool == 2 && !deleted.contains(id.as_str())).map(|(id, l)| { let [x, y, w, h] = crate::manipulation::bounds(&l.points); let r = l.width / 2.; json!({"id":id,"bounds":[x - r, y - r, w + 2. * r, h + 2. * r],"revealed":false}) })).collect::<Vec<_>>(),"locked":self.locked_items_reference(page),"timings":p.timings.iter().filter(|t| !deleted.contains(t.item_id.as_str()) && !deleted_recordings.contains(t.recording_id.as_str())).collect::<Vec<_>>(),"visible_imported":imported,"visible_added":added,"erased":deleted.len(),"can_undo":self.cursor>self.floor,"history_floor":self.floor,"can_redo":self.cursor<self.history.len(),"edit_count":self.cursor,"ink_text":self.ink_words(page),"recognized_text":self.recognized_words(page),"canvas":self.canvas}),
         )
     }
     /// Items locked in place on a page, with their current bounds.

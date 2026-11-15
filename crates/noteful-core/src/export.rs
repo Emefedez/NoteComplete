@@ -816,11 +816,16 @@ impl Editor {
             array(&mut index, 3)?.retain(|v| v.as_text().is_none_or(|id| !dead_pdfs.contains(id)));
         }
         let deleted_audio = self.deleted_audio();
+        let stripped_audio = self.stripped_audio_media();
         let removed_audio: HashSet<String> = self
             .scene
             .audio
             .iter()
-            .filter(|a| strip_native_audio || deleted_audio.contains(a.id.as_str()))
+            .filter(|a| {
+                strip_native_audio
+                    || deleted_audio.contains(a.id.as_str())
+                    || stripped_audio.contains(a.id.as_str())
+            })
             .map(|a| a.id.clone())
             .collect();
         if !removed_audio.is_empty() {
@@ -832,7 +837,7 @@ impl Editor {
             .scene
             .recordings
             .iter()
-            .filter(|r| removed_audio.contains(&r.asset_id))
+            .filter(|r| strip_native_audio || deleted_audio.contains(r.asset_id.as_str()))
             .map(|r| r.id.clone())
             .collect();
         // PDFs added with inserted or background-changed pages become ordinary resources,

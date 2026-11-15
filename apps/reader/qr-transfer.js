@@ -455,7 +455,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
         restartTimer();
       },
     }, icon('play'));
-    const infoBtn = makeEl('button', { type: 'button', textContent: 'Info (0)', title: 'Jump back to the info QR', onclick: () => { void showFrame(0); } });
+    const infoBtn = makeEl('button', { type: 'button', title: 'Jump back to the info QR', onclick: () => { void showFrame(0); } }, icon('note'), makeEl('span', { textContent: 'Info (0)' }));
     const prevBtn = makeEl('button', { type: 'button', className: 'icon-button', title: 'Previous QR frame', 'aria-label': 'Previous', onclick: () => { void showFrame(index - 1); } }, icon('arrowLeft'));
     const nextBtn = makeEl('button', { type: 'button', className: 'icon-button', title: 'Next QR frame', 'aria-label': 'Next', onclick: () => { void showFrame(index + 1); } }, icon('arrowRight'));
     const speedSel = makeEl('select', { 'aria-label': 'QR frame speed', className: 'qr-speed-select' },
@@ -470,11 +470,10 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
   if (onDownloadFallback) {
     actions.append(makeEl('button', {
       type: 'button',
-      textContent: fallbackLabel,
       onclick: async () => { dialog.close(); await onDownloadFallback(); },
-    }));
+    }, icon('save'), makeEl('span', { textContent: fallbackLabel })));
   }
-  actions.append(makeEl('button', { type: 'button', className: multi ? '' : 'primary', textContent: 'Done', onclick: () => dialog.close() }));
+  actions.append(makeEl('button', { type: 'button', className: multi ? '' : 'primary', onclick: () => dialog.close() }, icon('check'), makeEl('span', { textContent: 'Done' })));
 
   const dialog = makeEl('dialog', { className: 'ocr-dialog collab-dialog', 'aria-labelledby': headingId },
     makeEl('h2', { id: headingId, textContent: title || 'Share via QR' }),

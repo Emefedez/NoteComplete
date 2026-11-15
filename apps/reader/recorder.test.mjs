@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordingMime, extensionOf, mergeAdded, packAdded, addedAudio, recordingTitle, clock } from './recorder.js';
+import { ANIMATION_MIME, recordingMime, extensionOf, mergeAdded, packAdded, addedAudio, recordingTitle, animationTitle, clock } from './recorder.js';
 
 test('formats recording clock as h:mm:ss', () => {
   assert.equal(clock(0), '0:00:00');
@@ -60,4 +60,36 @@ test('imported and removed audio is kept per note', async () => {
 test('says when the device cannot record', async () => {
   const added = addedAudio({ store: { get: async () => null, set: async () => {} } });
   await assert.rejects(added.start(), /cannot record/);
+});
+
+test('records an animation without a microphone and captures stroke timings', async () => {
+  let fakeNow = 1_000;
+  const stores = new Map();
+  const store = { get: async (_s, k) => stores.get(k), set: async (_s, k, v) => { stores.set(k, v); } };
+  const added = addedAudio({ store, now: () => fakeNow });
+  await added.load('fp-anim');
+
+  added.startAnimation();
+  assert.equal(added.recording?.mode, 'animation');
+  fakeNow = 2_250;
+  added.recordTiming('stroke-1', 0, 0.4);
+  added.pause();
+  fakeNow = 10_000; // paused duration must not advance animation elapsed time
+  added.pause();
+  fakeNow = 11_000;
+  added.recordTiming('stroke-2', 2, 0.25);
+
+  const entry = await added.stop();
+  assert.equal(entry.mime, ANIMATION_MIME);
+  assert.match(animationTitle(1_700_000_000_000), /^Animation · /);
+  const payload = JSON.parse(await entry.blob.text());
+  assert.equal(payload.version, 1);
+  assert.ok(Math.abs(payload.duration - 2.25) < 0.01);
+  assert.deepEqual(payload.pages, [0, 2]);
+  assert.deepEqual(payload.timings, [
+    { item_id: 'stroke-1', start: 0.85, end: 1.25 },
+    { item_id: 'stroke-2', start: 2, end: 2.25 },
+  ]);
+  assert.equal(added.recording, null);
+  assert.equal(added.list.length, 1);
 });

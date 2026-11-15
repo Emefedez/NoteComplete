@@ -40,6 +40,8 @@
           <button id="newDocument" data-icon="note">New document…<kbd>Ctrl N</kbd></button>
           <button id="newHandwritten" data-icon="text" data-palette="New handwritten note from Markdown…" title="Write Markdown as real handwriting ink: a new note">New from Markdown…</button>
           <button id="newWithAi" data-icon="spark" data-palette="New note with AI…" title="Your AI tool writes a note about a topic or from what you paste, as handwriting" hidden>New note with AI…</button>
+          <button id="takeNotesAi" data-icon="batchNotes" data-palette="Take notes with AI…" title="Batch-create handwritten notebooks from Recents, folders, PDFs, Office docs or topics">Take notes with AI…</button>
+          <button id="fileCreateExam" data-icon="exam" data-palette="Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders or files">Create exam (AI)…</button>
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
           <hr />
           <hr />
@@ -144,7 +146,7 @@
           <button id="resizePage" data-icon="fit" disabled>Page size…</button>
           <button id="resizeDrag" data-icon="maximize" disabled>Resize by dragging the borders</button>
           <hr />
-          <button id="changePageBg" data-icon="note" disabled>Change PDF background…</button>
+          <button id="changePageBg" data-icon="pdfBg" disabled>Change PDF background…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="studyMenu">
@@ -152,6 +154,7 @@
         <div class="menu-content" role="menu">
           <button id="studyCards" data-icon="cards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
           <button id="studyQuiz" data-icon="help" disabled>Quiz me…<kbd>Shift Q</kbd></button>
+          <button id="studyCreateExam" data-icon="exam" data-palette="Study: Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders, notes or topics">Create exam (AI)…</button>
           <button id="studyCheck" data-icon="check" disabled title="The AI checks pages for errors, inconsistencies, unclear and missing points; its corrections go into your notes under each page">Fact check…<kbd>Shift F</kbd></button>
           <hr />
           <button id="studyResume" data-icon="play" disabled>Resume quiz<kbd>Q</kbd></button>
@@ -188,33 +191,39 @@
           <input id="importAnyFile" type="file" hidden />
       <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle">
         <h2 id="exportTitle">Export and share</h2>
-        <section aria-labelledby="exportPages">
-          <h3 id="exportPages">Pages</h3>
-          <button id="exportPdf" disabled class="export-item" data-icon="pages" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
-          <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
-          <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
-          <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
-        </section>
-        <section aria-labelledby="exportFiles">
-          <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
-          <button id="exportProject" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.nfedit)…" title="Export a .nfedit file and choose which resources to include (edit history, embedded PDFs, audio recordings, Markdown notes, handwriting text, quizzes, flashcards and scratchpad)."><b>NoteComplete project</b><small>.nfedit · choose what to include (history, PDFs, audio, notes, study sets)</small></button>
-          <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
-          <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
-        </section>
-        <section aria-labelledby="exportStudyHead">
-          <h3 id="exportStudyHead">Study</h3>
-          <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
-          <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
-        </section>
-        <section aria-labelledby="exportShareHead">
-          <h3 id="exportShareHead">Share with others</h3>
-          <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
-          <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note via QR / P2P…" title="Scan or paste a note transfer from Web, iOS, Android or desktop without any account"><b>Receive note via QR / P2P…</b><small>Scan QR stream or WebRTC P2P code</small></button>
-          <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
-          <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
-          <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
-          <button id="joinTablet" class="export-item" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
-        </section>
+        <div class="export-columns">
+          <div class="export-column">
+            <section aria-labelledby="exportPages">
+              <h3 id="exportPages">Pages</h3>
+              <button id="exportPdf" disabled class="export-item" data-icon="pages" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
+              <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
+              <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+              <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
+            </section>
+            <section aria-labelledby="exportFiles">
+              <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
+              <button id="exportProject" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.nfedit)…" title="Export a .nfedit file and choose which resources to include (edit history, embedded PDFs, audio recordings, Markdown notes, handwriting text, quizzes, flashcards and scratchpad)."><b>NoteComplete project</b><small>.nfedit · choose what to include (history, PDFs, audio, notes, study sets)</small></button>
+              <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
+              <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
+            </section>
+          </div>
+          <div class="export-column">
+            <section aria-labelledby="exportStudyHead">
+              <h3 id="exportStudyHead">Study</h3>
+              <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
+              <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
+            </section>
+            <section aria-labelledby="exportShareHead">
+              <h3 id="exportShareHead">Share with others</h3>
+              <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
+              <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note via QR / P2P…" title="Scan or paste a note transfer from Web, iOS, Android or desktop without any account"><b>Receive note via QR / P2P…</b><small>Scan QR stream or WebRTC P2P code</small></button>
+              <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
+              <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
+              <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
+              <button id="joinTablet" class="export-item" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
+            </section>
+          </div>
+        </div>
         <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
       </dialog>
     </nav>
@@ -713,20 +722,22 @@
         <div id="grabMenu" class="grab-menu grab-icons" role="toolbar" aria-label="Grabbed region" hidden><button id="grabSelect" type="button" class="icon-button" data-icon="select" title="Select what is inside" aria-label="Select what is inside"></button><button id="grabCopy" type="button" class="icon-button" data-icon="copy" title="Copy text" aria-label="Copy text"></button><button id="grabAsk" type="button" class="icon-button primary" data-icon="spark" title="Ask AI" aria-label="Ask AI"></button><button id="grabAttach" type="button" class="icon-button" data-icon="attach" title="Add to chat" aria-label="Add to chat"></button><button id="grabErase" type="button" class="icon-button" data-icon="erase" title="Erase the ink in this region" aria-label="Erase the ink in this region"></button><button id="grabCancel" type="button" class="icon-button" data-icon="close" title="Cancel" aria-label="Cancel"></button></div>
         <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
           <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
-          <!-- The recording list, with Record and Import beside it (recorder.js). -->
+          <!-- The recording & animation list, with Record, Animate, and Import beside it (recorder.js). -->
           <div class="audio-pick">
-            <select id="recording" aria-label="Recording"></select>
+            <select id="recording" aria-label="Recording or animation"></select>
             <div id="audioSources" class="audio-sources">
               <button id="recordAudio" type="button" data-icon="mic" title="Record with the microphone (Shift R)" aria-label="Record"><span class="label">Record</span></button>
+              <button id="recordAnimation" type="button" data-icon="animation" title="Record stroke/edit animation only (no microphone, saves space)" aria-label="Record animation"><span class="label">Animate</span></button>
               <button id="importAudio" type="button" data-icon="folder" title="Add an audio file to this note" aria-label="Import audio"><span class="label">Import…</span></button>
-              <button id="removeAudio" type="button" hidden title="Remove this recording from the note">Remove</button>
+              <button id="stripAudioToAnim" type="button" data-icon="animation" hidden title="Discard the audio recording and keep only the handwriting animation (saves space)"><span>To animation</span></button>
+              <button id="removeAudio" type="button" data-icon="trash" hidden title="Remove this recording from the note"><span id="removeAudioLabel">Remove</span></button>
             </div>
           </div>
           <div id="recordingRow" class="recording-row" hidden>
             <span class="rec-dot" aria-hidden="true"></span><output id="recordingClock" aria-live="off">0:00</output><span id="recordingNote" class="muted">Recording</span>
             <span class="spacer"></span>
-            <button id="pauseRecording" type="button">Pause</button>
-            <button id="stopRecording" type="button" class="primary" title="Stop and keep the recording (Shift R)">Stop</button>
+            <button id="pauseRecording" type="button" data-icon="pause">Pause</button>
+            <button id="stopRecording" type="button" data-icon="stop" class="primary" title="Stop and keep (Shift R)">Stop</button>
           </div>
           <input id="audioFile" type="file" hidden />
           <div class="audio-transport">
@@ -842,7 +853,7 @@
           <div class="panel-heading">
             <h2>Pages</h2>
             <span class="spacer"></span>
-            <button id="pagesChangeBg" type="button" class="icon-button" data-icon="note" aria-label="Change PDF background…" title="Change PDF background on pages…" disabled></button>
+            <button id="pagesChangeBg" type="button" class="icon-button" data-icon="pdfBg" aria-label="Change PDF background…" title="Change PDF background on pages…" disabled></button>
             <button id="closePages" aria-label="Close pages">×</button>
           </div>
           <div id="pagesGroupSlot" class="group-slot">
@@ -987,14 +998,14 @@
   <label class="ocr-languages">Pages
     <span class="page-bg-inline">
       <input id="pageBgTarget" type="text" placeholder="e.g. 1, 3-5" spellcheck="false" autocomplete="off" />
-      <button id="pageBgTargetCurrent" type="button">Current</button>
-      <button id="pageBgTargetAll" type="button">All</button>
+      <button id="pageBgTargetCurrent" type="button" data-icon="pages">Current</button>
+      <button id="pageBgTargetAll" type="button" data-icon="layers">All</button>
     </span>
   </label>
   <label class="ocr-languages">Background
     <span class="page-bg-inline">
       <select id="pageBgSource" data-native></select>
-      <button id="pageBgPick" type="button">Choose PDF…</button>
+      <button id="pageBgPick" type="button" data-icon="folder">Choose PDF…</button>
     </span>
   </label>
   <p id="pageBgPicked" class="muted page-bg-picked" hidden></p>
@@ -1017,7 +1028,7 @@
   </div>
   <p id="pageBgSizeNote" class="muted page-bg-note" role="status" aria-live="polite"></p>
   <p id="pageBgError" class="muted link-error" hidden></p>
-  <div class="ocr-actions"><button id="pageBgCancel" type="button">Cancel</button><button id="pageBgApply" type="button" class="primary">Apply</button></div>
+  <div class="ocr-actions"><button id="pageBgCancel" type="button" data-icon="close">Cancel</button><button id="pageBgApply" type="button" data-icon="check" class="primary">Apply</button></div>
 </dialog>
 
 <dialog id="studyDialog" class="ocr-dialog" aria-labelledby="studyTitle">
@@ -1340,7 +1351,7 @@
     <span>Base pages &amp; ink: <strong id="nfeditExportBaseSize">0 B</strong></span>
     <span>Estimated size: <strong id="nfeditExportTotalSize">0 B</strong></span>
   </div>
-  <div class="ocr-actions"><span class="spacer"></span><button id="nfeditExportCancel" type="button">Cancel</button><button id="nfeditExportConfirm" type="button" class="primary">Export .nfedit</button></div>
+  <div class="ocr-actions"><span class="spacer"></span><button id="nfeditExportCancel" type="button" data-icon="close">Cancel</button><button id="nfeditExportConfirm" type="button" data-icon="export" class="primary"><span id="nfeditExportConfirmLabel">Export .nfedit</span></button></div>
 </dialog>
 
 <dialog id="widthDialog" class="ocr-dialog width-dialog" aria-labelledby="widthTitle">

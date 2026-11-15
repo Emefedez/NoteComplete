@@ -21,7 +21,7 @@ pub mod trace;
 pub use annotate::{annotate, Annotation, Item};
 pub use compose::accent_index;
 pub use font::{FontName, FONT_NAMES};
-pub use hand::{color, highlight_color, Hand};
+pub use hand::{color, highlight_color, tape, Hand};
 pub use layout::{layout_overlay, page_layout};
 pub use paper::{paper_pdf, paper_svg, Paper, PaperKind, A4};
 pub use rng::seed_of;

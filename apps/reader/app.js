@@ -52,6 +52,8 @@ import { PdfBackgrounds, backgroundPlacement, openPdf, copyCanvas } from "./pdf-
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
 import { buildPageBackgroundChanges, bytesToBase64, formatBytes, parsePageSelection, shouldSuggestCompact, usedPdfPageIndices } from "./page-background.js";
 import { handwritingConverter } from "./convert.js";
+import { examController } from "./exam.js";
+import { batchNotesController } from "./batch-notes.js";
 import { agentConnector } from "./agents.js";
 import { AudioController } from "./audio.js";
 import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
@@ -711,7 +713,7 @@ function buildPages(sizes) {
         toggleTape(p, tape);
         return;
       }
-      if (!p.view?.timings.length) return;
+      if (!p.view?.timings.length && !audio.recording?.timings?.length) return;
       p.audioTap = null;
       const note = epoch, [x, y] = point(event, p);
       try {
@@ -719,8 +721,8 @@ function buildPages(sizes) {
         const itemId = directId || await call("pickTimed", { page: p.index, x, y,
           tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width });
         if (note !== epoch || tool !== "pan") return;
-        const timing = p.view?.timings.find(t => t.item_id === itemId);
-        if (timing && await audio.seekRecording(timing.recording_id, timing.start)) {
+        const timing = p.view?.timings.find(t => t.item_id === itemId) || audio.recording?.timings?.find(t => t.item_id === itemId);
+        if (timing && await audio.seekRecording(timing.recording_id || audio.recording?.id, timing.start)) {
           refreshSelects();
           status(`Audio positioned at ${timing.start.toFixed(1)} seconds.`);
         }
@@ -1337,6 +1339,9 @@ async function renderPage(p, provided) {
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
     p.ink = indexTimedInk(render, result.timings);
+    p.inkRevision = revision;
+    p.addedInkKey = "";
+    p.addedInk = [];
     for (const item of p.ink) {
       item.el.setAttribute("data-timed-ink", "");
       const title = document.createElementNS(ns, "title");
@@ -1552,6 +1557,17 @@ async function action(op, args = {}, hold = null) {
   try {
     const result = await mutate(op, args);
     if (token !== epoch) return;
+    if (addedStore?.recording?.mode === "animation" && addedStore.recording.here) {
+      if (op === "draw") {
+        const drawnId = drawnItems.get(result)?.id ?? `new:${result.edit_count - 1}`;
+        addedStore.recordTiming(drawnId, args.page ?? page);
+      } else if (op === "drawMany") {
+        const count = (args.lines?.length || 0) + (args.images?.length || 0);
+        for (let k = count; k > 0; k--) {
+          addedStore.recordTiming(`new:${result.edit_count - k}`, args.page ?? page);
+        }
+      }
+    }
     if (edited(op, args, result)) return;
     // A new shape is selected to adjust it, except on a drawing tablet (it keeps drawing shapes).
     if (op === "draw" && args.line.shape && !args.recognized && !gesture && collab?.role !== "tablet") {
@@ -1591,8 +1607,8 @@ function edited(op, args, result) {
   revision++;
   doc = result;
   savedState();
-  const audioCount = (d) => `${d?.audio?.length || 0}:${d?.recordings?.length || 0}`;
-  if (op === "deleteAudio" || ((op === "undo" || op === "redo") && audioCount(result) !== audioCount(prevDoc))) {
+  const audioStateKey = (d) => `${d?.audio?.length || 0}:${(d?.recordings || []).map((r) => `${r.id}${r.animation ? "a" : ""}`).join(",")}`;
+  if (op === "deleteAudio" || op === "stripAudioMedia" || ((op === "undo" || op === "redo") && audioStateKey(result) !== audioStateKey(prevDoc))) {
     audio.setNative(result.audio || [], result.recordings || []);
     recordingState();
   }
@@ -1725,8 +1741,19 @@ function syncInk() {
     time = audio.time;
   if (!recording && inkSyncedOff) return;
   inkSyncedOff = !recording;
+  const addedTimings = recording?.timings;
   for (const p of panels) {
-    if (p.view && (!recording || p.near !== false)) updateTimedInk(p.ink || [], recording?.id, time);
+    if (!p.view || (recording && p.near === false)) continue;
+    if (addedTimings && recording) {
+      const key = `${recording.id}:${p.inkRevision ?? 0}`;
+      if (p.addedInkKey !== key) {
+        p.addedInkKey = key;
+        p.addedInk = indexTimedInk(p.el, addedTimings);
+      }
+      updateTimedInk(p.addedInk || [], recording.id, time);
+    } else {
+      updateTimedInk(p.ink || [], recording?.id, time);
+    }
   }
 }
 function syncActiveLayerHighlight() {
@@ -4146,19 +4173,24 @@ function recordingState() {
   $("recordingRow").hidden = !r;
   $("audioSources").hidden = !!r;
   for (const el of [$("audioToggle"), $("recordingRow")]) { el.classList.toggle("recording", !!r); el.classList.toggle("paused", !!r?.paused); }
-  $("audioToggle").title = r ? `Recording ${clock(r.seconds)}: audio and transcript (A)` : "Audio and transcript (A)";
+  $("audioToggle").title = r ? `${r.mode === "animation" ? "Animation" : "Recording"} ${clock(r.seconds)}: audio and animation (A)` : "Audio and animation (A)";
   if (r) {
     $("recordingClock").textContent = clock(r.seconds);
-    $("recordingNote").textContent = r.paused ? "Paused" : "Recording";
-    $("pauseRecording").textContent = r.paused ? "Resume" : "Pause";
+    $("recordingNote").textContent = r.paused ? "Paused" : r.mode === "animation" ? "Recording animation" : "Recording";
+    const pauseBtn = $("pauseRecording");
+    if (pauseBtn) {
+      pauseBtn.replaceChildren(icon(r.paused ? "play" : "pause"), r.paused ? "Resume" : "Pause");
+    }
   }
   clearTimeout(clockTimer);
   if (r && !r.paused) clockTimer = setTimeout(recordingState, 500);
-  $("removeAudio").hidden = !audio.selected;
-  if (audio.selected) {
-    $("removeAudio").title = audio.selected.added
-      ? "Remove this added recording from the note"
-      : "Remove this recording from the note (undoable with Ctrl Z)";
+  const selected = audio.selected;
+  $("stripAudioToAnim").hidden = !(selected && selected.asset && selected.recording && !selected.added && !audio.isAnimation(selected));
+  $("removeAudio").hidden = !selected;
+  if (selected) {
+    $("removeAudio").title = selected.added
+      ? `Remove this added ${audio.isAnimation(selected) ? "animation" : "recording"} from the note`
+      : `Remove this ${audio.isAnimation(selected) ? "animation" : "recording"} from the note (undoable with Ctrl Z)`;
   }
 }
 let startingRecording = false;
@@ -4184,17 +4216,32 @@ async function startRecording() {
   } finally { clearTimeout(slow); startingRecording = false; }
   recordingState();
 }
+function startAnimationRecording() {
+  if (addedStore.recording || startingRecording) return;
+  addedStore.startAnimation();
+  if (!audio.paused) $("playAudio")?.click();
+  recordingState();
+  status("Recording animation (edit history only, no audio). Draw on the page, then press Stop.");
+}
 async function stopRecording() {
   if (!addedStore?.recording) return;
   try {
     const take = await addedStore.stop();
-    if (take) status(`${take.name} kept in this note (${Math.round(take.blob.size / 1024)} KB).`);
+    if (take) {
+      const kb = Math.max(1, Math.round(take.blob.size / 1024));
+      status(`${take.name} kept in this note (${kb} KB).`);
+    }
   } catch (e) { status(e.message, true); }
   recordingState();
 }
-function disarmRemove() { delete $("removeAudio").dataset.armed; $("removeAudio").textContent = "Remove"; }
+function disarmRemove() {
+  delete $("removeAudio").dataset.armed;
+  if ($("removeAudioLabel")) $("removeAudioLabel").textContent = "Remove";
+  else $("removeAudio").textContent = "Remove";
+}
 audio.onselect = () => { disarmRemove(); recordingState(); };
 $("recordAudio").onclick = startRecording;
+$("recordAnimation").onclick = startAnimationRecording;
 $("stopRecording").onclick = stopRecording;
 $("pauseRecording").onclick = () => { addedStore.pause(); recordingState(); };
 $("importAudio").onclick = () => $("audioFile").click();
@@ -4206,19 +4253,31 @@ $("audioFile").onchange = async () => {
   try { const added = await addedStore.import(file); status(`${added.name} added to this note.`); }
   catch (e) { status(e.message, true); }
 };
+$("stripAudioToAnim").onclick = async () => {
+  const entry = audio.selected;
+  if (!entry?.asset?.id || entry.added) return;
+  await action("stripAudioMedia", { assetId: entry.asset.id });
+  status("Converted to animation (audio removed to save space). Ctrl Z restores audio.");
+};
 $("removeAudio").onclick = async () => {
   const entry = audio.selected, button = $("removeAudio");
   if (!entry) return;
-  if (button.dataset.armed !== "1") { button.dataset.armed = "1"; button.textContent = "Press again to remove"; return; }
+  if (button.dataset.armed !== "1") {
+    button.dataset.armed = "1";
+    if ($("removeAudioLabel")) $("removeAudioLabel").textContent = "Confirm";
+    else button.textContent = "Press again to remove";
+    return;
+  }
   disarmRemove();
   if (entry.added) {
     await addedStore.remove(entry.added.id).catch((e) => status(e.message, true));
     status(`${entry.added.name} removed from this note.`);
     return;
   }
-  if (!entry.asset?.id) return;
-  await action("deleteAudio", { assetId: entry.asset.id });
-  status("Recording removed. Ctrl Z restores it.");
+  const assetId = entry.asset?.id || entry.recording?.asset_id;
+  if (!assetId) return;
+  await action("deleteAudio", { assetId });
+  status("Removed from this note. Ctrl Z restores it.");
 };
 window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.preventDefault(); e.returnValue = ""; } });
 // The open note's file on disk (desktop), so AI tools can read other pages via MCP,
@@ -5746,6 +5805,50 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
+const openGeneratedFile = async (file, entry) => {
+  if (entry) return openFromLibrary(file, entry);
+  if (!canReplace()) return false;
+  await load(file, { entry });
+  return true;
+};
+const examMaker = examController({
+  call,
+  openPdf,
+  library,
+  groups,
+  hasOpenDoc: () => !!doc || studyText(),
+  openDocTitle: () => (studyText() ? (textView.name || "Document") : (doc?.title || "Note")),
+  openDocPages: () => (studyText() ? textSource.count : (doc?.pages || 0)),
+  pageText: studyDeps.pageText,
+  pageCanvas: studyDeps.pageCanvas,
+  notesText: studyDeps.notesText,
+  jobs,
+  ai,
+  status,
+  download,
+  openGeneratedFile,
+  refreshHome: () => home?.renderRecent?.(),
+});
+const batchNotes = batchNotesController({
+  call,
+  openPdf,
+  library,
+  groups,
+  hasOpenDoc: () => !!doc || studyText(),
+  openDocTitle: () => (studyText() ? (textView.name || "Document") : (doc?.title || "Note")),
+  openDocPages: () => (studyText() ? textSource.count : (doc?.pages || 0)),
+  pageText: studyDeps.pageText,
+  pageCanvas: studyDeps.pageCanvas,
+  notesText: studyDeps.notesText,
+  jobs,
+  ai,
+  status,
+  openGeneratedFile,
+  refreshHome: () => home?.renderRecent?.(),
+});
+$("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
+$("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
+$("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
 practiceWindow = floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });

@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
   readSibling: (file, relative) => ipcRenderer.invoke('files:read-sibling', file, relative),
   saveCopy: (file, options) => ipcRenderer.invoke('files:save-copy', file, options),
+  renderHtmlPdf: html => ipcRenderer.invoke('files:render-html-pdf', html),
   renameOpened: (file, name) => ipcRenderer.invoke('files:rename-opened', file, name),
   trashOpened: (file) => ipcRenderer.invoke('files:trash-opened', file),
   // onCancel(cancel) hands the caller a function that stops the download. A function, not an

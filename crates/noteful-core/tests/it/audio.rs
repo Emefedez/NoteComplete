@@ -286,3 +286,52 @@ fn nfedit_v11_bundles_added_audio_and_filtered_export_strips_selected_resources(
     assert_eq!(flat.study().decks.len(), 1);
     assert!(!flat.view(0).unwrap()["can_undo"].as_bool().unwrap());
 }
+
+#[test]
+fn strip_audio_media_turns_recording_into_animation_with_undo_and_export() {
+    let mut e = Editor::open(crate::samples::PRACTICE_BOOK).unwrap();
+    let asset_id = e.scene.recordings[0].asset_id.clone();
+    assert!(!asset_id.is_empty());
+    let before = e.project_breakdown().unwrap();
+    assert!(before.native_audio_bytes > 0);
+    assert_eq!(before.native_audio_count, 1);
+
+    e.strip_audio_media(&asset_id).unwrap();
+    // Stripping a second time is rejected so edit history stays clean.
+    assert!(e.strip_audio_media(&asset_id).is_err());
+
+    let after = e.project_breakdown().unwrap();
+    assert_eq!(after.native_audio_bytes, 0);
+    assert_eq!(after.native_audio_count, 0);
+
+    let view = e.view(8).unwrap();
+    assert!(view["audio"].as_array().unwrap().is_empty());
+    let recs = view["recordings"].as_array().unwrap();
+    assert_eq!(recs.len(), 1);
+    assert_eq!(recs[0]["animation"], serde_json::json!(true));
+    assert!(!view["timings"].as_array().unwrap().is_empty());
+
+    // Project save/reopen and .noteful export preserve animation metadata without audio bytes.
+    let reopened = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(
+        reopened.view(8).unwrap()["recordings"][0]["animation"],
+        serde_json::json!(true)
+    );
+    assert!(reopened.view(8).unwrap()["audio"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let exported = Editor::open(&e.export_noteful().unwrap()).unwrap();
+    assert!(exported.scene.audio.is_empty());
+    assert_eq!(exported.scene.recordings.len(), 1);
+    assert_eq!(exported.scene.recordings[0].asset_id, asset_id);
+
+    // Undo restores native audio bytes and removes animation flag.
+    e.undo();
+    let restored = e.project_breakdown().unwrap();
+    assert_eq!(restored.native_audio_bytes, before.native_audio_bytes);
+    assert_eq!(restored.native_audio_count, 1);
+    let view_restored = e.view(8).unwrap();
+    assert_eq!(view_restored["audio"].as_array().unwrap().len(), 1);
+    assert!(view_restored["recordings"][0]["animation"].is_null());
+}

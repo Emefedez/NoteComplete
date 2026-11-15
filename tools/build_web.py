@@ -181,6 +181,21 @@ def vendor_modules():
     for package,name in (('yjs','yjs'),('y-protocols','y-protocols'),('lib0','lib0'),('qrcode-generator','qrcode')):
         licence=modules/package/'LICENSE'
         if licence.exists():shutil.copy2(licence,out/name/'LICENSE')
+    jsqr_out=out/'jsqr'
+    if jsqr_out.exists():shutil.rmtree(jsqr_out)
+    jsqr_out.mkdir(parents=True,exist_ok=True)
+    jsqr_umd=(modules/'jsqr/dist/jsQR.js').read_text()
+    (jsqr_out/'jsqr.mjs').write_text(
+        '// ESM wrapper generated from jsqr/dist/jsQR.js for offline QR scanning without globals or eval.\n'
+        'const _target = {};\n'
+        'const _mod = { exports: _target };\n'
+        '((module, exports, define, self) => {\n'
+        + jsqr_umd
+        + '\n})(_mod, _mod.exports, undefined, _target);\n'
+        'export default typeof _mod.exports === \'function\' ? _mod.exports : (_mod.exports?.default || _target.jsQR);\n'
+    )
+    jsqr_licence=modules/'jsqr/LICENSE'
+    if jsqr_licence.exists():shutil.copy2(jsqr_licence,jsqr_out/'LICENSE')
 
 # --manifest: only rewrite precache.json for the files already built.
 if __name__=='__main__':write_manifest() if sys.argv[1:]==['--manifest'] else main()

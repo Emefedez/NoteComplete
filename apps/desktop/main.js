@@ -1,4 +1,4 @@
-import { app, BaseWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,6 +15,8 @@ import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
 import { menuTemplate } from './app-menu.js';
+import { readerPermissionAllowed } from './permissions.js';
+import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
@@ -364,11 +366,9 @@ app.whenReady().then(async () => {
   integrateLinux().catch(() => { /* Best effort: the app works without file associations. */ });
   try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
   // Two web permissions, for the reader itself only: writing text to the clipboard (Grab → Copy text)
-  // and the microphone (Record in the audio panel); never the camera.
-  const allowed = (permission, url = '', media = []) => String(url).startsWith(home)
-    && (permission === 'clipboard-sanitized-write' || (permission === 'media' && media.length > 0 && media.every(type => type === 'audio')));
-  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowed(permission, details?.requestingUrl || contents?.getURL?.(), details?.mediaTypes || [])));
-  session.defaultSession.setPermissionCheckHandler((_contents, permission, origin, details) => allowed(permission, origin?.endsWith('/') ? origin : `${origin}/`, details?.mediaType ? [details.mediaType] : []));
+  // and camera/microphone media (QR scanning in Share and recording in the audio panel).
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(readerPermissionAllowed(home, permission, details?.requestingUrl || contents?.getURL?.(), details?.mediaTypes || [])));
+  session.defaultSession.setPermissionCheckHandler((_contents, permission, origin, details) => readerPermissionAllowed(home, permission, origin, details?.mediaType ? [details.mediaType] : []));
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*.archive.org/*', '*://archive.org/*'] }, (details, callback) => {
     const responseHeaders = { ...details.responseHeaders };
     responseHeaders['access-control-allow-origin'] = ['*'];
@@ -446,6 +446,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
   ipcMain.handle('files:read-sibling', guarded((_event, file, relative) => files.readSibling(file, relative)));
   ipcMain.handle('files:save-copy', guarded((_event, file, options) => files.saveCopy(file, options)));
+  ipcMain.handle('files:render-html-pdf', guarded((_event, html) => renderHtmlToPdfWithTapes({ BrowserWindow, html })));
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));

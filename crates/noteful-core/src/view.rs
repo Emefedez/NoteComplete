@@ -337,6 +337,16 @@ impl Editor {
         let texts: Vec<Value> = imported_texts.chain(added_texts).collect();
 
         let deleted_audio = self.deleted_audio();
+        let stripped_audio = self.stripped_audio_media();
+        let audio: Vec<_> = self
+            .scene
+            .audio
+            .iter()
+            .filter(|a| {
+                !deleted_audio.contains(a.id.as_str()) && !stripped_audio.contains(a.id.as_str())
+            })
+            .collect();
+        let active_audio: HashSet<&str> = audio.iter().map(|a| a.id.as_str()).collect();
         let deleted_recordings: HashSet<&str> = self
             .scene
             .recordings
@@ -352,7 +362,11 @@ impl Editor {
             .iter()
             .filter(|r| !deleted_audio.contains(r.asset_id.as_str()))
             .map(|r| {
+                let is_animation = !active_audio.contains(r.asset_id.as_str());
                 let mut r = serde_json::to_value(r).unwrap_or(Value::Null);
+                if is_animation {
+                    r["animation"] = json!(true);
+                }
                 if let Some(pages) = r["pages"].as_array_mut() {
                     for p in pages.iter_mut() {
                         if let Some(d) = p.as_u64().and_then(|s| display(s as usize)) {
@@ -414,7 +428,7 @@ impl Editor {
             "warnings": p.warnings,
             "texts": texts,
             "parts": parts,
-            "audio": self.scene.audio.iter().filter(|a| !deleted_audio.contains(a.id.as_str())).collect::<Vec<_>>(),
+            "audio": audio,
             "recordings": recordings,
             "layers": layers,
             "shapes": shapes,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { optionsFrom, LOOK_FIELDS, SAMPLE, aiPrompt, aiEnrichPrompt, answerMarkdown, titleOf } from './convert.js';
+import { optionsFrom, LOOK_FIELDS, SAMPLE, CHEATSHEET, aiPrompt, aiEnrichPrompt, answerMarkdown, titleOf } from './convert.js';
 
 test('only known look options reach the core, and defaults are left out', () => {
   assert.deepEqual(optionsFrom({ look: 'classic', theme: 'dark', paper: 'ruled', hand: '', pen: 'ballpoint', size: '13' }), { look: 'classic', theme: 'dark', paper: 'ruled', pen: 'ballpoint', size: 13 });
@@ -34,4 +34,12 @@ test("making your Markdown richer keeps its content and asks for the dialect's m
   assert.match(prompt, /!draw/);
   assert.match(prompt, /<!-- page N -->/);
   assert.ok(prompt.endsWith("The note:\n# Tema 2\n<!-- page 3 -->\n- uno"));
+});
+
+test("interactive Markdown cheatsheet groups headings, emphasis and layout/SVG snippets", () => {
+  assert.ok(CHEATSHEET.length >= 3);
+  const codes = CHEATSHEET.flatMap((g) => g.items.map((i) => i.code));
+  assert.ok(codes.some((c) => c.includes("!draw")));
+  assert.ok(codes.some((c) => c.includes("=={pink}")));
+  assert.ok(codes.some((c) => c.includes("\\pagebreak")));
 });

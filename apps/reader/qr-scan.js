@@ -1,10 +1,24 @@
-// Reads one or a progressive sequence of QR codes with the camera (`BarcodeDetector`),
-// updating live progress so both invite links and multi-frame `NCQR1` transfers work seamlessly.
+// Reads one or a progressive sequence of QR codes with the camera, using native
+// `BarcodeDetector` when available and falling back to offline `jsQR` frame decoding so
+// desktop Electron and browsers without `BarcodeDetector` scan QR streams reliably.
+import { icon } from './icons.js';
 
+const MAX_SCAN_DIM = 960;
 let cameraPermissionId = 0;
+let jsQrLoading = null;
+
+/** Whether the current environment exposes a camera capture API. */
+export function canScanQr(nav = globalThis.navigator) {
+  return Boolean(nav?.mediaDevices?.getUserMedia);
+}
+
+function defaultLoadJsQr() {
+  return (jsQrLoading ||= import('./vendor/jsqr/jsqr.mjs').then((mod) => mod.default || mod));
+}
 
 function requestNativeCameraPermission() {
-  if (!window.ReactNativeWebView) return Promise.resolve(true);
+  const nativeBridge = globalThis.window?.ReactNativeWebView;
+  if (!nativeBridge) return Promise.resolve(true);
   const id = ++cameraPermissionId;
   return new Promise((resolve) => {
     const onMessage = (event) => {
@@ -15,15 +29,90 @@ function requestNativeCameraPermission() {
       resolve(!!message.granted);
     };
     const cleanup = () => {
-      window.removeEventListener('message', onMessage);
-      document.removeEventListener('message', onMessage);
+      globalThis.window?.removeEventListener('message', onMessage);
+      globalThis.document?.removeEventListener('message', onMessage);
       clearTimeout(timer);
     };
     const timer = setTimeout(() => { cleanup(); resolve(true); }, 10000);
-    window.addEventListener('message', onMessage);
-    document.addEventListener('message', onMessage);
-    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'notecomplete-camera-permission', id }));
+    globalThis.window?.addEventListener('message', onMessage);
+    globalThis.document?.addEventListener('message', onMessage);
+    nativeBridge.postMessage(JSON.stringify({ type: 'notecomplete-camera-permission', id }));
   });
+}
+
+function formatCameraOpenError(error) {
+  const name = error?.name || '';
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return Error('Camera permission was denied (allow camera access, or import a file instead).');
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return Error('No camera was found on this device (connect a camera, or import a file instead).');
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return Error('The camera is busy in another app (close it there, or import a file instead).');
+  }
+  return Error('The camera is not available (allow camera permission, or import a file instead).');
+}
+
+/** Opens a video stream with rear-camera preference and falls back to any available webcam. */
+export async function openCameraStream(mediaDevices = globalThis.navigator?.mediaDevices) {
+  if (!mediaDevices?.getUserMedia) {
+    throw Error('The camera is not available on this device (import a file or paste the code instead).');
+  }
+  const preferred = {
+    audio: false,
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  };
+  try {
+    return await mediaDevices.getUserMedia(preferred);
+  } catch (err) {
+    if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+      throw formatCameraOpenError(err);
+    }
+    try {
+      return await mediaDevices.getUserMedia({ audio: false, video: true });
+    } catch (fallbackErr) {
+      throw formatCameraOpenError(fallbackErr);
+    }
+  }
+}
+
+/** Builds a detector using native `BarcodeDetector` when supported, else canvas + `jsQR`. */
+export async function createQrDetector({ doc = globalThis.document, Detector = globalThis.BarcodeDetector, loadJsQr = defaultLoadJsQr } = {}) {
+  if (typeof Detector === 'function') {
+    try {
+      const supported = typeof Detector.getSupportedFormats === 'function' ? await Detector.getSupportedFormats() : null;
+      if (!Array.isArray(supported) || supported.includes('qr_code')) {
+        return new Detector({ formats: ['qr_code'] });
+      }
+    } catch { /* Fall back to jsQR when native BarcodeDetector cannot initialize qr_code. */ }
+  }
+  const jsQR = await loadJsQr();
+  let canvas = null;
+  let ctx = null;
+  return {
+    async detect(video) {
+      const srcWidth = Number(video?.videoWidth || 0);
+      const srcHeight = Number(video?.videoHeight || 0);
+      if (!srcWidth || !srcHeight) return [];
+      const scale = Math.min(1, MAX_SCAN_DIM / Math.max(srcWidth, srcHeight));
+      const width = Math.max(1, Math.round(srcWidth * scale));
+      const height = Math.max(1, Math.round(srcHeight * scale));
+      if (!canvas) {
+        canvas = doc.createElement('canvas');
+        ctx = canvas.getContext('2d', { willReadFrequently: true });
+      }
+      if (!ctx) return [];
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      ctx.drawImage(video, 0, 0, width, height);
+      const frame = ctx.getImageData(0, 0, width, height);
+      const decoded = jsQR(frame.data, width, height, { inversionAttempts: 'attemptBoth' });
+      return decoded?.data ? [{ rawValue: decoded.data }] : [];
+    },
+  };
 }
 
 /**
@@ -31,20 +120,13 @@ function requestNativeCameraPermission() {
  * or the user cancels / times out.
  */
 export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the camera at the QR code…', timeoutMs = 120000 } = {}) {
-  if (!('BarcodeDetector' in globalThis)) {
-    throw Error('QR camera detection is not supported in this browser or Android WebView. Use file import or copy/paste the link instead.');
-  }
-  const detector = new BarcodeDetector({ formats: ['qr_code'] });
   const allowed = await requestNativeCameraPermission();
   if (!allowed) {
-    throw Error('Camera permission was denied. Enable Camera access for NoteComplete in Android settings, or import a file instead.');
+    const scope = globalThis.window?.ReactNativeWebView ? ' for NoteComplete in Android settings' : '';
+    throw Error(`Camera permission was denied. Enable Camera access${scope}, or import a file instead.`);
   }
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-  } catch {
-    throw Error('The camera is not available (allow camera permission, or import a file instead).');
-  }
+  const detector = await createQrDetector();
+  const stream = await openCameraStream();
   const wrap = document.createElement('div');
   wrap.className = 'qr-scan-live';
   const progress = document.createElement('progress');
@@ -61,7 +143,7 @@ export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the 
   let cancelled = false;
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.textContent = 'Stop camera';
+  cancelBtn.append(icon('stop'), 'Stop camera');
   cancelBtn.onclick = () => { cancelled = true; };
   wrap.append(progress, slotsBar, skipAlert, video, cancelBtn);
   statusEl.textContent = initialText;

@@ -331,9 +331,13 @@ impl EditorSession {
             .map(|(_, bytes)| bytes.clone())
             .ok_or_else(|| Failure("Audio index outside project".to_owned()))
     }
-    /// Deletes an embedded native Noteful audio recording (undoable until compacted).
+    /// Deletes an embedded native Noteful audio recording or animation (undoable until compacted).
     pub fn delete_audio(&mut self, asset_id: &str) -> Result<(), Failure> {
         Ok(self.inner.delete_audio(asset_id)?)
+    }
+    /// Strips audio bytes from an embedded recording while keeping its stroke timings as animation.
+    pub fn strip_audio_media(&mut self, asset_id: &str) -> Result<(), Failure> {
+        Ok(self.inner.strip_audio_media(asset_id)?)
     }
     /// Byte breakdown of optional resource categories inside a `.nfedit` project.
     pub fn project_breakdown(&self) -> Result<String, Failure> {
@@ -650,6 +654,187 @@ pub fn verify_document(data: &[u8]) -> Result<bool, Failure> {
     Ok(Package::parse(data)?.rebuild()? == data)
 }
 
+fn parse_rgba(value: Option<&serde_json::Value>, default: [f64; 4]) -> [f64; 4] {
+    let Some(arr) = value.and_then(|v| v.as_array()) else {
+        return default;
+    };
+    if arr.len() != 4 {
+        return default;
+    }
+    let mut out = default;
+    for (dst, src) in out.iter_mut().zip(arr) {
+        let Some(n) = src.as_f64() else {
+            return default;
+        };
+        *dst = n;
+    }
+    out
+}
+
+fn open_any_editor(data: &[u8]) -> Result<noteful_core::Editor, Failure> {
+    if noteful_core::is_notecomplete(data) {
+        return Ok(noteful_core::Editor::open_notecomplete(data)?);
+    }
+    let trimmed = data.iter().copied().find(|b| !b.is_ascii_whitespace());
+    if trimmed == Some(b'{') {
+        if let Ok(text) = std::str::from_utf8(data) {
+            if let Ok(ed) = noteful_core::Editor::open_project(text) {
+                return Ok(ed);
+            }
+        }
+    }
+    Ok(noteful_core::Editor::open(data)?)
+}
+
+/// Composes Markdown as a standalone handwritten `.nfedit` project without
+/// replacing the currently open session. Returns JSON `{project, pages, warnings}`.
+#[wasm_bindgen]
+pub fn compose_note_file(title: &str, markdown: &str, options: &str) -> Result<String, Failure> {
+    let (pages, warnings) = compose_with(title, markdown, options)?;
+    let page_count = pages.len();
+    let editor = ink::new_notebook(title, &pages)?;
+    let project = editor.save_project()?;
+    Ok(json!({
+        "project": project,
+        "pages": page_count,
+        "warnings": warnings,
+    })
+    .to_string())
+}
+
+/// Builds a standalone `.nfedit` project from `pdf` and `sizes` (`[[w, h], …]`),
+/// pre-applying Noteful Tape strokes from `tapes_json` (`[{page, x, y, w, h, angle?, rgba?}]`).
+#[wasm_bindgen]
+pub fn create_pdf_note_with_tapes(
+    title: &str,
+    sizes_json: &str,
+    pdf: &[u8],
+    tapes_json: &str,
+) -> Result<String, Failure> {
+    let sizes: Vec<[f64; 2]> = serde_json::from_str(sizes_json)?;
+    let tapes: Vec<serde_json::Value> = if tapes_json.trim().is_empty() {
+        Vec::new()
+    } else {
+        serde_json::from_str(tapes_json)?
+    };
+    let mut editor = noteful_core::Editor::create_document(title, &sizes, pdf)?;
+    let default_rgba = [0.95, 0.77, 0.28, 1.0];
+    for t in tapes {
+        let Some(page) = t.get("page").and_then(|v| v.as_u64()).map(|v| v as usize) else {
+            continue;
+        };
+        let (Some(x), Some(y), Some(w), Some(h)) = (
+            t.get("x").and_then(|v| v.as_f64()),
+            t.get("y").and_then(|v| v.as_f64()),
+            t.get("w").and_then(|v| v.as_f64()),
+            t.get("h").and_then(|v| v.as_f64()),
+        ) else {
+            continue;
+        };
+        if page >= sizes.len() || w <= 0.0 || h <= 0.0 {
+            continue;
+        }
+        let angle = t.get("angle").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let rgba = parse_rgba(t.get("rgba"), default_rgba);
+        let slot = editor.slot(page)?;
+        let line = ink::tape(x, y, w, h, angle, rgba);
+        editor.add_line(slot, line)?;
+    }
+    Ok(editor.save_project()?)
+}
+
+fn words_text(list: &serde_json::Value) -> String {
+    list.as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|w| w.get("text").and_then(|v| v.as_str()))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default()
+}
+
+/// Extracts text, handwriting/OCR words, Markdown notes, and PDF background
+/// references from an arbitrary `.noteful` / `.nfedit` / `.notecomp` byte buffer
+/// without disturbing the open editor session.
+#[wasm_bindgen]
+pub fn extract_note_summary(data: &[u8], max_pages: usize) -> Result<String, Failure> {
+    let editor = open_any_editor(data)?;
+    let first = editor.view(editor.slot(0)?)?;
+    let total_pages = first["pages"].as_u64().unwrap_or(1) as usize;
+    let take_pages = if max_pages == 0 {
+        total_pages
+    } else {
+        total_pages.min(max_pages)
+    };
+    let mut pages_out = Vec::with_capacity(take_pages);
+    let mut pdf_ids = std::collections::BTreeSet::new();
+    for display in 0..take_pages {
+        let slot = editor.slot(display)?;
+        let view = if display == 0 {
+            first.clone()
+        } else {
+            editor.view(slot)?
+        };
+        let typed = view["texts"]
+            .as_array()
+            .map(|boxes| {
+                boxes
+                    .iter()
+                    .filter_map(|b| {
+                        let s = b
+                            .get("text")
+                            .and_then(|v| v.as_str())
+                            .map(|t| t.trim().to_owned())
+                            .filter(|t| !t.is_empty())
+                            .or_else(|| {
+                                let w = words_text(&b["words"]);
+                                (!w.is_empty()).then_some(w)
+                            });
+                        s
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default();
+        let recognized = words_text(&view["recognized_text"]);
+        let ink = words_text(&view["ink_text"]);
+        let pdf_bg = view.get("pdf_background").filter(|v| !v.is_null()).cloned();
+        if let Some(id) = pdf_bg.as_ref().and_then(|v| {
+            v.get("resource_id")
+                .or_else(|| v.get("id"))
+                .and_then(|s| s.as_str())
+        }) {
+            pdf_ids.insert(id.to_owned());
+        }
+        pages_out.push(json!({
+            "page": display + 1,
+            "typed": typed,
+            "recognized": recognized,
+            "ink": ink,
+            "pdf_background": pdf_bg,
+        }));
+    }
+    Ok(json!({
+        "title": first["title"],
+        "page_count": total_pages,
+        "markdown": editor.markdown(),
+        "pages": pages_out,
+        "pdf_ids": pdf_ids.into_iter().collect::<Vec<_>>(),
+    })
+    .to_string())
+}
+
+/// Extracts raw PDF bytes for `pdf_id` from an arbitrary `.noteful` / `.nfedit` / `.notecomp` buffer.
+#[wasm_bindgen]
+pub fn extract_note_pdf(data: &[u8], pdf_id: &str) -> Result<Vec<u8>, Failure> {
+    let editor = open_any_editor(data)?;
+    Ok(editor.pdf_bytes(pdf_id)?.to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -740,5 +925,44 @@ mod tests {
         assert!(super::keep_recognized_text(&mut e, "[1, 2").is_err());
         assert!(super::keep_recognized_text(&mut e, "[]").is_err());
         assert_eq!(e.recognized_words(2).len(), 1);
+    }
+
+    #[test]
+    fn composes_standalone_note_creates_pdf_with_tapes_and_extracts_summary() {
+        let composed: serde_json::Value = serde_json::from_str(
+            &super::compose_note_file("Batch Test", "# Title\n\n- Key idea", "{}").unwrap(),
+        )
+        .unwrap();
+        assert!(composed["pages"].as_u64().unwrap() >= 1);
+        let project = composed["project"].as_str().unwrap();
+        let extracted: serde_json::Value =
+            serde_json::from_str(&super::extract_note_summary(project.as_bytes(), 0).unwrap())
+                .unwrap();
+        assert_eq!(extracted["title"], "Batch Test");
+        assert!(extracted["page_count"].as_u64().unwrap() >= 1);
+        assert!(
+            extracted["pages"][0]["ink"]
+                .as_str()
+                .unwrap()
+                .contains("Key idea"),
+            "extracted={extracted}"
+        );
+
+        let fake_pdf = b"%PDF-1.4\n%%EOF\n";
+        let sizes = serde_json::json!([[1091.34, 1543.46]]).to_string();
+        let tapes = serde_json::json!([
+            {"page": 0, "x": 80.0, "y": 240.0, "w": 600.0, "h": 90.0}
+        ])
+        .to_string();
+        let exam_project =
+            super::create_pdf_note_with_tapes("ACII Exam", &sizes, fake_pdf, &tapes).unwrap();
+        let ed = noteful_core::Editor::open_project(&exam_project).unwrap();
+        let view = ed.view(ed.slot(0).unwrap()).unwrap();
+        assert_eq!(view["title"], "ACII Exam");
+        assert_eq!(view["tapes"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            super::extract_note_pdf(exam_project.as_bytes(), "imported-pdf").unwrap(),
+            fake_pdf
+        );
     }
 }

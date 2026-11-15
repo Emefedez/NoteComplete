@@ -122,7 +122,9 @@ export function chooseNfeditExport({ $, doc = globalThis.document, title = 'Note
 
   if (titleEl) titleEl.textContent = title || 'Note';
   if (baseEl) baseEl.textContent = formatBytes(breakdown?.base_bytes || 0);
-  if (confirmBtn) confirmBtn.textContent = actionLabel;
+  const confirmLabelEl = $('nfeditExportConfirmLabel');
+  if (confirmLabelEl) confirmLabelEl.textContent = actionLabel;
+  else if (confirmBtn) confirmBtn.textContent = actionLabel;
 
   const state = normalizeExportOptions(initialOptions);
   const inputs = new Map();

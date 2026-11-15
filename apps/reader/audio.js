@@ -1,23 +1,36 @@
+import { ANIMATION_MIME } from './recorder.js';
+
 const $=id=>document.getElementById(id);
 function recordingName(recording,index,added){
  if(added?.name?.trim())return added.name;
  if(recording?.name?.trim())return recording.name;
  if(recording?.start_us){const date=new Date((Number(BigInt(recording.start_us)/1000n)+978307200000));if(Number.isFinite(date.getTime()))return `Recording ${index+1} · ${date.toLocaleString('en',{dateStyle:'medium',timeStyle:'short'})}`;}
- return `Audio ${index+1}`;
+ return recording?.animation?`Animation ${index+1}`:`Audio ${index+1}`;
 }
 export const clock=t=>{if(!Number.isFinite(t))return '0:00:00';const s=Math.max(0,Math.floor(t));return `${Math.floor(s/3600)}:${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;};
 export class AudioController {
  constructor(read,jump,changed){
   // Recordings added in NoteComplete (recorder.js) are read from their kept blobs.
   this.read=async id=>{const added=this.entries.find(e=>e.added&&e.asset.id===id)?.added;return added?new Uint8Array(await added.blob.arrayBuffer()):read(id);};
-  this.jump=jump;this.changed=changed;this.audio=$('audio');this.token=0;this.urls=new Map();this.positions=new Map();this.entries=[];
+  this.jump=jump;this.changed=changed;this.audio=$('audio');this.token=0;this.urls=new Map();this.positions=new Map();this.entries=[];this.virtual=null;
   $('recording').onchange=()=>this.select(Number($('recording').value));
-  $('playAudio').onclick=async()=>{if(this.audio.paused){try{await this.processing?.resume();await this.audio.play();}catch(e){$('audioState').textContent=e.message;}}else this.audio.pause();};
+  $('playAudio').onclick=async()=>{
+   if(this.virtual){
+    if(this.virtual.paused){
+     if(this.virtual.time>=this.virtual.duration)this.virtual.time=0;
+     this.virtual.paused=false;this.lastFrame=0;this.lastTick=0;this.update();this.tick();
+    }else{
+     this.virtual.paused=true;cancelAnimationFrame(this.frame);this.update();
+    }
+    return;
+   }
+   if(this.audio.paused){try{await this.processing?.resume();await this.audio.play();}catch(e){$('audioState').textContent=e.message;}}else this.audio.pause();
+  };
   this.bindSkipButton($('backAudio'),-1);
   this.bindSkipButton($('forwardAudio'),1);
   // Dragging the position bar: the time label follows at once, the element seeks at most once a frame
   // (each seek in a long WebM or MP3 is costly; seeking on every input event made dragging lag).
-  $('audioSeek').oninput=()=>{this.dragTo=Number($('audioSeek').value);$('audioTime').textContent=`${clock(this.dragTo)} / ${clock(this.audio.duration||0)}`;if(!this.dragFrame)this.dragFrame=requestAnimationFrame(()=>{this.dragFrame=0;this.seek(this.dragTo);});};
+  $('audioSeek').oninput=()=>{this.dragTo=Number($('audioSeek').value);$('audioTime').textContent=`${clock(this.dragTo)} / ${clock(this.duration)}`;if(!this.dragFrame)this.dragFrame=requestAnimationFrame(()=>{this.dragFrame=0;this.seek(this.dragTo);});};
   $('audioSeek').onchange=()=>{cancelAnimationFrame(this.dragFrame);this.dragFrame=0;this.seek(Number($('audioSeek').value));};
   // Playback speed, the same for every recording and remembered; the pitch stays natural.
   const speed=$('audioSpeed');
@@ -33,8 +46,12 @@ export class AudioController {
   this.audio.onended=this.audio.onpause;
   this.audio.onerror=()=>{$('audioState').textContent='This browser cannot play this format. You can download the audio.';};
  }
+ isAnimation(entry=this.selected){return Boolean(entry?.animation||entry?.recording?.animation||entry?.added?.mime===ANIMATION_MIME||(entry?.recording&&!entry?.asset));}
+ positionKey(entry=this.entries[this.index]){return entry?.asset?.id||(entry?.recording?`rec:${entry.recording.id}`:null);}
  get recording(){return $('syncEnabled').checked?this.entries[this.index]?.recording:null;}
- get time(){return this.audio.currentTime||0;}
+ get time(){return this.virtual?this.virtual.time:(this.audio.currentTime||0);}
+ get duration(){return this.virtual?(Number.isFinite(this.virtual.duration)?this.virtual.duration:0):(Number.isFinite(this.audio.duration)?this.audio.duration:0);}
+ get paused(){return this.virtual?this.virtual.paused:this.audio.paused;}
  get rate(){return this.audio.playbackRate||1;}
  // 0.5× to 3×; the nearest listed speed is shown in the menu.
  setRate(rate,save=true){
@@ -53,7 +70,7 @@ export class AudioController {
   const dir=direction<0?-1:1;
   if(!held){this.skipSteps=0;}else{this.skipSteps=(this.skipSteps||0)+1;}
   const delta=held?Math.min(60,5+Math.floor(this.skipSteps/3)*5):10;
-  const target=dir<0?Math.max(0,(this.audio.currentTime||0)-delta):Math.min(this.audio.duration||0,(this.audio.currentTime||0)+delta);
+  const target=dir<0?Math.max(0,this.time-delta):Math.min(this.duration,this.time+delta);
   this.seek(target);
   return target;
  }
@@ -103,29 +120,47 @@ export class AudioController {
  }
  // While playing: the time and position bar every frame are cheap; the ink and the transcript
  // (which walk many elements) about ten times a second, enough to follow speech even at 3×.
- tick(now=0){if(!this.lastTick||now-this.lastTick>=100){this.lastTick=now;this.paint();this.changed();this.transcript?.update();}if(!this.audio.paused)this.frame=requestAnimationFrame(time=>this.tick(time));}
- paint(){if(!this.dragFrame)$('audioSeek').value=this.time;$('audioTime').textContent=`${clock(this.time)} / ${clock(this.audio.duration||0)}`;}
- seek(t){if(this.audio.readyState){this.audio.currentTime=t;this.update();}}
+ tick(now=0){
+  if(this.virtual){
+   if(this.virtual.paused)return;
+   if(this.lastFrame&&now>this.lastFrame){this.virtual.time=Math.min(this.virtual.duration,this.virtual.time+((now-this.lastFrame)/1000)*this.rate);}
+   this.lastFrame=now;
+   if(!this.lastTick||now-this.lastTick>=100){this.lastTick=now;this.paint();this.changed();}
+   if(this.virtual.time>=this.virtual.duration){this.virtual.paused=true;this.update();return;}
+   this.frame=requestAnimationFrame(time=>this.tick(time));
+   return;
+  }
+  if(!this.lastTick||now-this.lastTick>=100){this.lastTick=now;this.paint();this.changed();this.transcript?.update();}
+  if(!this.audio.paused)this.frame=requestAnimationFrame(time=>this.tick(time));
+ }
+ paint(){if(!this.dragFrame)$('audioSeek').value=this.time;$('audioTime').textContent=`${clock(this.time)} / ${clock(this.duration)}`;}
+ seek(t){
+  const clamped=Math.min(this.duration,Math.max(0,Number(t)||0));
+  if(this.virtual){this.virtual.time=clamped;this.update();return;}
+  if(this.audio.readyState){this.audio.currentTime=clamped;this.update();}
+ }
  label(entry){return recordingName(entry?.recording,Math.max(0,this.entries.indexOf(entry)),entry?.added);}
  async seekRecording(id,time){
   const index=this.entries.findIndex(entry=>entry.recording?.id===id);
-  if(index<0||!this.entries[index].asset||!Number.isFinite(time)||time<0)return false;
-  this.positions.set(this.entries[index].asset.id,time);
+  const entry=this.entries[index];
+  if(index<0||(!entry.asset&&!this.isAnimation(entry))||!Number.isFinite(time)||time<0)return false;
+  const key=this.positionKey(entry);
+  if(key)this.positions.set(key,time);
   if(this.index===index){this.seek(time);return true;}
   $('recording').value=String(index);
   await this.select(index);
   return true;
  }
- reset(){this.stopSkipHold();this.skipHeld=false;this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;$('audioBar').hidden=true;$('audioToggle').hidden=true;$('audioToggle').setAttribute('aria-expanded','false');}
+ reset(){this.stopSkipHold();this.skipHeld=false;this.virtual=null;this.transcript?.reset();this.token++;this.audio.pause();this.audio.removeAttribute('src');this.audio.load();cancelAnimationFrame(this.frame);for(const url of this.urls.values())URL.revokeObjectURL(url);this.urls.clear();this.positions.clear();this.entries=[];this.index=undefined;delete $('audioBar').dataset.mode;$('audioBar').hidden=true;$('audioToggle').hidden=true;$('audioToggle').setAttribute('aria-expanded','false');}
  // The audio button is always there with a note open: recording and importing start from the panel.
  open(assets,recordings,added=[]){
-  this.reset();this.entries=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id)}));
+  this.reset();this.entries=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id),animation:Boolean(recording.animation||!assets.some(a=>a.id===recording.asset_id))}));
   for(const asset of assets)if(!recordings.some(r=>r.asset_id===asset.id))this.entries.push({asset});
   $('audioToggle').hidden=false;this.setAdded(added,false);
  }
- // Added recordings follow the note's own ones; a new one is selected.
+ // Added recordings and animations follow the note's own ones; a new one is selected.
  _applyEntries(nextEntries,{selectFreshOf=null,preferAssetId=null,autoSelect=true}={}){
-  const current=preferAssetId??this.entries[this.index]?.asset?.id;
+  const current=preferAssetId??this.positionKey();
   if(current&&this.entries[this.index])this.positions.set(current,this.time);
   const keepIds=new Set(nextEntries.map(e=>e.asset?.id).filter(Boolean));
   for(const url of [...this.urls.keys()])if(!keepIds.has(url)){URL.revokeObjectURL(this.urls.get(url));this.urls.delete(url);}
@@ -133,39 +168,67 @@ export class AudioController {
   $('recording').replaceChildren();
   for(const [i,e] of this.entries.entries()){const o=document.createElement('option');o.value=i;o.textContent=recordingName(e.recording,i,e.added);$('recording').append(o);}
   const fresh=selectFreshOf?this.entries.findIndex(e=>e.added&&!selectFreshOf.has(e.added.id)):-1;
-  const kept=this.entries.findIndex(e=>e.asset?.id===current);
+  const kept=this.entries.findIndex(e=>this.positionKey(e)===current);
   const next=fresh>=0?fresh:kept>=0?kept:this.entries.length?0:-1;
   this.empty();
   const prev=this.index;this.index=undefined;
-  if(next<0){this.transcript?.select(null);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();this.update();this.onselect?.(undefined);return;}
+  if(next<0){this.virtual=null;this.transcript?.select(null);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();delete $('audioBar').dataset.mode;this.update();this.onselect?.(undefined);return;}
   $('recording').value=String(next);
   if(fresh>=0||kept<0||(autoSelect&&next!==prev&&prev===undefined))this.select(next);
   else {this.index=next;this.onselect?.(this.entries[next]);}
  }
  setNative(assets,recordings){
-  const native=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id)}));
+  const native=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id),animation:Boolean(recording.animation||!assets.some(a=>a.id===recording.asset_id))}));
   for(const asset of assets)if(!recordings.some(r=>r.asset_id===asset.id))native.push({asset});
   const added=this.entries.filter(e=>e.added);
-  this._applyEntries([...native,...added],{autoSelect:false});
+  this._applyEntries([...native,...added],{autoSelect:true});
  }
  setAdded(added,selectNew=true){
   const before=selectNew?new Set(this.entries.filter(e=>e.added).map(e=>e.added.id)):null;
   const native=this.entries.filter(e=>!e.added);
-  const nextAdded=added.map(a=>({added:a,asset:{id:`added:${a.id}`,mime:a.mime,kind:a.mime.includes('webm')?'webm':a.mime.includes('mp4')?'m4a':a.mime.split('/')[1]?.split(';')[0]||'audio'}}));
+  const nextAdded=added.map(a=>a.mime===ANIMATION_MIME
+   ?{added:a,animation:true,asset:{id:`added:${a.id}`,mime:a.mime,kind:'animation'}}
+   :{added:a,asset:{id:`added:${a.id}`,mime:a.mime,kind:a.mime.includes('webm')?'webm':a.mime.includes('mp4')?'m4a':a.mime.split('/')[1]?.split(';')[0]||'audio'}});
   this._applyEntries([...native,...nextAdded],{selectFreshOf:before});
  }
  empty(){
   const none=!this.entries.length;
   $('audioBar').classList.toggle('no-audio',none);
-  if(none){$('recordingTitle').textContent='Audio';$('playAudio').disabled=true;$('audioSeek').disabled=true;$('audioPage').disabled=true;$('audioDownload').hidden=true;$('audioState').textContent='No audio in this note yet. Record or import one.';}
+  if(none){$('recordingTitle').textContent='Audio';$('playAudio').disabled=true;$('audioSeek').disabled=true;$('audioPage').disabled=true;$('audioDownload').hidden=true;$('audioState').textContent='No audio or animations yet. Record, animate, or import one.';}
  }
  get selected(){return this.entries[this.index];}
  async select(index){
-  if(this.index!==undefined&&this.entries[this.index]?.asset)this.positions.set(this.entries[this.index].asset.id,this.time);
-  this.audio.pause();const token=++this.token;this.index=index;const entry=this.entries[index];this.audio.onloadedmetadata=null;$('recordingTitle').textContent=recordingName(entry?.recording,index,entry?.added);this.onselect?.(entry);$('recording').title=$('recordingTitle').textContent;
-  this.transcript?.select(entry?.asset);
-  this.audio.removeAttribute('src');this.audio.load();$('playAudio').disabled=true;$('audioSeek').disabled=true;$('audioState').textContent='Loading audio…';$('audioDownload').hidden=true;
-  $('audioPage').disabled=!entry?.recording?.pages.length;this.changed();
+  const prevKey=this.positionKey();
+  if(this.index!==undefined&&prevKey)this.positions.set(prevKey,this.time);
+  this.audio.pause();this.virtual=null;cancelAnimationFrame(this.frame);
+  const token=++this.token;this.index=index;const entry=this.entries[index];this.audio.onloadedmetadata=null;$('recordingTitle').textContent=recordingName(entry?.recording,index,entry?.added);$('recording').title=$('recordingTitle').textContent;
+  const anim=this.isAnimation(entry);
+  $('audioBar').dataset.mode=anim?'animation':'audio';
+  this.transcript?.select(anim?null:entry?.asset);
+  this.audio.removeAttribute('src');this.audio.load();$('playAudio').disabled=true;$('audioSeek').disabled=true;$('audioState').textContent=anim?'Loading animation…':'Loading audio…';$('audioDownload').hidden=true;
+  if(anim){
+   try{
+    if(entry.added&&entry.added.mime===ANIMATION_MIME&&!entry.recording){
+     const bytes=await this.read(entry.asset.id);
+     if(token!==this.token)return;
+     const parsed=JSON.parse(new TextDecoder().decode(bytes));
+     entry.recording={id:`added:${entry.added.id}`,name:entry.added.name,duration:Math.max(0.1,Number(parsed?.duration)||0),pages:Array.isArray(parsed?.pages)?parsed.pages:[],timings:Array.isArray(parsed?.timings)?parsed.timings.map(t=>({...t,recording_id:`added:${entry.added.id}`})):[],animation:true};
+    }
+    if(token!==this.token)return;
+    const dur=Math.max(0,Number(entry?.recording?.duration)||0);
+    const saved=this.positions.get(this.positionKey(entry))||0;
+    this.virtual={duration:dur,time:Math.min(saved,dur),paused:true};
+    $('syncEnabled').checked=true;
+    $('audioPage').disabled=!entry?.recording?.pages?.length;
+    $('playAudio').disabled=dur<=0;$('audioSeek').disabled=dur<=0;$('audioSeek').max=dur;
+    $('audioState').textContent='Animation only · edit history without audio';
+    this.onselect?.(entry);
+    this.update();
+   }catch(e){if(token===this.token)$('audioState').textContent=e.message;}
+   return;
+  }
+  this.onselect?.(entry);
+  $('audioPage').disabled=!entry?.recording?.pages?.length;this.changed();
   if(!entry?.asset){$('audioState').textContent='Audio resource is missing.';return;}
   try {
    const asset=entry.asset;
@@ -179,6 +242,7 @@ export class AudioController {
  }
  update(){
   this.paint();
-  $('playAudio').dataset.state=this.audio.paused?'paused':'playing';$('playAudio').setAttribute('aria-label',this.audio.paused?'Play':'Pause');this.changed();this.transcript?.update();
+  const p=this.paused;
+  $('playAudio').dataset.state=p?'paused':'playing';$('playAudio').setAttribute('aria-label',p?'Play':'Pause');this.changed();if(!this.virtual)this.transcript?.update();
  }
 }

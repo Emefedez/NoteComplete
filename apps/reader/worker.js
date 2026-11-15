@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect, compose_note_file, create_pdf_note_with_tapes, extract_note_summary, extract_note_pdf } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -85,6 +85,10 @@ const standalone = {
   },
   // Handwriting preview of Markdown; needs no open document.
   composePreview: (args) => JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)),
+  composeNoteFile: (args) => JSON.parse(compose_note_file(args.title || "Untitled note", args.markdown || "", JSON.stringify(args.options || {}))),
+  createPdfNoteWithTapes: (args) => create_pdf_note_with_tapes(args.title || "Exam", JSON.stringify(args.sizes || []), new Uint8Array(args.pdf || []), JSON.stringify(args.tapes || [])),
+  extractNoteSummary: (args) => JSON.parse(extract_note_summary(new Uint8Array(args.bytes || []), args.maxPages || 0)),
+  extractNotePdf: (args) => extract_note_pdf(new Uint8Array(args.bytes || []), args.pdfId || ""),
   md5: (args) => md5_hex(new Uint8Array(args.bytes)),
   jpegPagesPdf: (args) => jpeg_pages_pdf(args.data, args.layout, args.title),
 };
@@ -186,6 +190,7 @@ const onDocument = {
   setPageBackgrounds: edit((args) => session.set_page_backgrounds(JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
   movePage: edit((args) => session.move_page(args.from, args.to)),
   deleteAudio: edit((args) => session.delete_audio(args.assetId)),
+  stripAudioMedia: edit((args) => session.strip_audio_media(args.assetId)),
   undo: lastPageLeft(() => session.undo()),
   redo: lastPageLeft(() => session.redo()),
 };
