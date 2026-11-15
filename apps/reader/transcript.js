@@ -231,7 +231,7 @@ export class TranscriptController {
   }
   // Clean up the transcript with the user's AI tool; timings are kept per word.
   async revise() {
-    const ai = sharedAI(), asset = this.asset, words = this.words;
+    const ai = this.ai || sharedAI(), asset = this.asset, words = this.words;
     if (!ai || !asset || !words.length || this.revising) return;
     let provider = '';
     try { provider = localStorage.getItem('notecomplete-ai-provider') || ''; } catch { /* Optional. */ }
@@ -246,7 +246,7 @@ export class TranscriptController {
     try {
       const language = $('transcriptLanguage').selectedOptions?.[0]?.textContent || '';
       const result = await reviseWords(words, {
-        ask: async prompt => (await ai.run({ provider, prompt, images: [] })).text,
+        ask: async prompt => (await ai.run({ provider, prompt, images: [], tag: 'revise' })).text,
         parse: jsonFrom, title: this.context?.().title, language, perCall: smallSetting(provider, { ai }) ? 3 : 25, cancelled: () => stopped,
         onProgress: (done, total) => chip?.set(done / total, `${done} of ${total} parts`),
       });

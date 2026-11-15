@@ -55,6 +55,17 @@ test('a chosen folder lists its notes and opens them; other folders stay closed'
   await assert.rejects(files.readRecent(path.join(folder, '..', 'outside.md')), /not opened/);
   assert.equal(new TextDecoder().decode(await files.readRecent(path.join(folder, 'ciudades'))), 'x');
   await assert.rejects(files.readRecent(path.join(folder, 'tool.exe')), /not opened/);
+
+  // Nested subdirectories are also listed and readable, while companion _files assets are skipped.
+  const nestedDir = path.join(folder, 'Examenes_Anteriores');
+  const assetDir = path.join(folder, 'Tema 1_files');
+  await dir(nestedDir);
+  await dir(assetDir);
+  await put(path.join(nestedDir, 'parcial.pdf'), 'pdf');
+  await put(path.join(assetDir, 'img.png'), 'png');
+  assert.ok((await files.listFolder(folder)).some(f => f.name === 'Examenes_Anteriores/parcial.pdf'));
+  assert.ok(!(await files.listFolder(folder)).some(f => f.name.includes('Tema 1_files')));
+  assert.equal(new TextDecoder().decode(await files.readRecent(path.join(nestedDir, 'parcial.pdf'))), 'pdf');
 });
 
 test('an edited text file is saved only over a file that was opened, keeping its mode', async () => {

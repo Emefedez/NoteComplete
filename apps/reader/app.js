@@ -2823,11 +2823,6 @@ $("shape").onchange = () =>
 // the color input stay the data source the drawing code reads.
 const CHOICE_ICONS = {
   highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>', text: '<rect x="3" y="9.5" width="18" height="5" rx="0.5" fill="currentColor" fill-opacity="0.35" stroke="none"/><path d="M4 7h10M4 12h16M4 17h12"/>' },
-  // Pen pressure: a clear P glyph beside smoothing's S.
-  pressure: {
-    on: '<path d="M8 19V5h5a4.5 4.5 0 0 1 0 9H8" stroke-width="2.1"/>',
-    off: '<path d="M8 19V5h5a4.5 4.5 0 0 1 0 9H8" stroke-width="1.8" opacity=".45"/><path d="M5 19L19 5" stroke-width="1.8"/>',
-  },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
   // A wobbly loop that becomes a clean box: when the pen is held, on every lift, or never.
   shapeSnap: { hold: '<path d="M5 8c3-3 10-3 13 0" stroke-dasharray="2 2"/><rect x="5" y="11" width="14" height="8" rx="0.5"/><circle cx="19" cy="6" r="2.2" fill="currentColor"/>', lift: '<path d="M4 9c2-4 6 1 8-3s5 2 8-1" stroke-dasharray="2 2"/><rect x="5" y="12" width="14" height="7" rx="0.5"/>', off: '<path d="M4 14c3-6 5 4 8-2s5 5 9-3"/>' },
@@ -2867,6 +2862,7 @@ function syncChoices() {
     const value = $(row.dataset.for).value.toLowerCase();
     for (const b of row.children) b.setAttribute("aria-checked", String(b.dataset.value.toLowerCase() === value));
   }
+  if ($("pressureToggle")) $("pressureToggle").setAttribute("aria-pressed", String(pressureOn()));
 }
 // Eraser size (page units around the pointer); remembered on this device.
 const eraserRadius = () => Number($("eraserSize").value) || 10;
@@ -2874,6 +2870,14 @@ const eraserRadius = () => Number($("eraserSize").value) || 10;
 const pressureOn = () => $("pressure").value !== "off";
 try { if (localStorage.getItem("notecomplete-pressure") === "off") $("pressure").value = "off"; } catch { /* Optional. */ }
 $("pressure").addEventListener("change", () => { try { localStorage.setItem("notecomplete-pressure", $("pressure").value); } catch { /* Optional. */ } });
+if ($("pressureToggle")) {
+  $("pressureToggle").onclick = () => {
+    $("pressure").value = pressureOn() ? "off" : "on";
+    $("pressure").dispatchEvent(new Event("change"));
+    syncChoices();
+    status(pressureOn() ? "Pen pressure on: width varies with pressure." : "Pen pressure off: even width.");
+  };
+}
 try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved && $("eraserSize").querySelector(`option[value="${saved}"]`)) $("eraserSize").value = saved; } catch { /* Optional. */ }
 $("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
@@ -3995,10 +3999,13 @@ $("newCreate").onclick = async () => {
   await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format, canvas });
 };
 // Markdown written as handwriting ink (the MCP ink engine): a new note, or pages in this one.
+const jobs = jobChip({ status });
+// The desktop AI tools and/or the model in this app (WebLLM, where WebGPU exists).
+const ai = jobs.watchAi(sharedAI());
 const converter = handwritingConverter({
   call,
   status,
-  ai: sharedAI(),
+  ai,
   hasDocument: () => !!doc,
   sourceText: () => (!doc && textView?.visible && (converted || isMarkdownName(textView.key)) ? textView.text : ""),
   onCreate: async ({ title, markdown, options }) => {
@@ -5818,8 +5825,6 @@ const find = findController({
   documentInfo: () => ({ pages: doc?.pages || 0 }),
   jobs: () => jobs,
 });
-// The desktop AI tools and/or the model in this app (WebLLM, where WebGPU exists).
-const ai = sharedAI();
 // Scratchpad: AI conversations kept per note (View → Scratchpad…).
 const scratch = scratchpad({
   store: library.store,
@@ -5848,8 +5853,8 @@ const studyDeps = {
   status,
 };
 const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: (text) => textBox.answerToTextBox(text) });
-const jobs = jobChip({ status });
 audio.transcript.jobs = jobs;
+audio.transcript.ai = ai;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
 const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
 audio.transcript.context = () => ({ title: doc?.title || "" });
@@ -5929,6 +5934,7 @@ const examMaker = examController({
   hasOpenDoc: () => !!doc || studyText(),
   openDocTitle: () => (studyText() ? (textView.name || "Document") : (doc?.title || "Note")),
   openDocPages: () => (studyText() ? textSource.count : (doc?.pages || 0)),
+  openDocResource: currentDocResource,
   pageText: studyDeps.pageText,
   pageCanvas: studyDeps.pageCanvas,
   notesText: studyDeps.notesText,
@@ -5947,6 +5953,7 @@ const batchNotes = batchNotesController({
   hasOpenDoc: () => !!doc || studyText(),
   openDocTitle: () => (studyText() ? (textView.name || "Document") : (doc?.title || "Note")),
   openDocPages: () => (studyText() ? textSource.count : (doc?.pages || 0)),
+  openDocResource: currentDocResource,
   pageText: studyDeps.pageText,
   pageCanvas: studyDeps.pageCanvas,
   notesText: studyDeps.notesText,
@@ -5997,10 +6004,12 @@ const expandMaker = expandController({
   status,
 });
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
-$("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
-$("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
-if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: "pages" }); };
-if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "pages" }); };
+$("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
+$("fileSolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
+$("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
+$("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
+if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "note" }); };
+if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : undefined }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
 practiceWindow = floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });

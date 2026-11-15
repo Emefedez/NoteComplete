@@ -42,6 +42,7 @@
           <button id="newWithAi" data-icon="spark" data-palette="New note with AI…" title="Your AI tool writes a note about a topic or from what you paste, as handwriting" hidden>New note with AI…</button>
           <button id="takeNotesAi" data-icon="batchNotes" data-palette="Take notes with AI…" title="Batch-create handwritten notebooks from Recents, folders, PDFs, Office docs or topics">Take notes with AI…</button>
           <button id="fileCreateExam" data-icon="exam" data-palette="Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders or files">Create exam (AI)…</button>
+          <button id="fileSolveExam" data-icon="check" data-palette="Solve exam (AI)…" title="Feed an exam PDF or note: splits questions, solves them in parallel, and formats Exercise → New Page → Solution">Solve exam (AI)…</button>
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
           <hr />
           <hr />
@@ -156,6 +157,7 @@
           <button id="studyCards" data-icon="cards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
           <button id="studyQuiz" data-icon="help" disabled>Quiz me…<kbd>Shift Q</kbd></button>
           <button id="studyCreateExam" data-icon="exam" data-palette="Study: Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders, notes or topics">Create exam (AI)…</button>
+          <button id="studySolveExam" data-icon="check" data-palette="Study: Solve exam (AI)…" title="Feed an exam PDF or note: cuts it into exercises, solves them in parallel with KaTeX math &amp; MCP, and separates Questions from Solutions onto new pages">Solve exam (AI)…</button>
           <button id="studyCheck" data-icon="check" disabled title="The AI checks pages for errors, inconsistencies, unclear and missing points; its corrections go into your notes under each page">Fact check…<kbd>Shift F</kbd></button>
           <hr />
           <button id="studyResume" data-icon="play" disabled>Resume quiz<kbd>Q</kbd></button>
@@ -663,7 +665,9 @@
               </select>
             </div>
             <div id="pressureOptions" class="option-group" hidden>
-              <div class="choice-row" data-for="pressure" role="radiogroup" aria-label="Pen pressure"></div>
+              <div class="choice-toggle-box" role="group" aria-label="Pen pressure">
+                <button id="pressureToggle" type="button" class="choice-toggle" aria-pressed="true" data-icon="pressure" title="Pen pressure: width changes with how hard you press (click for even width)" aria-label="Pen pressure"></button>
+              </div>
               <select id="pressure" data-native hidden aria-label="Pen pressure">
                 <option value="on" selected>Pressure changes the width</option>
                 <option value="off">Even width</option>

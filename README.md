@@ -126,6 +126,19 @@ A note is **saved** in one of two formats; the others are **exports**.
 
 NoteComplete also **opens to read**: PDFs and PNG, JPEG and WebP images (as notes you can write on), HTML pages, text and Markdown files, and Word (`.docx`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`), CSV and TSV files. Word, OpenDocument, Excel and CSV files are shown as Markdown that you can edit: headings, lists, tables, links, bold, italic and pictures come through, layout does not; a spreadsheet becomes one table per sheet, up to 1000 rows and 50 columns. Save writes a `.md` copy (with its pictures in a `<name>_files` folder) and never changes the original.
 
+## TODO
+
+### Critical — iOS & Real Noteful Compatibility (macOS test needed)
+
+- **Exporting fails on iOS:** investigate and fix file export flows on iOS.
+- **`.noteful` header / format mismatch on NoteComplete-created notes:** newly created notebooks (*New handwritten note*, generated exams) fail to open in real Noteful, whereas editing an existing `.noteful` file (such as `Resumen T2+2`) in NoteComplete and reimporting it back into Noteful works. Diff NoteComplete-generated `.noteful` headers/metadata against native Noteful files, fix creation/export, and ship a repair path in a future release for affected `.noteful` files.
+
+### Exam Generator & Interactive Solutions
+
+- Embed editable HTML source inside generated `.nfedit` assets (no sidecar folders) for easy manual updates.
+- Preserve structured solution formats (e.g. render table exercises as completed solved tables) and improve readability/typography toward clean handwritten/printed study sheets.
+- Support step-by-step solution animations, either via the audio/animation system or self-contained HTML widget assets opened in a tab from clickable internal links (without creating separate external folders).
+
 ## Known issues
 
 - Releases are published automatically from 1.1.0 on; earlier local builds (1.0.x) find them as updates (Help → Check for updates… checks at once).

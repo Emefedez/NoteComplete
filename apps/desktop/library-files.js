@@ -51,11 +51,22 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     await mkdir(path.dirname(settingsFile), { recursive: true });
     await writeFile(settingsFile, JSON.stringify(settings), { mode: 0o600 });
   };
-  // A file the user chose in the open dialog, or one directly in a chosen folder.
+  // A file the user chose in the open dialog, or one inside an opened folder (including subfolders).
   const opened = async (file) => {
     const s = await load();
-    const inFolder = typeof file === 'string' && path.resolve(file) === file && NOTE.test(path.basename(file)) && s.folders.includes(path.dirname(file));
-    if (typeof file !== 'string' || !(s.recent.includes(file) || inFolder)) throw Error('That file was not opened from this device.');
+    if (typeof file === 'string' && s.recent.includes(file)) return;
+    let inFolder = false;
+    const base = typeof file === 'string' ? path.basename(file) : '';
+    if (typeof file === 'string' && path.resolve(file) === file && base && !base.startsWith('.') && NOTE.test(base)) {
+      const parent = s.folders.find(f => inside(f, file));
+      if (parent) {
+        try {
+          const [realRoot, realFile] = await Promise.all([realpath(parent), realpath(file)]);
+          inFolder = inside(realRoot, realFile);
+        } catch { inFolder = false; }
+      }
+    }
+    if (!inFolder) throw Error('That file was not opened from this device.');
   };
   return {
     // Saves an edited text document over its file: written beside it, then renamed, keeping its mode.
@@ -131,14 +142,31 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     async listFolder(folder) {
       const s = await load();
       if (typeof folder !== 'string' || !s.folders.includes(folder)) throw Error('That folder was not opened from this device.');
-      const names = (await readdir(folder, { withFileTypes: true })).filter(d => d.isFile() && !d.name.startsWith('.') && NOTE.test(d.name)).map(d => d.name);
+      const realRoot = await realpath(folder).catch(() => folder);
       const files = [];
-      for (const name of names) {
-        try {
-          if (!name.includes('.') && !await textStart(path.join(folder, name))) continue;
-          const info = await stat(path.join(folder, name)); files.push({ path: path.join(folder, name), name, size: info.size, modified: info.mtimeMs });
-        } catch { /* Gone meanwhile. */ }
-      }
+      const walk = async (dir, depth) => {
+        if (depth > 6 || files.length >= 500) return;
+        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        for (const d of entries) {
+          if (files.length >= 500 || d.name.startsWith('.')) continue;
+          const full = path.join(dir, d.name);
+          if (d.isDirectory()) {
+            if (d.name.endsWith('_files')) continue;
+            await walk(full, depth + 1);
+            continue;
+          }
+          if (!d.isFile() || !NOTE.test(d.name)) continue;
+          try {
+            const realFile = await realpath(full);
+            if (!inside(realRoot, realFile)) continue;
+            if (!d.name.includes('.') && !await textStart(full)) continue;
+            const info = await stat(full);
+            const rel = path.relative(folder, full).split(path.sep).join('/');
+            files.push({ path: full, name: rel, size: info.size, modified: info.mtimeMs });
+          } catch { /* Gone meanwhile. */ }
+        }
+      };
+      await walk(folder, 0);
       return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     },
     // A picture a document shows from beside it ("Tema_files/image1.png"): inside the document's

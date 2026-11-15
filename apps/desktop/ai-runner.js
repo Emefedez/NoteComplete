@@ -91,7 +91,7 @@ export function invocation(provider, { prompt, images, dir, model, mcp, stream =
     return { args, stdin: prompt + listed, parse: out => (stream ? lastFinal(provider, out) : JSON.parse(out).result) };
   }
   if (provider === 'antigravity') {
-    const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', '--add-dir', dir, '--print-timeout', '600s'];
+    const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', '--add-dir', dir, '--print-timeout', '3600s'];
     if (model) args.push('--model', model);
     // A workspace plugin: .agents/plugins/<name>/{plugin.json, mcp_config.json}.
     const files = mcp ? [
@@ -238,8 +238,20 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...call.env }, stdio: ['pipe', 'pipe', 'pipe'] });
           entry.child = child;
           let out = '', err = '', pending = '';
-          const timer = setTimeout(() => terminateProcess(child), 10 * 60 * 1000);
+          let timedOut = false;
+          // Only terminate on inactivity/stall so active slow generations run to completion.
+          const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+          let timer = null;
+          const bumpIdle = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              timedOut = true;
+              terminateProcess(child);
+            }, IDLE_TIMEOUT_MS);
+          };
+          bumpIdle();
           child.stdout.on('data', d => {
+            bumpIdle();
             out += d;
             if (!stream) return;
             pending += d;
@@ -250,7 +262,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
               if (delta) onDelta(delta);
             }
           });
-          child.stderr.on('data', d => { err += d; });
+          child.stderr.on('data', d => { bumpIdle(); err += d; });
           child.on('error', reject);
           child.on('close', async (code, signal) => {
             clearTimeout(timer);
@@ -264,7 +276,8 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
                   if (typeof text === 'string' && text.trim()) return resolve(out);
                 } catch { /* Output was incomplete or invalid. */ }
               }
-              if (signal) reject(Error('The AI request was stopped.'));
+              if (timedOut) reject(Error('Timed out after 10 minutes without AI output. Saved progress can be resumed or restarted.'));
+              else if (signal) reject(Error('The AI request was stopped.'));
               else reject(Error(`${PROVIDERS[provider].label} failed: ${call.failure?.(out) || tail(err || out) || `exit ${code}`}`));
               return;
             }

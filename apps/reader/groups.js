@@ -73,7 +73,8 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
       if (!member?.key) return null;
       const groups = await all();
       return groups.find((g) => g.members?.some((m) => m.key === member.key))
-        || (member.path && groups.find((g) => g.folder && g.folder === dirname(member.path)))
+        || (member.path && groups.find((g) => g.folder && (g.folder === dirname(member.path)
+          || member.path.startsWith(g.folder.endsWith('/') ? g.folder : g.folder + '/'))))
         || null;
     },
     async openFolder({ folder, name }) {

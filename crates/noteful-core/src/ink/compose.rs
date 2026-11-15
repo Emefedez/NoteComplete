@@ -665,7 +665,11 @@ impl Composer {
         let mut i = 0;
         while i < t.len() {
             if t[i] == '$' && (i == 0 || t[i - 1] != '\\') {
-                let delim = if i + 1 < t.len() && t[i + 1] == '$' { "$$" } else { "$" };
+                let delim = if i + 1 < t.len() && t[i + 1] == '$' {
+                    "$$"
+                } else {
+                    "$"
+                };
                 if let Some(e) = find_from(&t, &chars(delim), i + delim.len()) {
                     let end = e + delim.len();
                     out.extend(&t[i..end]);

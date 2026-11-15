@@ -279,11 +279,22 @@ export function batchNotesController({
           language: prefs.language,
           instructions,
         });
+        let streamed = '';
         const res = await runAI(
           ai,
-          { provider, model: m, prompt, images: caps.vision === false ? [] : task.images, tag: 'batch-notes', signal: ac.signal },
+          {
+            provider,
+            model: m,
+            prompt,
+            images: caps.vision === false ? [] : task.images,
+            tag: 'batch-notes',
+            label: `Notes · ${task.title}`,
+            peek: () => streamed,
+            signal: ac.signal,
+          },
           (chunk) => {
-            el('bnStatus').textContent = `Writing "${task.title}" (${i + 1}/${tasks.length})… ${chunk.length} chars`;
+            streamed += chunk;
+            el('bnStatus').textContent = `Writing "${task.title}" (${i + 1}/${tasks.length})… ${streamed.length} chars`;
           },
           { vision: caps.vision !== false },
         );

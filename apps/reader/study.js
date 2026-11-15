@@ -246,7 +246,8 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
                 ? factCheckPrompt({ title, language, unit, pages: batch, reference: referenceText(texts.filter(t => !batch.includes(t.page))) })
                 : quizPrompt(instructions(), { amount, language, title, unit, pages: batch }))
               + (avoid.length ? `\nThe student marked these earlier questions as wrong or unhelpful; do not ask them or close variants:\n${avoid.map(q => `- ${q}`).join('\n')}` : '');
-            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study', schema: studySchema(kind) });
+            const batchLabel = `${kind === 'cards' ? 'Cards' : kind === 'check' ? 'Fact check' : 'Quiz'} · ${b + 1}/${batches.length}`;
+            const { text } = await ai.run({ provider, model: chosen, notePath: notePath(), images: context.images, prompt: `${batchPrompt}\n\n${context.text}`, tag: 'study', label: batchLabel, schema: studySchema(kind) });
             if (cancelled) return;
             const parsed = jsonFrom(text);
             answers[b] = kind === 'cards' ? cleanCards(parsed, batch) : kind === 'check' ? cleanFindings(parsed, batch) : prepareQuestions(parsed, batch);

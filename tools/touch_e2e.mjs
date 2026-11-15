@@ -60,7 +60,7 @@ try {
   console.log('· two fingers pinch-zoom and scroll without drawing, and glide on when lifted');
   // The pen's pressure can be turned off in the draw tool's settings, and it is remembered.
   await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); document.querySelector('[data-tool=draw]').click(); });
-  await p.evaluate(() => document.querySelector('.choice-row[data-for="pressure"] [data-value="off"]').click());
+  await p.evaluate(() => document.querySelector('#pressureToggle').click());
   assert.equal(await p.evaluate(() => localStorage.getItem('notecomplete-pressure')), 'off');
   console.log('· pen pressure can be turned off');
   // The tools reorder with a finger: hold one until it lifts, then drag it along the row.

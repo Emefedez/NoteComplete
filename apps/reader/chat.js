@@ -196,7 +196,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       // every 120 ms so long answers stay cheap.
       let streamed = '', timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
-      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat' }, delta => {
+      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat', label: 'Ask AI', peek: () => streamed }, delta => {
         if (!streamed) { waiting.querySelector('small')?.remove(); dots.remove(); }
         streamed += delta;
         timer ||= setTimeout(show, 120);

@@ -3,16 +3,38 @@
 // open-ended, tables, code), prints it to PDF, and pre-applies Noteful Tape over
 // every answer/theory box so it opens ready to study in NoteComplete or Noteful.
 import { icon } from './icons.js';
-import { jsonFrom } from './ai-context.js';
+import { optionsFrom } from './convert.js';
+import { jsonFrom, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationPrompt, mergePartialExamJson } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
 import { runAI } from './small-model.js';
 import { createSourcePicker } from './source-picker.js';
 import { resolveSources, formatSourceBundle } from './source-extract.js';
-import { PROBLEM_TYPES, FOCUS_MODES, examPrompt, cleanExamData, buildPaginatedExamHtml } from './exam-html.js';
+import {
+  PROBLEM_TYPES,
+  FOCUS_MODES,
+  ensureExamMathRenderer,
+  examPrompt,
+  cleanExamData,
+  buildPaginatedExamHtml,
+  buildSourceCatalog,
+  buildFallbackExamPlan,
+  examPlanPrompt,
+  cleanExamPlan,
+  mergeExamSections,
+  solveSplitPrompt,
+  cleanSplitExercises,
+  solveChunkPrompt,
+  cleanSolvedExercise,
+  buildSolvedExamHtml,
+  buildSolvedExamMcpMarkdown,
+} from './exam-html.js';
 import { renderExamPdfAndTapes } from './exam-pdf.js';
 import { recordExam, resourceKeysFor } from './exam-index.js';
 
+const PARALLEL_WORKERS = 4;
+
 const STORE = 'notecomplete-exam-prefs';
+const DRAFT_KEY = 'notecomplete-exam-draft';
 
 export function safeFileBase(title = 'Exam') {
   return String(title || 'Exam').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 80) || 'Exam';
@@ -23,7 +45,7 @@ export function safeFileBase(title = 'Exam') {
  * (open note, Recents, folders, local files, Drive files) so Saved resources can
  * link exams back to any resource or folder used to create them.
  */
-export function collectSourceLinks(sources, resolved, { groups = null, openDocResource = null } = {}) {
+export async function collectSourceLinks(sources, resolved, { groups = null, openDocResource = null } = {}) {
   const keys = [];
   const labels = [];
   const openRes = typeof openDocResource === 'function' ? (openDocResource() || {}) : {};
@@ -38,7 +60,10 @@ export function collectSourceLinks(sources, resolved, { groups = null, openDocRe
     } else if (s.kind === 'group' && s.group) {
       keys.push(...resourceKeysFor({ folderIds: [s.group.id] }));
       if (s.group.name) labels.push(s.group.name);
-      for (const m of groups?.members?.(s.group) || []) {
+      const members = (typeof groups?.members === 'function'
+        ? await groups.members(s.group).catch(() => [])
+        : s.group.members) || [];
+      for (const m of members) {
         if (m?.key) keys.push(m.key);
         if (m?.name) labels.push(m.name);
       }
@@ -105,42 +130,66 @@ export function examController({
         <h2 id="examDialogTitle"></h2>
         <button id="examCloseX" type="button" class="dlg-close" aria-label="Close"></button>
       </div>
-      <p class="muted">Select Recents, entire folders, PDFs, notes, Drive files or topics. Generates a printable A4 exam PDF with pre-applied Noteful answer tape instead of dropdowns.</p>
+      <div class="expand-mode-bar exam-mode-bar">
+        <input id="examMode" type="hidden" value="create" />
+        <div class="exam-mode-row">
+          <span class="exam-mode-label">Mode:</span>
+          <div class="expand-mode-pills" role="group" aria-label="Exam mode">
+            <button type="button" data-exam-mode="create" aria-pressed="true">Create exam</button>
+            <button type="button" data-exam-mode="solve" aria-pressed="false">Solve fed exam</button>
+          </div>
+        </div>
+        <p id="examModeDesc" class="muted exam-mode-desc"></p>
+      </div>
       <div class="exam-dlg-grid">
         <section class="exam-col">
-          <h3 class="exam-sub">1. Study sources</h3>
+          <h3 id="examSourceHeading" class="exam-sub">1. Study sources</h3>
           <div id="examSourceMount"></div>
         </section>
         <section class="exam-col exam-opts">
-          <h3 class="exam-sub">2. Exam structure</h3>
+          <h3 id="examOptsHeading" class="exam-sub">2. Exam structure</h3>
           <label class="exam-field">Exam title
             <input id="examTitle" type="text" placeholder="Auto from selected sources" spellcheck="false" />
           </label>
-          <fieldset class="exam-types">
-            <legend>Problem types</legend>
-            <div class="exam-types-grid">${typeChecks}</div>
-          </fieldset>
-          <div class="exam-row-2">
-            <label class="exam-field">Coverage focus
-              <select id="examFocus" data-native>${focusOpts}</select>
-            </label>
-            <label class="exam-field">Difficulty
-              <select id="examDifficulty" data-native>
-                <option value="easy">Foundation / easy</option>
-                <option value="exam" selected>Exam level</option>
-                <option value="hard">Challenging</option>
-              </select>
-            </label>
+          <div id="examCreateOpts">
+            <fieldset class="exam-types">
+              <legend>Problem types</legend>
+              <div class="exam-types-grid">${typeChecks}</div>
+            </fieldset>
+            <div class="exam-row-2">
+              <label class="exam-field">Coverage focus
+                <select id="examFocus" data-native>${focusOpts}</select>
+              </label>
+              <label class="exam-field">Difficulty
+                <select id="examDifficulty" data-native>
+                  <option value="easy">Foundation / easy</option>
+                  <option value="exam" selected>Exam level</option>
+                  <option value="hard">Challenging</option>
+                </select>
+              </label>
+            </div>
+            <div class="exam-row-2">
+              <label class="exam-field">Number of questions
+                <select id="examCountMode" data-native>
+                  <option value="auto">As many as AI decides</option>
+                  <option value="exact" selected>Exact count…</option>
+                </select>
+              </label>
+              <label class="exam-field" id="examCountBox">Questions
+                <input id="examCount" type="number" min="1" max="60" value="12" />
+              </label>
+            </div>
           </div>
-          <div class="exam-row-2">
-            <label class="exam-field">Number of questions
-              <select id="examCountMode" data-native>
-                <option value="auto">As many as AI decides</option>
-                <option value="exact" selected>Exact count…</option>
+          <div id="examSolveOpts" hidden>
+            <label class="exam-field">Solved layout &amp; format
+              <select id="examSolveFormat" data-native>
+                <option value="pdf" selected>Exercise → New Page → Solution (A4 PDF + KaTeX math .nfedit)</option>
+                <option value="mcp">Handwritten Notebook + MCP Math Boxes (.nfedit)</option>
               </select>
             </label>
-            <label class="exam-field" id="examCountBox">Questions
-              <input id="examCount" type="number" min="1" max="60" value="12" />
+            <label class="sp-check exam-theory-toggle">
+              <input id="examSolveTape" type="checkbox" />
+              <span>Cover Solution pages with scratch-to-reveal Noteful tape</span>
             </label>
           </div>
           <div class="exam-row-2">
@@ -159,10 +208,10 @@ export function examController({
           </div>
           <label class="sp-check exam-theory-toggle">
             <input id="examIncludeTheory" type="checkbox" checked />
-            <span>Include blue-taped Theory foundation boxes</span>
+            <span>Include blue Theory / Formula boxes</span>
           </label>
           <label class="exam-field">Extra instructions
-            <textarea id="examInstructions" rows="2" placeholder="Optional focus: e.g., weight timing diagrams 40%, include tricky unit conversions…"></textarea>
+            <textarea id="examInstructions" rows="2" placeholder="Optional focus or solving instructions…"></textarea>
           </label>
           <div id="examAiRow" class="hw-ai-row hw-tools"${ai ? '' : ' hidden'}>
             <select id="examTool" data-native aria-label="AI tool"></select>
@@ -170,6 +219,14 @@ export function examController({
             <input id="examModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden />
           </div>
           <p id="examStatus" class="muted hw-ai-status" role="status"></p>
+          <div id="examDraftBar" class="exam-ready" hidden>
+            <strong id="examDraftLabel"></strong>
+            <div class="exam-ready-btns">
+              <button id="examContinueBtn" type="button" class="primary">Continue from saved progress</button>
+              <button id="examRestartBtn" type="button">Restart from scratch</button>
+              <button id="examDismissDraftBtn" type="button">Dismiss</button>
+            </div>
+          </div>
           <div id="examReadyBar" class="exam-ready" hidden>
             <strong id="examReadyLabel"></strong>
             <div class="exam-ready-btns">
@@ -187,12 +244,17 @@ export function examController({
     `;
     document.body.append(dialog);
 
-    el('examDialogTitle').replaceChildren(icon('exam'), document.createTextNode(' Create exam with AI'));
+    el('examDialogTitle').replaceChildren(icon('exam'), document.createTextNode(' Create / Solve exam with AI'));
     el('examCloseX').replaceChildren(icon('close'));
     el('examGenerate').replaceChildren(icon('spark'), document.createTextNode(' Create exam'));
-    el('examOpenBtn').replaceChildren(icon('open'), document.createTextNode(' Open taped exam'));
+    el('examOpenBtn').replaceChildren(icon('open'), document.createTextNode(' Open exam'));
     el('examPdfBtn').replaceChildren(icon('pdf'), document.createTextNode(' Save .pdf'));
     el('examHtmlBtn').replaceChildren(icon('text'), document.createTextNode(' Save .html'));
+
+    for (const pill of dialog.querySelectorAll('[data-exam-mode]')) {
+      pill.onclick = () => setExamMode(pill.dataset.examMode);
+    }
+    setExamMode('create');
 
     el('examCloseX').onclick = () => dialog.close();
     el('examCancel').onclick = () => {
@@ -221,7 +283,17 @@ export function examController({
       };
     }
 
-    el('examGenerate').onclick = () => generate();
+    el('examGenerate').onclick = () => generate({ resume: false });
+    el('examContinueBtn').onclick = () => generate({ resume: true });
+    el('examRestartBtn').onclick = () => {
+      clearAiDraft(store, DRAFT_KEY);
+      syncDraftBar();
+      generate({ resume: false });
+    };
+    el('examDismissDraftBtn').onclick = () => {
+      clearAiDraft(store, DRAFT_KEY);
+      syncDraftBar();
+    };
     el('examOpenBtn').onclick = async () => {
       if (!lastResult?.file) return;
       dialog.close();
@@ -263,89 +335,578 @@ export function examController({
     else el('examStatus').textContent = 'No AI tool found. Install or connect an AI tool under Help → Connect AI tools…';
   }
 
-  async function generate() {
+  function setExamMode(nextMode) {
+    const mode = nextMode === 'solve' ? 'solve' : 'create';
+    el('examMode').value = mode;
+    for (const pill of dialog.querySelectorAll('[data-exam-mode]')) {
+      pill.setAttribute('aria-pressed', String(pill.dataset.examMode === mode));
+    }
+    const isSolve = mode === 'solve';
+    el('examCreateOpts').hidden = isSolve;
+    el('examSolveOpts').hidden = !isSolve;
+    el('examSourceHeading').textContent = isSolve ? '1. Exam to solve (+ optional reference notes)' : '1. Study sources';
+    el('examOptsHeading').textContent = isSolve ? '2. Solution format & layout' : '2. Exam structure';
+    el('examModeDesc').textContent = isSolve
+      ? 'An orchestrator cuts the exam into logical exercises, parallel subagents solve each one, and each Exercise (with Steps) is followed on a NEW PAGE by Solution (Exercise N).'
+      : 'Splits large source sets into parallel topic blocks, generates multi-format questions with KaTeX math, and renders printable A4 PDF + Noteful tape.';
+    el('examGenerate').replaceChildren(
+      icon('spark'),
+      document.createTextNode(isSolve ? ' Split & solve exam' : ' Create exam'),
+    );
+    syncDraftBar();
+  }
+
+  function syncDraftBar() {
+    const draft = loadAiDraft(store, DRAFT_KEY);
+    if (!draft || (!draft.prompt && !draft.chunkTasks?.length && !draft.exercises?.length)) {
+      el('examDraftBar').hidden = true;
+      return;
+    }
+    let detail = 'sources ready';
+    if (draft.mode === 'solve' && Array.isArray(draft.exercises)) {
+      const done = (draft.solved || []).filter(Boolean).length;
+      detail = `${done}/${draft.exercises.length} exercises solved`;
+    } else if (Array.isArray(draft.chunkTasks)) {
+      const done = (draft.completed || []).filter(Boolean).length;
+      detail = `${done}/${draft.chunkTasks.length} blocks done`;
+    } else if (draft.partialText?.length) {
+      detail = `${draft.partialText.length} chars saved`;
+    }
+    el('examDraftLabel').textContent = `Saved ${draft.mode === 'solve' ? 'solve' : 'exam'} progress for “${draft.title || 'Exam'}” (${detail}) — continue or restart from scratch.`;
+    el('examDraftBar').hidden = false;
+  }
+
+  async function saveFinalExamArchive({ title, fileName, outFile, pageCount, tapeCount, resolved, sources, draft, origin = 'AI Exam' }) {
+    const targetFolderId = el('examFolder').value;
+    const targetGroup = targetFolderId ? (await groups?.folders?.())?.find((g) => g.id === targetFolderId) : null;
+    let entry = null;
+    if (library?.rememberImported) {
+      entry = await library.rememberImported(outFile, {
+        origin,
+        folder: targetGroup?.name || '',
+      });
+      if (targetGroup && groups?.move && entry) {
+        await groups.move({ key: entry.key, name: entry.name, source: 'imported' }, targetGroup);
+      }
+      const { resourceKeys, resourceLabels } = draft
+        ? { resourceKeys: [...(draft.resourceKeys || [])], resourceLabels: [...(draft.resourceLabels || [])] }
+        : await collectSourceLinks(sources, resolved, { groups, openDocResource });
+      if (targetGroup?.id) resourceKeys.push(...resourceKeysFor({ folderIds: [targetGroup.id] }));
+      await recordExam(library?.store, {
+        id: entry?.key || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        entryKey: entry?.key || '',
+        title,
+        fileName,
+        pageCount,
+        tapeCount,
+        created: Date.now(),
+        resourceKeys,
+        resourceLabels,
+      }).catch(() => {});
+      refreshHome?.();
+    }
+    return entry;
+  }
+
+  async function generate({ resume = false } = {}) {
     if (running) return;
     if (!ai) { el('examStatus').textContent = 'Connect an AI tool first (Help → Connect AI tools…).'; return; }
+    const draft = resume ? loadAiDraft(store, DRAFT_KEY) : null;
+    if (resume && !draft) { el('examStatus').textContent = 'No saved exam progress to continue.'; return; }
+    const mode = draft?.mode || el('examMode').value || 'create';
+    if (draft?.mode) setExamMode(draft.mode);
+
     const sources = picker.list();
-    if (!sources.length) { el('examStatus').textContent = 'Select at least one note, folder, file or topic first.'; return; }
+    if (!draft && !sources.length) { el('examStatus').textContent = 'Select at least one note, folder, file or topic first.'; return; }
     const types = Array.from(dialog.querySelectorAll('input[name="examType"]:checked')).map((c) => c.value);
-    if (!types.length) { el('examStatus').textContent = 'Pick at least one problem type.'; return; }
-    const provider = el('examTool').value;
+    if (!draft && mode === 'create' && !types.length) { el('examStatus').textContent = 'Pick at least one problem type.'; return; }
+    const provider = el('examTool').value || draft?.provider;
     if (!provider) { el('examStatus').textContent = 'No AI tool is available.'; return; }
 
-    const prefs = {
+    const prefs = draft?.prefs || {
+      mode,
       focus: el('examFocus').value,
       difficulty: el('examDifficulty').value,
       countMode: el('examCountMode').value,
       count: Number(el('examCount').value) || 12,
       language: el('examLanguage').value,
       includeTheory: el('examIncludeTheory').checked,
+      solveFormat: el('examSolveFormat').value,
+      tapeSolutions: el('examSolveTape').checked,
       types,
     };
-    savePrefs(prefs);
+    if (!draft) savePrefs(prefs);
 
     const ac = new AbortController();
     running = ac;
     el('examGenerate').disabled = true;
+    el('examContinueBtn').disabled = true;
+    el('examRestartBtn').disabled = true;
     el('examCancel').textContent = 'Stop';
     el('examReadyBar').hidden = true;
-    el('examStatus').textContent = 'Reading selected sources…';
-    const job = jobs?.start?.('Creating exam…', { onCancel: () => ac.abort() });
+    el('examDraftBar').hidden = true;
+    el('examStatus').textContent = draft ? 'Resuming from saved progress…' : 'Reading selected sources…';
+    const job = jobs?.start?.(
+      draft
+        ? (mode === 'solve' ? 'Resuming exam solve…' : 'Resuming exam…')
+        : (mode === 'solve' ? 'Solving exam…' : 'Creating exam…'),
+      { onCancel: () => ac.abort() },
+    );
 
+    let checkpoint = draft ? { ...draft } : null;
+    let streamed = '';
     try {
-      const resolved = await resolveSources(sources, {
-        call,
-        openPdf,
-        library,
-        groups,
-        openDocResource,
-        pageText,
-        pageCanvas,
-        notesText,
-        documentInfo: () => ({ pages: openDocPages(), title: openDocTitle() }),
-        onProgress: (i, n, label) => {
-          el('examStatus').textContent = `Reading ${i + 1}/${n}: ${label}`;
-          job?.progress?.(`Reading ${i + 1}/${n}`);
-        },
-      });
-      if (ac.signal.aborted) throw Error('Cancelled.');
-      if (!resolved.length) throw Error('Could not extract readable text or images from the selected sources.');
-
-      const { promptText, images } = formatSourceBundle(resolved);
-      const userTitle = el('examTitle').value.trim();
-      const defaultTitle = userTitle || `${resolved[0].title}${resolved.length > 1 ? ` + ${resolved.length - 1} more` : ''} — Exam`;
-      const prompt = examPrompt({
-        title: userTitle || defaultTitle,
-        sourcesText: promptText,
-        types: prefs.types,
-        countMode: prefs.countMode,
-        count: prefs.count,
-        difficulty: prefs.difficulty,
-        focus: prefs.focus,
-        language: prefs.language,
-        includeTheory: prefs.includeTheory,
-        instructions: el('examInstructions').value.trim(),
-      });
-
-      el('examStatus').textContent = 'Generating exam problems with AI…';
-      job?.progress?.('Writing exam questions…');
       const m = model.value;
       const caps = ai.capabilities?.(provider, m) || {};
-      const res = await runAI(
-        ai,
-        { provider, model: m, prompt, images: caps.vision === false ? [] : images, tag: 'exam', signal: ac.signal },
-        (chunk) => {
-          el('examStatus').textContent = `Generating exam… (${chunk.length} chars received)`;
-        },
-        { small: model.small, vision: caps.vision !== false },
-      );
+      const userTitle = el('examTitle').value.trim() || draft?.title || '';
+      const extraInstructions = el('examInstructions').value.trim();
 
-      if (ac.signal.aborted) throw Error('Cancelled.');
-      const exam = cleanExamData(jsonFrom(res.text));
+      let resolved = [];
+      if (!draft) {
+        resolved = await resolveSources(sources, {
+          call,
+          openPdf,
+          library,
+          groups,
+          openDocResource,
+          pageText,
+          pageCanvas,
+          notesText,
+          documentInfo: () => ({ pages: openDocPages(), title: openDocTitle() }),
+          onProgress: (i, n, label) => {
+            el('examStatus').textContent = `Reading ${i + 1}/${n}: ${label}`;
+            job?.progress?.(`Reading ${i + 1}/${n}`);
+          },
+        });
+        if (ac.signal.aborted) throw Error('Cancelled.');
+        if (!resolved.length) throw Error('Could not extract readable text or images from the selected sources.');
+      }
+
+      if (mode === 'solve') {
+        const providerName = el('examTool').selectedOptions?.[0]?.textContent || provider;
+        if (!checkpoint?.exercises?.length) {
+          const bundle = formatSourceBundle(resolved, { maxChars: 90000 });
+          const defaultTitle = userTitle || `${resolved[0].title} — Solved`;
+          const sourceLinks = await collectSourceLinks(sources, resolved, { groups, openDocResource });
+
+          // Stage 1: Splitter cuts fed exam verbatim into self-contained exercises.
+          let splitStream = '';
+          el('examStatus').textContent = 'Stage 1/3 · Splitting exam into logical exercises…';
+          job?.progress?.('Stage 1/3 · Splitting exam');
+          const splitPromptText = solveSplitPrompt({
+            title: defaultTitle,
+            sourcesText: bundle.promptText,
+            language: prefs.language,
+            instructions: extraInstructions,
+          });
+          const splitRes = await runAI(
+            ai,
+            {
+              provider,
+              model: m,
+              prompt: splitPromptText,
+              images: caps.vision === false ? [] : bundle.images,
+              tag: 'solve-split',
+              label: 'Splitter · cut exam into exercises',
+              peek: () => splitStream,
+              signal: ac.signal,
+            },
+            (chunk) => {
+              splitStream += chunk;
+              el('examStatus').textContent = `Stage 1/3 · Splitting exam… (${splitStream.length} chars)`;
+            },
+            { small: model.small, vision: caps.vision !== false },
+          );
+          if (ac.signal.aborted) throw Error('Cancelled.');
+
+          let splitRaw = null;
+          try { splitRaw = jsonFrom(splitRes.text); } catch { splitRaw = null; }
+          const splitData = cleanSplitExercises(splitRaw, bundle.promptText, userTitle || defaultTitle);
+          checkpoint = {
+            mode: 'solve',
+            title: userTitle || splitData.title || defaultTitle,
+            language: prefs.language !== 'auto' ? prefs.language : (splitData.language || 'auto'),
+            exercises: splitData.exercises,
+            solved: Array(splitData.exercises.length).fill(null),
+            referenceText: resolved.length > 1
+              ? formatSourceBundle(resolved.slice(1), { maxChars: 14000 }).promptText
+              : '',
+            prefs,
+            provider,
+            resourceKeys: sourceLinks.resourceKeys,
+            resourceLabels: sourceLinks.resourceLabels,
+          };
+          saveAiDraft(store, DRAFT_KEY, checkpoint);
+        }
+
+        // Stage 2: Solve every exercise concurrently across up to PARALLEL_WORKERS subagents.
+        const exercises = checkpoint.exercises;
+        const solved = [...(checkpoint.solved || Array(exercises.length).fill(null))];
+        const pendingIndices = exercises.map((_, i) => i).filter((i) => !solved[i]);
+        let nextCursor = 0;
+        let doneCount = exercises.length - pendingIndices.length;
+
+        el('examStatus').textContent = `Stage 2/3 · Solving ${exercises.length} exercise${exercises.length === 1 ? '' : 's'} in parallel…`;
+        job?.progress?.(`Solving ${doneCount}/${exercises.length} exercises`);
+
+        const solveWorker = async () => {
+          while (!ac.signal.aborted && nextCursor < pendingIndices.length) {
+            const idx = pendingIndices[nextCursor++];
+            const ex = exercises[idx];
+            let workerStream = '';
+            const prompt = solveChunkPrompt({
+              exercise: ex,
+              examTitle: checkpoint.title,
+              referenceText: checkpoint.referenceText || '',
+              language: checkpoint.language || prefs.language,
+              instructions: extraInstructions,
+            });
+            const res = await runAI(
+              ai,
+              {
+                provider,
+                model: m,
+                prompt,
+                images: [],
+                tag: 'solve-chunk',
+                label: `Solver · Ex ${ex.number || idx + 1}`,
+                peek: () => workerStream,
+                signal: ac.signal,
+              },
+              (chunk) => { workerStream += chunk; },
+              { small: model.small, vision: false },
+            );
+            if (ac.signal.aborted) return;
+            solved[idx] = cleanSolvedExercise(jsonFrom(res.text), ex, idx);
+            doneCount++;
+            checkpoint.solved = solved;
+            saveAiDraft(store, DRAFT_KEY, checkpoint);
+            el('examStatus').textContent = `Stage 2/3 · Solved ${doneCount}/${exercises.length} exercises (${providerName})…`;
+            job?.progress?.(`Solved ${doneCount}/${exercises.length} exercises`);
+          }
+        };
+
+        await Promise.all(
+          Array.from({ length: Math.min(PARALLEL_WORKERS, Math.max(1, pendingIndices.length)) }, solveWorker),
+        );
+        if (ac.signal.aborted) throw Error('Cancelled.');
+
+        // Stage 3: Deterministic Composer (Exercise N + Steps -> NEW PAGE -> Solution N)
+        const solvedExam = {
+          title: userTitle || checkpoint.title,
+          exercises: solved.filter(Boolean),
+        };
+        el('examStatus').textContent = 'Stage 3/3 · Composing alternating Exercise / Solution pages…';
+        job?.progress?.('Composing solved exam…');
+
+        const fileName = `${safeFileBase(solvedExam.title)}.nfedit`;
+        let outFile;
+        let pdfBytes = null;
+        let interactiveHtml = '';
+        let pageCount = 0;
+        let tapeCount = 0;
+
+        if (prefs.solveFormat === 'mcp') {
+          const md = buildSolvedExamMcpMarkdown(solvedExam, {
+            tapeSolutions: prefs.tapeSolutions,
+            showTheory: prefs.includeTheory,
+          });
+          const composeOpts = optionsFrom({
+            look: 'classic',
+            paper: 'lined',
+            theme: 'ivory',
+            font: 'patrick',
+            hand: 'natural',
+            pen: 'fountain',
+            accent: 'navy',
+          });
+          const composed = await call('composeNoteFile', { title: solvedExam.title, markdown: md, options: composeOpts });
+          outFile = new File([composed.project], fileName, { type: 'application/json' });
+          pageCount = composed.pages || solvedExam.exercises.length * 2;
+        } else {
+          await ensureExamMathRenderer();
+          const printHtml = buildSolvedExamHtml(solvedExam, {
+            showTheory: prefs.includeTheory,
+            tapeSolutions: prefs.tapeSolutions,
+            interactiveFallback: false,
+          });
+          interactiveHtml = buildSolvedExamHtml(solvedExam, {
+            showTheory: prefs.includeTheory,
+            tapeSolutions: prefs.tapeSolutions,
+            interactiveFallback: true,
+          });
+          const rendered = await renderExamPdfAndTapes(printHtml, { title: solvedExam.title, call });
+          const pdfTransfer = rendered.pdf.slice().buffer;
+          const projectJson = await call('createPdfNoteWithTapes', {
+            title: solvedExam.title,
+            sizes: rendered.sizes,
+            pdf: pdfTransfer,
+            tapes: prefs.tapeSolutions ? rendered.tapes : [],
+          }, [pdfTransfer]);
+          outFile = new File([projectJson], fileName, { type: 'application/json' });
+          pdfBytes = rendered.pdf;
+          pageCount = rendered.pageCount;
+          tapeCount = prefs.tapeSolutions ? rendered.tapes.length : 0;
+        }
+
+        const entry = await saveFinalExamArchive({
+          title: solvedExam.title,
+          fileName,
+          outFile,
+          pageCount,
+          tapeCount,
+          resolved,
+          sources,
+          draft,
+          origin: 'AI Solved Exam',
+        });
+
+        clearAiDraft(store, DRAFT_KEY);
+        syncDraftBar();
+        lastResult = {
+          title: solvedExam.title,
+          file: outFile,
+          entry,
+          pdf: pdfBytes,
+          interactiveHtml,
+          pageCount,
+          tapeCount,
+        };
+        el('examPdfBtn').hidden = !pdfBytes;
+        el('examHtmlBtn').hidden = !interactiveHtml;
+        el('examOpenBtn').replaceChildren(icon('open'), document.createTextNode(' Open solved exam'));
+        el('examReadyLabel').textContent = `Solved: ${solvedExam.exercises.length} exercise${solvedExam.exercises.length === 1 ? '' : 's'} · ${pageCount} pages${tapeCount ? ` · ${tapeCount} taped answers` : ''} — saved to Recent!`;
+        el('examReadyBar').hidden = false;
+        el('examStatus').textContent = '';
+        job?.done?.(`Solved "${solvedExam.title}" (${solvedExam.exercises.length} exercises, ${pageCount} pages).`);
+        status?.(`Solved "${solvedExam.title}" and saved to Recent.`);
+        return;
+      }
+
+      // ---- CREATE EXAM MODE (Stage 1 Planner -> Stage 2 Parallel Writers -> Stage 3 Composer) ----
+      let exam = null;
+      const totalChars = resolved.reduce((s, d) => s + String(d?.text || '').length, 0);
+      const useParallelCreate = draft?.parallel
+        || resolved.length >= 2
+        || totalChars >= 16000;
+
+      if (useParallelCreate) {
+        if (!checkpoint?.chunkTasks?.length) {
+          const defaultTitle = userTitle || `${resolved[0].title}${resolved.length > 1 ? ` + ${resolved.length - 1} more` : ''} — Exam`;
+          const sourceLinks = await collectSourceLinks(sources, resolved, { groups, openDocResource });
+
+          let plan;
+          if (resolved.length >= 3) {
+            let planStream = '';
+            el('examStatus').textContent = `Stage 1/3 · Planning parallel blocks across ${resolved.length} sources…`;
+            job?.progress?.('Stage 1/3 · Planning blocks');
+            const catalogText = buildSourceCatalog(resolved);
+            const planRes = await runAI(
+              ai,
+              {
+                provider,
+                model: m,
+                prompt: examPlanPrompt({
+                  title: defaultTitle,
+                  catalogText,
+                  docCount: resolved.length,
+                  countMode: prefs.countMode,
+                  count: prefs.count,
+                  focus: prefs.focus,
+                  language: prefs.language,
+                }),
+                images: [],
+                tag: 'exam-plan',
+                label: 'Planner · organize blocks',
+                peek: () => planStream,
+                signal: ac.signal,
+              },
+              (chunk) => { planStream += chunk; },
+              { small: model.small, vision: false },
+            );
+            if (ac.signal.aborted) throw Error('Cancelled.');
+            let parsedPlan = null;
+            try { parsedPlan = jsonFrom(planRes.text); } catch { parsedPlan = null; }
+            plan = cleanExamPlan(parsedPlan, resolved, { countMode: prefs.countMode, count: prefs.count });
+          } else {
+            plan = {
+              title: defaultTitle,
+              subtitle: '',
+              chunks: buildFallbackExamPlan(resolved, { countMode: prefs.countMode, count: prefs.count }),
+            };
+          }
+
+          const chunkTasks = plan.chunks.map((chunk, ci) => {
+            const docs = chunk.docIndices.map((idx) => resolved[idx]).filter(Boolean);
+            const chunkBundle = formatSourceBundle(docs, { maxChars: 26000 });
+            const chunkCountMode = chunk.count > 0 ? 'exact' : prefs.countMode;
+            const chunkCount = chunk.count > 0 ? chunk.count : prefs.count;
+            const prompt = examPrompt({
+              title: `${userTitle || plan.title || defaultTitle} — ${chunk.heading}`,
+              sourcesText: chunkBundle.promptText,
+              types: prefs.types,
+              countMode: chunkCountMode,
+              count: chunkCount,
+              difficulty: prefs.difficulty,
+              focus: prefs.focus,
+              language: prefs.language,
+              includeTheory: prefs.includeTheory,
+              instructions: [
+                `Write ONE cohesive section titled "${chunk.heading}" (badge "${chunk.badge}", badgeKind "${chunk.badgeKind}").`,
+                chunk.focusNote ? `Block emphasis: ${chunk.focusNote}` : '',
+                extraInstructions,
+              ].filter(Boolean).join('\n'),
+            });
+            return {
+              heading: chunk.heading,
+              badge: chunk.badge,
+              prompt,
+              imageCount: chunkBundle.images.length,
+              images: caps.vision === false ? [] : chunkBundle.images,
+            };
+          });
+
+          checkpoint = {
+            mode: 'create',
+            parallel: true,
+            title: userTitle || plan.title || defaultTitle,
+            subtitle: plan.subtitle || '',
+            chunkTasks: chunkTasks.map(({ images: _imgs, ...rest }) => rest),
+            completed: Array(chunkTasks.length).fill(null),
+            prefs,
+            provider,
+            resourceKeys: sourceLinks.resourceKeys,
+            resourceLabels: sourceLinks.resourceLabels,
+            _runtimeImages: chunkTasks.map((t) => t.images),
+          };
+          saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined });
+        }
+
+        const chunkTasks = checkpoint.chunkTasks;
+        const completed = [...(checkpoint.completed || Array(chunkTasks.length).fill(null))];
+        const runtimeImages = checkpoint._runtimeImages || [];
+        const pendingIdx = chunkTasks.map((_, i) => i).filter((i) => !completed[i]);
+        let cursor = 0;
+        let finished = chunkTasks.length - pendingIdx.length;
+
+        el('examStatus').textContent = `Stage 2/3 · Running ${chunkTasks.length} parallel exam subagents…`;
+        job?.progress?.(`Blocks ${finished}/${chunkTasks.length}`);
+
+        const runWorker = async () => {
+          while (!ac.signal.aborted && cursor < pendingIdx.length) {
+            const ci = pendingIdx[cursor++];
+            const task = chunkTasks[ci];
+            let chunkStream = '';
+            const res = await runAI(
+              ai,
+              {
+                provider,
+                model: m,
+                prompt: task.prompt,
+                images: runtimeImages[ci] || [],
+                tag: 'exam',
+                label: `Block ${ci + 1}/${chunkTasks.length} · ${task.heading}`,
+                peek: () => chunkStream,
+                signal: ac.signal,
+              },
+              (chunk) => { chunkStream += chunk; },
+              { small: model.small, vision: caps.vision !== false },
+            );
+            if (ac.signal.aborted) return;
+            completed[ci] = cleanExamData(jsonFrom(res.text));
+            finished++;
+            checkpoint.completed = completed;
+            saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined });
+            el('examStatus').textContent = `Stage 2/3 · Finished ${finished}/${chunkTasks.length} exam blocks…`;
+            job?.progress?.(`Blocks ${finished}/${chunkTasks.length}`);
+          }
+        };
+
+        await Promise.all(
+          Array.from({ length: Math.min(PARALLEL_WORKERS, Math.max(1, pendingIdx.length)) }, runWorker),
+        );
+        if (ac.signal.aborted) throw Error('Cancelled.');
+
+        el('examStatus').textContent = 'Stage 3/3 · Composing exam blocks & laying out PDF…';
+        exam = mergeExamSections(completed, {
+          title: userTitle || checkpoint.title,
+          subtitle: checkpoint.subtitle,
+        });
+      } else {
+        // Single short source path with streaming + resume support.
+        let basePrompt = draft?.prompt || '';
+        let images = [];
+        if (!draft) {
+          const bundle = formatSourceBundle(resolved);
+          images = bundle.images;
+          const defaultTitle = userTitle || `${resolved[0].title} — Exam`;
+          basePrompt = examPrompt({
+            title: userTitle || defaultTitle,
+            sourcesText: bundle.promptText,
+            types: prefs.types,
+            countMode: prefs.countMode,
+            count: prefs.count,
+            difficulty: prefs.difficulty,
+            focus: prefs.focus,
+            language: prefs.language,
+            includeTheory: prefs.includeTheory,
+            instructions: extraInstructions,
+          });
+          const sourceLinks = await collectSourceLinks(sources, resolved, { groups, openDocResource });
+          checkpoint = {
+            mode: 'create',
+            title: userTitle || defaultTitle,
+            prompt: basePrompt,
+            partialText: '',
+            prefs,
+            provider,
+            resourceKeys: sourceLinks.resourceKeys,
+            resourceLabels: sourceLinks.resourceLabels,
+          };
+          saveAiDraft(store, DRAFT_KEY, checkpoint);
+        }
+
+        const finalPrompt = draft
+          ? buildContinuationPrompt({ basePrompt, partialText: draft.partialText || '', kind: 'exam' })
+          : basePrompt;
+
+        el('examStatus').textContent = draft ? 'Continuing exam generation with AI…' : 'Generating exam problems with AI…';
+        job?.progress?.('Writing exam questions…');
+        let lastSavedAt = 0;
+        const res = await runAI(
+          ai,
+          {
+            provider,
+            model: m,
+            prompt: finalPrompt,
+            images: caps.vision === false ? [] : images,
+            tag: 'exam',
+            label: 'Exam generator',
+            peek: () => streamed,
+            signal: ac.signal,
+          },
+          (chunk) => {
+            streamed += chunk;
+            const totalCharsStreamed = (draft?.partialText || '').length + streamed.length;
+            el('examStatus').textContent = `Generating exam… (${totalCharsStreamed} chars received)`;
+            if (checkpoint && Date.now() - lastSavedAt > 4000) {
+              lastSavedAt = Date.now();
+              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, partialText: `${draft?.partialText || ''}${streamed}` });
+            }
+          },
+          { small: model.small, vision: caps.vision !== false },
+        );
+        if (ac.signal.aborted) throw Error('Cancelled.');
+        const parsed = draft?.partialText
+          ? mergePartialExamJson(draft.partialText, res.text)
+          : jsonFrom(res.text);
+        exam = cleanExamData(parsed);
+      }
+
       if (userTitle) exam.title = userTitle;
-
       el('examStatus').textContent = 'Laying out A4 PDF and measuring answer tape…';
       job?.progress?.('Rendering PDF & tape…');
+      await ensureExamMathRenderer();
       const printHtml = buildPaginatedExamHtml(exam, { showTheory: prefs.includeTheory, interactiveFallback: false });
       const interactiveHtml = buildPaginatedExamHtml(exam, { showTheory: prefs.includeTheory, interactiveFallback: true });
       const rendered = await renderExamPdfAndTapes(printHtml, { title: exam.title, call });
@@ -361,33 +922,20 @@ export function examController({
 
       const fileName = `${safeFileBase(exam.title)}.nfedit`;
       const outFile = new File([projectJson], fileName, { type: 'application/json' });
-      const targetFolderId = el('examFolder').value;
-      const targetGroup = targetFolderId ? (await groups?.folders?.())?.find((g) => g.id === targetFolderId) : null;
-      let entry = null;
-      if (library?.rememberImported) {
-        entry = await library.rememberImported(outFile, {
-          origin: 'AI Exam',
-          folder: targetGroup?.name || '',
-        });
-        if (targetGroup && groups?.move && entry) {
-          await groups.move({ key: entry.key, name: entry.name, source: 'imported' }, targetGroup);
-        }
-        const { resourceKeys, resourceLabels } = collectSourceLinks(sources, resolved, { groups, openDocResource });
-        if (targetGroup?.id) resourceKeys.push(...resourceKeysFor({ folderIds: [targetGroup.id] }));
-        await recordExam(library?.store, {
-          id: entry?.key || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          entryKey: entry?.key || '',
-          title: exam.title,
-          fileName,
-          pageCount: rendered.pageCount,
-          tapeCount: rendered.tapes.length,
-          created: Date.now(),
-          resourceKeys,
-          resourceLabels,
-        }).catch(() => {});
-        refreshHome?.();
-      }
+      const entry = await saveFinalExamArchive({
+        title: exam.title,
+        fileName,
+        outFile,
+        pageCount: rendered.pageCount,
+        tapeCount: rendered.tapes.length,
+        resolved,
+        sources,
+        draft,
+        origin: 'AI Exam',
+      });
 
+      clearAiDraft(store, DRAFT_KEY);
+      syncDraftBar();
       lastResult = {
         title: exam.title,
         file: outFile,
@@ -397,23 +945,38 @@ export function examController({
         pageCount: rendered.pageCount,
         tapeCount: rendered.tapes.length,
       };
+      el('examPdfBtn').hidden = false;
+      el('examHtmlBtn').hidden = false;
+      el('examOpenBtn').replaceChildren(icon('open'), document.createTextNode(' Open taped exam'));
       el('examReadyLabel').textContent = `Ready: ${rendered.pageCount} A4 page${rendered.pageCount === 1 ? '' : 's'} · ${rendered.tapes.length} taped answer${rendered.tapes.length === 1 ? '' : 's'} — saved to Recent!`;
       el('examReadyBar').hidden = false;
       el('examStatus').textContent = '';
       job?.done?.(`Created exam "${exam.title}" (${rendered.pageCount} pages, ${rendered.tapes.length} answer tapes).`);
-      status?.(`Created exam "${exam.title}" (${rendered.tapeCount} taped answers) and saved to Recent.`);
+      status?.(`Created exam "${exam.title}" (${rendered.tapes.length} taped answers) and saved to Recent.`);
     } catch (e) {
+      if (checkpoint) {
+        const cleanCheckpoint = { ...checkpoint };
+        delete cleanCheckpoint._runtimeImages;
+        if (!cleanCheckpoint.parallel && cleanCheckpoint.mode !== 'solve') {
+          cleanCheckpoint.partialText = `${draft?.partialText || ''}${streamed}`;
+        }
+        cleanCheckpoint.reason = e?.message || String(e);
+        saveAiDraft(store, DRAFT_KEY, cleanCheckpoint);
+        syncDraftBar();
+      }
       el('examStatus').textContent = e?.message || String(e);
       job?.fail?.(e?.message || String(e));
     } finally {
       running = null;
       el('examGenerate').disabled = false;
+      el('examContinueBtn').disabled = false;
+      el('examRestartBtn').disabled = false;
       el('examCancel').textContent = 'Cancel';
     }
   }
 
   return {
-    async open({ preselectOpen = false } = {}) {
+    async open({ preselectOpen = false, mode = 'create' } = {}) {
       if (!dialog) build();
       const prefs = loadPrefs();
       if (prefs.focus) el('examFocus').value = prefs.focus;
@@ -422,12 +985,16 @@ export function examController({
       if (prefs.count) el('examCount').value = prefs.count;
       if (prefs.language) el('examLanguage').value = prefs.language;
       if (typeof prefs.includeTheory === 'boolean') el('examIncludeTheory').checked = prefs.includeTheory;
+      if (prefs.solveFormat) el('examSolveFormat').value = prefs.solveFormat;
+      if (typeof prefs.tapeSolutions === 'boolean') el('examSolveTape').checked = prefs.tapeSolutions;
       if (Array.isArray(prefs.types) && prefs.types.length) {
         for (const cb of dialog.querySelectorAll('input[name="examType"]')) cb.checked = prefs.types.includes(cb.value);
       }
+      setExamMode(mode === 'solve' ? 'solve' : 'create');
       el('examCountBox').hidden = el('examCountMode').value !== 'exact';
       el('examReadyBar').hidden = true;
       el('examStatus').textContent = '';
+      syncDraftBar();
       dialog.showModal();
       await picker.refresh({ preselectOpen });
       await fillFoldersAndTools();

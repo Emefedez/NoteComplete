@@ -2,6 +2,19 @@
 // using visible answer/theory blocks tagged with [data-tape-answer] instead of <details> dropdowns
 // so generated PDF pages receive exact-fit Noteful Tape overlays.
 
+let katexMod = null;
+export async function ensureExamMathRenderer() {
+  if (!katexMod) {
+    try {
+      const m = await import('./vendor/katex/katex.mjs');
+      katexMod = m?.default || m;
+    } catch {
+      katexMod = null;
+    }
+  }
+  return katexMod;
+}
+
 export const PROBLEM_TYPES = [
   ['mcq', 'Multiple choice'],
   ['fill', 'Fill-in / conversions'],
@@ -31,6 +44,84 @@ export function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+// Splits exam prose into plain text and $...$ / $$...$$ LaTeX segments without misreading prices like "$5 and $10".
+export function splitExamMath(text) {
+  const source = String(text ?? '');
+  const parts = [];
+  let plainStart = 0;
+  let i = 0;
+  const pushText = (end) => {
+    if (end > plainStart) parts.push({ text: source.slice(plainStart, end).replaceAll('\\$', '$') });
+  };
+  while (i < source.length) {
+    if (source[i] === '\\' && source[i + 1] === '$') { i += 2; continue; }
+    if (source[i] !== '$') { i += 1; continue; }
+    if (source[i + 1] === '$') {
+      const close = source.indexOf('$$', i + 2);
+      if (close !== -1) {
+        pushText(i);
+        parts.push({ tex: source.slice(i + 2, close).trim(), display: true });
+        i = close + 2;
+        plainStart = i;
+        continue;
+      }
+      i += 2;
+      continue;
+    }
+    let close = -1;
+    for (let j = i + 1; j < source.length && source[j] !== '\n'; j++) {
+      if (source[j] === '\\') { j += 1; continue; }
+      if (source[j] === '$') {
+        if (source[j + 1] === '$') break;
+        close = j;
+        break;
+      }
+    }
+    if (close !== -1) {
+      const inner = source.slice(i + 1, close);
+      const nextCh = source[close + 1] || '';
+      if (inner.trim() && !/^\s|\s$/.test(inner) && !/\d/.test(nextCh)) {
+        pushText(i);
+        parts.push({ tex: inner.trim(), display: false });
+        i = close + 1;
+        plainStart = i;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  pushText(source.length);
+  return parts;
+}
+
+function formatInlinePlain(s) {
+  return escapeHtml(s)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+}
+
+// Renders LaTeX ($...$, $$...$$) using bundled KaTeX MathML so formulas print natively in offline A4 PDFs.
+export function renderRichExamHtml(value, katex = katexMod) {
+  const source = String(value ?? '');
+  if (!source) return '';
+  return splitExamMath(source).map((part) => {
+    if (part.tex == null) return formatInlinePlain(part.text);
+    if (!katex?.renderToString) {
+      return `<code>${escapeHtml(part.tex)}</code>`;
+    }
+    try {
+      const html = katex.renderToString(part.tex, {
+        displayMode: part.display,
+        output: 'mathml',
+        throwOnError: false,
+      });
+      return part.display ? `<span class="math-block">${html}</span>` : html;
+    } catch {
+      return `<code>${escapeHtml(part.tex)}</code>`;
+    }
+  }).join('');
+}
+
 export function examPrompt({
   title = '',
   sourcesText = '',
@@ -57,6 +148,11 @@ export function examPrompt({
     hard: 'Challenging advanced problems: synthesis across topics, tricky edge cases, proofs/derivations, and subtle traps.',
   };
 
+  const hasRichKinds = pickedTypes.some((t) => ['open', 'calculation', 'code', 'table'].includes(t));
+  const balanceRule = hasRichKinds
+    ? 'CRITICAL EXERCISE MIX RULE: Whenever the sources contain algorithms, systems/architectural mechanisms, formulas, scheduling, memory management, proofs, or design tradeoffs, you MUST include genuine multi-step development, calculation, table, or code-trace exercises (`open`, `calculation`, `table`, `code` with clear sub-parts and `writingLines` / `expressions`). Do NOT default mostly to True/False or shallow one-line MCQs when real developable exercises can be crafted; keep True/False or short MCQs only as a minor share (or only when a source truly contains nothing deeper than factual T/F statements).'
+    : '';
+
   return [
     'You are an expert professor designing a rich, printable A4 written examination from the student’s study sources.',
     title.trim() ? `Requested exam title: ${title.trim()}` : '',
@@ -65,6 +161,7 @@ export function examPrompt({
     `Coverage focus: ${focusText}`,
     countLine,
     `Include ONLY these problem kinds (distribute them naturally based on what each topic suits best): ${pickedTypes.join(', ')}.`,
+    balanceRule,
     includeTheory
       ? 'For sections or tricky questions where background intuition helps, include a concise `theory` field explaining the underlying rule.'
       : 'Omit standalone theory boxes (`"theory": ""`).',
@@ -419,6 +516,42 @@ export const EXAM_PRINT_CSS = `
     color: #7f1d1d;
     border-radius: 2px;
   }
+  math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Noto Serif", Georgia, serif; font-size: 1.03em; }
+  .math-block { display: block; margin: 5px 0; text-align: center; }
+  .solve-steps-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #475569;
+    padding: 7px 9px;
+    border-radius: 4px;
+    margin: 7px 0;
+  }
+  .solve-steps-box strong.lbl {
+    display: block;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    color: #334155;
+    margin-bottom: 4px;
+  }
+  .solve-step-item { margin: 4px 0 6px 0; }
+  .solve-step-work { border-bottom: 1px dashed #cbd5e1; height: 22px; margin-top: 3px; }
+  .solve-sol-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 5px 9px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 10.4pt;
+    font-weight: 700;
+  }
+  .solve-part-ans { margin: 5px 0; padding: 4px 7px; background: rgba(255,255,255,0.65); border-radius: 4px; border: 1px solid #a7f3d0; }
+  .solve-part-ans .ans-final { font-weight: 700; color: #064e3b; }
+  .solve-part-ans .ans-work { margin-top: 3px; white-space: pre-wrap; }
+  .solve-card-free { break-inside: auto; }
   @media screen {
     body { background: #e2e8f0; padding: 14px 0; }
     .exam-page { margin: 0 auto 14px auto; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16); }
@@ -437,7 +570,7 @@ function renderProblemHtml(p) {
       + (p.points != null ? `<span class="prob-pts">${escapeHtml(p.points)} pts</span>` : '')
       + `</div>`,
   );
-  parts.push(`<p class="prob-prompt">${escapeHtml(p.prompt)}</p>`);
+  parts.push(`<p class="prob-prompt">${renderRichExamHtml(p.prompt)}</p>`);
 
   if (p.code) {
     parts.push(`<pre class="exam-code"><code>${escapeHtml(p.code)}</code></pre>`);
@@ -445,18 +578,18 @@ function renderProblemHtml(p) {
   if (p.options?.length) {
     parts.push(
       `<div class="mc-grid">`
-        + p.options.map((opt, idx) => `<div class="mc-opt"><strong>${letters[idx] || idx + 1})</strong> ${escapeHtml(opt)}</div>`).join('')
+        + p.options.map((opt, idx) => `<div class="mc-opt"><strong>${letters[idx] || idx + 1})</strong> ${renderRichExamHtml(opt)}</div>`).join('')
         + `</div>`,
     );
   }
   if (p.expressions?.length) {
     for (const ex of p.expressions) {
-      parts.push(`<div class="expr-row"><span>${escapeHtml(ex.label)}</span><span class="fill-line"></span></div>`);
+      parts.push(`<div class="expr-row"><span>${renderRichExamHtml(ex.label)}</span><span class="fill-line"></span></div>`);
     }
   }
   if (p.table?.headers?.length) {
-    const ths = p.table.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
-    const rows = (p.table.rows || []).map((r) => `<tr>${(Array.isArray(r) ? r : []).map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
+    const ths = p.table.headers.map((h) => `<th>${renderRichExamHtml(h)}</th>`).join('');
+    const rows = (p.table.rows || []).map((r) => `<tr>${(Array.isArray(r) ? r : []).map((c) => `<td>${renderRichExamHtml(c)}</td>`).join('')}</tr>`).join('');
     parts.push(`<table class="exam-tbl"><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`);
   }
   if (p.writingLines > 0) {
@@ -465,9 +598,9 @@ function renderProblemHtml(p) {
 
   parts.push(
     `<div class="key" data-tape-answer="solution">`
-      + `<strong class="lbl">Solution</strong> · ${escapeHtml(p.answerBox.summary)}`
-      + (p.answerBox.steps ? `<div class="key-steps">${escapeHtml(p.answerBox.steps)}</div>` : '')
-      + (p.answerBox.trap ? `<div class="bad"><strong>Watch out:</strong> ${escapeHtml(p.answerBox.trap)}</div>` : '')
+      + `<strong class="lbl">Solution</strong> · ${renderRichExamHtml(p.answerBox.summary)}`
+      + (p.answerBox.steps ? `<div class="key-steps">${renderRichExamHtml(p.answerBox.steps)}</div>` : '')
+      + (p.answerBox.trap ? `<div class="bad"><strong>Watch out:</strong> ${renderRichExamHtml(p.answerBox.trap)}</div>` : '')
       + `</div>`,
   );
   parts.push(`</article>`);
@@ -493,10 +626,10 @@ export function buildPaginatedExamHtml(exam, { showTheory = true, interactiveFal
   for (const sec of exam.sections) {
     blocks.push(
       `<div class="sec-hdr">`
-        + `<h2><span class="badge ${escapeHtml(sec.badgeKind)}">${escapeHtml(sec.badge)}</span> ${escapeHtml(sec.heading)}</h2>`
-        + (sec.intro ? `<p class="sec-intro">${escapeHtml(sec.intro)}</p>` : '')
+        + `<h2><span class="badge ${escapeHtml(sec.badgeKind)}">${escapeHtml(sec.badge)}</span> ${renderRichExamHtml(sec.heading)}</h2>`
+        + (sec.intro ? `<p class="sec-intro">${renderRichExamHtml(sec.intro)}</p>` : '')
         + (showTheory && sec.theory
-          ? `<div class="theory-box" data-tape-answer="theory"><strong class="lbl">Theory Foundation</strong>${escapeHtml(sec.theory)}</div>`
+          ? `<div class="theory-box" data-tape-answer="theory"><strong class="lbl">Theory Foundation</strong>${renderRichExamHtml(sec.theory)}</div>`
           : '')
         + `</div>`,
     );
@@ -505,6 +638,10 @@ export function buildPaginatedExamHtml(exam, { showTheory = true, interactiveFal
     }
   }
 
+  return wrapExamHtmlDocument(exam.title, blocks, { interactiveFallback });
+}
+
+function wrapExamHtmlDocument(title, blocks, { interactiveFallback = false } = {}) {
   const interactiveCss = interactiveFallback
     ? `.key[data-tape-answer],.theory-box[data-tape-answer]{cursor:pointer;position:relative;}
        .key[data-tape-answer]:not(.revealed)::after,.theory-box[data-tape-answer]:not(.revealed)::after{
@@ -522,7 +659,7 @@ export function buildPaginatedExamHtml(exam, { showTheory = true, interactiveFal
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';${interactiveFallback ? " script-src 'unsafe-inline';" : ''} img-src data:; font-src data:;" />
-  <title>${escapeHtml(exam.title)}</title>
+  <title>${escapeHtml(title)}</title>
   <style>${EXAM_PRINT_CSS}${interactiveCss}</style>
 </head>
 <body>
@@ -531,4 +668,507 @@ export function buildPaginatedExamHtml(exam, { showTheory = true, interactiveFal
   ${interactiveScript}
 </body>
 </html>`;
+}
+
+// ---- Stage 1 / Stage 2 / Stage 3 parallel exam planning & solving ----
+
+export function buildSourceCatalog(docs = [], maxExcerptChars = 360) {
+  return (docs || []).map((d, idx) => {
+    const clean = String(d?.text || '').replace(/\s+/g, ' ').trim();
+    const snippet = clean.length > maxExcerptChars ? `${clean.slice(0, maxExcerptChars)}…` : clean;
+    const folder = d?.folderName ? ` [${d.folderName}]` : '';
+    return `[${idx}] "${d?.title || `Source ${idx + 1}`}"${folder} (${String(d?.text || '').length} chars): ${snippet || '(scanned/image content)'}`;
+  }).join('\n');
+}
+
+export function buildFallbackExamPlan(docs = [], { countMode = 'auto', count = 12, maxChunks = 4, targetChars = 15000 } = {}) {
+  const nDocs = docs?.length || 0;
+  if (!nDocs) return [];
+  const totalChars = docs.reduce((s, d) => s + String(d?.text || '').length, 0);
+  const desiredChunks = nDocs === 1
+    ? 1
+    : Math.max(1, Math.min(maxChunks, nDocs, Math.max(2, Math.ceil(totalChars / targetChars))));
+
+  const buckets = Array.from({ length: desiredChunks }, () => ({ docIndices: [], chars: 0 }));
+  docs.forEach((d, idx) => {
+    // Place each doc into the lightest bucket so parallel subagents finish at similar times.
+    let best = 0;
+    for (let i = 1; i < buckets.length; i++) {
+      if (buckets[i].chars < buckets[best].chars) best = i;
+    }
+    buckets[best].docIndices.push(idx);
+    buckets[best].chars += String(d?.text || '').length || 1200;
+  });
+
+  const nonEmpty = buckets.filter((b) => b.docIndices.length > 0);
+  const exactTotal = countMode === 'exact' ? Math.max(1, Math.min(60, Number(count) || 12)) : 0;
+  return nonEmpty.map((b, i) => {
+    const share = exactTotal
+      ? Math.max(1, Math.floor(exactTotal / nonEmpty.length) + (i < exactTotal % nonEmpty.length ? 1 : 0))
+      : 0;
+    const firstTitle = docs[b.docIndices[0]]?.title || `Block ${i + 1}`;
+    const heading = b.docIndices.length === 1 ? firstTitle : `${firstTitle} & related (${b.docIndices.length} sources)`;
+    return {
+      heading,
+      badge: `BLOCK ${i + 1}`,
+      badgeKind: i === 0 ? 'exam' : i % 2 === 1 ? 'src' : 'prj',
+      docIndices: b.docIndices,
+      count: share,
+      focusNote: '',
+    };
+  });
+}
+
+export function examPlanPrompt({
+  title = '',
+  catalogText = '',
+  docCount = 1,
+  countMode = 'auto',
+  count = 12,
+  focus = 'important',
+  language = 'auto',
+} = {}) {
+  const langLine = language && language !== 'auto'
+    ? `Use ${language} for headings and subtitles.`
+    : 'Match the primary language of the catalog sources.';
+  const countRule = countMode === 'exact'
+    ? `Distribute exactly ${Math.max(1, Math.min(60, Number(count) || 12))} total questions across the chunks (sum of all \`count\` fields MUST equal ${Math.max(1, Math.min(60, Number(count) || 12))}).`
+    : 'Set each chunk `count` to 3-6 questions depending on content density (or 0 to let the worker decide).';
+  return [
+    'You are the orchestrator separating study sources into 2 to 4 balanced, cohesive topic blocks so parallel subagents can write questions simultaneously.',
+    title ? `Exam title: "${title}"` : '',
+    langLine,
+    `Coverage focus: ${focus}.`,
+    countRule,
+    `Every source index 0..${Math.max(0, docCount - 1)} must appear in at least one chunk.`,
+    'CRITICAL: Organize blocks by SUBJECT TOPIC — NEVER create blocks dedicated solely to "True/False" or shallow trivia when sources cover developable concepts, formulas, algorithms, or system exercises. In `focusNote`, tell each block worker to include genuine multi-step development, calculation, derivation, or trace exercises whenever the assigned sources support them.',
+    '',
+    'Reply with ONLY valid JSON:',
+    '{',
+    '  "title": "Suggested exam title",',
+    '  "subtitle": "Short exam scope summary",',
+    '  "chunks": [',
+    '    {',
+    '      "heading": "Cohesive block topic name",',
+    '      "badge": "BLOCK 1",',
+    '      "badgeKind": "exam | src | prj",',
+    '      "docIndices": [0, 1],',
+    '      "count": 4,',
+    '      "focusNote": "Key concepts to emphasize in this block"',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'SOURCE CATALOG:',
+    catalogText,
+  ].filter(Boolean).join('\n');
+}
+
+export function cleanExamPlan(raw, docs = [], { countMode = 'auto', count = 12 } = {}) {
+  const maxIdx = Math.max(0, (docs?.length || 1) - 1);
+  const rawChunks = Array.isArray(raw?.chunks) ? raw.chunks : [];
+  const valid = rawChunks
+    .map((c, i) => ({
+      heading: String(c?.heading || `Block ${i + 1}`).trim(),
+      badge: String(c?.badge || `BLOCK ${i + 1}`).trim().slice(0, 16),
+      badgeKind: ['exam', 'src', 'prj'].includes(c?.badgeKind) ? c.badgeKind : 'exam',
+      docIndices: [...new Set((Array.isArray(c?.docIndices) ? c.docIndices : [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= maxIdx))],
+      count: Math.max(0, Math.min(30, Number(c?.count) || 0)),
+      focusNote: String(c?.focusNote || '').trim(),
+    }))
+    .filter((c) => c.docIndices.length > 0)
+    .slice(0, 6);
+
+  if (!valid.length) return { title: '', subtitle: '', chunks: buildFallbackExamPlan(docs, { countMode, count }) };
+
+  // Ensure every document was assigned somewhere.
+  const covered = new Set(valid.flatMap((c) => c.docIndices));
+  for (let i = 0; i < (docs?.length || 0); i++) {
+    if (!covered.has(i)) valid[i % valid.length].docIndices.push(i);
+  }
+  if (countMode === 'exact') {
+    const want = Math.max(1, Math.min(60, Number(count) || 12));
+    let sum = valid.reduce((a, c) => a + c.count, 0);
+    if (sum <= 0) {
+      valid.forEach((c, i) => { c.count = Math.max(1, Math.floor(want / valid.length) + (i < want % valid.length ? 1 : 0)); });
+    } else if (sum !== want) {
+      valid[valid.length - 1].count = Math.max(1, valid[valid.length - 1].count + (want - sum));
+    }
+  }
+  return {
+    title: String(raw?.title || '').trim(),
+    subtitle: String(raw?.subtitle || '').trim(),
+    chunks: valid,
+  };
+}
+
+// Deterministic Stage-3 Composer: stitches ordered parallel worker JSON results without extra LLM calls.
+export function mergeExamSections(chunkExams = [], { title = '', subtitle = '' } = {}) {
+  const sections = [];
+  const seenPrompts = new Set();
+  for (let ci = 0; ci < (chunkExams || []).length; ci++) {
+    const ex = chunkExams[ci];
+    if (!ex?.sections?.length) continue;
+    for (const sec of ex.sections) {
+      const secIndex = sections.length + 1;
+      const problems = [];
+      for (const p of sec.problems || []) {
+        const key = String(p.prompt || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        if (!key || seenPrompts.has(key)) continue;
+        seenPrompts.add(key);
+        problems.push({ ...p, number: `${secIndex}.${problems.length + 1}` });
+      }
+      if (problems.length) {
+        sections.push({
+          ...sec,
+          badge: sec.badge || `BLOCK ${secIndex}`,
+          problems,
+        });
+      }
+    }
+  }
+  if (!sections.length) throw Error('Parallel workers produced no valid exam problems.');
+  return {
+    title: String(title || chunkExams[0]?.title || 'Practice Examination').trim(),
+    subtitle: String(subtitle || chunkExams[0]?.subtitle || '').trim(),
+    sections,
+  };
+}
+
+// ---- Solve Fed Exam: Stage 1 Splitter -> Stage 2 Parallel Solvers -> Stage 3 Alternating Composer ----
+
+export function splitExamHeuristically(sourcesText = '', title = 'Solved Exam') {
+  const text = String(sourcesText || '').trim();
+  if (!text) return [];
+  const rawParts = text
+    .split(/(?=(?:^|\n)\s*(?:Ejercicio|Exercise|Problema|Problem|Cuesti[oó]n|Pregunta|Question|Parte|Part)\s*\d+[\s.:)-])/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20);
+  const chunks = rawParts.length ? rawParts : [text];
+  return chunks.slice(0, 20).map((statement, i) => ({
+    number: String(i + 1),
+    title: statement.split('\n')[0].trim().slice(0, 90) || `${title} — ${i + 1}`,
+    kind: 'open',
+    points: null,
+    statement,
+    parts: [],
+    options: [],
+    code: '',
+    table: null,
+  }));
+}
+
+export function solveSplitPrompt({ title = '', sourcesText = '', language = 'auto', instructions = '' } = {}) {
+  const langLine = language && language !== 'auto'
+    ? `Detected/target language hint: ${language}. Keep the exact problem wording in its original language.`
+    : 'Preserve the original language and verbatim wording of every question.';
+  return [
+    'You are the Exam Splitter agent. Cut the provided exam into clean, ordered, self-contained exercises/questions so separate solver subagents can solve each one independently in parallel.',
+    title ? `Exam label: "${title}"` : '',
+    langLine,
+    instructions?.trim() ? `User notes: ${instructions.trim()}` : '',
+    '',
+    'Rules:',
+    '- Preserve EVERY exercise/problem/question and all sub-parts (a), b), c)...) accurately; keep formulas in $...$ or $$...$$ LaTeX.',
+    '- Keep tables, code snippets, numeric values, and MCQ options intact inside their exercise object.',
+    '- Do NOT solve the questions yet — ONLY split and transcribe each exercise cleanly.',
+    '',
+    'Reply with ONLY valid JSON:',
+    '{',
+    '  "title": "Exam title",',
+    '  "language": "Spanish | English | French | German | ...",',
+    '  "exercises": [',
+    '    {',
+    '      "number": "1",',
+    '      "title": "Short descriptive topic",',
+    '      "kind": "mcq | fill | calculation | open | table | code",',
+    '      "points": 2.5,',
+    '      "statement": "Complete problem statement (preserve formulas in $...$ and sub-parts)",',
+    '      "parts": ["a) First sub-question...", "b) Second sub-question..."],',
+    '      "options": [],',
+    '      "code": "",',
+    '      "table": null',
+    '    }',
+    '  ]',
+    '}',
+    '',
+    'EXAM CONTENT TO SPLIT:',
+    sourcesText,
+  ].filter(Boolean).join('\n');
+}
+
+export function cleanSplitExercises(raw, fallbackText = '', title = 'Solved Exam') {
+  const rawList = Array.isArray(raw?.exercises) ? raw.exercises : [];
+  const exercises = rawList
+    .filter((ex) => ex && String(ex.statement || ex.prompt || '').trim())
+    .map((ex, i) => ({
+      number: String(ex.number || i + 1).trim(),
+      title: String(ex.title || `Exercise ${i + 1}`).trim(),
+      kind: VALID_KINDS.has(String(ex.kind || '').toLowerCase()) ? String(ex.kind).toLowerCase() : 'open',
+      points: Number.isFinite(Number(ex.points)) && Number(ex.points) > 0 ? Number(ex.points) : null,
+      statement: String(ex.statement || ex.prompt || '').trim(),
+      parts: Array.isArray(ex.parts) ? ex.parts.map((p) => String(p || '').trim()).filter(Boolean) : [],
+      options: Array.isArray(ex.options) ? ex.options.map((o) => String(o || '').trim()).filter(Boolean) : [],
+      code: typeof ex.code === 'string' ? ex.code.trim() : '',
+      table: ex.table && Array.isArray(ex.table.headers) && Array.isArray(ex.table.rows) ? ex.table : null,
+    }));
+  if (!exercises.length) {
+    return {
+      title,
+      language: '',
+      exercises: splitExamHeuristically(fallbackText, title),
+    };
+  }
+  return {
+    title: String(raw?.title || title).trim(),
+    language: String(raw?.language || '').trim(),
+    exercises,
+  };
+}
+
+export function solveChunkPrompt({
+  exercise,
+  examTitle = '',
+  referenceText = '',
+  language = 'auto',
+  instructions = '',
+} = {}) {
+  const langTarget = language && language !== 'auto'
+    ? language
+    : '';
+  const langRule = langTarget
+    ? `Write ALL headings ("Pasos" / "Steps", "Solución (Ejercicio N)" / "Solution (Exercise N)"), hints, and worked explanations strictly in ${langTarget}.`
+    : 'Write ALL headings ("Steps"/"Pasos", "Solution (Exercise N)"/"Solución (Ejercicio N)"), hints, and worked explanations in the SAME language as the exercise.';
+  return [
+    `You are an expert Solver subagent solving ONE exercise from "${examTitle || 'Exam'}".`,
+    langRule,
+    'Use clear mathematical LaTeX (`$...$` inline, `$$...$$` display) for every formula, equation, vector, matrix, or derivation.',
+    instructions?.trim() ? `Extra instructions: ${instructions.trim()}` : '',
+    '',
+    'Produce TWO clearly separated pieces for an alternating Study-then-Solution layout:',
+    '1) `partSteps`: For the QUESTION page, break each sub-part a), b), c)... down into a short guiding step / approach hint (NO final answers revealed — leave room for the student to solve it).',
+    '2) `partSolutions`: For the NEW PAGE right after it, provide the complete, rigorous worked solution for each sub-part a), b), c)... showing every intermediate formula, substitution, unit, completed table row, or code trace.',
+    '',
+    'Reply with ONLY valid JSON matching this schema:',
+    '{',
+    `  "number": ${JSON.stringify(String(exercise?.number || '1'))},`,
+    `  "title": ${JSON.stringify(String(exercise?.title || ''))},`,
+    '  "exerciseHeading": "Exercise 1: Title (or localized: Ejercicio 1: Título)",',
+    '  "stepsHeading": "Steps (or localized: Pasos / Étapes / Schritte)",',
+    '  "solutionHeading": "Solution (Exercise 1) (or localized: Solución (Ejercicio 1))",',
+    '  "statement": "Clean problem statement with $LaTeX$ formulas",',
+    '  "theory": "Concise key formula / theorem used (1-3 sentences)",',
+    '  "partSteps": [',
+    '    { "label": "a)", "hint": "Sub-part statement + brief method step hint (without giving away the final answer)" }',
+    '  ],',
+    '  "partSolutions": [',
+    '    { "label": "a)", "answer": "Direct final answer / chosen option", "work": "Full step-by-step derivation with $...$ / $$...$$ math" }',
+    '  ],',
+    '  "solvedTable": null,',
+    '  "trap": "Common mistake or exam trap to double-check"',
+    '}',
+    '',
+    'EXERCISE TO SOLVE:',
+    JSON.stringify(exercise, null, 2),
+    referenceText ? `\nREFERENCE NOTES:\n${referenceText}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+export function cleanSolvedExercise(raw, fallbackEx = {}, index = 0) {
+  const num = String(raw?.number || fallbackEx.number || index + 1).trim();
+  const title = String(raw?.title || fallbackEx.title || '').trim();
+  const partSteps = Array.isArray(raw?.partSteps) && raw.partSteps.length
+    ? raw.partSteps.map((s, idx) => ({
+        label: String(s?.label || `${String.fromCharCode(97 + idx)})`).trim(),
+        hint: String(s?.hint || s?.step || s || '').trim(),
+      })).filter((s) => s.hint)
+    : (fallbackEx.parts || []).map((p, idx) => ({
+        label: `${String.fromCharCode(97 + idx)})`,
+        hint: String(p).trim(),
+      }));
+  const partSolutions = Array.isArray(raw?.partSolutions) && raw.partSolutions.length
+    ? raw.partSolutions.map((s, idx) => ({
+        label: String(s?.label || partSteps[idx]?.label || `${String.fromCharCode(97 + idx)})`).trim(),
+        answer: String(s?.answer || s?.final || '').trim(),
+        work: String(s?.work || s?.steps || s?.explanation || '').trim(),
+      })).filter((s) => s.answer || s.work)
+    : [{
+        label: 'a)',
+        answer: String(raw?.answer || raw?.summary || 'See solution below.').trim(),
+        work: String(raw?.work || raw?.solution || raw?.steps || '').trim(),
+      }];
+
+  return {
+    number: num,
+    title,
+    kind: fallbackEx.kind || 'open',
+    points: fallbackEx.points ?? null,
+    exerciseHeading: String(raw?.exerciseHeading || `Exercise ${num}${title ? `: ${title}` : ''}`).trim(),
+    stepsHeading: String(raw?.stepsHeading || 'Steps').trim(),
+    solutionHeading: String(raw?.solutionHeading || `Solution (Exercise ${num})`).trim(),
+    statement: String(raw?.statement || fallbackEx.statement || '').trim(),
+    options: Array.isArray(fallbackEx.options) ? fallbackEx.options : [],
+    code: fallbackEx.code || '',
+    table: fallbackEx.table || null,
+    solvedTable: raw?.solvedTable && Array.isArray(raw.solvedTable.headers) ? raw.solvedTable : null,
+    theory: String(raw?.theory || '').trim(),
+    partSteps,
+    partSolutions,
+    trap: String(raw?.trap || '').trim(),
+  };
+}
+
+// Deterministic Stage-3 Composer (A4 PDF): Exercise N (Steps a, b, c) -> NEW PAGE -> Solution (Exercise N) (a, b, c) -> NEW PAGE ...
+export function buildSolvedExamHtml(solvedExam, { showTheory = true, tapeSolutions = false, interactiveFallback = false } = {}) {
+  const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const exercises = Array.isArray(solvedExam?.exercises) ? solvedExam.exercises : [];
+  if (!exercises.length) throw Error('No solved exercises to compose.');
+  const blocks = [];
+
+  blocks.push(
+    `<header class="exam-hdr">`
+      + `<h1>${escapeHtml(solvedExam.title || 'Solved Examination')}</h1>`
+      + `<div class="exam-meta">`
+      + `<span>Exercise-by-exercise workspace followed by worked step-by-step solutions</span>`
+      + `<span>${exercises.length} exercise${exercises.length === 1 ? '' : 's'}</span>`
+      + `</div>`
+      + `</header>`,
+  );
+
+  exercises.forEach((ex, idx) => {
+    // 1. Exercise Question + Steps page
+    const qParts = [];
+    qParts.push(`<article class="prob-card solve-card-free">`);
+    qParts.push(
+      `<div class="sec-hdr" style="margin-top:0"><h2>`
+        + `<span class="badge exam">EXERCISE ${escapeHtml(ex.number)}</span> `
+        + `${renderRichExamHtml(ex.exerciseHeading)}`
+        + (ex.points != null ? `<span class="prob-pts" style="color:#e2e8f0;margin-left:auto">${escapeHtml(ex.points)} pts</span>` : '')
+        + `</h2></div>`,
+    );
+    qParts.push(`<p class="prob-prompt">${renderRichExamHtml(ex.statement)}</p>`);
+    if (ex.code) qParts.push(`<pre class="exam-code"><code>${escapeHtml(ex.code)}</code></pre>`);
+    if (ex.options?.length) {
+      qParts.push(
+        `<div class="mc-grid">`
+          + ex.options.map((opt, oi) => `<div class="mc-opt"><strong>${letters[oi] || oi + 1})</strong> ${renderRichExamHtml(opt)}</div>`).join('')
+          + `</div>`,
+      );
+    }
+    if (ex.table?.headers?.length) {
+      const ths = ex.table.headers.map((h) => `<th>${renderRichExamHtml(h)}</th>`).join('');
+      const rows = (ex.table.rows || []).map((r) => `<tr>${(Array.isArray(r) ? r : []).map((c) => `<td>${renderRichExamHtml(c)}</td>`).join('')}</tr>`).join('');
+      qParts.push(`<table class="exam-tbl"><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`);
+    }
+    if (ex.partSteps?.length) {
+      qParts.push(`<div class="solve-steps-box"><strong class="lbl">${escapeHtml(ex.stepsHeading)}:</strong>`);
+      for (const st of ex.partSteps) {
+        qParts.push(
+          `<div class="solve-step-item">`
+            + `<div><strong>${escapeHtml(st.label)}</strong> ${renderRichExamHtml(st.hint)}</div>`
+            + `<div class="solve-step-work"></div><div class="solve-step-work"></div>`
+            + `</div>`,
+        );
+      }
+      qParts.push(`</div>`);
+    } else {
+      qParts.push(`<div class="writing-lines">${'<div class="wline"></div>'.repeat(8)}</div>`);
+    }
+    qParts.push(`</article>`);
+    blocks.push(qParts.join('\n'));
+
+    // 2. NEW PAGE -> Worked Solution (Exercise N)
+    blocks.push(`<div class="page-break"></div>`);
+
+    const sParts = [];
+    sParts.push(`<article class="prob-card solve-card-free">`);
+    sParts.push(
+      `<div class="solve-sol-banner">`
+        + `<span class="badge prj">SOLUTION</span> `
+        + `<span>${renderRichExamHtml(ex.solutionHeading)}:</span>`
+        + `</div>`,
+    );
+    if (showTheory && ex.theory) {
+      const tapeAttr = tapeSolutions ? ' data-tape-answer="theory"' : '';
+      sParts.push(`<div class="theory-box"${tapeAttr}><strong class="lbl">Formula / Key Concept</strong>${renderRichExamHtml(ex.theory)}</div>`);
+    }
+    const solTapeAttr = tapeSolutions ? ' data-tape-answer="solution"' : '';
+    sParts.push(`<div class="key"${solTapeAttr}>`);
+    for (const sol of ex.partSolutions || []) {
+      sParts.push(
+        `<div class="solve-part-ans">`
+          + `<div><strong>${escapeHtml(sol.label)}</strong> `
+          + (sol.answer ? `<span class="ans-final">${renderRichExamHtml(sol.answer)}</span>` : '')
+          + `</div>`
+          + (sol.work ? `<div class="ans-work">${renderRichExamHtml(sol.work)}</div>` : '')
+          + `</div>`,
+      );
+    }
+    if (ex.solvedTable?.headers?.length) {
+      const ths = ex.solvedTable.headers.map((h) => `<th>${renderRichExamHtml(h)}</th>`).join('');
+      const rows = (ex.solvedTable.rows || []).map((r) => `<tr>${(Array.isArray(r) ? r : []).map((c) => `<td>${renderRichExamHtml(c)}</td>`).join('')}</tr>`).join('');
+      sParts.push(`<table class="exam-tbl"><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`);
+    }
+    if (ex.trap) {
+      sParts.push(`<div class="bad"><strong>Watch out:</strong> ${renderRichExamHtml(ex.trap)}</div>`);
+    }
+    sParts.push(`</div></article>`);
+    blocks.push(sParts.join('\n'));
+
+    if (idx < exercises.length - 1) {
+      blocks.push(`<div class="page-break"></div>`);
+    }
+  });
+
+  return wrapExamHtmlDocument(solvedExam.title || 'Solved Exam', blocks, { interactiveFallback: interactiveFallback && tapeSolutions });
+}
+
+// Deterministic Stage-3 Composer (MCP Ink Engine): emits NoteComplete dialect Markdown with \pagebreak, !tape, and $...$/$$...$$ native math boxes.
+export function buildSolvedExamMcpMarkdown(solvedExam, { tapeSolutions = false, showTheory = true } = {}) {
+  const exercises = Array.isArray(solvedExam?.exercises) ? solvedExam.exercises : [];
+  if (!exercises.length) throw Error('No solved exercises to compose.');
+  const out = [`# ${solvedExam.title || 'Solved Exam'}`, ''];
+
+  exercises.forEach((ex, idx) => {
+    if (idx > 0) out.push('\\pagebreak', '');
+    out.push(`## ${ex.exerciseHeading}`, '');
+    out.push(ex.statement, '');
+    if (ex.code) {
+      out.push('```', ex.code, '```', '');
+    }
+    if (ex.options?.length) {
+      const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+      ex.options.forEach((opt, oi) => out.push(`- **${letters[oi] || oi + 1})** ${opt}`));
+      out.push('');
+    }
+    if (ex.partSteps?.length) {
+      out.push(`### ${ex.stepsHeading}:`, '');
+      for (const st of ex.partSteps) {
+        out.push(`- **${st.label}** ${st.hint}`, '', '');
+      }
+    }
+    out.push('\\pagebreak', '');
+    out.push(`## ${ex.solutionHeading}:`, '');
+    if (showTheory && ex.theory) {
+      if (tapeSolutions) out.push('!tape sky');
+      out.push(`=={sky}${ex.theory}==`, '');
+    }
+    for (const sol of ex.partSolutions || []) {
+      if (tapeSolutions) out.push('!tape yellow');
+      const line = sol.answer ? `**${sol.label}** ${sol.answer}` : `**${sol.label}**`;
+      out.push(line);
+      if (sol.work) {
+        if (tapeSolutions) out.push('!tape yellow');
+        out.push(sol.work);
+      }
+      out.push('');
+    }
+    if (ex.trap) {
+      out.push(`> **Watch out:** ${ex.trap}`, '');
+    }
+  });
+
+  return out.join('\n').trim();
 }

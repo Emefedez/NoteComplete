@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ankiText, cleanCards, cleanQuestions, prompts, listLines } from './study.js';
-import { jsonFrom, textBlock, notesBlock } from './ai-context.js';
+import { jsonFrom, textBlock, notesBlock, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationPrompt, mergePartialExamJson } from './ai-context.js';
 import { renderAnswer } from './chat.js';
 
 test('Anki export escapes tabs and newlines and tags pages', () => {
@@ -24,6 +24,29 @@ test('AI replies are parsed leniently but only well-formed items survive', () =>
   ] });
   assert.equal(quiz.length, 1);
   assert.throws(() => jsonFrom('no json here'), /expected JSON/);
+
+  const dirty = 'Note {ignore this}\n```json\n{"questions":[{"question":"Line 1\nLine 2\tindented\\x01","options":["\\vec{v}","\\alpha","c","d",],"answer":0,},],}\n```\nTrailing {brace}';
+  const cleaned = jsonFrom(dirty.replace('\\x01', '\x01'));
+  assert.equal(cleaned.questions[0].question, 'Line 1\nLine 2\tindented\x01');
+  assert.deepEqual(cleaned.questions[0].options, ['\\vec{v}', '\\alpha', 'c', 'd']);
+
+  const bag = new Map();
+  const store = { getItem: (k) => bag.get(k) || null, setItem: (k, v) => bag.set(k, v), removeItem: (k) => bag.delete(k) };
+  assert.equal(saveAiDraft(store, 'k', { title: 'SO Exam', prompt: 'BASE', partialText: '{"sections":[{"problems":[{"prompt":"Q1","answerBox":{"summary":"A1"}},{"prompt":"Q2' }), true);
+  assert.equal(loadAiDraft(store, 'k').title, 'SO Exam');
+  const contPrompt = buildContinuationPrompt({ basePrompt: 'BASE', partialText: '{"sections":[{"problems":[{"prompt":"Q1"}]}]}', kind: 'exam' });
+  assert.match(contPrompt, /BASE/);
+  assert.match(contPrompt, /PREVIOUS PARTIAL GENERATION/);
+  const merged = mergePartialExamJson(
+    '{"sections":[{"problems":[{"prompt":"Q1","kind":"open","answerBox":{"summary":"A1"}},{"prompt":"Incomplete',
+    '{"sections":[{"heading":"Part 2","problems":[{"prompt":"Q1","kind":"open","answerBox":{"summary":"A1"}},{"prompt":"Q2","kind":"open","answerBox":{"summary":"A2"}}]}]}',
+  );
+  assert.equal(merged.sections.length, 2);
+  assert.equal(merged.sections[0].problems[0].prompt, 'Q1');
+  assert.equal(merged.sections[1].problems.length, 1);
+  assert.equal(merged.sections[1].problems[0].prompt, 'Q2');
+  clearAiDraft(store, 'k');
+  assert.equal(loadAiDraft(store, 'k'), null);
 });
 
 test('prompts ask for the JSON shape and respect the chosen language', () => {

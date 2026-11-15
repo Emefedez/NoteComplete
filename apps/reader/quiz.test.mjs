@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards, barStates } from './quiz.js';
-import { progressAt } from './jobs.js';
+import { progressAt, createAiMonitor } from './jobs.js';
 
 const reply = { questions: [
   { question: '¿Qué almacena una celda DRAM?', options: ['Un bit en un condensador', 'Un bit en un biestable', 'Dos bits', 'Nada'], answer: 0, source: { page: 7, box: [0.05, 0.3, 0.95, 0.5] } },
@@ -110,4 +110,98 @@ test('reorderQuizQuestions shuffles and restores original question order while k
   reorderQuizQuestions(quiz, false);
   assert.deepEqual(quiz.questions.map(q => q.question), ['Q0', 'Q1', 'Q2']);
   assert.deepEqual(quiz.answers, { 0: { choice: 0 }, 2: { choice: 1 } });
+});
+
+test('createAiMonitor skips buffering while closed, tracks parallel streams when open, and discards buffers on close or completion', async () => {
+  const monitor = createAiMonitor({ maxChars: 20 });
+  assert.equal(monitor.wrap(null), null);
+
+  let releaseA, releaseB;
+  const seenOnDelta = [];
+  const rawAi = {
+    run(req, onDelta) {
+      seenOnDelta.push(typeof onDelta);
+      if (req.tag === 'exam') {
+        onDelta?.('hidden-chunk');
+        return new Promise((r) => { releaseA = () => r({ text: 'doneA' }); });
+      }
+      if (req.tag === 'study') {
+        onDelta?.('hello ');
+        onDelta?.('world-1234567890-tail');
+        return new Promise((r) => { releaseB = () => r({ text: 'doneB' }); });
+      }
+      return Promise.resolve({ text: 'ok' });
+    },
+  };
+  const ai = monitor.wrap(rawAi);
+
+  // 1. Not watching + non-streaming caller: onDelta is not passed at all.
+  await ai.run({ tag: 'chat', provider: 'claude' });
+  assert.equal(seenOnDelta.at(-1), 'undefined');
+  assert.equal(monitor.active().length, 0);
+
+  try {
+    // 2. Not watching + streaming caller: caller gets chunk, monitor keeps 0 chars.
+    const callerChunks = [];
+    const pA = ai.run({ tag: 'exam', provider: 'claude' }, c => callerChunks.push(c));
+    assert.deepEqual(callerChunks, ['hidden-chunk']);
+    assert.equal(monitor.active().length, 1);
+    assert.equal(monitor.active()[0].text, '');
+
+    // 3. Open live inspector: newly started non-streaming agent now streams in parallel!
+    monitor.setWatching(true);
+    const pB = ai.run({ tag: 'study', provider: 'codex' });
+    assert.equal(seenOnDelta.at(-1), 'function');
+    const active = monitor.active();
+    assert.equal(active.length, 2);
+    assert.equal(active[1].label, 'Study');
+    assert.equal(active[1].text.length, 20);
+    assert.equal(active[1].text, 'rld-1234567890-tail'.padStart(20, 'o'));
+
+    // Closing the inspector immediately clears all buffered text.
+    monitor.setWatching(false);
+    assert.equal(monitor.active()[1].text, '');
+
+    // Finishing removes active agents so zero history stays.
+    releaseA(); releaseB();
+    await Promise.all([pA, pB]);
+    assert.equal(monitor.active().length, 0);
+  } finally {
+    releaseA?.();
+    releaseB?.();
+  }
+});
+
+test('createAiMonitor reads caller peek buffer immediately upon opening and strips label/peek before rawAi.run', async () => {
+  const { createAiMonitor } = await import('./jobs.js');
+  const monitor = createAiMonitor({ maxChars: 120 });
+  let release = null;
+  let seenReq = null;
+  let callerBuf = '';
+  const rawAi = {
+    run(req, onDelta) {
+      seenReq = req;
+      onDelta?.('first token before inspect ');
+      return new Promise((r) => { release = () => r({ text: callerBuf }); });
+    },
+  };
+  const ai = monitor.wrap(rawAi);
+  try {
+    const pending = ai.run(
+      { tag: 'solve-chunk', label: 'Solver subagent · Ex 1', provider: 'codex', peek: () => callerBuf },
+      (chunk) => { callerBuf += chunk; },
+    );
+    assert.equal('label' in seenReq, false);
+    assert.equal('peek' in seenReq, false);
+    assert.equal(monitor.active()[0].label, 'Solver subagent · Ex 1');
+    assert.equal(monitor.active()[0].streams, true);
+    // Watching while already mid-run immediately reflects callerBuf without extra monitor copy.
+    monitor.setWatching(true);
+    assert.equal(monitor.active()[0].text, 'first token before inspect ');
+    release();
+    await pending;
+    assert.equal(monitor.active().length, 0);
+  } finally {
+    release?.();
+  }
 });
