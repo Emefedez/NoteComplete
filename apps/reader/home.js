@@ -8,6 +8,7 @@ import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
+import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
@@ -663,10 +664,29 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   for (const b of document.querySelectorAll('[data-home-view]')) b.onclick = () => { const was = quick; setView(b.dataset.homeView); if (was && !quick) renderRecent(); };
   try { setView(localStorage.getItem('notecomplete-home-view') === 'list' ? 'list' : 'cards'); } catch { setView('cards'); }
   let shown = false;
+  const dups = duplicatesDialog({
+    library,
+    groups,
+    bridge: library.bridge,
+    onChanged: (batches = []) => {
+      let touched = false;
+      for (const batch of batches) {
+        if (!batch?.keepKey) continue;
+        for (const rk of batch.removedKeys || []) {
+          if (favourites.delete(rk)) { favourites.add(batch.keepKey); touched = true; }
+        }
+      }
+      if (touched) saveFavourites();
+      renderRecent();
+    },
+    status,
+  });
+  if ($('findDuplicates')) $('findDuplicates').onclick = () => dups.open();
   return {
     showFolder,
     back: leaveFolder,
     forward: reopenFolder,
+    findDuplicates: () => dups.open(),
     get folder() { return shownFolder; },
     show(hasDocument) {
       $('empty').hidden = false;

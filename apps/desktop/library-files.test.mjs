@@ -190,3 +190,18 @@ test('a converted document is saved as a copy, never over a file, with its pictu
   await assert.rejects(files.saveCopy(original, { name: 'x.md', text, images: [pic(1)], folder: '../fuera_files' }), /Invalid pictures folder/);
   assert.ok((await list(folder)).every((n) => !n.endsWith('.partial')));
 });
+
+test('saveChosen writes to a chosen file, remembers it in Recent, and allows writeOpened overwrites', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-save-chosen-'));
+  const files = libraryFiles({ settingsFile: path.join(root, 'library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  const target = path.join(root, 'Notes', 'Algebra.nfedit');
+  const saved = await files.saveChosen(target, new TextEncoder().encode('{"v":1}'));
+  assert.equal(saved.path, target);
+  assert.equal(saved.name, 'Algebra.nfedit');
+  assert.equal(await readFile(target, 'utf8'), '{"v":1}');
+
+  await files.writeOpened(target, new TextEncoder().encode('{"v":2}'));
+  assert.equal(await readFile(target, 'utf8'), '{"v":2}');
+
+  await assert.rejects(files.saveChosen(path.join(root, 'bad.exe'), new Uint8Array([1])), /Invalid file name/);
+});

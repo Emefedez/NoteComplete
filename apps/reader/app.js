@@ -44,6 +44,7 @@ import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
+import { saveDocumentInPlace } from "./save-target.js";
 import { zipFiles } from "./zip.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
@@ -290,10 +291,18 @@ async function openFromAddress() {
 // manifest) or the share target, possibly before the engine is ready, so they wait in launchedFiles. One document per tab:
 // the first file opens, the others are named in the status.
 const launchedFiles = [];
+const launchedHandles = new WeakMap();
+let saveFileHandle = null;
 window.launchQueue?.setConsumer(async (params) => {
   const files = [];
   for (const handle of params?.files || []) {
-    try { if (handle.kind !== "directory") files.push(await handle.getFile()); } catch { /* Gone or not allowed. */ }
+    try {
+      if (handle.kind !== "directory") {
+        const file = await handle.getFile();
+        launchedHandles.set(file, handle);
+        files.push(file);
+      }
+    } catch { /* Gone or not allowed. */ }
   }
   if (!files.length) return;
   launchedFiles.splice(0, launchedFiles.length, ...files);
@@ -421,6 +430,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   activeFileName = "";
   activeDocKind = "";
   activeCoverKeyOverride = "";
+  saveFileHandle = null;
   embeddedExam = null;
   htmlView?.close();
   textView?.close();
@@ -541,6 +551,7 @@ async function load(file, preparedDocument = null) {
     });
     // Both worker and UI retain the previous document until the replacement validates.
     reset({ opening: true, keepSession: true });
+    if (launchedHandles.has(file)) saveFileHandle = launchedHandles.get(file);
     activeFileName = nextFileName;
     activeDocKind = nextDocKind;
     engine.opened(openedBytes);
@@ -3809,8 +3820,8 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    if (saveAs) save(saveAs === "noteful", saveAs);
-    else save(false);
+    if (saveAs) save(saveAs === "noteful", saveAs, null, { inPlace: true });
+    else save(false, "project", null, { inPlace: true });
     return;
   }
   if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
@@ -3917,9 +3928,9 @@ async function exportNoteBytes(as = "project", projectOptions = null) {
   const name = filename() + SAVE_EXT[as];
   return { name, mime: "application/octet-stream", bytes, ext: SAVE_EXT[as] };
 }
-// Save the project (Ctrl+S saves full .nfedit silently), or export: .nfedit with resource
-// checkboxes, Noteful alone, or Noteful plus the notes as Markdown (page breaks marked).
-async function save(native, as = native ? "noteful" : "project", projectOptions = null) {
+// Save the project (Ctrl+S saves full .nfedit in place over the current file), or export:
+// .nfedit with resource checkboxes, Noteful alone, or Noteful plus notes as Markdown.
+async function save(native, as = native ? "noteful" : "project", projectOptions = null, { inPlace = false } = {}) {
   if (!doc || busy()) return;
   cancelGesture();
   editing = true;
@@ -3949,15 +3960,48 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     const opArgs = as === "project" ? { ...(packedAudio || {}), ...(chosenOptions ? { options: chosenOptions } : {}) } : {};
     const data = await call(op, opArgs);
     if (token !== epoch) return;
-    const delivery = await download(
-      data,
-      filename() + SAVE_EXT[as],
-      as === "project" ? "application/json" : "application/octet-stream",
-    );
+    const suggestedName = filename() + SAVE_EXT[as];
+    const mime = as === "project" ? "application/json" : "application/octet-stream";
+    let delivery;
+    if (inPlace && !chosenOptions && (as === "project" || as === "noteful")) {
+      delivery = await saveDocumentInPlace({
+        bytes: data,
+        suggestedName,
+        targetExt: SAVE_EXT[as],
+        mime,
+        docMember,
+        noteEntryKey,
+        saveFileHandle,
+        bridge: window.notecompleteFiles,
+        library,
+        showSaveFilePicker: window.showSaveFilePicker?.bind(window),
+        download,
+      });
+    } else {
+      delivery = await download(data, suggestedName, mime);
+    }
     if (token !== epoch) return;
     if (delivery.cancelled) {
-      status("Export cancelled.");
+      status("Save cancelled.");
       return;
+    }
+    if (delivery.kind === "handle" && delivery.handle) {
+      saveFileHandle = delivery.handle;
+    }
+    if (delivery.kind === "local" && delivery.path) {
+      const boundChanged = !delivery.overwritten || notePath !== delivery.path || docMember?.path !== delivery.path;
+      notePath = delivery.path;
+      const savedEntry = await library.rememberLocal(delivery.path, delivery.name, delivery.size).catch(() => null);
+      if (boundChanged && savedEntry) {
+        noteEntryKey = savedEntry.key;
+        activeCoverKeyOverride = savedEntry.key;
+        rememberDocument(savedEntry.key);
+        await setDocMember(localMember(delivery.path, delivery.name));
+      } else if (savedEntry && home?.visible) {
+        home.renderRecent?.();
+      }
+    } else if (delivery.kind === "imported" && home?.visible) {
+      home.renderRecent?.();
     }
     if (as === "markdown") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
@@ -3974,7 +4018,7 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     if (as === saveAs && !chosenOptions && !delivery.shared) {
       dirty = changed = false;
       savedState();
-      status(`Saved as ${filename()}${SAVE_EXT[as]}.`);
+      status(`Saved ${delivery.name || suggestedName}.`);
       return;
     }
     if (as === "markdown") {
@@ -3992,7 +4036,9 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
           ? ".nfedit file exported."
           : native
             ? ".noteful file exported."
-            : "Project saved.",
+            : delivery.overwritten || delivery.kind === "local" || delivery.kind === "handle" || delivery.kind === "imported"
+              ? `Saved ${delivery.name || suggestedName}.`
+              : "Project saved.",
     );
   } catch (e) {
     status(e.message, true);
@@ -4000,7 +4046,7 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     if (token === epoch) editing = false;
   }
 }
-$("save").onclick = () => (saveAs ? save(saveAs === "noteful", saveAs) : save(false));
+$("save").onclick = () => (saveAs ? save(saveAs === "noteful", saveAs, null, { inPlace: true }) : save(false, "project", null, { inPlace: true }));
 // New document: blank pages of a chosen size, saved in the chosen format, or an
 // infinite canvas: one page (two sheets wide, two tall) that grows as ink nears its edge.
 const CANVAS_START = [3087, 2182.8];
@@ -4540,7 +4586,7 @@ async function openFromLibrary(file, entry) {
     activeCoverKeyOverride = entry?.source === "drive"
       ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
       : (entry?.key || "");
-    setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: "drive" } : null);
+    setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: entry.source || "drive" } : null);
     void ensureDocumentCover({ skipExisting: true });
   }
   return opened;
@@ -4736,7 +4782,7 @@ async function saveText() {
 $("textSave").onclick = () => saveText();
 $("htmlSave").onclick = async () => {
   if (embeddedExam?.active && doc) {
-    await save(false);
+    await save(false, saveAs === "noteful" ? "noteful" : "project", null, { inPlace: true });
     $("htmlSave").hidden = true;
     return;
   }
@@ -6463,6 +6509,10 @@ const palette = commandPalette({
     const items = otherWindows
       .filter((w) => !query.trim() || w.title.toLowerCase().includes(query.trim().toLowerCase()) || ["tab", "window"].some((k) => k.startsWith(query.trim().toLowerCase())))
       .map((w) => ({ id: `window-${w.id}`, title: `Tab: ${w.title}`, group: "Open notes", run: () => windows.focus(w.id) }));
+    const q = query.trim().toLowerCase();
+    if (!q || "find & combine duplicates".includes(q) || "dedupe".includes(q)) {
+      items.push({ id: "find-duplicates", title: "Home: Find & combine duplicates…", group: "General", run: () => home.findDuplicates() });
+    }
     const phrase = query.trim().match(/^(?:find|buscar)\s+(.+)$/i);
     if (phrase && doc) items.push({ id: "find", title: `Find “${phrase[1]}” in this note`, group: "Navigate", run: () => { showDocument(); find.find(phrase[1]); } });
     const number = query.trim().match(/^(?:p(?:age|ágina)?\.?\s*|:)?(\d+)$/i);

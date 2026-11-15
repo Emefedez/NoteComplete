@@ -1478,8 +1478,8 @@ export const EXAM_PRINT_CSS = `
     margin: 0;
     padding: 0;
     font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-    font-size: 9.2pt;
-    line-height: 1.42;
+    font-size: 10.2pt;
+    line-height: 1.48;
     color: #1a202c;
     background: #ffffff;
   }
@@ -1498,17 +1498,17 @@ export const EXAM_PRINT_CSS = `
   }
   .exam-hdr {
     border-bottom: 2.2px solid #0f172a;
-    padding-bottom: 6px;
-    margin-bottom: 10px;
+    padding-bottom: 7px;
+    margin-bottom: 12px;
   }
   .exam-hdr h1 {
-    font-size: 14.5pt;
+    font-size: 15.5pt;
     color: #0f172a;
-    margin: 0 0 3px 0;
+    margin: 0 0 4px 0;
     letter-spacing: -0.2px;
   }
   .exam-meta {
-    font-size: 8.3pt;
+    font-size: 9pt;
     color: #475569;
     display: flex;
     flex-wrap: wrap;
@@ -1516,42 +1516,42 @@ export const EXAM_PRINT_CSS = `
     gap: 8px;
   }
   .student-strip {
-    margin-top: 6px;
-    padding: 5px 8px;
+    margin-top: 7px;
+    padding: 6px 9px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
-    font-size: 8.3pt;
+    font-size: 9pt;
     color: #334155;
     display: flex;
     gap: 14px;
   }
   .student-strip span { flex: 1; border-bottom: 1px dashed #94a3b8; padding-bottom: 1px; }
   .sec-hdr {
-    margin-top: 6px;
-    margin-bottom: 6px;
+    margin-top: 8px;
+    margin-bottom: 8px;
   }
   h2 {
-    font-size: 10.6pt;
+    font-size: 11.4pt;
     background: #0f172a;
     color: #ffffff;
-    padding: 4px 8px;
-    margin: 0 0 5px 0;
+    padding: 5px 9px;
+    margin: 0 0 6px 0;
     border-radius: 3px;
     display: flex;
     align-items: center;
     gap: 7px;
   }
   .sec-intro {
-    margin: 0 0 6px 0;
+    margin: 0 0 7px 0;
     color: #334155;
-    font-size: 8.7pt;
+    font-size: 9.5pt;
   }
   .badge {
     display: inline-block;
-    padding: 1px 6px;
+    padding: 1.5px 6px;
     border-radius: 3px;
-    font-size: 7pt;
+    font-size: 7.4pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -1564,25 +1564,26 @@ export const EXAM_PRINT_CSS = `
     background: #eff6ff;
     border: 1px solid #93c5fd;
     border-left: 4px solid #2563eb;
-    padding: 6px 9px;
+    padding: 9px 12px;
     border-radius: 4px;
-    margin: 4px 0 8px 0;
-    font-size: 8.5pt;
+    margin: 8px 0 12px 0;
+    font-size: 9.5pt;
+    line-height: 1.5;
     color: #1e3a8a;
   }
   .theory-box strong.lbl {
     color: #1d4ed8;
-    font-size: 8pt;
+    font-size: 8.4pt;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
   .prob-card {
     border: 1px solid #e2e8f0;
     border-radius: 5px;
-    padding: 7px 9px;
-    margin-bottom: 8px;
+    padding: 9px 11px;
+    margin-bottom: 11px;
     background: #ffffff;
     break-inside: avoid;
   }
@@ -1590,15 +1591,15 @@ export const EXAM_PRINT_CSS = `
     display: flex;
     align-items: baseline;
     gap: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
   }
   .prob-num {
     font-weight: 800;
     color: #0f172a;
-    font-size: 9.4pt;
+    font-size: 10.4pt;
   }
   .prob-kind {
-    font-size: 7.2pt;
+    font-size: 7.6pt;
     font-weight: 700;
     text-transform: uppercase;
     padding: 1px 5px;
@@ -1608,69 +1609,69 @@ export const EXAM_PRINT_CSS = `
   }
   .prob-pts {
     margin-left: auto;
-    font-size: 7.8pt;
+    font-size: 8.4pt;
     color: #475569;
     font-weight: 600;
   }
   .prob-prompt {
-    margin: 0 0 5px 0;
+    margin: 0 0 7px 0;
     white-space: pre-wrap;
   }
   .mc-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4px 12px;
-    margin: 5px 0;
+    gap: 5px 12px;
+    margin: 6px 0;
   }
   .mc-opt {
     border: 1px solid #cbd5e1;
     border-radius: 4px;
-    padding: 4px 7px;
-    font-size: 8.5pt;
+    padding: 5px 8px;
+    font-size: 9.4pt;
     background: #f8fafc;
   }
   .expr-row {
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    margin: 5px 0;
-    font-size: 8.8pt;
+    margin: 6px 0;
+    font-size: 9.6pt;
   }
   .fill-line {
     flex: 1;
     min-width: 75px;
     border-bottom: 1.5px solid #475569;
-    height: 15px;
+    height: 18px;
   }
-  .writing-lines { margin: 5px 0; }
-  .wline { border-bottom: 1px solid #cbd5e1; height: 17px; }
+  .writing-lines { margin: 7px 0; }
+  .wline { border-bottom: 1px solid #cbd5e1; height: 22px; }
   table.exam-tbl {
     width: 100%;
     border-collapse: collapse;
-    margin: 5px 0;
-    font-size: 8.3pt;
+    margin: 7px 0;
+    font-size: 9.2pt;
   }
   table.exam-tbl th {
     background: #1e293b;
     color: #ffffff;
     text-align: left;
-    padding: 4px 6px;
+    padding: 5px 7px;
     border: 1px solid #334155;
   }
   table.exam-tbl td {
     border: 1px solid #cbd5e1;
-    padding: 4px 6px;
-    min-height: 18px;
+    padding: 5px 7px;
+    min-height: 20px;
   }
   pre.exam-code {
     background: #0f172a;
     color: #e2e8f0;
-    padding: 6px 8px;
+    padding: 7px 9px;
     border-radius: 4px;
     font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-    font-size: 7.8pt;
-    line-height: 1.38;
-    margin: 5px 0;
+    font-size: 8.6pt;
+    line-height: 1.44;
+    margin: 6px 0;
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -1678,63 +1679,67 @@ export const EXAM_PRINT_CSS = `
     background: #ecfdf5;
     border: 1px solid #6ee7b7;
     border-left: 4px solid #10b981;
-    padding: 5px 8px;
-    border-radius: 4px;
-    margin-top: 6px;
-    font-size: 8.3pt;
+    padding: 9px 12px;
+    border-radius: 5px;
+    margin-top: 10px;
+    font-size: 9.5pt;
+    line-height: 1.54;
     color: #064e3b;
   }
   .key strong.lbl {
+    display: inline-block;
     color: #047857;
-    font-size: 7.7pt;
+    font-size: 8.4pt;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    margin-bottom: 3px;
   }
-  .key-steps { margin-top: 2px; white-space: pre-wrap; }
+  .key-steps { margin-top: 6px; line-height: 1.56; white-space: pre-wrap; }
   .bad {
     background: #fef2f2;
     border-left: 3px solid #ef4444;
-    padding: 3px 6px;
-    margin-top: 4px;
-    font-size: 8pt;
+    padding: 5px 9px;
+    margin-top: 8px;
+    font-size: 9pt;
+    line-height: 1.48;
     color: #7f1d1d;
-    border-radius: 2px;
+    border-radius: 3px;
   }
-  math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Noto Serif", Georgia, serif; font-size: 1.03em; }
-  .math-block { display: block; margin: 5px 0; text-align: center; }
+  math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Noto Serif", Georgia, serif; font-size: 1.05em; }
+  .math-block { display: block; margin: 7px 0; text-align: center; }
   .solve-steps-box {
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-left: 4px solid #475569;
-    padding: 7px 9px;
+    padding: 9px 11px;
     border-radius: 4px;
-    margin: 7px 0;
+    margin: 9px 0;
   }
   .solve-steps-box strong.lbl {
     display: block;
-    font-size: 8pt;
+    font-size: 8.6pt;
     text-transform: uppercase;
     letter-spacing: 0.35px;
     color: #334155;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
-  .solve-step-item { margin: 4px 0 6px 0; }
-  .solve-step-work { border-bottom: 1px dashed #cbd5e1; height: 22px; margin-top: 3px; }
+  .solve-step-item { margin: 6px 0 8px 0; }
+  .solve-step-work { border-bottom: 1px dashed #cbd5e1; height: 24px; margin-top: 4px; }
   .solve-sol-banner {
     display: flex;
     align-items: center;
     gap: 8px;
     background: #0f172a;
     color: #ffffff;
-    padding: 5px 9px;
+    padding: 6px 10px;
     border-radius: 4px;
-    margin-bottom: 8px;
-    font-size: 10.4pt;
+    margin-bottom: 11px;
+    font-size: 11.2pt;
     font-weight: 700;
   }
-  .solve-part-ans { margin: 5px 0; padding: 4px 7px; background: rgba(255,255,255,0.65); border-radius: 4px; border: 1px solid #a7f3d0; }
+  .solve-part-ans { margin: 9px 0; padding: 8px 11px; background: rgba(255,255,255,0.7); border-radius: 5px; border: 1px solid #a7f3d0; line-height: 1.55; }
   .solve-part-ans .ans-final { font-weight: 700; color: #064e3b; }
-  .solve-part-ans .ans-work { margin-top: 3px; white-space: pre-wrap; }
+  .solve-part-ans .ans-work { margin-top: 6px; line-height: 1.56; white-space: pre-wrap; }
   .solve-card-free { break-inside: auto; }
   .prob-visual {
     margin: 6px 0;
@@ -2417,16 +2422,15 @@ export function buildSolvedExamMcpMarkdown(solvedExam, { tapeSolutions = false, 
     for (const sol of ex.partSolutions || []) {
       if (tapeSolutions) out.push('!tape yellow');
       const line = sol.answer ? `**${sol.label}** ${sol.answer}` : `**${sol.label}**`;
-      out.push(line);
+      out.push(line, '');
       if (sol.work) {
         if (tapeSolutions) out.push('!tape yellow');
-        out.push(sol.work);
+        out.push(sol.work, '');
       }
       if (sol.visual) {
         const pDraw = renderVisualMcpMarkdown(sol.visual);
-        if (pDraw) out.push(pDraw);
+        if (pDraw) out.push(pDraw, '');
       }
-      out.push('');
     }
     if (ex.solutionVisual) {
       const sDraw = renderVisualMcpMarkdown(ex.solutionVisual);

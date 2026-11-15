@@ -67,9 +67,60 @@ pub(crate) fn bounds(points: &[[f64; 2]]) -> [f64; 4] {
     };
     [b[0], b[1], b[2] - b[0], b[3] - b[1]]
 }
+/// Visual bounding box of a stroke ribbon, including perpendicular thickness and caps.
+pub(crate) fn stroke_ribbon_bounds(points: &[[f64; 2]], width: f64, square_ends: bool) -> [f64; 4] {
+    if points.is_empty() {
+        return [0.; 4];
+    }
+    let r = (width / 2.).max(0.);
+    if points.len() == 1 {
+        let p = points[0];
+        return [p[0] - r, p[1] - r, 2. * r, 2. * r];
+    }
+    if !square_ends {
+        let [x, y, w, h] = bounds(points);
+        return [x - r, y - r, w + 2. * r, h + 2. * r];
+    }
+    let mut b = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    let mut expand = |x: f64, y: f64| {
+        b[0] = b[0].min(x);
+        b[1] = b[1].min(y);
+        b[2] = b[2].max(x);
+        b[3] = b[3].max(y);
+    };
+    for seg in points.windows(2) {
+        let (a, c) = (seg[0], seg[1]);
+        let (dx, dy) = (c[0] - a[0], c[1] - a[1]);
+        let len = dx.hypot(dy);
+        if len > 1e-9 {
+            let (ox, oy) = (-dy / len * r, dx / len * r);
+            expand(a[0] + ox, a[1] + oy);
+            expand(a[0] - ox, a[1] - oy);
+            expand(c[0] + ox, c[1] + oy);
+            expand(c[0] - ox, c[1] - oy);
+        } else {
+            expand(a[0] - r, a[1] - r);
+            expand(a[0] + r, a[1] + r);
+        }
+    }
+    [b[0], b[1], b[2] - b[0], b[3] - b[1]]
+}
 pub(crate) fn line_geometry(line: &Line) -> Geometry {
+    let mut b = if line.tool == 2 || line.square {
+        stroke_ribbon_bounds(&line.points, line.width, true)
+    } else {
+        bounds(&line.points)
+    };
+    if line.shape.is_some() && !line.points.is_empty() && (b[2] < line.width || b[3] < line.width) {
+        b = stroke_ribbon_bounds(&line.points, line.width, false);
+    }
     Geometry {
-        bounds: bounds(&line.points),
+        bounds: b,
         rotation: 0.,
         width: line.width,
         rgba: line.rgba,
@@ -98,8 +149,19 @@ pub(crate) fn item_geometry(item: &Item) -> Geometry {
         }
     } else {
         let s = item.stroke.as_ref().unwrap();
+        let b = if s.style.tool == 2 {
+            crate::view::imported_tape_bounds(item)
+        } else {
+            let [x, y, w, h] = item.bounds;
+            if w == 0. || h == 0. {
+                let r = s.radius.max(0.);
+                [x - r, y - r, w + 2. * r, h + 2. * r]
+            } else {
+                item.bounds
+            }
+        };
         Geometry {
-            bounds: item.bounds,
+            bounds: b,
             rotation: 0.,
             width: s.radius * 2.,
             rgba: s.style.rgba,

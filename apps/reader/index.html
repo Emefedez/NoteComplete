@@ -323,6 +323,7 @@
             <input id="recentSearch" type="search" placeholder="Search recent notes…" aria-label="Search recent notes" autocomplete="off" spellcheck="false" />
             <button id="recentSearchClear" type="button" class="icon-button recent-search-clear" data-icon="close" aria-label="Clear search" title="Clear search" hidden></button>
           </div>
+          <button id="findDuplicates" type="button" class="chip find-duplicates-btn" data-icon="copy" title="Scan recent notes for duplicates by name, note ID, and hash, and combine them">Find duplicates…</button>
         </div>
         <div id="recentContent" class="category-content">
           <p id="folderEmpty" class="muted" hidden>Nothing in this folder yet. Move a note here from its ⋯ menu.</p>
@@ -1362,6 +1363,22 @@
     <div class="ocr-actions"><button id="migrateFinish" type="button" class="primary">Done</button></div>
   </div>
   <p id="migrateStatus" class="muted" role="status" aria-live="polite"></p>
+</dialog>
+
+<dialog id="duplicatesDialog" class="ocr-dialog migrate-dialog duplicates-dialog" aria-labelledby="duplicatesTitle">
+  <h2 id="duplicatesTitle">Find &amp; combine duplicates</h2>
+  <p id="duplicatesSummary" class="muted" role="status" aria-live="polite"></p>
+  <div id="duplicatesControls" class="dup-controls" hidden>
+    <button id="dupSelectAll" type="button" class="chip">Toggle all</button>
+    <label id="dupTrashLocalRow" class="check"><input id="dupTrashLocal" type="checkbox" /> Also move removed local files to Trash</label>
+  </div>
+  <div id="duplicatesList" class="dup-list"></div>
+  <div class="ocr-actions">
+    <button id="duplicatesRescan" type="button">Rescan</button>
+    <span class="spacer"></span>
+    <button id="duplicatesCancel" type="button">Close</button>
+    <button id="duplicatesCombineAll" type="button" class="primary" disabled>Combine selected</button>
+  </div>
 </dialog>
 
 <dialog id="archiveAddDialog" class="deck-dialog" aria-labelledby="archiveAddTitle">

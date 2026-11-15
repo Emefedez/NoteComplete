@@ -79,6 +79,20 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       await chmod(partial, mode);
       await rename(partial, file);
     },
+    // Saves a user-chosen file from the native Save dialog and remembers it in Recent so later
+    // saves can update it in place with writeOpened.
+    async saveChosen(file, bytes) {
+      if (typeof file !== 'string' || !path.isAbsolute(file)) throw Error('Choose an absolute path.');
+      const base = path.basename(file);
+      if (!base || base.startsWith('.') || /[\\/\x00-\x1f]/.test(base) || !NOTE.test(base)) throw Error('Invalid file name.');
+      if (!(bytes instanceof Uint8Array)) throw Error('Expected file bytes.');
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeAtomic(file, bytes);
+      const s = await load();
+      s.recent = [file, ...s.recent.filter(p => p !== file)].slice(0, RECENT);
+      await save();
+      return { path: file, name: base, size: bytes.byteLength };
+    },
     // Renames an opened document in its own folder (Rename… in the documents list), never
     // over another file; Recent follows it. Returns the new path.
     async renameOpened(file, name) {
@@ -122,6 +136,20 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       const partial = path.join(folder, `.${path.basename(file)}.${process.pid}.partial`);
       await writeFile(partial, bytes);
       await rename(partial, file);
+    },
+    // Saves a user-chosen file from the native Save dialog and remembers it in Recent so later
+    // saves can update it in place with writeOpened.
+    async saveChosen(file, bytes) {
+      if (typeof file !== 'string' || !path.isAbsolute(file)) throw Error('Choose an absolute path.');
+      const base = path.basename(file);
+      if (!base || base.startsWith('.') || /[\\/\x00-\x1f]/.test(base) || !NOTE.test(base)) throw Error('Invalid file name.');
+      if (!(bytes instanceof Uint8Array)) throw Error('Expected file bytes.');
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeAtomic(file, bytes);
+      const s = await load();
+      s.recent = [file, ...s.recent.filter(p => p !== file)].slice(0, RECENT);
+      await save();
+      return { path: file, name: base, size: bytes.byteLength };
     },
     async remove(name) {
       await rm(path.join((await load()).folder, plainName(name)), { force: true });

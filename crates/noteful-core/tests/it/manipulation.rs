@@ -1,4 +1,4 @@
-use noteful_core::{Adjustment, Editor, Line, Package};
+use noteful_core::{Adjustment, Editor, Line, Package, Shape, ShapeKind};
 fn line() -> Line {
     Line {
         part: None,
@@ -313,4 +313,52 @@ fn a_group_moved_as_one_is_undone_as_one() {
         2,
         "strokes undo one by one"
     );
+}
+#[test]
+fn tape_and_flat_shape_selection_encompasses_visual_bounds() {
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
+    // Horizontal added tape: ribbon spans full [100..300] x [188..212].
+    let mut horiz_tape = Line::new(vec![[100., 200.], [300., 200.]], 24., [0.9, 0.7, 0.2, 1.]);
+    horiz_tape.tool = 2;
+    horiz_tape.square = true;
+    e.add_line(0, horiz_tape).unwrap();
+    assert_eq!(
+        e.selection(0, "new:0").unwrap()["bounds"],
+        serde_json::json!([100., 188., 200., 24.])
+    );
+
+    // Vertical added tape: ribbon spans [385..415] x [80..260].
+    let mut vert_tape = Line::new(vec![[400., 80.], [400., 260.]], 30., [0.9, 0.7, 0.2, 1.]);
+    vert_tape.tool = 2;
+    e.add_line(0, vert_tape).unwrap();
+    assert_eq!(
+        e.selection(0, "new:1").unwrap()["bounds"],
+        serde_json::json!([385., 80., 30., 180.])
+    );
+
+    // Straight shape line: zero-height centerline expands by stroke radius so H is selectable.
+    let mut straight_shape = Line::new(vec![[50., 50.], [150., 50.]], 6., [0., 0., 0., 1.]);
+    straight_shape.shape = Some(Shape {
+        kind: ShapeKind::Line,
+        start: [50., 50.],
+        end: [150., 50.],
+        fill: None,
+    });
+    e.add_line(0, straight_shape).unwrap();
+    assert_eq!(
+        e.selection(0, "new:2").unwrap()["bounds"],
+        serde_json::json!([47., 47., 106., 6.])
+    );
+
+    // Re-exporting native .noteful and opening imported stroke tape keeps full tape bounds.
+    let exported = e.export_noteful().unwrap();
+    let reopened = Editor::open(&exported).unwrap();
+    let view = reopened.view(0).unwrap();
+    let imported_tapes = view["tapes"].as_array().unwrap();
+    assert!(!imported_tapes.is_empty());
+    let first_id = imported_tapes[0]["id"].as_str().unwrap();
+    let sel_bounds = reopened.selection(0, first_id).unwrap()["bounds"].clone();
+    let b = sel_bounds.as_array().unwrap();
+    assert!(b[2].as_f64().unwrap() >= 200.);
+    assert!(b[3].as_f64().unwrap() >= 24.);
 }

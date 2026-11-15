@@ -2440,6 +2440,29 @@ body.bar-compact .tab { height: 22px; }
 .migrate-row .muted { font-size: 12px; }
 .migrate-kinds { display: grid; gap: 4px; margin: 6px 0 10px; }
 #migrateFinish[data-armed="1"] { background: var(--danger-soft); color: var(--danger); }
+/* Find & combine duplicates modal */
+.find-duplicates-btn { flex: none; display: inline-flex; align-items: center; gap: 5px; }
+.find-duplicates-btn svg { width: 14px; height: 14px; }
+.duplicates-dialog { width: min(680px, calc(100vw - 24px)); max-height: 86dvh; }
+.duplicates-dialog[open] { display: flex; flex-direction: column; gap: 8px; }
+.dup-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.dup-list { display: grid; gap: 10px; max-height: 52dvh; overflow: auto; padding-right: 2px; }
+.dup-group { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; background: var(--surface); display: grid; gap: 6px; }
+.dup-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-group-head > strong { font-size: 13px; flex: 1 1 auto; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-reasons { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.dup-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: var(--fill); color: var(--ink); }
+.dup-badge.hash { background: #dcfce7; color: #166534; }
+.dup-badge.id { background: #dbeafe; color: #1d4ed8; }
+.dup-badge.name { background: #fef3c7; color: #92400e; }
+.dup-items { display: grid; gap: 4px; }
+.dup-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px; border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; font-size: 13px; }
+.dup-item:hover, .dup-item:has(input:checked) { background: var(--accent-soft); border-color: var(--line); }
+.dup-item > input { margin-top: 3px; flex: none; }
+.dup-item-body { flex: 1; min-width: 0; }
+.dup-item-name { font-weight: 500; word-break: break-word; }
+.dup-item-meta { font-size: 11.5px; color: var(--muted); }
+.dup-rec { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 10.5px; font-weight: 600; border-radius: 99px; background: var(--accent); color: #fff; vertical-align: middle; }
 /* Ask AI: three dots pulse while the answer is on its way. */
 .typing-dots { display: inline-flex; gap: 4px; align-items: center; height: 1em; margin-right: 8px; vertical-align: middle; }
 .typing-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .25; animation: typing-dot 1.2s ease-in-out infinite; }

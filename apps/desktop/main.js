@@ -443,6 +443,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:save-copy', guarded((_event, file, options) => files.saveCopy(file, options)));
   ipcMain.handle('files:render-html-pdf', guarded((_event, html) => renderHtmlToPdfWithTapes({ BrowserWindow, html })));
   ipcMain.handle('files:write-opened', guarded((_event, file, bytes) => files.writeOpened(file, bytes)));
+  ipcMain.handle('files:save', guarded(async (event, defaultName, bytes, filters) => {
+    const chosen = await dialog.showSaveDialog(windowOf(event.sender), {
+      title: 'Save note',
+      defaultPath: typeof defaultName === 'string' && defaultName ? path.basename(defaultName) : 'Untitled.nfedit',
+      ...(Array.isArray(filters) && filters.length ? { filters } : {}),
+    });
+    if (chosen.canceled || !chosen.filePath) return null;
+    return files.saveChosen(chosen.filePath, bytes);
+  }));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped

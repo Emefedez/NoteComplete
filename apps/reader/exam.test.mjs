@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanExamData, buildPaginatedExamHtml, examPrompt, FOCUS_MODES, PROBLEM_TYPES,
-  ensureExamMathRenderer, renderRichExamHtml,
+  ensureExamMathRenderer, renderRichExamHtml, EXAM_PRINT_CSS,
   buildFallbackExamPlan, cleanExamPlan, mergeExamSections,
   splitExamHeuristically, cleanSplitExercises, cleanSolvedExercise,
   buildSolvedExamHtml, buildSolvedExamMcpMarkdown,
@@ -389,4 +389,29 @@ test('mergeEmbeddedExam appends structured sections cleanly and splices fallback
   assert.match(mergedRawHtml.html, /Edited PCB prompt\./);
   assert.match(mergedRawHtml.html, /Bloque 2/);
   assert.equal((mergedRawHtml.html.match(/<header class="exam-hdr"/g) || []).length, 1);
+});
+
+test('EXAM_PRINT_CSS uses >= 10pt body typography and generous solution spacing', () => {
+  const bodySize = /html,\s*body\s*\{[^}]*font-size:\s*([\d.]+)pt/.exec(EXAM_PRINT_CSS);
+  assert.ok(bodySize && Number(bodySize[1]) >= 10);
+  const keyBlock = /\.key\s*\{[^}]+\}/.exec(EXAM_PRINT_CSS)?.[0] || '';
+  assert.match(keyBlock, /margin-top:\s*10px/);
+  assert.match(keyBlock, /padding:\s*9px 12px/);
+  assert.match(keyBlock, /font-size:\s*9\.5pt/);
+  const partBlock = /\.solve-part-ans\s*\{[^}]+\}/.exec(EXAM_PRINT_CSS)?.[0] || '';
+  assert.match(partBlock, /margin:\s*9px 0/);
+  assert.match(partBlock, /padding:\s*8px 11px/);
+
+  const md = buildSolvedExamMcpMarkdown({
+    title: 'Spacing Check',
+    exercises: [{
+      exerciseHeading: 'Ex 1',
+      statement: 'Q?',
+      stepsHeading: 'Steps',
+      partSteps: [],
+      solutionHeading: 'Sol',
+      partSolutions: [{ label: 'a)', answer: '42', work: '6 * 7' }],
+    }],
+  });
+  assert.match(md, /\*\*a\)\*\* 42\n\n6 \* 7/);
 });
