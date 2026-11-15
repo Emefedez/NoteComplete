@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.73
+
+- **Fixed: AI study dialogs (Fact check, Generate flashcards, Quiz me) layout.** Removed the outer `.ocr-scope` grid from `.ai-fieldset`, wrapped `#studyModel`, its magnifier/manage buttons, `Small model`, `Text only`, and `#studyModelOther` inside `.model-controls`, aligned `Language` and the AI fields to the dialog's label column on desktop, and stacked rows full-width on narrow mobile viewports (`<= 540px`).
+- **Fixed: Mobile bottom navigation bar and Ask AI header sizing.** Tightened mobile `.navigation` spacing and button sizes (`<= 520px`) so all action icons (including Find, Layers, and Toolbar toggle) and `Fit` stay visible without horizontal clipping, and gave `.chat-head` selects a readable minimum flex basis alongside the model magnifier controls.
+
 ## 1.1.72
 
 - **One-tap Find button on mobile and desktop.** Added a search icon (`#findToggle`) to the toolbar actions (which moves into the mobile navigation strip) and a search toggle (`#textFindToggle`) to the text viewer bar so `Ctrl+F` find is one tap away without opening Home or menus.
