@@ -5,7 +5,7 @@ import { shrink } from './drive-thumbs.js';
 import { openPdf } from './pdf-background.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
-import { entryTitle, plainTitle } from './library.js';
+import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
 import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { icon } from './icons.js';
@@ -183,7 +183,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       meta.className = 'note-meta';
       name.textContent = entryTitle(entry);
       name.title = entry.title ? `${entry.title}\nFile: ${entry.name}` : entry.name;
-      detail.textContent = `${entry.source === 'drive' ? 'Drive' : entry.source === 'web' ? 'Web link' : 'This device'} · ${entry.openedAt ? `opened ${ago(entry.openedAt)}` : 'not opened yet'}`;
+      detail.textContent = `${entrySourceLabel(entry)} · ${entry.openedAt ? `opened ${ago(entry.openedAt)}` : 'not opened yet'}`;
       meta.append(name, detail);
       const hit = entry.source === 'web' ? 'Web' : Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''))?.[1][0];
       if (hit) {

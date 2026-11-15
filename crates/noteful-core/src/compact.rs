@@ -185,6 +185,59 @@ impl Editor {
             }
         }
 
+        // Background changes: per slot before `upto`, only the latest before `upto` has any
+        // final effect (unless a PDF from an earlier edit is still referenced later).
+        let mut bg_slots: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (i, edit) in history[..upto].iter().enumerate() {
+            if let Edit::SetPageBackground { pages, .. } = edit {
+                for p in pages {
+                    bg_slots.entry(p.page).or_default().push(i);
+                }
+            }
+        }
+        let mut live_pdfs: HashSet<String> = HashSet::new();
+        for (i, edit) in history.iter().enumerate() {
+            if i >= upto {
+                if let Edit::SetPageBackground { pages, .. } = edit {
+                    for p in pages {
+                        if let Some(pdf) = &p.pdf {
+                            live_pdfs.insert(pdf.resource.clone());
+                        }
+                    }
+                } else if let Edit::InsertPages { pages, .. } = edit {
+                    for p in pages {
+                        if let Some(pdf) = &p.pdf {
+                            live_pdfs.insert(pdf.resource.clone());
+                        }
+                    }
+                }
+            }
+        }
+        let latest_bg: HashMap<usize, usize> = bg_slots
+            .iter()
+            .filter_map(|(&slot, list)| list.last().map(|&last| (slot, last)))
+            .collect();
+        for (i, edit) in history[..upto].iter().enumerate().rev() {
+            if let Edit::SetPageBackground { pages, pdf } = edit {
+                let all_overwritten = pages.iter().all(|p| latest_bg.get(&p.page) != Some(&i));
+                let pdf_needed = pdf.as_ref().is_some_and(|n| live_pdfs.contains(&n.id));
+                if all_overwritten && !pdf_needed {
+                    keep[i] = false;
+                } else {
+                    for p in pages {
+                        if let Some(r) = &p.pdf {
+                            live_pdfs.insert(r.resource.clone());
+                        }
+                    }
+                }
+            } else if let Edit::InsertPages { pages, .. } = edit {
+                for p in pages {
+                    if let Some(r) = &p.pdf {
+                        live_pdfs.insert(r.resource.clone());
+                    }
+                }
+            }
+        }
         // Erasures left with nothing to erase go too.
         let gone = |id: &str| added_index(id).is_some_and(|n| erased.contains(&n));
         for (i, edit) in history[..upto].iter().enumerate() {

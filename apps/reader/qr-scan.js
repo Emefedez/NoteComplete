@@ -50,6 +50,12 @@ export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the 
   const progress = document.createElement('progress');
   progress.className = 'qr-progress-bar';
   progress.hidden = true;
+  const slotsBar = document.createElement('div');
+  slotsBar.className = 'qr-slot-strip';
+  slotsBar.hidden = true;
+  const skipAlert = document.createElement('p');
+  skipAlert.className = 'qr-skip-note';
+  skipAlert.hidden = true;
   const video = Object.assign(document.createElement('video'), { srcObject: stream, muted: true, playsInline: true });
   video.style.cssText = 'width:100%;max-height:260px;border-radius:8px;background:#000;margin:6px 0';
   let cancelled = false;
@@ -57,12 +63,12 @@ export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the 
   cancelBtn.type = 'button';
   cancelBtn.textContent = 'Stop camera';
   cancelBtn.onclick = () => { cancelled = true; };
-  wrap.append(progress, video, cancelBtn);
+  wrap.append(progress, slotsBar, skipAlert, video, cancelBtn);
   statusEl.textContent = initialText;
   statusEl.after(wrap);
   await video.play();
   const helpers = {
-    setProgress(text, received, total) {
+    setProgress(text, received, total, details = null) {
       statusEl.textContent = text;
       if (total && total > 1) {
         progress.hidden = false;
@@ -70,6 +76,29 @@ export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the 
         progress.value = received;
       } else {
         progress.hidden = true;
+      }
+      if (total && total > 1 && total <= 96 && Array.isArray(details?.receivedSlots)) {
+        const filled = new Set(details.receivedSlots);
+        const skipped = new Set(details.skipped || []);
+        if (slotsBar.children.length !== total) {
+          slotsBar.replaceChildren(...Array.from({ length: total }, () => document.createElement('span')));
+        }
+        slotsBar.hidden = false;
+        for (let i = 0; i < total; i++) {
+          const cell = slotsBar.children[i];
+          const slotNum = i + 1;
+          cell.className = filled.has(slotNum) ? 'is-filled' : skipped.has(slotNum) ? 'is-skipped' : '';
+        }
+      } else {
+        slotsBar.hidden = true;
+      }
+      const skipped = details?.skipped || [];
+      if (skipped.length) {
+        skipAlert.hidden = false;
+        const preview = skipped.slice(0, 6).map((n) => `#${n}`).join(', ') + (skipped.length > 6 ? ` (+${skipped.length - 6} more)` : '');
+        skipAlert.textContent = `Skipped segment${skipped.length === 1 ? '' : 's'} ${preview} — keeping slot${skipped.length === 1 ? '' : 's'} empty until it cycles back.`;
+      } else {
+        skipAlert.hidden = true;
       }
     },
   };

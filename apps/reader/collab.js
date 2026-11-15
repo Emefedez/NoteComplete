@@ -149,6 +149,18 @@ function studyDialog(host, sendPanel, tab, aimed = null) {
   d.addEventListener('close', () => { if (session?.codeClock) clearInterval(session.codeClock); }, { once: true });
   show(aimed ? 'send' : tab);
 }
+function formatOfflineQrStatus(step) {
+  const title = step.meta?.title ? ` “${step.meta.title}”` : '';
+  const size = step.meta?.rawBytes ? ` (${formatByteSize(step.meta.rawBytes)})` : '';
+  if (step.kind === 'info') {
+    const base = `Info${title}${size}: ${step.total} segment${step.total === 1 ? '' : 's'}`;
+    if (step.received > 0 && step.skipped?.length) return `${base} · ${step.received}/${step.total} read · keep scanning for missed segments`;
+    return step.received > 0 ? `${base} · ${step.received}/${step.total} segments read…` : `${base} · ready — press Start on sender`;
+  }
+  const pct = Math.round((step.received / step.total) * 100);
+  return `Receiving${title}: ${step.received} / ${step.total} segments (${pct}%)`;
+}
+
 async function receiveViaQrStream(host, stateEl) {
   const { scanQrFrames } = await import('./qr-scan.js');
   const receiver = new QrReceiver();
@@ -159,11 +171,10 @@ async function receiveViaQrStream(host, stateEl) {
       helpers.setProgress(step.error, 0, step.total);
       return null;
     }
-    const pct = Math.round((step.received / step.total) * 100);
-    helpers.setProgress(`Receiving QR stream: ${step.received} / ${step.total} frames (${pct}%)`, step.received, step.total);
+    helpers.setProgress(formatOfflineQrStatus(step), step.received, step.total, step);
     if (step.done) return { done: true, value: step.payload };
     return null;
-  }, stateEl, { initialText: 'Point the camera at the sender’s QR stream…' });
+  }, stateEl, { initialText: 'Point the camera at the sender’s Info QR…' });
 
   if (payload?.kind === 'study' && payload.pack) {
     const { readPack, describePack } = await import('./study-pack.js');
@@ -187,7 +198,7 @@ async function receiveViaQrStream(host, stateEl) {
     const bytes = base64UrlDecode(payload.base64);
     const file = new File([bytes], safeName, { type: payload.mime || 'application/octet-stream' });
     closeDialog();
-    await host.openFile(file);
+    await host.openFile(file, { origin: 'QR share' });
     host.status(`Opened “${safeName}” received via offline QR.`);
     return;
   }
@@ -655,7 +666,7 @@ export async function openReceiveNoteQr(host) {
       cleanup();
       closeDialog();
       const file = new File([result.bytes], result.name, { type: result.mime });
-      await host.openFile(file);
+      await host.openFile(file, { origin: 'P2P QR' });
       host.status(`Opened “${result.name}” (${formatByteSize(result.bytes.byteLength)}) received peer-to-peer.`);
     } catch (e) {
       cleanup();
@@ -679,8 +690,7 @@ export async function openReceiveNoteQr(host) {
           const step = await offlineRx.accept(raw);
           if (step.ignored) return null;
           if (step.error) { helpers.setProgress(step.error, 0, step.total); return null; }
-          const pct = Math.round((step.received / step.total) * 100);
-          helpers.setProgress(`Receiving QR stream: ${step.received} / ${step.total} (${pct}%)`, step.received, step.total);
+          helpers.setProgress(formatOfflineQrStatus(step), step.received, step.total, step);
           return step.done ? { done: true, value: { kind: 'offline', payload: step.payload } } : null;
         }, state, { initialText: 'Point the camera at the sender’s QR code…' });
         if (scanned.kind === 'webrtc') {
@@ -689,7 +699,7 @@ export async function openReceiveNoteQr(host) {
           const safeName = String(scanned.payload.name || 'Shared.nfedit').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
           const bytes = base64UrlDecode(scanned.payload.base64);
           closeDialog();
-          await host.openFile(new File([bytes], safeName, { type: scanned.payload.mime || 'application/octet-stream' }));
+          await host.openFile(new File([bytes], safeName, { type: scanned.payload.mime || 'application/octet-stream' }), { origin: 'QR share' });
           host.status(`Opened “${safeName}” received via offline QR.`);
         } else if (scanned.payload?.kind === 'study' && scanned.payload.pack) {
           const { readPack, describePack } = await import('./study-pack.js');

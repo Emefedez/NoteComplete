@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.res.AssetManager
 import android.net.Uri
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.view.MotionEvent
 import android.view.View
@@ -34,6 +35,7 @@ class ReaderServerModule : Module() {
   private var shareAddress: String = ""
   private var hoverHookedWindow: Window? = null
   private var originalWindowCallback: Window.Callback? = null
+  @Volatile private var stylusTouching: Boolean = false
 
   private fun findWebView(root: View?): WebView? {
     if (root is WebView) return root
@@ -57,8 +59,11 @@ class ReaderServerModule : Module() {
         Window.Callback::class.java.classLoader,
         arrayOf(Window.Callback::class.java),
       ) { _, method, args ->
-        if (method.name == "dispatchGenericMotionEvent" && args?.size == 1) {
-          (args[0] as? MotionEvent)?.let { forwardStylusHover(window, it) }
+        if (args?.size == 1) {
+          when (method.name) {
+            "dispatchTouchEvent" -> (args[0] as? MotionEvent)?.let { noteStylusTouch(it) }
+            "dispatchGenericMotionEvent" -> (args[0] as? MotionEvent)?.let { forwardStylusHover(window, it) }
+          }
         }
         val unwrapped = args ?: emptyArray()
         method.invoke(current, *unwrapped)
@@ -79,10 +84,26 @@ class ReaderServerModule : Module() {
     }
   }
 
+  private fun noteStylusTouch(event: MotionEvent) {
+    val pointerIndex = event.actionIndex.coerceIn(0, (event.pointerCount - 1).coerceAtLeast(0))
+    val tool = event.getToolType(pointerIndex)
+    if (tool != MotionEvent.TOOL_TYPE_STYLUS && tool != MotionEvent.TOOL_TYPE_ERASER) return
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_MOVE -> stylusTouching = true
+      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> stylusTouching = false
+    }
+  }
+
   private fun forwardStylusHover(window: Window, event: MotionEvent) {
     val phase = when (event.actionMasked) {
-      MotionEvent.ACTION_HOVER_ENTER -> "enter"
-      MotionEvent.ACTION_HOVER_MOVE -> "move"
+      MotionEvent.ACTION_HOVER_ENTER -> {
+        stylusTouching = false
+        "enter"
+      }
+      MotionEvent.ACTION_HOVER_MOVE -> {
+        if (stylusTouching) return
+        "move"
+      }
       MotionEvent.ACTION_HOVER_EXIT -> "exit"
       else -> return
     }
@@ -107,7 +128,11 @@ class ReaderServerModule : Module() {
       cssY,
       if (dist.isFinite()) dist else 0f,
     )
-    webView.post { webView.evaluateJavascript(js, null) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      webView.evaluateJavascript(js, null)
+    } else {
+      webView.post { webView.evaluateJavascript(js, null) }
+    }
   }
 
   override fun definition() = ModuleDefinition {

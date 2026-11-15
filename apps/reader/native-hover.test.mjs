@@ -81,6 +81,18 @@ test('native hover bridge emits pointerover, pointermove, and pointerout with pe
   assert.equal(globalObj.__notecompleteNativeHover('move', 160, 270, 'pen'), true);
   assert.equal(dom.dispatched.length, 2); // pointerover (after exit cleared hoverTarget) + pointermove
 
+  // Stale native hover events arriving while the pen is touching down are suppressed so
+  // they cannot clear contact state before pointerup.
+  dom.dispatched.length = 0;
+  dom.win.triggerTrusted({ type: 'pointerdown', isTrusted: true, pointerType: 'pen', buttons: 1 });
+  assert.equal(globalObj.__notecompleteNativeHover('move', 165, 275, 'pen'), false);
+  assert.equal(globalObj.__notecompleteNativeHover('exit', 165, 275, 'pen'), false);
+  assert.equal(dom.dispatched.length, 0);
+
+  dom.win.triggerTrusted({ type: 'pointerup', isTrusted: true, pointerType: 'pen', buttons: 0 });
+  assert.equal(globalObj.__notecompleteNativeHover('enter', 170, 280, 'pen'), true);
+  assert.equal(dom.dispatched.length, 2);
+
   cleanup();
   assert.equal(globalObj.__notecompleteNativeHover, undefined);
 });

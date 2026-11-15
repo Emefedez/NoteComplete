@@ -47,7 +47,7 @@ pub mod canvas;
 mod export;
 mod layer;
 mod pages;
-pub use pages::{InkWord, NewPage, NewPdf, PageResize, PdfPlacement};
+pub use pages::{InkWord, NewPage, NewPdf, PageBackground, PageResize, PdfPlacement};
 mod part;
 mod shape;
 pub use layer::Layer;

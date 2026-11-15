@@ -143,6 +143,8 @@
           <hr />
           <button id="resizePage" data-icon="fit" disabled>Page size…</button>
           <button id="resizeDrag" data-icon="maximize" disabled>Resize by dragging the borders</button>
+          <hr />
+          <button id="changePageBg" data-icon="note" disabled>Change PDF background…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="studyMenu">
@@ -240,6 +242,7 @@
         multiple
         hidden
       /><input id="pdfPagesFile" type="file" accept=".pdf,application/pdf" hidden
+      /><input id="pdfBgFile" type="file" accept=".pdf,application/pdf" hidden
       /><input id="deckFile" type="file" accept=".json,application/json" hidden />
     </div>
   </header>
@@ -839,6 +842,8 @@
         <aside id="pagesPanel" aria-label="Page navigation">
           <div class="panel-heading">
             <h2>Pages</h2>
+            <span class="spacer"></span>
+            <button id="pagesChangeBg" type="button" class="icon-button" data-icon="note" aria-label="Change PDF background…" title="Change PDF background on pages…" disabled></button>
             <button id="closePages" aria-label="Close pages">×</button>
           </div>
           <div id="pagesGroupSlot" class="group-slot">
@@ -975,6 +980,45 @@
   <label id="resizeFitRow" class="ocr-skip"><input id="resizeFit" type="checkbox" /> Scale the PDF to fill the new size (otherwise it keeps its size and place)</label>
   <p class="muted">Writing and drawings stay where they are on the page. Undo restores the previous size.</p>
   <div class="ocr-actions"><button id="resizeDragInstead" type="button">Drag the borders instead</button><button id="resizeCancel" type="button">Cancel</button><button id="resizeAll" type="button" title="Give every page this size (space added and Original follow each page's own size); one undo restores them">Resize all pages</button><button id="resizeConfirm" type="button" class="primary">Resize this page</button></div>
+</dialog>
+
+<dialog id="pageBgDialog" class="ocr-dialog" aria-labelledby="pageBgTitle">
+  <h2 id="pageBgTitle">Change PDF background</h2>
+  <p class="muted">Swap, reuse, or remove the PDF behind specific pages. Writing and drawings stay intact; one undo restores everything.</p>
+  <label class="ocr-languages">Pages
+    <span class="page-bg-inline">
+      <input id="pageBgTarget" type="text" placeholder="e.g. 1, 3-5" spellcheck="false" autocomplete="off" />
+      <button id="pageBgTargetCurrent" type="button">Current</button>
+      <button id="pageBgTargetAll" type="button">All</button>
+    </span>
+  </label>
+  <label class="ocr-languages">Background
+    <span class="page-bg-inline">
+      <select id="pageBgSource" data-native></select>
+      <button id="pageBgPick" type="button">Choose PDF…</button>
+    </span>
+  </label>
+  <p id="pageBgPicked" class="muted page-bg-picked" hidden></p>
+  <div id="pageBgPdfOptions" hidden>
+    <label class="ocr-languages">Start PDF page <input id="pageBgFrom" type="number" min="1" value="1" /></label>
+    <label class="ocr-languages">Page mapping
+      <select id="pageBgMode" data-native>
+        <option value="sequence">Sequential PDF pages</option>
+        <option value="repeat">Repeat this PDF page</option>
+      </select>
+    </label>
+    <label class="ocr-languages">Page size
+      <select id="pageBgSizeMode" data-native>
+        <option value="fit">Keep page size &amp; align writing (fit PDF)</option>
+        <option value="width">Keep width, match PDF height</option>
+        <option value="pdf">Match PDF size</option>
+      </select>
+    </label>
+    <label id="pageBgCompactRow" class="ocr-skip" hidden><input id="pageBgCompact" type="checkbox" /> <span>Extract only needed page(s) as compressed images (saves space)</span></label>
+  </div>
+  <p id="pageBgSizeNote" class="muted page-bg-note" role="status" aria-live="polite"></p>
+  <p id="pageBgError" class="muted link-error" hidden></p>
+  <div class="ocr-actions"><button id="pageBgCancel" type="button">Cancel</button><button id="pageBgApply" type="button" class="primary">Apply</button></div>
 </dialog>
 
 <dialog id="studyDialog" class="ocr-dialog" aria-labelledby="studyTitle">

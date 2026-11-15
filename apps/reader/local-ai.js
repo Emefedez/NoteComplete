@@ -39,6 +39,37 @@ export const CATALOGUE = [
   { id: 'phi-3.5-vision', label: 'Phi 3.5 Vision', f16: 'Phi-3.5-vision-instruct-q4f16_1-MLC-6k', f32: 'Phi-3.5-vision-instruct-q4f32_1-MLC-6k', download: 2.8, memory: 5.3, vision: true, context: 6144 },
 ];
 export const DEFAULT_MODEL = 'qwen3-1.7b';
+const IOS_DEFAULT_MODEL = 'qwen3-0.6b';
+const OPFS_ROOT_DIR = 'tvmjs-opfs-store';
+
+export function isIOSDevice(nav = globalThis.navigator) {
+  const ua = String(nav?.userAgent || '');
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ reports "Macintosh" in Safari UA while exposing multi-touch points.
+  return /Macintosh/i.test(ua) && Number(nav?.maxTouchPoints) > 1;
+}
+
+export function isAppleWebKit(nav = globalThis.navigator) {
+  if (isIOSDevice(nav)) return true;
+  const ua = String(nav?.userAgent || '');
+  return /AppleWebKit/i.test(ua) && !/Chrome|CriOS|Edg|EdgiOS|FxiOS|Firefox|Android/i.test(ua);
+}
+
+export function defaultModelId(nav = globalThis.navigator) {
+  return isIOSDevice(nav) ? IOS_DEFAULT_MODEL : DEFAULT_MODEL;
+}
+
+export function cacheBackendCandidates({
+  nav = globalThis.navigator,
+  fileHandle = globalThis.FileSystemFileHandle,
+} = {}) {
+  const hasOpfs = typeof nav?.storage?.getDirectory === 'function'
+    && typeof fileHandle?.prototype?.createWritable === 'function';
+  if (isAppleWebKit(nav)) {
+    return hasOpfs ? ['opfs', 'indexeddb'] : ['indexeddb'];
+  }
+  return hasOpfs ? ['cache', 'opfs', 'indexeddb'] : ['cache', 'indexeddb'];
+}
 // Our own records beside WebLLM's prebuilt list: the same model files and
 // compiled code with other settings. Phi 3.5 Vision with a 6,144-token window
 // fits one page image (up to ~2,400 tokens), the instructions and a dense page's
@@ -85,8 +116,8 @@ export function modelList(downloaded = new Set(), f16 = true) {
 
 // A choice (catalogue id, a typed WebLLM model_id, or '' for the default) as
 // the model to load. `list` is appModelList(WebLLM's prebuilt list).
-export function resolveModel(choice, { f16 = true, list = [] } = {}) {
-  const wanted = String(choice || '').trim() || DEFAULT_MODEL;
+export function resolveModel(choice, { f16 = true, list = [], fallback = DEFAULT_MODEL } = {}) {
+  const wanted = String(choice || '').trim() || fallback;
   const entry = CATALOGUE.find(m => m.id === wanted || m.f16 === wanted || m.f32 === wanted);
   const id = entry ? (f16 ? entry.f16 : entry.f32) : wanted;
   const record = list.find(r => r.model_id === id);
@@ -101,8 +132,8 @@ export function resolveModel(choice, { f16 = true, list = [] } = {}) {
   };
 }
 // Without loading the library: whether a choice reads images, and its window.
-export function capabilitiesOf(choice) {
-  const wanted = String(choice || '').trim() || DEFAULT_MODEL;
+export function capabilitiesOf(choice, fallback = DEFAULT_MODEL) {
+  const wanted = String(choice || '').trim() || fallback;
   const entry = CATALOGUE.find(m => m.id === wanted || m.f16 === wanted || m.f32 === wanted);
   return entry ? { vision: !!entry.vision, contextTokens: entry.context || CONTEXT_TOKENS } : { vision: /vision/i.test(wanted), contextTokens: CONTEXT_TOKENS };
 }
@@ -211,14 +242,26 @@ export function phaseOf(report = {}) {
 // Engine errors in the reader's words.
 export function friendlyError(error) {
   const name = String(error?.name || ''), message = String(error?.message || error || '');
+  const combined = `${name} ${message}`;
   if (message === STOPPED) return error;
-  if (/DeviceLost|out of memory|OOM/i.test(name + message)) return Error('The GPU ran out of memory for this model. Close other tabs or choose a smaller model.');
+  if (/DeviceLost|out of memory|OOM|worker stopped|crashed|maxBufferSize|maxStorageBufferBindingSize/i.test(combined)) {
+    return Error('The GPU ran out of memory for this model. Close other tabs or choose a smaller model (such as Qwen3 0.6B).');
+  }
   if (/ShaderF16/i.test(name)) return Error('This GPU cannot run half-precision models. Choose another model.');
   if (/WebGPUNot/i.test(name)) return Error(NO_WEBGPU);
   if (/NonVLM/i.test(name)) return Error('This model cannot read images. Choose Phi 3.5 Vision, or tick Small model so images are left out.');
-  if (/QuotaExceeded|quota/i.test(name + message)) return Error('Not enough storage for this model. Free some space or delete downloaded models (Downloaded models… beside the model list).');
-  if (/Failed to fetch|NetworkError|network/i.test(message)) return Error('Could not download the model. Check the connection and try again; what was already downloaded is kept.');
+  if (/QuotaExceeded|quota|NoModificationAllowed|SecurityError|InvalidStateError|OPFSStore|Database error|database/i.test(combined)) {
+    return Error('Not enough browser storage for this model (or Private Browsing is blocking offline storage). Free space, use a normal tab, or choose Qwen3 0.6B (0.3 GB).');
+  }
+  if (/Failed to fetch|Load failed|NetworkError|network|Cannot fetch|Unable to fetch|Failed to store/i.test(message)) {
+    return Error('Could not download the model. Check the connection and try again; what was already downloaded is kept.');
+  }
   return Error(`The AI in this app failed: ${message.slice(0, 300) || 'unknown error'}`);
+}
+
+export function shouldFallbackCacheBackend(error) {
+  const text = `${error?.name || ''} ${error?.message || error || ''}`;
+  return /QuotaExceeded|quota|Cache\.add|OPFSStore|createWritable|createSyncAccessHandle|Database error|database|SecurityError|NoModificationAllowed|InvalidStateError|Load failed|Failed to fetch|Cannot fetch|Unable to fetch|Failed to store/i.test(text);
 }
 
 // ---- Browser parts ----
@@ -229,7 +272,8 @@ async function sha256(bytes) {
 }
 
 // The library, from this browser's cache or jsDelivr, run only if its hash is
-// the pinned one. The page and the worker import it from the same blob: URL.
+// the pinned one. The page imports it from a blob: URL and passes bytes so the
+// worker can create its own blob: URL in its worker realm.
 export async function loadWebLLM({ fetchImpl = globalThis.fetch, cacheStorage = globalThis.caches } = {}) {
   const cache = await cacheStorage?.open(LIBRARY_CACHE).catch(() => null);
   let bytes = null;
@@ -246,7 +290,7 @@ export async function loadWebLLM({ fetchImpl = globalThis.fetch, cacheStorage = 
     await cache?.put(WEBLLM_URL, new Response(bytes, { headers: { 'content-type': 'text/javascript' } })).catch(() => { /* Optional. */ });
   }
   const url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
-  return { module: await import(/* @vite-ignore */ url), url };
+  return { module: await import(/* @vite-ignore */ url), url, bytes };
 }
 
 // A page image scaled down (never up) to the size the vision model resizes it
@@ -271,14 +315,19 @@ export async function shrinkImage(image) {
 }
 
 // The worker imports the library from the page's blob: URL, then answers.
-function startWorker(worker, url) {
+function startWorker(worker, lib, { throttleDownloads = false } = {}) {
   return new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
       if (data?.notecomplete === 'ready') resolve();
       else if (data?.notecomplete === 'error') reject(Error(data.message || 'The AI worker failed to start.'));
     };
     worker.onerror = event => { event.preventDefault?.(); reject(Error(event.message || 'The AI worker failed to start.')); };
-    worker.postMessage({ notecomplete: 'load', url });
+    worker.postMessage({
+      notecomplete: 'load',
+      url: lib.url,
+      ...(lib.bytes ? { bytes: new Uint8Array(lib.bytes) } : {}),
+      ...(throttleDownloads ? { throttleDownloads: true } : {}),
+    });
   });
 }
 
@@ -296,36 +345,71 @@ function chipProgress() {
   };
 }
 
+async function hasOpfsModelRoot(nav) {
+  try {
+    const root = await nav?.storage?.getDirectory?.();
+    if (!root) return false;
+    await root.getDirectoryHandle(OPFS_ROOT_DIR, { create: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteIndexedDb(idbFactory, name) {
+  if (typeof idbFactory?.deleteDatabase !== 'function') return;
+  await new Promise((resolve) => {
+    try {
+      const req = idbFactory.deleteDatabase(name);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
 // The engine: one worker, one loaded model, requests one at a time.
 // Everything that touches the browser is injectable for tests.
 export function createLocalRuntime({
   gpu = globalThis.navigator?.gpu,
+  nav = globalThis.navigator,
+  fileHandle = globalThis.FileSystemFileHandle,
+  idbFactory = globalThis.indexedDB,
   loadLibrary = loadWebLLM,
   createWorker = () => new Worker(new URL('./local-ai-worker.js', import.meta.url), { type: 'module' }),
   progress = chipProgress(),
   storage = globalThis.localStorage,
   persist = () => globalThis.navigator?.storage?.persist?.().catch(() => false),
   prepareImage = shrinkImage,
+  resolveBackends = () => cacheBackendCandidates({ nav, fileHandle }),
   // A loaded model holds GPU memory (about 5 GB for Phi 3.5 Vision, shared with
   // the rest of the computer on Apple and integrated GPUs): it is unloaded after
   // this long without requests, and loads again from the cache in seconds.
   idleMs = 3 * 60 * 1000,
 } = {}) {
-  let library = null, engine = null, worker = null, loaded = '', abort = null, probed = null, tail = Promise.resolve();
+  let library = null, engine = null, worker = null, loaded = '', activeBackend = '', abort = null, probed = null, tail = Promise.resolve();
   const entries = new Set();
+  const fallbackModel = defaultModelId(nav);
+  const webKitMode = isAppleWebKit(nav);
 
   const probe = () => (probed ||= (async () => {
     const adapter = await gpu?.requestAdapter?.().catch(() => null);
     return { adapter: !!adapter, f16: !!adapter?.features?.has?.('shader-f16') };
   })());
   const getLibrary = () => (library ||= loadLibrary().catch(error => { library = null; throw error; }));
-  const appConfigOf = lib => ({ ...lib.module.prebuiltAppConfig, model_list: appModelList(lib.module.prebuiltAppConfig?.model_list || []) });
+  const appConfigOf = (lib, backend) => ({
+    ...lib.module.prebuiltAppConfig,
+    model_list: appModelList(lib.module.prebuiltAppConfig?.model_list || []),
+    ...(backend && backend !== 'cache' ? { cacheBackend: backend } : {}),
+    ...(backend === 'opfs' ? { opfsAccessMode: 'auto' } : {}),
+  });
 
   // Drop the worker and the GPU memory it holds.
   function teardown() {
     worker?.terminate();
     worker = engine = null;
     loaded = '';
+    activeBackend = '';
   }
   // The same, and a load in progress fails.
   function reset() {
@@ -343,18 +427,49 @@ export function createLocalRuntime({
       if (!library) chip = progress.start('AI engine', () => cancel());
       chip?.set?.(0.02, 'downloading WebLLM');
       const lib = await race(getLibrary());
-      const model = resolveModel(choice, { f16: gpuInfo.f16, list: appConfigOf(lib).model_list });
+      const model = resolveModel(choice, { f16: gpuInfo.f16, list: appConfigOf(lib).model_list, fallback: fallbackModel });
       if (engine && loaded === model.id) return model;
       if (engine) teardown();
       const downloaded = readDownloaded(storage);
       if (!downloaded.has(model.id)) await persist();
       chip?.finish?.('');
       chip = progress.start(`AI model ${model.label}`, () => cancel());
-      chip?.set?.(0.01, downloaded.has(model.id) ? 'loading' : 'starting the download');
-      worker = createWorker();
-      await race(startWorker(worker, lib.url));
-      engine = new lib.module.WebWorkerMLCEngine(worker, { appConfig: appConfigOf(lib), initProgressCallback: report => chip?.set?.(Math.min(0.99, Number(report?.progress) || 0), phaseOf(report)) });
-      await race(engine.reload(model.id));
+      const backends = resolveBackends();
+      let lastError = null;
+      for (let i = 0; i < backends.length; i++) {
+        const backend = backends[i];
+        chip?.set?.(0.01, downloaded.has(model.id) ? 'loading' : i === 0 ? 'starting the download' : `retrying download (${backend})`);
+        try {
+          const w = createWorker();
+          worker = w;
+          await race(startWorker(w, lib, { throttleDownloads: webKitMode }));
+          w.onerror = (event) => {
+            event.preventDefault?.();
+            const fail = Error(event?.message || 'The AI worker stopped (likely out of GPU memory).');
+            abort?.(fail);
+            teardown();
+          };
+          w.onmessageerror = () => {
+            const fail = Error('The AI worker stopped responding.');
+            abort?.(fail);
+            teardown();
+          };
+          engine = new lib.module.WebWorkerMLCEngine(w, {
+            appConfig: appConfigOf(lib, backend),
+            initProgressCallback: report => chip?.set?.(Math.min(0.99, Number(report?.progress) || 0), phaseOf(report)),
+          });
+          await race(engine.reload(model.id));
+          activeBackend = backend;
+          lastError = null;
+          break;
+        } catch (error) {
+          teardown();
+          lastError = error;
+          if (i + 1 < backends.length && shouldFallbackCacheBackend(error)) continue;
+          throw error;
+        }
+      }
+      if (lastError) throw lastError;
       loaded = model.id;
       downloaded.add(model.id);
       writeDownloaded(storage, downloaded);
@@ -445,24 +560,34 @@ export function createLocalRuntime({
     return modelList(readDownloaded(storage), f16);
   }
 
-  // What is actually in the caches; the kept record is corrected from it.
+  // What is actually in the caches (Cache Storage, OPFS, IndexedDB); the kept record is corrected from it.
   async function downloadedModels() {
     const known = readDownloaded(storage);
     const hasCache = await globalThis.caches?.has?.(LIBRARY_CACHE).catch(() => false);
-    if (!library && !hasCache && !known.size) return known;
+    const hasOpfs = await hasOpfsModelRoot(nav);
+    if (!library && !hasCache && !hasOpfs && !known.size) return known;
     const lib = await getLibrary().catch(() => null);
     if (!lib?.module?.hasModelInCache) return known;
-    const config = appConfigOf(lib);
+    const backends = activeBackend ? [activeBackend, ...resolveBackends().filter(b => b !== activeBackend)] : resolveBackends();
     const ids = new Set([...CATALOGUE.flatMap(m => [m.f16, m.f32]), ...known]);
     const found = new Set();
-    for (const id of ids) if (await lib.module.hasModelInCache(id, config).catch(() => false)) found.add(id);
+    for (const backend of backends) {
+      const config = appConfigOf(lib, backend);
+      for (const id of ids) {
+        if (!found.has(id) && await lib.module.hasModelInCache(id, config).catch(() => false)) found.add(id);
+      }
+    }
     writeDownloaded(storage, found);
     return found;
   }
   async function remove(ids) {
     const lib = await getLibrary();
     if (ids.includes(loaded)) reset();
-    for (const id of ids) await lib.module.deleteModelAllInfoInCache(id, appConfigOf(lib));
+    const backends = new Set([...resolveBackends(), 'cache', 'opfs', 'indexeddb']);
+    for (const backend of backends) {
+      const config = appConfigOf(lib, backend);
+      for (const id of ids) await lib.module.deleteModelAllInfoInCache(id, config).catch(() => { /* Optional. */ });
+    }
     const kept = readDownloaded(storage);
     for (const id of ids) kept.delete(id);
     writeDownloaded(storage, kept);
@@ -470,10 +595,15 @@ export function createLocalRuntime({
   async function removeAll() {
     reset();
     for (const name of [...MODEL_CACHES, LIBRARY_CACHE]) await globalThis.caches?.delete(name).catch(() => { /* Optional. */ });
+    for (const name of MODEL_CACHES) await deleteIndexedDb(idbFactory, name);
+    try {
+      const root = await nav?.storage?.getDirectory?.();
+      await root?.removeEntry?.(OPFS_ROOT_DIR, { recursive: true });
+    } catch { /* Optional. */ }
     writeDownloaded(storage, new Set());
   }
 
-  return { probe, run, cancel, models, reset, capabilities: capabilitiesOf, downloadedModels, remove, removeAll, manage: () => manageDialog({ downloadedModels, remove, removeAll }) };
+  return { probe, run, cancel, models, reset, capabilities: choice => capabilitiesOf(choice, fallbackModel), downloadedModels, remove, removeAll, manage: () => manageDialog({ downloadedModels, remove, removeAll }) };
 }
 
 // Downloaded models…: what is kept on this device, and deleting it.
@@ -524,9 +654,10 @@ async function manageDialog({ downloadedModels, remove, removeAll }) {
 
 // The desktop bridge with the model in this app added, or the model alone on
 // the web. Without WebGPU nothing is added (and the web has no AI, as before).
-export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, runtime = null } = {}) {
+export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, nav = globalThis.navigator, runtime = null } = {}) {
   if (!gpu) return native || null;
-  const local = runtime || createLocalRuntime({ gpu });
+  const local = runtime || createLocalRuntime({ gpu, nav });
+  const fallback = defaultModelId(nav);
   // Where no adapter is found, the website still lists it so using it explains
   // why; the desktop app just leaves it out.
   const entry = async () => ((await local.probe()).adapter || !native ? localEntry() : null);
@@ -551,10 +682,10 @@ export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, ru
     canManage: provider => provider === LOCAL_ID,
     manage: () => local.manage(),
     // Whether a model reads images and its window (0: large, the desktop tools).
-    capabilities: (provider, model) => (provider === LOCAL_ID ? (local.capabilities || capabilitiesOf)(model) : { vision: true, contextTokens: 0 }),
+    capabilities: (provider, model) => (provider === LOCAL_ID ? (local.capabilities ? local.capabilities(model) : capabilitiesOf(model, fallback)) : { vision: true, contextTokens: 0 }),
     smallByDefault: provider => provider === LOCAL_ID,
     // The dropdown's first entry names the model it stands for.
-    defaultLabel: provider => (provider === LOCAL_ID ? `Default: ${CATALOGUE.find(m => m.id === DEFAULT_MODEL).label}` : undefined),
+    defaultLabel: provider => (provider === LOCAL_ID ? `Default: ${CATALOGUE.find(m => m.id === fallback).label.replace(/ \(.*\)$/, '')}` : undefined),
   };
 }
 

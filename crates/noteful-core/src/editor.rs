@@ -117,6 +117,12 @@ pub(crate) enum Edit {
         from: usize,
         to: usize,
     },
+    /// Replaces or clears the PDF background on specific page slots.
+    SetPageBackground {
+        pages: Vec<crate::PageBackground>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pdf: Option<crate::NewPdf>,
+    },
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -343,10 +349,12 @@ impl Editor {
         self.history
             .try_reserve(1)
             .map_err(|e| Error::new(0, e.to_string()))?;
-        let pages_changed = matches!(edit, Edit::InsertPages { .. })
-            || self.history[self.cursor..]
-                .iter()
-                .any(|e| matches!(e, Edit::InsertPages { .. }));
+        let pages_changed = matches!(
+            edit,
+            Edit::InsertPages { .. } | Edit::SetPageBackground { .. }
+        ) || self.history[self.cursor..]
+            .iter()
+            .any(|e| matches!(e, Edit::InsertPages { .. } | Edit::SetPageBackground { .. }));
         self.history.truncate(self.cursor);
         // The edits from here on are replaced, and so is what was kept for them.
         self.added_svg.get_mut().truncate(self.cursor);
@@ -594,7 +602,7 @@ impl Editor {
             } else if !self.markdown.is_empty() {
                 5
             } else if self.history.iter().any(|e| {
-                matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. })
+                matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. } | Edit::SetPageBackground { .. })
                     || matches!(e, Edit::Image { image, .. } if image.text.is_some())
             }) {
                 4
@@ -793,6 +801,9 @@ impl Editor {
                     }
                 }
                 Edit::InsertPages { at, pages, pdf } => editor.insert_pages(at, pages, pdf)?,
+                Edit::SetPageBackground { pages, pdf } => {
+                    editor.set_page_backgrounds(pages, pdf)?
+                }
                 Edit::MovePage { from, to } => editor.move_page(from, to)?,
                 Edit::ResizePage {
                     page,

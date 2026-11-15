@@ -344,14 +344,16 @@ impl Editor {
                 .inserted_spec(slot)
                 .ok_or_else(|| Error::new(0, "Inserted page missing"))?
                 .clone();
-            // A resized inserted page is written at its final size and placement.
+            // A resized or background-changed inserted page is written at its final state.
             let (size, background) = self.page_geometry(slot)?;
             spec.size = size;
-            if let (Some(p), Some(b)) = (spec.pdf.as_mut(), background) {
-                if b.rect != [0., 0., size[0], size[1]] || p.rect.is_some() {
-                    p.rect = Some(b.rect);
-                }
-            }
+            spec.pdf = background.map(|b| crate::PdfPlacement {
+                resource: b.resource_id,
+                page_index: b.page_index,
+                rect: (b.rect != [0., 0., size[0], size[1]]
+                    || spec.pdf.as_ref().and_then(|p| p.rect).is_some())
+                .then_some(b.rect),
+            });
             let spec = &spec;
             let set = page_assets.get(&page.id).cloned().unwrap_or_default();
             added.push((
@@ -754,31 +756,67 @@ impl Editor {
         let pages_reordered = self.history[..self.cursor]
             .iter()
             .any(|e| matches!(e, Edit::MovePage { .. }));
+        let bg_changed: HashSet<usize> = order
+            .iter()
+            .copied()
+            .filter(|&s| {
+                s < originals
+                    && self.history[..self.cursor].iter().any(|e| {
+                        matches!(e, Edit::SetPageBackground { pages, .. } if pages.iter().any(|p| p.page == s))
+                    })
+            })
+            .collect();
         let resized: Vec<usize> = order
             .iter()
             .copied()
             .filter(|&s| {
                 s < originals
+                    && !bg_changed.contains(&s)
                     && self.history[..self.cursor]
                         .iter()
                         .any(|e| matches!(e, Edit::ResizePage { page, .. } if *page == s))
             })
             .collect();
-        // PDFs added with inserted pages become ordinary resources.
-        for edit in &self.history[..self.cursor] {
-            if let Edit::InsertPages { pdf: Some(pdf), .. } = edit {
-                let bytes = self
-                    .added_pdf(&pdf.id)
-                    .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
-                array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
-                blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
+        let mut used_pdfs = HashSet::new();
+        for &slot in &order {
+            if let (_, Some(b)) = self.page_geometry(slot)? {
+                used_pdfs.insert(b.resource_id);
             }
+        }
+        let dead_pdfs: HashSet<String> = package
+            .blocks
+            .iter()
+            .filter(|b| b.kind == "pdf" && !used_pdfs.contains(&b.id))
+            .map(|b| b.id.clone())
+            .collect();
+        if !dead_pdfs.is_empty() {
+            blocks.retain(|(id, _)| !dead_pdfs.contains(id));
+            array(&mut index, 3)?.retain(|v| v.as_text().is_none_or(|id| !dead_pdfs.contains(id)));
+        }
+        // PDFs added with inserted or background-changed pages become ordinary resources,
+        // omitting any resource that no page in the final note uses.
+        let mut seen_added = HashSet::new();
+        for edit in &self.history[..self.cursor] {
+            let pdf = match edit {
+                Edit::InsertPages { pdf: Some(pdf), .. }
+                | Edit::SetPageBackground { pdf: Some(pdf), .. } => pdf,
+                _ => continue,
+            };
+            if !used_pdfs.contains(&pdf.id) || !seen_added.insert(pdf.id.clone()) {
+                continue;
+            }
+            let bytes = self
+                .added_pdf(&pdf.id)
+                .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
+            array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
+            blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
         }
         if !page_assets.is_empty()
             || layers_changed
             || pages_inserted
             || pages_reordered
             || !resized.is_empty()
+            || !bg_changed.is_empty()
         {
             for b in package
                 .blocks
@@ -811,6 +849,27 @@ impl Editor {
                                 if let Some(b) = &background {
                                     set(bg, 9, 0x23, V::Rect(b.rect), time);
                                 }
+                            }
+                        }
+                    }
+                }
+                for &slot in &bg_changed {
+                    let id = self.page(slot)?.id.clone();
+                    let (size, background) = self.page_geometry(slot)?;
+                    let spec = crate::NewPage {
+                        size,
+                        pdf: background.map(|b| crate::PdfPlacement {
+                            resource: b.resource_id,
+                            page_index: b.page_index,
+                            rect: Some(b.rect),
+                        }),
+                        words: Vec::new(),
+                    };
+                    let bg_fields = Self::inserted_background(&spec);
+                    for v in array(nested(&mut fields, 2)?, 0)? {
+                        if let V::Fields(fs) = v {
+                            if field(fs, 1).and_then(V::as_text) == Some(id.as_str()) {
+                                set(fs, 4, 7, V::Fields(bg_fields.clone()), time);
                             }
                         }
                     }

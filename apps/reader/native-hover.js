@@ -19,12 +19,28 @@ export function installNativeHoverBridge({
 
   let lastTrustedHoverAt = -Infinity;
   let hoverTarget = null;
+  let inContact = false;
 
+  const onTrustedPenDown = (e) => {
+    if (e?.isTrusted && e.pointerType === 'pen') {
+      inContact = true;
+      hoverTarget = null;
+    }
+  };
+  const onTrustedPenUp = (e) => {
+    if (e?.isTrusted && e.pointerType === 'pen') inContact = false;
+  };
   const onTrustedPenHover = (e) => {
-    if (e?.isTrusted && e.pointerType === 'pen' && !e.buttons) {
+    if (!e?.isTrusted || e.pointerType !== 'pen') return;
+    if (e.buttons) inContact = true;
+    else {
+      inContact = false;
       lastTrustedHoverAt = now();
     }
   };
+  win.addEventListener('pointerdown', onTrustedPenDown, { capture: true, passive: true });
+  win.addEventListener('pointerup', onTrustedPenUp, { capture: true, passive: true });
+  win.addEventListener('pointercancel', onTrustedPenUp, { capture: true, passive: true });
   win.addEventListener('pointermove', onTrustedPenHover, { capture: true, passive: true });
   win.addEventListener('pointerover', onTrustedPenHover, { capture: true, passive: true });
 
@@ -52,6 +68,10 @@ export function installNativeHoverBridge({
     const cx = Number(x);
     const cy = Number(y);
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) return false;
+    // Never replay delayed native hover events while the stylus is touching the glass:
+    // synthetic buttons=0 pointermove during contact would look like a hover release and
+    // make the next contact move look like a pen-button press.
+    if (inContact) return false;
     if (phase === 'move' && now() - lastTrustedHoverAt < dedupeMs) return false;
 
     const target = phase === 'exit'
@@ -80,9 +100,13 @@ export function installNativeHoverBridge({
 
   globalObj.__notecompleteNativeHover = bridge;
   return () => {
+    win.removeEventListener('pointerdown', onTrustedPenDown, { capture: true });
+    win.removeEventListener('pointerup', onTrustedPenUp, { capture: true });
+    win.removeEventListener('pointercancel', onTrustedPenUp, { capture: true });
     win.removeEventListener('pointermove', onTrustedPenHover, { capture: true });
     win.removeEventListener('pointerover', onTrustedPenHover, { capture: true });
     if (globalObj.__notecompleteNativeHover === bridge) delete globalObj.__notecompleteNativeHover;
     hoverTarget = null;
+    inContact = false;
   };
 }

@@ -163,8 +163,9 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
 
       const dateStr = doc.modifiedTime ? new Date(doc.modifiedTime).toLocaleDateString() : '';
       const sizeStr = doc.size ? mb(doc.size) : '';
+      const loc = trail.length ? `Internet Archive / ${trail.at(-1)}` : itemData?.title ? `Internet Archive / ${itemData.title}` : 'Internet Archive';
       const detail = document.createElement('span');
-      detail.textContent = [dateStr, sizeStr].filter(Boolean).join(' · ') || 'Internet Archive';
+      detail.textContent = [loc, dateStr, sizeStr].filter(Boolean).join(' · ');
 
       meta.append(name, detail);
 
@@ -290,7 +291,8 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
       if (bar) bar.hidden = true;
 
       if (library && file) {
-        await library.keep({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name, name: doc.name, size: file.size }, file).catch((e) => console.warn('Archive keep:', e));
+        const folderName = trail.length ? trail.at(-1) : itemData?.title || '';
+        await library.keep({ source: 'archive', archiveId: currentRepo, path: doc.path || doc.name, name: doc.name, size: file.size, folderName }, file).catch((e) => console.warn('Archive keep:', e));
       }
 
       const opened = await open(file, { source: 'archive', id: currentRepo, path: doc.path });

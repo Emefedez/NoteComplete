@@ -244,6 +244,41 @@ impl EditorSession {
         }
         Ok(self.inner.resize_pages(&list)?)
     }
+    /// Every PDF resource available in the note as JSON [{id, bytes}].
+    pub fn pdf_resources(&self) -> Result<String, Failure> {
+        let list: Vec<_> = self
+            .inner
+            .pdf_resources()
+            .into_iter()
+            .map(|(id, bytes)| json!({ "id": id, "bytes": bytes }))
+            .collect();
+        Ok(serde_json::to_string(&list)?)
+    }
+    /// Replace or clear PDF backgrounds on one or more display pages as one undoable edit:
+    /// `pages` is JSON [{"page", "size": [w, h], "pdf": {"resource", "page_index", "rect"} | null}].
+    pub fn set_page_backgrounds(
+        &mut self,
+        pages: &str,
+        pdf: Option<String>,
+    ) -> Result<(), Failure> {
+        let wanted: Vec<serde_json::Value> = serde_json::from_str(pages)?;
+        let mut list = Vec::with_capacity(wanted.len());
+        let bad = || Failure::from("Invalid background change");
+        for w in wanted {
+            let display = w["page"].as_u64().ok_or_else(bad)? as usize;
+            let size: [f64; 2] = serde_json::from_value(w["size"].clone()).map_err(|_| bad())?;
+            let placement: Option<noteful_core::PdfPlacement> =
+                serde_json::from_value(w["pdf"].clone()).map_err(|_| bad())?;
+            list.push(noteful_core::PageBackground {
+                page: self.slot(display)?,
+                size,
+                pdf: placement,
+            });
+        }
+        let pdf: Option<noteful_core::NewPdf> =
+            pdf.map(|p| serde_json::from_str(&p)).transpose()?;
+        Ok(self.inner.set_page_backgrounds(list, pdf)?)
+    }
     /// Open a `.notecomplete` archive: the note and its Markdown notes.
     pub fn open_notecomplete(data: &[u8]) -> Result<EditorSession, Failure> {
         Ok(Self {

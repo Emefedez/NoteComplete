@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {IncomingFiles,incomingFile,incomingName,OPEN_TYPES,OWN_EXTENSIONS,CARRIER_TYPES} from './incoming-files.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 test('file intents accept local grants and reject remote or malformed links',()=>{
- assert.deepEqual(incomingFile('content://downloads/42'),{uri:'content://downloads/42',name:'Imported file'});
+ assert.deepEqual(incomingFile('content://downloads/42'),{uri:'content://downloads/42',name:'Imported file',origin:'Downloads'});
  assert.equal(incomingFile('file:///tmp/My%20note.noteful').name,'My note.noteful');
  for(const uri of [null,'https://example.com/a.noteful','javascript:alert(1)','exp://192.0.2.1:8081','content://['])assert.equal(incomingFile(uri),null);
 });
@@ -63,6 +63,16 @@ test('large files go to the reader as a loopback path, and their copy is release
  const queue=new IncomingFiles({read:async()=>({url:'/incoming/'+'a'.repeat(32),token:'a'.repeat(32)}),post:m=>sent.push(m),error:()=>{},release:f=>released.push(f.data.token)});
  queue.open('content://com.whatsapp.provider.media/item/1');queue.setReady(true);await settle();
  assert.equal(sent[0].url,'/incoming/'+'a'.repeat(32));assert.equal(sent[0].base64,undefined);
+ assert.equal(sent[0].origin,'WhatsApp');
  queue.setReady(false);queue.setReady(true);assert.equal(sent.length,2,'a reload is sent the same path');assert.deepEqual(released,[]);
  queue.acknowledge(1);assert.deepEqual(released,['a'.repeat(32)]);
+});
+
+test('incomingOrigin identifies apps and storage folders from Android URIs',async()=>{
+ const {incomingOrigin}=await import('./incoming-files.mjs');
+ assert.equal(incomingOrigin('content://com.whatsapp.provider.media/item/1'),'WhatsApp');
+ assert.equal(incomingOrigin('content://org.telegram.messenger.provider/media/1'),'Telegram');
+ assert.equal(incomingOrigin('content://com.android.providers.downloads.documents/document/42'),'Downloads');
+ assert.equal(incomingOrigin('content://com.android.externalstorage.documents/document/primary%3ADocuments%2FBiochemistry%2Fnotes.noteful'),'Biochemistry');
+ assert.equal(incomingOrigin('file:///storage/emulated/0/Download/exam.pdf'),'Download');
 });

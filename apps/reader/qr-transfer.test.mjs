@@ -119,3 +119,47 @@ test('large compressed payloads round-trip without stream backpressure deadlock'
   assert.equal(result?.done, true);
   assert.deepEqual(result.payload, envelope);
 });
+
+test('multi-frame protocol starts with Info QR (0/N), keeps slots strictly ordered, and flags skipped slots until cycled back', async () => {
+  const envelope = {
+    kind: 'note',
+    name: 'Calculus.nfedit',
+    mime: 'application/json',
+    base64: 'x'.repeat(600),
+  };
+  const encoded = await encodeQrFrames(envelope, { maxChunk: 100, compress: false, id: 'calc1' });
+  assert.ok(encoded.total >= 4);
+  assert.match(encoded.infoFrame, new RegExp(`^NCQR1\\|calc1\\|0/${encoded.total}\\|[0-9a-f]{8}\\|`));
+  assert.equal(encoded.streamFrames[0], encoded.infoFrame);
+  assert.deepEqual(encoded.streamFrames.slice(1), encoded.frames);
+
+  const rx = new QrReceiver();
+  const infoStep = await rx.accept(encoded.infoFrame);
+  assert.equal(infoStep.kind, 'info');
+  assert.equal(infoStep.total, encoded.total);
+  assert.equal(infoStep.received, 0);
+  assert.match(infoStep.meta.title, /Calculus\.nfedit/);
+
+  // Scan segment 1, skip segment 2, scan segment 3: slot 2 MUST remain empty and be flagged skipped.
+  const s1 = await rx.accept(encoded.frames[0]);
+  assert.equal(s1.index, 1);
+  assert.deepEqual(s1.skipped, []);
+
+  const s3 = await rx.accept(encoded.frames[2]);
+  assert.equal(s3.index, 3);
+  assert.equal(s3.received, 2);
+  assert.deepEqual(s3.receivedSlots, [1, 3]);
+  assert.deepEqual(s3.skipped, [2]);
+  assert.ok(s3.missing.includes(2));
+
+  // Cycle rest except segment 2, then return to segment 2 on next pass.
+  for (let i = 3; i < encoded.frames.length; i++) await rx.accept(encoded.frames[i]);
+  const s1Again = await rx.accept(encoded.frames[0]);
+  assert.equal(s1Again.done, false);
+  assert.deepEqual(s1Again.skipped, [2]);
+
+  const doneStep = await rx.accept(encoded.frames[1]);
+  assert.equal(doneStep.done, true);
+  assert.equal(doneStep.index, 2);
+  assert.deepEqual(doneStep.payload, envelope);
+});

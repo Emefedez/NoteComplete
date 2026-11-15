@@ -71,6 +71,7 @@ const paths = {
  hash:'M5 9h14M5 15h14M10 4 8 20M16 4l-2 16',
  help:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5M12 17h.01',
  play:'M8 5v14l11-7Z',
+ pause:'M8 5h3v14H8zM13 5h3v14h-3z',
  keyboard:'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
  // Math keypad: a curve on axes, delete back, and the next / previous empty place.
  graph:'M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6',

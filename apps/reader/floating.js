@@ -180,12 +180,23 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
 
   // Drag by the head (not its controls).
   head.addEventListener('pointerdown', down => {
-    if (!enabled() || down.button !== 0 || down.target.closest('button, input, select, textarea, a, [contenteditable="true"]')) return;
+    if (!enabled() || down.button !== 0 || !down.buttons || down.target.closest('button, input, select, textarea, a, [contenteditable="true"]')) return;
     const start = current(), x = down.clientX, y = down.clientY;
-    const move = e => apply({ ...start, left: start.left + e.clientX - x, top: start.top + e.clientY - y });
-    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); apply(current(), true); el.classList.remove('dragging'); };
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      removeEventListener('pointercancel', up);
+      removeEventListener('blur', up);
+      apply(current(), true);
+      el.classList.remove('dragging');
+    };
+    const move = e => {
+      if (e.pointerId !== down.pointerId) return;
+      if (!e.buttons) return up();
+      apply({ ...start, left: start.left + e.clientX - x, top: start.top + e.clientY - y });
+    };
     el.classList.add('dragging');
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up); addEventListener('blur', up);
     down.preventDefault();
   });
   head.classList.add('window-head');
@@ -195,7 +206,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   // keep their own clicks.
   el.addEventListener('pointerdown', down => {
     const mod = down.ctrlKey || down.metaKey, moving = mod && down.button === 0, sizing = mod && down.button === 2;
-    if (!enabled() || down.altKey || !(moving || sizing) || !visible()) return;
+    if (!enabled() || down.altKey || !(moving || sizing) || !down.buttons || !visible()) return;
     if (down.target.closest('input, textarea, select, [contenteditable="true"], .panel-grip')) return;
     const start = current(), a = area(), r = el.getBoundingClientRect();
     let edges = (down.clientX < r.left + r.width / 2 ? 'l' : 'r') + (down.clientY < r.top + r.height / 2 ? 't' : 'b');
@@ -205,13 +216,8 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     el.setPointerCapture(down.pointerId);
     const cls = moving ? 'dragging' : 'resizing';
     el.classList.add(cls);
-    const move = e => {
-      if (e.pointerId !== down.pointerId) return;
-      const dx = e.clientX - down.clientX, dy = e.clientY - down.clientY;
-      apply(moving ? { ...start, left: start.left + dx, top: start.top + dy } : resizeRect(start, dx, dy, edges, min, a));
-    };
     const up = e => {
-      if (e.pointerId !== down.pointerId) return;
+      if (e?.pointerId !== undefined && e.pointerId !== down.pointerId) return;
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
       el.classList.remove(cls);
       apply(current(), true);
@@ -219,6 +225,12 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       const swallow = c => { c.stopPropagation(); c.preventDefault(); };
       el.addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => el.removeEventListener('click', swallow, { capture: true }), 0);
+    };
+    const move = e => {
+      if (e.pointerId !== down.pointerId) return;
+      if (!e.buttons) return up(e);
+      const dx = e.clientX - down.clientX, dy = e.clientY - down.clientY;
+      apply(moving ? { ...start, left: start.left + dx, top: start.top + dy } : resizeRect(start, dx, dy, edges, min, a));
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   }, true);
@@ -235,12 +247,17 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     grip.setAttribute('aria-hidden', 'true');
     el.append(grip);
     grip.onpointerdown = down => {
-      if (!enabled() || isCompact() && /[tb]/.test(edges)) return;
+      if (!enabled() || !down.buttons || isCompact() && /[tb]/.test(edges)) return;
       down.preventDefault();
       grip.setPointerCapture(down.pointerId);
       const start = current(), a = area();
-      grip.onpointermove = e => apply(resizeRect(start, e.clientX - down.clientX, e.clientY - down.clientY, edges, min, a));
-      grip.onpointerup = () => { grip.onpointermove = grip.onpointerup = null; apply(current(), true); };
+      const finish = () => { grip.onpointermove = grip.onpointerup = grip.onpointercancel = null; apply(current(), true); };
+      grip.onpointermove = e => {
+        if (e.pointerId !== down.pointerId) return;
+        if (!e.buttons) return finish();
+        apply(resizeRect(start, e.clientX - down.clientX, e.clientY - down.clientY, edges, min, a));
+      };
+      grip.onpointerup = grip.onpointercancel = finish;
     };
   }
 

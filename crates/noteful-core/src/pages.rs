@@ -70,6 +70,17 @@ pub struct NewPdf {
     pub id: String,
     pub base64: String,
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PageBackground {
+    /// Internal slot of the page to change.
+    pub page: usize,
+    /// Page size in Noteful page units.
+    pub size: [f64; 2],
+    /// New PDF placement (`None` clears the PDF background to plain paper).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pdf: Option<PdfPlacement>,
+}
 
 fn finite(values: &[f64]) -> bool {
     values.iter().all(|v| v.is_finite() && v.abs() <= 1e6)
@@ -188,21 +199,29 @@ impl Editor {
         let mut pdfs = Vec::new();
         let mut slot = self.original_pages();
         for edit in &self.history {
-            if let Edit::InsertPages {
-                pages: added, pdf, ..
-            } = edit
-            {
-                if let Some(pdf) = pdf {
+            match edit {
+                Edit::InsertPages {
+                    pages: added, pdf, ..
+                } => {
+                    if let Some(pdf) = pdf {
+                        let bytes = STANDARD
+                            .decode(&pdf.base64)
+                            .map_err(|e| Error::new(0, e.to_string()))?;
+                        pdfs.push((pdf.id.clone(), bytes));
+                    }
+                    for page in added {
+                        pages.push(blank_page(slot, self.source.len(), page));
+                        words.push(page.words.clone());
+                        slot += 1;
+                    }
+                }
+                Edit::SetPageBackground { pdf: Some(pdf), .. } => {
                     let bytes = STANDARD
                         .decode(&pdf.base64)
                         .map_err(|e| Error::new(0, e.to_string()))?;
                     pdfs.push((pdf.id.clone(), bytes));
                 }
-                for page in added {
-                    pages.push(blank_page(slot, self.source.len(), page));
-                    words.push(page.words.clone());
-                    slot += 1;
-                }
+                _ => {}
             }
         }
         self.inserted = pages;
@@ -265,24 +284,129 @@ impl Editor {
         }
         self.commit(Edit::InsertPages { at, pages, pdf })
     }
-    /// A slot's size and PDF placement after the applied resizes.
+    /// Existing PDF resource whose bytes match `bytes` verbatim (for deduplication).
+    fn find_matching_pdf(&self, bytes: &[u8]) -> Option<String> {
+        for a in &self.scene.pdf_assets {
+            if self.source.get(a.offset..a.offset + a.bytes) == Some(bytes) {
+                return Some(a.id.clone());
+            }
+        }
+        for (id, existing) in &self.added_pdfs {
+            if existing.as_slice() == bytes {
+                return Some(id.clone());
+            }
+        }
+        None
+    }
+    /// Every PDF resource available in this note (`id`, byte size), excluding duplicates.
+    pub fn pdf_resources(&self) -> Vec<(String, usize)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for a in &self.scene.pdf_assets {
+            if seen.insert(a.id.clone()) {
+                out.push((a.id.clone(), a.bytes));
+            }
+        }
+        for edit in &self.history[..self.cursor] {
+            let pdf = match edit {
+                Edit::InsertPages { pdf: Some(p), .. }
+                | Edit::SetPageBackground { pdf: Some(p), .. } => p,
+                _ => continue,
+            };
+            if let Some(bytes) = self.added_pdf(&pdf.id) {
+                if seen.insert(pdf.id.clone()) {
+                    out.push((pdf.id.clone(), bytes.len()));
+                }
+            }
+        }
+        out
+    }
+    /// Replace or clear the PDF background on one or more pages (slots) as one undoable edit.
+    pub fn set_page_backgrounds(
+        &mut self,
+        mut pages: Vec<PageBackground>,
+        mut pdf: Option<NewPdf>,
+    ) -> Result<()> {
+        if pages.is_empty() || pages.len() > 2000 {
+            return Err(Error::new(0, "Invalid background change"));
+        }
+        let mut seen_slots = std::collections::HashSet::new();
+        for change in &pages {
+            self.page(change.page)?;
+            if !seen_slots.insert(change.page) {
+                return Err(Error::new(0, "Duplicate page in background change"));
+            }
+        }
+        if let Some(incoming) = &pdf {
+            let bytes = STANDARD
+                .decode(&incoming.base64)
+                .map_err(|e| Error::new(0, e.to_string()))?;
+            if !bytes.starts_with(b"%PDF-")
+                || incoming.id.is_empty()
+                || incoming.id.len() > 64
+                || !incoming
+                    .id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            {
+                return Err(Error::new(0, "Invalid PDF background"));
+            }
+            if let Some(existing_id) = self.find_matching_pdf(&bytes) {
+                for change in &mut pages {
+                    if let Some(p) = &mut change.pdf {
+                        if p.resource == incoming.id {
+                            p.resource = existing_id.clone();
+                        }
+                    }
+                }
+                pdf = None;
+            } else if self.has_pdf(&incoming.id) {
+                return Err(Error::new(0, "Invalid PDF background"));
+            }
+        }
+        for change in &pages {
+            if !finite(&change.size) || change.size.iter().any(|v| *v < 10.) {
+                return Err(Error::new(0, "Invalid page size"));
+            }
+            if let Some(p) = &change.pdf {
+                let known =
+                    self.has_pdf(&p.resource) || pdf.as_ref().is_some_and(|n| n.id == p.resource);
+                let rect_ok = p.rect.is_none_or(|r| finite(&r) && r[2] > 0. && r[3] > 0.);
+                if !known || !rect_ok || p.page_index > 100_000 {
+                    return Err(Error::new(0, "Invalid PDF placement"));
+                }
+            }
+        }
+        self.commit(Edit::SetPageBackground { pages, pdf })
+    }
+    /// A slot's size and PDF placement after the applied resizes and background changes.
     pub(crate) fn page_geometry(&self, slot: usize) -> Result<([f64; 2], Option<PdfBackground>)> {
         let p = self.page(slot)?;
         let (mut size, mut background) = (p.size, p.pdf_background.clone());
         for edit in &self.history[..self.cursor] {
-            if let Edit::ResizePage {
-                page,
-                size: s,
-                pdf_rect,
-                ..
-            } = edit
-            {
-                if *page == slot {
+            match edit {
+                Edit::ResizePage {
+                    page,
+                    size: s,
+                    pdf_rect,
+                    ..
+                } if *page == slot => {
                     size = *s;
                     if let (Some(b), Some(r)) = (background.as_mut(), pdf_rect) {
                         b.rect = *r;
                     }
                 }
+                Edit::SetPageBackground { pages, .. } => {
+                    if let Some(change) = pages.iter().find(|c| c.page == slot) {
+                        size = change.size;
+                        background = change.pdf.as_ref().map(|p| PdfBackground {
+                            resource_id: p.resource.clone(),
+                            page_index: p.page_index,
+                            rect: p.rect.unwrap_or([0., 0., size[0], size[1]]),
+                        });
+                    }
+                }
+                _ => {}
             }
         }
         Ok((size, background))

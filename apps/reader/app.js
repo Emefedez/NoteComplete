@@ -16,7 +16,7 @@ import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
-import { Library } from "./library.js";
+import { Library, entrySourceLabel } from "./library.js";
 import { homeScreen } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
@@ -36,7 +36,7 @@ import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
-import { pageExporter } from "./page-export.js";
+import { pageExporter, packPages } from "./page-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
@@ -49,6 +49,7 @@ import { decorateIcons, icon } from "./icons.js";
 import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf, copyCanvas } from "./pdf-background.js";
 import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
+import { buildPageBackgroundChanges, bytesToBase64, formatBytes, parsePageSelection, shouldSuggestCompact, usedPdfPageIndices } from "./page-background.js";
 import { handwritingConverter } from "./convert.js";
 import { agentConnector } from "./agents.js";
 import { AudioController } from "./audio.js";
@@ -806,32 +807,45 @@ function buildPageList() {
     label.className = "page-label";
     label.textContent = `Page ${panel.index + 1}`;
     meta.append(label);
-    if (canReorder) {
+    if (!doc?.canvas) {
       const actions = document.createElement("div");
       actions.className = "page-actions";
-      const up = document.createElement("button");
-      up.type = "button";
-      up.className = "icon-button page-move";
-      up.disabled = panel.index === 0;
-      up.title = "Move page up";
-      up.setAttribute("aria-label", `Move page ${panel.index + 1} up`);
-      up.append(icon("arrowUp"));
-      up.onclick = (e) => {
+      const bg = document.createElement("button");
+      bg.type = "button";
+      bg.className = "icon-button page-move";
+      bg.title = `Change PDF background on page ${panel.index + 1}…`;
+      bg.setAttribute("aria-label", `Change PDF background on page ${panel.index + 1}`);
+      bg.append(icon("note"));
+      bg.onclick = (e) => {
         e.stopPropagation();
-        movePage(panel.index, panel.index - 1);
+        openPageBackground(String(panel.index + 1));
       };
-      const down = document.createElement("button");
-      down.type = "button";
-      down.className = "icon-button page-move";
-      down.disabled = panel.index === panels.length - 1;
-      down.title = "Move page down";
-      down.setAttribute("aria-label", `Move page ${panel.index + 1} down`);
-      down.append(icon("arrowDown"));
-      down.onclick = (e) => {
-        e.stopPropagation();
-        movePage(panel.index, panel.index + 1);
-      };
-      actions.append(up, down);
+      actions.append(bg);
+      if (canReorder) {
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "icon-button page-move";
+        up.disabled = panel.index === 0;
+        up.title = "Move page up";
+        up.setAttribute("aria-label", `Move page ${panel.index + 1} up`);
+        up.append(icon("arrowUp"));
+        up.onclick = (e) => {
+          e.stopPropagation();
+          movePage(panel.index, panel.index - 1);
+        };
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "icon-button page-move";
+        down.disabled = panel.index === panels.length - 1;
+        down.title = "Move page down";
+        down.setAttribute("aria-label", `Move page ${panel.index + 1} down`);
+        down.append(icon("arrowDown"));
+        down.onclick = (e) => {
+          e.stopPropagation();
+          movePage(panel.index, panel.index + 1);
+        };
+        actions.append(up, down);
+      }
       meta.append(actions);
     }
     item.append(button, meta);
@@ -1596,6 +1610,7 @@ function edited(op, args, result) {
     }
     const msg = op === "resizePage" ? "Page resized. You can undo this change."
       : op === "resizePages" ? `All ${result.pages} pages resized. One undo restores them.`
+      : op === "setPageBackgrounds" ? `Updated background on ${args.pages.length} page${args.pages.length === 1 ? "" : "s"}. One undo restores it.`
       : op === "movePage" ? "Page moved. You can undo this change."
       : undefined;
     restructure(result, focus, msg);
@@ -1608,10 +1623,18 @@ function showEdit(op, args, result) {
   layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
   const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  const affected = op === "setPageBackgrounds" && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
+  const bgDirty = op === "setPageBackgrounds" || op === "undo" || op === "redo";
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
+    if (affected && !affected.has(p.index)) continue;
     p.edits = pageEdits(p) + 1;
     p.token++;
+    if (bgDirty) {
+      if (!(p.near || p.index === page)) p.view = null;
+      p.thumbnailReady = false;
+      updatePagePreview(p, true);
+    }
     if (!(p.near || p.index === page)) continue;
     // Strokes in quick succession: the page is redrawn once the pen pauses. Until then the
     // strokes stay on screen as drawn, and the next one starts at once instead of waiting
@@ -1620,6 +1643,8 @@ function showEdit(op, args, result) {
     if (op === "draw" && !args.line?.shape && p.index === result.page) laterRender(p, result);
     else renderPage(p, p.index === result.page ? result : undefined);
   }
+  if (op === "setPageBackgrounds" && Array.isArray(args.pages))
+    status(`Updated background on ${args.pages.length} page${args.pages.length === 1 ? "" : "s"}. One undo restores it.`);
 }
 // A drawn line joins the page on screen as one element, and the page is not drawn again,
 // when the page shows exactly the view the line was put into (viewAfter). False, with
@@ -3635,11 +3660,11 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("open").onclick = $("emptyOpen").onclick = () => openLocal();
-function openFileObject(file) {
-  if (file) void openImportedFile(file);
+function openFileObject(file, meta = { origin: "File picker" }) {
+  if (file) void openImportedFile(file, meta);
 }
 $("file").onchange = (e) => {
-  openFileObject(e.target.files[0]);
+  openFileObject(e.target.files[0], { origin: "File picker" });
   e.target.value = "";
 };
 $("importImage").onclick = () => $("imageFile").click();
@@ -3658,7 +3683,7 @@ for (const event of ["dragover", "drop"])
       const bytes = new Uint8Array(await files[0].slice(0, 64).arrayBuffer());
       if (doc && fileKind(files[0].name, bytes) === "image")
         await importImages(files);
-      else await openImportedFile(files[0]);
+      else await openImportedFile(files[0], { origin: "Dropped file" });
     } catch (error) {
       status(error.message, true);
     }
@@ -4708,7 +4733,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .notecomp only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -4717,7 +4742,7 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.notecomp)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "exportStudyQr", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
@@ -5254,6 +5279,268 @@ $("insertConfirm").onclick = async () => {
   $("insertDialog").close();
   await action("insertPages", { at, pages, pdf, focus: at });
 };
+// Pages -> Change PDF background: swap, reuse, or clear the PDF on selected pages while keeping size sane.
+let pageBgState = { existing: [], uploaded: null, sizesCache: new Map(), compactTouched: false };
+async function readPdfSizes(bytes) {
+  const pdf = await openPdf(bytes.slice());
+  const sizes = [];
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
+      sizes.push([viewport.width, viewport.height]);
+      p.cleanup();
+    }
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+  return sizes;
+}
+async function ensureBgPdfSizes(sourceKey) {
+  if (sourceKey === "none") return [];
+  if (sourceKey === "uploaded") return pageBgState.uploaded?.sizes || [];
+  if (pageBgState.sizesCache.has(sourceKey)) return pageBgState.sizesCache.get(sourceKey);
+  if (!backgrounds) return [];
+  const pdf = await backgrounds.document(sourceKey);
+  const sizes = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
+    sizes.push([viewport.width, viewport.height]);
+    p.cleanup();
+  }
+  pageBgState.sizesCache.set(sourceKey, sizes);
+  return sizes;
+}
+async function extractPdfPagesAsCompactPdf(bytes, indices, title) {
+  const src = await openPdf(bytes.slice());
+  const drawn = [];
+  try {
+    for (const i of indices) {
+      const p = await src.getPage(i + 1);
+      const vp1 = p.getViewport({ scale: 1 });
+      const scale = Math.min(2.2, Math.max(1, 2200 / Math.max(vp1.width, vp1.height)));
+      const viewport = p.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await p.render({ canvasContext: ctx, viewport }).promise;
+      p.cleanup();
+      const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not render PDF page."))), "image/jpeg", 0.86),
+      );
+      drawn.push({
+        bytes: new Uint8Array(await blob.arrayBuffer()),
+        widthPx: canvas.width,
+        heightPx: canvas.height,
+        widthPt: vp1.width,
+        heightPt: vp1.height,
+      });
+      canvas.width = canvas.height = 0;
+    }
+  } finally {
+    await src.loadingTask.destroy();
+  }
+  const { data, layout } = packPages(drawn);
+  return await call("jpegPagesPdf", { data, layout, title });
+}
+function updatePageBgDialog() {
+  const sourceVal = $("pageBgSource").value;
+  const isNone = sourceVal === "none";
+  const isUploaded = sourceVal === "uploaded" && !!pageBgState.uploaded;
+  $("pageBgPdfOptions").hidden = isNone;
+  $("pageBgPicked").hidden = !isUploaded;
+  if (isUploaded) {
+    const up = pageBgState.uploaded;
+    $("pageBgPicked").textContent = `${up.name} (${up.sizes.length} page${up.sizes.length === 1 ? "" : "s"}, ${formatBytes(up.bytes.length)})`;
+  }
+  const parsed = parsePageSelection($("pageBgTarget").value, doc?.pages || 0);
+  $("pageBgError").hidden = !parsed.error;
+  $("pageBgError").textContent = parsed.error || "";
+  const sizes = isNone ? [] : isUploaded ? pageBgState.uploaded.sizes : pageBgState.sizesCache.get(sourceVal) || [];
+  if (!isNone && sizes.length) $("pageBgFrom").max = String(sizes.length);
+  const noteEl = $("pageBgSizeNote");
+  noteEl.classList.remove("warn");
+  if (isNone) {
+    $("pageBgCompactRow").hidden = true;
+    noteEl.textContent = parsed.indices
+      ? `Clears PDF background on ${parsed.indices.length} page${parsed.indices.length === 1 ? "" : "s"}. Unused PDFs are pruned when exporting or compacting.`
+      : "Clears the PDF background to plain paper.";
+    $("pageBgApply").disabled = !!parsed.error;
+    return;
+  }
+  if (!sizes.length) {
+    $("pageBgCompactRow").hidden = true;
+    noteEl.textContent = isUploaded ? "" : "Loading PDF info…";
+    $("pageBgApply").disabled = !!parsed.error || (sourceVal === "uploaded" && !isUploaded);
+    return;
+  }
+  const startPdf = Math.max(0, Math.min(sizes.length - 1, (Number($("pageBgFrom").value) || 1) - 1));
+  const used = usedPdfPageIndices({
+    noteCount: parsed.indices?.length || 1,
+    pdfPageCount: sizes.length,
+    startPdfPage: startPdf,
+    mode: $("pageBgMode").value,
+  });
+  if (isUploaded) {
+    const up = pageBgState.uploaded;
+    const suggest = shouldSuggestCompact(up.bytes.length, up.sizes.length, used.length);
+    $("pageBgCompactRow").hidden = used.length >= up.sizes.length;
+    if (!pageBgState.compactTouched) $("pageBgCompact").checked = suggest;
+    const compact = !$("pageBgCompactRow").hidden && $("pageBgCompact").checked;
+    if (compact) {
+      noteEl.textContent = `Extracts ${used.length} of ${up.sizes.length} pages (~${formatBytes(used.length * 160 * 1024)} est. instead of ${formatBytes(up.bytes.length)}).`;
+    } else if (suggest) {
+      noteEl.textContent = `Warning: keeping full PDF embeds ${formatBytes(up.bytes.length)} even though only ${used.length} of ${up.sizes.length} pages are used.`;
+      noteEl.classList.add("warn");
+    } else {
+      noteEl.textContent = `Embeds ${formatBytes(up.bytes.length)}${$("pageBgMode").value === "sequence" && parsed.indices && startPdf + parsed.indices.length > sizes.length ? " (PDF reaches its last page and repeats it)" : ""}.`;
+      if (up.bytes.length >= 4 * 1024 * 1024) noteEl.classList.add("warn");
+    }
+  } else {
+    $("pageBgCompactRow").hidden = true;
+    const existing = pageBgState.existing.find((e) => e.id === sourceVal);
+    noteEl.textContent = `Reuses PDF already in note (${existing ? formatBytes(existing.bytes) : "in note"}, +0 B added).`;
+  }
+  $("pageBgApply").disabled = !!parsed.error;
+}
+async function openPageBackground(initialTarget = String(page + 1)) {
+  if (!doc || doc.canvas || busy()) return;
+  pageBgState = {
+    existing: await call("pdfResources").catch(() => []),
+    uploaded: null,
+    sizesCache: pageBgState.sizesCache,
+    compactTouched: false,
+  };
+  const select = $("pageBgSource");
+  select.replaceChildren();
+  const currentRes = panels[page]?.view?.pdf_background?.resource_id;
+  for (const [idx, item] of pageBgState.existing.entries()) {
+    const label = `${item.id === currentRes ? "Current PDF in note" : `PDF #${idx + 1} in note`} (${formatBytes(item.bytes)}, +0 B)`;
+    select.add(new Option(label, item.id));
+  }
+  select.add(new Option("Plain white paper (clear PDF)", "none"));
+  if (currentRes && pageBgState.existing.some((e) => e.id === currentRes)) select.value = currentRes;
+  $("pageBgTarget").value = initialTarget;
+  $("pageBgFrom").value = String((panels[page]?.view?.pdf_background?.page_index ?? 0) + 1);
+  $("pageBgMode").value = "sequence";
+  $("pageBgSizeMode").value = "fit";
+  $("pageBgCompact").checked = false;
+  refreshSelects($("pageBgDialog"));
+  updatePageBgDialog();
+  if (select.value !== "none") {
+    ensureBgPdfSizes(select.value).then(() => { if ($("pageBgDialog").open) updatePageBgDialog(); }).catch(() => {});
+  }
+  $("pageBgDialog").showModal();
+}
+$("changePageBg").onclick = () => openPageBackground(String(page + 1));
+$("pagesChangeBg").onclick = () => openPageBackground(String(page + 1));
+$("pageBgTargetCurrent").onclick = () => { $("pageBgTarget").value = String(page + 1); updatePageBgDialog(); };
+$("pageBgTargetAll").onclick = () => { $("pageBgTarget").value = doc?.pages > 1 ? `1-${doc.pages}` : "1"; updatePageBgDialog(); };
+$("pageBgTarget").oninput = updatePageBgDialog;
+$("pageBgFrom").oninput = updatePageBgDialog;
+$("pageBgMode").onchange = updatePageBgDialog;
+$("pageBgSizeMode").onchange = updatePageBgDialog;
+$("pageBgCompact").onchange = () => { pageBgState.compactTouched = true; updatePageBgDialog(); };
+$("pageBgSource").onchange = () => {
+  const val = $("pageBgSource").value;
+  updatePageBgDialog();
+  if (val !== "none" && val !== "uploaded") {
+    ensureBgPdfSizes(val).then(() => { if ($("pageBgDialog").open) updatePageBgDialog(); }).catch((e) => status(e.message, true));
+  }
+};
+$("pageBgPick").onclick = () => $("pdfBgFile").click();
+$("pdfBgFile").onchange = async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file || !doc) return;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const sizes = await readPdfSizes(bytes);
+    pageBgState.uploaded = { name: file.name, bytes, sizes };
+    pageBgState.compactTouched = false;
+    const select = $("pageBgSource");
+    let opt = select.querySelector('option[value="uploaded"]');
+    if (!opt) {
+      opt = new Option("", "uploaded");
+      select.prepend(opt);
+    }
+    opt.textContent = `${file.name} (${formatBytes(bytes.length)})`;
+    select.value = "uploaded";
+    refreshSelects($("pageBgDialog"));
+    $("pageBgFrom").value = "1";
+    updatePageBgDialog();
+  } catch (error) {
+    status(`Could not read that PDF: ${error.message}`, true);
+  }
+};
+$("pageBgCancel").onclick = () => $("pageBgDialog").close();
+$("pageBgApply").onclick = async () => {
+  if (!doc || busy()) return;
+  const parsed = parsePageSelection($("pageBgTarget").value, doc.pages);
+  if (parsed.error) return updatePageBgDialog();
+  const noteIndices = parsed.indices;
+  const currentSizes = panels.map((p) => p.size);
+  const sourceVal = $("pageBgSource").value;
+  if (sourceVal === "none") {
+    $("pageBgDialog").close();
+    const pages = buildPageBackgroundChanges({ noteIndices, currentSizes, source: { kind: "none" } });
+    await action("setPageBackgrounds", { pages, focus: noteIndices[0] });
+    return;
+  }
+  const startPdf = Math.max(0, (Number($("pageBgFrom").value) || 1) - 1);
+  const mode = $("pageBgMode").value;
+  const sizeMode = $("pageBgSizeMode").value;
+  const upp = await noteUnitsPerPoint();
+  if (sourceVal === "uploaded") {
+    const up = pageBgState.uploaded;
+    if (!up) return;
+    const used = usedPdfPageIndices({ noteCount: noteIndices.length, pdfPageCount: up.sizes.length, startPdfPage: startPdf, mode });
+    const useCompact = !$("pageBgCompactRow").hidden && $("pageBgCompact").checked && used.length < up.sizes.length;
+    let pdfBytes = up.bytes;
+    let remap = null;
+    if (useCompact) {
+      $("pageBgApply").disabled = true;
+      $("pageBgSizeNote").textContent = `Extracting ${used.length} page${used.length === 1 ? "" : "s"}…`;
+      try {
+        pdfBytes = await extractPdfPagesAsCompactPdf(up.bytes, used, up.name);
+        remap = new Map(used.map((srcIdx, i) => [srcIdx, i]));
+      } catch (error) {
+        updatePageBgDialog();
+        return status(`Could not extract PDF pages: ${error.message}`, true);
+      }
+    }
+    const id = "pdf-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+    const pages = buildPageBackgroundChanges({
+      noteIndices,
+      currentSizes,
+      source: { kind: "pdf", resourceId: id },
+      pdfSizesPt: up.sizes,
+      startPdfPage: startPdf,
+      mode,
+      sizeMode,
+      unitsPerPoint: upp,
+      remapIndices: remap,
+    });
+    $("pageBgDialog").close();
+    await action("setPageBackgrounds", { pages, pdf: { id, base64: bytesToBase64(pdfBytes) }, focus: noteIndices[0] });
+    return;
+  }
+  const sizesPt = await ensureBgPdfSizes(sourceVal);
+  const pages = buildPageBackgroundChanges({
+    noteIndices,
+    currentSizes,
+    source: { kind: "pdf", resourceId: sourceVal },
+    pdfSizesPt: sizesPt,
+    startPdfPage: startPdf,
+    mode,
+    sizeMode,
+    unitsPerPoint: upp,
+  });
+  $("pageBgDialog").close();
+  await action("setPageBackgrounds", { pages, focus: noteIndices[0] });
+};
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
@@ -5771,7 +6058,7 @@ const collabHost = {
     savedState();
   },
   closeDocument: () => reset(),
-  openFile: (file) => load(file),
+  openFile: (file, meta) => openImportedFile(file, meta),
   // Auto-save in a session: the host's switch, followed by everyone else.
   autosaveOn: () => autosave.pref(),
   // Keeping the live notes and copy helper on the sharing host.
@@ -5872,7 +6159,7 @@ async function pickImportTarget(pack, { preferOpen = false } = {}) {
       entry,
       title: cleanTitle,
       entryKey: entry.key,
-      meta: `${entry.source === "drive" ? "Drive" : "This device"}${entry.modifiedTime ? ` · ${new Date(entry.modifiedTime).toLocaleDateString()}` : ""}`,
+      meta: entrySourceLabel(entry) + (entry.modifiedTime ? ` · ${new Date(entry.modifiedTime).toLocaleDateString()}` : ""),
       matched: false,
     });
   }
@@ -6018,7 +6305,7 @@ async function importStudyFile(file, kindHint = null) {
   } catch (e) { status(e.message, true); }
 }
 
-async function openImportedFile(file) {
+async function openImportedFile(file, meta = {}) {
   if (!file || busy()) return;
   try {
     const { classifyImport } = await import("./import-route.js");
@@ -6029,7 +6316,23 @@ async function openImportedFile(file) {
   } catch { /* Fall through to opening as a document. */ }
   if (!canReplace()) return;
   notePath = noteEntryKey = "";
-  load(file).then(() => setDocMember(null)).catch(() => { /* Reported by load(). */ });
+  try {
+    await load(file);
+    const entry = await library.rememberImported(file, {
+      origin: meta?.origin || "Imported",
+      folder: meta?.folder || "",
+    }).catch(() => null);
+    if (entry) {
+      noteEntryKey = entry.key;
+      rememberDocument(entry.key);
+      home.rememberCover(entry.key, file);
+      home.rememberFacts(entry.key, file);
+      setDocMember({ key: entry.key, name: entry.name, source: "imported" });
+      if (home.visible) home.renderRecent();
+    } else {
+      setDocMember(null);
+    }
+  } catch { /* Reported by load(). */ }
 }
 
 $("studyPackFile").onchange = () => {

@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+const READS = new Set(["view", "save", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -107,6 +107,7 @@ const onDocument = {
   contentDigest: () => session.content_digest(),
   audio: (args) => session.audio_bytes(args.resource),
   pdf: (args) => session.pdf_bytes(args.resource),
+  pdfResources: () => JSON.parse(session.pdf_resources()),
   recognized(args) {
     session.set_recognized_text(JSON.stringify(args.pages || {}));
     return true;
@@ -161,6 +162,7 @@ const onDocument = {
   erase: edit((args, page) => session.erase(page, JSON.stringify(args.points), args.radius)),
   insertHandwritten: edit((args) => session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}))),
   insertPages: edit((args) => session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
+  setPageBackgrounds: edit((args) => session.set_page_backgrounds(JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
   movePage: edit((args) => session.move_page(args.from, args.to)),
   undo: lastPageLeft(() => session.undo()),
   redo: lastPageLeft(() => session.redo()),

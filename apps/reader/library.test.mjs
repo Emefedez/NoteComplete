@@ -160,3 +160,32 @@ test('a local file renamed on disk keeps its Recent entry, title and cover', asy
   assert.equal(await library.cover('local:/d/Tema 1.md'), 'data:image/png;base64,AA');
   assert.equal(await library.moveLocal('/d/none.md', '/d/x.md', 'x.md'), null);
 });
+
+test('imported files (WhatsApp, file picker, QR share) appear in Recent, reopen offline, and format source labels cleanly', async () => {
+  const { entrySourceLabel } = await import('./library.js');
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir } });
+  const file = new File([new Uint8Array([37, 80, 68, 70, 45, 49])], 'Apuntes.pdf', { type: 'application/pdf' });
+  const entry = await library.rememberImported(file, { origin: 'WhatsApp' });
+  assert.equal(entry.source, 'imported');
+  assert.equal(entry.origin, 'WhatsApp');
+  assert.equal(entrySourceLabel(entry), 'WhatsApp');
+  const recent = await library.recent();
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].key, entry.key);
+
+  const reopened = await library.open(entry);
+  assert.ok(reopened);
+  assert.equal(reopened.name, 'Apuntes.pdf');
+  assert.deepEqual([...new Uint8Array(await reopened.arrayBuffer())], [37, 80, 68, 70, 45, 49]);
+
+  // Deleting with deleteFile removes kept imported copy too.
+  await library.forget(entry.key, { deleteFile: true });
+  assert.equal(dir.files.size, 0);
+
+  // Source / folder formatting across Drive, Archive, Local folder, Web link.
+  assert.equal(entrySourceLabel({ source: 'drive', folder: 'Biochemistry' }), 'Google Drive / Biochemistry');
+  assert.equal(entrySourceLabel({ source: 'archive', folder: 'MIT' }), 'Internet Archive / MIT');
+  assert.equal(entrySourceLabel({ source: 'local', path: '/home/u/Documents/Linear Algebra/hw1.noteful' }), 'This device / Linear Algebra');
+  assert.equal(entrySourceLabel({ source: 'web', url: 'https://www.notion.so/page' }), 'Web link · notion.so');
+});

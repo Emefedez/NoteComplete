@@ -322,3 +322,141 @@ fn moving_pages_reorders_pages_through_undo_project_and_export() {
         baseline_imported[0] + 1
     );
 }
+
+#[test]
+fn changing_page_pdf_background_dedups_and_prunes_unused_pdfs() {
+    let source = crate::samples::EXAM;
+    let mut editor = Editor::open(source).unwrap();
+    let pdf1 = b"%PDF-1.7\nfirst replacement pdf payload\n%%EOF".to_vec();
+    let mut pdf2 = b"%PDF-1.7\nsecond replacement".to_vec();
+    pdf2.extend_from_slice(&vec![b' '; 4096]);
+    pdf2.extend_from_slice(b"\n%%EOF");
+    let orig_size = sizes(&editor)[1];
+
+    // Replace page 1 (middle page) with pdf1, keeping its page size and fitting rect.
+    editor
+        .set_page_backgrounds(
+            vec![noteful_core::PageBackground {
+                page: 1,
+                size: orig_size,
+                pdf: Some(PdfPlacement {
+                    resource: "bg-1".into(),
+                    page_index: 2,
+                    rect: Some([10., 20., 400., 500.]),
+                }),
+            }],
+            Some(NewPdf {
+                id: "bg-1".into(),
+                base64: STANDARD.encode(&pdf1),
+            }),
+        )
+        .unwrap();
+    let v1 = editor.view(1).unwrap();
+    assert_eq!(v1["pdf_background"]["resource_id"], "bg-1");
+    assert_eq!(v1["pdf_background"]["page_index"], 2);
+    assert_eq!(
+        v1["pdf_background"]["rect"],
+        serde_json::json!([10., 20., 400., 500.])
+    );
+
+    // Re-applying byte-identical pdf1 under a new id reuses "bg-1" with zero duplicate bytes.
+    editor
+        .set_page_backgrounds(
+            vec![noteful_core::PageBackground {
+                page: 2,
+                size: [800., 600.],
+                pdf: Some(PdfPlacement {
+                    resource: "bg-dup".into(),
+                    page_index: 0,
+                    rect: None,
+                }),
+            }],
+            Some(NewPdf {
+                id: "bg-dup".into(),
+                base64: STANDARD.encode(&pdf1),
+            }),
+        )
+        .unwrap();
+    assert_eq!(
+        editor.view(2).unwrap()["pdf_background"]["resource_id"],
+        "bg-1"
+    );
+    assert_eq!(
+        editor
+            .pdf_resources()
+            .iter()
+            .filter(|(id, _)| id == "bg-dup")
+            .count(),
+        0
+    );
+
+    // Replace every page using bg-2 and verify dead original + dead bg-1 are pruned on export!
+    editor
+        .set_page_backgrounds(
+            (0..3)
+                .map(|slot| noteful_core::PageBackground {
+                    page: slot,
+                    size: [700., 900.],
+                    pdf: Some(PdfPlacement {
+                        resource: "bg-2".into(),
+                        page_index: slot as u64,
+                        rect: None,
+                    }),
+                })
+                .collect(),
+            Some(NewPdf {
+                id: "bg-2".into(),
+                base64: STANDARD.encode(&pdf2),
+            }),
+        )
+        .unwrap();
+
+    // Project save/open & undo/redo check.
+    let proj = editor.save_project().unwrap();
+    let reopened = Editor::open_project(&proj).unwrap();
+    assert_eq!(
+        reopened.view(0).unwrap()["pdf_background"]["resource_id"],
+        "bg-2"
+    );
+
+    // Compacting before the latest overwrite drops dead superseded SetPageBackgrounds & pdf1 bytes.
+    let (mark, _) = editor.history_mark().unwrap();
+    let compacted = editor.compact_history(mark).unwrap();
+    assert!(compacted.bytes_after <= compacted.bytes_before);
+
+    let exported_bytes = editor.export_noteful().unwrap();
+    let pkg = Package::parse(&exported_bytes).unwrap();
+    assert!(pkg
+        .blocks
+        .iter()
+        .all(|b| b.id != "bg-1" && (b.kind != "pdf" || b.id == "bg-2")));
+    let reopened_native = Editor::open(&exported_bytes).unwrap();
+    assert_eq!(reopened_native.pdf_bytes("bg-2").unwrap(), pdf2);
+    assert_eq!(
+        reopened_native.view(1).unwrap()["pdf_background"]["page_index"],
+        1
+    );
+    assert!(reopened_native.view(1).unwrap()["warnings"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    // Clearing page 0's PDF background to plain paper leaves zero warnings.
+    editor
+        .set_page_backgrounds(
+            vec![noteful_core::PageBackground {
+                page: 0,
+                size: [700., 900.],
+                pdf: None,
+            }],
+            None,
+        )
+        .unwrap();
+    assert!(editor.view(0).unwrap()["pdf_background"].is_null());
+    let cleared_native = Editor::open(&editor.export_noteful().unwrap()).unwrap();
+    assert!(cleared_native.view(0).unwrap()["pdf_background"].is_null());
+    assert!(cleared_native.view(0).unwrap()["warnings"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}

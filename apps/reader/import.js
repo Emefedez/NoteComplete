@@ -30,7 +30,8 @@ export function receiveNativeFiles({open,canReplace,isBusy,status}) {
    else bytes=Uint8Array.from(atob(message.base64),c=>c.charCodeAt(0));
    // Content-provider URIs often omit filenames. The bytes determine the format.
    const kind=fileKind(message.name||'',bytes);
-   await open(new File([bytes],importName(message.name,kind)));
+   const origin=typeof message.origin==='string'&&message.origin.trim()?message.origin.trim():'Shared';
+   await open(new File([bytes],importName(message.name,kind)),{origin});
   }catch(error){failure=error.message;status(failure,true);}
   finally{pending.delete(message.id);completed.add(message.id);reply(message.id,failure);}
  }

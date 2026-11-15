@@ -157,6 +157,19 @@ impl Editor {
                         }
                     }
                 }
+                Edit::SetPageBackground { pages, .. } => {
+                    for change in pages {
+                        resized.insert(change.page, change.size);
+                        if change.page == page {
+                            size = change.size;
+                            pdf_background = change.pdf.as_ref().map(|p| PdfBackground {
+                                resource_id: p.resource.clone(),
+                                page_index: p.page_index,
+                                rect: p.rect.unwrap_or([0., 0., size[0], size[1]]),
+                            });
+                        }
+                    }
+                }
                 _ => {}
             }
         }

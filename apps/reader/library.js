@@ -101,6 +101,29 @@ function bridgeFolder(bridge, label) {
 // What Recent shows for an entry: the user's title, else the file name without extension.
 export const plainTitle = (name) => String(name || '').replace(/\.(noteful|notepart|notecomp|notecomplete|nfedit)$/i, '');
 export const entryTitle = (entry) => entry?.title || plainTitle(entry?.name);
+export function parentFolderName(path) {
+  const parts = String(path || '').split(/[\\/]/).filter(Boolean);
+  return parts.length >= 2 ? parts.at(-2) : '';
+}
+// Human-readable source / folder label for file tiles and list rows.
+export function entrySourceLabel(entry) {
+  if (!entry) return 'This device';
+  if (entry.source === 'drive') return entry.folder ? `Google Drive / ${entry.folder}` : 'Google Drive';
+  if (entry.source === 'archive') return entry.folder ? `Internet Archive / ${entry.folder}` : 'Internet Archive';
+  if (entry.source === 'web') {
+    try {
+      const host = new URL(entry.url).hostname.replace(/^www\./, '');
+      if (host) return `Web link · ${host}`;
+    } catch { /* Fall back to plain label. */ }
+    return 'Web link';
+  }
+  if (entry.source === 'imported') return [entry.origin || 'Imported', entry.folder].filter(Boolean).join(' / ');
+  if (entry.source === 'local') {
+    const folder = parentFolderName(entry.path);
+    return folder ? `This device / ${folder}` : 'This device';
+  }
+  return entry.folder || entry.origin || 'This device';
+}
 export class Library {
   constructor({ store = idbStore(), bridge = globalThis.notecompleteFiles, storage = globalThis.navigator?.storage, picker = globalThis.showDirectoryPicker, md5 = null } = {}) {
     Object.assign(this, { store, bridge, storage, picker, md5 });
@@ -198,11 +221,46 @@ export class Library {
       filename,
       openedAt: this.now(),
       ...(isArchive
-        ? { archiveId: file.archiveId, path: file.path }
-        : { driveId: file.id, resourceKey: file.resourceKey, md5: file.md5Checksum || null, parent: file.parents?.[0] || null }),
+        ? { archiveId: file.archiveId, path: file.path, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
+        : { driveId: file.id, resourceKey: file.resourceKey, md5: file.md5Checksum || null, parent: file.parents?.[0] || null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }),
       ...(previous?.title ? { title: previous.title } : {})
     };
     await this.store.set('entries', entry.key, entry);
+    return entry;
+  }
+  // Files opened from WhatsApp, Android intents, file picker, drag-and-drop, or QR shares:
+  // keep a copy in the library folder so they appear in Recent with their source/folder and reopen later.
+  async rememberImported(file, { origin = 'Imported', folder = '' } = {}) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let digest = '';
+    if (this.md5) {
+      try { digest = await this.md5(bytes); } catch { /* Fall back below. */ }
+    } else if (globalThis.crypto?.subtle?.digest) {
+      try {
+        const hash = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+        digest = Array.from(hash.slice(0, 8), b => b.toString(16).padStart(2, '0')).join('');
+      } catch { /* Fall back below. */ }
+    }
+    if (!digest) digest = `${safeName(file.name)}:${file.size}`;
+    const key = 'imported:' + digest;
+    const previous = await this.store.get('entries', key);
+    let filename = previous?.filename || safeName(file.name);
+    const taken = (await this.store.values('entries')).some(e => e.filename === filename && e.key !== key);
+    if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${digest.replace(/[^a-z0-9]/gi, '').slice(0, 6) || 'imp'})$1`);
+    await (await this.location()).write(filename, file);
+    const entry = {
+      key,
+      source: 'imported',
+      origin: String(origin || previous?.origin || 'Imported').trim() || 'Imported',
+      ...(folder || previous?.folder ? { folder: folder || previous.folder } : {}),
+      name: file.name || previous?.name || 'Imported file',
+      mimeType: file.type || previous?.mimeType || '',
+      size: String(bytes.byteLength),
+      filename,
+      openedAt: this.now(),
+      ...(previous?.title ? { title: previous.title } : {}),
+    };
+    await this.store.set('entries', key, entry);
     return entry;
   }
   // Locally opened files the desktop bridge can reopen by path.
@@ -249,7 +307,7 @@ export class Library {
   // Remove from Recent; with `deleteFile`, also delete the kept copy (never a local original).
   async forget(key, { deleteFile = false } = {}) {
     const entry = await this.store.get('entries', key);
-    if (deleteFile && entry?.source === 'drive' && entry.filename) await (await this.location()).remove?.(entry.filename);
+    if (deleteFile && entry?.filename && entry.source !== 'local') await (await this.location()).remove?.(entry.filename);
     await this.store.delete('entries', key);
     await this.store.delete('covers', key);
     if (entry?.source === 'drive') await this.store.delete('covers', this.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }));

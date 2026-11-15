@@ -46,11 +46,41 @@ function lastSegment(uri) {
  // Document providers encode the whole path in one segment (primary%3ADownload%2Fa.pdf).
  try { return decodeURIComponent(path).split(/[/:]/).at(-1); } catch { return ''; }
 }
+const ORIGIN_PROVIDERS = [
+ [/(^|\.)whatsapp(\.|$)/i, 'WhatsApp'],
+ [/(^|\.)telegram(\.|$)/i, 'Telegram'],
+ [/google\.android\.gm(\.|$)/i, 'Gmail'],
+ [/google\.android\.apps\.docs/i, 'Google Drive'],
+ [/(^|\.)discord(\.|$)/i, 'Discord'],
+ [/(^|\.)slack(\.|$)/i, 'Slack'],
+ [/(^|\.)teams(\.|$)/i, 'Teams'],
+ [/android\.providers\.downloads/i, 'Downloads'],
+];
+
+// Human-readable source or folder label for Android content:// and file:// URIs.
+export function incomingOrigin(uri) {
+ let parsed; try { parsed = new URL(uri); } catch { return 'Shared'; }
+ const host = (parsed.hostname || '').toLowerCase();
+ for (const [re, label] of ORIGIN_PROVIDERS) if (re.test(host)) return label;
+ if (/externalstorage\.documents/i.test(host) || parsed.protocol === 'file:') {
+  let decoded = ''; try { decoded = decodeURIComponent(parsed.pathname || ''); } catch { decoded = parsed.pathname || ''; }
+  const clean = decoded.replace(/^\/?(document|tree|root)\//i, '').replace(/^[^:]+:/, '');
+  const parts = clean.split('/').filter(Boolean);
+  if (parts.length >= 2) return parts.at(-2);
+  return 'Device storage';
+ }
+ if (host && !/^(media|fileprovider)$/i.test(host)) {
+  const seg = host.replace(/^com\.android\.(providers\.)?|^com\.google\.android\.|^org\.|^com\.|\.fileprovider$|\.provider$/gi, '').split('.').filter(Boolean)[0];
+  if (seg) return seg[0].toUpperCase() + seg.slice(1);
+ }
+ return 'Shared';
+}
+
 // Android URI grants are used only for the file explicitly opened by the user.
 export function incomingFile(uri) {
  if (typeof uri !== 'string' || !/^(content|file):\/\//i.test(uri)) return null;
  try { new URL(uri); } catch { return null; }
- return {uri, name: incomingName(uri)};
+ return {uri, name: incomingName(uri), origin: incomingOrigin(uri)};
 }
 // describe(uri) (optional): the provider's {name, mime}, read before the bytes.
 // read(uri): the file as base64, or {url} where the reader fetches it (large files never cross
@@ -62,7 +92,7 @@ export class IncomingFiles {
   this.queue.push({...file,id:++this.sequence}); this.flush();
  }
  setReady(ready) { this.ready=ready; if (ready) { if(this.current?.data) this.post(this.message()); else this.flush(); } }
- message() { const {id,name,data}=this.current; return {type:'noteful-import',id,name,...data}; }
+ message() { const {id,name,origin,data}=this.current; return {type:'noteful-import',id,name,...(origin?{origin}:{}),...data}; }
  async flush() {
   if(!this.ready || this.busy || this.current || !this.queue.length) return;
   this.busy=true; this.current=this.queue.shift();

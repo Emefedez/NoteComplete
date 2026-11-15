@@ -7,6 +7,7 @@ import {
   mergeProviders, localEntry, modelList, resolveModel, wantsJson, responseFormat, promptBudget,
   fitPrompt, requestToMessages, visibleText, nextDelta, phaseOf, friendlyError,
   withLocalAI, createLocalRuntime, appModelList, capabilitiesOf, visionSize, visionTokens, CUSTOM_RECORDS, imageLayout,
+  isIOSDevice, isAppleWebKit, cacheBackendCandidates, defaultModelId, shouldFallbackCacheBackend,
 } from './local-ai.js';
 import { studySchema } from './study.js';
 
@@ -385,4 +386,79 @@ test('an idle model is unloaded, freeing its GPU memory, and loads again when as
 test('a page image is scaled down to what the vision model uses, never up', () => {
   assert.deepEqual(imageLayout(1400, 1980), { width: 1008, height: 1426 });
   assert.deepEqual(imageLayout(600, 800), { width: 600, height: 800 });
+});
+
+test('iOS Safari picks OPFS / IndexedDB backends, falls back when a cache backend fails, and handles Safari errors', async () => {
+  const iosNav = {
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
+    maxTouchPoints: 5,
+    storage: { getDirectory: async () => ({}) },
+  };
+  const ipadNav = {
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
+    maxTouchPoints: 5,
+    storage: { getDirectory: async () => ({}) },
+  };
+  const chromeNav = {
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36',
+    maxTouchPoints: 0,
+    storage: { getDirectory: async () => ({}) },
+  };
+  const writableHandle = { prototype: { createWritable: async () => {} } };
+  assert.equal(isIOSDevice(iosNav), true);
+  assert.equal(isIOSDevice(ipadNav), true);
+  assert.equal(isIOSDevice(chromeNav), false);
+  assert.equal(isAppleWebKit(chromeNav), false);
+  assert.equal(defaultModelId(iosNav), 'qwen3-0.6b');
+  assert.deepEqual(cacheBackendCandidates({ nav: iosNav, fileHandle: writableHandle }), ['opfs', 'indexeddb']);
+  assert.deepEqual(cacheBackendCandidates({ nav: iosNav, fileHandle: {} }), ['indexeddb']);
+  assert.deepEqual(cacheBackendCandidates({ nav: chromeNav, fileHandle: writableHandle }), ['cache', 'opfs', 'indexeddb']);
+
+  assert.match(friendlyError(TypeError('Load failed')).message, /Could not download the model/);
+  assert.match(friendlyError(Error('The AI worker stopped (likely out of GPU memory).')).message, /out of memory/);
+  assert.match(friendlyError(Object.assign(Error('Private mode'), { name: 'SecurityError' })).message, /Private Browsing|storage/);
+  assert.equal(shouldFallbackCacheBackend(TypeError('Load failed')), true);
+  assert.equal(shouldFallbackCacheBackend(Error('WebGPUNotAvailableError')), false);
+
+  const configs = [], loads = [];
+  const { library } = fakeLibrary();
+  const BaseEngine = library.module.WebWorkerMLCEngine;
+  let attempt = 0;
+  library.module.WebWorkerMLCEngine = class extends BaseEngine {
+    constructor(worker, options) {
+      super(worker, options);
+      configs.push(options.appConfig.cacheBackend || 'cache');
+    }
+    async reload(id) {
+      attempt++;
+      if (attempt === 1) throw TypeError('Load failed');
+      return super.reload(id);
+    }
+  };
+  const fakeW = () => ({
+    onmessage: null, onerror: null, onmessageerror: null,
+    postMessage(msg) {
+      if (msg?.notecomplete === 'load') {
+        loads.push(msg);
+        queueMicrotask(() => this.onmessage?.({ data: { notecomplete: 'ready' } }));
+      }
+    },
+    terminate() {},
+  });
+  library.bytes = new Uint8Array([1, 2, 3]);
+  const runtime = createLocalRuntime({
+    gpu: gpu(true),
+    nav: iosNav,
+    fileHandle: writableHandle,
+    loadLibrary: async () => library,
+    createWorker: fakeW,
+    progress: quiet,
+    storage: memory(),
+    persist: async () => false,
+  });
+  const res = await runtime.run({ prompt: 'Hola' });
+  assert.equal(res.text, 'Hello');
+  assert.deepEqual(configs, ['opfs', 'indexeddb']);
+  assert.equal(loads[0].throttleDownloads, true);
+  assert.equal(loads[0].bytes.byteLength, 3);
 });

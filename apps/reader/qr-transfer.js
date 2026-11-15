@@ -1,6 +1,7 @@
 // Offline progressive QR code transfer for small payloads (quizzes, flashcard decks,
 // study packs, Anki exports). Splits compressed JSON into self-verified chunks (`NCQR1|...`)
 // so two devices can transfer without Internet, local servers, or files.
+import { icon } from './icons.js';
 
 const PREFIX = 'NCQR1';
 const DEFAULT_MAX_CHUNK = 220;
@@ -112,7 +113,9 @@ function randomId() {
 }
 
 /**
- * Encodes any JSON-serializable envelope into 1 or more `NCQR1` QR frame strings.
+ * Encodes any JSON-serializable envelope into ordered `NCQR1` QR frame strings.
+ * Multi-frame transfers include an Info QR (`0/<total>`) with title/kind/byte count/
+ * segment total, followed strictly by data segments `1/<total>` .. `<total>/<total>`.
  * @param {unknown} envelope
  * @param {{ maxChunk?: number, id?: string, compress?: boolean }} [options]
  */
@@ -128,9 +131,27 @@ export async function encodeQrFrames(envelope, { maxChunk = DEFAULT_MAX_CHUNK, i
     const part = encoded.slice(i * chunkLimit, (i + 1) * chunkLimit);
     frames.push(`${PREFIX}|${id}|${i + 1}/${total}|${crc}|${part}`);
   }
+  const meta = total > 1
+    ? {
+        v: 2,
+        kind: envelope?.kind || 'study',
+        title: describeQrEnvelope(envelope),
+        name: String(envelope?.name || envelope?.pack?.title || ''),
+        rawBytes: rawBytes.byteLength,
+        segments: total,
+        compressed: mode === 'z',
+      }
+    : null;
+  const infoFrame = meta
+    ? `${PREFIX}|${id}|0/${total}|${crc}|${base64UrlEncode(encoder.encode(JSON.stringify(meta)))}`
+    : null;
+  const streamFrames = infoFrame ? [infoFrame, ...frames] : [...frames];
   return {
     id,
     frames,
+    infoFrame,
+    streamFrames,
+    meta,
     total,
     crc,
     rawBytes: rawBytes.byteLength,
@@ -139,7 +160,7 @@ export async function encodeQrFrames(envelope, { maxChunk = DEFAULT_MAX_CHUNK, i
   };
 }
 
-/** Parses one `NCQR1|<id>|<index>/<total>|<crc32>|<data>` frame or returns null. */
+/** Parses one `NCQR1|<id>|<index>/<total>|<crc32>|<data>` frame (`index === 0` is info) or returns null. */
 export function parseQrFrame(raw) {
   if (typeof raw !== 'string' || !raw.startsWith(`${PREFIX}|`)) return null;
   const parts = raw.split('|');
@@ -150,11 +171,26 @@ export function parseQrFrame(raw) {
   if (!match) return null;
   const index = Number(match[1]);
   const total = Number(match[2]);
-  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || total < 1 || index > total) return null;
+  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 0 || total < 1 || index > total) return null;
   return { id, index, total, crc, data };
 }
 
-/** Reassembles multi-frame `NCQR1` QR scans in arbitrary order with CRC verification. */
+function decodeInfoMeta(data) {
+  try {
+    const json = JSON.parse(decoder.decode(base64UrlDecode(data)));
+    return json && typeof json === 'object' ? json : null;
+  } catch {
+    return null;
+  }
+}
+
+function missingSlots(parts) {
+  const missing = [];
+  for (let i = 0; i < parts.length; i++) if (parts[i] === null) missing.push(i + 1);
+  return missing;
+}
+
+/** Reassembles multi-frame `NCQR1` QR scans strictly into their numbered slots, tracking skipped/missing segments. */
 export class QrReceiver {
   constructor() {
     this.transfers = new Map();
@@ -170,34 +206,107 @@ export class QrReceiver {
     if (!frame) return { ignored: true };
     let state = this.transfers.get(frame.id);
     if (!state || state.total !== frame.total || state.crc !== frame.crc) {
-      state = { id: frame.id, total: frame.total, crc: frame.crc, parts: new Array(frame.total).fill(null), received: 0 };
+      state = {
+        id: frame.id,
+        total: frame.total,
+        crc: frame.crc,
+        meta: null,
+        infoSeen: false,
+        parts: new Array(frame.total).fill(null),
+        received: 0,
+        lastIndex: 0,
+        wrapped: false,
+        skipped: new Set(),
+      };
       this.transfers.set(frame.id, state);
     }
     this.activeId = frame.id;
-    const duplicate = state.parts[frame.index - 1] !== null;
-    if (!duplicate) {
-      state.parts[frame.index - 1] = frame.data;
-      state.received++;
-    }
-    if (state.received < state.total) {
+
+    if (frame.index === 0) {
+      const duplicate = state.infoSeen;
+      state.infoSeen = true;
+      const meta = decodeInfoMeta(frame.data);
+      if (meta) state.meta = meta;
+      if (state.lastIndex > 0 && state.received < state.total) {
+        state.wrapped = true;
+        for (const s of missingSlots(state.parts)) state.skipped.add(s);
+      }
+      state.lastIndex = 0;
+      const missing = missingSlots(state.parts);
       return {
         ignored: false,
+        kind: 'info',
+        index: 0,
         duplicate,
         transferId: state.id,
+        meta: state.meta,
         received: state.received,
         total: state.total,
+        missing,
+        skipped: [...state.skipped].filter((n) => state.parts[n - 1] === null).sort((a, b) => a - b),
+        wrapped: state.wrapped,
         done: false,
       };
     }
+
+    const slot = frame.index - 1;
+    const duplicate = state.parts[slot] !== null;
+    if (!duplicate) {
+      state.parts[slot] = frame.data;
+      state.received++;
+    }
+    state.skipped.delete(frame.index);
+    if (state.lastIndex > 0 && state.received < state.total) {
+      if (frame.index < state.lastIndex) {
+        state.wrapped = true;
+        for (const s of missingSlots(state.parts)) state.skipped.add(s);
+      } else if (frame.index > state.lastIndex + 1) {
+        for (let s = state.lastIndex + 1; s < frame.index; s++) {
+          if (state.parts[s - 1] === null) state.skipped.add(s);
+        }
+      }
+    }
+    state.lastIndex = frame.index;
+
+    const missing = missingSlots(state.parts);
+    const skipped = [...state.skipped].filter((n) => state.parts[n - 1] === null).sort((a, b) => a - b);
+    const receivedSlots = [];
+    for (let i = 0; i < state.parts.length; i++) if (state.parts[i] !== null) receivedSlots.push(i + 1);
+
+    if (state.received < state.total) {
+      return {
+        ignored: false,
+        kind: 'segment',
+        index: frame.index,
+        duplicate,
+        transferId: state.id,
+        meta: state.meta,
+        received: state.received,
+        total: state.total,
+        receivedSlots,
+        missing,
+        skipped,
+        wrapped: state.wrapped,
+        done: false,
+      };
+    }
+
     const joined = state.parts.join('');
     if (crc32(encoder.encode(joined)) !== state.crc) {
       this.transfers.delete(frame.id);
       return {
         ignored: false,
+        kind: 'segment',
+        index: frame.index,
         duplicate: false,
         transferId: state.id,
+        meta: state.meta,
         received: 0,
         total: state.total,
+        receivedSlots: [],
+        missing: Array.from({ length: state.total }, (_, i) => i + 1),
+        skipped: [],
+        wrapped: false,
         done: false,
         error: 'Checksum mismatch — resetting this transfer. Keep scanning.',
       };
@@ -210,10 +319,17 @@ export class QrReceiver {
       this.transfers.delete(frame.id);
       return {
         ignored: false,
+        kind: 'segment',
+        index: frame.index,
         duplicate,
         transferId: state.id,
+        meta: state.meta,
         received: state.total,
         total: state.total,
+        receivedSlots: Array.from({ length: state.total }, (_, i) => i + 1),
+        missing: [],
+        skipped: [],
+        wrapped: state.wrapped,
         done: true,
         bytes: rawBytes.byteLength,
         payload,
@@ -222,10 +338,17 @@ export class QrReceiver {
       this.transfers.delete(frame.id);
       return {
         ignored: false,
+        kind: 'segment',
+        index: frame.index,
         duplicate: false,
         transferId: state.id,
+        meta: state.meta,
         received: 0,
         total: state.total,
+        receivedSlots: [],
+        missing: Array.from({ length: state.total }, (_, i) => i + 1),
+        skipped: [],
+        wrapped: false,
         done: false,
         error: e?.message || 'Could not decode QR transfer.',
       };
@@ -259,62 +382,88 @@ function makeEl(tag, props = {}, ...kids) {
 }
 
 /**
- * Displays a modal QR stream (single static QR when compact, animated progressive QR
- * carousel with play/pause, speed, and manual stepping when multi-frame).
+ * Displays a modal QR transfer: single static QR when compact, or for multi-segment
+ * transfers shows the Info QR (`0/N`) first with a Start button before cycling strictly
+ * ordered segment QRs (`1/N` .. `N/N`).
  */
 export async function showQrTransfer({ title, subtitle, payload, onDownloadFallback, fallbackLabel = 'Save as file instead', status }) {
   const encoded = await encodeQrFrames(payload);
+  const frames = encoded.streamFrames;
+  const multi = encoded.total > 1;
   let index = 0;
-  let playing = encoded.total > 1;
+  let playing = false;
+  let started = false;
   let intervalMs = 260;
   let timer = null;
 
   const headingId = `qrTxTitle-${encoded.id}`;
   const qrBox = makeEl('div', { className: 'collab-qr qr-stream-box' });
   const frameText = makeEl('p', { className: 'qr-progress-label' });
-  const progress = makeEl('progress', { className: 'qr-progress-bar', max: encoded.total, value: 1 });
+  const progress = makeEl('progress', { className: 'qr-progress-bar', max: encoded.total, value: 0 });
   const sizeNote = makeEl('p', {
     className: 'muted',
-    textContent: `${describeQrEnvelope(payload)} · ${(encoded.rawBytes / 1024).toFixed(1)} KB JSON → ${encoded.total} QR frame${encoded.total === 1 ? '' : 's'}${encoded.compressed ? ' (compressed)' : ''} · works completely offline`,
+    textContent: `${describeQrEnvelope(payload)} · ${(encoded.rawBytes / 1024).toFixed(1)} KB JSON → ${encoded.total} segment${encoded.total === 1 ? '' : 's'}${encoded.compressed ? ' (compressed)' : ''} · works completely offline`,
   });
 
-  const svgs = new Array(encoded.total).fill(null);
+  const svgs = new Array(frames.length).fill(null);
   const showFrame = async (next) => {
-    index = ((next % encoded.total) + encoded.total) % encoded.total;
-    progress.value = index + 1;
-    const pct = Math.round(((index + 1) / encoded.total) * 100);
-    frameText.textContent = encoded.total === 1
-      ? 'Single QR code · point the other NoteComplete’s camera here'
-      : `Frame ${index + 1} of ${encoded.total} (${pct}%)`;
-    if (!svgs[index]) svgs[index] = await renderQrSvg(encoded.frames[index]);
+    index = ((next % frames.length) + frames.length) % frames.length;
+    progress.value = multi ? (index === 0 ? 0 : index) : 1;
+    if (!multi) {
+      frameText.textContent = 'Single QR code · point the other NoteComplete’s camera here';
+    } else if (index === 0) {
+      frameText.textContent = started
+        ? `Info QR (0/${encoded.total}) · Note info & segment count`
+        : `Info QR (0/${encoded.total}) · Let receiver scan this first, then press Start`;
+    } else {
+      const pct = Math.round((index / encoded.total) * 100);
+      frameText.textContent = `Segment ${index} of ${encoded.total} (${pct}%)`;
+    }
+    if (!svgs[index]) svgs[index] = await renderQrSvg(frames[index]);
     if (qrBox.isConnected || index === 0) qrBox.innerHTML = svgs[index];
   };
 
   const restartTimer = () => {
     clearInterval(timer);
     timer = null;
-    if (playing && encoded.total > 1) timer = setInterval(() => { void showFrame(index + 1); }, intervalMs);
+    if (playing && multi) timer = setInterval(() => { void showFrame(index + 1); }, intervalMs);
   };
 
   const controls = [];
-  if (encoded.total > 1) {
+  if (multi) {
     const playBtn = makeEl('button', {
       type: 'button',
-      textContent: 'Pause',
+      className: 'icon-button primary',
+      title: 'Start cycling segment QR codes',
+      'aria-label': 'Start',
       onclick: () => {
         playing = !playing;
-        playBtn.textContent = playing ? 'Pause' : 'Play';
+        if (playing) {
+          const firstStart = !started;
+          started = true;
+          playBtn.className = 'icon-button';
+          playBtn.title = 'Pause';
+          playBtn.setAttribute('aria-label', 'Pause');
+          playBtn.replaceChildren(icon('pause'));
+          if (firstStart && index === 0) void showFrame(1);
+        } else {
+          playBtn.className = 'icon-button primary';
+          playBtn.title = 'Resume';
+          playBtn.setAttribute('aria-label', 'Resume');
+          playBtn.replaceChildren(icon('play'));
+        }
         restartTimer();
       },
-    });
-    const prevBtn = makeEl('button', { type: 'button', textContent: 'Prev', onclick: () => { void showFrame(index - 1); } });
-    const nextBtn = makeEl('button', { type: 'button', textContent: 'Next', onclick: () => { void showFrame(index + 1); } });
+    }, icon('play'));
+    const infoBtn = makeEl('button', { type: 'button', textContent: 'Info (0)', title: 'Jump back to the info QR', onclick: () => { void showFrame(0); } });
+    const prevBtn = makeEl('button', { type: 'button', className: 'icon-button', title: 'Previous QR frame', 'aria-label': 'Previous', onclick: () => { void showFrame(index - 1); } }, icon('arrowLeft'));
+    const nextBtn = makeEl('button', { type: 'button', className: 'icon-button', title: 'Next QR frame', 'aria-label': 'Next', onclick: () => { void showFrame(index + 1); } }, icon('arrowRight'));
     const speedSel = makeEl('select', { 'aria-label': 'QR frame speed', className: 'qr-speed-select' },
       makeEl('option', { value: '500', textContent: 'Slow (2/s)' }),
       makeEl('option', { value: '260', textContent: 'Normal (4/s)', selected: true }),
       makeEl('option', { value: '160', textContent: 'Fast (6/s)' }));
     speedSel.onchange = () => { intervalMs = Number(speedSel.value) || 260; restartTimer(); };
-    controls.push(playBtn, prevBtn, nextBtn, speedSel);
+    controls.push(playBtn, infoBtn, prevBtn, nextBtn, speedSel);
   }
 
   const actions = makeEl('div', { className: 'dialog-actions' });
@@ -325,7 +474,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
       onclick: async () => { dialog.close(); await onDownloadFallback(); },
     }));
   }
-  actions.append(makeEl('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: () => dialog.close() }));
+  actions.append(makeEl('button', { type: 'button', className: multi ? '' : 'primary', textContent: 'Done', onclick: () => dialog.close() }));
 
   const dialog = makeEl('dialog', { className: 'ocr-dialog collab-dialog', 'aria-labelledby': headingId },
     makeEl('h2', { id: headingId, textContent: title || 'Share via QR' }),
@@ -334,7 +483,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
       qrBox,
       makeEl('div', { className: 'qr-transfer-meta' },
         frameText,
-        encoded.total > 1 ? progress : '',
+        multi ? progress : '',
         sizeNote,
         controls.length ? makeEl('div', { className: 'qr-stream-controls' }, ...controls) : '')),
     actions);
@@ -347,11 +496,12 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
     dialog.remove();
   }, { once: true });
   dialog.showModal();
-  if (encoded.total > 1) {
-    // Pre-render the first batch quietly so playback never stalls mid-loop.
-    for (let i = 1; i < Math.min(encoded.total, 12); i++) svgs[i] = await renderQrSvg(encoded.frames[i]);
-    restartTimer();
+  if (multi) {
+    // Pre-render the first batch quietly while waiting for the user to press Start.
+    for (let i = 1; i < Math.min(frames.length, 16); i++) svgs[i] = await renderQrSvg(frames[i]);
   }
-  status?.(`Ready: ${encoded.total} QR frame${encoded.total === 1 ? '' : 's'} for ${describeQrEnvelope(payload)}.`);
+  status?.(multi
+    ? `Ready: Info QR + ${encoded.total} segments for ${describeQrEnvelope(payload)}. Press Start when the receiver is aimed.`
+    : `Ready: 1 QR frame for ${describeQrEnvelope(payload)}.`);
   return encoded;
 }

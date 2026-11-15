@@ -198,7 +198,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       const supported = isFolder || supportedDriveFile(file);
       const allowed = supported && (isFolder || file.capabilities?.canDownload !== false);
       button.dataset.unavailable = String(!allowed);
-      detail.textContent = isFolder ? 'Folder' : !supported ? 'Unsupported format' : !allowed ? 'Download restricted' : [file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? megabytes(file.size) : ''].filter(Boolean).join(' · ');
+      const loc = folder?.name ? `Drive / ${folder.name}` : 'Google Drive';
+      detail.textContent = isFolder ? `${loc} · Folder` : !supported ? 'Unsupported format' : !allowed ? 'Download restricted' : [loc, file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? megabytes(file.size) : ''].filter(Boolean).join(' · ');
       const entry = document.createElement('div');
       entry.className = 'note-meta';
       entry.append(name, detail);
@@ -322,7 +323,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
           });
         } finally { if (bar) bar.hidden = true; }
         if (!valid()) return;
-        try { await library?.keep(file, local); }
+        try { await library?.keep({ ...file, folderName: folder?.name || '' }, local); }
         catch (error) { message(`Opening without keeping a copy: ${error.message}`); }
       } else await library.touch(library.key(file));
       if (!valid()) return;
