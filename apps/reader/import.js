@@ -1,14 +1,14 @@
 import {fileKind} from './media-import.js';
 import {hasExtension} from './text-types.js';
-const OWN={note:/\.noteful$/i,project:/\.nfedit$/i,notecomplete:/\.(notecomp|notecomplete|notepart)$/i};
-const SUFFIX={note:'.noteful',project:'.nfedit',notecomplete:'.notecomp',pdf:'.pdf',image:'.png',html:'.html',text:'.txt'};
+const OWN={note:/\.noteful$/i,project:/\.nfedit$/i,notecomplete:/\.(notecomp|notecomplete|notepart)$/i,'study-pack':/\.ncstudy$/i,json:/\.json$/i};
+const SUFFIX={note:'.noteful',project:'.nfedit',notecomplete:'.notecomp','study-pack':'.ncstudy',json:'.json',pdf:'.pdf',image:'.png',html:'.html',text:'.txt'};
 // The file keeps its own name and extension (Report.docx opens as Word). Only a missing
 // extension, or one of ours that the bytes contradict (providers guess), is replaced by the
 // one the content shows.
 export function importName(name,kind){
  const given=(typeof name==='string'&&name.trim())||'Imported file';
- if(OWN[kind]?OWN[kind].test(given):hasExtension(given)&&!/\.(noteful|nfedit|notecomp|notecomplete|notepart)$/i.test(given))return given;
- return given.replace(/\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf|png|jpe?g|webp)$/i,'')+(SUFFIX[kind]||'');
+ if(OWN[kind]?OWN[kind].test(given):hasExtension(given)&&!/\.(noteful|nfedit|notecomp|notecomplete|notepart|ncstudy)$/i.test(given))return given;
+ return given.replace(/\.(noteful|nfedit|notecomp|notecomplete|notepart|ncstudy|pdf|png|jpe?g|webp)$/i,'')+(SUFFIX[kind]||'');
 }
 // Native file intents enter through the same user-visible open flow as the picker.
 export function receiveNativeFiles({open,canReplace,isBusy,status}) {

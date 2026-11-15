@@ -59,17 +59,40 @@ export function readPack(value) {
   return out;
 }
 
-// Keeps a pack on this device. The same document (its fingerprint is known here) gets the
-// material merged in; otherwise it becomes a document of its own, "Title (from Name)".
-// Returns { fingerprint, merged, counts }.
-export async function importPack(store, pack, { known = async (fp) => !!(await store.get('settings', `doc:${fp}`).catch(() => null)), now = Date.now } = {}) {
-  const merged = !!pack.fingerprint && (await known(pack.fingerprint));
-  const fingerprint = merged ? pack.fingerprint : `received:${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+// Keeps a pack on this device. When `target` is given:
+// - `{ general: true }` stores it as a standalone/general study set (`general:<id>`);
+// - `{ fingerprint, title, entryKey }` attaches it directly into that note.
+// Otherwise, if its fingerprint is known here it merges in; else `received:...`.
+export async function importPack(store, pack, { target = null, known = async (fp) => !!(await store.get('settings', `doc:${fp}`).catch(() => null)), now = Date.now } = {}) {
+  let fingerprint = '';
+  let merged = false;
+  let general = false;
+  if (target?.general) {
+    general = true;
+    fingerprint = `general:${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  } else if (target?.fingerprint) {
+    merged = true;
+    fingerprint = target.fingerprint;
+  } else {
+    merged = !!pack.fingerprint && (await known(pack.fingerprint));
+    fingerprint = merged ? pack.fingerprint : `received:${now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
   for (const [kind] of KINDS) {
     if (pack[kind] == null) continue;
     const existing = await store.get('settings', `${kind}:${fingerprint}`).catch(() => null);
     await store.set('settings', `${kind}:${fingerprint}`, mergeStudy(kind, existing, pack[kind]));
   }
-  if (!merged) await store.set('settings', `doc:${fingerprint}`, { title: `${pack.title}${pack.from ? ` (from ${pack.from})` : ''}`, entryKey: '', at: now() });
-  return { fingerprint, merged, counts: summary(pack) };
+  if (general) {
+    await store.set('settings', `doc:${fingerprint}`, { title: `${pack.title}${pack.from ? ` (from ${pack.from})` : ''}`, entryKey: '', general: true, at: now() });
+  } else if (target?.fingerprint) {
+    const before = await store.get('settings', `doc:${fingerprint}`).catch(() => null);
+    await store.set('settings', `doc:${fingerprint}`, {
+      title: target.title || before?.title || pack.title,
+      entryKey: target.entryKey || before?.entryKey || '',
+      at: now(),
+    });
+  } else if (!merged) {
+    await store.set('settings', `doc:${fingerprint}`, { title: `${pack.title}${pack.from ? ` (from ${pack.from})` : ''}`, entryKey: '', at: now() });
+  }
+  return { fingerprint, merged, general, counts: summary(pack) };
 }

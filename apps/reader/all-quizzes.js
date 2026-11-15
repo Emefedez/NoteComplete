@@ -29,6 +29,14 @@ export function describe(kind, item) {
   return `${answered}/${item.questions.length} answered · ${points} of ${max} points${item.done ? ' · finished' : ''}${item.created ? ` · ${new Date(item.created).toLocaleDateString()}` : ''}`;
 }
 
+export function groupHeading(g, current = '') {
+  const base = g.doc?.title || (g.fp?.startsWith('general:') ? 'General quiz' : 'Standalone study material');
+  const tags = [];
+  if (g.doc?.general || g.fp?.startsWith('general:')) tags.push('General');
+  if (g.fp === current && current) tags.push('open now');
+  return tags.length ? `${base} · ${tags.join(' · ')}` : base;
+}
+
 export function allQuizzes({ library, status, currentFingerprint, openEntry, openItem, exportItem }) {
   async function read() {
     const keys = (await library.store.keys?.('settings').catch(error => { console.warn('Study keys could not be read', error); return []; })) || [];
@@ -64,12 +72,12 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
     const nodes = [];
     for (const g of groups) {
       if (scope === 'note' && g.fp !== current) continue;
-      const title = g.doc?.title || 'Unknown document';
-      const shown = g.items.filter(item => !filter || title.toLowerCase().includes(filter) || String(item?.title || '').toLowerCase().includes(filter));
+      const heading = groupHeading(g, current);
+      const shown = g.items.filter(item => !filter || heading.toLowerCase().includes(filter) || String(item?.title || '').toLowerCase().includes(filter));
       if (!shown.length) continue;
       const head = document.createElement('li');
       head.className = 'all-quizzes-doc';
-      head.textContent = title + (g.fp === current ? ' · open now' : '');
+      head.textContent = heading;
       nodes.push(head);
       for (const item of shown) {
         const row = document.createElement('li'), open = document.createElement('button'), name = document.createElement('strong'), meta = document.createElement('span'), anki = document.createElement('button');
@@ -77,14 +85,13 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
         name.textContent = item?.title || (kind === 'decks' ? 'Flashcards' : 'Quiz');
         try { meta.textContent = describe(kind, item); } catch (error) { console.warn('Study item skipped', error); meta.textContent = 'cannot be read'; }
         open.append(name, meta);
-        open.disabled = meta.textContent === 'cannot be read' || (g.fp !== current && !g.doc?.entryKey);
-        if (g.fp !== current && !g.doc?.entryKey) meta.textContent += ' · open the note once to open it from here';
+        open.disabled = meta.textContent === 'cannot be read';
         open.title = `${name.textContent}\n${meta.textContent}`;
         open.onclick = async () => {
           try {
-            if (g.fp !== current && !(await openEntry(g.doc.entryKey))) return;
+            if (g.fp !== current && g.doc?.entryKey && !(await openEntry(g.doc.entryKey))) return;
             $('allQuizzesDialog').close();
-            await openItem(kind, item.id);
+            await openItem(kind, item.id, g.fp);
           } catch (error) { $('allQuizzesStatus').textContent = error.message; }
         };
         anki.type = 'button'; anki.className = 'saved-export'; anki.textContent = 'Anki';
@@ -107,9 +114,15 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
       $(`all-${kind}-empty`).textContent = scope === 'note' ? 'None for this note.' : kind === 'decks' ? 'None yet: Study → Generate flashcards….' : 'None yet: Study → Quiz me….';
     }
   }
-  async function render() {
+  async function render(explicitScope = null) {
     data = await read();
-    const missing = new Set(KINDS.flatMap(kind => groupQuizzes(data.stored, data.docs, `${kind}:`)).filter(g => !g.doc).map(g => g.fp));
+    const missing = new Set(KINDS.flatMap(kind => groupQuizzes(data.stored, data.docs, `${kind}:`)).filter(g => !g.doc && !String(g.fp).startsWith('general:') && !String(g.fp).startsWith('received:')).map(g => g.fp));
+    if (!explicitScope && scope === 'note') {
+      const current = currentFingerprint();
+      const hasForCurrent = KINDS.some(kind => groupQuizzes(data.stored, data.docs, `${kind}:`).some(g => g.fp === current));
+      const hasAny = KINDS.some(kind => groupQuizzes(data.stored, data.docs, `${kind}:`).length > 0);
+      if (!hasForCurrent && hasAny) setScope('all');
+    }
     draw();
     if (missing.size) {
       $('allQuizzesStatus').textContent = 'Finding the documents of older material…';
@@ -121,14 +134,14 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
   $('allQuizzesFilter').oninput = draw;
   $('allQuizzesClose').onclick = () => $('allQuizzesDialog').close();
   return {
-    async open() {
+    async open({ scope: wantedScope = null } = {}) {
       $('allQuizzesFilter').value = '';
       const inNote = !!currentFingerprint();
       $('allScope').hidden = !inNote;
-      setScope(inNote ? 'note' : 'all');
+      setScope(wantedScope && (!inNote ? 'all' : wantedScope) || (inNote ? 'note' : 'all'));
       for (const kind of KINDS) $(`all-${kind}`).replaceChildren();
       if (!$('allQuizzesDialog').open) $('allQuizzesDialog').showModal();
-      await render().catch(error => { console.warn('Study material could not be listed', error); $('allQuizzesStatus').textContent = `Could not list everything: ${error.message}`; });
+      await render(wantedScope).catch(error => { console.warn('Study material could not be listed', error); $('allQuizzesStatus').textContent = `Could not list everything: ${error.message}`; });
     },
   };
 }

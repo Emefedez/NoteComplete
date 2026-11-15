@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import {strict as assert} from 'node:assert';
-import {readerURL,exportRequest,allowsNavigation} from './connection.mjs';
+import {readerURL,exportRequest,shareRequest,allowsNavigation} from './connection.mjs';
 test('QR host resolves the reader on the same LAN, with IPv6 and URL overrides',()=>{
  assert.equal(readerURL('', '192.168.1.24:8081'),'http://192.168.1.24:8768/');
  assert.equal(readerURL('', '[::1]:8081'),'http://[::1]:8768/');
@@ -12,6 +12,18 @@ test('export bridge accepts reader files and rejects foreign origins and malform
  assert.equal(exportRequest(data,'http://192.168.1.24:8768/','http://192.168.1.24:8768/').name,'.._Note.nfedit');
  assert.throws(()=>exportRequest(data,'https://other.test/','http://192.168.1.24:8768/'));
  assert.throws(()=>exportRequest('{}','http://a.test/','http://a.test/'));
+});
+
+test('share bridge validates share actions, sanitizes file names, and rejects foreign origins',()=>{
+ const origin='http://127.0.0.1:8768/';
+ const fileMsg=JSON.stringify({type:'notecomplete-share-file',id:1,name:'a/b.nfedit',mime:'application/json',base64:'AA=='});
+ assert.deepEqual(shareRequest(fileMsg,origin,origin),{type:'notecomplete-share-file',id:1,name:'a_b.nfedit',mime:'application/json',base64:'AA=='});
+ assert.deepEqual(shareRequest(JSON.stringify({type:'notecomplete-share-links',id:2,shareId:'abc123'}),origin,origin).shareId,'abc123');
+ assert.deepEqual(shareRequest(JSON.stringify({type:'notecomplete-share-address',id:3,address:'192.168.1.5'}),origin,origin).address,'192.168.1.5');
+ assert.deepEqual(shareRequest(JSON.stringify({type:'notecomplete-unshare',id:4,shareId:'abc123'}),origin,origin).shareId,'abc123');
+ assert.throws(()=>shareRequest(fileMsg,'https://other.test/',origin));
+ assert.throws(()=>shareRequest(JSON.stringify({type:'notecomplete-share-links',id:5,shareId:''}),origin,origin));
+ assert.throws(()=>shareRequest(JSON.stringify({type:'unknown',id:6}),origin,origin));
 });
 
 test('navigation stays in the reader and malformed URLs fail closed',()=>{

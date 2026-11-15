@@ -13,4 +13,8 @@ test('files are told apart by name and content', async () => {
   assert.equal(await classifyImport(file('q.md', quiz)), 'quiz-markdown');
   assert.equal(await classifyImport(file('notes.md', '# Just notes\n\ntext')), 'document');
   assert.equal(await classifyImport(file('a.pdf', '')), 'document');
+  // Extensionless WhatsApp/Android carrier files are recognized from their bytes.
+  assert.equal(await classifyImport(file('Imported file', '{"format":"notecomplete-study"}')), 'study-pack');
+  assert.equal(await classifyImport(file('Imported file', '{"title":"d","cards":[{"front":"a","back":"b"}]}')), 'deck');
+  assert.equal(await classifyImport(file('DOC-WA01', quiz)), 'quiz-markdown');
 });

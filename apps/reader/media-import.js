@@ -32,11 +32,16 @@ export function fileKind(name, bytes) {
   const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
   if (!/\.[a-z0-9]+$/i.test(name) && (head.startsWith("<!doctype html") || head.startsWith("<html")))
     return "html";
+  if (/\.ncstudy$/i.test(name)) return "study-pack";
+  const headText = new TextDecoder().decode(bytes.subarray(0, 128)).trimStart();
+  if (!/\.nfedit$/i.test(name) && /^\{\s*"format"\s*:\s*"notecomplete-study"/.test(headText))
+    return "study-pack";
+  if (/\.json$/i.test(name)) return "json";
   if (/\.(notecomp(lete)?|notepart|tar)$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
     return "notecomplete";
   if (
     /\.nfedit$/i.test(name) ||
-    new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().startsWith("{")
+    headText.startsWith("{")
   )
     return "project";
   // No extension (data files, README, Makefile…): text when the content is.

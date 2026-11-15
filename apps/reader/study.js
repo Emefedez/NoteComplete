@@ -141,10 +141,11 @@ export function prompts(kind, { amount, language, title, unit = 'page', pages = 
 }
 
 export function studyController({ ai, pageCanvas, pageText, pageWords = async () => null, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null }) {
-  let mode = 'cards', cancelled = false, deck = null, practice = null;
+  let mode = 'cards', cancelled = false, deck = null, practice = null, activeDeckKey = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
-  const savedDecks = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
+  const deckKey = () => activeDeckKey || key();
+  const savedDecks = async (k = deckKey()) => (await library.store.get('settings', k).catch(() => null)) || [];
   const model = ai ? modelPicker($('studyModel'), $('studyModelOther'), ai) : null;
   async function fillProviders() {
     const select = $('studyProvider');
@@ -326,12 +327,13 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   $('quizPromptCancel').onclick = () => $('quizPromptDialog').close();
 
   // Deck review: every card editable, then save, practise or export.
-  function showDeck(value, unsaved = false) {
+  function showDeck(value, unsaved = false, customKey = null) {
+    activeDeckKey = customKey || null;
     deck = structuredClone(value);
     // Decks saved before list items were split get the same line breaks.
     for (const card of deck.cards) { card.front = listLines(card.front); card.back = listLines(card.back); }
     $('deckTitle').value = deck.title;
-    $('deckSaved').textContent = unsaved ? 'Not saved yet' : 'Saved with this note';
+    $('deckSaved').textContent = unsaved ? 'Not saved yet' : (activeDeckKey ? 'Saved study deck' : 'Saved with this note');
     renderCards();
     $('deckList').hidden = false; $('deckPractice').hidden = true;
     if ($('deckDialog').classList.contains('floating')) { $('deckDialog').close(); $('deckDialog').classList.remove('floating', 'minimized'); for (const p of ['left', 'top', 'width', 'height', 'right', 'bottom', 'margin']) $('deckDialog').style[p] = ''; }
@@ -518,11 +520,12 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   // double check it against its page, or discard it. Changes are saved at once.
   async function saveDeck() {
     deck.title = $('deckTitle').value.trim() || deck.title;
-    const decks = await savedDecks(), value = { ...deck, cards: deck.cards.filter(c => c.front.trim() && c.back.trim()) };
+    const targetKey = deckKey();
+    const decks = await savedDecks(targetKey), value = { ...deck, cards: deck.cards.filter(c => c.front.trim() && c.back.trim()) };
     const at = decks.findIndex(d => d.id === deck.id);
     if (at >= 0) decks[at] = value; else decks.unshift(value);
-    await library.store.set('settings', key(), decks);
-    $('deckSaved').textContent = 'Saved with this note';
+    await library.store.set('settings', targetKey, decks);
+    $('deckSaved').textContent = activeDeckKey ? 'Saved study deck' : 'Saved with this note';
   }
   // The AI tool and model for card requests, chosen in the Ask AI box and remembered.
   const cardModel = ai ? modelPicker($('practiceAskModel'), $('practiceAskModelOther'), ai) : null;
@@ -963,11 +966,12 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
       fallbackLabel: 'Export Anki .txt instead',
     });
   }
-  // From Study → All quizzes and decks: a deck of the open note, and any deck to Anki.
-  async function openDeck(id) {
-    const d = (await savedDecks()).find(x => x.id === id);
-    if (!d) return status('That deck is no longer saved with the note.', true);
-    showDeck(d);
+  // From Study → All quizzes and decks: a deck of the open note or a standalone imported one.
+  async function openDeck(id, fp = '') {
+    const customKey = fp ? `decks:${fp}` : null;
+    const d = (await savedDecks(customKey || key())).find(x => x.id === id);
+    if (!d) return status('That deck is no longer saved on this device.', true);
+    showDeck(d, false, customKey);
   }
   async function exportDeck(d) {
     const name = fileName(d.title || 'Flashcards');

@@ -1180,6 +1180,15 @@
   <div class="ocr-actions"><span class="spacer"></span><button id="allQuizzesClose" type="button">Close</button></div>
 </dialog>
 
+<dialog id="importTargetDialog" class="ocr-dialog migrate-dialog" aria-labelledby="importTargetTitle">
+  <h2 id="importTargetTitle">Import study material</h2>
+  <p id="importTargetSummary" class="muted"></p>
+  <input id="importTargetFilter" type="search" placeholder="Filter notes" aria-label="Filter notes" spellcheck="false" />
+  <div id="importTargetList" class="migrate-list" role="radiogroup" aria-label="Note this study material belongs to"></div>
+  <p id="importTargetStatus" class="muted" role="status" aria-live="polite"></p>
+  <div class="ocr-actions"><button id="importTargetCancel" type="button">Cancel</button><button id="importTargetConfirm" type="button" class="primary">Import</button></div>
+</dialog>
+
 <dialog id="migrateDialog" class="ocr-dialog migrate-dialog" aria-labelledby="migrateTitle">
   <h2 id="migrateTitle">Migrate content</h2>
   <div id="migratePick">

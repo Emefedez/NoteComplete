@@ -167,9 +167,10 @@ async function receiveViaQrStream(host, stateEl) {
   if (payload?.kind === 'study' && payload.pack) {
     const { readPack, describePack } = await import('./study-pack.js');
     const pack = readPack(payload.pack);
-    const { merged } = await host.importStudyPack(pack);
-    const msg = merged ? `Added to “${pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
     closeDialog();
+    const res = await host.importStudyPack(pack);
+    if (res?.cancelled) { host.status('Import cancelled.'); return; }
+    const msg = res?.general ? `Kept as a general study set (“${pack.title}”).` : res?.merged ? `Added to “${res.targetTitle || pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
     host.status(`Received ${describePack(pack)} via QR. ${msg}`);
     return;
   }
@@ -240,8 +241,9 @@ async function askAboutPack(session, id, pack, from) {
       d.close();
       if (!accept) { session.client.packResult(id, false, 'Declined.'); return resolve(); }
       try {
-        const { merged, fingerprint } = await session.host.importStudyPack(pack);
-        const message = merged ? `Added to the matching note “${pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
+        const res = await session.host.importStudyPack(pack);
+        if (res?.cancelled) { session.client.packResult(id, false, 'Cancelled.'); return resolve(); }
+        const message = res?.general ? `Kept as a general study set (“${pack.title}”).` : res?.merged ? `Added to “${res.targetTitle || pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
         session.client.packResult(id, true, message);
         session.host.status(`Received ${describePack(pack)} from ${from}. ${message}`);
       } catch (e) { session.client.packResult(id, false, e.message); session.host.status(e.message, true); }
@@ -259,17 +261,77 @@ async function askAboutPack(session, id, pack, from) {
   });
 }
 
+let mobileShareSeq = 0;
+
+function bytesToBase64(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let binary = '';
+  for (let i = 0; i < view.length; i += 8192) {
+    binary += String.fromCharCode(...view.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+}
+
+function mobileShareCall(type, payload) {
+  if (!window.ReactNativeWebView) return Promise.reject(Error('Mobile QR share bridge unavailable.'));
+  const id = ++mobileShareSeq;
+  return new Promise((resolve, reject) => {
+    const onMessage = (event) => {
+      let msg;
+      try { msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch { return; }
+      if (msg?.type !== 'notecomplete-share-result' || msg.id !== id) return;
+      cleanup();
+      if (msg.error) reject(Error(msg.error));
+      else resolve(msg.result);
+    };
+    const cleanup = () => {
+      window.removeEventListener('message', onMessage);
+      document.removeEventListener('message', onMessage);
+      clearTimeout(timer);
+    };
+    const timer = setTimeout(() => { cleanup(); reject(Error('Timed out preparing the note share link.')); }, 60000);
+    window.addEventListener('message', onMessage);
+    document.addEventListener('message', onMessage);
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type, id, ...payload }));
+  });
+}
+
+function noteShareBridge() {
+  if (window.notecompleteCollab?.shareFile) {
+    return {
+      canOnline: typeof window.notecompleteCollab.online === 'function',
+      shareFile: ({ name, mime, bytes }) => window.notecompleteCollab.shareFile({ name, mime, bytes }),
+      shareLinks: (shareId) => window.notecompleteCollab.shareLinks?.(shareId),
+      useAddress: (address) => window.notecompleteCollab.useAddress?.(address),
+      online: (on) => window.notecompleteCollab.online?.(on),
+      unshareFile: (shareId) => window.notecompleteCollab.unshareFile?.(shareId),
+    };
+  }
+  if (window.ReactNativeWebView && window.notecompleteApp?.canShareQr) {
+    return {
+      canOnline: false,
+      shareFile: ({ name, mime, bytes }) => mobileShareCall('notecomplete-share-file', { name, mime, base64: bytesToBase64(bytes) }),
+      shareLinks: (shareId) => mobileShareCall('notecomplete-share-links', { shareId }),
+      useAddress: (address) => mobileShareCall('notecomplete-share-address', { address }),
+      online: null,
+      unshareFile: (shareId) => mobileShareCall('notecomplete-unshare', { shareId }),
+    };
+  }
+  return null;
+}
+
 /**
  * Export → Share with others → Share note via QR…
- * On desktop: exports the chosen note format (.nfedit, .notecomp, or .noteful), serves it
- * over the local/online sharing server, and renders a direct download QR code.
- * In browsers/mobile: exports via the OS share sheet / download or launches study QR transfer.
+ * On desktop & Android: exports the chosen note format (.nfedit, .notecomp, or .noteful), serves it
+ * over the local sharing server (plus optional online tunnel on desktop), and renders a QR code.
+ * In web browsers: exports via the OS share sheet / download or launches study QR transfer.
  */
 export async function openShareNoteQr(host) {
   if (!host.doc) throw Error('Open a note first.');
   let format = 'project';
   let sharedId = null;
   let sharedMeta = null;
+  const bridge = noteShareBridge();
   const stage = el('div', { className: 'collab-panel' });
   const formats = [
     ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history with undo, Markdown notes, handwriting text, quizzes, flashcards & scratchpad'],
@@ -295,9 +357,9 @@ export async function openShareNoteQr(host) {
   };
 
   async function render() {
-    if (!window.notecompleteCollab?.shareFile) {
+    if (!bridge) {
       stage.replaceChildren(
-        el('p', { textContent: 'Browsers and mobile sandboxes cannot host an incoming download link on a local port.' }),
+        el('p', { textContent: 'Browsers cannot host an incoming download link on a local port.' }),
         el('p', { className: 'muted', textContent: 'Save or open your device’s Share menu for the full note file, or share quizzes and flashcards offline with progressive QR codes.' }),
         buttons(
           el('button', { type: 'button', textContent: 'Share quizzes & decks (QR)…', onclick: () => { closeDialog(); void openStudyShare(host); } }),
@@ -311,11 +373,11 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(el('p', { className: 'muted', textContent: 'Preparing note package…' }));
     try {
       if (sharedId) {
-        await window.notecompleteCollab.unshareFile(sharedId).catch(() => {});
+        await bridge.unshareFile(sharedId).catch(() => {});
         sharedId = null;
       }
       const { name, mime, bytes } = await host.exportNote(format);
-      sharedMeta = await window.notecompleteCollab.shareFile({ name, mime, bytes });
+      sharedMeta = await bridge.shareFile({ name, mime, bytes });
       sharedId = sharedMeta.id;
       await drawDesktopShare();
     } catch (e) {
@@ -342,40 +404,45 @@ export async function openShareNoteQr(host) {
       const sel = el('select', { 'aria-label': 'Network interface', className: 'qr-speed-select' });
       for (const addr of sharedMeta.addresses) sel.append(el('option', { value: addr, textContent: addr, selected: addr === sharedMeta.address }));
       sel.onchange = async () => {
-        await window.notecompleteCollab.useAddress(sel.value);
-        const refreshed = await window.notecompleteCollab.shareLinks?.(sharedId);
+        await bridge.useAddress(sel.value);
+        const refreshed = await bridge.shareLinks?.(sharedId);
         if (refreshed) { sharedMeta = refreshed; await drawDesktopShare(); }
       };
       meta.append(el('div', { className: 'collab-network' }, el('span', { textContent: 'Address:' }), sel));
     }
 
-    const onlineBtn = el('button', {
-      type: 'button',
-      textContent: sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…',
-      onclick: async () => {
-        onlineBtn.disabled = true;
-        try {
-          await window.notecompleteCollab.online(!sharedMeta.online);
-          const refreshed = await window.notecompleteCollab.shareLinks?.(sharedId);
-          if (refreshed) { sharedMeta = refreshed; await drawDesktopShare(); }
-        } catch (e) { host.status(e.message, true); onlineBtn.disabled = false; }
-      },
-    });
-    const stopBtn = el('button', {
+    const actions = [];
+    actions.push(el('button', {
       type: 'button',
       textContent: 'Stop link',
       onclick: async () => {
-        if (sharedId) await window.notecompleteCollab.unshareFile(sharedId).catch(() => {});
+        if (sharedId) await bridge.unshareFile(sharedId).catch(() => {});
         sharedId = null;
         closeDialog();
         host.status('Stopped note download link.');
       },
-    });
-    const downloadBtn = el('button', {
+    }));
+    actions.push(el('button', {
       type: 'button',
       textContent: 'Save file copy',
       onclick: async () => { closeDialog(); await host.exportAndDownload(format); },
-    });
+    }));
+    if (bridge.canOnline) {
+      const onlineBtn = el('button', {
+        type: 'button',
+        textContent: sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…',
+        onclick: async () => {
+          onlineBtn.disabled = true;
+          try {
+            await bridge.online(!sharedMeta.online);
+            const refreshed = await bridge.shareLinks?.(sharedId);
+            if (refreshed) { sharedMeta = refreshed; await drawDesktopShare(); }
+          } catch (e) { host.status(e.message, true); onlineBtn.disabled = false; }
+        },
+      });
+      actions.push(onlineBtn);
+    }
+    actions.push(el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog }));
     const noteLine = el('p', { className: 'muted', textContent: 'Download link stays active until you click Stop link or quit NoteComplete.' });
     const firewall = sharedMeta.firewall?.command
       ? el('div', { className: 'collab-firewall' }, el('p', { textContent: `Blocked by ${sharedMeta.firewall.name}? Allow port ${sharedMeta.port} once:` }), linkRowEl(sharedMeta.firewall.command, 'Firewall command copied.'))
@@ -384,7 +451,7 @@ export async function openShareNoteQr(host) {
       el('div', { className: 'collab-pair' }, qrBox, meta),
       firewall,
       noteLine,
-      buttons(stopBtn, downloadBtn, onlineBtn, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog })),
+      buttons(...actions),
     );
   }
 

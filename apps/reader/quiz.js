@@ -162,12 +162,14 @@ export function clarifyPrompt(q, { answered = null, history = [], question = '',
 }
 
 export function quizController({ library, key, pageCanvas, jump, highlight, clarify, status, factCheck, ai = null, markdown = null, notePath = () => '', notesText = async () => '', pagePdf = null, pageText = async () => '', continueInChat = null, keep = null, grow = () => {}, documentInfo = () => ({}) }) {
-  let quiz = null, hint = null;
-  const store = async () => (await library.store.get('settings', key()).catch(() => null)) || [];
+  let quiz = null, hint = null, activeKey = null;
+  const targetKey = () => activeKey || key();
+  const store = async (k = targetKey()) => (await library.store.get('settings', k).catch(() => null)) || [];
   async function save() {
     if (!quiz) return;
-    const all = (await store()).filter(q => q.id !== quiz.id);
-    await library.store.set('settings', key(), [quiz, ...all]);
+    const k = targetKey();
+    const all = (await store(k)).filter(q => q.id !== quiz.id);
+    await library.store.set('settings', k, [quiz, ...all]);
   }
   // The hint: the source box cut from the page (tape lifted), or the whole page.
   // Text documents have no page image (null): their hint is the quote.
@@ -344,7 +346,8 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
       status(shuffleOn ? 'Random question order on.' : 'Questions in note order.');
     };
   }
-  function open(value) {
+  function open(value, customKey = null) {
+    activeKey = customKey || null;
     quiz = value;
     quiz.answers ||= {};
     quiz.questions?.forEach((q, i) => { if (!Number.isInteger(q._order)) q._order = i; });
@@ -480,21 +483,22 @@ export function quizController({ library, key, pageCanvas, jump, highlight, clar
     if (k === 'escape') { if (explain.open) explain.close(); else $('quizPanel').classList.add('minimized'); return true; }
     return false;
   }
-  async function list() { return store(); }
-  async function remove(id) { await library.store.set('settings', key(), (await store()).filter(q => q.id !== id)); }
+  async function list(customKey = null) { return store(customKey || key()); }
+  async function remove(id) { await library.store.set('settings', key(), (await store(key())).filter(q => q.id !== id)); }
   // Disputed questions of this note, so new quizzes can be told to avoid them.
   async function disputed() {
-    return (await store()).flatMap(q => q.questions.filter(x => x.disputed).map(x => x.question));
+    return (await store(key())).flatMap(q => q.questions.filter(x => x.disputed).map(x => x.question));
   }
   async function retakeWrong() {
-    const questions = wrongQuestions(await store());
-    if (!questions.length) { status('No wrong answers to retake in this note’s quizzes.'); return; }
+    const k = targetKey();
+    const questions = wrongQuestions(await store(k));
+    if (!questions.length) { status('No wrong answers to retake in these quizzes.'); return; }
     const value = { id: String(Date.now()), title: `Wrong answers · ${new Date().toLocaleDateString()}`, created: Date.now(), questions, answers: {}, at: 0, retake: true };
-    await library.store.set('settings', key(), [value, ...(await store())]);
-    open(value);
+    await library.store.set('settings', k, [value, ...(await store(k))]);
+    open(value, activeKey);
   }
   return { open, key: onKey, list, remove, save, disputed, retakeWrong, get current() { return quiz; },
     // Put a deleted quiz back (Undo in the saved list) without touching the open one.
-    async restore(value) { const all = (await store()).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); },
-    async add(value) { quiz = null; const all = (await store()).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); } };
+    async restore(value) { const all = (await store(key())).filter(q => q.id !== value.id); await library.store.set('settings', key(), [value, ...all]); },
+    async add(value, customKey = null) { quiz = null; const k = customKey || key(); const all = (await store(k)).filter(q => q.id !== value.id); await library.store.set('settings', k, [value, ...all]); } };
 }

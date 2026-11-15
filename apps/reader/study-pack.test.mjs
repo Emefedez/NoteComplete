@@ -72,3 +72,20 @@ test('the description is in the singular where it should be', () => {
   const one = buildPack({ title: 'x', study: { decks: [deck('d1', 1)], quizzes: [quiz('q1', 1)] } });
   assert.equal(describePack(one), '1 flashcard deck (1 card), 1 quiz (1 question)');
 });
+
+test('importing with an explicit target attaches to that note or creates a general study set', async () => {
+  const store = memoryStore();
+  const pack = readPack(buildPack({ title: 'Physics', from: 'Luis', study: { quizzes: [quiz('q1', 2)], decks: [deck('d1', 2)] } }));
+  const gen = await importPack(store, pack, { target: { general: true }, now: () => 1700000000000 });
+  assert.equal(gen.general, true);
+  assert.equal(gen.merged, false);
+  assert.match(gen.fingerprint, /^general:/);
+  assert.equal((await store.get('settings', `doc:${gen.fingerprint}`)).general, true);
+  assert.equal((await store.get('settings', `quizzes:${gen.fingerprint}`)).length, 1);
+
+  const attached = await importPack(store, pack, { target: { fingerprint: 'fp-note', title: 'Mechanics', entryKey: 'local:mech' }, now: () => 1700000001000 });
+  assert.equal(attached.merged, true);
+  assert.equal(attached.fingerprint, 'fp-note');
+  assert.deepEqual(await store.get('settings', 'doc:fp-note'), { title: 'Mechanics', entryKey: 'local:mech', at: 1700000001000 });
+  assert.equal((await store.get('settings', 'decks:fp-note')).length, 1);
+});

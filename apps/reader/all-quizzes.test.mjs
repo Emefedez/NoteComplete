@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupQuizzes, describe } from './all-quizzes.js';
+import { groupQuizzes, describe, groupHeading } from './all-quizzes.js';
 import { ankiDecks, studyGroups } from './study.js';
 
 test('quizzes are grouped by document, newest first, unknown ones last', () => {
@@ -23,4 +23,11 @@ test('decks group under their documents too, and damaged quizzes are described, 
   assert.deepEqual(groupQuizzes(stored, new Map([['a', { title: 'Memoria 1' }]]), 'decks:').map(g => g.items.length), [1]);
   assert.equal(describe('decks', stored[0][1][0]), '2 cards');
   assert.equal(describe('quizzes', { id: 'q' }), 'cannot be read');
+});
+
+test('general and standalone study sets format clear headings without disabling access', () => {
+  assert.equal(groupHeading({ fp: 'general:1', doc: { title: 'Biology', general: true } }, 'other'), 'Biology · General');
+  assert.equal(groupHeading({ fp: 'fp1', doc: { title: 'Math' } }, 'fp1'), 'Math · open now');
+  assert.equal(groupHeading({ fp: 'general:2', doc: null }, ''), 'General quiz · General');
+  assert.equal(groupHeading({ fp: 'received:9', doc: null }, ''), 'Standalone study material');
 });

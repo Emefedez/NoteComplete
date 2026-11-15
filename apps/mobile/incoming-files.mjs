@@ -5,6 +5,8 @@ export const OPEN_TYPES = {
  'application/x-nfedit':['nfedit'],
  'application/x-notecomp':['notecomp','notecomplete'],
  'application/x-notepart':['notepart'],
+ 'application/x-ncstudy':['ncstudy'],
+ 'application/json':['json'],
  'application/pdf':['pdf'],
  'image/png':['png'],
  'image/jpeg':['jpg','jpeg'],
@@ -25,7 +27,7 @@ export const OPEN_TYPES = {
 // Generic types other apps (WhatsApp, mail, file managers) attach to files they cannot name:
 // declared for sharing and opening, but never used to guess a file name.
 export const CARRIER_TYPES = ['application/octet-stream','application/zip','application/x-zip-compressed','application/gzip','application/x-gzip'];
-export const OWN_EXTENSIONS = ['noteful','nfedit','notecomp','notecomplete','notepart'];
+export const OWN_EXTENSIONS = ['noteful','nfedit','notecomp','notecomplete','notepart','ncstudy'];
 const SUPPORTED = new RegExp(`\\.(${[...new Set(Object.values(OPEN_TYPES).flat())].join('|')})$`,'i');
 
 // The name the reader gets: the provider's display name, else the URI's last segment, as long

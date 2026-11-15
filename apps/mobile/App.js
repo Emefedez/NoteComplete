@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, StyleSheet, Text, View, Pressable, useColorScheme, Linking, Platform} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View, Pressable, useColorScheme, Linking, Platform, PermissionsAndroid} from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {StatusBar} from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import {mobileDriveToken} from './drive-auth.mjs';
 import {IncomingFiles} from './incoming-files.mjs';
-import {readerURL, exportRequest, allowsNavigation} from './connection.mjs';
+import {readerURL, exportRequest, shareRequest, allowsNavigation} from './connection.mjs';
 // The provider's file names and Share intents come from the app's own module (absent in Expo Go).
 const files = requireOptionalNativeModule('ReaderServer');
 
@@ -24,7 +24,7 @@ async function readIncoming(uri, bundled) {
  finally{files.release(token);}
 }
 // The reader's updater (android-updates.js) needs this app's version to compare releases.
-const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '' })};true;`;
+const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '', canShareQr: !!files?.shareFile })};true;`;
 export default function App() {
  const web = useRef(null), sharing = useRef(false), incoming = useRef(null), driveSession = useRef({generation:0,busy:false});
  const [notice, setNotice] = useState('');
@@ -80,6 +80,46 @@ export default function App() {
    }
    if(message.type==='noteful-ready'){incoming.current.setReady(true);return;}
    if(message.type==='noteful-import-result'){incoming.current.acknowledge(message.id);return;}
+   if(message.type==='notecomplete-camera-permission'&&Number.isSafeInteger(message.id)){
+    let granted=Platform.OS!=='android';
+    if(!granted){
+     const res=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA,{
+      title:'Camera permission',
+      message:'NoteComplete needs camera access to scan QR codes.',
+      buttonPositive:'Allow',
+      buttonNegative:'Cancel',
+     });
+     granted=res===PermissionsAndroid.RESULTS.GRANTED;
+    }
+    web.current?.postMessage(JSON.stringify({type:'notecomplete-camera-permission-result',id:message.id,granted}));
+    return;
+   }
+   if(typeof message.type==='string'&&message.type.startsWith('notecomplete-share-')||message.type==='notecomplete-unshare'){
+    let req;
+    const replyShare=payload=>web.current?.postMessage(JSON.stringify({type:'notecomplete-share-result',...payload}));
+    try{
+     req=shareRequest(message,event.nativeEvent.url,uri);
+     if(!files?.shareFile)throw Error('Local note QR sharing is not available in this build.');
+     if(req.type==='notecomplete-share-file'){
+      const dir=`${FileSystem.cacheDirectory}share-${Date.now()}-${req.id}/`;
+      await FileSystem.makeDirectoryAsync(dir,{intermediates:true});
+      const fileUri=dir+req.name;
+      await FileSystem.writeAsStringAsync(fileUri,req.base64,{encoding:FileSystem.EncodingType.Base64});
+      const result=await files.shareFile(fileUri.replace(/^file:\/\//,''),req.name,req.mime);
+      replyShare({id:req.id,result});
+     }else if(req.type==='notecomplete-share-links'){
+      replyShare({id:req.id,result:await files.shareLinks(req.shareId,null)});
+     }else if(req.type==='notecomplete-share-address'){
+      await files.shareLinks('',req.address).catch(()=>{});
+      replyShare({id:req.id,result:true});
+     }else if(req.type==='notecomplete-unshare'){
+      replyShare({id:req.id,result:await files.unshareFile(req.shareId)});
+     }
+    }catch(e){
+     if(req)replyShare({id:req.id,error:e.message});
+    }
+    return;
+   }
    request = exportRequest(event.nativeEvent.data, event.nativeEvent.url, uri);
    if (sharing.current) throw Error('Finish saving the previous file first.');
    sharing.current = true;
@@ -106,7 +146,7 @@ export default function App() {
    originWhitelist={[new URL(uri).origin]} onShouldStartLoadWithRequest={request=>{if(allowsNavigation(request.url,uri))return true;if(/^https?:\/\//.test(request.url))Linking.openURL(request.url).catch(()=>{});return false;}}
    onLoadStart={()=>{incoming.current.setReady(false);driveSession.current.generation++;}} onMessage={onMessage} onError={event=>setError(event.nativeEvent.description)} onHttpError={event=>setError(`Could not open the reader (${event.nativeEvent.statusCode}).`)}
    startInLoadingState renderLoading={()=> <View style={[styles.loading,{backgroundColor:background}]}><ActivityIndicator size="large" color="#438ee3"/><Text style={[styles.description,{color:ink}]}>Preparing your workspace…</Text></View>}
-   allowsInlineMediaPlayback mediaPlaybackRequiresUserAction bounces={false} allowsBackForwardNavigationGestures={false}
+   allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false} mediaCapturePermissionGrantType="grantIfSameHostElsePrompt" bounces={false} allowsBackForwardNavigationGestures={false}
    setSupportMultipleWindows={false} javaScriptEnabled domStorageEnabled textZoom={100}
    injectedJavaScriptBeforeContentLoaded={appInfo}
   />}

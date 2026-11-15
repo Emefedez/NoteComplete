@@ -1,15 +1,44 @@
 // Reads one or a progressive sequence of QR codes with the camera (`BarcodeDetector`),
 // updating live progress so both invite links and multi-frame `NCQR1` transfers work seamlessly.
 
+let cameraPermissionId = 0;
+
+function requestNativeCameraPermission() {
+  if (!window.ReactNativeWebView) return Promise.resolve(true);
+  const id = ++cameraPermissionId;
+  return new Promise((resolve) => {
+    const onMessage = (event) => {
+      let message;
+      try { message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch { return; }
+      if (message?.type !== 'notecomplete-camera-permission-result' || message.id !== id) return;
+      cleanup();
+      resolve(!!message.granted);
+    };
+    const cleanup = () => {
+      window.removeEventListener('message', onMessage);
+      document.removeEventListener('message', onMessage);
+      clearTimeout(timer);
+    };
+    const timer = setTimeout(() => { cleanup(); resolve(true); }, 10000);
+    window.addEventListener('message', onMessage);
+    document.addEventListener('message', onMessage);
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'notecomplete-camera-permission', id }));
+  });
+}
+
 /**
  * Scans QR frames until `onCode(rawValue, helpers)` returns a truthy result `{ done: true, value }`
  * or the user cancels / times out.
  */
 export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the camera at the QR code…', timeoutMs = 120000 } = {}) {
   if (!('BarcodeDetector' in globalThis)) {
-    throw Error('This browser cannot read QR codes with the camera. Use the file import or paste an address instead.');
+    throw Error('QR camera detection is not supported in this browser or Android WebView. Use file import or copy/paste the link instead.');
   }
   const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  const allowed = await requestNativeCameraPermission();
+  if (!allowed) {
+    throw Error('Camera permission was denied. Enable Camera access for NoteComplete in Android settings, or import a file instead.');
+  }
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });

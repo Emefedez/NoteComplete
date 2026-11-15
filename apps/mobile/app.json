@@ -12,6 +12,9 @@
         "backgroundColor": "#087BFF"
       },
       "package": "com.notecomplete.viewer",
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -37,6 +40,12 @@
             },
             {
               "mimeType": "application/x-notepart"
+            },
+            {
+              "mimeType": "application/x-ncstudy"
+            },
+            {
+              "mimeType": "application/json"
             },
             {
               "mimeType": "application/pdf"
@@ -122,6 +131,12 @@
               "mimeType": "application/x-notepart"
             },
             {
+              "mimeType": "application/x-ncstudy"
+            },
+            {
+              "mimeType": "application/json"
+            },
+            {
               "mimeType": "application/pdf"
             },
             {
@@ -205,6 +220,12 @@
               "mimeType": "application/x-notepart"
             },
             {
+              "mimeType": "application/x-ncstudy"
+            },
+            {
+              "mimeType": "application/json"
+            },
+            {
               "mimeType": "application/pdf"
             },
             {
@@ -307,6 +328,12 @@
               "mimeType": "application/octet-stream"
             },
             {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy",
+              "mimeType": "application/octet-stream"
+            },
+            {
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.noteful",
@@ -334,6 +361,12 @@
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.notepart",
+              "mimeType": "application/octet-stream"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy",
               "mimeType": "application/octet-stream"
             }
           ]
@@ -376,6 +409,12 @@
               "mimeType": "*/*"
             },
             {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy",
+              "mimeType": "*/*"
+            },
+            {
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.noteful",
@@ -403,6 +442,12 @@
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.notepart",
+              "mimeType": "*/*"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy",
               "mimeType": "*/*"
             }
           ]
@@ -440,6 +485,11 @@
               "pathPattern": ".*\\.notepart"
             },
             {
+              "scheme": "content",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy"
+            },
+            {
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.noteful"
@@ -463,6 +513,11 @@
               "scheme": "file",
               "host": "*",
               "pathPattern": ".*\\.notepart"
+            },
+            {
+              "scheme": "file",
+              "host": "*",
+              "pathPattern": ".*\\.ncstudy"
             }
           ]
         },
