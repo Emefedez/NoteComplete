@@ -209,6 +209,7 @@ export function examController({
       hasOpenDoc,
       openDocTitle,
       openDocPages,
+      openDocKey: () => (typeof openDocResource === 'function' ? openDocResource()?.entryKey || '' : ''),
       allowTopics: true,
     });
 
@@ -297,6 +298,7 @@ export function examController({
         openPdf,
         library,
         groups,
+        openDocResource,
         pageText,
         pageCanvas,
         notesText,
@@ -349,12 +351,13 @@ export function examController({
       const rendered = await renderExamPdfAndTapes(printHtml, { title: exam.title, call });
 
       el('examStatus').textContent = 'Applying Noteful tape to exam pages…';
+      const pdfTransfer = rendered.pdf.slice().buffer;
       const projectJson = await call('createPdfNoteWithTapes', {
         title: exam.title,
         sizes: rendered.sizes,
-        pdf: rendered.pdf,
+        pdf: pdfTransfer,
         tapes: rendered.tapes,
-      }, [rendered.pdf.buffer.slice(0)]);
+      }, [pdfTransfer]);
 
       const fileName = `${safeFileBase(exam.title)}.nfedit`;
       const outFile = new File([projectJson], fileName, { type: 'application/json' });

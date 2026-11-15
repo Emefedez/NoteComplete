@@ -323,8 +323,12 @@ async function openLaunched() {
     if (rest.length) status(`Opened ${file.name}. Open ${rest.map((f) => f.name).join(", ")} on its own; one document per window.`);
   } catch (e) { status(e.message, true); }
 }
-function call(op, args = {}) {
-  return engine.call({ op, page, ...args }, args.bytes ? [args.bytes] : []);
+function call(op, args = {}, transfer = null) {
+  const raw = Array.isArray(transfer)
+    ? transfer
+    : (args.bytes instanceof ArrayBuffer || ArrayBuffer.isView(args.bytes) ? [args.bytes] : []);
+  const list = [...new Set(raw.map((x) => (ArrayBuffer.isView(x) ? x.buffer : x)).filter((x) => x instanceof ArrayBuffer))];
+  return engine.call({ op, page, ...args }, list);
 }
 // A sharing session (collab.js, loaded only when one starts). While it holds the open
 // note, edits go into the session's shared order and come back to be applied here
@@ -6445,6 +6449,27 @@ $("receiveNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
+if ($("receiveStudyQr")) $("receiveStudyQr").onclick = () => $("receiveNoteQr")?.click();
+if ($("exportSavedResources")) $("exportSavedResources").onclick = () => {
+  closeMenus();
+  quizIndex.open();
+};
+if ($("exportImportStudy")) $("exportImportStudy").onclick = () => {
+  closeMenus();
+  $("importAny")?.click();
+};
+{
+  const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
+  const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];
+  const setExportTab = (name) => {
+    const active = name === "resources" ? "resources" : "notes";
+    for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.exportTab === active));
+    for (const p of panels) p.hidden = p.dataset.exportPanel !== active;
+    try { localStorage.setItem("notecomplete-export-tab", active); } catch { /* Optional. */ }
+  };
+  for (const t of tabs) t.onclick = () => setExportTab(t.dataset.exportTab);
+  try { setExportTab(localStorage.getItem("notecomplete-export-tab") || "notes"); } catch { setExportTab("notes"); }
+}
 $("studyShare").onclick = async () => {
   closeMenus();
   try { const { openStudyShare } = await (collabLoading ||= import("./collab.js")); await openStudyShare(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }

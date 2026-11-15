@@ -217,26 +217,20 @@ export function expandController({
     el('expRun').prepend(icon('plus'));
     document.body.append(dialog);
 
-    picker = createSourcePicker({
-      mount: el('expSourceMount'),
+    picker = createSourcePicker(el('expSourceMount'), {
       library,
       groups,
       hasOpenDoc,
       openDocTitle,
       openDocPages,
+      openDocKey: () => (typeof openDocResource === 'function' ? openDocResource()?.entryKey || '' : ''),
       onChange: () => { el('expStatus').textContent = ''; },
     });
 
-    model = modelPicker({
-      ai,
-      tool: el('expTool'),
-      model: el('expModel'),
-      custom: el('expModelOther'),
-      store,
-      key: 'notecomplete-expand-model',
-    });
-
-    el('expTool').onchange = () => { try { store?.setItem('notecomplete-expand-ai', el('expTool').value); } catch {} model.load(el('expTool').value); };
+    if (ai) {
+      model = modelPicker(el('expModel'), el('expModelOther'), ai);
+      el('expTool').onchange = () => { try { store?.setItem('notecomplete-expand-ai', el('expTool').value); } catch {} model.load(el('expTool').value); };
+    }
     el('expMode').onchange = syncModeFields;
     el('expCountMode').onchange = syncModeFields;
     el('expCloseX').onclick = () => el('expCancel').click();
@@ -304,6 +298,7 @@ export function expandController({
         openPdf,
         library,
         groups,
+        openDocResource,
         pageText,
         pageCanvas,
         notesText,

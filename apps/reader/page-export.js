@@ -168,7 +168,7 @@ export function pageExporter({
     if ($('exportClose')) $('exportClose').onclick = () => $('exportDialog')?.close();
     $('exportDialog')?.addEventListener?.('click', (e) => {
       const b = e.target?.closest?.('button');
-      if (!b || b.id === 'exportImage' || b.id === 'exportClose' || b.hasAttribute?.('data-format-help')) return;
+      if (!b || b.id === 'exportImage' || b.id === 'exportClose' || b.hasAttribute?.('data-format-help') || b.hasAttribute?.('data-export-tab') || b.getAttribute?.('role') === 'tab') return;
       setTimeout(() => $('exportDialog')?.close(), 0);
     });
   }

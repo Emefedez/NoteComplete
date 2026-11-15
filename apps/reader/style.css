@@ -1845,7 +1845,7 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 .quiz-options kbd { min-width: 18px; text-align: center; }
 .saved-dialog { width: min(640px, calc(100vw - 24px)); }
 .saved-dialog h3 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.deck-picker { list-style: none; padding: 0; margin: 0 0 4px; display: grid; gap: 4px; max-height: 32dvh; overflow: auto; }
+.deck-picker { list-style: none; padding: 0; margin: 0 0 4px; display: grid; align-content: start; grid-auto-rows: max-content; gap: 4px; max-height: 32dvh; overflow: auto; }
 .deck-picker:empty::before { content: "None yet."; color: var(--muted); font-size: 13px; }
 .deck-picker li { display: flex; gap: 4px; align-items: stretch; }
 .deck-picker .saved-open { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; background: var(--fill); padding: 5px 10px; }
@@ -2497,12 +2497,14 @@ body.bar-compact .tab { height: 22px; }
 .icon-button.dictate.recording::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: rec-pulse 1.4s ease-in-out infinite; }
 .icon-button.dictate.busy { opacity: .55; cursor: progress; }
 @media (prefers-reduced-motion: reduce) { .icon-button.dictate.recording::after { animation: none; } }
-/* Saved resource rows: column items shrink cleanly. */
-.all-study .all-quizzes li:not(.all-quizzes-doc) { min-width: 0; }
-.all-study .saved-open { flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding-block: 5px; }
+/* Saved resource rows: keep every item compact and top-aligned (never stretch to fill card height). */
+.all-study .all-quizzes { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.all-study .all-quizzes li:not(.all-quizzes-doc) { flex: none; align-items: center; min-width: 0; }
+.all-study .saved-open { flex: 1 1 auto; min-width: 0; min-height: 40px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 6px 10px; border-radius: var(--radius); }
 .all-study .saved-open strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .all-study .saved-open span { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.all-study .saved-export { flex: none; align-self: stretch; }
+.all-study .saved-export, .all-study .saved-icon { flex: none; align-self: center; width: 32px; height: 32px; min-height: 32px; }
+.all-study .scratch-saved-row { align-items: center; }
 /* Saved explanations open from their Explanation ▾ button; closed, they take no room. */
 .practice-explained:not([open]) { display: none; }
 /* Restart quiz (the circling arrow, left of the sun): a second press confirms. */
@@ -3504,10 +3506,23 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 
 /* Export and share: two compact columns on wide screens so sections fit at a glance. */
 .export-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; }
+.export-dialog .export-head { display: grid; gap: 10px; margin-bottom: 12px; }
+.export-dialog .export-head h2 { margin: 0; }
+.export-dialog .export-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); }
+.export-dialog .export-tab { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid transparent; border-radius: calc(var(--radius-box) - 3px); background: transparent; color: var(--muted); text-align: left; }
+.export-dialog .export-tab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.export-dialog .export-tab-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.export-dialog .export-tab-text b { font-size: 13.5px; font-weight: 600; color: inherit; }
+.export-dialog .export-tab-text small { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.export-dialog .export-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.export-dialog .export-tab[aria-selected="true"] { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); box-shadow: 0 1px 4px #0002; }
+.export-dialog .export-tab[aria-selected="true"] .export-tab-text b { color: var(--ink); }
+.export-dialog .export-tabpanel[hidden] { display: none; }
 .export-dialog .export-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 680px) { .export-dialog .export-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; align-items: start; } }
+@media (max-width: 520px) { .export-dialog .export-tabs { grid-template-columns: minmax(0, 1fr); } }
 .export-dialog .export-column { min-width: 0; }
-.export-dialog section { margin: 0 0 10px; }
+.export-dialog section { margin: 0 0 12px; padding: 10px 10px 8px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--chrome); }
 .export-dialog .export-column > section:last-child { margin-bottom: 0; }
 .export-dialog h3 { display: flex; align-items: center; margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .export-dialog .export-item { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 40px; margin: 2px 0; padding: 6px 12px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); text-align: left; }

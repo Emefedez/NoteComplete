@@ -109,7 +109,8 @@ export async function extractHtmlText(html) {
 
 export async function extractNoteArchive(bytes, { call, openPdf, maxPages = 60 } = {}) {
   const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  const summary = await call('extractNoteSummary', { bytes: buf, maxPages }, [buf.buffer.slice(0)]);
+  const summaryBuf = buf.slice().buffer;
+  const summary = await call('extractNoteSummary', { bytes: summaryBuf, maxPages }, [summaryBuf]);
   const parts = [];
   if (summary?.markdown?.trim()) {
     parts.push(`## Notes\n${summary.markdown.trim()}`);
@@ -118,7 +119,8 @@ export async function extractNoteArchive(bytes, { call, openPdf, maxPages = 60 }
   for (const id of summary?.pdf_ids || []) {
     if (String(id).startsWith('paper-')) continue;
     try {
-      const pdfBytes = await call('extractNotePdf', { bytes: buf, pdfId: id }, [buf.buffer.slice(0)]);
+      const pdfArgBuf = buf.slice().buffer;
+      const pdfBytes = await call('extractNotePdf', { bytes: pdfArgBuf, pdfId: id }, [pdfArgBuf]);
       pdfCache.set(id, await extractPdfText(pdfBytes, openPdf, { maxPages }));
     } catch { /* Keep note text even if embedded PDF fails. */ }
   }
@@ -211,14 +213,52 @@ async function readOpenSource(source, { pageText, pageCanvas, notesText, documen
   };
 }
 
+/** Fast deterministic signature of file bytes so identical documents added from different sources deduplicate reliably. */
+export function contentSignature(bytes) {
+  const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  const len = buf.byteLength;
+  let h = 0x811c9dc5;
+  const step = Math.max(1, Math.floor(len / 512));
+  for (let i = 0; i < len; i += step) {
+    h ^= buf[i];
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  const tailStart = Math.max(0, len - 64);
+  for (let i = tailStart; i < len; i++) {
+    h ^= buf[i];
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${len}:${h.toString(16)}`;
+}
+
+/** Normalizes a library entry or file descriptor into a canonical dedup key. */
+export function normalizeSourceKey(entry) {
+  if (!entry || typeof entry !== 'object') return '';
+  if (entry.key) return String(entry.key);
+  if (entry.path) return `local:${entry.path}`;
+  if (entry.driveId) return `drive:${entry.driveId}`;
+  return String(entry.name || '').trim().toLowerCase();
+}
+
 // Resolves a heterogeneous list of selected sources (open note, Recents, folders, local File objects, topics)
-// into normalized { id, title, text, images, folderName? } documents.
+// into normalized { id, title, text, images, folderName? } documents, deduplicating repeated files/notes.
 export async function resolveSources(sources, deps) {
-  const { call, openPdf, library, groups, onProgress } = deps;
+  const { call, openPdf, library, groups, onProgress, openDocResource } = deps;
   const resolved = [];
   const seenFiles = new Set();
+  const seenContent = new Set();
+
+  const openRes = typeof openDocResource === 'function' ? (openDocResource() || null) : (openDocResource || null);
+  const hasOpen = (sources || []).some((s) => s.kind === 'open');
+  if (hasOpen && openRes) {
+    if (openRes.entryKey) seenFiles.add(String(openRes.entryKey));
+    if (openRes.name) seenFiles.add(`name:${String(openRes.name).trim().toLowerCase()}`);
+  }
 
   const addFileLike = async (title, name, bytes, folderName = '') => {
+    const sig = contentSignature(bytes);
+    if (seenContent.has(sig)) return;
+    seenContent.add(sig);
     const res = await extractFileBytes(name, bytes, { call, openPdf });
     resolved.push({
       id: `${folderName ? folderName + ':' : ''}${name}`,
@@ -236,25 +276,34 @@ export async function resolveSources(sources, deps) {
     if (src.kind === 'topic') {
       const topicText = coerceSourceText(src.text);
       if (topicText) {
-        resolved.push({ id: src.id, title: src.label || topicText.slice(0, 48), text: topicText, images: [] });
+        const topicSig = `topic:${topicText.toLowerCase()}`;
+        if (!seenContent.has(topicSig)) {
+          seenContent.add(topicSig);
+          resolved.push({ id: src.id, title: src.label || topicText.slice(0, 48), text: topicText, images: [] });
+        }
       }
       continue;
     }
     if (src.kind === 'open') {
-      resolved.push(await readOpenSource(src, deps));
+      if (!seenFiles.has('open:current')) {
+        seenFiles.add('open:current');
+        resolved.push(await readOpenSource(src, deps));
+      }
       continue;
     }
     if (src.kind === 'file' && src.file) {
       const k = `${src.file.name}:${src.file.size}:${src.file.lastModified}`;
-      if (seenFiles.has(k)) continue;
+      const nameKey = `name:${String(src.file.name || '').trim().toLowerCase()}`;
+      if (seenFiles.has(k) || (hasOpen && openRes?.name && seenFiles.has(nameKey) && src.file.name === openRes.name)) continue;
       seenFiles.add(k);
       const buf = new Uint8Array(await src.file.arrayBuffer());
       await addFileLike(cleanTitle(src.file.name), src.file.name, buf, src.folderName || '');
       continue;
     }
     if (src.kind === 'recent' && src.entry && library) {
-      const key = src.entry.key || src.entry.path || src.entry.name;
-      if (key && seenFiles.has(key)) continue;
+      const key = normalizeSourceKey(src.entry);
+      const nameKey = src.entry.name ? `name:${String(src.entry.name).trim().toLowerCase()}` : '';
+      if ((key && seenFiles.has(key)) || (hasOpen && nameKey && seenFiles.has(nameKey))) continue;
       if (key) seenFiles.add(key);
       const file = await library.open(src.entry);
       if (!file) continue;
@@ -266,8 +315,9 @@ export async function resolveSources(sources, deps) {
       const members = await groups.members(src.group);
       for (const m of members) {
         if (m.source === 'web' || !isSupportedSourceName(m.name || '')) continue;
-        const key = m.key || m.path || m.name;
-        if (key && seenFiles.has(key)) continue;
+        const key = normalizeSourceKey(m);
+        const nameKey = m.name ? `name:${String(m.name).trim().toLowerCase()}` : '';
+        if ((key && seenFiles.has(key)) || (hasOpen && nameKey && seenFiles.has(nameKey))) continue;
         if (key) seenFiles.add(key);
         const file = await library.open(m).catch(() => null);
         if (!file) continue;

@@ -2,7 +2,7 @@
 // Supports: Open document (+ page range), Recents (with search + Drive filter),
 // Folders (NoteComplete groups AND disk folders), Local files / folders, and Custom Topics.
 import { icon } from './icons.js';
-import { cleanTitle, isSupportedSourceName } from './source-extract.js';
+import { cleanTitle, isSupportedSourceName, normalizeSourceKey } from './source-extract.js';
 
 export function createSourcePicker(container, {
   library,
@@ -10,6 +10,7 @@ export function createSourcePicker(container, {
   hasOpenDoc = () => false,
   openDocTitle = () => 'Current note',
   openDocPages = () => 0,
+  openDocKey = () => '',
   bridge = globalThis.notecompleteFiles,
   allowTopics = true,
   onChange = () => {},
@@ -18,6 +19,20 @@ export function createSourcePicker(container, {
   let recentEntries = [];
   let folderList = [];
   let activeTab = 'recents';
+
+  const recentId = (e) => `recent:${normalizeSourceKey(e)}`;
+  const isAlreadySelected = ({ key = '', path = '', name = '', size = 0 } = {}) => {
+    const openKey = openDocKey?.() || '';
+    if (selected.has('open:current') && openKey && key && openKey === key) return true;
+    for (const item of selected.values()) {
+      const ik = item.entry ? normalizeSourceKey(item.entry) : (item.canonicalKey || '');
+      if (key && ik && key === ik) return true;
+      if (path && item.entry?.path && path === item.entry.path) return true;
+      if (size && name && item.file?.name === name && item.file?.size === size) return true;
+      if (!size && name && item.name && !path && !key && item.name.toLowerCase() === name.toLowerCase()) return true;
+    }
+    return false;
+  };
 
   container.innerHTML = `
     <div class="source-picker">
@@ -127,8 +142,27 @@ export function createSourcePicker(container, {
   }
 
   function toggleItem(item, checked) {
-    if (checked) selected.set(item.id, item);
-    else selected.delete(item.id);
+    if (checked) {
+      // Prevent adding the open document twice or re-adding an identical file from Recents vs Drive.
+      if (item.kind === 'open') {
+        const openKey = openDocKey?.() || '';
+        if (openKey) {
+          for (const [k, existing] of selected) {
+            if (existing.kind === 'recent' && normalizeSourceKey(existing.entry) === openKey) selected.delete(k);
+          }
+        }
+      } else if (item.kind === 'recent') {
+        const rk = normalizeSourceKey(item.entry);
+        const openKey = openDocKey?.() || '';
+        if (selected.has('open:current') && openKey && rk && openKey === rk) {
+          syncCheckboxes();
+          return;
+        }
+      }
+      selected.set(item.id, item);
+    } else {
+      selected.delete(item.id);
+    }
     syncCheckboxes();
     syncSummary();
   }
@@ -170,13 +204,13 @@ export function createSourcePicker(container, {
       return;
     }
     listEl.replaceChildren(...items.map((e) => {
-      const id = `recent:${e.key || e.path || e.name}`;
+      const id = recentId(e);
       return renderCheckRow(
         id,
         e.title || cleanTitle(e.name),
         `${e.source === 'drive' ? 'Drive' : 'Local'} · ${e.name}`,
         e.source === 'drive' ? 'drive' : 'note',
-        () => ({ id, kind: 'recent', entry: e, label: e.title || cleanTitle(e.name), name: e.name }),
+        () => ({ id, kind: 'recent', entry: e, canonicalKey: normalizeSourceKey(e), label: e.title || cleanTitle(e.name), name: e.name }),
       );
     }));
   }
@@ -192,13 +226,13 @@ export function createSourcePicker(container, {
       return;
     }
     listEl.replaceChildren(...items.map((e) => {
-      const id = `recent:${e.key || e.name}`;
+      const id = recentId(e);
       return renderCheckRow(
         id,
         e.title || cleanTitle(e.name),
         e.name,
         'drive',
-        () => ({ id, kind: 'recent', entry: e, label: e.title || cleanTitle(e.name), name: e.name }),
+        () => ({ id, kind: 'recent', entry: e, canonicalKey: normalizeSourceKey(e), label: e.title || cleanTitle(e.name), name: e.name }),
       );
     }));
   }
@@ -246,8 +280,9 @@ export function createSourcePicker(container, {
       for (const f of picked || []) {
         if (!isSupportedSourceName(f.name)) continue;
         const entry = { key: `local:${f.path}`, source: 'local', path: f.path, name: f.name };
-        const id = `recent:${entry.key}`;
-        selected.set(id, { id, kind: 'recent', entry, label: cleanTitle(f.name), name: f.name });
+        if (isAlreadySelected({ key: entry.key, path: f.path, name: f.name })) continue;
+        const id = recentId(entry);
+        selected.set(id, { id, kind: 'recent', entry, canonicalKey: entry.key, label: cleanTitle(f.name), name: f.name });
       }
       syncCheckboxes();
       syncSummary();
@@ -272,6 +307,7 @@ export function createSourcePicker(container, {
   q('.sp-file-input').onchange = () => {
     for (const file of q('.sp-file-input').files || []) {
       if (!isSupportedSourceName(file.name)) continue;
+      if (isAlreadySelected({ name: file.name, size: file.size })) continue;
       const id = `file:${file.name}:${file.size}:${file.lastModified}`;
       selected.set(id, { id, kind: 'file', file, label: cleanTitle(file.name), name: file.name });
     }
@@ -283,6 +319,7 @@ export function createSourcePicker(container, {
     const files = Array.from(q('.sp-dir-input').files || []).filter((f) => isSupportedSourceName(f.name));
     const folderName = files[0]?.webkitRelativePath?.split('/')?.[0] || 'Folder';
     for (const file of files) {
+      if (isAlreadySelected({ name: file.name, size: file.size })) continue;
       const id = `file:${folderName}:${file.webkitRelativePath || file.name}:${file.size}`;
       selected.set(id, { id, kind: 'file', file, folderName, label: `${folderName}/${file.name}`, name: file.name });
     }

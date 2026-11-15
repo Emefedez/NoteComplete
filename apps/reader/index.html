@@ -48,9 +48,7 @@
           <button id="save" data-icon="save" disabled title="Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, added recordings, quizzes, flashcards and scratchpad."><span class="menu-label">Save project (.nfedit)</span><kbd>Ctrl S</kbd></button>
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
-          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="PDF, images, Noteful and NoteComplete files, Anki, and sharing with other people and devices">Export and share…</button>
-          <button data-proxy="studyShare" data-icon="share" data-palette="Share or export study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or save them as a .ncstudy file">Share or export study material…</button>
-          <button data-proxy="exportStudy" data-icon="cards" data-palette="Export study to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export study to Anki</button>
+          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="Export and share notes or study resources (PDF, images, .nfedit, .noteful, Anki, QR, and live collab)">Export and share…</button>
           <hr />
           <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
         </div>
@@ -190,38 +188,67 @@
       </details>
           <input id="importAnyFile" type="file" hidden />
       <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle">
-        <h2 id="exportTitle">Export and share</h2>
-        <div class="export-columns">
-          <div class="export-column">
-            <section aria-labelledby="exportPages">
-              <h3 id="exportPages">Pages</h3>
-              <button id="exportPdf" disabled class="export-item" data-icon="pages" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
-              <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
-              <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
-              <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
-            </section>
-            <section aria-labelledby="exportFiles">
-              <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
-              <button id="exportProject" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.nfedit)…" title="Export a .nfedit file and choose which resources to include (edit history, embedded PDFs, audio recordings, Markdown notes, handwriting text, quizzes, flashcards and scratchpad)."><b>NoteComplete project</b><small>.nfedit · choose what to include (history, PDFs, audio, notes, study sets)</small></button>
-              <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
-              <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
-            </section>
+        <div class="export-head">
+          <h2 id="exportTitle">Export and share</h2>
+          <div class="export-tabs" role="tablist" aria-label="Export and share sections">
+            <button id="exportTabNotes" type="button" class="export-tab" role="tab" data-export-tab="notes" data-icon="note" aria-selected="true" aria-controls="exportPanelNotes">
+              <span class="export-tab-text"><b>Notes</b><small>Pages, files, QR &amp; live sharing</small></span>
+            </button>
+            <button id="exportTabResources" type="button" class="export-tab" role="tab" data-export-tab="resources" data-icon="storage" aria-selected="false" aria-controls="exportPanelResources">
+              <span class="export-tab-text"><b>Resources</b><small>Quizzes, flashcards, Anki &amp; study packs</small></span>
+            </button>
           </div>
-          <div class="export-column">
-            <section aria-labelledby="exportStudyHead">
-              <h3 id="exportStudyHead">Study</h3>
-              <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
-              <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
-            </section>
-            <section aria-labelledby="exportShareHead">
-              <h3 id="exportShareHead">Share with others</h3>
-              <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
-              <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes, quizzes &amp; flashcards"><b>Receive notes or study…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
-              <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
-              <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
-              <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
-              <button id="joinTablet" class="export-item" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
-            </section>
+        </div>
+        <div id="exportPanelNotes" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabNotes" data-export-panel="notes">
+          <div class="export-columns">
+            <div class="export-column">
+              <section aria-labelledby="exportPages">
+                <h3 id="exportPages">Pages</h3>
+                <button id="exportPdf" disabled class="export-item" data-icon="pages" data-palette="Export pages as PDF" title="Every page as one PDF, as shown (runs in the background)"><b>PDF</b><small>Every page, as shown</small></button>
+                <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
+                <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
+                <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
+              </section>
+              <section aria-labelledby="exportFiles">
+                <h3 id="exportFiles">Note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
+                <button id="exportProject" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.nfedit)…" title="Export a .nfedit file and choose which resources to include (edit history, embedded PDFs, audio recordings, Markdown notes, handwriting text, quizzes, flashcards and scratchpad)."><b>NoteComplete project</b><small>.nfedit · choose what to include (history, PDFs, audio, notes, study sets)</small></button>
+                <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
+                <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
+              </section>
+            </div>
+            <div class="export-column">
+              <section aria-labelledby="exportShareHead">
+                <h3 id="exportShareHead">Share &amp; receive notes</h3>
+                <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
+                <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes, quizzes &amp; flashcards"><b>Receive notes or study…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
+              </section>
+              <section aria-labelledby="exportCollabHead">
+                <h3 id="exportCollabHead">Live collaboration</h3>
+                <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
+                <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
+                <button id="joinTablet" class="export-item" data-icon="tablet" data-palette="Join as drawing tablet…" title="Use this device to draw on a note open on a computer"><b>Use this device as a drawing tablet…</b><small>Draw on a note open on a computer</small></button>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div id="exportPanelResources" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabResources" data-export-panel="resources" hidden>
+          <div class="export-columns">
+            <div class="export-column">
+              <section aria-labelledby="exportResOutHead">
+                <h3 id="exportResOutHead">Export &amp; manage</h3>
+                <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Export all to Anki</b><small>All flashcards and quizzes of this note (.txt)</small></button>
+                <button id="exportSavedResources" class="export-item" data-icon="storage" title="Open all saved quizzes, flashcard decks, exams, and AI scratchpad conversations"><b>Browse saved resources…</b><small>Manage, export or share quizzes, decks, exams &amp; scratchpad</small></button>
+                <button id="exportImportStudy" class="export-item" data-icon="import" title="Import a .ncstudy pack, Anki/JSON flashcard deck, or Quiz Toolkit Markdown file"><b>Import quiz or study file…</b><small>.ncstudy pack, deck JSON, or Quiz Markdown</small></button>
+              </section>
+            </div>
+            <div class="export-column">
+              <section aria-labelledby="exportResShareHead">
+                <h3 id="exportResShareHead">Share &amp; receive study material</h3>
+                <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
+                <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or save a .ncstudy file (QR code and PIN, link, or file)"><b>Send or receive study pack…</b><small>Another NoteComplete (Wi-Fi PIN, QR, link) or .ncstudy file</small></button>
+                <button id="receiveStudyQr" class="export-item" data-icon="qr" title="Scan any NoteComplete QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes &amp; study packs"><b>Receive via QR, code or file…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
+              </section>
+            </div>
           </div>
         </div>
         <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>

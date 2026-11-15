@@ -143,4 +143,12 @@ test('pageExporter wires export buttons, image menu and exportRequested', async 
   assert.deepEqual(saved.at(-1), { native: true, kind: 'project' });
   assert.equal(exporter.exportRequest.kind, '');
   assert.ok(closedMenus >= 0);
+
+  // Clicking a tab button inside #exportDialog must not close the dialog.
+  const dlg = els.get('exportDialog');
+  dlg.open = true;
+  const tabBtn = { id: 'exportTabResources', getAttribute: (k) => (k === 'role' ? 'tab' : null), hasAttribute: (k) => k === 'data-export-tab', closest: () => null };
+  dlg.on_click?.({ target: { closest: () => tabBtn } });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(dlg.open, true);
 });

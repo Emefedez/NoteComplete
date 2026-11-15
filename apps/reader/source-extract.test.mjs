@@ -97,3 +97,54 @@ test('resolveSources expands entire folders cleanly and formatSourceBundle distr
   assert.match(bundled.promptText, /Nested vector interrupt controller/);
   assert.match(bundled.promptText, /Pipeline forwarding/);
 });
+
+test('extractNoteArchive sends transferable ArrayBuffers without detaching source buffer, and resolveSources deduplicates identical files across sources', async () => {
+  const sampleBytes = new TextEncoder().encode('SAME-PDF-OR-NOTEFUL-BYTES'.repeat(80));
+  const seenTransfers = [];
+  const fakeLibrary = {
+    async open(entry) {
+      if (entry.name.endsWith('.noteful') || entry.name === 'copy.md' || entry.name === 'dup.md') {
+        if (entry.name === 'a.noteful') return new File([sampleBytes], 'a.noteful');
+        return new File(['# Identical Body\nRepeated across sources.'], entry.name);
+      }
+      return null;
+    },
+  };
+  const fakeGroups = {
+    async members() {
+      return [
+        { key: 'drive:copy-1', name: 'copy.md', source: 'drive' },
+        { key: 'local:/same/a.noteful', name: 'a.noteful', source: 'local', path: '/same/a.noteful' },
+      ];
+    },
+  };
+  const resolved = await resolveSources(
+    [
+      { id: 'open:current', kind: 'open', label: 'Current doc' },
+      { id: 'recent:local:/same/open.md', kind: 'recent', entry: { key: 'local:/same/open.md', name: 'open.md' } },
+      { id: 'recent:local:/same/a.noteful', kind: 'recent', entry: { key: 'local:/same/a.noteful', name: 'a.noteful' } },
+      { id: 'file:dup', kind: 'file', file: new File([sampleBytes], 'renamed-copy.noteful') },
+      { id: 'recent:local:/dup.md', kind: 'recent', entry: { key: 'local:/dup.md', name: 'dup.md' } },
+      { id: 'group:1', kind: 'group', group: { id: '1', name: 'Folder' } },
+    ],
+    {
+      library: fakeLibrary,
+      groups: fakeGroups,
+      openDocResource: () => ({ entryKey: 'local:/same/open.md', name: 'open.md', title: 'Current doc' }),
+      documentInfo: () => ({ pages: 1, title: 'Current doc' }),
+      pageText: async () => 'Open document text',
+      call: async (op, args, transfer) => {
+        for (const t of transfer || []) assert.ok(t instanceof ArrayBuffer, `${op}: transfer must only contain ArrayBuffers`);
+        if (args.bytes) assert.ok(args.bytes instanceof ArrayBuffer, `${op}: args.bytes must be a fresh ArrayBuffer`);
+        seenTransfers.push(op);
+        if (op === 'extractNoteSummary') {
+          return { title: 'Note A', page_count: 1, markdown: 'Summary text', pages: [{ page: 1, typed: 'P1', recognized: '', ink: '' }], pdf_ids: [] };
+        }
+        return {};
+      },
+    },
+  );
+  assert.ok(seenTransfers.includes('extractNoteSummary'));
+  // Expected unique resolved docs: 1 open doc + 1 unique a.noteful + 1 unique markdown body = 3 (all cross-source dupes dropped).
+  assert.equal(resolved.length, 3);
+});
