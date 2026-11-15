@@ -104,3 +104,18 @@ test('parseQrFrame validates headers and describeQrEnvelope summarizes payloads'
   assert.match(describeQrEnvelope({ kind: 'study', pack: { decks: [{}], quizzes: [{}, {}] } }), /1 deck, 2 quizzes/);
   assert.match(describeQrEnvelope({ kind: 'anki', name: 'Spanish' }), /Spanish/);
 });
+
+test('large compressed payloads round-trip without stream backpressure deadlock', async () => {
+  const cards = Array.from({ length: 400 }, (_, i) => ({
+    front: `Question ${i}: Explain membrane transport step ${i} across lipid bilayers (${(i * 7919).toString(36)})`,
+    back: `Answer ${i}: Active/passive transport detail ${(i * 104729).toString(36)}`,
+  }));
+  const envelope = { kind: 'study', pack: { format: 'notecomplete-study', version: 1, title: 'Large Deck', fingerprint: 'fp-large', decks: [{ id: 'd-large', title: 'Large', cards }], quizzes: [], notes: '' } };
+  const encoded = await encodeQrFrames(envelope, { maxChunk: 300, id: 'big01' });
+  assert.ok(encoded.rawBytes > 40000);
+  const receiver = new QrReceiver();
+  let result = null;
+  for (const frame of encoded.frames) result = await receiver.accept(frame);
+  assert.equal(result?.done, true);
+  assert.deepEqual(result.payload, envelope);
+});

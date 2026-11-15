@@ -4,6 +4,7 @@
 // which file that was. Older ones are matched by reading the fingerprints of Recent notes.
 import { score } from './quiz.js';
 import { noteFingerprint } from './find.js';
+import { icon } from './icons.js';
 const $ = id => document.getElementById(id);
 const KINDS = ['quizzes', 'decks'];
 
@@ -37,7 +38,7 @@ export function groupHeading(g, current = '') {
   return tags.length ? `${base} · ${tags.join(' · ')}` : base;
 }
 
-export function allQuizzes({ library, status, currentFingerprint, openEntry, openItem, exportItem }) {
+export function allQuizzes({ library, status, currentFingerprint, openEntry, openItem, exportItem, qrItem = null }) {
   async function read() {
     const keys = (await library.store.keys?.('settings').catch(error => { console.warn('Study keys could not be read', error); return []; })) || [];
     const stored = [], docs = new Map();
@@ -98,7 +99,17 @@ export function allQuizzes({ library, status, currentFingerprint, openEntry, ope
         anki.title = `Export to Anki`; anki.setAttribute('aria-label', `Export ${name.textContent} to Anki`);
         anki.disabled = meta.textContent.startsWith('cannot be read');
         anki.onclick = () => exportItem(kind, item);
-        row.append(open, anki);
+        if (qrItem) {
+          const qrBtn = document.createElement('button');
+          qrBtn.type = 'button'; qrBtn.className = 'saved-export saved-icon';
+          qrBtn.title = `Share via progressive QR code`; qrBtn.setAttribute('aria-label', `Share ${name.textContent} via QR`);
+          qrBtn.disabled = meta.textContent.startsWith('cannot be read');
+          qrBtn.append(icon('qr'));
+          qrBtn.onclick = () => qrItem(kind, item);
+          row.append(open, qrBtn, anki);
+        } else {
+          row.append(open, anki);
+        }
         nodes.push(row);
       }
     }

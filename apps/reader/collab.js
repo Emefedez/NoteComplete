@@ -7,7 +7,8 @@
 // The protocol is in sync.js; the host's server in apps/desktop/collab-server.js.
 import { SyncClient, parseInvite, applyTextDiff, sendPack } from './sync.js';
 import { icon } from './icons.js';
-import { renderQrSvg, showQrTransfer, QrReceiver, describeQrEnvelope } from './qr-transfer.js';
+import { base64UrlDecode, base64UrlEncode, renderQrSvg, showQrTransfer, QrReceiver, describeQrEnvelope } from './qr-transfer.js';
+import { createWebRtcNoteSender, createWebRtcNoteReceiver, isWebRtcSignal } from './p2p-share.js';
 
 const $ = (id) => document.getElementById(id);
 const LOCAL = Symbol('local notes edit');
@@ -181,6 +182,15 @@ async function receiveViaQrStream(host, stateEl) {
     host.status(`Received ${describeQrEnvelope(payload)} via QR.`);
     return;
   }
+  if (payload?.kind === 'note' && payload.base64) {
+    const safeName = String(payload.name || 'Shared.nfedit').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    const bytes = base64UrlDecode(payload.base64);
+    const file = new File([bytes], safeName, { type: payload.mime || 'application/octet-stream' });
+    closeDialog();
+    await host.openFile(file);
+    host.status(`Opened “${safeName}” received via offline QR.`);
+    return;
+  }
   throw Error('Unsupported QR transfer format.');
 }
 
@@ -322,16 +332,22 @@ function noteShareBridge() {
 
 /**
  * Export → Share with others → Share note via QR…
- * On desktop & Android: exports the chosen note format (.nfedit, .notecomp, or .noteful), serves it
- * over the local sharing server (plus optional online tunnel on desktop), and renders a QR code.
- * In web browsers: exports via the OS share sheet / download or launches study QR transfer.
+ * On desktop & Android: serves the chosen note (.nfedit, .notecomp, or .noteful) over the local
+ * sharing server (plus optional Cloudflare online link on desktop), or sends directly via
+ * zero-server WebRTC P2P QR / compact offline QR stream.
+ * In web browsers & iOS: creates a zero-account WebRTC P2P QR transfer (and offline QR for small notes).
  */
+const MAX_OFFLINE_NOTE_BYTES = 48 * 1024;
+const formatByteSize = (n) => (n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${(n / 1024).toFixed(n >= 102400 ? 0 : 1)} KB`);
+
 export async function openShareNoteQr(host) {
   if (!host.doc) throw Error('Open a note first.');
   let format = 'project';
   let sharedId = null;
   let sharedMeta = null;
+  let p2pSender = null;
   const bridge = noteShareBridge();
+  let mode = bridge ? 'link' : 'p2p';
   const stage = el('div', { className: 'collab-panel' });
   const formats = [
     ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history with undo, Markdown notes, handwriting text, quizzes, flashcards & scratchpad'],
@@ -345,6 +361,29 @@ export async function openShareNoteQr(host) {
     fieldset.append(el('label', { className: 'collab-choice' }, radio, el('span', {}, el('strong', { textContent: label }), el('small', { className: 'muted', textContent: detail }))));
   }
 
+  const tabs = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Note QR transfer method' });
+  const tabDefs = bridge
+    ? [['link', 'Wi-Fi / Link QR'], ['p2p', 'Web / iOS P2P QR']]
+    : [['p2p', 'Web / iOS P2P QR'], ['offline', 'Offline QR stream']];
+  if (bridge) tabDefs.push(['offline', 'Offline QR stream']);
+  const tabButtons = {};
+  for (const [id, label] of tabDefs) {
+    const btn = el('button', {
+      type: 'button',
+      role: 'tab',
+      textContent: label,
+      'aria-selected': String(mode === id),
+      onclick: () => {
+        if (mode === id) return;
+        mode = id;
+        for (const [k, b] of Object.entries(tabButtons)) b.setAttribute('aria-selected', String(k === mode));
+        void render();
+      },
+    });
+    tabButtons[id] = btn;
+    tabs.append(btn);
+  }
+
   const linkRowEl = (link, message) => {
     const copy = el('button', {
       type: 'button',
@@ -356,28 +395,130 @@ export async function openShareNoteQr(host) {
     return el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', 'aria-label': 'Download link', onfocus: (e) => e.target.select() }), copy);
   };
 
-  async function render() {
-    if (!bridge) {
+  async function cleanupActive() {
+    if (sharedId && bridge) {
+      await bridge.unshareFile(sharedId).catch(() => {});
+      sharedId = null;
+    }
+    if (p2pSender) {
+      p2pSender.close();
+      p2pSender = null;
+    }
+  }
+
+  async function renderP2pShare(exported) {
+    stage.replaceChildren(el('p', { className: 'muted', textContent: 'Creating peer-to-peer WebRTC QR (no account or storage server required)…' }));
+    p2pSender = await createWebRtcNoteSender(exported);
+    const qrBox = el('div', { className: 'collab-qr' });
+    qrBox.innerHTML = await qrSvg(p2pSender.offerSignal);
+    const state = el('p', { className: 'muted', role: 'status', textContent: 'Step 1: Receiver opens Export & share… → Receive note via QR / P2P… and scans this QR (or pastes the offer code).' });
+    const progress = el('progress', { className: 'qr-progress-bar', max: exported.bytes.byteLength || 1, value: 0, hidden: true });
+    const replyInput = el('input', { type: 'text', className: 'collab-link', placeholder: 'Paste receiver’s reply code (NCW1|a|…)', 'aria-label': 'Receiver reply code', spellcheck: false, autocomplete: 'off' });
+    const connectWithReply = async (raw) => {
+      if (!p2pSender) return;
+      connectBtn.disabled = scanBtn.disabled = true;
+      progress.hidden = false;
+      state.textContent = 'Connecting peer-to-peer…';
+      try {
+        await p2pSender.acceptAnswer(raw, ({ sent, total }) => {
+          progress.value = sent;
+          state.textContent = total ? `Sending “${exported.name}”: ${formatByteSize(sent)} / ${formatByteSize(total)}` : 'Sending…';
+        });
+        closeDialog();
+        host.status(`Sent “${exported.name}” peer-to-peer via QR.`);
+      } catch (e) {
+        connectBtn.disabled = scanBtn.disabled = false;
+        state.textContent = e.message;
+      }
+    };
+    const connectBtn = el('button', { type: 'button', className: 'primary', textContent: 'Send file', onclick: () => { void connectWithReply(replyInput.value); } });
+    const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
+    const scanBtn = el('button', {
+      type: 'button',
+      textContent: 'Scan reply QR',
+      hidden: !canScan,
+      onclick: async () => {
+        scanBtn.disabled = true;
+        try {
+          const { scanQrFrames } = await import('./qr-scan.js');
+          const code = await scanQrFrames(
+            (raw) => (isWebRtcSignal(raw) ? { done: true, value: raw } : null),
+            state,
+            { initialText: 'Point the camera at the receiver’s reply QR…' },
+          );
+          replyInput.value = code;
+          await connectWithReply(code);
+        } catch (e) {
+          scanBtn.disabled = false;
+          state.textContent = e.message;
+        }
+      },
+    });
+    const meta = el('div', {},
+      el('p', {}, el('strong', { textContent: exported.name }), ` (${formatByteSize(exported.bytes.byteLength)})`),
+      el('p', { className: 'muted', textContent: 'Direct WebRTC transfer: works on Web, iOS Safari, Android, and desktop without Cloudflare or accounts.' }),
+      linkRowEl(p2pSender.offerSignal, 'Offer code copied.'),
+      el('label', { className: 'p2p-reply-label' }, el('span', { textContent: 'Step 2: Receiver’s reply QR or code' }), replyInput),
+      progress,
+      state);
+    stage.replaceChildren(
+      el('div', { className: 'collab-pair' }, qrBox, meta),
+      buttons(
+        el('button', { type: 'button', textContent: 'Save / share file', onclick: async () => { closeDialog(); await host.exportAndDownload(format); } }),
+        scanBtn,
+        el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+        connectBtn));
+  }
+
+  async function renderOfflineNote(exported) {
+    if (exported.bytes.byteLength > MAX_OFFLINE_NOTE_BYTES) {
       stage.replaceChildren(
-        el('p', { textContent: 'Browsers cannot host an incoming download link on a local port.' }),
-        el('p', { className: 'muted', textContent: 'Save or open your device’s Share menu for the full note file, or share quizzes and flashcards offline with progressive QR codes.' }),
+        el('p', {}, el('strong', { textContent: exported.name }), ` is ${formatByteSize(exported.bytes.byteLength)}.`),
+        el('p', { className: 'muted', textContent: `Pure offline visual QR frames work best up to ${Math.round(MAX_OFFLINE_NOTE_BYTES / 1024)} KB (smaller ink/Markdown notes or study packs). For larger notes on Web or iOS, use Web / iOS P2P QR.` }),
         buttons(
+          el('button', { type: 'button', className: 'primary', textContent: 'Use Web / iOS P2P QR', onclick: () => tabButtons.p2p.click() }),
           el('button', { type: 'button', textContent: 'Share quizzes & decks (QR)…', onclick: () => { closeDialog(); void openStudyShare(host); } }),
-          el('button', { type: 'button', className: 'primary', textContent: `Share / save file (${format === 'project' ? '.nfedit' : format === 'notecomplete' ? '.notecomp' : '.noteful'})`, onclick: async () => { closeDialog(); await host.exportAndDownload(format); } }),
           el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
-        ),
-      );
+        ));
       return;
     }
+    const startOffline = el('button', {
+      type: 'button',
+      className: 'primary',
+      textContent: 'Show offline QR stream',
+      onclick: async () => {
+        closeDialog();
+        await showQrTransfer({
+          title: `Share “${exported.name}” offline via QR`,
+          subtitle: 'Receiver opens Export & share… → Receive note via QR / P2P… → Scan QR stream.',
+          payload: { kind: 'note', name: exported.name, mime: exported.mime, base64: base64UrlEncode(exported.bytes) },
+          onDownloadFallback: () => host.exportAndDownload(format),
+          fallbackLabel: 'Save file instead',
+          status: host.status,
+        });
+      },
+    });
+    stage.replaceChildren(
+      el('p', {}, el('strong', { textContent: exported.name }), ` (${formatByteSize(exported.bytes.byteLength)}) fits cleanly inside offline QR frames with zero internet needed.`),
+      buttons(
+        el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+        startOffline));
+  }
 
+  async function render() {
     stage.replaceChildren(el('p', { className: 'muted', textContent: 'Preparing note package…' }));
     try {
-      if (sharedId) {
-        await bridge.unshareFile(sharedId).catch(() => {});
-        sharedId = null;
+      await cleanupActive();
+      const exported = await host.exportNote(format);
+      if (mode === 'p2p') {
+        await renderP2pShare(exported);
+        return;
       }
-      const { name, mime, bytes } = await host.exportNote(format);
-      sharedMeta = await bridge.shareFile({ name, mime, bytes });
+      if (mode === 'offline') {
+        await renderOfflineNote(exported);
+        return;
+      }
+      sharedMeta = await bridge.shareFile(exported);
       sharedId = sharedMeta.id;
       await drawDesktopShare();
     } catch (e) {
@@ -455,8 +596,132 @@ export async function openShareNoteQr(host) {
     );
   }
 
-  dialog('Share note via QR', fieldset, stage);
+  const d = dialog('Share note via QR', tabs, fieldset, stage);
+  d.addEventListener('close', () => { void cleanupActive(); }, { once: true });
   await render();
+}
+
+/** Export → Share with others → Receive note via QR / P2P… */
+export async function openReceiveNoteQr(host) {
+  let activeReceiver = null;
+  const cleanup = () => {
+    activeReceiver?.close();
+    activeReceiver = null;
+  };
+  const stage = el('div', { className: 'collab-panel' });
+  const offerInput = el('input', {
+    type: 'text',
+    className: 'collab-link',
+    placeholder: 'Paste WebRTC offer code (NCW1|o|…)',
+    'aria-label': 'Offer code',
+    spellcheck: false,
+    autocomplete: 'off',
+  });
+  const state = el('p', { className: 'muted', role: 'status', textContent: 'Scan the sender’s QR code (WebRTC P2P or offline QR stream), or paste their offer code.' });
+
+  const startWebRtcAnswer = async (offerText) => {
+    try {
+      cleanup();
+      state.textContent = 'Creating peer-to-peer reply QR…';
+      const rx = await createWebRtcNoteReceiver(offerText);
+      activeReceiver = rx;
+      const qrBox = el('div', { className: 'collab-qr' });
+      qrBox.innerHTML = await qrSvg(rx.answerSignal);
+      const progress = el('progress', { className: 'qr-progress-bar', max: 1, value: 0, hidden: true });
+      const rxState = el('p', { className: 'muted', role: 'status', textContent: 'Show this reply QR to the sender (or copy & send the reply code below). Waiting for connection…' });
+      const copy = el('button', {
+        type: 'button',
+        className: 'collab-copy',
+        title: 'Copy reply code',
+        'aria-label': 'Copy reply code',
+        onclick: () => navigator.clipboard.writeText(rx.answerSignal).then(() => host.status('Reply code copied.'), () => host.status('Select the reply code and copy it.', true)),
+      }, icon('copy'));
+      const copyRow = el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: rx.answerSignal, className: 'collab-link', 'aria-label': 'Reply code', onfocus: (e) => e.target.select() }), copy);
+
+      stage.replaceChildren(
+        el('div', { className: 'collab-pair' }, qrBox, el('div', {},
+          el('p', { textContent: 'Step 2: Let the sender scan this reply QR (or send them the code below).' }),
+          copyRow,
+          progress,
+          rxState)),
+        buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog })));
+
+      const result = await rx.receive(({ received, total, name }) => {
+        progress.hidden = false;
+        progress.max = total || 1;
+        progress.value = received;
+        rxState.textContent = `Receiving${name ? ` “${name}”` : ''}: ${formatByteSize(received)}${total ? ` / ${formatByteSize(total)}` : ''}`;
+      });
+      cleanup();
+      closeDialog();
+      const file = new File([result.bytes], result.name, { type: result.mime });
+      await host.openFile(file);
+      host.status(`Opened “${result.name}” (${formatByteSize(result.bytes.byteLength)}) received peer-to-peer.`);
+    } catch (e) {
+      cleanup();
+      state.textContent = e.message;
+    }
+  };
+
+  const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
+  const offlineRx = new QrReceiver();
+  const scanBtn = el('button', {
+    type: 'button',
+    className: 'primary',
+    textContent: 'Scan sender QR',
+    hidden: !canScan,
+    onclick: async () => {
+      scanBtn.disabled = connectBtn.disabled = true;
+      try {
+        const { scanQrFrames } = await import('./qr-scan.js');
+        const scanned = await scanQrFrames(async (raw, helpers) => {
+          if (isWebRtcSignal(raw)) return { done: true, value: { kind: 'webrtc', raw } };
+          const step = await offlineRx.accept(raw);
+          if (step.ignored) return null;
+          if (step.error) { helpers.setProgress(step.error, 0, step.total); return null; }
+          const pct = Math.round((step.received / step.total) * 100);
+          helpers.setProgress(`Receiving QR stream: ${step.received} / ${step.total} (${pct}%)`, step.received, step.total);
+          return step.done ? { done: true, value: { kind: 'offline', payload: step.payload } } : null;
+        }, state, { initialText: 'Point the camera at the sender’s QR code…' });
+        if (scanned.kind === 'webrtc') {
+          await startWebRtcAnswer(scanned.raw);
+        } else if (scanned.payload?.kind === 'note' && scanned.payload.base64) {
+          const safeName = String(scanned.payload.name || 'Shared.nfedit').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+          const bytes = base64UrlDecode(scanned.payload.base64);
+          closeDialog();
+          await host.openFile(new File([bytes], safeName, { type: scanned.payload.mime || 'application/octet-stream' }));
+          host.status(`Opened “${safeName}” received via offline QR.`);
+        } else if (scanned.payload?.kind === 'study' && scanned.payload.pack) {
+          const { readPack, describePack } = await import('./study-pack.js');
+          const pack = readPack(scanned.payload.pack);
+          closeDialog();
+          await host.importStudyPack(pack);
+          host.status(`Received ${describePack(pack)} via QR.`);
+        } else {
+          throw Error('Scanned QR does not contain a NoteComplete note or study pack.');
+        }
+      } catch (e) {
+        scanBtn.disabled = connectBtn.disabled = false;
+        state.textContent = e.message;
+      }
+    },
+  });
+
+  const connectBtn = el('button', {
+    type: 'button',
+    className: canScan ? '' : 'primary',
+    textContent: 'Connect with code',
+    onclick: () => { void startWebRtcAnswer(offerInput.value); },
+  });
+
+  stage.replaceChildren(
+    el('p', { className: 'muted', textContent: 'Accept a full note from Web, iOS Safari, Android, or desktop with no Cloudflare account or storage server.' }),
+    el('label', { className: 'p2p-reply-label' }, el('span', { textContent: 'Sender’s WebRTC offer code (or scan their QR)' }), offerInput),
+    state,
+    buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), scanBtn, connectBtn));
+
+  const d = dialog('Receive note via QR / P2P', stage);
+  d.addEventListener('close', cleanup, { once: true });
 }
 
 // Entry point (app.js): mode is host, join-tablet, join-notes or link (an invite URL).

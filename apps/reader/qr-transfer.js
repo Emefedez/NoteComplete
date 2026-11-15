@@ -52,31 +52,45 @@ export function base64UrlDecode(str) {
 
 async function runStream(bytes, StreamCtor, format) {
   const stream = new StreamCtor(format);
+  // Drain readable concurrently with writing/closing writable so transform backpressure cannot deadlock.
+  const reading = (async () => {
+    const chunks = [];
+    const reader = stream.readable.getReader();
+    let total = 0;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, at);
+      at += chunk.byteLength;
+    }
+    return out;
+  })();
   const writer = stream.writable.getWriter();
-  await writer.write(bytes);
-  await writer.close();
-  const chunks = [];
-  const reader = stream.readable.getReader();
-  let total = 0;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    total += value.byteLength;
-  }
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.byteLength;
-  }
+  const writing = writer.write(bytes).then(() => writer.close());
+  const [out] = await Promise.all([reading, writing]);
   return out;
+}
+
+export async function deflateRaw(rawBytes) {
+  if (typeof CompressionStream !== 'function') throw Error('Compression is not supported on this device.');
+  return runStream(rawBytes, CompressionStream, 'deflate-raw');
+}
+
+export async function inflateRaw(bytes) {
+  if (typeof DecompressionStream !== 'function') throw Error('Decompression is not supported on this device.');
+  return runStream(bytes, DecompressionStream, 'deflate-raw');
 }
 
 async function compressPayload(rawBytes) {
   if (typeof CompressionStream === 'function') {
     try {
-      const zipped = await runStream(rawBytes, CompressionStream, 'deflate-raw');
+      const zipped = await deflateRaw(rawBytes);
       if (zipped.byteLength < rawBytes.byteLength) return { mode: 'z', bytes: zipped };
     } catch { /* Fall back to uncompressed when deflate-raw is unsupported. */ }
   }
@@ -87,7 +101,7 @@ async function decompressPayload(mode, bytes) {
   if (mode === 'r') return bytes;
   if (mode !== 'z') throw Error('Unsupported QR encoding.');
   if (typeof DecompressionStream !== 'function') throw Error('This device cannot open compressed QR transfers.');
-  return runStream(bytes, DecompressionStream, 'deflate-raw');
+  return inflateRaw(bytes);
 }
 
 function randomId() {
@@ -220,6 +234,7 @@ export class QrReceiver {
 }
 
 export function describeQrEnvelope(envelope) {
+  if (envelope?.kind === 'note') return envelope.name ? `Note “${envelope.name}”` : 'note file';
   if (envelope?.kind === 'anki') return `Anki deck “${envelope.name || 'Study'}”`;
   if (envelope?.kind === 'study' && envelope.pack) {
     const { decks = [], quizzes = [], notes = '' } = envelope.pack;

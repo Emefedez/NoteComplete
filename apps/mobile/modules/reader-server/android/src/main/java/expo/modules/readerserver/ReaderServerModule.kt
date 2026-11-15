@@ -347,7 +347,7 @@ private class ShareHttpServer : NanoHTTPD("0.0.0.0", 0) {
       return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found")
     }
     val id = parts[1]
-    val token = session.parameters["t"]?.firstOrNull() ?: ""
+    val token = session.parameters["t"]?.firstOrNull() ?: parts[2]
     val entry = entries[id] ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found")
     if (token != entry.token || !entry.file.isFile) {
       return newFixedLengthResponse(Response.Status.FORBIDDEN, "text/plain", "Forbidden")

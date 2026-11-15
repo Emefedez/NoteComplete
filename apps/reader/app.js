@@ -5445,6 +5445,7 @@ async function resumeQuiz() {
 $("studyResume").onclick = resumeQuiz;
 $("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
 $("studyExportQuiz").onclick = () => study.exportQuiz();
+$("quizQr").onclick = () => study.qrQuiz(quizzes.current);
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
 $("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
@@ -5469,6 +5470,7 @@ const quizIndex = allQuizzes({
     quizzes.open(quiz, fp ? `quizzes:${fp}` : null);
   },
   exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
+  qrItem: (kind, item) => (kind === "decks" ? study.qrDeck(item) : study.qrQuiz(item)),
 });
 // The desktop app's updater, or the Android app's (it says its version: App.js).
 updateNotice({ status, bridge: globalThis.notecompleteUpdates || (globalThis.notecompleteApp?.platform === "android" ? androidUpdates({ app: globalThis.notecompleteApp }) : undefined) });
@@ -5794,6 +5796,16 @@ $("shareNoteQr").onclick = async () => {
   try {
     const { openShareNoteQr } = await (collabLoading ||= import("./collab.js"));
     await openShareNoteQr(collabHost);
+  } catch (e) {
+    collabLoading = null;
+    status(e.message, true);
+  }
+};
+$("receiveNoteQr").onclick = async () => {
+  closeMenus();
+  try {
+    const { openReceiveNoteQr } = await (collabLoading ||= import("./collab.js"));
+    await openReceiveNoteQr(collabHost);
   } catch (e) {
     collabLoading = null;
     status(e.message, true);
