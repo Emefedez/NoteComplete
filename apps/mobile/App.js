@@ -71,9 +71,8 @@ export default function App() {
     try {
      if(Constants.appOwnership==='expo')throw Error('Google sign-in requires an installed NoteComplete build; Expo Go does not include the native sign-in module.');
      const {GoogleSignin}=require('@react-native-google-signin/google-signin');
-     const token=await mobileDriveToken(GoogleSignin,{webClientId:process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID});
+     const token=await mobileDriveToken(GoogleSignin,{webClientId:process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,silent:Boolean(message.silent),clearToken:typeof message.clearToken==='string'?message.clearToken:''});
      if(auth.generation===generation)send({token});
-     else await GoogleSignin.signOut();
     }catch(error){send({error:error.message || 'Google sign-in failed. Check the OAuth app and signing certificate configuration.'});}
     finally{auth.busy=false;}
     return;

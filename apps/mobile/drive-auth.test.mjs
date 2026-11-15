@@ -10,3 +10,21 @@ test('mobile SDK asks for read-only Drive and returns only a short-lived access 
  sdk.signIn=async()=>({type:'cancelled'});await assert.rejects(mobileDriveToken(sdk,{}),/cancelled/);
  sdk.signIn=async()=>({type:'success',data:{scopes:[]}});await assert.rejects(mobileDriveToken(sdk,{}),/permission/);
 });
+test('mobile SDK reuses existing native sign-in silently without interactive prompts',async()=>{
+ let prompted=0, cleared='';
+ const sdk={
+  configure(){},
+  hasPlayServices:async()=>true,
+  hasPreviousSignIn:async()=>true,
+  clearCachedAccessToken:async tok=>{cleared=tok;},
+  signInSilently:async()=>({type:'success',data:{scopes:[scope]}}),
+  signIn:async()=>{prompted++;return {type:'cancelled'};},
+  getTokens:async()=>({accessToken:'silent-token'}),
+ };
+ assert.deepEqual(await mobileDriveToken(sdk,{webClientId:'web-client',clearToken:'old-tok'}),{access_token:'silent-token',scope,expires_in:3000});
+ assert.equal(prompted,0);
+ assert.equal(cleared,'old-tok');
+ sdk.signInSilently=async()=>({type:'noSavedCredentialFound',data:null});
+ await assert.rejects(mobileDriveToken(sdk,{silent:true}),/Reconnect Google Drive/);
+ assert.equal(prompted,0);
+});

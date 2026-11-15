@@ -126,3 +126,24 @@ test('writes need the separate write grant: upload replaces content, trash only 
   await client.trash({ id: 'one' });
   assert.deepEqual(calls, [['PATCH', '/upload/drive/v3/files/one', 'blob'], ['PATCH', '/drive/v3/files/one', '{"trashed":true}']]);
 });
+test('DriveClient refreshes silently before a call when expired and retries once after 401', async () => {
+  const seen = [];
+  const client = new DriveClient(async (_url, options) => {
+    seen.push(options.headers.Authorization);
+    if (options.headers.Authorization === 'Bearer old-tok') return new Response('expired', { status: 401 });
+    return Response.json({ files: [{ id: 'ok', name: 'Ok.noteful' }] });
+  });
+  let refreshes = 0;
+  client.authorize({ access_token: 'old-tok', scope: DRIVE_SCOPE, expires_in: 3600 });
+  client.onRefresh = async ({ force, clearToken }) => {
+    refreshes++;
+    assert.equal(force, true);
+    assert.equal(clearToken, 'old-tok');
+    client.authorize({ access_token: 'new-tok', scope: DRIVE_SCOPE, expires_in: 3600 });
+    return true;
+  };
+  const listed = await client.roots();
+  assert.equal(listed.files[0].id, 'ok');
+  assert.equal(refreshes, 1);
+  assert.deepEqual(seen, ['Bearer old-tok', 'Bearer new-tok']);
+});

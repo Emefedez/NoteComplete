@@ -5,6 +5,7 @@ export function googleAuthError(code) {
   if (code === 'invalid_client' || code === 'deleted_client') return 'Google rejected this client ID. Use an existing Web application OAuth client from Google Cloud (not an API key or Desktop/Android client).';
   if (code === 'origin_mismatch' || code === 'redirect_uri_mismatch') return `Register this exact Authorized JavaScript origin in Google Cloud: ${location.origin}`;
   if (code === 'access_denied') return 'Google access was declined. If the app is in testing, add this account as an OAuth test user.';
+  if (code === 'interaction_required' || code === 'consent_required' || code === 'login_required') return 'Google needs you to choose your account once. Click Reconnect Google Drive again.';
   return 'Google sign-in failed. Check the client type, registered origin and OAuth test users in Connection setup.';
 }
 export function loadGoogleIdentity() {
@@ -30,13 +31,22 @@ export function loadGoogleIdentity() {
   });
   return loading;
 }
-export function requestDriveAccess(identity, clientId, callback, error, scope = DRIVE_SCOPE) {
+export function requestDriveAccess(identity, clientId, callback, error, scopeOrOptions = DRIVE_SCOPE) {
+  const options = typeof scopeOrOptions === 'string' ? { scope: scopeOrOptions } : (scopeOrOptions || {});
+  const scope = options.scope || DRIVE_SCOPE;
   const write = scope !== DRIVE_SCOPE;
-  if (identity.native) { identity.signIn({ write }).then(callback, error); return; }
+  if (identity.native) {
+    const req = options.silent && typeof identity.refresh === 'function'
+      ? identity.refresh({ write, force: Boolean(options.clearToken), clearToken: options.clearToken || '' })
+      : identity.signIn({ write, silent: options.silent === true });
+    req.then(callback, error);
+    return;
+  }
   if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId)) throw Error('Enter a Google OAuth web client ID in Connection setup.');
+  const prompt = options.prompt ?? 'select_account';
   identity.initTokenClient({
     client_id: clientId, scope, include_granted_scopes: false,
     callback: response => response.error ? error(Error(googleAuthError(response.error))) : callback(response),
     error_callback: () => error(Error('Google sign-in was closed or blocked. Allow the sign-in popup and try again.')),
-  }).requestAccessToken({ prompt: 'select_account' });
+  }).requestAccessToken(options.hint ? { prompt, hint: options.hint } : { prompt });
 }

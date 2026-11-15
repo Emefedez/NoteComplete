@@ -1,4 +1,4 @@
-import { DriveClient, FOLDER_MIME, folderReference, supportedDriveFile, DRIVE_WRITE_SCOPE } from './drive-client.js';
+import { DriveClient, DRIVE_SCOPE, FOLDER_MIME, folderReference, supportedDriveFile, DRIVE_WRITE_SCOPE } from './drive-client.js';
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
@@ -16,7 +16,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   let history = [], forwardHistory = [], box = '';
   const view = () => ({ trail: [...trail], folder, search, filter, box });
   const push = () => { history.push(view()); if (history.length > 50) history.shift(); forwardHistory = []; };
-  const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1';
+  const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1', sessionKey = 'notecomplete-drive-session-v1';
   const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
   const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
   const config = stored(configKey) || {};
@@ -32,8 +32,56 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveFolderLink').value = typeof config.folderLink === 'string' ? config.folderLink : '';
   function saveConfig() {
     applyApiKey();
-    store(configKey, { ...config, clientId: $('driveClientId').value.trim(), apiKey: $('driveApiKey').value.trim(), folderLink: $('driveFolderLink').value.trim(), connected: config.connected });
+    store(configKey, { ...config, clientId: $('driveClientId').value.trim(), apiKey: $('driveApiKey').value.trim(), folderLink: $('driveFolderLink').value.trim(), connected: config.connected, email: config.email || '' });
   }
+  function persistSession(response) {
+    const seconds = Number(response?.expires_in);
+    if (!response?.access_token || !Number.isFinite(seconds) || seconds <= 60) return;
+    store(sessionKey, { access_token: response.access_token, scope: response.scope || DRIVE_SCOPE, expires: Date.now() + seconds * 1000 });
+  }
+  function clearStoredSession() { store(sessionKey, null); }
+  function restoreSession() {
+    const saved = stored(sessionKey);
+    if (!saved?.access_token || !saved?.expires) return false;
+    const remaining = Math.floor((saved.expires - Date.now()) / 1000);
+    if (remaining <= 60) { clearStoredSession(); return false; }
+    try {
+      client.authorize({ access_token: saved.access_token, scope: saved.scope || DRIVE_SCOPE, expires_in: remaining });
+      config.connected = true;
+      return true;
+    } catch { clearStoredSession(); return false; }
+  }
+  function rememberEmail() {
+    if (config.email || typeof client.userEmail !== 'function') return;
+    client.userEmail().then(email => {
+      if (email && email !== config.email) { config.email = email; saveConfig(); }
+    }).catch(() => {});
+  }
+  let refreshTask = null;
+  async function silentRefresh({ force = false, clearToken = '' } = {}) {
+    if (refreshTask) return refreshTask;
+    refreshTask = (async () => {
+      try {
+        identity ||= await identityLoader();
+        if (!identity?.native || typeof identity.refresh !== 'function') return false;
+        const token = await identity.refresh({ force, clearToken });
+        if (!token?.access_token) return false;
+        client.authorize(token);
+        config.connected = true;
+        saveConfig();
+        persistSession(token);
+        controls();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshTask = null;
+      }
+    })();
+    return refreshTask;
+  }
+  client.onRefresh = silentRefresh;
+  client.onClear = clearStoredSession;
   const message = text => { $('driveStatus').textContent = text; };
   function controls() {
     $('driveConnect').disabled = !identity || loading;
@@ -339,15 +387,26 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     if (!window.isSecureContext && !window.ReactNativeWebView && !window.notecompleteDrive) { message('Open NoteComplete over HTTPS or localhost to connect Google Drive.'); return; }
     for (const [entry, file] of cards) badge(entry, file);
     if (!quick) for (const preview of [...pending.keys()]) load(preview);
+    if (!client.connected) restoreSession();
     if (client.connected) { if (!$('driveList').children.length) run(resume); return; }
     if (client.publicAccess) $('driveLinkSetup').open = true;
     message(client.publicAccess ? 'Paste a folder shared as "Anyone with the link" to browse it without signing in, or connect Google Drive.' : '');
-    try { identity ||= await identityLoader(); $('driveClientId').closest('details').hidden = !!identity.native; controls(); }
+    try {
+      identity ||= await identityLoader();
+      $('driveClientId').closest('details').hidden = !!identity.native;
+      controls();
+      if (config.connected && identity?.native && typeof identity.refresh === 'function') {
+        const version = generation;
+        const ok = await silentRefresh();
+        if (ok && visible && version === generation && !$('driveList').children.length) run(resume);
+      }
+    }
     catch (error) { message(error.message); }
   }
   function hide() { visible = false; stop(); previews.cancel(); }
   $('driveConnect').onclick = () => {
-    saveConfig(); stop(); client.clear(); resetList(); trail = []; folder = null;
+    const authOpts = config.connected ? { scope: DRIVE_SCOPE, prompt: config.email ? '' : 'select_account', hint: config.email || '' } : { scope: DRIVE_SCOPE, prompt: 'select_account' };
+    saveConfig(); stop(); client.clear(); clearStoredSession(); resetList(); trail = []; folder = null;
     try {
       const version = generation;
       loading = true; controls(); message('Complete sign-in in the Google window…');
@@ -356,12 +415,18 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         loading = false;
         try {
           client.authorize(response);
-          config.connected = true; saveConfig();
+          persistSession(response);
+          config.connected = true; saveConfig(); rememberEmail();
           search = $('driveSearch').value.trim() || 'Noteful'; filter = '';
           run(resume);
         }
         catch (error) { message(error.message); controls(); }
-      }, error => { if (version === generation) { loading = false; message(error.message); controls(); } });
+      }, error => {
+        if (version !== generation) return;
+        loading = false;
+        if (authOpts.prompt === '') { config.email = ''; saveConfig(); }
+        message(error.message); controls();
+      }, authOpts);
     } catch (error) {
       loading = false; message(error.message); controls();
       // Missing configuration: reveal the setup fields the message points to.
@@ -369,8 +434,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     }
   };
   $('driveDisconnect').onclick = () => {
-    stop(); identity?.disconnect?.(); client.clear(); previews.cancel(); resetList(); trail = []; folder = null; filter = ''; history = []; forwardHistory = []; box = '';
-    config.connected = false; saveConfig();
+    stop(); identity?.disconnect?.(); client.clear(); clearStoredSession(); previews.cancel(); resetList(); trail = []; folder = null; filter = ''; history = []; forwardHistory = []; box = '';
+    config.connected = false; config.email = ''; saveConfig();
     message('Disconnected on this device. No files were changed in Drive. Notes kept on this device stay available under Recent.'); controls();
   };
   $('driveSearch').onkeydown = event => {
@@ -496,10 +561,14 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       if (session?.write?.access_token && client.writeToken !== session.write.access_token) client.authorizeWrite(session.write);
     } catch { /* A stale or malformed session just means signing in again. */ }
   }
+  // Restore an active web/PWA token on launch, or silently refresh the native mobile/desktop session.
+  restoreSession();
   const shared = window.notecompleteDrive;
   if (shared?.session) {
     shared.onSession?.(adopt);
     shared.session().then(adopt, () => {});
+  } else if (!client.connected && config.connected && window.ReactNativeWebView) {
+    silentRefresh().catch(() => {});
   }
   return { show, hide, update, trash, setQuick, newest, onQueueItemDone, back, forward, canGoBack, canGoForward, fetch: (file, onProgress) => fetchFile(file, undefined, onProgress), get ready() { return client.ready; }, get busy() { return importing; } };
 }

@@ -91,7 +91,8 @@ contextBridge.exposeInMainWorld('notecompleteUpdates', {
   restart: () => ipcRenderer.invoke('update:restart'),
 });
 contextBridge.exposeInMainWorld('notecompleteDrive', {
-  signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true }),
+  signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true, silent: options.silent === true }),
+  refresh: (options = {}) => ipcRenderer.invoke('drive:refresh', { write: options.write === true, force: options.force === true }),
   cancel: () => ipcRenderer.send('drive:cancel'),
   // The session shared by every tab: what is signed in now, and changes made in other tabs.
   session: () => ipcRenderer.invoke('drive:session'),

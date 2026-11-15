@@ -1,8 +1,8 @@
-import { app, BaseWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { desktopCredentials, desktopSignIn } from './google-auth.js';
+import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles } from './library-files.js';
@@ -26,8 +26,45 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
 // Windows hold tabs: one reader view per tab, only the active one shown. The
 // readers draw the tab strip in their own top bar from the list sent here.
 const tabs = tabStore();
-// Google Drive access tokens, shared by all tabs (see drive:session below).
+// Google Drive tokens, shared by all tabs and persisted encrypted when available so sign-in survives restarts.
+// Refresh tokens never leave the main process; renderers only receive short-lived access tokens.
 const driveSession = { read: null, write: null };
+const refreshingDrive = new Map();
+const driveSessionPath = () => path.join(app.getPath('userData'), 'drive-session.json');
+async function readDesktopCredentials() {
+  const saved = path.join(app.getPath('userData'), 'google-desktop-client.json');
+  for (const filename of [fileURLToPath(new URL('./google-desktop-client.json', import.meta.url)), saved]) {
+    try { return desktopCredentials(JSON.parse(await readFile(filename, 'utf8'))); } catch { /* Try the configured fallback. */ }
+  }
+  return null;
+}
+async function saveDriveSession() {
+  try {
+    const payload = {};
+    for (const kind of ['read', 'write']) {
+      const s = driveSession[kind];
+      if (s?.refreshToken || (s?.access_token && s.expires - Date.now() > 10000)) payload[kind] = s;
+    }
+    if (!payload.read && !payload.write) { await rm(driveSessionPath(), { force: true }); return; }
+    const raw = JSON.stringify(payload);
+    const wrapped = safeStorage.isEncryptionAvailable()
+      ? JSON.stringify({ encrypted: true, data: safeStorage.encryptString(raw).toString('base64') })
+      : raw;
+    await writeFile(driveSessionPath(), wrapped, { mode: 0o600 });
+  } catch { /* Optional on read-only environments. */ }
+}
+async function loadDriveSession() {
+  try {
+    const parsed = JSON.parse(await readFile(driveSessionPath(), 'utf8'));
+    const data = parsed?.encrypted
+      ? (safeStorage.isEncryptionAvailable() ? JSON.parse(safeStorage.decryptString(Buffer.from(parsed.data, 'base64'))) : null)
+      : parsed;
+    if (!data || typeof data !== 'object') return;
+    for (const kind of ['read', 'write']) {
+      if (data[kind] && typeof data[kind] === 'object') driveSession[kind] = data[kind];
+    }
+  } catch { /* No saved session yet. */ }
+}
 function currentDriveSession() {
   const out = {};
   for (const kind of ['read', 'write']) {
@@ -40,9 +77,40 @@ function sendDriveSession() {
   const session = currentDriveSession();
   for (const view of views.values()) if (!view.webContents.isDestroyed()) view.webContents.send('drive:session', session);
 }
-function shareDriveSession(kind, token) {
-  driveSession[kind] = { access_token: token.access_token, scope: token.scope, expires: Date.now() + Number(token.expires_in || 0) * 1000 };
+function shareDriveSession(kind, token, refreshToken = driveSession[kind]?.refreshToken || '') {
+  driveSession[kind] = { access_token: token.access_token, scope: token.scope, expires: Date.now() + Number(token.expires_in || 0) * 1000, ...(refreshToken ? { refreshToken } : {}) };
+  void saveDriveSession();
   sendDriveSession();
+}
+async function refreshDriveKind(kind, { force = false } = {}) {
+  const current = driveSession[kind];
+  if (!force && current?.access_token && current.expires - Date.now() > 60000) {
+    return { access_token: current.access_token, scope: current.scope, expires_in: Math.floor((current.expires - Date.now()) / 1000) };
+  }
+  if (!current?.refreshToken) throw Error('Connect to Google Drive to continue.');
+  if (refreshingDrive.has(kind)) return refreshingDrive.get(kind);
+  const task = (async () => {
+    const credentials = await readDesktopCredentials();
+    if (!credentials) throw Error('Google OAuth client configuration is missing.');
+    try {
+      let nextRefresh = current.refreshToken;
+      const scope = current.scope || (kind === 'write' ? 'https://www.googleapis.com/auth/drive' : 'https://www.googleapis.com/auth/drive.readonly');
+      const token = await refreshDesktopToken({ credentials, refreshToken: current.refreshToken, scope, onRefreshToken: rt => { nextRefresh = rt; } });
+      shareDriveSession(kind, token, nextRefresh);
+      return token;
+    } catch (error) {
+      if (error.code === 'invalid_grant') {
+        driveSession[kind] = null;
+        await saveDriveSession();
+        sendDriveSession();
+      }
+      throw error;
+    } finally {
+      refreshingDrive.delete(kind);
+    }
+  })();
+  refreshingDrive.set(kind, task);
+  return task;
 }
 const views = new Map(), windows = new Map();
 // Called when a tab's page is gone, so work started for it stops (set once the AI runners exist).
@@ -560,13 +628,25 @@ app.whenReady().then(async () => {
     const win = windowOf(event.sender);
     if (win && tabs.update(event.sender.id, { title: state.title, dirty: state.dirty })) broadcast(win);
   }));
-  // The Drive session belongs to the app, not to one tab: kept here in memory (never on disk)
-  // and handed to every tab, so a new tab does not start signed out.
-  ipcMain.handle('drive:session', event => (trusted(event) ? currentDriveSession() : null));
-  ipcMain.on('drive:forget', event => { if (trusted(event)) { driveSession.read = driveSession.write = null; sendDriveSession(); } });
+  await loadDriveSession();
+  // The Drive session belongs to the app and persists encrypted in userData (refresh tokens
+  // stay in the main process); renderers get short-lived access tokens and silent refreshes.
+  ipcMain.handle('drive:session', async event => {
+    if (!trusted(event)) return null;
+    if (!currentDriveSession().read && driveSession.read?.refreshToken) await refreshDriveKind('read').catch(() => {});
+    return currentDriveSession();
+  });
+  ipcMain.handle('drive:refresh', async (event, options = {}) => {
+    if (!trusted(event)) throw Error('Unexpected authentication origin.');
+    const kind = options?.write === true ? 'write' : 'read';
+    return refreshDriveKind(kind, { force: options?.force === true });
+  });
+  ipcMain.on('drive:forget', event => { if (trusted(event)) { driveSession.read = driveSession.write = null; void saveDriveSession(); sendDriveSession(); } });
   ipcMain.on('drive:cancel', event => { if (trusted(event)) pendingAuth.get(event.sender.id)?.abort(); });
   ipcMain.handle('drive:sign-in', async (event, options = {}) => {
     if (!trusted(event)) throw Error('Unexpected authentication origin.');
+    const kind = options?.write === true ? 'write' : 'read';
+    if (options?.silent === true) return refreshDriveKind(kind);
     if (pendingAuth.has(event.sender.id)) throw Error('Finish the current Google sign-in first.');
     const abort = new AbortController(), sender = event.sender;
     pendingAuth.set(sender.id, abort);
@@ -574,10 +654,7 @@ app.whenReady().then(async () => {
     sender.once('destroyed', cancelled);
     try {
       const saved = path.join(app.getPath('userData'), 'google-desktop-client.json');
-      let config;
-      for (const filename of [fileURLToPath(new URL('./google-desktop-client.json', import.meta.url)), saved]) {
-        try { config = desktopCredentials(JSON.parse(await readFile(filename, 'utf8'))); break; } catch { /* Try the configured fallback. */ }
-      }
+      let config = await readDesktopCredentials();
       if (!config) {
         const chosen = await dialog.showOpenDialog(windowOf(sender), { title: 'Choose Google Desktop OAuth client JSON', filters: [{ name: 'Google OAuth client', extensions: ['json'] }], properties: ['openFile'] });
         if (chosen.canceled) throw Error('Google sign-in cancelled.');
@@ -585,8 +662,9 @@ app.whenReady().then(async () => {
         config = desktopCredentials(value);
         await writeFile(saved, JSON.stringify({ installed: { client_id: config.clientId, client_secret: config.clientSecret } }), { mode: 0o600 });
       }
-      const token = await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true });
-      shareDriveSession(options?.write === true ? 'write' : 'read', token);
+      let refreshToken = '';
+      const token = await desktopSignIn({ credentials: config, signal: abort.signal, openExternal: url => shell.openExternal(url), write: options?.write === true, onRefreshToken: rt => { refreshToken = rt; } });
+      shareDriveSession(kind, token, refreshToken);
       return token;
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });

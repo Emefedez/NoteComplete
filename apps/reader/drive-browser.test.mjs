@@ -186,3 +186,38 @@ test('a cover cancelled by leaving Home is asked for again when Home returns', a
   ui.drive.hide(); await ui.drive.show(); await tick();
   assert.equal(asked.length, 2);
 });
+test('saved read session restores across reloads and native sessions refresh silently on show', async t => {
+  const saved = new Map([['notecomplete-drive-session-v1', JSON.stringify({ access_token: 'kept-tok', scope: 'https://www.googleapis.com/auth/drive.readonly', expires: Date.now() + 1800_000 })]]);
+  const restored = setup(t);
+  globalThis.localStorage = { getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v) };
+  await restored.drive.show(); await tick();
+  assert.equal(restored.client.connected, true);
+  assert.deepEqual(restored.calls, ['search']);
+  // Disconnecting clears the saved session and hint.
+  restored.node('driveDisconnect').onclick();
+  assert.equal(saved.get('notecomplete-drive-session-v1'), 'null');
+  // Native bridge (Desktop/Mobile) reconnects silently when previously connected.
+  const calls = [];
+  const savedNative = new Map([['notecomplete-drive-config-v1', JSON.stringify({ connected: true })]]);
+  const origLS = globalThis.localStorage;
+  globalThis.localStorage = { getItem: k => savedNative.get(k) ?? null, setItem: (k, v) => savedNative.set(k, v) };
+  const client = {
+    connected: false, token: '', apiKey: '',
+    get publicAccess() { return false; }, get ready() { return this.connected; },
+    clear() { this.connected = false; this.token = ''; },
+    authorize(tok) { this.connected = true; this.token = tok.access_token; },
+    async search() { calls.push('search'); return { files: [] }; },
+  };
+  let refreshed = 0;
+  const { driveBrowser: makeBrowser } = await import('./drive-browser.js');
+  const nativeDrive = makeBrowser({
+    open: async () => true, client,
+    identityLoader: async () => ({ native: true, refresh: async () => { refreshed++; return { access_token: 'native-silent', scope: 'https://www.googleapis.com/auth/drive.readonly', expires_in: 3000 }; } }),
+    authorize() { throw Error('should use silent refresh'); },
+  });
+  await nativeDrive.show(); await tick();
+  assert.equal(refreshed, 1);
+  assert.equal(client.connected, true);
+  assert.deepEqual(calls, ['search']);
+  globalThis.localStorage = origLS;
+});

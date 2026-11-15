@@ -20,17 +20,25 @@ export function nativeDriveIdentity() {
     pending.clear();
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'notecomplete-drive-cancel' }));
   };
+  const requestAuth = (options = {}) => {
+    const id = ++sequence;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { pending.delete(id); reject(Error('Google sign-in timed out. Try again.')); }, 180000);
+      pending.set(id, { resolve, reject, timer });
+      try {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'notecomplete-drive-auth',
+          id,
+          silent: options.silent === true,
+          clearToken: typeof options.clearToken === 'string' ? options.clearToken : '',
+        }));
+      } catch (error) { clearTimeout(timer); pending.delete(id); reject(error); }
+    });
+  };
   return {
     native: true, cancel,
     disconnect() { cancel(); window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'notecomplete-drive-disconnect' })); },
-    signIn() {
-      const id = ++sequence;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { pending.delete(id); reject(Error('Google sign-in timed out. Try again.')); }, 180000);
-        pending.set(id, { resolve, reject, timer });
-        try { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'notecomplete-drive-auth', id })); }
-        catch (error) { clearTimeout(timer); pending.delete(id); reject(error); }
-      });
-    },
+    signIn(options = {}) { return requestAuth(options); },
+    refresh(options = {}) { return requestAuth({ ...options, silent: true }); },
   };
 }
