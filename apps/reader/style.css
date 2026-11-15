@@ -2866,6 +2866,16 @@ body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
 .collab-firewall { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: 13px; }
 .collab-firewall p { margin: 0 0 6px; }
 #collabOnline[hidden] { display: none; }
+/* Progressive QR transfer modal & scanner progress. */
+.qr-transfer-stage { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; margin: 10px 0 4px; }
+.qr-stream-box { width: 200px; padding: 8px; }
+.qr-transfer-meta { display: grid; gap: 8px; min-width: 0; }
+.qr-progress-label { margin: 0; font-weight: 600; font-size: 13px; }
+.qr-progress-bar { width: 100%; height: 10px; accent-color: var(--accent); border-radius: 999px; }
+.qr-stream-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.qr-speed-select { min-height: 30px; padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 13px; }
+.qr-scan-live { display: grid; gap: 6px; margin: 6px 0; }
+@media (max-width: 520px) { .qr-transfer-stage { grid-template-columns: minmax(0, 1fr); } .qr-stream-box { margin: 0 auto; } }
 /* Others' carets in the notes editor. */
 .notes-editor { position: relative; }
 .notes-cursors { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; pointer-events: none; z-index: 2; }

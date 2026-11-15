@@ -7,6 +7,7 @@
 // The protocol is in sync.js; the host's server in apps/desktop/collab-server.js.
 import { SyncClient, parseInvite, applyTextDiff, sendPack } from './sync.js';
 import { icon } from './icons.js';
+import { renderQrSvg, showQrTransfer, QrReceiver, describeQrEnvelope } from './qr-transfer.js';
 
 const $ = (id) => document.getElementById(id);
 const LOCAL = Symbol('local notes edit');
@@ -19,7 +20,6 @@ let session = null;
 // The open session, for checks in the browser (tools/collab_e2e.mjs).
 export const currentSession = () => session;
 let yjsLoading = null;
-let qrLoading = null;
 
 // Yjs, its sync and awareness protocols, vendored by tools/build_web.py.
 function loadYjs() {
@@ -32,12 +32,8 @@ function loadYjs() {
   ]).then(([Y, sync, awareness, encoding, decoding]) => ({ Y, sync, awareness, encoding, decoding }))
     .catch((e) => { yjsLoading = null; throw Error('Sharing could not be loaded: ' + e.message); });
 }
-async function qrSvg(text) {
-  const { default: qrcode } = await (qrLoading ||= import('./vendor/qrcode/qrcode.mjs'));
-  const qr = qrcode(0, 'M');
-  qr.addData(text);
-  qr.make();
-  return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+function qrSvg(text) {
+  return renderQrSvg(text);
 }
 const remembered = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
 const remember = (name) => { try { localStorage.setItem(NAME_KEY, name); } catch { /* Optional. */ } };
@@ -92,6 +88,20 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
   const save = el('button', { type: 'button', textContent: 'Save as a file', title: 'A .ncstudy file to send by any means; the other NoteComplete opens it with File → Import…', onclick: async () => {
     try { const pack = build(); await host.download(JSON.stringify(pack), `${material.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - study.ncstudy`, 'application/json'); state.textContent = `Saved: ${describePack(pack)}.`; } catch (e) { state.textContent = e.message; }
   } });
+  const sendQr = el('button', { type: 'button', textContent: 'Show QR stream', title: 'Transmit quizzes, flashcards and notes directly via offline progressive QR codes with progress', onclick: async () => {
+    try {
+      const pack = build();
+      closeDialog();
+      await showQrTransfer({
+        title: 'Share study material via QR',
+        subtitle: `From “${material.title}”: on the other device open Share study material → Receive → Scan QR stream.`,
+        payload: { kind: 'study', pack },
+        onDownloadFallback: () => host.download(JSON.stringify(pack), `${material.title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')} - study.ncstudy`, 'application/json'),
+        fallbackLabel: 'Save .ncstudy file instead',
+        status: host.status,
+      });
+    } catch (e) { state.textContent = e.message; }
+  } });
   const send = el('button', { type: 'button', className: 'primary', textContent: 'Send' });
   send.onclick = async () => {
     send.disabled = true;
@@ -116,7 +126,7 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
     aimed ? '' : el('p', { className: 'muted', textContent: 'On the other computer, in NoteComplete: File → Share… . Its Local tab shows the address and PIN (same Wi-Fi); with online access on, its Online tab has a link that works from anywhere. In a browser (https), use that link. Or scan the QR code it shows: Study → Receive study material… on the other computer.' }),
     aimed ? el('p', {}, el('strong', { textContent: 'To: ' }), `the NoteComplete at ${new URL(aimed.url).host.replace(/^ws/, '')} (from the QR code)`) : '',
     el('div', { className: 'collab-join' }, ...(aimed ? [] : [el('label', {}, el('span', { textContent: 'Address or link' }), link), el('label', {}, el('span', { textContent: 'PIN (with an address)' }), code), scan]), el('label', {}, el('span', { textContent: 'Your name' }), who)),
-    state, buttons(save, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
+    state, buttons(save, sendQr, el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), send));
   studyDialog(host, sendPanel, tab === 'receive' ? 'receive' : 'send', aimed);
   (aimed ? who : link.value ? code : link).focus();
 }
@@ -138,14 +148,64 @@ function studyDialog(host, sendPanel, tab, aimed = null) {
   d.addEventListener('close', () => { if (session?.codeClock) clearInterval(session.codeClock); }, { once: true });
   show(aimed ? 'send' : tab);
 }
+async function receiveViaQrStream(host, stateEl) {
+  const { scanQrFrames } = await import('./qr-scan.js');
+  const receiver = new QrReceiver();
+  const payload = await scanQrFrames(async (raw, helpers) => {
+    const step = await receiver.accept(raw);
+    if (step.ignored) return null;
+    if (step.error) {
+      helpers.setProgress(step.error, 0, step.total);
+      return null;
+    }
+    const pct = Math.round((step.received / step.total) * 100);
+    helpers.setProgress(`Receiving QR stream: ${step.received} / ${step.total} frames (${pct}%)`, step.received, step.total);
+    if (step.done) return { done: true, value: step.payload };
+    return null;
+  }, stateEl, { initialText: 'Point the camera at the sender’s QR stream…' });
+
+  if (payload?.kind === 'study' && payload.pack) {
+    const { readPack, describePack } = await import('./study-pack.js');
+    const pack = readPack(payload.pack);
+    const { merged } = await host.importStudyPack(pack);
+    const msg = merged ? `Added to “${pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
+    closeDialog();
+    host.status(`Received ${describePack(pack)} via QR. ${msg}`);
+    return;
+  }
+  if (payload?.kind === 'anki' && payload.text) {
+    const safeName = `${String(payload.name || 'study').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.txt`;
+    await host.download(payload.text, safeName, 'text/plain');
+    closeDialog();
+    host.status(`Received ${describeQrEnvelope(payload)} via QR.`);
+    return;
+  }
+  throw Error('Unsupported QR transfer format.');
+}
+
 async function fillReceive(host, panel) {
   const close = el('button', { type: 'button', textContent: 'Close', onclick: closeDialog });
   const importFile = el('button', { type: 'button', textContent: 'Import a file…', title: 'A .ncstudy file from another NoteComplete', onclick: () => { closeDialog(); host.importStudyFile(); } });
+  const state = el('p', { className: 'muted', role: 'status', textContent: '' });
+  const canScan = 'BarcodeDetector' in globalThis && !!navigator.mediaDevices?.getUserMedia;
+  const scanStream = el('button', {
+    type: 'button',
+    className: window.notecompleteCollab ? '' : 'primary',
+    textContent: 'Scan QR stream',
+    hidden: !canScan,
+    title: 'Scan single or animated multi-frame QR codes directly from another NoteComplete',
+    onclick: async () => {
+      scanStream.disabled = true;
+      try { await receiveViaQrStream(host, state); }
+      catch (e) { state.textContent = e.message; scanStream.disabled = false; }
+    },
+  });
   if (!window.notecompleteCollab) {
     panel.replaceChildren(
-      el('p', { textContent: 'Receive study material from a file: on the other NoteComplete, Send → Save as a file, then open that file here.' }),
-      el('p', { className: 'muted', textContent: 'Receiving it live, with a QR code and PIN, needs the NoteComplete desktop app: it can accept connections and a browser cannot yet.' }),
-      buttons(close, importFile));
+      el('p', { textContent: 'Receive quizzes, flashcards, or notes offline by scanning the sender’s QR stream, or open a .ncstudy file.' }),
+      el('p', { className: 'muted', textContent: 'Live PIN receiving over Wi-Fi requires the NoteComplete desktop app, while offline QR streams and files work on any device.' }),
+      state,
+      buttons(close, importFile, scanStream));
     return;
   }
   if (session?.role !== 'host') {
@@ -159,12 +219,13 @@ async function fillReceive(host, panel) {
       } catch (e) { start.disabled = false; host.status(e.message, true); }
     };
     panel.replaceChildren(
-      el('p', { textContent: 'Another NoteComplete on this network (or online, when you turn it on) can send you flashcards, quizzes and notes. Start receiving to get a QR code and PIN. You are asked before anything is kept.' }),
-      buttons(close, importFile, start));
+      el('p', { textContent: 'Receive quizzes, flashcards and notes via offline QR stream, a .ncstudy file, or live Wi-Fi transfer with a QR code and PIN.' }),
+      state,
+      buttons(close, importFile, scanStream, start));
     return;
   }
   const card = el('section', { id: 'collabStudy', className: 'collab-section' });
-  panel.replaceChildren(card, buttons(close, importFile));
+  panel.replaceChildren(card, state, buttons(close, importFile, scanStream));
   await session.drawStudy(true);
   session.tickCode();
   clearInterval(session.codeClock);
@@ -196,6 +257,139 @@ async function askAboutPack(session, id, pack, from) {
     d.addEventListener('close', () => d.remove());
     d.showModal();
   });
+}
+
+/**
+ * Export → Share with others → Share note via QR…
+ * On desktop: exports the chosen note format (.nfedit, .notecomp, or .noteful), serves it
+ * over the local/online sharing server, and renders a direct download QR code.
+ * In browsers/mobile: exports via the OS share sheet / download or launches study QR transfer.
+ */
+export async function openShareNoteQr(host) {
+  if (!host.doc) throw Error('Open a note first.');
+  let format = 'project';
+  let sharedId = null;
+  let sharedMeta = null;
+  const stage = el('div', { className: 'collab-panel' });
+  const formats = [
+    ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history with undo, Markdown notes, handwriting text, quizzes, flashcards & scratchpad'],
+    ['notecomplete', 'NoteComplete archive (.notecomp)', 'Flattened note, Markdown notes, handwriting text & added recordings'],
+    ...(!host.doc.canvas ? [['noteful', 'Noteful (.noteful)', 'Flattened pages & ink for Noteful']] : []),
+  ];
+  const fieldset = el('fieldset', { className: 'collab-choices' }, el('legend', { textContent: 'Format to share' }));
+  for (const [value, label, detail] of formats) {
+    const radio = el('input', { type: 'radio', name: 'shareNoteFormat', value, checked: value === format });
+    radio.onchange = () => { if (radio.checked) { format = value; void render(); } };
+    fieldset.append(el('label', { className: 'collab-choice' }, radio, el('span', {}, el('strong', { textContent: label }), el('small', { className: 'muted', textContent: detail }))));
+  }
+
+  const linkRowEl = (link, message) => {
+    const copy = el('button', {
+      type: 'button',
+      className: 'collab-copy',
+      title: 'Copy the link',
+      'aria-label': 'Copy the link',
+      onclick: () => navigator.clipboard.writeText(link).then(() => host.status(message), () => host.status('Select the link and copy it.', true)),
+    }, icon('copy'));
+    return el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: link, className: 'collab-link', 'aria-label': 'Download link', onfocus: (e) => e.target.select() }), copy);
+  };
+
+  async function render() {
+    if (!window.notecompleteCollab?.shareFile) {
+      stage.replaceChildren(
+        el('p', { textContent: 'Browsers and mobile sandboxes cannot host an incoming download link on a local port.' }),
+        el('p', { className: 'muted', textContent: 'Save or open your device’s Share menu for the full note file, or share quizzes and flashcards offline with progressive QR codes.' }),
+        buttons(
+          el('button', { type: 'button', textContent: 'Share quizzes & decks (QR)…', onclick: () => { closeDialog(); void openStudyShare(host); } }),
+          el('button', { type: 'button', className: 'primary', textContent: `Share / save file (${format === 'project' ? '.nfedit' : format === 'notecomplete' ? '.notecomp' : '.noteful'})`, onclick: async () => { closeDialog(); await host.exportAndDownload(format); } }),
+          el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
+        ),
+      );
+      return;
+    }
+
+    stage.replaceChildren(el('p', { className: 'muted', textContent: 'Preparing note package…' }));
+    try {
+      if (sharedId) {
+        await window.notecompleteCollab.unshareFile(sharedId).catch(() => {});
+        sharedId = null;
+      }
+      const { name, mime, bytes } = await host.exportNote(format);
+      sharedMeta = await window.notecompleteCollab.shareFile({ name, mime, bytes });
+      sharedId = sharedMeta.id;
+      await drawDesktopShare();
+    } catch (e) {
+      stage.replaceChildren(
+        el('p', { className: 'collab-error', textContent: e?.message || 'Could not prepare QR share.' }),
+        buttons(el('button', { type: 'button', textContent: 'Close', onclick: closeDialog })),
+      );
+    }
+  }
+
+  async function drawDesktopShare() {
+    if (!sharedMeta) return;
+    const activeUrl = sharedMeta.online && sharedMeta.onlineLink ? sharedMeta.onlineLink : sharedMeta.link;
+    const qrBox = el('div', { className: 'collab-qr' });
+    qrBox.innerHTML = await qrSvg(activeUrl);
+    const kb = (sharedMeta.size / 1024).toFixed(sharedMeta.size >= 102400 ? 0 : 1);
+    const meta = el('div', {},
+      el('p', {}, el('strong', { textContent: sharedMeta.name }), ` (${kb} KB)`),
+      el('p', { className: 'muted', textContent: sharedMeta.online ? 'Scan from anywhere with internet access to download this note directly.' : 'Point another phone, tablet, or computer on the same Wi-Fi at this QR code to download the note.' }),
+      linkRowEl(activeUrl, 'Download link copied.'),
+    );
+
+    if (sharedMeta.addresses?.length > 1 && !sharedMeta.online) {
+      const sel = el('select', { 'aria-label': 'Network interface', className: 'qr-speed-select' });
+      for (const addr of sharedMeta.addresses) sel.append(el('option', { value: addr, textContent: addr, selected: addr === sharedMeta.address }));
+      sel.onchange = async () => {
+        await window.notecompleteCollab.useAddress(sel.value);
+        const refreshed = await window.notecompleteCollab.shareLinks?.(sharedId);
+        if (refreshed) { sharedMeta = refreshed; await drawDesktopShare(); }
+      };
+      meta.append(el('div', { className: 'collab-network' }, el('span', { textContent: 'Address:' }), sel));
+    }
+
+    const onlineBtn = el('button', {
+      type: 'button',
+      textContent: sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…',
+      onclick: async () => {
+        onlineBtn.disabled = true;
+        try {
+          await window.notecompleteCollab.online(!sharedMeta.online);
+          const refreshed = await window.notecompleteCollab.shareLinks?.(sharedId);
+          if (refreshed) { sharedMeta = refreshed; await drawDesktopShare(); }
+        } catch (e) { host.status(e.message, true); onlineBtn.disabled = false; }
+      },
+    });
+    const stopBtn = el('button', {
+      type: 'button',
+      textContent: 'Stop link',
+      onclick: async () => {
+        if (sharedId) await window.notecompleteCollab.unshareFile(sharedId).catch(() => {});
+        sharedId = null;
+        closeDialog();
+        host.status('Stopped note download link.');
+      },
+    });
+    const downloadBtn = el('button', {
+      type: 'button',
+      textContent: 'Save file copy',
+      onclick: async () => { closeDialog(); await host.exportAndDownload(format); },
+    });
+    const noteLine = el('p', { className: 'muted', textContent: 'Download link stays active until you click Stop link or quit NoteComplete.' });
+    const firewall = sharedMeta.firewall?.command
+      ? el('div', { className: 'collab-firewall' }, el('p', { textContent: `Blocked by ${sharedMeta.firewall.name}? Allow port ${sharedMeta.port} once:` }), linkRowEl(sharedMeta.firewall.command, 'Firewall command copied.'))
+      : '';
+    stage.replaceChildren(
+      el('div', { className: 'collab-pair' }, qrBox, meta),
+      firewall,
+      noteLine,
+      buttons(stopBtn, downloadBtn, onlineBtn, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closeDialog })),
+    );
+  }
+
+  dialog('Share note via QR', fieldset, stage);
+  await render();
 }
 
 // Entry point (app.js): mode is host, join-tablet, join-notes or link (an invite URL).

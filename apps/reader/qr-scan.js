@@ -1,23 +1,71 @@
-// Reads a QR code with the camera (the browser's BarcodeDetector, where it exists), for the
-// address a NoteComplete shows to receive study material. Resolves with the code's text.
-export async function scanQr(status) {
-  if (!('BarcodeDetector' in globalThis)) throw Error('This browser cannot read QR codes. Scan the code with the camera app instead, or type the address and PIN.');
+// Reads one or a progressive sequence of QR codes with the camera (`BarcodeDetector`),
+// updating live progress so both invite links and multi-frame `NCQR1` transfers work seamlessly.
+
+/**
+ * Scans QR frames until `onCode(rawValue, helpers)` returns a truthy result `{ done: true, value }`
+ * or the user cancels / times out.
+ */
+export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the camera at the QR code…', timeoutMs = 120000 } = {}) {
+  if (!('BarcodeDetector' in globalThis)) {
+    throw Error('This browser cannot read QR codes with the camera. Use the file import or paste an address instead.');
+  }
   const detector = new BarcodeDetector({ formats: ['qr_code'] });
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); }
-  catch { throw Error('The camera is not available (allow it, or type the address and PIN).'); }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch {
+    throw Error('The camera is not available (allow camera permission, or import a file instead).');
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'qr-scan-live';
+  const progress = document.createElement('progress');
+  progress.className = 'qr-progress-bar';
+  progress.hidden = true;
   const video = Object.assign(document.createElement('video'), { srcObject: stream, muted: true, playsInline: true });
   video.style.cssText = 'width:100%;max-height:260px;border-radius:8px;background:#000;margin:6px 0';
-  status.after(video);
+  let cancelled = false;
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = 'Stop camera';
+  cancelBtn.onclick = () => { cancelled = true; };
+  wrap.append(progress, video, cancelBtn);
+  statusEl.textContent = initialText;
+  statusEl.after(wrap);
   await video.play();
+  const helpers = {
+    setProgress(text, received, total) {
+      statusEl.textContent = text;
+      if (total && total > 1) {
+        progress.hidden = false;
+        progress.max = total;
+        progress.value = received;
+      } else {
+        progress.hidden = true;
+      }
+    },
+  };
   try {
-    const stop = Date.now() + 60000;
-    while (Date.now() < stop) {
+    const deadline = Date.now() + timeoutMs;
+    while (!cancelled && Date.now() < deadline) {
       const [code] = await detector.detect(video).catch(() => []);
-      if (code?.rawValue) return code.rawValue;
-      status.textContent = 'Point the camera at the QR code on the other computer…';
-      await new Promise((r) => setTimeout(r, 250));
+      if (code?.rawValue) {
+        const res = await onCode(code.rawValue, helpers);
+        if (res?.done) return res.value;
+      }
+      await new Promise((r) => setTimeout(r, 140));
     }
-    throw Error('No QR code found. Try again, or type the address and PIN.');
-  } finally { for (const track of stream.getTracks()) track.stop(); video.remove(); }
+    throw Error(cancelled ? 'Camera scan stopped.' : 'QR transfer did not finish in time. Move closer or pause on missing frames.');
+  } finally {
+    for (const track of stream.getTracks()) track.stop();
+    wrap.remove();
+  }
+}
+
+/** Legacy single-QR helper returning the first detected QR string. */
+export async function scanQr(statusEl) {
+  return scanQrFrames(
+    (raw) => ({ done: true, value: raw }),
+    statusEl,
+    { initialText: 'Point the camera at the QR code on the other computer…', timeoutMs: 60000 },
+  );
 }

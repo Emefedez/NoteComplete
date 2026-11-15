@@ -518,6 +518,32 @@ app.whenReady().then(async () => {
     sharing = null;
   }));
   ipcMain.handle('collab:info', guarded((event) => (sharing?.owner === event.sender.id ? { tabletLink: sharing.server.tabletLink(), sendLink: sharing.server.sendLink(), onlineSendLink: sharing.server.onlineSendLink, address: sharing.server.address, ...sharing.server.code() } : null)));
+  ipcMain.handle('collab:share-file', guarded(async (event, options = {}) => {
+    const owner = event.sender.id;
+    if (sharing && sharing.owner !== owner) throw Error('Another tab is already sharing. Stop sharing there first.');
+    if (!sharing) {
+      const server = await (await collabServer()).startServer({
+        root, notes: null,
+        onEnded: (result) => {
+          const contents = views.get(owner)?.webContents;
+          if (contents && !contents.isDestroyed()) contents.send('collab:ended', { reason: result.reason });
+          const done = sharing?.closed;
+          sharing = null;
+          done?.();
+        },
+      });
+      sharing = { owner, server };
+      sharing.firewall = await (await collabServer()).firewallHint(server.port).catch(() => null);
+    }
+    const shared = sharing.server.shareFile({ name: options.name, mime: options.mime, bytes: options.bytes });
+    return { ...shared, ...sharingInfo(sharing.server) };
+  }));
+  ipcMain.handle('collab:share-links', guarded((event, id) => {
+    if (sharing?.owner !== event.sender.id) return null;
+    const links = sharing.server.shareLinks(id);
+    return links ? { ...links, ...sharingInfo(sharing.server) } : null;
+  }));
+  ipcMain.handle('collab:unshare-file', guarded((event, id) => (sharing?.owner === event.sender.id ? sharing.server.unshareFile(id) : false)));
   ipcMain.handle('collab:minimize', guarded((event) => windowOf(event.sender)?.minimize()));
   ipcMain.handle('ui:zoom', guarded((_event, step) => setUiZoom([-1, 0, 1].includes(step) ? step : 0)));
   ipcMain.handle('tabs:detach', guarded((event, id) => tabs.windowOf(id) === tabs.windowOf(event.sender.id) && detachTab(id)));

@@ -9,6 +9,7 @@ import * as awareness from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { gunzipSync, brotliDecompressSync } from 'node:zlib';
+import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { startServer, lanAddress, lanAddresses, readerFile, firewallHint, pickEncoding, hostSized, HOST_MAX_PAYLOAD } from './collab-server.js';
 import { SyncClient, parseInvite, applyTextDiff } from '../reader/sync.js';
@@ -884,5 +885,48 @@ test('a big message from anyone but the host is refused before it is held in mem
     assert.equal(t.replica.digest(), mine.digest());
     assert.ok(sizes.some((n) => n > big), 'the host sent it in one large message');
     t.client.close(); h.close();
+  } finally { await server.stop(); }
+});
+
+test('shared note files download with token verification, tunnel gating, and cleanup', async () => {
+  const server = await startServer({ root: await reader(), host: '127.0.0.1', address: '192.168.1.40', port: 0, notes: null });
+  try {
+    const payload = Buffer.from('{"format":"noteful-re-project","version":10}');
+    const shared = server.shareFile({ name: 'Bio "Notes"/1.nfedit', mime: 'application/json', bytes: payload });
+    assert.ok(shared.link.includes('/share/'));
+    assert.equal(shared.size, payload.length);
+
+    const url = new URL(shared.link);
+    const localBase = `http://127.0.0.1:${server.port}`;
+
+    // Local GET with valid token returns attachment with nosniff and exact bytes.
+    const ok = await fetch(`${localBase}${url.pathname}`);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(ok.headers.get('content-disposition'), /^attachment; filename=/);
+    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), payload);
+
+    // HEAD returns headers without body.
+    const head = await fetch(`${localBase}${url.pathname}`, { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(Number(head.headers.get('content-length')), payload.length);
+
+    // Wrong token is rejected cleanly.
+    const wrong = await fetch(`${localBase}${url.pathname.replace(/\/[a-f0-9]{24}\//, `/${'0'.repeat(24)}/`)}`);
+    assert.equal(wrong.status, 404);
+
+    // Remote/tunneled request is blocked until online access is turned on.
+    const blockedCf = await fetch(`${localBase}${url.pathname}`, { headers: { 'cf-connecting-ip': '203.0.113.5' } });
+    assert.equal(blockedCf.status, 404);
+    const blockedHost = await new Promise((resolve, reject) => {
+      const req = http.get({ hostname: '127.0.0.1', port: server.port, path: url.pathname, headers: { Host: 'example-tunnel.trycloudflare.com' } }, (res) => { res.resume(); resolve(res.statusCode); });
+      req.on('error', reject);
+    });
+    assert.equal(blockedHost, 404);
+
+    // Unsharing removes the endpoint immediately.
+    assert.equal(server.unshareFile(shared.id), true);
+    const gone = await fetch(`${localBase}${url.pathname}`);
+    assert.equal(gone.status, 404);
   } finally { await server.stop(); }
 });

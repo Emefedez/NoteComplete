@@ -43,7 +43,7 @@
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
           <hr />
           <hr />
-          <button id="save" data-icon="save" disabled><span class="menu-label">Save project</span><kbd>Ctrl S</kbd></button>
+          <button id="save" data-icon="save" disabled title="Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, quizzes, flashcards and scratchpad (audio recordings stay on this device)."><span class="menu-label">Save project (.nfedit)</span><kbd>Ctrl S</kbd></button>
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="PDF, images, Noteful and NoteComplete files, Anki, and sharing with other people and devices">Export and share…</button>
@@ -196,16 +196,18 @@
         <section aria-labelledby="exportFiles">
           <h3 id="exportFiles">Your note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>
           <button id="exportNotecomplete" disabled class="export-item" data-icon="save" data-palette="Export NoteComplete (.notecomp)" title="One file with the note, its notes and recordings, without the undo history."><b>NoteComplete file</b><small>.notecomp · note, notes and recordings</small></button>
-          <button id="exportProject" disabled class="export-item" data-icon="clock" data-palette="Export NoteComplete project (.nfedit)" title="The note with its whole edit history, as Save project writes it."><b>Project with history</b><small>.nfedit · every edit, with undo</small></button>
+          <button id="exportProject" disabled class="export-item" data-icon="clock" data-palette="Export NoteComplete project (.nfedit)" title="Full project archive: original note, full undo history, Markdown notes, handwriting text, quizzes, flashcard decks and scratchpad (audio recordings stay on this device)."><b>Project with history</b><small>.nfedit · edit history, notes, handwriting text, quizzes, flashcards &amp; scratchpad</small></button>
           <button id="native" disabled class="export-item" data-icon="note" data-palette="Export Noteful (.noteful)" title="The note for Noteful, with your edits."><b>Noteful file</b><small>.noteful · to open in Noteful</small></button>
           <button id="nativeMarkdown" disabled class="export-item" data-icon="text" data-palette="Export Noteful + Markdown" title="The .noteful file and the notes as a .md file, with page breaks marked."><b>Noteful + Markdown</b><small>.noteful and a .md of your notes</small></button>
         </section>
         <section aria-labelledby="exportStudyHead">
           <h3 id="exportStudyHead">Study</h3>
           <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Anki</b><small>All flashcards and quizzes of this note</small></button>
+          <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
         </section>
         <section aria-labelledby="exportShareHead">
           <h3 id="exportShareHead">Share with others</h3>
+          <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit, .notecomp, or .noteful) available via a QR download link on this network or online"><b>Share note via QR…</b><small>Download link as QR code (.nfedit, .notecomp, or .noteful)</small></button>
           <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or receive them (a QR code and PIN, or a file)"><b>Send or receive study material…</b><small>Another NoteComplete: QR code and PIN, or a file</small></button>
           <button id="shareSession" class="export-item" data-icon="monitor" data-palette="Share notes and pair a drawing tablet…" title="Share the notes with people on this network, or use a phone or tablet as a drawing surface" hidden><b>Share live, or draw on a tablet…</b><small>People on this network; a phone or tablet as drawing surface</small></button>
           <button id="joinNotes" class="export-item" data-icon="link" data-palette="Join shared notes…" title="Open notes someone shares with you (paste their invite link)"><b>Join shared notes…</b><small>Paste the invite link someone sent you</small></button>
@@ -926,7 +928,7 @@
   <label class="ocr-languages new-pages-only">Pages<input id="newCount" type="number" min="1" max="200" value="1" /></label>
   <fieldset class="new-format">
     <legend>Save as <button type="button" class="format-help" data-format-help aria-label="What is the difference?" title="What is the difference?">?</button></legend>
-    <label><input type="radio" name="newFormat" value="project" checked /> <strong>NoteComplete</strong> <span class="muted">.nfedit · every edit with its undo history, and the Markdown notes</span></label>
+    <label><input type="radio" name="newFormat" value="project" checked /> <strong>NoteComplete</strong> <span class="muted">.nfedit · edit history with undo, Markdown notes, handwriting text, quizzes, flashcards &amp; scratchpad</span></label>
     <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful on the iPad; notes stay in NoteComplete</span></label>
   </fieldset>
   <div class="ocr-actions"><button id="newCancel" type="button">Cancel</button><button id="newCreate" type="button" class="primary">Create</button></div>
@@ -1004,7 +1006,7 @@
   <div class="deck-head"><label id="deckTitleLabel" class="sr-only" for="deckTitle">Deck name</label><input id="deckTitle" type="text" /><span id="deckCount" class="muted"></span><span id="deckSaved" class="muted"></span><button id="deckShuffle" type="button" class="icon-button shuffle-toggle" data-icon="shuffle" aria-pressed="false" aria-label="Random order" title="Random order: ask cards in random order"></button><button id="deckDim" type="button" class="deck-float-only icon-button dim-toggle" data-icon="sun" aria-pressed="false" aria-label="Dim the background" title="Dim everything behind the cards"></button><button id="deckMinimize" type="button" class="deck-float-only icon-button" title="Minimize (M)" aria-label="Minimize">–</button><button id="deckFloatClose" type="button" class="deck-float-only icon-button" title="Close; the deck is saved" aria-label="Close">×</button></div>
   <div id="deckList">
     <ol id="deckCards" class="deck-cards"></ol>
-    <div class="ocr-actions"><button id="deckAdd" type="button">Add card</button><span class="spacer"></span><button id="deckClose" type="button">Close</button><button id="deckExport" type="button">Export to Anki…</button><button id="deckSave" type="button">Save</button><button id="deckPracticeStart" type="button" class="primary">Practise</button></div>
+    <div class="ocr-actions"><button id="deckAdd" type="button">Add card</button><span class="spacer"></span><button id="deckClose" type="button">Close</button><button id="deckQr" type="button" title="Share this flashcard deck via QR code (works offline)">QR…</button><button id="deckExport" type="button">Export to Anki…</button><button id="deckSave" type="button">Save</button><button id="deckPracticeStart" type="button" class="primary">Practise</button></div>
   </div>
   <div id="deckPractice" class="deck-practice" hidden>
     <p id="practiceProgress" class="muted"></p>
@@ -1139,7 +1141,7 @@
     <span data-icon="export" title="Opens the note, then exports it">Export</span>
     <button type="button" data-export="noteful" title="Export Noteful (.noteful)">NF</button>
     <button type="button" data-export="markdown" title="Export Noteful + Markdown">N+MD</button>
-    <button type="button" data-export="project" title="Export the project (.nfedit) with its whole edit history">NFE</button>
+    <button type="button" data-export="project" title="Export the project (.nfedit) with its edit history, notes, handwriting text, quizzes, flashcards and scratchpad">NFE</button>
     <button type="button" data-export="notecomplete" title="Export NoteComplete (.notecomp): the note, its notes and recordings">NC</button>
     <button type="button" data-export="pdf" title="Every page as one PDF">PDF</button>
   </div>
@@ -1261,7 +1263,7 @@
   <table class="formats-table">
     <thead><tr><th></th><th>Keeps</th><th>Use it for</th></tr></thead>
     <tbody>
-      <tr><th>NoteComplete project<br><span class="muted">.nfedit</span></th><td>The original note untouched, every edit with its undo history, the Markdown notes and the text of the handwriting. Recordings added here stay on this device.</td><td>Your notes in NoteComplete: nothing is ever lost.</td></tr>
+      <tr><th>NoteComplete project<br><span class="muted">.nfedit</span></th><td>The original note untouched, every edit with its undo history, Markdown notes, recognized handwriting text, flashcard decks, quizzes and scratchpad. Added audio recordings stay on this device (they travel in .notecomp).</td><td>Your notes in NoteComplete: nothing is ever lost.</td></tr>
       <tr><th>Noteful<br><span class="muted">.noteful</span></th><td>Pages, ink, PDFs, images and text, as Noteful stores them. No undo history; notes stay in NoteComplete.</td><td>Notes you also open in Noteful on the iPad.</td></tr>
     </tbody>
   </table>
@@ -1269,7 +1271,7 @@
   <ul>
     <li><b>Noteful file</b> a .noteful copy. No undo history.</li>
     <li><b>Noteful + Markdown</b> the .noteful and its notes as a .md file.</li>
-    <li><b>NoteComplete file</b> one <b>.notecomp</b> file with the note, its Markdown notes, the text of the handwriting and added recordings, to send to someone. It is flattened: <b>no undo history</b>, shapes become outlines and locked ink is unlocked. Choose <b>Project with history</b> (.nfedit) to keep the history.</li>
+    <li><b>NoteComplete file</b> one <b>.notecomp</b> file with the note, its Markdown notes, the text of the handwriting and added recordings, to send to someone. It is flattened: <b>no undo history</b>, shapes become outlines, locked ink is unlocked, and study sets (quizzes/decks/scratchpad) are not bundled. Choose <b>Project with history</b> (.nfedit) to keep the undo history, quizzes, flashcard decks and scratchpad.</li>
     <li>Pages as SVG, PDF or images · study decks for Anki · sending study material to another NoteComplete. <b>File → Import…</b> brings any of these back, and quizzes from Quiz Toolkit.</li>
   </ul>
   <p class="muted">NoteComplete opens .notecomp and .notepart files as well.</p>

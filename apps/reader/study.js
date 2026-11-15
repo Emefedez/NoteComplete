@@ -10,6 +10,7 @@ import { scratchButton, newId } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 import { runAI, smallStudy } from './small-model.js';
+import { buildPack } from './study-pack.js';
 
 const $ = id => document.getElementById(id);
 const BATCH = 6, PARALLEL = 3;
@@ -400,10 +401,35 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     renderCards();
   };
   const fileName = title => (title.trim() || 'NoteComplete').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+  const shareStudyQr = async ({ title, subtitle, pack, onDownloadFallback, fallbackLabel }) => {
+    const { showQrTransfer } = await import('./qr-transfer.js');
+    await showQrTransfer({
+      title,
+      subtitle,
+      payload: { kind: 'study', pack },
+      onDownloadFallback,
+      fallbackLabel,
+      status,
+    });
+  };
   $('deckExport').onclick = async () => {
     const name = fileName($('deckTitle').value);
     await download(ankiText(name, deck.cards.filter(c => c.front.trim() && c.back.trim())), `${name}.txt`, 'text/plain');
     status('Anki deck exported. In Anki: File → Import, then choose the file.');
+  };
+  $('deckQr').onclick = async () => {
+    const cleanTitle = $('deckTitle').value.trim() || deck.title || 'Flashcards';
+    const cleanDeck = { ...deck, title: cleanTitle, cards: deck.cards.filter(c => c.front.trim() && c.back.trim()) };
+    if (!cleanDeck.cards.length) return status('Add at least one card before sharing via QR.', true);
+    const noteTitle = documentInfo().title || cleanTitle;
+    const pack = buildPack({ title: noteTitle, fingerprint: fingerprint(), study: { decks: [cleanDeck] } });
+    await shareStudyQr({
+      title: `Share “${cleanTitle}” via QR`,
+      subtitle: 'On the other device: File → Export and share… → Send or receive study material → Receive → Scan QR stream.',
+      pack,
+      onDownloadFallback: () => $('deckExport').onclick(),
+      fallbackLabel: 'Export Anki .txt instead',
+    });
   };
   // Quizzes export the same way: the open one from Study, any one from the saved list.
   async function exportQuiz(quiz) {
@@ -822,7 +848,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   // can be undone until the dialog closes.
   async function openSaved() {
     const decks = await savedDecks(), saved = await quizzes.list();
-    const row = ({ title, detail, kind, run, remove, restore, exportTo = null }) => {
+    const row = ({ title, detail, kind, run, remove, restore, exportTo = null, shareQr = null }) => {
       const item = document.createElement('li');
       const show = () => {
         const open = document.createElement('button'), name = document.createElement('strong'), meta = document.createElement('span');
@@ -835,6 +861,13 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
         del.title = `Delete this ${kind}…`; del.setAttribute('aria-label', `Delete ${kind} ${title}`);
         del.onclick = confirm;
         const extra = [];
+        if (shareQr) {
+          const qrBtn = document.createElement('button');
+          qrBtn.type = 'button'; qrBtn.className = 'saved-export'; qrBtn.textContent = 'QR';
+          qrBtn.title = `Share this ${kind} via progressive QR code`; qrBtn.setAttribute('aria-label', `Share ${kind} ${title} via QR`);
+          qrBtn.onclick = shareQr;
+          extra.push(qrBtn);
+        }
         if (exportTo) {
           const anki = document.createElement('button');
           anki.type = 'button'; anki.className = 'saved-export'; anki.textContent = 'Anki';
@@ -861,7 +894,13 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
       return item;
     };
     $('deckPicker').replaceChildren(...decks.map((d, i) => row({
-      kind: 'deck', exportTo: () => download(ankiText(fileName(d.title), d.cards.filter(c => c.front.trim() && c.back.trim())), `${fileName(d.title)}.txt`, 'text/plain').then(() => status('Anki deck exported. In Anki: File → Import, then choose the file.')), title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
+      kind: 'deck',
+      shareQr: () => {
+        const noteTitle = documentInfo().title || d.title || 'Flashcards';
+        const pack = buildPack({ title: noteTitle, fingerprint: fingerprint(), study: { decks: [d] } });
+        return shareStudyQr({ title: `Share “${d.title}” via QR`, subtitle: 'Receiver scans via Share study material → Receive → Scan QR stream.', pack, onDownloadFallback: () => download(ankiText(fileName(d.title), d.cards.filter(c => c.front.trim() && c.back.trim())), `${fileName(d.title)}.txt`, 'text/plain'), fallbackLabel: 'Export Anki .txt instead' });
+      },
+      exportTo: () => download(ankiText(fileName(d.title), d.cards.filter(c => c.front.trim() && c.back.trim())), `${fileName(d.title)}.txt`, 'text/plain').then(() => status('Anki deck exported. In Anki: File → Import, then choose the file.')), title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
       run: () => showDeck(d),
       remove: async () => library.store.set('settings', key(), (await savedDecks()).filter(x => x.id !== d.id)),
       restore: async () => { const now = (await savedDecks()).filter(x => x.id !== d.id); now.splice(Math.min(i, now.length), 0, d); await library.store.set('settings', key(), now); },
@@ -869,7 +908,20 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     $('quizPicker').replaceChildren(...saved.map(q => {
       const answered = Object.keys(q.answers || {}).length;
       const points = Object.entries(q.answers || {}).reduce((n, [i, a]) => n + (isRight(q.questions[i], a) ? (a.hinted ? 1 : 2) : 0), 0);
-      return row({ kind: 'quiz', title: q.title, detail: `${answered}/${q.questions.length} answered · ${points} points`, run: () => quizzes.open(q), exportTo: () => exportQuiz(q), remove: () => quizzes.remove(q.id), restore: () => quizzes.restore(q) });
+      return row({
+        kind: 'quiz',
+        title: q.title,
+        detail: `${answered}/${q.questions.length} answered · ${points} points`,
+        run: () => quizzes.open(q),
+        shareQr: () => {
+          const noteTitle = documentInfo().title || q.title || 'Quiz';
+          const pack = buildPack({ title: noteTitle, fingerprint: fingerprint(), study: { quizzes: [q] } });
+          return shareStudyQr({ title: `Share quiz “${q.title}” via QR`, subtitle: 'Receiver scans via Share study material → Receive → Scan QR stream.', pack, onDownloadFallback: () => exportQuiz(q), fallbackLabel: 'Export Anki .txt instead' });
+        },
+        exportTo: () => exportQuiz(q),
+        remove: () => quizzes.remove(q.id),
+        restore: () => quizzes.restore(q),
+      });
     }));
     if (!$('deckPickerDialog').open) $('deckPickerDialog').showModal();
   }
@@ -899,6 +951,18 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     await download(ankiDecks(groups), `${fileName(title)} · study.txt`, 'text/plain');
     status(`Exported ${groups.length} deck${groups.length === 1 ? '' : 's'} to Anki (${groups.reduce((n, g) => n + g.cards.length, 0)} cards). In Anki: File → Import.`);
   }
+  async function qrAll() {
+    const title = documentInfo().title || 'NoteComplete', decks = await savedDecks(), savedQuizzes = await quizzes.list();
+    if (!decks.length && !savedQuizzes.length) return status('This note has no flashcards or quizzes yet.', true);
+    const pack = buildPack({ title, fingerprint: fingerprint(), study: { decks, quizzes: savedQuizzes } });
+    await shareStudyQr({
+      title: `Share “${title}” study sets via QR`,
+      subtitle: 'Receiver scans via Share study material → Receive → Scan QR stream.',
+      pack,
+      onDownloadFallback: () => exportAll(),
+      fallbackLabel: 'Export Anki .txt instead',
+    });
+  }
   // From Study → All quizzes and decks: a deck of the open note, and any deck to Anki.
   async function openDeck(id) {
     const d = (await savedDecks()).find(x => x.id === id);
@@ -910,5 +974,5 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     await download(ankiText(name, (d.cards || []).filter(c => c.front?.trim() && c.back?.trim())), `${name}.txt`, 'text/plain');
     status('Anki deck exported. In Anki: File → Import, then choose the file.');
   }
-  return { cards: () => open('cards'), quiz: () => open('quiz'), check: () => open('check'), saved: openSaved, exportQuiz, exportAll, openDeck, exportDeck, fillProviders, key: onKey };
+  return { cards: () => open('cards'), quiz: () => open('quiz'), check: () => open('check'), saved: openSaved, exportQuiz, exportAll, qrAll, openDeck, exportDeck, fillProviders, key: onKey };
 }

@@ -1,4 +1,4 @@
-# Noteful RE Project (.nfedit), versions 1–9
+# Noteful RE Project (.nfedit), versions 1–10
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -120,6 +120,10 @@ A project may have `floor`: the edits before it were compacted and cannot be und
 ## Infinite canvas (project version 7)
 
 A project may have `"canvas": true`. Such a note has exactly one page, which grows through ordinary `ResizePage` edits: before ink, a picture or a text box is added, a host asks `canvas_growth(bounds)`, which says whether the page needs to grow. The page grows when the new content comes within 300 units of the right or bottom edge, in 800-unit steps. `grow_canvas_for` applies that growth. Because the growth is an edit of its own, made before the content, undo removes the content first. `view` returns `"canvas"`. A canvas refuses `InsertPages` and `export_noteful` (there is no Noteful form). It travels in `.notecomp`/`.notepart` with `"canvas": true` in the manifest. Its `note.noteful` holds the one large page, and readers that do not know the flag open it as an ordinary one-page note.
+
+## Study sets (project version 10)
+
+A project may include `"study": { "decks": […], "quizzes": […], "scratch": […] }`, keeping this note's flashcard decks, generated quizzes, and scratchpad notes/conversations alongside the source archive, edit history, Markdown notes, and recognized handwriting text (`STUDY_LIMIT` 8 MiB; omitted when empty so earlier versions remain valid). Opening an `.nfedit` merges incoming `decks`, `quizzes`, and `scratch` by `id` into local library storage. Added audio recordings stay on-device and travel in `.notecomp` rather than `.nfedit`.
 
 ## Filled shapes
 

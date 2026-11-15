@@ -28,6 +28,7 @@ import { allQuizzes } from "./all-quizzes.js";
 import { updateNotice } from "./updates.js";
 import { scratchpad } from "./scratchpad.js";
 import { dictation } from "./dictate.js";
+import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
 import { getAiFile } from "./rich-text.js";
@@ -36,7 +37,7 @@ import { jobChip } from "./jobs.js";
 import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter } from "./page-export.js";
-import { versionChooser, carryStudy } from "./versions.js";
+import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
 import { regionSweep } from "./selection-geometry.js";
@@ -459,7 +460,15 @@ function releaseImages() {
 }
 const SAVE_TEXT_TITLE = $("textSave").title;
 const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
-function saveLabel() { $("save").querySelector(".menu-label").textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project"; }
+function saveLabel() {
+  const el = $("save");
+  el.querySelector(".menu-label").textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project (.nfedit)";
+  el.title = saveAs === "noteful" || saveAs === "markdown"
+    ? "Save to the Noteful file (no undo history; notes and study sets stay on this device)."
+    : saveAs === "notecomplete" || saveAs === "notepart"
+      ? "Save a .notecomp copy with the note, notes and recordings (no undo history)."
+      : "Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, quizzes, flashcards and scratchpad (audio recordings stay on this device).";
+}
 async function load(file, preparedDocument = null) {
   if (!ready || busy()) {
     status("Wait for the current operation to finish.", true);
@@ -545,6 +554,15 @@ async function load(file, preparedDocument = null) {
     // Recordings that came inside a .notecomp join the ones kept for this note.
     const incoming = (result.added_audio || []).map((a) => ({ id: a.id, name: a.name, mime: a.mime, created: a.created, blob: new Blob([a.bytes], { type: a.mime }) }));
     audio.open(result.audio || [], result.recordings || [], await addedStore.load(find.fingerprint, incoming));
+    if (prepared.kind === "project" && result.study && find.fingerprint) {
+      for (const kind of ["decks", "quizzes", "scratch"]) {
+        const items = result.study[kind];
+        if (!Array.isArray(items) || !items.length) continue;
+        const key = `${kind}:${find.fingerprint}`;
+        const existing = await library.store.get("settings", key).catch(() => null);
+        await library.store.set("settings", key, mergeStudy(kind, existing, items)).catch(() => {});
+      }
+    }
     rememberDocument();
     await renderPage(panels[0], result);
     status("Document opened.");
@@ -1966,13 +1984,15 @@ function point(e, p) {
 }
 // A stylus counts as in use for half a minute after it last touched or hovered the page.
 const PEN_ACTIVE_MS = 30000;
+installNativeHoverBridge();
 let lastPen = -Infinity, lastPenWrote = -Infinity;
 const notePen = (e) => {
   if (e.pointerType === "pen") {
     lastPen = performance.now();
-    // Touching the page, not hovering: an Apple Pencil that hovers (held near the screen
-    // while two fingers open the quick menu) sends moves all the time.
-    if (e.buttons || e.type !== "pointermove") lastPenWrote = lastPen;
+    // Touching the page, not hovering: a stylus held near the screen sends hover moves/over
+    // so fingers can still pan while the stylus hovers above the page.
+    const hoverEvent = !e.buttons && (e.type === "pointermove" || e.type === "pointerover");
+    if (!hoverEvent) lastPenWrote = lastPen;
   }
   // Fingers and pens never select the text over the pages (it would pick words while
   // scrolling or drawing); the mouse still does.
@@ -1982,7 +2002,7 @@ const notePen = (e) => {
     if (touchy && e.target.closest?.(".sheet")) window.getSelection()?.removeAllRanges();
   }
 };
-for (const type of ["pointerdown", "pointermove", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
+for (const type of ["pointerdown", "pointermove", "pointerover", "pointerup"]) window.addEventListener(type, notePen, { capture: true, passive: true });
 // Pen smoothing on or off (View menu), per device: off, the line follows the pen exactly.
 let smoothingOn = true;
 try { smoothingOn = localStorage.getItem("notecomplete-pen-smoothing") !== "0"; } catch { /* Optional. */ }
@@ -1995,10 +2015,10 @@ $("penSmoothToggle").onclick = () => {
   status(smoothingOn ? "Pen smoothing on." : "Pen smoothing off: strokes follow the pen exactly.");
 };
 // Pen hover preview: a ring at the pen's tip, as wide as it would draw, while it hovers (pointer
-// events with no button held). An Apple Pencil shows nothing of its own; Samsung and other
-// Android devices draw a system-wide hover pointer, so there it starts off. Per device.
+// events with no button held). Enabled by default on iOS and Android so stylus hover detection
+// is immediately visible; can be toggled off per device in View → Pen hover preview.
 const appleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-let penHoverOn = appleDevice;
+let penHoverOn = appleDevice || /Android/i.test(navigator.userAgent);
 try { const saved = localStorage.getItem("notecomplete-pen-hover"); if (saved === "1" || saved === "0") penHoverOn = saved === "1"; } catch { /* Optional. */ }
 const penHoverRing = document.createElement("div");
 penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
@@ -3352,6 +3372,7 @@ $("redo").onclick = () => {
   action("redo");
 };
 // Auto-save, recovery dialog and history compaction (autosave.js).
+const autosaveCall = (op, args = {}) => (op === "save" ? syncProjectStudy().then(() => call(op, args)) : call(op, args));
 const autosave = autosaveController({
   state: {
     doc: () => doc,
@@ -3362,7 +3383,7 @@ const autosave = autosaveController({
     collab: () => collab,
     fingerprint: () => find.fingerprint,
   },
-  call,
+  call: autosaveCall,
   notes: () => notes,
   status,
   closeMenus,
@@ -3649,6 +3670,39 @@ $("drop").ondragleave = () => $("drop").classList.remove("drag");
 function filename() {
   return (doc?.title || "Note").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_");
 }
+async function syncProjectStudy() {
+  if (!doc) return;
+  const fp = find.fingerprint || doc.title;
+  const readList = async (kind, fallback = "") => {
+    const primary = fp ? await library.store.get("settings", `${kind}:${fp}`).catch(() => null) : null;
+    if (Array.isArray(primary)) return primary;
+    if (fallback && fallback !== fp) {
+      const alt = await library.store.get("settings", `${kind}:${fallback}`).catch(() => null);
+      if (Array.isArray(alt)) return alt;
+    }
+    return [];
+  };
+  const study = {
+    decks: await readList("decks", doc.title),
+    quizzes: await readList("quizzes", doc.title || "note"),
+    scratch: await readList("scratch", doc.title || "note"),
+  };
+  await call("study", { study }).catch((e) => console.warn("Project study:", e));
+}
+async function exportNoteBytes(as = "project") {
+  if (!doc) throw Error("Open a note first.");
+  await notes?.flush();
+  if (as !== "noteful" && as !== "markdown") {
+    await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
+  }
+  if (as === "project") await syncProjectStudy();
+  const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
+  const raw = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
+  const bytes = typeof raw === "string" ? new TextEncoder().encode(raw) : raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+  const name = filename() + SAVE_EXT[as];
+  const mime = as === "project" ? "application/json" : "application/octet-stream";
+  return { name, mime, bytes, ext: SAVE_EXT[as] };
+}
 // Save the project, or export: Noteful alone, Noteful plus the notes as
 // Markdown (page breaks marked), or a .notecomp archive holding both.
 async function save(native, as = native ? "noteful" : "project") {
@@ -3661,6 +3715,7 @@ async function save(native, as = native ? "noteful" : "project") {
     // Text recognized in the handwriting goes with the note, so other tools (the MCP
     // server) and other copies find it. .noteful files have no place for it.
     if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
+    if (as === "project") await syncProjectStudy();
     const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
     const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
     if (token !== epoch) return;
@@ -4656,7 +4711,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .notecomp only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -4667,7 +4722,7 @@ function documentControls() {
   // A canvas is one page that grows: no inserted pages.
   for (const id of ["insertBlank", "insertPdf", "insertHandwritten"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "scratchOpen", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "exportStudyQr", "scratchOpen", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   if (!open) $("svg").disabled = true;
   syncPageMoveMenus();
@@ -5395,6 +5450,7 @@ $("studyRetake").onclick = () => { showDocument(); quizzes.retakeWrong(); };
 $("studyExportQuiz").onclick = () => study.exportQuiz();
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
+$("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
 // Study → All quizzes…: every quiz with its document; another document is opened first.
 const quizIndex = allQuizzes({
   library, status,
@@ -5548,7 +5604,10 @@ $("penSetupSave").onclick = () => {
       // Entering and leaving between the box's own children are not the pen coming or going.
       if ((type === "pointerover" || type === "pointerout") && e.relatedTarget && pad.contains(e.relatedTarget)) return;
       e.preventDefault();
-      note(`${type} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
+      const state = e.pointerType === "pen"
+        ? (type === "pointerover" ? "hover enter" : type === "pointerout" ? "hover exit" : type === "pointermove" ? (e.buttons || e.pressure > 0 ? "contact" : "hover") : "")
+        : "";
+      note(`${type}${state ? ` · ${state}` : ""} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
     });
   pad.addEventListener("contextmenu", (e) => { e.preventDefault(); note(`contextmenu · ${e.pointerType || "?"} · button ${e.button}`); });
   pad.addEventListener("touchstart", (e) => note(`touchstart · ${[...e.changedTouches].map((t) => t.touchType || "direct").join(", ")}`), { passive: true });
@@ -5657,7 +5716,7 @@ document.addEventListener("click", (e) => {
 // drawing surfaces. Nothing of it loads until a session starts or an invite is opened.
 let collabLoading = null;
 const collabHost = {
-  call, applyShared, status, jump, cancelGesture, pinchBy, penActive, setZoom, notesApi, download, library,
+  call: autosaveCall, applyShared, status, jump, cancelGesture, pinchBy, penActive, setZoom, notesApi, download, library,
   get ready() { return ready; },
   get busy() { return busy() || !!gesture; },
   get doc() { return doc; },
@@ -5714,6 +5773,10 @@ const collabHost = {
   openFile: (file) => load(file),
   // Auto-save in a session: the host's switch, followed by everyone else.
   autosaveOn: () => autosave.pref(),
+  // Keeping the live notes and copy helper on the sharing host.
+  exportNote: (as = "project") => exportNoteBytes(as),
+  exportAndDownload: (as = "project") => save(as === "noteful", as),
+  // Keeps any active collaboration autosave flag aligned.
   setSharedAutosave: (on) => autosave.setShared(on),
   // A copy of the shared note before it closes (a guest or tablet losing the session).
   keepCopy: () => autosave.keepCopy(),
@@ -5727,6 +5790,16 @@ async function startCollab(mode) {
     status(e.message, true);
   }
 }
+$("shareNoteQr").onclick = async () => {
+  closeMenus();
+  try {
+    const { openShareNoteQr } = await (collabLoading ||= import("./collab.js"));
+    await openShareNoteQr(collabHost);
+  } catch (e) {
+    collabLoading = null;
+    status(e.message, true);
+  }
+};
 $("studyShare").onclick = async () => {
   closeMenus();
   try { const { openStudyShare } = await (collabLoading ||= import("./collab.js")); await openStudyShare(collabHost); } catch (e) { collabLoading = null; status(e.message, true); }

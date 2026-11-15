@@ -62,7 +62,7 @@ pub use media::{audio_kind, audio_mime, AudioAsset, InkTiming, PdfBackground, Re
 mod wire;
 pub use text::{decode_rich_text, text_svg, RichText, TextRun};
 
-pub use editor::{Editor, Line};
+pub use editor::{Editor, Line, ProjectStudy};
 pub use scene::{Page, Scene, TAPE_OPEN};
 
 pub use package::{Block, Package};

@@ -1,23 +1,112 @@
 package expo.modules.readerserver
 
+import android.app.Activity
 import android.content.Intent
 import android.content.res.AssetManager
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.Window
 import android.webkit.MimeTypeMap
+import android.webkit.WebView
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
+import java.lang.reflect.Proxy
 import java.security.SecureRandom
+import java.util.Locale
 
 class ReaderServerModule : Module() {
   private var server: ReaderServer? = null
+  private var hoverHookedWindow: Window? = null
+  private var originalWindowCallback: Window.Callback? = null
+
+  private fun findWebView(root: View?): WebView? {
+    if (root is WebView) return root
+    if (root is ViewGroup) {
+      for (i in 0 until root.childCount) {
+        findWebView(root.getChildAt(i))?.let { return it }
+      }
+    }
+    return null
+  }
+
+  private fun installStylusHoverHook() {
+    val activity: Activity = appContext.currentActivity ?: return
+    activity.runOnUiThread {
+      val window = activity.window ?: return@runOnUiThread
+      if (hoverHookedWindow === window) return@runOnUiThread
+      val current = window.callback ?: return@runOnUiThread
+      originalWindowCallback = current
+      hoverHookedWindow = window
+      val proxy = Proxy.newProxyInstance(
+        Window.Callback::class.java.classLoader,
+        arrayOf(Window.Callback::class.java),
+      ) { _, method, args ->
+        if (method.name == "dispatchGenericMotionEvent" && args?.size == 1) {
+          (args[0] as? MotionEvent)?.let { forwardStylusHover(window, it) }
+        }
+        val unwrapped = args ?: emptyArray()
+        method.invoke(current, *unwrapped)
+      } as Window.Callback
+      window.callback = proxy
+    }
+  }
+
+  private fun uninstallStylusHoverHook() {
+    val window = hoverHookedWindow ?: return
+    val orig = originalWindowCallback
+    hoverHookedWindow = null
+    originalWindowCallback = null
+    window.decorView.post {
+      if (window.callback !== orig && orig != null) {
+        window.callback = orig
+      }
+    }
+  }
+
+  private fun forwardStylusHover(window: Window, event: MotionEvent) {
+    val phase = when (event.actionMasked) {
+      MotionEvent.ACTION_HOVER_ENTER -> "enter"
+      MotionEvent.ACTION_HOVER_MOVE -> "move"
+      MotionEvent.ACTION_HOVER_EXIT -> "exit"
+      else -> return
+    }
+    val pointerIndex = event.actionIndex.coerceIn(0, (event.pointerCount - 1).coerceAtLeast(0))
+    val tool = event.getToolType(pointerIndex)
+    if (tool != MotionEvent.TOOL_TYPE_STYLUS && tool != MotionEvent.TOOL_TYPE_ERASER) return
+
+    val webView = findWebView(window.decorView) ?: return
+    val loc = IntArray(2)
+    webView.getLocationInWindow(loc)
+    val density = webView.resources.displayMetrics.density.takeIf { it > 0f } ?: 1f
+    val cssX = (event.getX(pointerIndex) - loc[0]) / density
+    val cssY = (event.getY(pointerIndex) - loc[1]) / density
+    val dist = event.getAxisValue(MotionEvent.AXIS_DISTANCE, pointerIndex)
+    if (!cssX.isFinite() || !cssY.isFinite()) return
+
+    val js = String.format(
+      Locale.US,
+      "window.__notecompleteNativeHover?.('%s',%.2f,%.2f,'pen',%.2f)",
+      phase,
+      cssX,
+      cssY,
+      if (dist.isFinite()) dist else 0f,
+    )
+    webView.post { webView.evaluateJavascript(js, null) }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("ReaderServer")
+    OnCreate { installStylusHoverHook() }
+    OnActivityEntersForeground { installStylusHoverHook() }
     AsyncFunction("start") {
+      installStylusHoverHook()
       if (server == null) {
         val context = requireNotNull(appContext.reactContext)
         val assets = context.assets
@@ -82,7 +171,11 @@ class ReaderServerModule : Module() {
       val uris = sharedUris(intent)
       if (uris.isNotEmpty()) sendEvent("onShared", mapOf("uris" to uris))
     }
-    OnDestroy { server?.stop(); server = null }
+    OnDestroy {
+      uninstallStylusHoverHook()
+      server?.stop()
+      server = null
+    }
   }
 }
 

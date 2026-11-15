@@ -5,6 +5,7 @@
 import http from 'node:http';
 import dgram from 'node:dgram';
 import { execFile } from 'node:child_process';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { createReadStream } from 'node:fs';
@@ -136,12 +137,64 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
   let stopping = null;
   const hub = new CollabHub({ notes, maxPeers, ...hubOptions, onEnded: (result) => { onEnded(result); stop(); } });
   const compressed = compressedFiles();
+  const sharedFiles = new Map();
+  const safeShareName = (name) => path.basename(String(name || 'note.nfedit')).replace(/[\r\n"\\/]/g, '_') || 'note.nfedit';
+  const asciiName = (name) => name.replace(/[^\x20-\x7e]|"/g, '_') || 'note.nfedit';
+  function shareFile({ name = 'note.nfedit', mime = 'application/octet-stream', bytes }) {
+    const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || []);
+    const clean = safeShareName(name);
+    const id = randomBytes(4).toString('hex');
+    const token = randomBytes(12).toString('hex');
+    if (sharedFiles.size >= 8) {
+      const oldest = sharedFiles.keys().next().value;
+      if (oldest) sharedFiles.delete(oldest);
+    }
+    sharedFiles.set(id, { id, token, name: clean, mime: String(mime || 'application/octet-stream'), data });
+    return {
+      id,
+      name: clean,
+      size: data.length,
+      link: `${origin()}/share/${id}/${token}/${encodeURIComponent(clean)}`,
+      onlineLink: onlineUrl ? `${onlineUrl}/share/${id}/${token}/${encodeURIComponent(clean)}` : '',
+    };
+  }
+  const shareLinks = (id) => {
+    const entry = sharedFiles.get(String(id || ''));
+    if (!entry) return null;
+    const encoded = encodeURIComponent(entry.name);
+    return {
+      id: entry.id,
+      name: entry.name,
+      size: entry.data.length,
+      link: `${origin()}/share/${entry.id}/${entry.token}/${encoded}`,
+      onlineLink: onlineUrl ? `${onlineUrl}/share/${entry.id}/${entry.token}/${encoded}` : '',
+    };
+  };
   const server = http.createServer(async (req, res) => {
     // The reader's pages carry their Content-Security-Policy in a meta tag (tools/reader-csp.mjs),
     // which cannot say who may frame them: no other site may show a session's page in a frame.
     const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "frame-ancestors 'self'" };
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, headers); return res.end(); }
-    const file = readerFile(root, new URL(req.url, 'http://x').pathname);
+    const pathname = new URL(req.url, 'http://x').pathname;
+    const shareMatch = /^\/share\/([a-f0-9]+)\/([a-f0-9]+)(?:\/([^/]+))?$/.exec(pathname);
+    if (shareMatch) {
+      if (cameFromTunnel(req) && !tunnel) { res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+      const entry = sharedFiles.get(shareMatch[1]);
+      const given = Buffer.from(shareMatch[2], 'utf8');
+      const expected = entry ? Buffer.from(entry.token, 'utf8') : null;
+      if (!entry || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+        res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' });
+        return res.end('Not found');
+      }
+      res.writeHead(200, {
+        ...headers,
+        'Content-Type': entry.mime,
+        'Content-Length': entry.data.length,
+        'Content-Disposition': `attachment; filename="${asciiName(entry.name)}"; filename*=UTF-8''${encodeURIComponent(entry.name)}`,
+      });
+      return res.end(req.method === 'HEAD' ? undefined : entry.data);
+    }
+    const file = readerFile(root, pathname);
     let info;
     try {
       if (!file || !(info = await stat(file)).isFile()) throw Error('missing');
@@ -279,6 +332,9 @@ export async function startServer({ root, notes = 'edit', host = '0.0.0.0', port
     get online() { return !!tunnel; },
     get guestLink() { return notes ? `${origin()}/join#${hub.id}.${hub.tokens.guest}` : ''; },
     tabletLink: () => `${origin()}/tablet#${hub.id}.${hub.tokens.tablet}`,
+    shareFile,
+    shareLinks,
+    unshareFile: (id) => sharedFiles.delete(String(id || '')),
     code: () => ({ code: hub.code.value, expires: hub.code.expires }),
     stop,
   };

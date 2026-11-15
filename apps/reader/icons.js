@@ -27,6 +27,7 @@ const paths = {
  pressure:'M3 16c4-1 6-7 9-7s5 6 9 7M8.5 12.6c1.6-2 2.6-3.6 3.5-3.6',
  close:'M6 6l12 12M18 6 6 18',
  share:'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.6 13.5l6.8 4M15.4 6.5l-6.8 4',
+ qr:'M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h2v2h-2zm4 0h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm4 0h2v2h-2z',
  home:'M3 11 12 3l9 8M5 9v12h5v-6h4v6h5V9',
  search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4',
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',

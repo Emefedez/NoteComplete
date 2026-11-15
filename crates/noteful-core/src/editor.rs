@@ -141,6 +141,30 @@ struct Project {
     /// Edits before this one were compacted and cannot be undone (project version 9).
     #[serde(default, skip_serializing_if = "is_zero")]
     floor: usize,
+    /// Flashcard decks, quizzes, and scratchpad notes kept with the note (project version 10).
+    #[serde(default, skip_serializing_if = "ProjectStudy::is_empty")]
+    study: ProjectStudy,
+}
+
+/// Upper bound for the study data serialized inside a project (bytes).
+pub const STUDY_LIMIT: usize = 8 << 20;
+
+/// Study sets kept alongside a note inside `.nfedit` projects (version 10).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectStudy {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub decks: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub quizzes: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub scratch: Vec<serde_json::Value>,
+}
+impl ProjectStudy {
+    /// True when no decks, quizzes, or scratchpad entries are stored.
+    pub fn is_empty(&self) -> bool {
+        self.decks.is_empty() && self.quizzes.is_empty() && self.scratch.is_empty()
+    }
 }
 fn is_zero(n: &usize) -> bool {
     *n == 0
@@ -196,6 +220,8 @@ pub struct Editor {
     pub(crate) recognized: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
     /// Undo stops here: the edits before it were compacted (compact.rs).
     pub(crate) floor: usize,
+    /// Study sets (decks, quizzes, scratchpad) kept with the note; not part of edit history.
+    pub(crate) study: ProjectStudy,
     /// The SVG of added lines, by the place of their `Add` edit in the history, so a view
     /// does not format every line again (view.rs). Emptied from the cursor on by `commit`.
     pub(crate) added_svg: std::cell::RefCell<Vec<Option<Box<str>>>>,
@@ -268,6 +294,7 @@ impl Editor {
             canvas: false,
             recognized: Default::default(),
             floor: 0,
+            study: ProjectStudy::default(),
             added_svg: Default::default(),
         })
     }
@@ -551,7 +578,9 @@ impl Editor {
     pub fn save_project(&self) -> Result<String> {
         let data = serde_json::to_string(&Project {
             format: "noteful-re-project".to_owned(),
-            version: if self.floor > 0 {
+            version: if !self.study.is_empty() {
+                10
+            } else if self.floor > 0 {
                 9
             } else if !self.recognized.is_empty() {
                 8
@@ -588,6 +617,7 @@ impl Editor {
             canvas: self.canvas,
             recognized_text: self.recognized.clone(),
             floor: self.floor,
+            study: self.study.clone(),
         })
         .map_err(|e| Error::new(0, e.to_string()))?;
         Ok(data)
@@ -633,6 +663,30 @@ impl Editor {
         }
         Ok(())
     }
+    /// Study sets (flashcard decks, quizzes, and scratchpad) kept with the note.
+    pub fn study(&self) -> &ProjectStudy {
+        &self.study
+    }
+    /// Replaces the study sets kept with the note so `.nfedit` projects carry them.
+    pub fn set_study(&mut self, study: ProjectStudy) -> Result<()> {
+        if study
+            .decks
+            .iter()
+            .chain(&study.quizzes)
+            .chain(&study.scratch)
+            .any(|item| !item.is_object())
+        {
+            return Err(Error::new(0, "Invalid study entry"));
+        }
+        let encoded_len = serde_json::to_string(&study)
+            .map_err(|e| Error::new(0, e.to_string()))?
+            .len();
+        if encoded_len > STUDY_LIMIT {
+            return Err(Error::new(0, "Study data is too large"));
+        }
+        self.study = study;
+        Ok(())
+    }
     /// Keeps the words written on an original page (a notebook made from Markdown).
     pub fn set_ink_words(&mut self, slot: usize, words: Vec<crate::InkWord>) -> Result<()> {
         if slot >= self.scene.pages.len() || !crate::pages::words_valid(&words) {
@@ -670,7 +724,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=9)
+            || !matches!(project.version, 1..=10)
             || project
                 .ink_text
                 .values()
@@ -789,6 +843,7 @@ impl Editor {
         for (slot, words) in project.recognized_text {
             editor.set_recognized_words(slot, words)?;
         }
+        editor.set_study(project.study)?;
         Ok(editor)
     }
 }

@@ -225,3 +225,48 @@ fn every_page_resized_at_once_is_one_undo_step() {
     // Pages already that size are left alone.
     assert_eq!(e.resize_pages(&all).unwrap(), 0);
 }
+
+#[test]
+fn project_round_trips_study_sets_and_compaction_keeps_them() {
+    let mut e = exam();
+    // Without study data, projects remain pre-v10 (no study field serialized).
+    let baseline: Value = serde_json::from_str(&e.save_project().unwrap()).unwrap();
+    assert!(baseline["version"].as_u64().unwrap() < 10);
+    assert!(baseline.get("study").is_none());
+
+    let study: noteful_core::ProjectStudy = serde_json::from_value(serde_json::json!({
+        "decks": [{"id": "d1", "name": "Biology", "cards": [{"id": "c1", "front": "ATP", "back": "Energy"}]}],
+        "quizzes": [{"id": "q1", "title": "Cell Quiz", "questions": []}],
+        "scratch": [{"id": "s1", "title": "Quick note", "text": "Review mitochondria", "messages": [], "at": 1234}]
+    }))
+    .unwrap();
+    e.set_study(study.clone()).unwrap();
+    e.add_line(0, line()).unwrap();
+    e.add_line(0, line()).unwrap();
+
+    let saved = e.save_project().unwrap();
+    let raw: Value = serde_json::from_str(&saved).unwrap();
+    assert_eq!(raw["version"], 10);
+    assert_eq!(raw["study"]["decks"].as_array().unwrap().len(), 1);
+    assert_eq!(raw["study"]["quizzes"].as_array().unwrap().len(), 1);
+    assert_eq!(raw["study"]["scratch"].as_array().unwrap().len(), 1);
+
+    let reopened = Editor::open_project(&saved).unwrap();
+    assert_eq!(reopened.study(), &study);
+
+    // Compacting history preserves version 10 and the study sets.
+    let mut compacted = reopened;
+    compacted.compact_history(1).unwrap();
+    assert_eq!(compacted.study(), &study);
+    let compacted_raw: Value = serde_json::from_str(&compacted.save_project().unwrap()).unwrap();
+    assert_eq!(compacted_raw["version"], 10);
+
+    // Non-object entries and oversized study payloads are rejected.
+    let mut bad_entry: Value = raw.clone();
+    bad_entry["study"]["quizzes"] = serde_json::json!(["not-an-object"]);
+    assert!(Editor::open_project(&bad_entry.to_string()).is_err());
+
+    let mut bad_version: Value = raw;
+    bad_version["version"] = 99.into();
+    assert!(Editor::open_project(&bad_version.to_string()).is_err());
+}

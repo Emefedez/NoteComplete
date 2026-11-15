@@ -58,6 +58,11 @@ const standalone = {
       // Recordings added in NoteComplete travel inside .notecomp files.
       if (args.notecomplete)
         result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
+      // Study sets (decks, quizzes, scratchpad) travel inside .nfedit v10 projects.
+      if (args.project) {
+        const study = JSON.parse(candidate.study());
+        if (study.decks?.length || study.quizzes?.length || study.scratch?.length) result.study = study;
+      }
       session?.free();
       session = candidate;
       candidate = undefined;
@@ -104,6 +109,11 @@ const onDocument = {
   pdf: (args) => session.pdf_bytes(args.resource),
   recognized(args) {
     session.set_recognized_text(JSON.stringify(args.pages || {}));
+    return true;
+  },
+  getStudy: () => JSON.parse(session.study()),
+  study(args) {
+    session.set_study(JSON.stringify(args.study || {}));
     return true;
   },
   digest: () => session.history_digest(),

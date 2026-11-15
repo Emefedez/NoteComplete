@@ -236,7 +236,7 @@ impl Editor {
                 .map_err(|e| Error::new(0, e.to_string()))?;
         project["cursor"] = cursor.into();
         project["floor"] = floor.into();
-        project["version"] = 9.into();
+        project["version"] = if project.get("study").is_some() { 10 } else { 9 }.into();
         let next = Editor::open_project(&project.to_string())?;
         let order = self.page_order();
         if next.page_order() != order {

@@ -371,6 +371,15 @@ impl EditorSession {
     pub fn save_project(&self) -> Result<String, Failure> {
         Ok(self.inner.save_project()?)
     }
+    /// Study sets (flashcard decks, quizzes, and scratchpad) kept with a `.nfedit` project.
+    pub fn study(&self) -> Result<String, Failure> {
+        Ok(serde_json::to_string(self.inner.study())?)
+    }
+    /// Sets the study sets kept with the note (`{decks, quizzes, scratch}` JSON).
+    pub fn set_study(&mut self, study: &str) -> Result<(), Failure> {
+        let parsed: noteful_core::ProjectStudy = serde_json::from_str(study)?;
+        Ok(self.inner.set_study(parsed)?)
+    }
     /// Keeps text recognized in the handwriting (OCR) of page slots, so it is saved with
     /// the note: `pages` is JSON {slot: [{text, bounds}]}. A page the note refuses (a slot
     /// it does not have, or words that are not valid) is skipped and the others are kept;
