@@ -12,13 +12,19 @@ test('hasMatchingExtension matches case-insensitively and rejects mismatched ext
 test('Ctrl+S overwrites desktop local: file when extension matches and never writes .nfedit over .noteful', async () => {
   const writes = [];
   const bridge = {
-    writeOpened: async (file, bytes) => { writes.push({ file, size: bytes.byteLength }); },
-    saveFile: async (suggestedName, bytes) => ({ path: `/picked/${suggestedName}`, name: suggestedName, size: bytes.byteLength }),
+    writeOpened: async (file, bytes) => {
+      assert.ok(bytes instanceof Uint8Array, 'writeOpened must always receive Uint8Array');
+      writes.push({ file, size: bytes.byteLength, text: new TextDecoder().decode(bytes) });
+    },
+    saveFile: async (suggestedName, bytes) => {
+      assert.ok(bytes instanceof Uint8Array, 'saveFile must always receive Uint8Array');
+      return { path: `/picked/${suggestedName}`, name: suggestedName, size: bytes.byteLength };
+    },
   };
 
-  // Matching .nfedit -> writes directly over the opened path via writeOpened.
+  // Matching .nfedit with worker string payload -> encoded to Uint8Array before writeOpened.
   const sameExt = await saveDocumentInPlace({
-    bytes: new Uint8Array([1, 2, 3, 4]),
+    bytes: '{"version":12}',
     suggestedName: 'Calc.nfedit',
     targetExt: '.nfedit',
     docMember: { source: 'local', path: '/notes/Calc.nfedit', name: 'Calc.nfedit' },
@@ -26,7 +32,8 @@ test('Ctrl+S overwrites desktop local: file when extension matches and never wri
   });
   assert.equal(sameExt.kind, 'local');
   assert.equal(sameExt.overwritten, true);
-  assert.deepEqual(writes, [{ file: '/notes/Calc.nfedit', size: 4 }]);
+  assert.equal(sameExt.size, 14);
+  assert.deepEqual(writes, [{ file: '/notes/Calc.nfedit', size: 14, text: '{"version":12}' }]);
 
   // Mismatched .noteful saved as .nfedit -> must prompt Save dialog (never clobber .noteful).
   const switched = await saveDocumentInPlace({
