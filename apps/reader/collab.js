@@ -141,16 +141,20 @@ export async function openStudyShare(host, { aimed = null, tab = 'send' } = {}) 
 function studyDialog(host, sendPanel, tab, aimed = null) {
   const receivePanel = el('div', { className: 'collab-panel', hidden: true });
   const bar = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Send or receive study material' });
+  let cleanupReceive = null;
   const show = (id) => {
     for (const [name, panel] of [['send', sendPanel], ['receive', receivePanel]]) {
       panel.hidden = name !== id;
       $(`studyTab-${name}`)?.setAttribute('aria-selected', String(name === id));
     }
-    if (id === 'receive') fillReceive(host, receivePanel);
+    if (id === 'receive') fillReceive(host, receivePanel, { onCleanup: (fn) => { cleanupReceive = fn; } });
   };
   for (const [id, label, glyph] of [['send', 'Send', 'upload'], ['receive', 'Receive', 'import']]) bar.append(iconBtn(glyph, label, { role: 'tab', id: `studyTab-${id}`, onclick: () => show(id) }));
   const d = dialog('Share study material', bar, sendPanel, receivePanel);
-  d.addEventListener('close', () => { if (session?.codeClock) clearInterval(session.codeClock); }, { once: true });
+  d.addEventListener('close', () => {
+    cleanupReceive?.();
+    if (session?.codeClock) clearInterval(session.codeClock);
+  }, { once: true });
   show(aimed ? 'send' : tab);
 }
 function formatOfflineQrStatus(step) {
@@ -165,28 +169,14 @@ function formatOfflineQrStatus(step) {
   return `Receiving${title}: ${step.received} / ${step.total} segments (${pct}%)`;
 }
 
-async function receiveViaQrStream(host, stateEl) {
-  const { scanQrFrames } = await import('./qr-scan.js');
-  const receiver = new QrReceiver();
-  const payload = await scanQrFrames(async (raw, helpers) => {
-    const step = await receiver.accept(raw);
-    if (step.ignored) return null;
-    if (step.error) {
-      helpers.setProgress(step.error, 0, step.total);
-      return null;
-    }
-    helpers.setProgress(formatOfflineQrStatus(step), step.received, step.total, step);
-    if (step.done) return { done: true, value: step.payload };
-    return null;
-  }, stateEl, { initialText: 'Point the camera at the sender’s Info QR…' });
-
+async function deliverReceivedPayload(host, payload) {
   if (payload?.kind === 'study' && payload.pack) {
     const { readPack, describePack } = await import('./study-pack.js');
     const pack = readPack(payload.pack);
     closeDialog();
     const res = await host.importStudyPack(pack);
     if (res?.cancelled) { host.status('Import cancelled.'); return; }
-    const msg = res?.general ? `Kept as a general study set (“${pack.title}”).` : res?.merged ? `Added to “${res.targetTitle || pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → All quizzes and decks.`;
+    const msg = res?.general ? `Kept as a general study set (“${pack.title}”).` : res?.merged ? `Added to “${res.targetTitle || pack.title}”.` : `Kept as “${pack.title}${pack.from ? ` (from ${pack.from})` : ''}” in Study → Saved resources.`;
     host.status(`Received ${describePack(pack)} via QR. ${msg}`);
     return;
   }
@@ -206,50 +196,176 @@ async function receiveViaQrStream(host, stateEl) {
     host.status(`Opened “${safeName}” received via offline QR.`);
     return;
   }
-  throw Error('Unsupported QR transfer format.');
+  throw Error('Scanned QR does not contain a NoteComplete note or study pack.');
 }
 
-async function fillReceive(host, panel) {
-  const close = iconBtn('close', 'Close', { onclick: closeDialog });
-  const importFile = iconBtn('import', 'Import a file…', { title: 'A .ncstudy file from another NoteComplete', onclick: () => { closeDialog(); host.importStudyFile(); } });
-  const state = el('p', { className: 'muted', role: 'status', textContent: '' });
+async function fillReceive(host, panel, { onCleanup } = {}) {
+  let activeReceiver = null;
+  const cleanup = () => {
+    activeReceiver?.close();
+    activeReceiver = null;
+  };
+  onCleanup?.(cleanup);
+  const close = iconBtn('close', 'Close', { onclick: () => { cleanup(); closeDialog(); } });
+  const importFile = iconBtn('import', 'Import a file…', {
+    title: 'Open a .noteful, .nfedit, .ncstudy, Markdown, or PDF file from this device',
+    onclick: () => { cleanup(); closeDialog(); host.importStudyFile(); },
+  });
+  const codeInput = el('input', {
+    type: 'text',
+    className: 'collab-link',
+    placeholder: 'Paste WebRTC offer code (NCW1|o|…) or QR payload',
+    'aria-label': 'Offer or QR code',
+    spellcheck: false,
+    autocomplete: 'off',
+  });
+  const state = el('p', {
+    className: 'muted',
+    role: 'status',
+    textContent: 'Scan any NoteComplete QR code (notes, quizzes, flashcards, WebRTC P2P, or Wi-Fi invite) or import a file.',
+  });
+
+  const startWebRtcAnswer = async (offerText) => {
+    try {
+      cleanup();
+      state.textContent = 'Creating peer-to-peer reply QR…';
+      const rx = await createWebRtcNoteReceiver(offerText);
+      activeReceiver = rx;
+      const qrBox = el('div', { className: 'collab-qr' });
+      qrBox.innerHTML = await qrSvg(rx.answerSignal);
+      const progress = el('progress', { className: 'qr-progress-bar', max: 1, value: 0, hidden: true });
+      const rxState = el('p', { className: 'muted', role: 'status', textContent: 'Show this reply QR to the sender (or copy & send the reply code below). Waiting for connection…' });
+      const copy = el('button', {
+        type: 'button',
+        className: 'collab-copy',
+        title: 'Copy reply code',
+        'aria-label': 'Copy reply code',
+        onclick: () => navigator.clipboard.writeText(rx.answerSignal).then(() => host.status('Reply code copied.'), () => host.status('Select the reply code and copy it.', true)),
+      }, icon('copy'));
+      const copyRow = el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: rx.answerSignal, className: 'collab-link', 'aria-label': 'Reply code', onfocus: (e) => e.target.select() }), copy);
+
+      panel.replaceChildren(
+        el('div', { className: 'collab-pair' }, qrBox, el('div', {},
+          el('p', { textContent: 'Step 2: Let the sender scan this reply QR (or send them the code below).' }),
+          copyRow,
+          progress,
+          rxState)),
+        buttons(iconBtn('close', 'Cancel', { onclick: () => { cleanup(); closeDialog(); } })));
+
+      const result = await rx.receive(({ received, total, name }) => {
+        progress.hidden = false;
+        progress.max = total || 1;
+        progress.value = received;
+        rxState.textContent = `Receiving${name ? ` “${name}”` : ''}: ${formatByteSize(received)}${total ? ` / ${formatByteSize(total)}` : ''}`;
+      });
+      cleanup();
+      closeDialog();
+      const file = new File([result.bytes], result.name, { type: result.mime });
+      await host.openFile(file, { origin: 'P2P QR' });
+      host.status(`Opened “${result.name}” (${formatByteSize(result.bytes.byteLength)}) received peer-to-peer.`);
+    } catch (e) {
+      cleanup();
+      state.textContent = e.message;
+    }
+  };
+
+  const handleDirectInput = async (rawText) => {
+    const raw = String(rawText || '').trim();
+    if (!raw) throw Error('Paste a WebRTC offer code, offline QR payload, or share link first.');
+    if (isWebRtcSignal(raw)) {
+      await startWebRtcAnswer(raw);
+      return;
+    }
+    const rx = new QrReceiver();
+    const step = await rx.accept(raw);
+    if (step?.done && step.payload) {
+      await deliverReceivedPayload(host, step.payload);
+      return;
+    }
+    if (/^https?:\/\/|^wss?:\/\//i.test(raw) || raw.includes('#')) {
+      const invite = parseInvite(raw);
+      closeDialog();
+      if (invite.role === 'sender') return openStudySend(host, invite);
+      return join(host, invite);
+    }
+    throw Error('Recognized neither a WebRTC offer code, an offline QR payload, nor a share link.');
+  };
+
   const canScan = canScanQr();
-  const scanStream = iconBtn('qr', 'Scan QR stream', {
-    className: window.notecompleteCollab ? '' : 'primary',
+  const offlineRx = new QrReceiver();
+  const scanStream = iconBtn('qr', 'Scan QR (auto-detect)', {
+    className: 'primary',
     hidden: !canScan,
-    title: 'Scan single or animated multi-frame QR codes directly from another NoteComplete',
+    title: 'Auto-detect single or animated QR streams for notes, quizzes, flashcards, WebRTC P2P, or Wi-Fi invites',
     onclick: async () => {
-      scanStream.disabled = true;
-      try { await receiveViaQrStream(host, state); }
-      catch (e) { state.textContent = e.message; scanStream.disabled = false; }
+      scanStream.disabled = connectBtn.disabled = true;
+      try {
+        const { scanQrFrames } = await import('./qr-scan.js');
+        const scanned = await scanQrFrames(async (raw, helpers) => {
+          if (isWebRtcSignal(raw)) return { done: true, value: { kind: 'webrtc', raw } };
+          if (/^https?:\/\/.*#/i.test(raw)) {
+            try { return { done: true, value: { kind: 'invite', invite: parseInvite(raw) } }; } catch { /* Fall through. */ }
+          }
+          const step = await offlineRx.accept(raw);
+          if (step.ignored) return null;
+          if (step.error) { helpers.setProgress(step.error, 0, step.total); return null; }
+          helpers.setProgress(formatOfflineQrStatus(step), step.received, step.total, step);
+          return step.done ? { done: true, value: { kind: 'offline', payload: step.payload } } : null;
+        }, state, { initialText: 'Point the camera at any NoteComplete QR code…' });
+        if (scanned.kind === 'webrtc') {
+          await startWebRtcAnswer(scanned.raw);
+        } else if (scanned.kind === 'invite') {
+          closeDialog();
+          if (scanned.invite.role === 'sender') await openStudySend(host, scanned.invite);
+          else await join(host, scanned.invite);
+        } else {
+          await deliverReceivedPayload(host, scanned.payload);
+        }
+      } catch (e) {
+        state.textContent = e.message;
+        scanStream.disabled = connectBtn.disabled = false;
+      }
     },
   });
+
+  const connectBtn = iconBtn('forward', 'Use code / link', {
+    className: canScan ? '' : 'primary',
+    onclick: () => { void handleDirectInput(codeInput.value).catch((e) => { state.textContent = e.message; }); },
+  });
+
+  const codeRow = el('label', { className: 'p2p-reply-label' },
+    el('span', { textContent: 'Or paste a WebRTC offer code / invite link' }),
+    codeInput);
+
   if (!window.notecompleteCollab) {
     panel.replaceChildren(
-      el('p', { textContent: 'Receive quizzes, flashcards, or notes offline by scanning the sender’s QR stream, or open a .ncstudy file.' }),
-      el('p', { className: 'muted', textContent: 'Live PIN receiving over Wi-Fi requires the NoteComplete desktop app, while offline QR streams and files work on any device.' }),
+      el('p', { textContent: 'Receive notes, quizzes, flashcards, or Markdown files in one place: scan any NoteComplete QR (offline stream or WebRTC P2P), paste a code, or import a file.' }),
+      codeRow,
       state,
-      buttons(close, importFile, scanStream));
+      buttons(close, importFile, connectBtn, scanStream));
     return;
   }
   if (session?.role !== 'host') {
-    const start = iconBtn('import', 'Start receiving', { className: 'primary' });
-    start.onclick = async () => {
-      start.disabled = true;
+    const startWifi = iconBtn('import', 'Start Wi-Fi receive', {
+      title: 'Show a local Wi-Fi QR & PIN so another NoteComplete can push study material or connect',
+    });
+    startWifi.onclick = async () => {
+      startWifi.disabled = true;
       try {
         const info = await window.notecompleteCollab.start({ notes: null });
         session = new Session(host, { url: info.hostUrl, token: info.hostToken, role: 'host', name: remembered() || 'Host', yjs: null, info: { ...info, notesMode: null } });
-        await fillReceive(host, panel);
-      } catch (e) { start.disabled = false; host.status(e.message, true); }
+        await fillReceive(host, panel, { onCleanup });
+      } catch (e) { startWifi.disabled = false; host.status(e.message, true); }
     };
     panel.replaceChildren(
-      el('p', { textContent: 'Receive quizzes, flashcards and notes via offline QR stream, a .ncstudy file, or live Wi-Fi transfer with a QR code and PIN.' }),
+      el('p', { textContent: 'Receive notes, quizzes, flashcards, or Markdown in one place: auto-detect any QR (offline stream, WebRTC P2P, or Wi-Fi), paste a code, import a file, or start Wi-Fi receiving.' }),
+      codeRow,
       state,
-      buttons(close, importFile, scanStream, start));
+      buttons(close, importFile, startWifi, connectBtn, scanStream));
     return;
   }
   const card = el('section', { id: 'collabStudy', className: 'collab-section' });
-  panel.replaceChildren(card, state, buttons(close, importFile, scanStream));
+  panel.replaceChildren(card, codeRow, state, buttons(close, importFile, connectBtn, scanStream));
   await session.drawStudy(true);
   session.tickCode();
   clearInterval(session.codeClock);
@@ -620,122 +736,16 @@ export async function openShareNoteQr(host) {
   await render();
 }
 
-/** Export → Share with others → Receive note via QR / P2P… */
+/** Unified Receive dialog for notes, quizzes, flashcards, WebRTC P2P, Wi-Fi PIN, and files. */
 export async function openReceiveNoteQr(host) {
-  let activeReceiver = null;
-  const cleanup = () => {
-    activeReceiver?.close();
-    activeReceiver = null;
-  };
+  let cleanupReceive = null;
   const stage = el('div', { className: 'collab-panel' });
-  const offerInput = el('input', {
-    type: 'text',
-    className: 'collab-link',
-    placeholder: 'Paste WebRTC offer code (NCW1|o|…)',
-    'aria-label': 'Offer code',
-    spellcheck: false,
-    autocomplete: 'off',
-  });
-  const state = el('p', { className: 'muted', role: 'status', textContent: 'Scan the sender’s QR code (WebRTC P2P or offline QR stream), or paste their offer code.' });
-
-  const startWebRtcAnswer = async (offerText) => {
-    try {
-      cleanup();
-      state.textContent = 'Creating peer-to-peer reply QR…';
-      const rx = await createWebRtcNoteReceiver(offerText);
-      activeReceiver = rx;
-      const qrBox = el('div', { className: 'collab-qr' });
-      qrBox.innerHTML = await qrSvg(rx.answerSignal);
-      const progress = el('progress', { className: 'qr-progress-bar', max: 1, value: 0, hidden: true });
-      const rxState = el('p', { className: 'muted', role: 'status', textContent: 'Show this reply QR to the sender (or copy & send the reply code below). Waiting for connection…' });
-      const copy = el('button', {
-        type: 'button',
-        className: 'collab-copy',
-        title: 'Copy reply code',
-        'aria-label': 'Copy reply code',
-        onclick: () => navigator.clipboard.writeText(rx.answerSignal).then(() => host.status('Reply code copied.'), () => host.status('Select the reply code and copy it.', true)),
-      }, icon('copy'));
-      const copyRow = el('div', { className: 'collab-linkrow' }, el('input', { type: 'text', readOnly: true, value: rx.answerSignal, className: 'collab-link', 'aria-label': 'Reply code', onfocus: (e) => e.target.select() }), copy);
-
-      stage.replaceChildren(
-        el('div', { className: 'collab-pair' }, qrBox, el('div', {},
-          el('p', { textContent: 'Step 2: Let the sender scan this reply QR (or send them the code below).' }),
-          copyRow,
-          progress,
-          rxState)),
-        buttons(iconBtn('close', 'Cancel', { onclick: closeDialog })));
-
-      const result = await rx.receive(({ received, total, name }) => {
-        progress.hidden = false;
-        progress.max = total || 1;
-        progress.value = received;
-        rxState.textContent = `Receiving${name ? ` “${name}”` : ''}: ${formatByteSize(received)}${total ? ` / ${formatByteSize(total)}` : ''}`;
-      });
-      cleanup();
-      closeDialog();
-      const file = new File([result.bytes], result.name, { type: result.mime });
-      await host.openFile(file, { origin: 'P2P QR' });
-      host.status(`Opened “${result.name}” (${formatByteSize(result.bytes.byteLength)}) received peer-to-peer.`);
-    } catch (e) {
-      cleanup();
-      state.textContent = e.message;
-    }
-  };
-
-  const canScan = canScanQr();
-  const offlineRx = new QrReceiver();
-  const scanBtn = iconBtn('qr', 'Scan sender QR', {
-    className: 'primary',
-    hidden: !canScan,
-    onclick: async () => {
-      scanBtn.disabled = connectBtn.disabled = true;
-      try {
-        const { scanQrFrames } = await import('./qr-scan.js');
-        const scanned = await scanQrFrames(async (raw, helpers) => {
-          if (isWebRtcSignal(raw)) return { done: true, value: { kind: 'webrtc', raw } };
-          const step = await offlineRx.accept(raw);
-          if (step.ignored) return null;
-          if (step.error) { helpers.setProgress(step.error, 0, step.total); return null; }
-          helpers.setProgress(formatOfflineQrStatus(step), step.received, step.total, step);
-          return step.done ? { done: true, value: { kind: 'offline', payload: step.payload } } : null;
-        }, state, { initialText: 'Point the camera at the sender’s QR code…' });
-        if (scanned.kind === 'webrtc') {
-          await startWebRtcAnswer(scanned.raw);
-        } else if (scanned.payload?.kind === 'note' && scanned.payload.base64) {
-          const safeName = String(scanned.payload.name || 'Shared.nfedit').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-          const bytes = base64UrlDecode(scanned.payload.base64);
-          closeDialog();
-          await host.openFile(new File([bytes], safeName, { type: scanned.payload.mime || 'application/octet-stream' }), { origin: 'QR share' });
-          host.status(`Opened “${safeName}” received via offline QR.`);
-        } else if (scanned.payload?.kind === 'study' && scanned.payload.pack) {
-          const { readPack, describePack } = await import('./study-pack.js');
-          const pack = readPack(scanned.payload.pack);
-          closeDialog();
-          await host.importStudyPack(pack);
-          host.status(`Received ${describePack(pack)} via QR.`);
-        } else {
-          throw Error('Scanned QR does not contain a NoteComplete note or study pack.');
-        }
-      } catch (e) {
-        scanBtn.disabled = connectBtn.disabled = false;
-        state.textContent = e.message;
-      }
-    },
-  });
-
-  const connectBtn = iconBtn('forward', 'Connect with code', {
-    className: canScan ? '' : 'primary',
-    onclick: () => { void startWebRtcAnswer(offerInput.value); },
-  });
-
-  stage.replaceChildren(
-    el('p', { className: 'muted', textContent: 'Accept a full note from Web, iOS Safari, Android, or desktop with no Cloudflare account or storage server.' }),
-    el('label', { className: 'p2p-reply-label' }, el('span', { textContent: 'Sender’s WebRTC offer code (or scan their QR)' }), offerInput),
-    state,
-    buttons(iconBtn('close', 'Cancel', { onclick: closeDialog }), scanBtn, connectBtn));
-
-  const d = dialog('Receive note via QR / P2P', stage);
-  d.addEventListener('close', cleanup, { once: true });
+  await fillReceive(host, stage, { onCleanup: (fn) => { cleanupReceive = fn; } });
+  const d = dialog('Receive notes or study', stage);
+  d.addEventListener('close', () => {
+    cleanupReceive?.();
+    if (session?.codeClock) clearInterval(session.codeClock);
+  }, { once: true });
 }
 
 // Entry point (app.js): mode is host, join-tablet, join-notes or link (an invite URL).

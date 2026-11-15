@@ -432,6 +432,7 @@ impl Composer {
         self.pages.push(InkPage {
             lines: vec![],
             under: vec![],
+            text_boxes: vec![],
             paper: self.paper,
             words: vec![],
         });
@@ -528,19 +529,26 @@ impl Composer {
         let page = self.page();
         page.under.splice(0..0, lines);
     }
-    fn capture(&mut self, f: impl FnOnce(&mut Self)) -> (Vec<Line>, Vec<Line>) {
+    fn capture(&mut self, f: impl FnOnce(&mut Self)) -> (Vec<Line>, Vec<Line>, Vec<crate::Image>) {
         let saved = (
             std::mem::take(&mut self.page().lines),
             std::mem::take(&mut self.page().under),
+            std::mem::take(&mut self.page().text_boxes),
         );
         f(self);
         let page = self.page();
         (
             std::mem::replace(&mut page.lines, saved.0),
             std::mem::replace(&mut page.under, saved.1),
+            std::mem::replace(&mut page.text_boxes, saved.2),
         )
     }
-    fn place(&mut self, (mut lines, mut under): (Vec<Line>, Vec<Line>), rotate: f64, centre: Pt) {
+    fn place(
+        &mut self,
+        (mut lines, mut under, mut boxes): (Vec<Line>, Vec<Line>, Vec<crate::Image>),
+        rotate: f64,
+        centre: Pt,
+    ) {
         if rotate != 0. {
             let (c, s) = (rotate.cos(), rotate.sin());
             for l in lines.iter_mut().chain(under.iter_mut()) {
@@ -549,9 +557,78 @@ impl Composer {
                     *p = [centre[0] + dx * c - dy * s, centre[1] + dx * s + dy * c];
                 }
             }
+            for tb in &mut boxes {
+                let bx = tb.bounds[0] + tb.bounds[2] / 2.;
+                let by = tb.bounds[1] + tb.bounds[3] / 2.;
+                let (dx, dy) = (bx - centre[0], by - centre[1]);
+                let nx = centre[0] + dx * c - dy * s;
+                let ny = centre[1] + dx * s + dy * c;
+                tb.bounds[0] = nx - tb.bounds[2] / 2.;
+                tb.bounds[1] = ny - tb.bounds[3] / 2.;
+            }
         }
         self.add_under(under);
         self.add(lines);
+        self.page().text_boxes.extend(boxes);
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn math_box(
+        &mut self,
+        text: &str,
+        x: f64,
+        width: f64,
+        size: f64,
+        colour: Rgba,
+        align: u64,
+        display: bool,
+    ) {
+        let clean = text.trim();
+        if clean.is_empty() {
+            return;
+        }
+        let font_size = size.clamp(10., 48.);
+        let w = width.max(font_size * 2.);
+        let cpl = (w / (font_size * 0.52)).max(12.);
+        let wrapped_lines: f64 = clean
+            .lines()
+            .map(|l| (l.chars().count().max(1) as f64 / cpl).ceil())
+            .sum::<f64>()
+            .max(1.);
+        let tall_math = display
+            || clean.contains("\\frac")
+            || clean.contains("\\dfrac")
+            || clean.contains("\\int")
+            || clean.contains("\\sum")
+            || clean.contains("\\sqrt");
+        let line_h = font_size * if tall_math { 2.3 } else { 1.65 };
+        let h = (wrapped_lines * line_h + 12.).max(font_size * 1.8);
+        self.ensure(h + 8.);
+        let y = self.y + 4.;
+        let b = y + font_size * 1.25;
+        self.last_baselines.push(b);
+        let st = text_style(self.font, (font_size * 0.72).max(9.), self.hand);
+        self.words(clean, x, b, &st);
+        self.page().text_boxes.push(crate::Image {
+            base64: String::new(),
+            mime: String::new(),
+            bounds: [x, y, w, h],
+            layer: 0,
+            joined: false,
+            part: None,
+            text: Some(crate::TextBox {
+                text: clean.to_owned(),
+                font_size,
+                rgba: colour,
+                bold: false,
+                italic: false,
+                font: "Helvetica".into(),
+                align,
+                underline: false,
+                strikethrough: false,
+                math: true,
+            }),
+        });
+        self.y = y + h + if display { 10. } else { 6. };
     }
     fn fill(&mut self, polys: Vec<Vec<Pt>>, colour: Rgba, band: f64) {
         if self.dark {
@@ -587,6 +664,15 @@ impl Composer {
         let t = chars(text);
         let mut i = 0;
         while i < t.len() {
+            if t[i] == '$' && (i == 0 || t[i - 1] != '\\') {
+                let delim = if i + 1 < t.len() && t[i + 1] == '$' { "$$" } else { "$" };
+                if let Some(e) = find_from(&t, &chars(delim), i + delim.len()) {
+                    let end = e + delim.len();
+                    out.extend(&t[i..end]);
+                    i = end;
+                    continue;
+                }
+            }
             if t[i] == '`' {
                 if let Some(e) = find_from(&t, &['`'], i + 1) {
                     out.extend(&t[i + 1..e]);
@@ -692,6 +778,18 @@ impl Composer {
         let (plain, spans) = parse_inline(text);
         let pc = chars(&plain);
         self.last_baselines.clear();
+        if super::text_has_latex(&plain) {
+            self.math_box(
+                &plain,
+                self.x0 + indent,
+                self.x1 - self.x0 - indent,
+                (st.size * 1.38).clamp(12., 24.),
+                colour.unwrap_or(self.ink),
+                0,
+                false,
+            );
+            return;
+        }
         let mut pos = 0;
         for line in wrap(&plain, self.x1 - self.x0 - indent, &st) {
             self.ensure(st.size * st.line_height);
@@ -816,7 +914,10 @@ impl Composer {
 
     fn classic(&mut self, lines: &[&str]) {
         let mut pending_tape: Option<String> = None;
-        for raw in lines {
+        let mut i = 0;
+        while i < lines.len() {
+            let raw = lines[i];
+            i += 1;
             let mut line = raw.trim_end().to_owned();
             let mut colour = None;
             if let Some(rest) = line.strip_prefix("{color:") {
@@ -832,6 +933,18 @@ impl Composer {
                 if let Some(p) = pending_tape.take() {
                     self.tape(self.x0 - 30., self.y + 2., 200., 36., -0.06, &p);
                 }
+            }
+            if let Some(tex) = consume_display_math(lines, i - 1, &mut i) {
+                self.math_box(
+                    &tex,
+                    self.x0,
+                    self.x1 - self.x0,
+                    (self.size * 1.55).clamp(14., 26.),
+                    colour.unwrap_or(self.ink),
+                    1,
+                    true,
+                );
+                continue;
             }
             let l = line.as_str();
             if l.trim().is_empty() {
@@ -1020,6 +1133,18 @@ impl Composer {
     ) {
         let (plain, spans) = parse_inline(text);
         let plain = self.body_text(&plain);
+        if super::text_has_latex(&plain) {
+            self.math_box(
+                &plain,
+                x0,
+                x1 - x0,
+                (st.size * 1.38).clamp(12., 24.),
+                colour.unwrap_or(self.ink),
+                0,
+                false,
+            );
+            return;
+        }
         let pc = chars(&plain);
         let mut pos = 0;
         for line in wrap(&plain, x1 - x0, st) {
@@ -1746,6 +1871,16 @@ impl Composer {
             i += 1;
             if line.is_empty() {
                 self.y += 10.;
+            } else if let Some(tex) = consume_display_math(lines, i - 1, &mut i) {
+                self.math_box(
+                    &tex,
+                    self.x0,
+                    self.x1 - self.x0,
+                    (self.size * 1.55).clamp(14., 26.),
+                    self.ink,
+                    1,
+                    true,
+                );
             } else if line == "\\pagebreak" {
                 self.new_page();
             } else if let Some(arg) = line.strip_prefix("!draw") {
@@ -1882,6 +2017,35 @@ impl Composer {
     }
 }
 
+/// Parses a single-line (`$$ expr $$`) or multi-line (`$$\nexpr\n$$`) display-math block starting at `idx`.
+fn consume_display_math(lines: &[&str], idx: usize, next_i: &mut usize) -> Option<String> {
+    let trimmed = lines[idx].trim();
+    let after = trimmed.strip_prefix("$$")?;
+    if let Some(close) = after.find("$$") {
+        let inner = after[..close].trim();
+        return (!inner.is_empty()).then(|| format!("$${inner}$$"));
+    }
+    let mut parts = Vec::new();
+    if !after.trim().is_empty() {
+        parts.push(after.trim());
+    }
+    let mut k = idx + 1;
+    while k < lines.len() {
+        let ln = lines[k].trim();
+        k += 1;
+        if let Some(before) = ln.strip_suffix("$$") {
+            if !before.trim().is_empty() {
+                parts.push(before.trim());
+            }
+            *next_i = k;
+            let inner = parts.join("\n");
+            return (!inner.trim().is_empty()).then(|| format!("$$\n{}\n$$", inner.trim()));
+        }
+        parts.push(lines[k - 1]);
+    }
+    None
+}
+
 /// `1. text` or `2) text` → ("1", "text").
 fn numbered(line: &str) -> Option<(&str, &str)> {
     let digits = line.chars().take_while(char::is_ascii_digit).count();
@@ -1977,5 +2141,33 @@ mod tests {
         assert_eq!(c.caps("biología celular"), "BIOLOGÍA CELULAR");
         assert_eq!(numbered("12. twelve"), Some(("12", "twelve")));
         assert_eq!(numbered("2020 was"), None);
+    }
+    #[test]
+    fn latex_equations_emit_math_text_boxes_and_survive_notebook_creation() {
+        let md = "# Physics\n\nEnergy equals $E = mc^2$.\n\n$$\nx = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\n$$\n\nPrices are $5 and $10.\n";
+        let (pages, warnings) = crate::ink::compose(md, &Default::default()).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(pages[0].text_boxes.len(), 2);
+        for img in &pages[0].text_boxes {
+            let tb = img.text.as_ref().unwrap();
+            assert!(tb.math, "expected math TextBox, got {tb:?}");
+        }
+        assert!(pages[0].text_boxes[0]
+            .text
+            .as_ref()
+            .unwrap()
+            .text
+            .contains("$E = mc^2$"));
+        assert!(pages[0].text_boxes[1]
+            .text
+            .as_ref()
+            .unwrap()
+            .text
+            .contains("\\frac{-b"));
+        let editor = crate::ink::new_notebook("Physics", &pages).unwrap();
+        let view = editor.view(0).unwrap();
+        let texts = view["texts"].as_array().unwrap();
+        assert_eq!(texts.len(), 2);
+        assert!(texts.iter().all(|t| t["math"] == true));
     }
 }

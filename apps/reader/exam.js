@@ -10,11 +10,54 @@ import { createSourcePicker } from './source-picker.js';
 import { resolveSources, formatSourceBundle } from './source-extract.js';
 import { PROBLEM_TYPES, FOCUS_MODES, examPrompt, cleanExamData, buildPaginatedExamHtml } from './exam-html.js';
 import { renderExamPdfAndTapes } from './exam-pdf.js';
+import { recordExam, resourceKeysFor } from './exam-index.js';
 
 const STORE = 'notecomplete-exam-prefs';
 
 export function safeFileBase(title = 'Exam') {
   return String(title || 'Exam').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 80) || 'Exam';
+}
+
+/**
+ * Collects canonical resource keys and human-readable labels for the selected sources
+ * (open note, Recents, folders, local files, Drive files) so Saved resources can
+ * link exams back to any resource or folder used to create them.
+ */
+export function collectSourceLinks(sources, resolved, { groups = null, openDocResource = null } = {}) {
+  const keys = [];
+  const labels = [];
+  const openRes = typeof openDocResource === 'function' ? (openDocResource() || {}) : {};
+  for (const s of sources || []) {
+    if (s.kind === 'open') {
+      keys.push(...resourceKeysFor(openRes));
+      if (openRes.title) labels.push(openRes.title);
+    } else if (s.kind === 'recent' && s.entry) {
+      keys.push(s.entry.key);
+      if (s.entry.name) labels.push(s.entry.name);
+      if (s.entry.title) labels.push(s.entry.title);
+    } else if (s.kind === 'group' && s.group) {
+      keys.push(...resourceKeysFor({ folderIds: [s.group.id] }));
+      if (s.group.name) labels.push(s.group.name);
+      for (const m of groups?.members?.(s.group) || []) {
+        if (m?.key) keys.push(m.key);
+        if (m?.name) labels.push(m.name);
+      }
+    } else if (s.kind === 'drive' && s.driveFile) {
+      if (s.driveFile.id) keys.push(`drive:${s.driveFile.id}`);
+      if (s.driveFile.name) labels.push(s.driveFile.name);
+    } else if (s.label) {
+      labels.push(s.label);
+    }
+  }
+  for (const d of resolved || []) {
+    if (d.title) labels.push(d.title);
+    if (d.name) labels.push(d.name);
+    if (d.folderName) labels.push(d.folderName);
+  }
+  return {
+    resourceKeys: [...new Set(keys.filter(Boolean))],
+    resourceLabels: [...new Set(labels.filter(Boolean))],
+  };
 }
 
 export function examController({
@@ -25,6 +68,7 @@ export function examController({
   hasOpenDoc = () => false,
   openDocTitle = () => 'Current note',
   openDocPages = () => 0,
+  openDocResource = () => ({}),
   pageText,
   pageCanvas,
   notesText,
@@ -325,6 +369,19 @@ export function examController({
         if (targetGroup && groups?.move && entry) {
           await groups.move({ key: entry.key, name: entry.name, source: 'imported' }, targetGroup);
         }
+        const { resourceKeys, resourceLabels } = collectSourceLinks(sources, resolved, { groups, openDocResource });
+        if (targetGroup?.id) resourceKeys.push(...resourceKeysFor({ folderIds: [targetGroup.id] }));
+        await recordExam(library?.store, {
+          id: entry?.key || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          entryKey: entry?.key || '',
+          title: exam.title,
+          fileName,
+          pageCount: rendered.pageCount,
+          tapeCount: rendered.tapes.length,
+          created: Date.now(),
+          resourceKeys,
+          resourceLabels,
+        }).catch(() => {});
         refreshHome?.();
       }
 

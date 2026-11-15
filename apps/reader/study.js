@@ -141,7 +141,7 @@ export function prompts(kind, { amount, language, title, unit = 'page', pages = 
   return `${intro}\n${multiQuestions} ${lang}\nReply with ONLY this JSON, no prose: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":<index of the correct option, 0-3>,"explanation":"why, in one or two sentences","page":${samplePage}}]}`;
 }
 
-export function studyController({ ai, pageCanvas, pageText, pageWords = async () => null, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null }) {
+export function studyController({ ai, pageCanvas, pageText, pageWords = async () => null, documentInfo, currentPage, library, fingerprint, jump, status, download, notePath, jobs, quizzes, markdown = null, pagePdf = null, notesText = async () => '', continueInChat = null, keep = null, growWindow = () => {}, appendNotes = null, openNotes = null, openSavedResources = null }) {
   let mode = 'cards', cancelled = false, deck = null, practice = null, activeDeckKey = null;
   const instructions = () => { try { return localStorage.getItem('notecomplete-quiz-prompt') || DEFAULT_QUIZ_PROMPT; } catch { return DEFAULT_QUIZ_PROMPT; } };
   const key = () => `decks:${fingerprint() || documentInfo().title}`;
@@ -868,9 +868,9 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   }
   $('practiceBackToList').onclick = () => { closeFix(); closeAsk(); $('deckPractice').hidden = true; $('deckList').hidden = false; floatDeck(false); renderCards(); };
 
-  // Saved decks and quizzes of this note, in two lists. Deleting asks first and
-  // can be undone until the dialog closes.
+  // Saved resources: open the unified wide dialog when wired, with fallback to #deckPickerDialog.
   async function openSaved() {
+    if (openSavedResources) return openSavedResources();
     const decks = await savedDecks(), saved = await quizzes.list();
     const row = ({ title, detail, kind, run, remove, restore, exportTo = null, shareQr = null }) => {
       const item = document.createElement('li');

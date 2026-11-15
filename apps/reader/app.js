@@ -54,6 +54,7 @@ import { buildPageBackgroundChanges, bytesToBase64, formatBytes, parsePageSelect
 import { handwritingConverter } from "./convert.js";
 import { examController } from "./exam.js";
 import { batchNotesController } from "./batch-notes.js";
+import { expandController } from "./expand.js";
 import { agentConnector } from "./agents.js";
 import { AudioController } from "./audio.js";
 import { addedAudio, AUDIO_TYPES, clock } from "./recorder.js";
@@ -119,10 +120,11 @@ const busy = () => editing || mutationPending > 0;
 // A floppy disk beside the title: a dot while there are unsaved changes,
 // and a click saves like Ctrl S.
 function savedState() {
-  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: !!doc && dirty && changed });
-  const label = dirty ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
+  const needsSave = !!(doc && dirty && changed);
+  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: needsSave });
+  const label = needsSave ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
   $("saveState").hidden = !doc;
-  $("saveState").classList.toggle("dirty", dirty);
+  $("saveState").classList.toggle("dirty", needsSave);
   $("saveState").setAttribute("aria-label", label);
   $("saveState").title = label;
 }
@@ -1493,6 +1495,10 @@ $("toolSettingsAuto").onclick = () => {
   try { localStorage.setItem("notecomplete-tool-settings-auto", toolSettingsAuto ? "1" : "0"); } catch { /* Optional. */ }
   status(toolSettingsAuto ? "Tool settings open when you choose a tool." : "Press the selected tool again to see its settings.");
 };
+function hasToolSettings() {
+  const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
+  return ["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && !!selection.item) || textDock;
+}
 function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
@@ -1505,9 +1511,11 @@ function toolOptions() {
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   // The text format bar, when docked here, shows while a text box is typed or selected.
+  const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
   const usual = optionsOpen && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
   $("toolOptions").hidden = chromeState.compact || !(usual || textDock);
+  $("toolbarToggle").hidden = !canOpen;
   $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
   syncChoices();
   if (!$("toolOptions").hidden) {
@@ -1527,12 +1535,6 @@ function setCompact(compact) {
     document.body.classList.contains("compact-chrome") !== compact;
   document.body.classList.toggle("compact-chrome", compact);
   chromeState.compact = compact;
-  $("toolbarToggle").setAttribute("aria-expanded", String(!compact));
-  $("toolbarToggle").setAttribute(
-    "aria-label",
-    compact ? "Show tools" : "Collapse tools",
-  );
-  $("toolbarToggle").title = compact ? "Show tools" : "Collapse tools";
   toolOptions();
   if (changed) {
     chromeSettling = true;
@@ -1546,7 +1548,10 @@ function setCompact(compact) {
 }
 $("toolbarToggle").onclick = () => {
   cancelGesture();
-  setCompact(chromeState.toggle($("viewport").scrollTop));
+  if (!hasToolSettings()) return;
+  optionsOpen = $("toolOptions").hidden;
+  if (optionsOpen && chromeState.compact) setCompact(false);
+  else toolOptions();
 };
 // `hold`: typed text or a stroke kept on screen until the page's render with this edit
 // (holdText, holdInk).
@@ -2075,8 +2080,30 @@ $("penSmoothToggle").onclick = () => {
 // events with no button held). Enabled by default on iOS and Android so stylus hover detection
 // is immediately visible; can be toggled off per device in View → Pen hover preview.
 const appleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const HOVER_TOOLS = [
+  ["pan", "Pan"],
+  ["select", "Select"],
+  ["text", "Text"],
+  ["draw", "Pen"],
+  ["highlight", "Highlighter"],
+  ["erase", "Eraser"],
+  ["shape", "Shapes"],
+  ["tape", "Tape"],
+  ["grab", "Grab text"],
+];
 let penHoverOn = appleDevice || /Android/i.test(navigator.userAgent);
 try { const saved = localStorage.getItem("notecomplete-pen-hover"); if (saved === "1" || saved === "0") penHoverOn = saved === "1"; } catch { /* Optional. */ }
+let penHoverTools = new Set(HOVER_TOOLS.map(([id]) => id));
+try {
+  const savedTools = JSON.parse(localStorage.getItem("notecomplete-pen-hover-tools") || "null");
+  if (Array.isArray(savedTools)) {
+    const valid = new Set(HOVER_TOOLS.map(([id]) => id));
+    penHoverTools = new Set(savedTools.filter((id) => valid.has(id)));
+  }
+} catch { /* Optional. */ }
+function savePenHoverTools() {
+  try { localStorage.setItem("notecomplete-pen-hover-tools", JSON.stringify([...penHoverTools])); } catch { /* Optional. */ }
+}
 const penHoverRing = document.createElement("div");
 penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
 document.body.append(penHoverRing);
@@ -2084,14 +2111,19 @@ const hidePenHover = () => { penHoverRing.hidden = true; };
 function showPenHover(e) {
   if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return hidePenHover();
   const sheet = e.target.closest?.(".sheet"), p = sheet && panels[Number(sheet.dataset.page)];
-  if (!p || !["draw", "highlight", "erase", "tape"].includes(tool)) return hidePenHover();
+  if (!p || !penHoverTools.has(tool)) return hidePenHover();
   const scale = p.el.getBoundingClientRect().width / p.size[0];
-  const size = Math.max(6, (tool === "erase" ? eraserRadius() * 2 : Number($("width").value) || 2) * scale);
+  const strokeTool = ["draw", "highlight", "erase", "tape"].includes(tool);
+  const size = strokeTool
+    ? Math.max(6, (tool === "erase" ? eraserRadius() * 2 : Number($("width").value) || 2) * scale)
+    : tool === "shape"
+      ? Math.max(8, (Number($("width").value) || 2) * scale)
+      : 12;
   const style = penHoverRing.style;
   style.width = style.height = `${size}px`;
   style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
   penHoverRing.dataset.tool = tool;
-  style.setProperty("--hover-color", tool === "erase" ? "#ed6b55" : $("color").value);
+  style.setProperty("--hover-color", tool === "erase" ? "#ed6b55" : strokeTool || tool === "shape" ? $("color").value : "var(--accent)");
   penHoverRing.hidden = false;
 }
 window.addEventListener("pointermove", showPenHover, { capture: true, passive: true });
@@ -2145,15 +2177,61 @@ document.addEventListener("pointerover", (e) => {
 }, { capture: true, passive: true });
 document.addEventListener("pointerout", (e) => { if (e.pointerType === "pen") hideTip(); }, { capture: true, passive: true });
 document.addEventListener("scroll", hideTip, { capture: true, passive: true });
-const penHoverSwitch = () => $("penHoverToggle").setAttribute("aria-checked", String(penHoverOn));
+const penHoverSwitch = () => {
+  $("penHoverToggle").setAttribute("aria-checked", String(penHoverOn));
+  if ($("hoverToolsMaster")) $("hoverToolsMaster").checked = penHoverOn;
+};
 penHoverSwitch();
 $("penHoverToggle").onclick = () => {
   penHoverOn = !penHoverOn;
   try { localStorage.setItem("notecomplete-pen-hover", penHoverOn ? "1" : "0"); } catch { /* Optional. */ }
   if (!penHoverOn) hidePenHover();
   penHoverSwitch();
-  status(penHoverOn ? "Pen hover preview on: a ring shows where the pen will draw." : "Pen hover preview off.");
+  status(penHoverOn ? "Pen hover preview on: a cursor shows over the page." : "Pen hover preview off.");
 };
+function renderHoverToolsDialog() {
+  $("hoverToolsMaster").checked = penHoverOn;
+  $("hoverToolsList").replaceChildren(...HOVER_TOOLS.map(([id, label]) => {
+    const row = document.createElement("label");
+    row.className = "hover-tool-opt";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = penHoverTools.has(id);
+    cb.onchange = () => {
+      if (cb.checked) penHoverTools.add(id);
+      else penHoverTools.delete(id);
+      savePenHoverTools();
+      if (!penHoverTools.has(tool)) hidePenHover();
+    };
+    const ic = icon(id);
+    const span = document.createElement("span");
+    span.textContent = label;
+    row.append(cb, ic, span);
+    return row;
+  }));
+}
+$("hoverToolsOpen").onclick = () => {
+  closeMenus();
+  renderHoverToolsDialog();
+  $("hoverToolsDialog").showModal();
+};
+$("hoverToolsMaster").onchange = () => {
+  penHoverOn = $("hoverToolsMaster").checked;
+  try { localStorage.setItem("notecomplete-pen-hover", penHoverOn ? "1" : "0"); } catch { /* Optional. */ }
+  if (!penHoverOn) hidePenHover();
+  penHoverSwitch();
+};
+$("hoverToolsReset").onclick = () => {
+  penHoverTools = new Set(HOVER_TOOLS.map(([id]) => id));
+  savePenHoverTools();
+  if (!penHoverOn) {
+    penHoverOn = true;
+    try { localStorage.setItem("notecomplete-pen-hover", "1"); } catch { /* Optional. */ }
+    penHoverSwitch();
+  }
+  renderHoverToolsDialog();
+};
+$("hoverToolsClose").onclick = () => $("hoverToolsDialog").close();
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
 let viewOnlyToldAt = -Infinity;
@@ -2706,6 +2784,7 @@ function selectTool(name, { fromMenu = false } = {}) {
     b.setAttribute("aria-pressed", String(b.dataset.tool === tool));
   for (const p of panels) shapeHandles(p);
   // Each tool comes back with the colour and width it was last used with.
+  try { localStorage.setItem("notecomplete-last-tool", tool); } catch { /* Optional. */ }
   restoreToolPrefs();
   toolOptions();
   refreshSelects();
@@ -2740,8 +2819,11 @@ $("shape").onchange = () =>
 // the color input stay the data source the drawing code reads.
 const CHOICE_ICONS = {
   highlightMode: { straight: '<path d="M4 12h16"/>', free: '<path d="M3 14c3-6 5 4 8-2s5 5 10-3"/>', box: '<rect x="4" y="7" width="16" height="10" rx="0.5" fill="currentColor" fill-opacity="0.35"/>', text: '<rect x="3" y="9.5" width="18" height="5" rx="0.5" fill="currentColor" fill-opacity="0.35" stroke="none"/><path d="M4 7h10M4 12h16M4 17h12"/>' },
-  // A stroke that thickens where pressed harder, or one even line.
-  pressure: { on: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="1.2"/><path d="M8 12.5c2-2 3-3.4 4-3.4" stroke-width="3.2"/>', off: '<path d="M3 15c4-1 6-6 9-6s5 5 9 6" stroke-width="2.4"/>' },
+  // Pen pressure: a clear P glyph beside smoothing's S.
+  pressure: {
+    on: '<path d="M8 19V5h5a4.5 4.5 0 0 1 0 9H8" stroke-width="2.1"/>',
+    off: '<path d="M8 19V5h5a4.5 4.5 0 0 1 0 9H8" stroke-width="1.8" opacity=".45"/><path d="M5 19L19 5" stroke-width="1.8"/>',
+  },
   tapeMode: { band: '<rect x="3" y="9" width="18" height="6" rx="0.5"/>', box: '<rect x="5" y="5" width="14" height="14" rx="0.5"/>' },
   // A wobbly loop that becomes a clean box: when the pen is held, on every lift, or never.
   shapeSnap: { hold: '<path d="M5 8c3-3 10-3 13 0" stroke-dasharray="2 2"/><rect x="5" y="11" width="14" height="8" rx="0.5"/><circle cx="19" cy="6" r="2.2" fill="currentColor"/>', lift: '<path d="M4 9c2-4 6 1 8-3s5 2 8-1" stroke-dasharray="2 2"/><rect x="5" y="12" width="14" height="7" rx="0.5"/>', off: '<path d="M4 14c3-6 5 4 8-2s5 5 9-3"/>' },
@@ -2924,6 +3006,7 @@ for (const id of ["highlightMode", "tapeMode", "shape", "shapeSnap"]) {
   $(id).addEventListener("change", () => { try { localStorage.setItem(`notecomplete-${id}`, $(id).value); } catch { /* Optional. */ } });
 }
 syncShapeSnapMenu();
+syncChoices();
 // The visible shape row drives the (hidden) select that the drawing code reads.
 function syncShapePicker() {
   for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
@@ -2932,10 +3015,17 @@ function syncShapePicker() {
 for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
   b.onclick = () => {
     $("shape").value = b.dataset.shape;
+    try { localStorage.setItem("notecomplete-shape", b.dataset.shape); } catch { /* Optional. */ }
     syncShapePicker();
     if (tool !== "shape") document.querySelector('[data-tool="shape"]').click();
   };
 syncShapePicker();
+try {
+  const lastTool = localStorage.getItem("notecomplete-last-tool");
+  if (lastTool && lastTool !== tool && document.querySelector(`button[data-tool="${lastTool}"]`)) {
+    selectTool(lastTool, { fromMenu: !toolSettingsAuto });
+  }
+} catch { /* Optional. */ }
 // Fill of closed shapes: none, a tint of the pen colour, or solid. Remembered; F cycles it.
 let shapeFill = "none";
 try { shapeFill = ["none", "tint", "solid"].includes(localStorage.getItem("notecomplete-shape-fill")) ? localStorage.getItem("notecomplete-shape-fill") : "none"; } catch { /* Optional. */ }
@@ -3213,7 +3303,7 @@ const QUICK_BASE = {
   "draw:top": COLOUR_BASE, "highlight:top": COLOUR_BASE, "shape:top": COLOUR_BASE, "tape:top": COLOUR_BASE, "text:top": COLOUR_BASE,
   "shape:bottom": ["rectangle", "ellipse", "triangle"], "draw:left": ["pressure", "shapeSnap"],
 };
-const quickOpen = {};
+const quickOpen = remembered("notecomplete-quick-open", {});
 function withMore(section, entries) {
   const k = `${tool}:${section}`, base = QUICK_BASE[k];
   if (!base || entries.length <= base.length) return entries;
@@ -3223,7 +3313,7 @@ function withMore(section, entries) {
   const first = sectionOrder[tool]?.[section] || section === "top" ? entries : [...base.map((key) => entries.find((e) => String(e.key) === key)).filter(Boolean), ...entries.filter((e) => !base.includes(String(e.key)))];
   const list = open ? first : first.filter((e) => base.includes(String(e.key)) || e.active?.());
   if (list.length === entries.length && !open) return first;
-  return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minus" : "plus"), run: () => { quickOpen[k] = !open; }, stay: () => true }];
+  return [...list, { key: "__more", fixed: true, more: true, label: open ? "Fewer choices" : `More choices (${entries.length - list.length})`, icon: icon(open ? "minus" : "plus"), run: () => { quickOpen[k] = !open; try { localStorage.setItem("notecomplete-quick-open", JSON.stringify(quickOpen)); } catch { /* Optional. */ } }, stay: () => true }];
 }
 const hiddenKey = (section) => (section === "inner" ? "inner" : `${tool}:${section}`);
 const hiddenIn = (section) => new Set((quickHidden[hiddenKey(section)] || []).map(String));
@@ -3387,7 +3477,21 @@ document.addEventListener("contextmenu", (e) => {
   // (Samsung's button + touch included) never does.
   if (!mouse) { e.preventDefault(); e.stopPropagation(); }
 }, true);
+function uiZoomStepForEvent(e) {
+  if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return null;
+  const k = e.key, c = e.code;
+  if (k === "0" || k === ")" || c === "Digit0" || c === "Numpad0") return 0;
+  if (k === "-" || k === "_" || c === "Minus" || c === "NumpadSubtract") return -1;
+  if (k === "+" || (k === "=" && c !== "Digit0") || (k === "*" && c !== "Digit8") || c === "Equal" || c === "NumpadAdd") return 1;
+  return null;
+}
 document.addEventListener("keydown", (e) => {
+  const uiStep = uiZoomStepForEvent(e);
+  if (uiStep !== null) {
+    e.preventDefault();
+    applyUiSize(uiStep);
+    return;
+  }
   if (penBtn.key(e) !== "menu" || !doc) return;
   e.preventDefault();
   if (quick.isOpen) { penMenu({}, true); return; }
@@ -3531,7 +3635,7 @@ function shortcut(e) {
   if (home?.visible) return false;
   const k = e.key;
   // Text documents have the study keys too (flashcards, quizzes, saved decks).
-  const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), F: () => study.check(), D: () => study.saved(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
+  const studyKey = !doc && textView.visible && { q: resumeQuiz, Q: () => study.quiz(), C: () => study.cards(), F: () => study.check(), D: () => quizIndex.open(), W: () => quizzes.retakeWrong(), "/": () => textFinder.open() }[k];
   if (studyKey) return studyKey(), true;
   if (!doc && (htmlView.visible || textView.visible) && k === "n") return notesButton().click(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
@@ -3570,7 +3674,7 @@ function shortcut(e) {
   if (k === "Q") return study.quiz(), true;
   if (k === "C") return study.cards(), true;
   if (k === "F") return study.check(), true;
-  if (k === "D") return study.saved(), true;
+  if (k === "D") return quizIndex.open(), true;
   if (k === "W") return showDocument(), quizzes.retakeWrong(), true;
   return false;
 }
@@ -3607,7 +3711,7 @@ document.addEventListener("keydown", (e) => {
     for (const menu of document.querySelectorAll("details.menu")) menu.open = false;
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && !e.altKey && doc && !$("editor").hidden && ["+", "=", "-", "_", "0"].includes(e.key)) {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && doc && !$("editor").hidden && ["+", "=", "-", "_", "0"].includes(e.key)) {
     e.preventDefault();
     if (e.key === "0") setZoom("fit");
     else stepZoom(e.key === "-" || e.key === "_" ? -1 : 1);
@@ -3653,7 +3757,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   // Ctrl +/−/0 on a text document or HTML page: its own zoom (notes zoom their pages below).
-  if ((e.metaKey || e.ctrlKey) && !e.altKey && sideView()?.visible && ["+", "=", "-", "_", "0"].includes(e.key)) {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && sideView()?.visible && ["+", "=", "-", "_", "0"].includes(e.key)) {
     e.preventDefault();
     const dir = e.key === "0" ? 0 : e.key === "-" || e.key === "_" ? -1 : 1;
     if (textView.visible) textView.zoom(dir); else if (webView.visible) webZoom.step(dir); else htmlZoom.step(dir);
@@ -4837,7 +4941,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -4846,10 +4950,12 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyOpenDeck", "studyExportQuiz", "exportStudy", "exportStudyQr", "scratchOpen", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
+  if ($("studyExpandAi")) $("studyExpandAi").disabled = !open || !!doc?.canvas;
+  if ($("studyOpenDeck")) $("studyOpenDeck").disabled = false;
   if (!open) $("svg").disabled = true;
   syncPageMoveMenus();
 }
@@ -5719,7 +5825,7 @@ const scratch = scratchpad({
   status,
   notes: async (text) => (await notesApi()).append(text),
 });
-$("scratchOpen").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; scratch.open(); };
+if ($("scratchOpen")) $("scratchOpen").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; scratch.open(); };
 // Text documents are studied by sections (text-study.js): no page images, no PDF or MCP.
 const textSource = textStudy({ body: $("textBody"), text: () => textView.text });
 const studyFp = () => (studyText() ? sideFp : find.fingerprint);
@@ -5846,9 +5952,51 @@ const batchNotes = batchNotesController({
   openGeneratedFile,
   refreshHome: () => home?.renderRecent?.(),
 });
+const expandMaker = expandController({
+  call,
+  openPdf,
+  library,
+  groups,
+  hasOpenDoc: () => !!doc && !doc?.canvas,
+  canInsertPdf: () => !!doc && !doc?.canvas,
+  openDocTitle: () => doc?.title || $("title").textContent || "Note",
+  openDocPages: () => doc?.pages || 0,
+  currentPage: () => page,
+  openDocResource: currentDocResource,
+  openDocHasTape: () => panels.some((p) => (p.view?.tapes || []).length > 0),
+  pageText: studyDeps.pageText,
+  pageCanvas: studyDeps.pageCanvas,
+  notesText: studyDeps.notesText,
+  insertHandwrittenPages: async ({ at, markdown, options, focus }) => {
+    await action("insertHandwritten", { at, markdown, options, focus });
+  },
+  insertPdfPagesWithTapes: async ({ at, pages, pdf, tapes }) => {
+    await action("insertPages", { at, pages, pdf, focus: at });
+    const byPage = new Map();
+    for (const t of tapes || []) {
+      const targetPage = at + t.page;
+      if (!byPage.has(targetPage)) byPage.set(targetPage, []);
+      byPage.get(targetPage).push({
+        points: [[t.x, t.y + t.h / 2], [t.x + t.w, t.y + t.h / 2]],
+        width: t.h,
+        rgba: t.rgba,
+        tool: 2,
+        layer: activeLayer,
+      });
+    }
+    for (const [targetPage, pageLines] of byPage) {
+      await action("drawMany", { page: targetPage, lines: pageLines });
+    }
+  },
+  jobs,
+  ai,
+  status,
+});
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText() }); };
+if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: "pages" }); };
+if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "pages" }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
 practiceWindow = floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });
@@ -5884,15 +6032,42 @@ $("quizQr").onclick = () => study.qrQuiz(quizzes.current);
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
 $("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
-// Study → All quizzes…: every quiz with its document; another document is opened first.
+function currentDocResource() {
+  if (doc && !$("editor").hidden) {
+    return {
+      entryKey: noteEntryKey || "",
+      fingerprint: find.fingerprint || "",
+      title: doc.title || "",
+      name: docMember?.name || doc.title || "",
+    };
+  }
+  if (studyText() && textView.visible) {
+    return {
+      entryKey: noteEntryKey || "",
+      fingerprint: sideFp || "",
+      title: textView.name || "",
+      name: textView.name || "",
+    };
+  }
+  return null;
+}
+// Study -> Saved resources...: unified hub for quizzes, flashcard decks, exams, and AI scratchpad conversations.
 const quizIndex = allQuizzes({
   library, status,
   // The note on screen (not one left loaded behind Home).
   currentFingerprint: () => (doc && !$("editor").hidden ? find.fingerprint : studyText() && textView.visible ? sideFp : ""),
+  currentResource: currentDocResource,
   openEntry: async (key) => {
     const entry = await library.store.get("entries", key).catch(() => null);
     const file = entry && await library.open(entry).catch(() => null);
     if (!file) { status("That note is no longer kept on this device. Open it again from Drive or your files.", true); return false; }
+    return openFromLibrary(file, entry);
+  },
+  openExam: async (exam) => {
+    if (!exam?.entryKey) return false;
+    const entry = await library.store.get("entries", exam.entryKey).catch(() => null);
+    const file = entry && await library.open(entry).catch(() => null);
+    if (!file) { status("That exam is no longer kept on this device.", true); return false; }
     return openFromLibrary(file, entry);
   },
   openItem: async (kind, id, fp = "") => {
@@ -5906,6 +6081,10 @@ const quizIndex = allQuizzes({
   },
   exportItem: (kind, item) => (kind === "decks" ? study.exportDeck(item) : study.exportQuiz(item)),
   qrItem: (kind, item) => (kind === "decks" ? study.qrDeck(item) : study.qrQuiz(item)),
+  importStudy: () => { $("studyPackFile").click(); },
+  appendNotes: async (markdown) => (await notesApi()).append(markdown),
+  canNote: () => !!doc || htmlView.hasDocument,
+  markdown: (text) => call("markdownHtml", { text }),
 });
 // The desktop app's updater, or the Android app's (it says its version: App.js).
 updateNotice({ status, bridge: globalThis.notecompleteUpdates || (globalThis.notecompleteApp?.platform === "android" ? androidUpdates({ app: globalThis.notecompleteApp }) : undefined) });
@@ -5914,7 +6093,7 @@ const dictate = dictation({ status });
 dictate.attach($("chatInput"), $("chatSend"));
 dictate.attach($("practiceAskInput"), $("practiceAskForm").querySelector('button[type="submit"]'));
 { const box = $("quizExplainBox").querySelector(".practice-ask-form"); if (box) dictate.attach(box.querySelector("input"), box.querySelector('button[type="submit"]')); }
-$("studyAllQuizzes").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; quizIndex.open(); };
+if ($("studyAllQuizzes")) $("studyAllQuizzes").onclick = () => { closeMenus(); quizIndex.open(); };
 // Help > Connect AI tools (desktop): the bundled note server for the user's own agents,
 // offered once by itself a few seconds after start.
 const agents = agentConnector({ status });
@@ -6056,7 +6235,7 @@ $("penSetupSave").onclick = () => {
 $("studyCards").onclick = () => study.cards();
 $("studyQuiz").onclick = () => study.quiz();
 $("studyCheck").onclick = () => study.check();
-$("studyOpenDeck").onclick = () => study.saved();
+$("studyOpenDeck").onclick = () => { closeMenus(); quizIndex.open(); };
 $("chatOpen").onclick = $("chatToggle").onclick = () => { if (doc || studyText()) { showDocument(); chat.toggle(); } };
 // Bars above the pages may change height (menubar compaction, wrapping tool
 // row); scroll by the same amount in that frame so the pages never move.
@@ -6115,14 +6294,27 @@ async function openPalette(query = "") {
 }
 $("paletteOpen").onclick = () => openPalette();
 $("newWindow").onclick = () => (windows ? windows.open() : window.open(location.href, "_blank"));
-// Interface size (desktop app; browsers have their own zoom).
-if (windows?.zoom) {
-  $("uiSizeItems").hidden = false;
-  const size = (step) => windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch((e) => status(e.message, true));
-  $("uiSmaller").onclick = () => size(-1);
-  $("uiLarger").onclick = () => size(1);
-  $("uiReset").onclick = () => size(0);
+// Interface size (desktop zoom IPC + browser zoom fallback so Ctrl+Shift+-/0/+ works everywhere).
+let webUiZoom = 1;
+try {
+  const savedUiZoom = Number(localStorage.getItem("notecomplete-ui-zoom"));
+  if (Number.isFinite(savedUiZoom) && savedUiZoom >= 0.7 && savedUiZoom <= 1.6) webUiZoom = savedUiZoom;
+} catch { /* Optional. */ }
+if (!windows?.zoom && webUiZoom !== 1) document.documentElement.style.zoom = String(webUiZoom);
+function applyUiSize(step) {
+  if (windows?.zoom) {
+    windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch((e) => status(e.message, true));
+    return;
+  }
+  webUiZoom = step === 0 ? 1 : Math.round(Math.min(1.6, Math.max(0.7, webUiZoom + step * 0.1)) * 100) / 100;
+  document.documentElement.style.zoom = webUiZoom === 1 ? "" : String(webUiZoom);
+  try { localStorage.setItem("notecomplete-ui-zoom", String(webUiZoom)); } catch { /* Optional. */ }
+  status(`Interface size ${Math.round(webUiZoom * 100)}%`);
 }
+$("uiSizeItems").hidden = false;
+$("uiSmaller").onclick = () => applyUiSize(-1);
+$("uiLarger").onclick = () => applyUiSize(1);
+$("uiReset").onclick = () => applyUiSize(0);
 
 // Links in AI answers: page links jump to the page, attached images open large;
 // web links open through the desktop app's window handler (target=_blank).

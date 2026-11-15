@@ -381,6 +381,23 @@ function makeEl(tag, props = {}, ...kids) {
   return node;
 }
 
+export function formatEtaSeconds(totalSeconds) {
+  const sec = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  if (sec < 60) return `~${sec}s`;
+  const mins = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `~${mins}m ${rem}s` : `~${mins}m`;
+}
+
+export function estimateQrRemainingSeconds(currentIndex, totalSegments, intervalMs = 260) {
+  const total = Math.max(0, Number(totalSegments) || 0);
+  const ms = Math.max(40, Number(intervalMs) || 260);
+  if (total <= 1) return 0;
+  const idx = Math.max(0, Number(currentIndex) || 0);
+  const remainingFrames = idx === 0 ? total : Math.max(0, total - idx);
+  return remainingFrames === 0 ? 0 : Math.max(1, Math.ceil((remainingFrames * ms) / 1000));
+}
+
 /**
  * Displays a modal QR transfer: single static QR when compact, or for multi-segment
  * transfers shows the Info QR (`0/N`) first with a Start button before cycling strictly
@@ -399,11 +416,32 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
   const headingId = `qrTxTitle-${encoded.id}`;
   const qrBox = makeEl('div', { className: 'collab-qr qr-stream-box' });
   const frameText = makeEl('p', { className: 'qr-progress-label' });
+  const etaText = makeEl('p', { className: 'qr-eta-label' });
   const progress = makeEl('progress', { className: 'qr-progress-bar', max: encoded.total, value: 0 });
   const sizeNote = makeEl('p', {
     className: 'muted',
     textContent: `${describeQrEnvelope(payload)} · ${(encoded.rawBytes / 1024).toFixed(1)} KB JSON → ${encoded.total} segment${encoded.total === 1 ? '' : 's'}${encoded.compressed ? ' (compressed)' : ''} · works completely offline`,
   });
+
+  const updateEta = () => {
+    if (!multi) {
+      etaText.hidden = true;
+      return;
+    }
+    etaText.hidden = false;
+    const rate = Math.max(1, Math.round(1000 / intervalMs));
+    const cycleSec = Math.max(1, Math.ceil((frames.length * intervalMs) / 1000));
+    const remSec = estimateQrRemainingSeconds(index, encoded.total, intervalMs);
+    if (!started) {
+      etaText.textContent = `Expected pass time: ${formatEtaSeconds(cycleSec)} at ${rate} QR/s (${frames.length} frames)`;
+    } else if (index === 0) {
+      etaText.textContent = `Cycle time: ${formatEtaSeconds(cycleSec)} · ${encoded.total} segments in pass`;
+    } else if (remSec === 0) {
+      etaText.textContent = `End of pass · restarting Info QR (${formatEtaSeconds(cycleSec)}/cycle)`;
+    } else {
+      etaText.textContent = `${formatEtaSeconds(remSec)} left in pass (${formatEtaSeconds(cycleSec)}/cycle · ${rate} QR/s)`;
+    }
+  };
 
   const svgs = new Array(frames.length).fill(null);
   const showFrame = async (next) => {
@@ -419,6 +457,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
       const pct = Math.round((index / encoded.total) * 100);
       frameText.textContent = `Segment ${index} of ${encoded.total} (${pct}%)`;
     }
+    updateEta();
     if (!svgs[index]) svgs[index] = await renderQrSvg(frames[index]);
     if (qrBox.isConnected || index === 0) qrBox.innerHTML = svgs[index];
   };
@@ -446,6 +485,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
           playBtn.setAttribute('aria-label', 'Pause');
           playBtn.replaceChildren(icon('pause'));
           if (firstStart && index === 0) void showFrame(1);
+          else updateEta();
         } else {
           playBtn.className = 'icon-button primary';
           playBtn.title = 'Resume';
@@ -462,7 +502,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
       makeEl('option', { value: '500', textContent: 'Slow (2/s)' }),
       makeEl('option', { value: '260', textContent: 'Normal (4/s)', selected: true }),
       makeEl('option', { value: '160', textContent: 'Fast (6/s)' }));
-    speedSel.onchange = () => { intervalMs = Number(speedSel.value) || 260; restartTimer(); };
+    speedSel.onchange = () => { intervalMs = Number(speedSel.value) || 260; updateEta(); restartTimer(); };
     controls.push(playBtn, infoBtn, prevBtn, nextBtn, speedSel);
   }
 
@@ -482,6 +522,7 @@ export async function showQrTransfer({ title, subtitle, payload, onDownloadFallb
       qrBox,
       makeEl('div', { className: 'qr-transfer-meta' },
         frameText,
+        multi ? etaText : '',
         multi ? progress : '',
         sizeNote,
         controls.length ? makeEl('div', { className: 'qr-stream-controls' }, ...controls) : '')),

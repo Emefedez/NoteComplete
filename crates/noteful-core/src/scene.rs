@@ -351,10 +351,16 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
             floats::<4>(&st["7"]["0"])?
         };
         let width = num(&st["2"], 0.);
-        let fill = if p["5"]["1"]["0"].is_null() {
+        let fill_off = p["5"]["1"]["0"].is_null()
+            || matches!(p["5"]["3"].as_f64(), Some(o) if o <= 0.)
+            || (p["5"]["2"].as_u64().is_some_and(|m| m != 0) && p["5"]["3"].is_null());
+        let fill = if fill_off {
             "fill=\"none\"".to_owned()
         } else {
-            let c = floats::<4>(&p["5"]["1"]["0"])?;
+            let mut c = floats::<4>(&p["5"]["1"]["0"])?;
+            if let Some(opacity) = p["5"]["3"].as_f64() {
+                c[3] *= opacity.clamp(0., 1.);
+            }
             format!("fill=\"{}\" fill-opacity=\"{}\"", color(&c), c[3])
         };
         let attrs=format!("stroke=\"{}\" stroke-opacity=\"{}\" stroke-width=\"{width}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" {fill}",color(&rgba),rgba[3]);
@@ -737,5 +743,16 @@ mod tests {
         let locked = object(&shape, None, 6).unwrap();
         assert!(locked.locked());
         assert_eq!(locked.tape(), None);
+    }
+
+    #[test]
+    fn unfilled_shapes_with_disabled_fill_color_render_fill_none() {
+        let unfilled = json!({"2":{"1":[100.0,100.0,80.0,80.0,0.0]},"4":0,"5":1,"6":{"1":6,"2":[80.0,80.0],"5":{"1":{"0":[0.0667,0.0157,0.2353,1.0]},"2":1,"3":0.0},"7":{"2":3.0,"7":{"0":[0.0,0.0,0.0,1.0]}},"13":{"1":[0.0,40.0,40.0,0.0,80.0,40.0,40.0,80.0],"2":[0,1,1,1,4]}},"8":1.0,"9":0});
+        let item = object(&unfilled, None, 0).unwrap();
+        assert!(item.svg.contains("fill=\"none\""), "{}", item.svg);
+
+        let partial = json!({"2":{"1":[100.0,100.0,80.0,80.0,0.0]},"4":0,"5":1,"6":{"1":6,"2":[80.0,80.0],"5":{"1":{"0":[0.0,0.5,1.0,1.0]},"2":0,"3":0.25},"7":{"2":3.0,"7":{"0":[0.0,0.0,0.0,1.0]}},"13":{"1":[0.0,40.0,40.0,0.0,80.0,40.0,40.0,80.0],"2":[0,1,1,1,4]}},"8":1.0,"9":0});
+        let tinted = object(&partial, None, 1).unwrap();
+        assert!(tinted.svg.contains("fill-opacity=\"0.25\""), "{}", tinted.svg);
     }
 }

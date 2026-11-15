@@ -1,5 +1,6 @@
 // Shared multi-source text & image extraction for AI Batch Notes and Exam Generator.
 import { decodeText, isOfficeName, isTextName, looksLikeText } from './text-types.js';
+import { SOURCE_NAMES, canvasImage } from './ai-context.js';
 
 const ARCHIVE_EXT = /\.(noteful|nfedit|notepart|notecomp|notecomplete)$/i;
 const IMAGE_MIME = {
@@ -10,6 +11,22 @@ const IMAGE_MIME = {
   gif: 'image/gif',
   bmp: 'image/bmp',
 };
+
+function coerceSourceText(val) {
+  if (typeof val === 'string') return val.trim();
+  if (val == null || typeof val === 'boolean') return '';
+  if (Array.isArray(val)) return val.map(coerceSourceText).filter(Boolean).join('\n');
+  if (typeof val === 'object') {
+    if (typeof val.markdown === 'string' || typeof val.typed === 'string' || typeof val.recognized === 'string' || Array.isArray(val.pages)) {
+      const parts = [coerceSourceText(val.markdown), coerceSourceText(val.typed), coerceSourceText(val.recognized)];
+      if (Array.isArray(val.pages)) parts.push(...val.pages.map(coerceSourceText));
+      return parts.filter(Boolean).join('\n');
+    }
+    if ('text' in val) return coerceSourceText(val.text);
+    if ('content' in val) return coerceSourceText(val.content);
+  }
+  return String(val).trim();
+}
 
 export function cleanTitle(name = '') {
   return String(name || '')
@@ -158,23 +175,34 @@ export async function extractFileBytes(name, bytes, { call, openPdf, maxPages = 
   throw Error(`${name}: unsupported file format.`);
 }
 
+export function coercePageText(raw) {
+  if (typeof raw === 'string') return raw.trim();
+  if (!raw || typeof raw !== 'object') return '';
+  return Object.entries(raw)
+    .filter(([, v]) => typeof v === 'string' && v.trim())
+    .map(([k, v]) => `${SOURCE_NAMES[k] || k}: ${v.trim()}`)
+    .join('\n');
+}
+
 async function readOpenSource(source, { pageText, pageCanvas, notesText, documentInfo }) {
   const info = documentInfo?.() || { pages: 0, title: 'Current document' };
   const indices = parsePageRange(source.range, info.pages || 0);
   const parts = [];
   const images = [];
   for (const idx of indices.slice(0, 60)) {
-    const text = (await pageText?.(idx, { recognize: true }).catch(() => '')) || '';
-    if (text.trim()) parts.push(`[Page ${idx + 1}]\n${text.trim()}`);
+    const rawText = await pageText?.(idx, { recognize: true }).catch(() => '');
+    const text = coercePageText(rawText);
+    if (text) parts.push(`[Page ${idx + 1}]\n${text}`);
     else if (pageCanvas && images.length < 6) {
       try {
         const img = await pageCanvas(idx, 1200, { revealTape: true });
         if (img?.bytes) images.push({ bytes: new Uint8Array(img.bytes), type: img.type || 'image/jpeg', label: `page-${idx + 1}` });
+        else if (typeof img?.toBlob === 'function') images.push(await canvasImage(img, `page-${idx + 1}`, 1200));
       } catch { /* Textless page image optional. */ }
     }
   }
-  const notes = (await notesText?.().catch(() => '')) || '';
-  if (notes.trim()) parts.unshift(`## Attached Notes\n${notes.trim()}`);
+  const notes = String((await notesText?.().catch(() => '')) || '').trim();
+  if (notes) parts.unshift(`## Attached Notes\n${notes}`);
   return {
     id: source.id,
     title: source.label || info.title || 'Open document',
@@ -197,7 +225,7 @@ export async function resolveSources(sources, deps) {
       title: res.title || title || cleanTitle(name),
       name,
       folderName,
-      text: res.text || '',
+      text: coerceSourceText(res.text),
       images: res.images || [],
     });
   };
@@ -206,8 +234,9 @@ export async function resolveSources(sources, deps) {
     const src = sources[i];
     onProgress?.(i, sources.length, src.label || src.name || 'Reading source…');
     if (src.kind === 'topic') {
-      if (src.text?.trim()) {
-        resolved.push({ id: src.id, title: src.label || src.text.trim().slice(0, 48), text: src.text.trim(), images: [] });
+      const topicText = coerceSourceText(src.text);
+      if (topicText) {
+        resolved.push({ id: src.id, title: src.label || topicText.slice(0, 48), text: topicText, images: [] });
       }
       continue;
     }
@@ -247,7 +276,9 @@ export async function resolveSources(sources, deps) {
       }
     }
   }
-  return resolved.filter((r) => (r.text && r.text.trim()) || r.images?.length);
+  return resolved
+    .map((r) => ({ ...r, text: coerceSourceText(r.text) }))
+    .filter((r) => r.text || r.images?.length);
 }
 
 // Distributes character budget fairly across all extracted sources so later chapters aren't starved.

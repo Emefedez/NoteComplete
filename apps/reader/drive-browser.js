@@ -9,17 +9,17 @@ import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queu
 export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {}, queue = null, exportRequest = null }) {
   const $ = id => document.getElementById(id);
   const previews = thumbs || driveThumbnails(client, { library });
+  const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1', sessionKey = 'notecomplete-drive-session-v1';
+  const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
+  const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
+  const config = stored(configKey) || {};
   let identity, controller, generation = 0, loading = false, importing = false, visible = false;
-  let everywhere = false, folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
+  let everywhere = config.everywhere === true, folder = null, trail = [], nextPage = '', search = 'Noteful', filter = '';
   // Views to go back to: entering a folder, searching or filtering pushes the view it leaves.
   // `box` is the search text that produced the current view.
   let history = [], forwardHistory = [], box = '';
   const view = () => ({ trail: [...trail], folder, search, filter, box });
   const push = () => { history.push(view()); if (history.length > 50) history.shift(); forwardHistory = []; };
-  const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1', sessionKey = 'notecomplete-drive-session-v1';
-  const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
-  const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage is optional. */ } };
-  const config = stored(configKey) || {};
   $('driveClientId').value = (typeof config.clientId === 'string' ? config.clientId : '') || document.querySelector('meta[name="google-drive-client-id"]')?.content || '';
   // The site's shared key is the default; a personal key typed here overrides it on this device.
   const siteApiKey = document.querySelector('meta[name="google-drive-api-key"]')?.content?.trim() || '';
@@ -32,7 +32,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   $('driveFolderLink').value = typeof config.folderLink === 'string' ? config.folderLink : '';
   function saveConfig() {
     applyApiKey();
-    store(configKey, { ...config, clientId: $('driveClientId').value.trim(), apiKey: $('driveApiKey').value.trim(), folderLink: $('driveFolderLink').value.trim(), connected: config.connected, email: config.email || '' });
+    store(configKey, { ...config, clientId: $('driveClientId').value.trim(), apiKey: $('driveApiKey').value.trim(), folderLink: $('driveFolderLink').value.trim(), connected: config.connected, email: config.email || '', everywhere });
   }
   function persistSession(response) {
     const seconds = Number(response?.expires_in);
@@ -90,6 +90,8 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     // While a public folder is open, the instructions shrink to the connect button.
     $('driveSignin').classList?.toggle('compact', !!folder);
     $('driveScope').hidden = !folder;
+    $('driveScope').setAttribute('aria-pressed', String(everywhere));
+    $('driveScope').classList?.toggle('active', everywhere);
     $('driveSearch').placeholder = folder ? (everywhere ? 'Search all of Drive (folders and notes)' : 'Filter this folder') : 'Search names; clear to list the top level';
     $('driveBrowse').hidden = !client.ready;
     $('driveDisconnect').hidden = !client.connected && !loading;
@@ -443,7 +445,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   };
   $('driveScope').onclick = () => {
     everywhere = !everywhere; $('driveScope').setAttribute('aria-pressed', String(everywhere));
-    $('driveScope').classList.toggle('active', everywhere); controls();
+    $('driveScope').classList.toggle('active', everywhere); saveConfig(); controls();
   };
   $('driveFind').onclick = () => {
     const value = $('driveSearch').value.trim();

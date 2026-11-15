@@ -12,3 +12,12 @@ export function menuTemplate(platform = process.platform) {
     { role: 'windowMenu' },
   ];
 }
+
+/** Maps Ctrl/Cmd+Shift+zoom shortcuts to -1, 1, or 0 across US/ES/international keyboard layouts. */
+export function uiZoomStep(input) {
+  if (!(input.control || input.meta) || !input.shift || input.alt) return null;
+  if (input.key === '_' || input.key === '-' || input.code === 'Minus' || input.code === 'NumpadSubtract') return -1;
+  if (input.key === '+' || input.key === '*' || (input.key === '=' && input.code !== 'Digit0') || input.code === 'Equal' || input.code === 'NumpadAdd') return 1;
+  if (input.key === '0' || input.key === ')' || input.code === 'Digit0' || input.code === 'Numpad0') return 0;
+  return null;
+}

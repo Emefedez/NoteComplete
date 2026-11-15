@@ -527,16 +527,43 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
       setCloudProvider(filters.sources[0]);
     }
+    const query = ($('recentSearch')?.value || '').trim().toLowerCase();
+    const terms = query ? query.split(/\s+/).filter(Boolean) : [];
+    if ($('recentSearchClear')) $('recentSearchClear').hidden = !query;
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
-    let hidden = 0, unknown = 0;
+    let hidden = 0, unknown = 0, recentVisible = 0, recentTotal = 0;
     for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #archiveList .note-card')) {
-      const show = !active || !card.note || matches(card.note, filters);
+      const inRecent = Boolean(card.closest('#recentList'));
+      if (inRecent) recentTotal++;
+      let show = !active || !card.note || matches(card.note, filters);
+      if (show && inRecent && terms.length) {
+        const hay = `${card.note?.title || ''} ${card.note?.name || ''} ${card.textContent || ''}`.toLowerCase();
+        show = terms.every((t) => hay.includes(t));
+      }
       card.closest('li').hidden = !show;
+      if (inRecent && show) recentVisible++;
       if (!show) { hidden++; if (filters.tags.length && card.note && card.note.facts?.tags == null) unknown++; }
     }
+    if ($('recentSearchEmpty')) $('recentSearchEmpty').hidden = !query || recentTotal === 0 || recentVisible > 0;
     const needsFacts = quick && (filters.audio || filters.tags.length);
     $('filterSummary').textContent = active ? `${hidden} hidden by filters${needsFacts ? ' · the quick list does not read recordings or tags; switch to cards for those filters' : unknown ? ` · ${unknown} not yet read for tags (open them once)` : ''}` : '';
     renderFiltersSoon();
+  }
+  if ($('recentSearch')) {
+    $('recentSearch').oninput = () => applyFilters();
+    $('recentSearch').onkeydown = (event) => {
+      if (event.key === 'Escape' && $('recentSearch').value) {
+        event.preventDefault(); event.stopPropagation();
+        $('recentSearch').value = '';
+        applyFilters();
+      }
+    };
+  }
+  if ($('recentSearchClear')) {
+    $('recentSearchClear').onclick = () => {
+      if ($('recentSearch')) { $('recentSearch').value = ''; $('recentSearch').focus(); }
+      applyFilters();
+    };
   }
   // Internet Archive listings are drawn by their own browser: filter them when they change.
   if ($('archiveList') && typeof MutationObserver === 'function') {

@@ -30,16 +30,71 @@ use crate::{Editor, Error, Line, NewPage, NewPdf, PdfPlacement, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use compose::{Composer, Setup};
 
-/// One composed page: ink, highlighter under it, and its paper.
+/// One composed page: ink, highlighter under it, typed math/text boxes, and its paper.
 #[derive(Clone, Debug)]
 pub struct InkPage {
     pub lines: Vec<Line>,
     /// Drawn below the ink (written first); every line has `under` set.
     pub under: Vec<Line>,
+    /// Typed text/math boxes emitted alongside handwriting (e.g. LaTeX equations).
+    pub text_boxes: Vec<crate::Image>,
     pub paper: Paper,
     /// The words written on the page, with their boxes: the page's text without
     /// recognizing the ink (kept with the note, see `Editor::ink_words`).
     pub words: Vec<crate::InkWord>,
+}
+
+/// Whether `text` contains unescaped LaTeX delimiters (`$$…$$` or inline `$…$`).
+pub(crate) fn text_has_latex(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    let escaped = |idx: usize| -> bool {
+        let mut backslashes = 0usize;
+        let mut j = idx;
+        while j > 0 && bytes[j - 1] == b'\\' {
+            backslashes += 1;
+            j -= 1;
+        }
+        backslashes % 2 == 1
+    };
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'$' && !escaped(i) {
+            if i + 1 < len && bytes[i + 1] == b'$' {
+                let start = i + 2;
+                let mut j = start;
+                while j + 1 < len {
+                    if bytes[j] == b'$' && bytes[j + 1] == b'$' && !escaped(j) {
+                        if !text[start..j].trim().is_empty() {
+                            return true;
+                        }
+                        break;
+                    }
+                    j += 1;
+                }
+                i += 2;
+                continue;
+            }
+            let start = i + 1;
+            if start < len && !bytes[start].is_ascii_whitespace() {
+                let mut j = start;
+                while j < len && bytes[j] != b'\n' {
+                    if bytes[j] == b'$' && !escaped(j) {
+                        if j > start
+                            && !bytes[j - 1].is_ascii_whitespace()
+                            && !(j + 1 < len && bytes[j + 1].is_ascii_digit())
+                        {
+                            return true;
+                        }
+                        break;
+                    }
+                    j += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+    false
 }
 impl InkPage {
     /// Under-ink first, then ink: the order to add them to a page.
@@ -205,7 +260,7 @@ pub fn compose(markdown: &str, o: &ComposeOptions) -> Result<(Vec<InkPage>, Vec<
     if pages.len() > 1
         && pages
             .last()
-            .is_some_and(|p| p.lines.is_empty() && p.under.is_empty())
+            .is_some_and(|p| p.lines.is_empty() && p.under.is_empty() && p.text_boxes.is_empty())
     {
         pages.pop();
     }
@@ -253,6 +308,9 @@ pub fn new_notebook(title: &str, pages: &[InkPage]) -> Result<Editor> {
     let mut editor = Editor::create_document_with(title, &records, &pdf, "paper-1", 1.)?;
     for (slot, page) in pages.iter().enumerate() {
         editor.add_lines(slot, page.strokes().cloned().collect())?;
+        for tb in &page.text_boxes {
+            editor.add_image(slot, tb.clone())?;
+        }
         editor.set_ink_words(slot, page.words.clone())?;
     }
     Ok(editor)
@@ -306,6 +364,15 @@ pub fn insert_pages(editor: &mut Editor, at: usize, pages: &[InkPage]) -> Result
                 .map(|l| Line { layer, ..l })
                 .collect(),
         )?;
+        for tb in &page.text_boxes {
+            editor.add_image(
+                slot,
+                crate::Image {
+                    layer,
+                    ..tb.clone()
+                },
+            )?;
+        }
         shown.push(display);
     }
     Ok(shown)

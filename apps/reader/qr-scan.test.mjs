@@ -160,11 +160,13 @@ test('scanQrFrames captures frames, updates status and stops camera tracks on co
     };
     const fakeEl = (tag) => ({
       tagName: tag.toUpperCase(),
+      isConnected: true,
       children: [],
       style: {},
       className: '',
       hidden: false,
       textContent: '',
+      closest() { return null; },
       setAttribute() {},
       replaceChildren(...nodes) { this.children = nodes; },
       append(...nodes) { this.children.push(...nodes); },
@@ -184,6 +186,79 @@ test('scanQrFrames captures frames, updates status and stops camera tracks on co
     assert.equal(result, 'FRAME-OK');
     assert.equal(stopped, 1);
     assert.equal(removed, true);
+  } finally {
+    restoreProperty(globalThis, 'navigator', navDesc);
+    restoreProperty(globalThis, 'BarcodeDetector', bdDesc);
+    restoreProperty(globalThis, 'document', docDesc);
+  }
+});
+
+test('scanQrFrames stops camera tracks immediately when enclosing dialog closes', async () => {
+  const navDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const bdDesc = Object.getOwnPropertyDescriptor(globalThis, 'BarcodeDetector');
+  const docDesc = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  let stopped = 0;
+  let removed = false;
+  const closeListeners = new Set();
+  const dialog = {
+    open: true,
+    addEventListener(type, fn) { if (type === 'close') closeListeners.add(fn); },
+    removeEventListener(type, fn) { if (type === 'close') closeListeners.delete(fn); },
+    close() {
+      this.open = false;
+      for (const fn of [...closeListeners]) fn();
+    },
+  };
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        mediaDevices: {
+          getUserMedia: async () => ({
+            getTracks: () => [{ stop() { stopped++; } }],
+          }),
+        },
+      },
+    });
+    let calls = 0;
+    globalThis.BarcodeDetector = class NeverDetector {
+      static async getSupportedFormats() { return ['qr_code']; }
+      async detect() {
+        calls += 1;
+        if (calls === 2) dialog.close();
+        return [];
+      }
+    };
+    const fakeEl = (tag) => ({
+      tagName: tag.toUpperCase(),
+      isConnected: true,
+      children: [],
+      style: {},
+      className: '',
+      hidden: false,
+      textContent: '',
+      closest(sel) { return sel === 'dialog' ? dialog : null; },
+      setAttribute() {},
+      replaceChildren(...nodes) { this.children = nodes; },
+      append(...nodes) { this.children.push(...nodes); },
+      after() {},
+      remove() { removed = true; },
+      play: async () => {},
+    });
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement: fakeEl,
+        createElementNS: (_ns, tag) => fakeEl(tag),
+      },
+    });
+    await assert.rejects(
+      () => scanQrFrames(() => null, fakeEl('p'), { timeoutMs: 10_000 }),
+      /Camera scan stopped/,
+    );
+    assert.ok(stopped >= 1);
+    assert.equal(removed, true);
+    assert.equal(closeListeners.size, 0);
   } finally {
     restoreProperty(globalThis, 'navigator', navDesc);
     restoreProperty(globalThis, 'BarcodeDetector', bdDesc);

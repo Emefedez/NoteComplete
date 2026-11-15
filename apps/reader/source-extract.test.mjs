@@ -86,12 +86,14 @@ test('resolveSources expands entire folders cleanly and formatSourceBundle distr
     [
       { id: 'group:1', kind: 'group', group: { id: '1', name: 'TEMARIO' } },
       { id: 'topic:1', kind: 'topic', label: 'Interrupts', text: 'Nested vector interrupt controller' },
+      { id: 'topic:2', kind: 'topic', label: 'Structured', text: { markdown: 'Pipeline forwarding', pages: [{ typed: 'Hazard unit' }] } },
     ],
     { library: fakeLibrary, groups: fakeGroups },
   );
-  assert.equal(resolved.length, 3);
+  assert.equal(resolved.length, 4);
   const bundled = formatSourceBundle(resolved);
   assert.match(bundled.promptText, /SOURCE: a \(TEMARIO\)/);
   assert.match(bundled.promptText, /Beta content/);
   assert.match(bundled.promptText, /Nested vector interrupt controller/);
+  assert.match(bundled.promptText, /Pipeline forwarding/);
 });

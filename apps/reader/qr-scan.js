@@ -141,62 +141,91 @@ export async function scanQrFrames(onCode, statusEl, { initialText = 'Point the 
   const video = Object.assign(document.createElement('video'), { srcObject: stream, muted: true, playsInline: true });
   video.style.cssText = 'width:100%;max-height:260px;border-radius:8px;background:#000;margin:6px 0';
   let cancelled = false;
+  const stopCamera = () => {
+    cancelled = true;
+    for (const track of stream.getTracks()) {
+      try { track.stop(); } catch { /* Already stopped. */ }
+    }
+  };
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.append(icon('stop'), 'Stop camera');
-  cancelBtn.onclick = () => { cancelled = true; };
+  cancelBtn.onclick = stopCamera;
   wrap.append(progress, slotsBar, skipAlert, video, cancelBtn);
   statusEl.textContent = initialText;
   statusEl.after(wrap);
-  await video.play();
-  const helpers = {
-    setProgress(text, received, total, details = null) {
-      statusEl.textContent = text;
-      if (total && total > 1) {
-        progress.hidden = false;
-        progress.max = total;
-        progress.value = received;
-      } else {
-        progress.hidden = true;
-      }
-      if (total && total > 1 && total <= 96 && Array.isArray(details?.receivedSlots)) {
-        const filled = new Set(details.receivedSlots);
-        const skipped = new Set(details.skipped || []);
-        if (slotsBar.children.length !== total) {
-          slotsBar.replaceChildren(...Array.from({ length: total }, () => document.createElement('span')));
-        }
-        slotsBar.hidden = false;
-        for (let i = 0; i < total; i++) {
-          const cell = slotsBar.children[i];
-          const slotNum = i + 1;
-          cell.className = filled.has(slotNum) ? 'is-filled' : skipped.has(slotNum) ? 'is-skipped' : '';
-        }
-      } else {
-        slotsBar.hidden = true;
-      }
-      const skipped = details?.skipped || [];
-      if (skipped.length) {
-        skipAlert.hidden = false;
-        const preview = skipped.slice(0, 6).map((n) => `#${n}`).join(', ') + (skipped.length > 6 ? ` (+${skipped.length - 6} more)` : '');
-        skipAlert.textContent = `Skipped segment${skipped.length === 1 ? '' : 's'} ${preview} — keeping slot${skipped.length === 1 ? '' : 's'} empty until it cycles back.`;
-      } else {
-        skipAlert.hidden = true;
-      }
-    },
-  };
+  const parentDialog = wrap.closest('dialog');
+  parentDialog?.addEventListener('close', stopCamera, { once: true });
+  let etaStartedAt = 0;
+  let etaStartCount = 0;
   try {
+    await video.play();
+    const helpers = {
+      setProgress(text, received, total, details = null) {
+        let displayText = text;
+        if (total && total > 1 && received >= 1 && received < total) {
+          if (!etaStartedAt) {
+            etaStartedAt = Date.now();
+            etaStartCount = received;
+          } else if (received > etaStartCount) {
+            const elapsedSec = (Date.now() - etaStartedAt) / 1000;
+            if (elapsedSec >= 0.4 && !/\bleft\b/i.test(displayText)) {
+              const rate = (received - etaStartCount) / elapsedSec;
+              const remSec = Math.max(1, Math.ceil((total - received) / rate));
+              const fmt = remSec < 60 ? `~${remSec}s` : `~${Math.floor(remSec / 60)}m${remSec % 60 ? ` ${remSec % 60}s` : ''}`;
+              displayText = `${displayText} · ${fmt} left`;
+            }
+          }
+        }
+        statusEl.textContent = displayText;
+        if (total && total > 1) {
+          progress.hidden = false;
+          progress.max = total;
+          progress.value = received;
+        } else {
+          progress.hidden = true;
+        }
+        if (total && total > 1 && total <= 96 && Array.isArray(details?.receivedSlots)) {
+          const filled = new Set(details.receivedSlots);
+          const skipped = new Set(details.skipped || []);
+          if (slotsBar.children.length !== total) {
+            slotsBar.replaceChildren(...Array.from({ length: total }, () => document.createElement('span')));
+          }
+          slotsBar.hidden = false;
+          for (let i = 0; i < total; i++) {
+            const cell = slotsBar.children[i];
+            const slotNum = i + 1;
+            cell.className = filled.has(slotNum) ? 'is-filled' : skipped.has(slotNum) ? 'is-skipped' : '';
+          }
+        } else {
+          slotsBar.hidden = true;
+        }
+        const skipped = details?.skipped || [];
+        if (skipped.length) {
+          skipAlert.hidden = false;
+          const preview = skipped.slice(0, 6).map((n) => `#${n}`).join(', ') + (skipped.length > 6 ? ` (+${skipped.length - 6} more)` : '');
+          skipAlert.textContent = `Skipped segment${skipped.length === 1 ? '' : 's'} ${preview} — keeping slot${skipped.length === 1 ? '' : 's'} empty until it cycles back.`;
+        } else {
+          skipAlert.hidden = true;
+        }
+      },
+    };
     const deadline = Date.now() + timeoutMs;
-    while (!cancelled && Date.now() < deadline) {
+    while (!cancelled && wrap.isConnected !== false && (!parentDialog || parentDialog.open) && Date.now() < deadline) {
       const [code] = await detector.detect(video).catch(() => []);
+      if (cancelled || wrap.isConnected === false || (parentDialog && !parentDialog.open)) break;
       if (code?.rawValue) {
         const res = await onCode(code.rawValue, helpers);
         if (res?.done) return res.value;
       }
       await new Promise((r) => setTimeout(r, 140));
     }
-    throw Error(cancelled ? 'Camera scan stopped.' : 'QR transfer did not finish in time. Move closer or pause on missing frames.');
+    throw Error(cancelled || wrap.isConnected === false || (parentDialog && !parentDialog.open)
+      ? 'Camera scan stopped.'
+      : 'QR transfer did not finish in time. Move closer or pause on missing frames.');
   } finally {
-    for (const track of stream.getTracks()) track.stop();
+    parentDialog?.removeEventListener('close', stopCamera);
+    stopCamera();
     wrap.remove();
   }
 }

@@ -54,7 +54,8 @@ pub struct Item {
     pub underline: bool,
     pub strikethrough: bool,
     /// A `textbox` whose text is LaTeX, typeset by readers (never drawn as ink).
-    pub math: bool,
+    /// When omitted (`None`), unescaped `$…$` / `$$…$$` LaTeX delimiters enable math mode automatically.
+    pub math: Option<bool>,
     pub align: Option<String>,
 }
 
@@ -170,17 +171,19 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                 let page = c.pages.swap_remove(0);
                 out.lines.extend(page.under);
                 out.lines.extend(page.lines);
+                out.text_boxes.extend(page.text_boxes);
                 out.warnings.extend(c.warnings.into_iter().map(|w| format!("item {n}: {w}")));
             }
             "textbox" => {
                 let text = it.text.as_deref().filter(|t| !t.trim().is_empty()).ok_or(format!("item {n}: text is required"))?;
+                let is_math = it.math.unwrap_or_else(|| super::text_has_latex(text));
                 let size = it.size.unwrap_or(16.).clamp(4., 200.);
                 let rgba = pen_color("#1f2233")?;
                 let lines = text.lines().count().max(1) as f64;
                 let longest = text.lines().map(|l| l.chars().count()).max().unwrap_or(1) as f64;
                 // Typeset math is narrower than its source (commands, braces) and taller
                 // (fractions, powers); readers fit the formula into the box either way.
-                let (wide, tall) = if it.math { (0.45, 2.2) } else { (0.58, 1.3) };
+                let (wide, tall) = if is_math { (0.45, 2.2) } else { (0.58, 1.3) };
                 let w = it.w.or(it.width).unwrap_or(longest * size * wide + 16.).max(size);
                 let h = it.h.or(it.height).unwrap_or(lines * size * tall + 12.).max(size);
                 let align = match it.align.as_deref().unwrap_or("left") {
@@ -207,7 +210,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                         align,
                         underline: it.underline,
                         strikethrough: it.strikethrough,
-                        math: it.math,
+                        math: is_math,
                     }),
                 });
             }
@@ -338,10 +341,22 @@ mod tests {
         // Sized for a formula: taller than a line of text.
         assert!(image.bounds[3] >= 16. * 2.2, "{:?}", image.bounds);
         let plain = annotate(
-            &items(r#"[{"type":"textbox","text":"Score","x":1,"y":1}]"#),
+            &items(r#"[{"type":"textbox","text":"Score $5","x":1,"y":1}]"#),
             1,
         )
         .unwrap();
         assert!(!plain.text_boxes[0].text.as_ref().unwrap().math);
+        let auto_math = annotate(
+            &items(r#"[{"type":"textbox","text":"Area = $\\pi r^2$","x":10,"y":20}]"#),
+            1,
+        )
+        .unwrap();
+        assert!(auto_math.text_boxes[0].text.as_ref().unwrap().math);
+        let forced_plain = annotate(
+            &items(r#"[{"type":"textbox","text":"Literal $x$","x":10,"y":20,"math":false}]"#),
+            1,
+        )
+        .unwrap();
+        assert!(!forced_plain.text_boxes[0].text.as_ref().unwrap().math);
     }
 }

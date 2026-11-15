@@ -144,6 +144,7 @@ struct Page<'a> {
     mock: Option<&'a Raster>,
     strokes: Vec<Line>,
     words: Vec<crate::InkWord>,
+    text_boxes: Vec<crate::Image>,
     under: Vec<Line>,
     warnings: Vec<String>,
 }
@@ -1122,6 +1123,7 @@ fn draw_spec(
         mock: None,
         strokes: vec![],
         words: vec![],
+        text_boxes: vec![],
         under: vec![],
         warnings: vec![],
     };
@@ -1286,6 +1288,7 @@ fn draw_spec(
             })
             .collect(),
         lines: pg.strokes,
+        text_boxes: pg.text_boxes,
         paper: paper.with_dark(dark),
         words: pg.words,
     };

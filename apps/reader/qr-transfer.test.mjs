@@ -6,6 +6,8 @@ import {
   parseQrFrame,
   QrReceiver,
   describeQrEnvelope,
+  formatEtaSeconds,
+  estimateQrRemainingSeconds,
 } from './qr-transfer.js';
 
 test('single-frame study transfer round-trips small quiz payloads cleanly', async () => {
@@ -162,4 +164,15 @@ test('multi-frame protocol starts with Info QR (0/N), keeps slots strictly order
   assert.equal(doneStep.done, true);
   assert.equal(doneStep.index, 2);
   assert.deepEqual(doneStep.payload, envelope);
+});
+
+test('ETA helpers format durations and estimate remaining QR stream seconds accurately', () => {
+  assert.equal(formatEtaSeconds(0), '~0s');
+  assert.equal(formatEtaSeconds(12.2), '~12s');
+  assert.equal(formatEtaSeconds(95), '~1m 35s');
+  assert.equal(formatEtaSeconds(120), '~2m');
+  // 50 total segments at 250ms per frame (4/s): full cycle ceil(12.5s)=13s; at index 10, 40 frames left = 10s; at end = 0s.
+  assert.equal(estimateQrRemainingSeconds(0, 50, 250), 13);
+  assert.equal(estimateQrRemainingSeconds(10, 50, 250), 10);
+  assert.equal(estimateQrRemainingSeconds(50, 50, 250), 0);
 });

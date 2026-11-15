@@ -14,7 +14,8 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
-import { menuTemplate } from './app-menu.js';
+import { menuTemplate, uiZoomStep } from './app-menu.js';
+export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
@@ -148,14 +149,8 @@ function setUiZoom(step) {
   writeFile(uiFile(), JSON.stringify({ zoom: uiZoom })).catch(() => {});
   return uiZoom;
 }
-// Which interface-size step a key press asks for (Shift held), on US and Spanish layouts.
-export function uiZoomStep(input) {
-  if (!(input.control || input.meta) || !input.shift || input.alt) return null;
-  if (input.key === '_' || input.code === 'NumpadSubtract') return -1;
-  if (input.key === '+' || input.key === '*' || input.code === 'NumpadAdd') return 1;
-  if (input.code === 'Digit0' || input.code === 'Numpad0') return 0;
-  return null;
-}
+// Which interface-size step a key press asks for (Shift held), on US, Spanish and Linux/Wayland layouts.
+// UI zoom step parsing lives in app-menu.js alongside keyboard layout notes.
 function layout(win) {
   const { width, height } = win.getContentBounds();
   for (const tab of tabs.list(win.id)) views.get(tab.id)?.setBounds({ x: 0, y: 0, width, height });

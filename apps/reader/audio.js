@@ -34,7 +34,18 @@ export class AudioController {
   $('audioSeek').onchange=()=>{cancelAnimationFrame(this.dragFrame);this.dragFrame=0;this.seek(Number($('audioSeek').value));};
   // Playback speed, the same for every recording and remembered; the pitch stays natural.
   const speed=$('audioSpeed');
-  if(speed){let saved=1;try{saved=Number(globalThis.localStorage?.getItem('notecomplete-audio-speed'))||1;}catch{/* Optional. */}speed.onchange=()=>this.setRate(Number(speed.value));this.setRate(saved,false);}
+  if(speed){
+   let saved=1;try{saved=Number(globalThis.localStorage?.getItem('notecomplete-audio-speed'))||1;}catch{/* Optional. */}
+   const applyInput=()=>{const raw=String(speed.value||'').replace(/[×x]/gi,'').replace(',','.').trim();const n=Number(raw);if(Number.isFinite(n)&&n>0)this.setRate(n);else this.setRate(this.rate,false);};
+   speed.onchange=applyInput;
+   speed.onfocus=()=>{speed.value=String(Number(this.rate.toFixed(2)));speed.select?.();};
+   speed.onblur=()=>{applyInput();};
+   speed.onkeydown=(e)=>{if(e.key==='Enter'){e.preventDefault();applyInput();speed.blur?.();}else if(e.key==='Escape'){speed.value=speed.type==='number'?String(Number(this.rate.toFixed(2))):`${Number(this.rate.toFixed(2))}×`;speed.blur?.();}else if(e.key==='ArrowUp'){e.preventDefault();this.stepRate(1);speed.value=String(Number(this.rate.toFixed(2)));speed.select?.();}else if(e.key==='ArrowDown'){e.preventDefault();this.stepRate(-1);speed.value=String(Number(this.rate.toFixed(2)));speed.select?.();}};
+   this.setRate(saved,false);
+  }
+  const speedUp=$('audioSpeedUp'),speedDown=$('audioSpeedDown');
+  if(speedUp)speedUp.onclick=()=>this.stepRate(1);
+  if(speedDown)speedDown.onclick=()=>this.stepRate(-1);
   // Playback volume, remembered across recordings and sessions.
   const vol=$('audioVolume');
   if(vol){let saved=1;try{const raw=globalThis.localStorage?.getItem('notecomplete-audio-volume');if(raw!==null&&raw!==undefined&&raw!=='')saved=Number(raw);}catch{/* Optional. */}vol.oninput=()=>this.setVolume(Number(vol.value));if($('audioMute'))$('audioMute').onclick=()=>this.setMuted(!this.muted);this.setVolume(Number.isFinite(saved)?saved:1,false);}
@@ -53,18 +64,34 @@ export class AudioController {
  get duration(){return this.virtual?(Number.isFinite(this.virtual.duration)?this.virtual.duration:0):(Number.isFinite(this.audio.duration)?this.audio.duration:0);}
  get paused(){return this.virtual?this.virtual.paused:this.audio.paused;}
  get rate(){return this.audio.playbackRate||1;}
- // 0.5× to 3×; the nearest listed speed is shown in the menu.
+ // 0.25× to 16×; allows exact custom entry and stepper adjustments.
  setRate(rate,save=true){
-  rate=Math.min(3,Math.max(0.5,Number(rate)||1));
+  const parsed=Number(String(rate).replace(/[×x]/gi,'').replace(',','.').trim());
+  rate=Math.min(16,Math.max(0.25,Math.round((parsed||1)*100)/100));
   this.audio.playbackRate=this.audio.defaultPlaybackRate=rate;
   if('preservesPitch' in this.audio)this.audio.preservesPitch=true;
   const speed=$('audioSpeed');
-  if(speed){const options=[...(speed.options||[])],near=options.reduce((a,o)=>Math.abs(o.value-rate)<Math.abs((a?.value??99)-rate)?o:a,null);if(near)speed.value=near.value;speed.dataset.rate=String(rate);}
+  if(speed){
+   if(Array.isArray(speed.options)&&speed.options.length){
+    const near=speed.options.reduce((a,o)=>Math.abs(o.value-rate)<Math.abs((a?.value??99)-rate)?o:a,null);
+    if(near)speed.value=near.value;
+   } else {
+    const focused=typeof document!=='undefined'&&document.activeElement===speed;
+    speed.value=(focused||speed.type==='number')?String(Number(rate.toFixed(2))):`${Number(rate.toFixed(2))}×`;
+   }
+   speed.dataset.rate=String(rate);
+  }
   if(globalThis.localStorage&&save)try{localStorage.setItem('notecomplete-audio-speed',String(rate));}catch{/* Optional. */}
   return rate;
  }
- // One step up or down the speed menu ([ and ]).
- stepRate(direction){const steps=[0.5,0.75,1,1.25,1.5,1.75,2,2.5,3],at=steps.findIndex(s=>s>=this.rate-1e-6);return this.setRate(steps[Math.max(0,Math.min(steps.length-1,(at<0?steps.length-1:at)+direction))]);}
+ // One step up or down across 0.25×..16× (arrows, [ and ]).
+ stepRate(direction){
+  const steps=[0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.5,4,5,6,8,10,12,16];
+  const cur=this.rate;
+  if(direction>0){const next=steps.find(s=>s>cur+1e-4);return this.setRate(next??16);}
+  const prev=[...steps].reverse().find(s=>s<cur-1e-4);
+  return this.setRate(prev??0.25);
+ }
  // Tap jumps 10 s; holding the button (or key) repeats and accelerates up to 60 s per step.
  skip(direction,held=false){
   const dir=direction<0?-1:1;
