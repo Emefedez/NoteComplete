@@ -308,6 +308,7 @@ impl Editor {
         order: &[usize],
         page_assets: &HashMap<String, String>,
         reordered: bool,
+        strip_pdfs: bool,
         time: u64,
     ) -> Result<()> {
         let originals = self.scene.pages.len();
@@ -347,13 +348,17 @@ impl Editor {
             // A resized or background-changed inserted page is written at its final state.
             let (size, background) = self.page_geometry(slot)?;
             spec.size = size;
-            spec.pdf = background.map(|b| crate::PdfPlacement {
-                resource: b.resource_id,
-                page_index: b.page_index,
-                rect: (b.rect != [0., 0., size[0], size[1]]
-                    || spec.pdf.as_ref().and_then(|p| p.rect).is_some())
-                .then_some(b.rect),
-            });
+            spec.pdf = if strip_pdfs {
+                None
+            } else {
+                background.map(|b| crate::PdfPlacement {
+                    resource: b.resource_id,
+                    page_index: b.page_index,
+                    rect: (b.rect != [0., 0., size[0], size[1]]
+                        || spec.pdf.as_ref().and_then(|p| p.rect).is_some())
+                    .then_some(b.rect),
+                })
+            };
             let spec = &spec;
             let set = page_assets.get(&page.id).cloned().unwrap_or_default();
             added.push((
@@ -381,7 +386,7 @@ impl Editor {
         if self.canvas {
             return Err(Error::new(
                 0,
-                "An infinite canvas cannot be a .noteful file; save it as .notecomp or .notepart",
+                "An infinite canvas cannot be a .noteful file; save it as .nfedit",
             ));
         }
         self.noteful_bytes()
@@ -394,7 +399,7 @@ impl Editor {
         if self.canvas {
             return Err(Error::new(
                 0,
-                "An infinite canvas cannot be a .noteful file; save it as .notecomp or .notepart",
+                "An infinite canvas cannot be a .noteful file; save it as .nfedit",
             ));
         }
         use md5::{Digest, Md5};
@@ -445,12 +450,19 @@ impl Editor {
             .map(|b| format!("{b:02x}"))
             .collect())
     }
-    /// The Noteful package itself, also for a canvas (inside its `.notecomp`).
+    /// The Noteful package itself, also for a canvas (inside its `.notecomp` or `.nfedit`).
     pub(crate) fn noteful_bytes(&self) -> Result<Vec<u8>> {
-        if self.cursor == 0 {
+        self.noteful_bytes_with(false, false)
+    }
+    pub(crate) fn noteful_bytes_with(
+        &self,
+        strip_pdfs: bool,
+        strip_native_audio: bool,
+    ) -> Result<Vec<u8>> {
+        if self.cursor == 0 && !strip_pdfs && !strip_native_audio {
             return Ok(self.source.clone());
         }
-        let (blocks, trailer) = self.noteful_parts()?;
+        let (blocks, trailer) = self.noteful_parts_with(strip_pdfs, strip_native_audio)?;
         let body: usize = blocks.iter().map(|(_, b)| b.len()).sum();
         let mut out = Vec::with_capacity(MAGIC.len() + body + trailer.len());
         out.extend_from_slice(&MAGIC);
@@ -463,6 +475,14 @@ impl Editor {
     }
     #[allow(clippy::type_complexity)]
     fn noteful_parts(&self) -> Result<(Vec<(String, Cow<'_, [u8]>)>, Vec<u8>)> {
+        self.noteful_parts_with(false, false)
+    }
+    #[allow(clippy::type_complexity)]
+    fn noteful_parts_with(
+        &self,
+        strip_pdfs: bool,
+        strip_native_audio: bool,
+    ) -> Result<(Vec<(String, Cow<'_, [u8]>)>, Vec<u8>)> {
         let package = Package::parse(&self.source)?;
         let mut blocks: Vec<(String, Cow<'_, [u8]>)> = package
             .blocks
@@ -761,9 +781,9 @@ impl Editor {
             .copied()
             .filter(|&s| {
                 s < originals
-                    && self.history[..self.cursor].iter().any(|e| {
+                    && (self.history[..self.cursor].iter().any(|e| {
                         matches!(e, Edit::SetPageBackground { pages, .. } if pages.iter().any(|p| p.page == s))
-                    })
+                    }) || (strip_pdfs && self.page_geometry(s).ok().is_some_and(|(_, b)| b.is_some())))
             })
             .collect();
         let resized: Vec<usize> = order
@@ -778,9 +798,11 @@ impl Editor {
             })
             .collect();
         let mut used_pdfs = HashSet::new();
-        for &slot in &order {
-            if let (_, Some(b)) = self.page_geometry(slot)? {
-                used_pdfs.insert(b.resource_id);
+        if !strip_pdfs {
+            for &slot in &order {
+                if let (_, Some(b)) = self.page_geometry(slot)? {
+                    used_pdfs.insert(b.resource_id);
+                }
             }
         }
         let dead_pdfs: HashSet<String> = package
@@ -793,23 +815,45 @@ impl Editor {
             blocks.retain(|(id, _)| !dead_pdfs.contains(id));
             array(&mut index, 3)?.retain(|v| v.as_text().is_none_or(|id| !dead_pdfs.contains(id)));
         }
+        let deleted_audio = self.deleted_audio();
+        let removed_audio: HashSet<String> = self
+            .scene
+            .audio
+            .iter()
+            .filter(|a| strip_native_audio || deleted_audio.contains(a.id.as_str()))
+            .map(|a| a.id.clone())
+            .collect();
+        if !removed_audio.is_empty() {
+            blocks.retain(|(id, _)| !removed_audio.contains(id));
+            array(&mut index, 3)?
+                .retain(|v| v.as_text().is_none_or(|id| !removed_audio.contains(id)));
+        }
+        let removed_rec_ids: HashSet<String> = self
+            .scene
+            .recordings
+            .iter()
+            .filter(|r| removed_audio.contains(&r.asset_id))
+            .map(|r| r.id.clone())
+            .collect();
         // PDFs added with inserted or background-changed pages become ordinary resources,
         // omitting any resource that no page in the final note uses.
-        let mut seen_added = HashSet::new();
-        for edit in &self.history[..self.cursor] {
-            let pdf = match edit {
-                Edit::InsertPages { pdf: Some(pdf), .. }
-                | Edit::SetPageBackground { pdf: Some(pdf), .. } => pdf,
-                _ => continue,
-            };
-            if !used_pdfs.contains(&pdf.id) || !seen_added.insert(pdf.id.clone()) {
-                continue;
+        if !strip_pdfs {
+            let mut seen_added = HashSet::new();
+            for edit in &self.history[..self.cursor] {
+                let pdf = match edit {
+                    Edit::InsertPages { pdf: Some(pdf), .. }
+                    | Edit::SetPageBackground { pdf: Some(pdf), .. } => pdf,
+                    _ => continue,
+                };
+                if !used_pdfs.contains(&pdf.id) || !seen_added.insert(pdf.id.clone()) {
+                    continue;
+                }
+                let bytes = self
+                    .added_pdf(&pdf.id)
+                    .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
+                array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
+                blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
             }
-            let bytes = self
-                .added_pdf(&pdf.id)
-                .ok_or_else(|| Error::new(0, "Inserted PDF missing"))?;
-            array(&mut index, 3)?.push(V::Text(pdf.id.clone()));
-            blocks.push((pdf.id.clone(), Cow::Borrowed(bytes)));
         }
         if !page_assets.is_empty()
             || layers_changed
@@ -817,6 +861,8 @@ impl Editor {
             || pages_reordered
             || !resized.is_empty()
             || !bg_changed.is_empty()
+            || !removed_audio.is_empty()
+            || strip_pdfs
         {
             for b in package
                 .blocks
@@ -858,11 +904,15 @@ impl Editor {
                     let (size, background) = self.page_geometry(slot)?;
                     let spec = crate::NewPage {
                         size,
-                        pdf: background.map(|b| crate::PdfPlacement {
-                            resource: b.resource_id,
-                            page_index: b.page_index,
-                            rect: Some(b.rect),
-                        }),
+                        pdf: if strip_pdfs {
+                            None
+                        } else {
+                            background.map(|b| crate::PdfPlacement {
+                                resource: b.resource_id,
+                                page_index: b.page_index,
+                                rect: Some(b.rect),
+                            })
+                        },
                         words: Vec::new(),
                     };
                     let bg_fields = Self::inserted_background(&spec);
@@ -880,6 +930,7 @@ impl Editor {
                         &order,
                         &page_assets,
                         pages_reordered,
+                        strip_pdfs,
                         time,
                     )?;
                 }
@@ -956,6 +1007,42 @@ impl Editor {
                         V::Array(vec![V::UInt(1); layers.len()]),
                         time,
                     );
+                }
+                if !removed_rec_ids.is_empty() {
+                    if let Some(rec_col) =
+                        fields
+                            .iter_mut()
+                            .find(|f| f.tag == 7)
+                            .and_then(|f| match &mut f.value {
+                                V::Fields(fs) => Some(fs),
+                                _ => None,
+                            })
+                    {
+                        if let Ok(records) = array(rec_col, 0) {
+                            records.retain(|v| {
+                                v.as_fields()
+                                    .and_then(|fs| field(fs, 1))
+                                    .and_then(V::as_text)
+                                    .is_none_or(|id| !removed_rec_ids.contains(id))
+                            });
+                        }
+                        if let Ok(keys) = array(rec_col, 1).map(|k| k.clone()) {
+                            for (idx, key) in keys.iter().enumerate() {
+                                if key.as_text().is_some_and(|id| removed_rec_ids.contains(id)) {
+                                    if let Ok(flags) = array(rec_col, 3) {
+                                        if let Some(v) = flags.get_mut(idx) {
+                                            *v = V::UInt(0);
+                                        }
+                                    }
+                                    if let Ok(clocks) = array(rec_col, 2) {
+                                        if let Some(v) = clocks.get_mut(idx) {
+                                            *v = V::UInt(time);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 blocks.iter_mut().find(|(id, _)| id == &b.id).unwrap().1 =
                     Cow::Owned(crate::encode_fields(&fields)?);

@@ -123,6 +123,68 @@ pub(crate) enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pdf: Option<crate::NewPdf>,
     },
+    /// Deletes an embedded native Noteful audio recording by asset ID.
+    DeleteAudio {
+        asset_id: String,
+    },
+}
+
+/// Added recording bundled inside a `.nfedit` v11 project.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectAddedAudio {
+    pub id: String,
+    pub name: String,
+    pub mime: String,
+    #[serde(default)]
+    pub created: f64,
+    pub bytes_base64: String,
+}
+
+/// Options controlling which resources are kept when exporting a filtered `.nfedit`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectExportOptions {
+    pub include_history: bool,
+    pub include_pdfs: bool,
+    pub include_native_audio: bool,
+    pub include_added_audio: bool,
+    pub include_markdown: bool,
+    pub include_ink_text: bool,
+    pub include_recognized_text: bool,
+    pub include_study: bool,
+}
+impl Default for ProjectExportOptions {
+    fn default() -> Self {
+        Self {
+            include_history: true,
+            include_pdfs: true,
+            include_native_audio: true,
+            include_added_audio: true,
+            include_markdown: true,
+            include_ink_text: true,
+            include_recognized_text: true,
+            include_study: true,
+        }
+    }
+}
+
+/// Byte footprint of each resource category inside `.nfedit` (total matches full export).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectBreakdown {
+    pub base_bytes: usize,
+    pub history_bytes: usize,
+    pub history_count: usize,
+    pub pdf_bytes: usize,
+    pub pdf_count: usize,
+    pub native_audio_bytes: usize,
+    pub native_audio_count: usize,
+    pub added_audio_bytes: usize,
+    pub added_audio_count: usize,
+    pub markdown_bytes: usize,
+    pub text_bytes: usize,
+    pub study_bytes: usize,
+    pub total_bytes: usize,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -150,6 +212,9 @@ struct Project {
     /// Flashcard decks, quizzes, and scratchpad notes kept with the note (project version 10).
     #[serde(default, skip_serializing_if = "ProjectStudy::is_empty")]
     study: ProjectStudy,
+    /// Recordings added in NoteComplete bundled with the project (project version 11).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    added_audio: Vec<ProjectAddedAudio>,
 }
 
 /// Upper bound for the study data serialized inside a project (bytes).
@@ -228,6 +293,8 @@ pub struct Editor {
     pub(crate) floor: usize,
     /// Study sets (decks, quizzes, scratchpad) kept with the note; not part of edit history.
     pub(crate) study: ProjectStudy,
+    /// Recordings added in NoteComplete kept with the project; not part of edit history.
+    pub(crate) added_audio: Vec<(crate::AddedAudio, Vec<u8>)>,
     /// The SVG of added lines, by the place of their `Add` edit in the history, so a view
     /// does not format every line again (view.rs). Emptied from the cursor on by `commit`.
     pub(crate) added_svg: std::cell::RefCell<Vec<Option<Box<str>>>>,
@@ -301,6 +368,7 @@ impl Editor {
             recognized: Default::default(),
             floor: 0,
             study: ProjectStudy::default(),
+            added_audio: Vec::new(),
             added_svg: Default::default(),
         })
     }
@@ -323,6 +391,27 @@ impl Editor {
             })
             .flatten()
             .collect()
+    }
+    pub(crate) fn deleted_audio(&self) -> HashSet<&str> {
+        self.history[..self.cursor]
+            .iter()
+            .filter_map(|e| match e {
+                Edit::DeleteAudio { asset_id } => Some(asset_id.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+    /// Deletes an embedded native Noteful recording (undoable until compacted).
+    pub fn delete_audio(&mut self, asset_id: &str) -> Result<()> {
+        if !self.scene.audio.iter().any(|a| a.id == asset_id) {
+            return Err(Error::new(0, "Audio resource not found"));
+        }
+        if self.deleted_audio().contains(asset_id) {
+            return Err(Error::new(0, "Audio recording already deleted"));
+        }
+        self.commit(Edit::DeleteAudio {
+            asset_id: asset_id.to_owned(),
+        })
     }
     pub(crate) fn additions(&self, page: usize) -> impl Iterator<Item = (String, &Line)> {
         let mut replacements = HashMap::new();
@@ -583,40 +672,69 @@ impl Editor {
             }
         }
     }
+    fn serialize_project(mut project: Project) -> Result<String> {
+        project.format = "noteful-re-project".to_owned();
+        project.version = if !project.added_audio.is_empty() {
+            11
+        } else if !project.study.is_empty() {
+            10
+        } else if project.floor > 0 {
+            9
+        } else if !project.recognized_text.is_empty() {
+            8
+        } else if project.canvas {
+            7
+        } else if !project.ink_text.is_empty()
+            || project.history.iter().any(|e| {
+                matches!(e, Edit::InsertPages { pages, .. } if pages.iter().any(|p| !p.words.is_empty()))
+            })
+        {
+            6
+        } else if !project.markdown.is_empty() {
+            5
+        } else if project.history.iter().any(|e| {
+            matches!(
+                e,
+                Edit::Retext { .. }
+                    | Edit::ResizePage { .. }
+                    | Edit::SetPageBackground { .. }
+                    | Edit::DeleteAudio { .. }
+            ) || matches!(e, Edit::Image { image, .. } if image.text.is_some())
+        }) {
+            4
+        } else if project
+            .history
+            .iter()
+            .any(|e| matches!(e, Edit::InsertPages { .. }))
+        {
+            3
+        } else if project
+            .history
+            .iter()
+            .any(|e| matches!(e, Edit::Image { .. }))
+        {
+            2
+        } else {
+            1
+        };
+        serde_json::to_string(&project).map_err(|e| Error::new(0, e.to_string()))
+    }
+    fn encode_added_audio(audio: &[(crate::AddedAudio, Vec<u8>)]) -> Vec<ProjectAddedAudio> {
+        audio
+            .iter()
+            .map(|(meta, bytes)| ProjectAddedAudio {
+                id: meta.id.clone(),
+                name: meta.name.clone(),
+                mime: meta.mime.clone(),
+                created: meta.created,
+                bytes_base64: STANDARD.encode(bytes),
+            })
+            .collect()
+    }
     pub fn save_project(&self) -> Result<String> {
-        let data = serde_json::to_string(&Project {
-            format: "noteful-re-project".to_owned(),
-            version: if !self.study.is_empty() {
-                10
-            } else if self.floor > 0 {
-                9
-            } else if !self.recognized.is_empty() {
-                8
-            } else if self.canvas {
-                7
-            } else if !self.base_words.is_empty()
-                || self.history.iter().any(|e| {
-                    matches!(e, Edit::InsertPages { pages, .. } if pages.iter().any(|p| !p.words.is_empty()))
-                }) {
-                6
-            } else if !self.markdown.is_empty() {
-                5
-            } else if self.history.iter().any(|e| {
-                matches!(e, Edit::Retext { .. } | Edit::ResizePage { .. } | Edit::SetPageBackground { .. })
-                    || matches!(e, Edit::Image { image, .. } if image.text.is_some())
-            }) {
-                4
-            } else if self
-                .history
-                .iter()
-                .any(|e| matches!(e, Edit::InsertPages { .. }))
-            {
-                3
-            } else if self.history.iter().any(|e| matches!(e, Edit::Image { .. })) {
-                2
-            } else {
-                1
-            },
+        Self::serialize_project(Project {
+            format: String::new(),
+            version: 0,
             source_base64: STANDARD.encode(&self.source),
             history: self.history.clone(),
             cursor: self.cursor,
@@ -626,9 +744,225 @@ impl Editor {
             recognized_text: self.recognized.clone(),
             floor: self.floor,
             study: self.study.clone(),
+            added_audio: Self::encode_added_audio(&self.added_audio),
         })
-        .map_err(|e| Error::new(0, e.to_string()))?;
-        Ok(data)
+    }
+    /// Serializes the project keeping only the resource categories chosen in `options`.
+    /// Stripping PDFs or native audio flattens edit history onto a compacted `.noteful` base.
+    pub fn export_filtered_project(&self, options: ProjectExportOptions) -> Result<String> {
+        let flatten =
+            !options.include_history || !options.include_pdfs || !options.include_native_audio;
+        let (source_bytes, history, cursor, floor, ink_text, recognized_text) = if flatten {
+            let source =
+                self.noteful_bytes_with(!options.include_pdfs, !options.include_native_audio)?;
+            let order = self.page_order();
+            let mut ink = std::collections::BTreeMap::new();
+            let mut rec = std::collections::BTreeMap::new();
+            for (display, &slot) in order.iter().enumerate() {
+                if options.include_ink_text {
+                    let words = self.ink_words(slot);
+                    if !words.is_empty() {
+                        ink.insert(display, words.to_vec());
+                    }
+                }
+                if options.include_recognized_text {
+                    let words = self.recognized_words(slot);
+                    if !words.is_empty() {
+                        rec.insert(display, words.to_vec());
+                    }
+                }
+            }
+            (source, Vec::new(), 0, 0, ink, rec)
+        } else {
+            let history = if options.include_ink_text {
+                self.history.clone()
+            } else {
+                self.history
+                    .iter()
+                    .map(|e| {
+                        if let Edit::InsertPages { at, pages, pdf } = e {
+                            let pages = pages
+                                .iter()
+                                .map(|p| crate::NewPage {
+                                    size: p.size,
+                                    pdf: p.pdf.clone(),
+                                    words: Vec::new(),
+                                })
+                                .collect();
+                            Edit::InsertPages {
+                                at: *at,
+                                pages,
+                                pdf: pdf.clone(),
+                            }
+                        } else {
+                            e.clone()
+                        }
+                    })
+                    .collect()
+            };
+            (
+                self.source.clone(),
+                history,
+                self.cursor,
+                self.floor,
+                if options.include_ink_text {
+                    self.base_words.clone()
+                } else {
+                    Default::default()
+                },
+                if options.include_recognized_text {
+                    self.recognized.clone()
+                } else {
+                    Default::default()
+                },
+            )
+        };
+        let markdown = if options.include_markdown {
+            self.markdown.clone()
+        } else {
+            String::new()
+        };
+        let study = if options.include_study {
+            self.study.clone()
+        } else {
+            ProjectStudy::default()
+        };
+        let added_audio = if options.include_added_audio {
+            Self::encode_added_audio(&self.added_audio)
+        } else {
+            Vec::new()
+        };
+        Self::serialize_project(Project {
+            format: String::new(),
+            version: 0,
+            source_base64: STANDARD.encode(&source_bytes),
+            history,
+            cursor,
+            markdown,
+            ink_text,
+            canvas: self.canvas,
+            recognized_text,
+            floor,
+            study,
+            added_audio,
+        })
+    }
+    /// Size breakdown of each optional resource category inside a full `.nfedit` export.
+    pub fn project_breakdown(&self) -> Result<ProjectBreakdown> {
+        let b64_len = |raw: usize| raw.div_ceil(3) * 4;
+        let full_bytes = self.save_project()?.len();
+        let orig_pdf_raw: usize = self.scene.pdf_assets.iter().map(|a| a.bytes).sum();
+        let mut added_pdf_ids: HashSet<String> = HashSet::new();
+        let mut added_pdf_b64 = 0usize;
+        let mut inserted_words_len = 0usize;
+        for edit in &self.history {
+            match edit {
+                Edit::InsertPages { pdf, pages, .. } => {
+                    if let Some(p) = pdf {
+                        added_pdf_ids.insert(p.id.clone());
+                        added_pdf_b64 += p.base64.len();
+                    }
+                    for page in pages {
+                        if !page.words.is_empty() {
+                            inserted_words_len +=
+                                serde_json::to_string(&page.words).map_or(0, |s| s.len());
+                        }
+                    }
+                }
+                Edit::SetPageBackground { pdf: Some(p), .. } => {
+                    added_pdf_ids.insert(p.id.clone());
+                    added_pdf_b64 += p.base64.len();
+                }
+                _ => {}
+            }
+        }
+        let pdf_count = self.scene.pdf_assets.len()
+            + added_pdf_ids
+                .iter()
+                .filter(|id| !self.scene.pdf_assets.iter().any(|a| &a.id == *id))
+                .count();
+        let pdf_bytes = b64_len(orig_pdf_raw) + added_pdf_b64;
+        let deleted_audio = self.deleted_audio();
+        let active_audio: Vec<_> = self
+            .scene
+            .audio
+            .iter()
+            .filter(|a| !deleted_audio.contains(a.id.as_str()))
+            .collect();
+        let native_audio_count = active_audio.len();
+        let native_audio_bytes = b64_len(active_audio.iter().map(|a| a.bytes).sum());
+        let added_audio_encoded = Self::encode_added_audio(&self.added_audio);
+        let added_audio_count = added_audio_encoded.len();
+        let added_audio_bytes = if added_audio_encoded.is_empty() {
+            0
+        } else {
+            serde_json::to_string(&added_audio_encoded)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 14
+        };
+        let history_count = self.history.len();
+        let history_bytes = if self.history.is_empty() {
+            0
+        } else {
+            serde_json::to_string(&self.history)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                .saturating_sub(2 + added_pdf_b64 + inserted_words_len)
+        };
+        let markdown_bytes = if self.markdown.is_empty() {
+            0
+        } else {
+            serde_json::to_string(&self.markdown)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 12
+        };
+        let mut text_bytes = inserted_words_len;
+        if !self.base_words.is_empty() {
+            text_bytes += serde_json::to_string(&self.base_words)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 12;
+        }
+        if !self.recognized.is_empty() {
+            text_bytes += serde_json::to_string(&self.recognized)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 19;
+        }
+        let study_bytes = if self.study.is_empty() {
+            0
+        } else {
+            serde_json::to_string(&self.study)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 9
+        };
+        let optional = pdf_bytes
+            + native_audio_bytes
+            + added_audio_bytes
+            + history_bytes
+            + markdown_bytes
+            + text_bytes
+            + study_bytes;
+        let base_bytes = full_bytes.saturating_sub(optional);
+        let total_bytes = base_bytes + optional;
+        Ok(ProjectBreakdown {
+            base_bytes,
+            history_bytes,
+            history_count,
+            pdf_bytes,
+            pdf_count,
+            native_audio_bytes,
+            native_audio_count,
+            added_audio_bytes,
+            added_audio_count,
+            markdown_bytes,
+            text_bytes,
+            study_bytes,
+            total_bytes,
+        })
     }
     /// A short digest of the edit history and its undo position (not the source
     /// or the notes). Replicas that applied the same edits in the same order (a
@@ -669,6 +1003,18 @@ impl Editor {
         } else {
             self.recognized.insert(slot, words);
         }
+        Ok(())
+    }
+    /// Recordings added in NoteComplete kept with the `.nfedit` project.
+    pub fn added_audio(&self) -> &[(crate::AddedAudio, Vec<u8>)] {
+        &self.added_audio
+    }
+    /// Replaces the added recordings bundled inside `.nfedit` projects.
+    pub fn set_added_audio(&mut self, audio: Vec<(crate::AddedAudio, Vec<u8>)>) -> Result<()> {
+        if audio.iter().any(|(meta, _)| meta.id.is_empty()) {
+            return Err(Error::new(0, "Audio entry is missing an id"));
+        }
+        self.added_audio = audio;
         Ok(())
     }
     /// Study sets (flashcard decks, quizzes, and scratchpad) kept with the note.
@@ -720,6 +1066,9 @@ impl Editor {
         Ok(&self.source[asset.offset..asset.offset + asset.bytes])
     }
     pub fn audio_bytes(&self, id: &str) -> Result<&[u8]> {
+        if self.deleted_audio().contains(id) {
+            return Err(Error::new(0, "Audio resource not found"));
+        }
         let asset = self
             .scene
             .audio
@@ -732,7 +1081,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=10)
+            || !matches!(project.version, 1..=11)
             || project
                 .ink_text
                 .values()
@@ -804,6 +1153,7 @@ impl Editor {
                 Edit::SetPageBackground { pages, pdf } => {
                     editor.set_page_backgrounds(pages, pdf)?
                 }
+                Edit::DeleteAudio { asset_id } => editor.delete_audio(&asset_id)?,
                 Edit::MovePage { from, to } => editor.move_page(from, to)?,
                 Edit::ResizePage {
                     page,
@@ -855,6 +1205,22 @@ impl Editor {
             editor.set_recognized_words(slot, words)?;
         }
         editor.set_study(project.study)?;
+        let mut decoded_audio = Vec::with_capacity(project.added_audio.len());
+        for item in project.added_audio {
+            let bytes = STANDARD
+                .decode(&item.bytes_base64)
+                .map_err(|e| Error::new(0, e.to_string()))?;
+            decoded_audio.push((
+                crate::AddedAudio {
+                    id: item.id,
+                    name: item.name,
+                    mime: item.mime,
+                    created: item.created,
+                },
+                bytes,
+            ));
+        }
+        editor.set_added_audio(decoded_audio)?;
         Ok(editor)
     }
 }

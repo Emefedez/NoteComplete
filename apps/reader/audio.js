@@ -124,20 +124,35 @@ export class AudioController {
   $('audioToggle').hidden=false;this.setAdded(added,false);
  }
  // Added recordings follow the note's own ones; a new one is selected.
- setAdded(added,selectNew=true){
-  const before=new Set(this.entries.filter(e=>e.added).map(e=>e.added.id)),current=this.entries[this.index]?.asset?.id;
-  if(current)this.positions.set(current,this.time);
-  this.entries=[...this.entries.filter(e=>!e.added),...added.map(a=>({added:a,asset:{id:`added:${a.id}`,mime:a.mime,kind:a.mime.includes('webm')?'webm':a.mime.includes('mp4')?'m4a':a.mime.split('/')[1]?.split(';')[0]||'audio'}}))];
-  for(const url of [...this.urls.keys()])if(url.startsWith('added:')&&!this.entries.some(e=>e.asset?.id===url)){URL.revokeObjectURL(this.urls.get(url));this.urls.delete(url);}
+ _applyEntries(nextEntries,{selectFreshOf=null,preferAssetId=null,autoSelect=true}={}){
+  const current=preferAssetId??this.entries[this.index]?.asset?.id;
+  if(current&&this.entries[this.index])this.positions.set(current,this.time);
+  const keepIds=new Set(nextEntries.map(e=>e.asset?.id).filter(Boolean));
+  for(const url of [...this.urls.keys()])if(!keepIds.has(url)){URL.revokeObjectURL(this.urls.get(url));this.urls.delete(url);}
+  this.entries=nextEntries;
   $('recording').replaceChildren();
   for(const [i,e] of this.entries.entries()){const o=document.createElement('option');o.value=i;o.textContent=recordingName(e.recording,i,e.added);$('recording').append(o);}
-  const fresh=selectNew?this.entries.findIndex(e=>e.added&&!before.has(e.added.id)):-1,kept=this.entries.findIndex(e=>e.asset?.id===current);
+  const fresh=selectFreshOf?this.entries.findIndex(e=>e.added&&!selectFreshOf.has(e.added.id)):-1;
+  const kept=this.entries.findIndex(e=>e.asset?.id===current);
   const next=fresh>=0?fresh:kept>=0?kept:this.entries.length?0:-1;
   this.empty();
   const prev=this.index;this.index=undefined;
-  if(next<0){this.transcript?.select(null);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();this.update();return;}
+  if(next<0){this.transcript?.select(null);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();this.update();this.onselect?.(undefined);return;}
   $('recording').value=String(next);
-  if(fresh>=0||kept<0||next!==prev&&prev===undefined)this.select(next);else this.index=next;
+  if(fresh>=0||kept<0||(autoSelect&&next!==prev&&prev===undefined))this.select(next);
+  else {this.index=next;this.onselect?.(this.entries[next]);}
+ }
+ setNative(assets,recordings){
+  const native=recordings.map(recording=>({recording,asset:assets.find(a=>a.id===recording.asset_id)}));
+  for(const asset of assets)if(!recordings.some(r=>r.asset_id===asset.id))native.push({asset});
+  const added=this.entries.filter(e=>e.added);
+  this._applyEntries([...native,...added],{autoSelect:false});
+ }
+ setAdded(added,selectNew=true){
+  const before=selectNew?new Set(this.entries.filter(e=>e.added).map(e=>e.added.id)):null;
+  const native=this.entries.filter(e=>!e.added);
+  const nextAdded=added.map(a=>({added:a,asset:{id:`added:${a.id}`,mime:a.mime,kind:a.mime.includes('webm')?'webm':a.mime.includes('mp4')?'m4a':a.mime.split('/')[1]?.split(';')[0]||'audio'}}));
+  this._applyEntries([...native,...nextAdded],{selectFreshOf:before});
  }
  empty(){
   const none=!this.entries.length;

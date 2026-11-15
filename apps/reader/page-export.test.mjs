@@ -76,7 +76,7 @@ test('pageExporter wires export buttons, image menu and exportRequested', async 
     click() { this.onclick?.({ stopPropagation() {}, preventDefault() {} }); },
     addEventListener(type, fn) { this[`on_${type}`] = fn; },
   });
-  for (const id of ['formatsDialog', 'formatsClose', 'native', 'nativeMarkdown', 'exportNotecomplete', 'exportProject', 'exportPdf', 'imageTypes', 'exportImage', 'svg', 'exportOpen', 'exportClose', 'exportDialog']) {
+  for (const id of ['formatsDialog', 'formatsClose', 'native', 'nativeMarkdown', 'exportProject', 'exportPdf', 'imageTypes', 'exportImage', 'svg', 'exportOpen', 'exportClose', 'exportDialog']) {
     els.set(id, makeEl(id));
   }
   const doc = {
@@ -126,12 +126,10 @@ test('pageExporter wires export buttons, image menu and exportRequested', async 
 
   els.get('native').click();
   els.get('nativeMarkdown').click();
-  els.get('exportNotecomplete').click();
   els.get('exportProject').click();
   assert.deepEqual(saved, [
     { native: true, kind: undefined },
     { native: true, kind: 'markdown' },
-    { native: true, kind: 'notecomplete' },
     { native: true, kind: 'project' },
   ]);
 
@@ -139,10 +137,10 @@ test('pageExporter wires export buttons, image menu and exportRequested', async 
   assert.equal(downloads.at(-1).name, 'Sample-p1.png');
   assert.equal(downloads.at(-1).mime, 'image/png');
 
-  exporter.exportRequest.kind = 'notecomplete';
+  exporter.exportRequest.kind = 'project';
   exporter.exportRequest.key = 'drive:1';
   await exporter.exportRequested('drive:1', true);
-  assert.deepEqual(saved.at(-1), { native: true, kind: 'notecomplete' });
+  assert.deepEqual(saved.at(-1), { native: true, kind: 'project' });
   assert.equal(exporter.exportRequest.kind, '');
   assert.ok(closedMenus >= 0);
 });

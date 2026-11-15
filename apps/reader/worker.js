@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
+const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -58,10 +58,14 @@ const standalone = {
       // Recordings added in NoteComplete travel inside .notecomp files.
       if (args.notecomplete)
         result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
-      // Study sets (decks, quizzes, scratchpad) travel inside .nfedit v10 projects.
+      // Study sets (decks, quizzes, scratchpad) and added audio travel inside .nfedit projects.
       if (args.project) {
         const study = JSON.parse(candidate.study());
         if (study.decks?.length || study.quizzes?.length || study.scratch?.length) result.study = study;
+        const addedMeta = JSON.parse(candidate.project_added_audio_meta());
+        if (addedMeta.length) {
+          result.added_audio = addedMeta.map((meta, i) => ({ ...meta, bytes: candidate.project_added_audio_bytes(i) }));
+        }
       }
       session?.free();
       session = candidate;
@@ -88,7 +92,24 @@ const standalone = {
 // Operations on the open document.
 const onDocument = {
   view: (args, page) => view(page),
-  save: () => session.save_project(),
+  save(args) {
+    if (args.audioData !== undefined || args.audioLayout !== undefined) {
+      session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
+    }
+    return session.save_project();
+  },
+  projectBreakdown(args) {
+    if (args.audioData !== undefined || args.audioLayout !== undefined) {
+      session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
+    }
+    return JSON.parse(session.project_breakdown());
+  },
+  exportFilteredProject(args) {
+    if (args.audioData !== undefined || args.audioLayout !== undefined) {
+      session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
+    }
+    return session.export_filtered_project(JSON.stringify(args.options || {}));
+  },
   pick: (args, page) => JSON.parse(session.pick_item(page, args.x, args.y, args.tolerance)),
   pickLock: (args, page) => JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)),
   pickTimed: (args, page) => JSON.parse(session.pick_timed(page, args.x, args.y, args.tolerance)),
@@ -164,6 +185,7 @@ const onDocument = {
   insertPages: edit((args) => session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
   setPageBackgrounds: edit((args) => session.set_page_backgrounds(JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
   movePage: edit((args) => session.move_page(args.from, args.to)),
+  deleteAudio: edit((args) => session.delete_audio(args.assetId)),
   undo: lastPageLeft(() => session.undo()),
   redo: lastPageLeft(() => session.redo()),
 };

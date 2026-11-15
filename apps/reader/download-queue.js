@@ -193,7 +193,7 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
 // ⋯ on a Google Drive or Internet Archive card: downloads and opens the note, then exports it
 // (the same formats as the File menu's Export row). `pick(kind)` does the opening.
 export const exportable = (name) => /\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf)$/i.test(name || '');
-const EXPORT_KINDS = [['noteful', 'NF', 'Export Noteful (.noteful)'], ['markdown', 'N+MD', 'Export Noteful + Markdown'], ['project', 'NFE', 'Export the project (.nfedit) with its whole edit history'], ['notecomplete', 'NC', 'Export NoteComplete (.notecomp)'], ['pdf', 'PDF', 'Every page as one PDF']];
+const EXPORT_KINDS = [['noteful', 'NF', 'Export Noteful (.noteful)'], ['markdown', 'N+MD', 'Export Noteful + Markdown'], ['project', 'NFE', 'Export NoteComplete (.nfedit): choose which resources to include'], ['pdf', 'PDF', 'Every page as one PDF']];
 let exportMenu = null;
 const closeExportMenu = () => { if (exportMenu) exportMenu.hidden = true; };
 export function addExportMenu(item, { label, pick }) {

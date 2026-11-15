@@ -336,11 +336,21 @@ impl Editor {
             });
         let texts: Vec<Value> = imported_texts.chain(added_texts).collect();
 
+        let deleted_audio = self.deleted_audio();
+        let deleted_recordings: HashSet<&str> = self
+            .scene
+            .recordings
+            .iter()
+            .filter(|r| deleted_audio.contains(r.asset_id.as_str()))
+            .map(|r| r.id.as_str())
+            .collect();
+
         // Recording page lists are slots; the host navigates by display position.
         let recordings: Vec<Value> = self
             .scene
             .recordings
             .iter()
+            .filter(|r| !deleted_audio.contains(r.asset_id.as_str()))
             .map(|r| {
                 let mut r = serde_json::to_value(r).unwrap_or(Value::Null);
                 if let Some(pages) = r["pages"].as_array_mut() {
@@ -386,7 +396,11 @@ impl Editor {
             .map(|a| tape_entry(&a.id, a.line));
         let tapes: Vec<Value> = imported_tapes.chain(added_tapes).collect();
 
-        let timings: Vec<_> = p.timings.iter().filter(|t| shown(&t.item_id)).collect();
+        let timings: Vec<_> = p
+            .timings
+            .iter()
+            .filter(|t| shown(&t.item_id) && !deleted_recordings.contains(t.recording_id.as_str()))
+            .collect();
 
         Ok(json!({
             "title": self.scene.title,
@@ -400,7 +414,7 @@ impl Editor {
             "warnings": p.warnings,
             "texts": texts,
             "parts": parts,
-            "audio": self.scene.audio,
+            "audio": self.scene.audio.iter().filter(|a| !deleted_audio.contains(a.id.as_str())).collect::<Vec<_>>(),
             "recordings": recordings,
             "layers": layers,
             "shapes": shapes,

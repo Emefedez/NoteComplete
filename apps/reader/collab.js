@@ -354,23 +354,43 @@ const formatByteSize = (n) => (n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed
 export async function openShareNoteQr(host) {
   if (!host.doc) throw Error('Open a note first.');
   let format = 'project';
+  let projectOptions = null;
   let sharedId = null;
   let sharedMeta = null;
   let p2pSender = null;
   const bridge = noteShareBridge();
   let mode = bridge ? 'link' : 'p2p';
   const stage = el('div', { className: 'collab-panel' });
+  const customizeBtn = el('button', {
+    type: 'button',
+    className: 'nfedit-customize-btn',
+    textContent: 'Choose what .nfedit includes…',
+    onclick: async () => {
+      const next = await host.pickProjectOptions?.(projectOptions);
+      if (next) {
+        projectOptions = next;
+        void render();
+      }
+    },
+  });
   const formats = [
-    ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history with undo, Markdown notes, handwriting text, quizzes, flashcards & scratchpad'],
-    ['notecomplete', 'NoteComplete archive (.notecomp)', 'Flattened note, Markdown notes, handwriting text & added recordings'],
+    ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history, PDFs, audio recordings, Markdown notes, handwriting text & study sets'],
     ...(!host.doc.canvas ? [['noteful', 'Noteful (.noteful)', 'Flattened pages & ink for Noteful']] : []),
   ];
   const fieldset = el('fieldset', { className: 'collab-choices' }, el('legend', { textContent: 'Format to share' }));
   for (const [value, label, detail] of formats) {
     const radio = el('input', { type: 'radio', name: 'shareNoteFormat', value, checked: value === format });
-    radio.onchange = () => { if (radio.checked) { format = value; void render(); } };
+    radio.onchange = () => {
+      if (radio.checked) {
+        format = value;
+        customizeBtn.hidden = format !== 'project' || !host.pickProjectOptions;
+        void render();
+      }
+    };
     fieldset.append(el('label', { className: 'collab-choice' }, radio, el('span', {}, el('strong', { textContent: label }), el('small', { className: 'muted', textContent: detail }))));
   }
+  customizeBtn.hidden = !host.pickProjectOptions;
+  fieldset.append(customizeBtn);
 
   const tabs = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Note QR transfer method' });
   const tabDefs = bridge
@@ -475,7 +495,7 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(
       el('div', { className: 'collab-pair' }, qrBox, meta),
       buttons(
-        el('button', { type: 'button', textContent: 'Save / share file', onclick: async () => { closeDialog(); await host.exportAndDownload(format); } }),
+        el('button', { type: 'button', textContent: 'Save / share file', onclick: async () => { closeDialog(); await host.exportAndDownload(format, format === 'project' ? projectOptions : undefined); } }),
         scanBtn,
         el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
         connectBtn));
@@ -485,8 +505,9 @@ export async function openShareNoteQr(host) {
     if (exported.bytes.byteLength > MAX_OFFLINE_NOTE_BYTES) {
       stage.replaceChildren(
         el('p', {}, el('strong', { textContent: exported.name }), ` is ${formatByteSize(exported.bytes.byteLength)}.`),
-        el('p', { className: 'muted', textContent: `Pure offline visual QR frames work best up to ${Math.round(MAX_OFFLINE_NOTE_BYTES / 1024)} KB (smaller ink/Markdown notes or study packs). For larger notes on Web or iOS, use Web / iOS P2P QR.` }),
+        el('p', { className: 'muted', textContent: `Pure offline visual QR frames work best up to ${Math.round(MAX_OFFLINE_NOTE_BYTES / 1024)} KB (smaller ink/Markdown notes or study packs). Strip PDFs/media in .nfedit, or use Web / iOS P2P QR.` }),
         buttons(
+          ...(format === 'project' && host.pickProjectOptions ? [el('button', { type: 'button', textContent: 'Strip PDFs / media…', onclick: () => customizeBtn.click() })] : []),
           el('button', { type: 'button', className: 'primary', textContent: 'Use Web / iOS P2P QR', onclick: () => tabButtons.p2p.click() }),
           el('button', { type: 'button', textContent: 'Share quizzes & decks (QR)…', onclick: () => { closeDialog(); void openStudyShare(host); } }),
           el('button', { type: 'button', textContent: 'Close', onclick: closeDialog }),
@@ -503,7 +524,7 @@ export async function openShareNoteQr(host) {
           title: `Share “${exported.name}” offline via QR`,
           subtitle: 'Receiver opens Export & share… → Receive note via QR / P2P… → Scan QR stream.',
           payload: { kind: 'note', name: exported.name, mime: exported.mime, base64: base64UrlEncode(exported.bytes) },
-          onDownloadFallback: () => host.exportAndDownload(format),
+          onDownloadFallback: () => host.exportAndDownload(format, format === 'project' ? projectOptions : undefined),
           fallbackLabel: 'Save file instead',
           status: host.status,
         });
@@ -520,7 +541,7 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(el('p', { className: 'muted', textContent: 'Preparing note package…' }));
     try {
       await cleanupActive();
-      const exported = await host.exportNote(format);
+      const exported = await host.exportNote(format, format === 'project' ? projectOptions : undefined);
       if (mode === 'p2p') {
         await renderP2pShare(exported);
         return;

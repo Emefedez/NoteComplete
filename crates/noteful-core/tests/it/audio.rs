@@ -135,3 +135,154 @@ fn multiple_recordings_have_independent_clocks_and_preserve_every_asset() {
     assert_eq!(e.view(8).unwrap()["svg"], before["svg"]);
     assert_eq!(e.view(8).unwrap()["timings"], before["timings"]);
 }
+
+#[test]
+fn deleting_native_audio_is_undoable_and_drops_it_from_export() {
+    let mut e = Editor::open(crate::samples::MULTI_AUDIO).unwrap();
+    assert_eq!(e.view(8).unwrap()["audio"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        e.view(8).unwrap()["recordings"].as_array().unwrap().len(),
+        2
+    );
+    let victim = e.scene.audio[0].id.clone();
+    let kept = e.scene.audio[1].id.clone();
+    e.delete_audio(&victim).unwrap();
+    assert!(e.delete_audio(&victim).is_err());
+    assert!(e.audio_bytes(&victim).is_err());
+    assert_eq!(e.view(8).unwrap()["audio"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        e.view(8).unwrap()["recordings"].as_array().unwrap().len(),
+        1
+    );
+    // Project round-trip preserves the deletion and its undo step.
+    let mut reopened = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    assert_eq!(
+        reopened.view(8).unwrap()["audio"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        reopened.view(8).unwrap()["recordings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    reopened.undo();
+    assert_eq!(
+        reopened.view(8).unwrap()["audio"].as_array().unwrap().len(),
+        2
+    );
+    assert_eq!(
+        reopened.view(8).unwrap()["recordings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert!(reopened.audio_bytes(&victim).is_ok());
+    // Native export drops the deleted asset and its recording metadata, keeping the other.
+    let exported = Editor::open(&e.export_noteful().unwrap()).unwrap();
+    assert_eq!(exported.scene.audio.len(), 1);
+    assert_eq!(exported.scene.audio[0].id, kept);
+    assert_eq!(exported.scene.recordings.len(), 1);
+    assert_eq!(exported.scene.recordings[0].asset_id, kept);
+}
+
+#[test]
+fn nfedit_v11_bundles_added_audio_and_filtered_export_strips_selected_resources() {
+    use noteful_core::{AddedAudio, InkWord, Line, ProjectExportOptions, ProjectStudy};
+    let mut e = Editor::open(crate::samples::PRACTICE_BOOK).unwrap();
+    e.add_line(
+        0,
+        Line::new(vec![[10., 10.], [80., 80.]], 3., [0., 0., 0., 1.]),
+    )
+    .unwrap();
+    e.set_markdown("# Notes").unwrap();
+    e.set_recognized_words(
+        0,
+        vec![InkWord {
+            text: "Hello".into(),
+            bounds: [10., 10., 50., 20.],
+            link: None,
+        }],
+    )
+    .unwrap();
+    e.set_study(ProjectStudy {
+        decks: vec![serde_json::json!({"id": "d1", "title": "Deck"})],
+        quizzes: vec![],
+        scratch: vec![],
+    })
+    .unwrap();
+    e.set_added_audio(vec![(
+        AddedAudio {
+            id: "rec-1".into(),
+            name: "Lecture".into(),
+            mime: "audio/webm".into(),
+            created: 1234.0,
+        },
+        vec![1, 2, 3, 4, 5, 6],
+    )])
+    .unwrap();
+    let project = e.save_project().unwrap();
+    assert!(project.contains("\"version\":11"));
+    let restored = Editor::open_project(&project).unwrap();
+    assert_eq!(restored.added_audio().len(), 1);
+    assert_eq!(restored.added_audio()[0].0.id, "rec-1");
+    assert_eq!(restored.added_audio()[0].1, vec![1, 2, 3, 4, 5, 6]);
+
+    let breakdown = e.project_breakdown().unwrap();
+    assert_eq!(breakdown.total_bytes, project.len());
+    assert!(breakdown.pdf_bytes > 0 && breakdown.pdf_count > 0);
+    assert!(breakdown.native_audio_bytes > 0 && breakdown.native_audio_count == 1);
+    assert!(breakdown.added_audio_bytes > 0 && breakdown.added_audio_count == 1);
+    assert!(breakdown.history_bytes > 0 && breakdown.history_count == 1);
+    assert!(breakdown.markdown_bytes > 0);
+    assert!(breakdown.text_bytes > 0);
+    assert!(breakdown.study_bytes > 0);
+
+    // Stripping PDFs, audio, history, markdown, text, and study produces a clean lean .nfedit
+    // with zero warnings and keeps drawn ink intact.
+    let stripped = e
+        .export_filtered_project(ProjectExportOptions {
+            include_history: true,
+            include_pdfs: false,
+            include_native_audio: false,
+            include_added_audio: false,
+            include_markdown: false,
+            include_ink_text: false,
+            include_recognized_text: false,
+            include_study: false,
+        })
+        .unwrap();
+    assert!(stripped.len() < project.len());
+    let lean = Editor::open_project(&stripped).unwrap();
+    assert_eq!(lean.scene.pages.len(), e.scene.pages.len());
+    assert!(lean.view(0).unwrap()["pdf_background"].is_null());
+    assert!(lean.pdf_bytes("FF1EDCCAC0CE4A5383FB20FA37C48BD9").is_err());
+    assert!(lean.scene.audio.is_empty());
+    assert!(lean.scene.recordings.is_empty());
+    assert!(lean.added_audio().is_empty());
+    assert!(lean.markdown().is_empty());
+    assert!(lean.recognized_words(0).is_empty());
+    assert!(lean.study().is_empty());
+    assert_eq!(lean.view(0).unwrap()["warnings"], serde_json::json!([]));
+    assert!(lean.view(0).unwrap()["visible_imported"].as_u64().unwrap() > 0);
+
+    // Stripping only history flattens edits while keeping PDFs, native audio, added audio,
+    // markdown, recognized text, and study sets.
+    let flat_json = e
+        .export_filtered_project(ProjectExportOptions {
+            include_history: false,
+            ..ProjectExportOptions::default()
+        })
+        .unwrap();
+    let flat = Editor::open_project(&flat_json).unwrap();
+    assert!(!flat.view(0).unwrap()["pdf_background"].is_null());
+    assert!(flat.pdf_bytes("FF1EDCCAC0CE4A5383FB20FA37C48BD9").is_ok());
+    assert_eq!(flat.scene.audio.len(), 1);
+    assert_eq!(flat.added_audio().len(), 1);
+    assert_eq!(flat.markdown(), "# Notes");
+    assert_eq!(flat.recognized_words(0).len(), 1);
+    assert_eq!(flat.study().decks.len(), 1);
+    assert!(!flat.view(0).unwrap()["can_undo"].as_bool().unwrap());
+}

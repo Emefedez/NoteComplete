@@ -135,7 +135,6 @@ export function pageExporter({
     if ($('formatsClose')) $('formatsClose').onclick = () => $('formatsDialog')?.close();
     if ($('native')) $('native').onclick = () => save(true);
     if ($('nativeMarkdown')) $('nativeMarkdown').onclick = () => save(true, 'markdown');
-    if ($('exportNotecomplete')) $('exportNotecomplete').onclick = () => save(true, 'notecomplete');
     if ($('exportProject')) $('exportProject').onclick = () => save(true, 'project');
     if ($('exportPdf')) $('exportPdf').onclick = () => { closeMenus(); if (!busy()) pdf(); };
     if ($('imageTypes') && doc) {

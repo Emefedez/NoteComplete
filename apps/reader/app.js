@@ -43,6 +43,7 @@ import { SelectionController } from "./selection.js";
 import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
+import { chooseNfeditExport } from "./nfedit-export.js";
 import { zipFiles } from "./zip.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
@@ -460,15 +461,13 @@ function releaseImages() {
   convertedImages = []; convertedFolder = ""; copyTarget = null;
 }
 const SAVE_TEXT_TITLE = $("textSave").title;
-const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful", notecomplete: ".notecomp", notepart: ".notepart" };
+const SAVE_EXT = { project: ".nfedit", noteful: ".noteful", markdown: ".noteful" };
 function saveLabel() {
   const el = $("save");
   el.querySelector(".menu-label").textContent = saveAs ? `Save (${SAVE_EXT[saveAs]})` : "Save project (.nfedit)";
   el.title = saveAs === "noteful" || saveAs === "markdown"
-    ? "Save to the Noteful file (no undo history; notes and study sets stay on this device)."
-    : saveAs === "notecomplete" || saveAs === "notepart"
-      ? "Save a .notecomp copy with the note, notes and recordings (no undo history)."
-      : "Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, quizzes, flashcards and scratchpad (audio recordings stay on this device).";
+    ? "Save to the Noteful file (no undo history; notes, added recordings and study sets stay on this device)."
+    : "Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, added recordings, quizzes, flashcards and scratchpad.";
 }
 async function load(file, preparedDocument = null) {
   if (!ready || busy()) {
@@ -552,7 +551,7 @@ async function load(file, preparedDocument = null) {
     buildPages(result.page_sizes);
     updateTools(result);
     layerPanel(result.layers);
-    // Recordings that came inside a .notecomp join the ones kept for this note.
+    // Recordings that came inside a .nfedit or legacy .notecomp join the ones kept for this note.
     const incoming = (result.added_audio || []).map((a) => ({ id: a.id, name: a.name, mime: a.mime, created: a.created, blob: new Blob([a.bytes], { type: a.mime }) }));
     audio.open(result.audio || [], result.recordings || [], await addedStore.load(find.fingerprint, incoming));
     if (prepared.kind === "project" && result.study && find.fingerprint) {
@@ -1586,11 +1585,17 @@ async function action(op, args = {}, hold = null) {
 // The note changed by `op` (here, or in a sharing session on another screen). Returns
 // true when the pages were rebuilt (inserted pages, or a page size changed).
 function edited(op, args, result) {
+  const prevDoc = doc;
   // A tablet's copy is the computer's note: the computer saves it, not the tablet.
   if (collab?.role !== "tablet") dirty = changed = true;
   revision++;
   doc = result;
   savedState();
+  const audioCount = (d) => `${d?.audio?.length || 0}:${d?.recordings?.length || 0}`;
+  if (op === "deleteAudio" || ((op === "undo" || op === "redo") && audioCount(result) !== audioCount(prevDoc))) {
+    audio.setNative(result.audio || [], result.recordings || []);
+    recordingState();
+  }
   // An infinite canvas that grew (or shrank on undo) keeps its place on screen: the
   // page is resized where it is and redrawn, not rebuilt.
   const size = result.page_sizes[0];
@@ -3711,35 +3716,63 @@ async function syncProjectStudy() {
   };
   await call("study", { study }).catch((e) => console.warn("Project study:", e));
 }
-async function exportNoteBytes(as = "project") {
-  if (!doc) throw Error("Open a note first.");
+async function prepareProjectMetadata() {
   await notes?.flush();
-  if (as !== "noteful" && as !== "markdown") {
-    await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
+  await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
+  await syncProjectStudy();
+}
+async function exportNoteBytes(as = "project", projectOptions = null) {
+  if (!doc) throw Error("Open a note first.");
+  if (as === "project") {
+    await prepareProjectMetadata();
+    const packed = await addedStore.packed();
+    const raw = projectOptions
+      ? await call("exportFilteredProject", { ...packed, options: projectOptions })
+      : await call("save", packed);
+    return {
+      name: filename() + SAVE_EXT.project,
+      mime: "application/json",
+      bytes: new TextEncoder().encode(raw),
+      ext: SAVE_EXT.project,
+    };
   }
-  if (as === "project") await syncProjectStudy();
-  const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
-  const raw = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
+  await notes?.flush();
+  const raw = await call("export", {});
   const bytes = typeof raw === "string" ? new TextEncoder().encode(raw) : raw instanceof Uint8Array ? raw : new Uint8Array(raw);
   const name = filename() + SAVE_EXT[as];
-  const mime = as === "project" ? "application/json" : "application/octet-stream";
-  return { name, mime, bytes, ext: SAVE_EXT[as] };
+  return { name, mime: "application/octet-stream", bytes, ext: SAVE_EXT[as] };
 }
-// Save the project, or export: Noteful alone, Noteful plus the notes as
-// Markdown (page breaks marked), or a .notecomp archive holding both.
-async function save(native, as = native ? "noteful" : "project") {
+// Save the project (Ctrl+S saves full .nfedit silently), or export: .nfedit with resource
+// checkboxes, Noteful alone, or Noteful plus the notes as Markdown (page breaks marked).
+async function save(native, as = native ? "noteful" : "project", projectOptions = null) {
   if (!doc || busy()) return;
   cancelGesture();
   editing = true;
   const token = epoch;
   try {
-    await notes?.flush();
-    // Text recognized in the handwriting goes with the note, so other tools (the MCP
-    // server) and other copies find it. .noteful files have no place for it.
-    if (as !== "noteful" && as !== "markdown") await call("recognized", { pages: find.recognizedText() }).catch((e) => console.warn("Recognized text:", e));
-    if (as === "project") await syncProjectStudy();
-    const op = { project: "save", noteful: "export", markdown: "export", notecomplete: "exportNotecomplete", notepart: "exportNotecomplete" }[as];
-    const data = await call(op, as === "notecomplete" || as === "notepart" ? await addedStore.packed() : {});
+    let chosenOptions = projectOptions;
+    let packedAudio = null;
+    if (as === "project") {
+      await prepareProjectMetadata();
+      packedAudio = await addedStore.packed();
+      if (native && !chosenOptions) {
+        const breakdown = await call("projectBreakdown", packedAudio);
+        if (token !== epoch) return;
+        chosenOptions = await chooseNfeditExport({
+          $,
+          title: doc?.title || filename(),
+          breakdown,
+          actionLabel: "Export .nfedit",
+        });
+        if (!chosenOptions || token !== epoch) return;
+        if ($("exportDialog")?.open) $("exportDialog").close();
+      }
+    } else {
+      await notes?.flush();
+    }
+    const op = as === "project" ? (chosenOptions ? "exportFilteredProject" : "save") : "export";
+    const opArgs = as === "project" ? { ...(packedAudio || {}), ...(chosenOptions ? { options: chosenOptions } : {}) } : {};
+    const data = await call(op, opArgs);
     if (token !== epoch) return;
     const delivery = await download(
       data,
@@ -3754,27 +3787,28 @@ async function save(native, as = native ? "noteful" : "project") {
     if (!delivery.shared) {
       autosave.markManual();
     }
-    if (as === saveAs && !delivery.shared) {
+    if (as === saveAs && !chosenOptions && !delivery.shared) {
       dirty = changed = false;
       savedState();
       status(`Saved as ${filename()}${SAVE_EXT[as]}.`);
       return;
     }
-    if (as === "notecomplete" || as === "markdown") {
-      const takes = addedStore.list.length;
-      status(as === "markdown" ? ".noteful and .md files exported." : `.notecomp file exported: the note, its notes${takes ? ` and ${takes} added recording${takes === 1 ? "" : "s"}` : ""}.`);
+    if (as === "markdown") {
+      status(".noteful and .md files exported.");
       return;
     }
-    if (!native && !delivery.shared) {
+    if (!native && !chosenOptions && !delivery.shared) {
       dirty = changed = false;
       savedState();
     }
     status(
       delivery.shared
         ? "Choose Save in the device menu."
-        : native
-          ? ".noteful file exported."
-          : "Project saved.",
+        : chosenOptions
+          ? ".nfedit file exported."
+          : native
+            ? ".noteful file exported."
+            : "Project saved.",
     );
   } catch (e) {
     status(e.message, true);
@@ -4120,7 +4154,12 @@ function recordingState() {
   }
   clearTimeout(clockTimer);
   if (r && !r.paused) clockTimer = setTimeout(recordingState, 500);
-  $("removeAudio").hidden = !audio.selected?.added;
+  $("removeAudio").hidden = !audio.selected;
+  if (audio.selected) {
+    $("removeAudio").title = audio.selected.added
+      ? "Remove this added recording from the note"
+      : "Remove this recording from the note (undoable with Ctrl Z)";
+  }
 }
 let startingRecording = false;
 async function startRecording() {
@@ -4169,11 +4208,17 @@ $("audioFile").onchange = async () => {
 };
 $("removeAudio").onclick = async () => {
   const entry = audio.selected, button = $("removeAudio");
-  if (!entry?.added) return;
+  if (!entry) return;
   if (button.dataset.armed !== "1") { button.dataset.armed = "1"; button.textContent = "Press again to remove"; return; }
   disarmRemove();
-  await addedStore.remove(entry.added.id).catch((e) => status(e.message, true));
-  status(`${entry.added.name} removed from this note.`);
+  if (entry.added) {
+    await addedStore.remove(entry.added.id).catch((e) => status(e.message, true));
+    status(`${entry.added.name} removed from this note.`);
+    return;
+  }
+  if (!entry.asset?.id) return;
+  await action("deleteAudio", { assetId: entry.asset.id });
+  status("Recording removed. Ctrl Z restores it.");
 };
 window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.preventDefault(); e.returnValue = ""; } });
 // The open note's file on disk (desktop), so AI tools can read other pages via MCP,
@@ -4733,13 +4778,13 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "exportNotecomplete", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
-  // Noteful has no infinite page: a canvas exports to .notecomp only.
+  // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
     $(id).dataset.title ??= $(id).title;
     $(id).disabled ||= !!doc?.canvas;
-    $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.notecomp)" : $(id).dataset.title;
+    $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
   for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
@@ -6062,8 +6107,15 @@ const collabHost = {
   // Auto-save in a session: the host's switch, followed by everyone else.
   autosaveOn: () => autosave.pref(),
   // Keeping the live notes and copy helper on the sharing host.
-  exportNote: (as = "project") => exportNoteBytes(as),
-  exportAndDownload: (as = "project") => save(as === "noteful", as),
+  async pickProjectOptions(currentOptions = null) {
+    if (!doc || busy()) return null;
+    await prepareProjectMetadata();
+    const packed = await addedStore.packed();
+    const breakdown = await call("projectBreakdown", packed);
+    return chooseNfeditExport({ $, title: doc?.title || filename(), breakdown, initialOptions: currentOptions || {}, actionLabel: "Use for QR share" });
+  },
+  exportNote: (as = "project", options = null) => exportNoteBytes(as, options),
+  exportAndDownload: (as = "project", options = null) => save(as === "noteful" || (as === "project" && !!options), as, options),
   // Keeps any active collaboration autosave flag aligned.
   setSharedAutosave: (on) => autosave.setShared(on),
   // A copy of the shared note before it closes (a guest or tablet losing the session).

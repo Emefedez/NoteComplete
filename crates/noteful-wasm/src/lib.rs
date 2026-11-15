@@ -298,30 +298,55 @@ impl EditorSession {
         audio_data: &[u8],
         audio_layout: &str,
     ) -> Result<Vec<u8>, Failure> {
-        let layout: Vec<serde_json::Value> = if audio_layout.is_empty() {
-            Vec::new()
-        } else {
-            serde_json::from_str(audio_layout)?
-        };
-        let mut audio = Vec::with_capacity(layout.len());
-        let mut at = 0usize;
-        for item in layout {
-            let length = item["length"].as_u64().unwrap_or(0) as usize;
-            let end = at
-                .checked_add(length)
-                .filter(|end| *end <= audio_data.len())
-                .ok_or("Recording data is shorter than its layout")?;
-            let text = |key: &str| item[key].as_str().unwrap_or("").to_owned();
-            let meta = noteful_core::AddedAudio {
-                id: text("id"),
-                name: text("name"),
-                mime: text("mime"),
-                created: item["created"].as_f64().unwrap_or(0.0),
-            };
-            audio.push((meta, &audio_data[at..end]));
-            at = end;
-        }
+        let audio = unpack_audio(audio_data, audio_layout)?;
         Ok(self.inner.export_notecomplete_with(&audio)?)
+    }
+    /// Sets the added audio recordings stored inside `.nfedit` projects.
+    pub fn set_added_audio(
+        &mut self,
+        audio_data: &[u8],
+        audio_layout: &str,
+    ) -> Result<(), Failure> {
+        let audio = unpack_audio(audio_data, audio_layout)?
+            .into_iter()
+            .map(|(meta, bytes)| (meta, bytes.to_vec()))
+            .collect();
+        Ok(self.inner.set_added_audio(audio)?)
+    }
+    /// Metadata for added audio recordings stored inside the opened `.nfedit` project.
+    pub fn project_added_audio_meta(&self) -> Result<String, Failure> {
+        let list: Vec<_> = self
+            .inner
+            .added_audio()
+            .iter()
+            .map(|(meta, _)| meta)
+            .collect();
+        Ok(serde_json::to_string(&list)?)
+    }
+    /// Raw bytes for the `index`-th added audio recording stored inside the `.nfedit` project.
+    pub fn project_added_audio_bytes(&self, index: usize) -> Result<Vec<u8>, Failure> {
+        self.inner
+            .added_audio()
+            .get(index)
+            .map(|(_, bytes)| bytes.clone())
+            .ok_or_else(|| Failure("Audio index outside project".to_owned()))
+    }
+    /// Deletes an embedded native Noteful audio recording (undoable until compacted).
+    pub fn delete_audio(&mut self, asset_id: &str) -> Result<(), Failure> {
+        Ok(self.inner.delete_audio(asset_id)?)
+    }
+    /// Byte breakdown of optional resource categories inside a `.nfedit` project.
+    pub fn project_breakdown(&self) -> Result<String, Failure> {
+        Ok(serde_json::to_string(&self.inner.project_breakdown()?)?)
+    }
+    /// Exports `.nfedit` JSON keeping only the resources enabled in `options`.
+    pub fn export_filtered_project(&self, options: &str) -> Result<String, Failure> {
+        let parsed: noteful_core::ProjectExportOptions = if options.is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_str(options)?
+        };
+        Ok(self.inner.export_filtered_project(parsed)?)
     }
     pub fn set_locked(&mut self, page: usize, id: &str, locked: bool) -> Result<(), Failure> {
         let page = self.slot(page)?;
@@ -449,6 +474,36 @@ impl EditorSession {
     pub fn audio_bytes(&self, id: &str) -> Result<Vec<u8>, Failure> {
         Ok(self.inner.audio_bytes(id)?.to_vec())
     }
+}
+
+fn unpack_audio<'a>(
+    audio_data: &'a [u8],
+    audio_layout: &str,
+) -> Result<Vec<(noteful_core::AddedAudio, &'a [u8])>, Failure> {
+    let layout: Vec<serde_json::Value> = if audio_layout.is_empty() {
+        Vec::new()
+    } else {
+        serde_json::from_str(audio_layout)?
+    };
+    let mut audio = Vec::with_capacity(layout.len());
+    let mut at = 0usize;
+    for item in layout {
+        let length = item["length"].as_u64().unwrap_or(0) as usize;
+        let end = at
+            .checked_add(length)
+            .filter(|end| *end <= audio_data.len())
+            .ok_or("Recording data is shorter than its layout")?;
+        let text = |key: &str| item[key].as_str().unwrap_or("").to_owned();
+        let meta = noteful_core::AddedAudio {
+            id: text("id"),
+            name: text("name"),
+            mime: text("mime"),
+            created: item["created"].as_f64().unwrap_or(0.0),
+        };
+        audio.push((meta, &audio_data[at..end]));
+        at = end;
+    }
+    Ok(audio)
 }
 
 /// Sets the recognized text of every page in `pages` (JSON {slot: [word…]}) that the

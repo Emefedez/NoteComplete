@@ -289,7 +289,9 @@ impl Editor {
                 .map_err(|e| Error::new(0, e.to_string()))?;
         project["cursor"] = cursor.into();
         project["floor"] = floor.into();
-        project["version"] = if project.get("study").is_some() {
+        project["version"] = if project.get("added_audio").is_some() {
+            11
+        } else if project.get("study").is_some() {
             10
         } else {
             9

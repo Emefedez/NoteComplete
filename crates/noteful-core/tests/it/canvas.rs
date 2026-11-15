@@ -56,7 +56,7 @@ fn a_canvas_is_never_a_noteful_file() {
     e.add_line(0, stroke(vec![[100., 100.], [200., 150.]]))
         .unwrap();
     let refused = e.export_noteful().unwrap_err().to_string();
-    assert!(refused.contains(".notecomp"), "{refused}");
+    assert!(refused.contains(".nfedit"), "{refused}");
     // Its own formats keep it whole, ink included.
     let archive = Editor::open_notecomplete(&e.export_notecomplete().unwrap()).unwrap();
     assert!(archive.is_canvas());

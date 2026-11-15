@@ -147,11 +147,13 @@ impl Editor {
             )
             .collect();
         let order = self.page_order();
+        let deleted_audio = self.deleted_audio();
         // Recording page lists are slots; the host navigates by display position.
         let recordings: Vec<_> = self
             .scene
             .recordings
             .iter()
+            .filter(|r| !deleted_audio.contains(r.asset_id.as_str()))
             .map(|r| {
                 let mut r = serde_json::to_value(r).unwrap_or(Value::Null);
                 if let Some(pages) = r["pages"].as_array_mut() {
