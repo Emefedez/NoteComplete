@@ -189,3 +189,18 @@ test('imported files (WhatsApp, file picker, QR share) appear in Recent, reopen 
   assert.equal(entrySourceLabel({ source: 'local', path: '/home/u/Documents/Linear Algebra/hw1.noteful' }), 'This device / Linear Algebra');
   assert.equal(entrySourceLabel({ source: 'web', url: 'https://www.notion.so/page' }), 'Web link · notion.so');
 });
+
+test('rememberImported never overwrites an existing file already present in the library folder on disk', async () => {
+  const dir = fakeDirectory();
+  const handle = await dir.getFileHandle('Examen SO.nfedit', { create: true });
+  const w = await handle.createWritable();
+  await w.write(new Blob([new Uint8Array([9, 9, 9])]));
+  await w.close();
+
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir } });
+  const incoming = new File([new Uint8Array([1, 2, 3, 4])], 'Examen SO.nfedit', { type: 'application/json' });
+  const entry = await library.rememberImported(incoming, { origin: 'AI Exam' });
+  assert.notEqual(entry.filename, 'Examen SO.nfedit');
+  assert.deepEqual([...dir.files.get('Examen SO.nfedit')], [9, 9, 9]);
+  assert.deepEqual([...dir.files.get(entry.filename)], [1, 2, 3, 4]);
+});

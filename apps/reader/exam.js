@@ -29,7 +29,7 @@ import {
   buildSolvedExamMcpMarkdown,
 } from './exam-html.js';
 import { renderExamPdfAndTapes } from './exam-pdf.js';
-import { recordExam, resourceKeysFor } from './exam-index.js';
+import { recordExam, listExams, resourceKeysFor } from './exam-index.js';
 
 const PARALLEL_WORKERS = 4;
 
@@ -38,6 +38,84 @@ const DRAFT_KEY = 'notecomplete-exam-draft';
 
 export function safeFileBase(title = 'Exam') {
   return String(title || 'Exam').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 80) || 'Exam';
+}
+
+const stripExamExt = (name) => String(name || '').replace(/\.(nfedit|noteful|notepart|notecomp|notecomplete|pdf|html?)$/i, '').trim();
+
+/**
+ * Picks a unique exam title that will not collide with existing exam titles or
+ * `.nfedit` filenames, appending ` (2)`, ` (3)`, ... when needed.
+ * @param {string} baseTitle
+ * @param {Iterable<string>} existingNames
+ * @returns {string}
+ */
+export function uniqueExamTitle(baseTitle, existingNames = []) {
+  const clean = stripExamExt(baseTitle) || 'Exam';
+  const taken = new Set();
+  for (const name of existingNames || []) {
+    const stem = stripExamExt(name);
+    if (!stem) continue;
+    taken.add(stem.toLowerCase());
+    taken.add(safeFileBase(stem).toLowerCase());
+  }
+  const isTaken = (candidate) => {
+    const stem = stripExamExt(candidate);
+    return taken.has(stem.toLowerCase()) || taken.has(safeFileBase(stem).toLowerCase());
+  };
+  if (!isTaken(clean)) return clean;
+
+  const numbered = clean.match(/^(.*?)\s*\((\d+)\)$/);
+  const stem = (numbered ? numbered[1].trim() : clean).slice(0, 70).trim() || 'Exam';
+  let n = numbered ? Math.max(2, Number(numbered[2]) + 1) : 2;
+  while (isTaken(`${stem} (${n})`)) n++;
+  return `${stem} (${n})`;
+}
+
+/**
+ * Resolves a unique exam title against saved library entries, the exam index,
+ * and files already present on disk in the library folder so a newly generated
+ * or solved exam never overwrites an existing one.
+ * @param {string} baseTitle
+ * @param {{ library?: object }} [deps]
+ * @returns {Promise<string>}
+ */
+export async function resolveUniqueExamTitle(baseTitle, { library } = {}) {
+  const used = [];
+  if (library?.store) {
+    try {
+      const entries = await library.store.values('entries');
+      for (const e of entries || []) {
+        if (e?.title) used.push(e.title);
+        if (e?.name) used.push(e.name);
+        if (e?.filename) used.push(e.filename);
+      }
+    } catch { /* Optional library store lookup. */ }
+    try {
+      const indexed = await listExams(library.store);
+      for (const x of indexed || []) {
+        if (x?.title) used.push(x.title);
+        if (x?.fileName) used.push(x.fileName);
+      }
+    } catch { /* Optional exam index lookup. */ }
+  }
+  let candidate = uniqueExamTitle(baseTitle, used);
+  if (library?.location) {
+    try {
+      const loc = await library.location();
+      if (loc?.read) {
+        let guard = 0;
+        while (guard < 100) {
+          const fileName = `${safeFileBase(candidate)}.nfedit`;
+          const existing = await loc.read(fileName).catch(() => null);
+          if (!existing) break;
+          used.push(candidate);
+          candidate = uniqueExamTitle(baseTitle, used);
+          guard++;
+        }
+      }
+    } catch { /* Optional disk folder check. */ }
+  }
+  return candidate;
 }
 
 /**
@@ -592,8 +670,9 @@ export function examController({
         if (ac.signal.aborted) throw Error('Cancelled.');
 
         // Stage 3: Deterministic Composer (Exercise N + Steps -> NEW PAGE -> Solution N)
+        const finalSolvedTitle = await resolveUniqueExamTitle(userTitle || checkpoint.title, { library });
         const solvedExam = {
-          title: userTitle || checkpoint.title,
+          title: finalSolvedTitle,
           exercises: solved.filter(Boolean),
         };
         el('examStatus').textContent = 'Stage 3/3 · Composing alternating Exercise / Solution pages…';
@@ -904,6 +983,7 @@ export function examController({
       }
 
       if (userTitle) exam.title = userTitle;
+      exam.title = await resolveUniqueExamTitle(exam.title, { library });
       el('examStatus').textContent = 'Laying out A4 PDF and measuring answer tape…';
       job?.progress?.('Rendering PDF & tape…');
       await ensureExamMathRenderer();

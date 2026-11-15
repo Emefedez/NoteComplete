@@ -244,10 +244,20 @@ export class Library {
     if (!digest) digest = `${safeName(file.name)}:${file.size}`;
     const key = 'imported:' + digest;
     const previous = await this.store.get('entries', key);
+    const loc = await this.location();
+    const entries = await this.store.values('entries');
+    const suffix = digest.replace(/[^a-z0-9]/gi, '').slice(0, 6) || 'imp';
     let filename = previous?.filename || safeName(file.name);
-    const taken = (await this.store.values('entries')).some(e => e.filename === filename && e.key !== key);
-    if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${digest.replace(/[^a-z0-9]/gi, '').slice(0, 6) || 'imp'})$1`);
-    await (await this.location()).write(filename, file);
+    let attempt = 0;
+    while (
+      entries.some(e => e.filename === filename && e.key !== key) ||
+      (!previous && await loc.read(filename).catch(() => null))
+    ) {
+      attempt++;
+      const tag = attempt === 1 ? suffix : `${suffix}-${attempt}`;
+      filename = safeName(file.name).replace(/(\.[^.]*)?$/, ` (${tag})$1`);
+    }
+    await loc.write(filename, file);
     const entry = {
       key,
       source: 'imported',

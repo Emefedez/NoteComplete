@@ -8,7 +8,7 @@ import {
   buildSolvedExamHtml, buildSolvedExamMcpMarkdown,
 } from './exam-html.js';
 import { tapeLinesFromNormalized, A4_UNITS } from './exam-pdf.js';
-import { collectSourceLinks } from './exam.js';
+import { collectSourceLinks, uniqueExamTitle, resolveUniqueExamTitle } from './exam.js';
 import { detectExpandMode, buildExpandGuidance, summarizeExistingDocument, dedupeNewExamProblems, dedupeNewMarkdownSections } from './expand.js';
 
 test('examPrompt encodes focus modes (important, everything, random), auto vs exact count, and diverse problem kinds', () => {
@@ -332,4 +332,29 @@ test('jsonFrom repairs unescaped inner double quotes, LaTeX backslashes, and tra
   assert.match(parsed.sections[0].problems[0].prompt, /exec\("ls"\)/);
   assert.match(parsed.sections[0].problems[0].prompt, /"Listo", pasa/);
   assert.match(parsed.sections[0].problems[0].answerBox.summary, /\{"ok": 1\}/);
+});
+
+test('uniqueExamTitle and resolveUniqueExamTitle never collide with existing entries, indexed exams, or disk files', async () => {
+  assert.equal(uniqueExamTitle('Examen SO', []), 'Examen SO');
+  assert.equal(uniqueExamTitle('Examen SO', ['examen so.nfedit']), 'Examen SO (2)');
+  assert.equal(uniqueExamTitle('Examen SO', ['Examen SO', 'Examen SO (2).nfedit']), 'Examen SO (3)');
+  assert.equal(uniqueExamTitle('Examen SO (2)', ['Examen SO (2)']), 'Examen SO (3)');
+
+  const diskFiles = new Map([['Examen SO.nfedit', new Uint8Array([1, 2, 3])]]);
+  const fakeStore = {
+    values: async (name) => (name === 'entries'
+      ? [{ key: 'imported:1', name: 'Examen SO (2).nfedit', filename: 'Examen SO (2).nfedit' }]
+      : []),
+    get: async (_store, key) => (key === 'exams:index'
+      ? [{ id: 'e3', title: 'Examen SO (3)', fileName: 'Examen SO (3).nfedit' }]
+      : null),
+  };
+  const fakeLibrary = {
+    store: fakeStore,
+    location: async () => ({
+      read: async (name) => (diskFiles.has(name) ? new Blob([diskFiles.get(name)]) : null),
+    }),
+  };
+  const chosen = await resolveUniqueExamTitle('Examen SO', { library: fakeLibrary });
+  assert.equal(chosen, 'Examen SO (4)');
 });
