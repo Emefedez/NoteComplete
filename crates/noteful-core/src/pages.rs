@@ -142,11 +142,11 @@ impl Editor {
                     order.splice(at..at, slots);
                     next += pages.len();
                 }
-                Edit::MovePage { from, to } => {
-                    if *from < order.len() && *to < order.len() && from != to {
-                        let slot = order.remove(*from);
-                        order.insert(*to, slot);
-                    }
+                Edit::MovePage { from, to }
+                    if *from < order.len() && *to < order.len() && from != to =>
+                {
+                    let slot = order.remove(*from);
+                    order.insert(*to, slot);
                 }
                 _ => {}
             }

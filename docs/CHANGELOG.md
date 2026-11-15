@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.74
+
+- **`.nfedit` v10 persists quizzes, flashcards, and scratchpad notes.** `.nfedit` projects now save and restore each note's flashcard decks, quizzes, and scratchpad conversations alongside the source archive, undo history, Markdown notes, and recognized handwriting text (while preserving versions `1..=9` when empty and keeping audio recordings on-device / in `.notecomp`), and every menu item, export row, new-note format picker, and File Formats help dialog documents what `.nfedit` keeps.
+- **Share note via QR in exports.** Added **Export and share → Share note via QR…** to host `.nfedit`, `.notecomp`, or `.noteful` files with tokenized LAN/Cloudflare links and QR codes on desktop, plus direct system share/save and study QR actions on browsers and mobile.
+- **Offline progressive QR transfer for quizzes and flashcards.** Added animated multi-frame `NCQR1` QR code streaming (`deflate-raw` + CRC-32) with play/pause/speed/progress controls and camera stream scanning (`BarcodeDetector`) across **Share study material**, **Export → Share quizzes & decks via QR…**, individual flashcards decks, and saved quizzes.
+- **Android stylus hover detection & finger-panning while hovering.** Added a native Android `Window.Callback` stylus hover forwarder and DOM `PointerEvent` bridge (`__notecompleteNativeHover`), enabled pen hover preview by default on Android alongside iOS, allowed finger panning while hovering, and labeled hover vs contact events explicitly in **Help → Test pen and stylus**.
+
 ## 1.1.73
 
 - **Fixed: AI study dialogs (Fact check, Generate flashcards, Quiz me) layout.** Removed the outer `.ocr-scope` grid from `.ai-fieldset`, wrapped `#studyModel`, its magnifier/manage buttons, `Small model`, `Text only`, and `#studyModelOther` inside `.model-controls`, aligned `Language` and the AI fields to the dialog's label column on desktop, and stacked rows full-width on narrow mobile viewports (`<= 540px`).
