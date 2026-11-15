@@ -2,11 +2,12 @@
 // Each question carries the current page (image with tape lifted + its text),
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
-import { scratchButton, newId } from './scratchpad.js';
+import { scratchButton, newId, parseConversation } from './scratchpad.js';
 import { canvasImage, textBlock, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
 import { runAI } from './small-model.js';
 import { renderMarkdown, plainText, rememberAiFile } from './rich-text.js';
+import { windowOf } from './floating.js';
 
 const $ = id => document.getElementById(id);
 
@@ -29,9 +30,25 @@ export function renderAnswer(text) {
   return fragment;
 }
 
+// Clone valid { role, content } conversation messages, falling back to Markdown if needed.
+export function normalizeThreadMessages(messages = [], fallbackText = '') {
+  const source = Array.isArray(messages) && messages.length
+    ? messages
+    : (fallbackText ? parseConversation(fallbackText) : []);
+  const out = [];
+  for (const m of source) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
+    if (m.content === undefined || m.content === null) continue;
+    const content = String(m.content);
+    if (!content.trim()) continue;
+    out.push({ role: m.role, content });
+  }
+  return out;
+}
+
 // Text documents (documentInfo().unit 'section') send the section being read and
 // the selected text instead of page images; their answers have no page to go on.
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '' }) {
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '', win = null }) {
   const sectioned = () => documentInfo().unit === 'section';
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
@@ -43,7 +60,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     const body = item.querySelector('.chat-body') || item.appendChild(Object.assign(document.createElement('div'), { className: 'chat-body' }));
     return renderMarkdown(body, content, markdown).catch(() => { body.replaceChildren(renderAnswer(content)); });
   }
-  function actions(item, content) {
+  function actions(item, content, upto = history.slice()) {
     const row = document.createElement('div');
     row.className = 'chat-actions';
     const box = document.createElement('button');
@@ -59,19 +76,32 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     copy.title = 'Copy this answer';
     copy.onclick = () => navigator.clipboard.writeText(plainText(content)).then(() => status('Answer copied.'), () => status('The clipboard is not available here.', true));
     // Scratchpad: this conversation up to this answer, kept with the note.
-    const upto = history.slice(), id = conversation, title = chatTitle || history.find(m => m.role === 'user')?.content || 'Ask AI';
-    row.append(box, copy, scratchButton(keep, () => ({ id, title, messages: upto })));
+    const snap = upto.slice(), id = conversation, title = chatTitle || snap.find(m => m.role === 'user')?.content || 'Ask AI';
+    row.append(box, copy, scratchButton(keep, () => ({ id, title, messages: snap })));
     item.append(row);
   }
-  function add(role, content, note = '') {
+  function bubble(role, content, note = '') {
     const item = document.createElement('li');
     item.className = `chat-${role}`;
-    if (role === 'assistant') answer(item, content);
-    else item.textContent = content;
+    const rendered = role === 'assistant' ? answer(item, content) : null;
+    if (role !== 'assistant') item.textContent = content;
     if (note) { const small = document.createElement('small'); small.textContent = note; item.append(small); }
     $('chatMessages').append(item);
-    item.scrollIntoView({ block: 'end' });
-    return item;
+    item.scrollIntoView?.({ block: 'end' });
+    return { item, rendered };
+  }
+  function add(role, content, note = '') {
+    return bubble(role, content, note).item;
+  }
+  function setHeading(title = '') {
+    const head = $('chatPanel')?.querySelector?.('.chat-head strong');
+    if (!head) return;
+    const clean = String(title || '').replace(/\s+/g, ' ').trim();
+    const label = clean ? `Ask AI · ${clean}` : 'Ask AI';
+    const svg = head.querySelector?.('svg');
+    if (svg) head.replaceChildren(svg, document.createTextNode(label));
+    else head.textContent = label;
+    head.title = clean || 'Ask AI';
   }
   async function open() {
     if (!ai) {
@@ -128,8 +158,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     renderAttachments();
   }
   function renderAttachments() {
-    $('chatAttachments').hidden = !attachments.length;
-    $('chatAttachments').replaceChildren(...attachments.map((a, i) => {
+    const box = $('chatAttachments');
+    if (!box) return;
+    box.hidden = !attachments.length;
+    box.replaceChildren(...attachments.map((a, i) => {
       const item = document.createElement('figure'), img = document.createElement('img'), remove = document.createElement('button');
       img.src = a.url; img.alt = a.label;
       remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove'; remove.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
@@ -233,14 +265,59 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; $('chatMessages').replaceChildren(); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; $('chatMessages').replaceChildren(); setHeading(''); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
     model.load($('chatProvider').value);
   };
+  /** Load an existing conversation thread into #chatPanel without triggering an AI call. */
+  async function openThread({ id = null, title = '', messages = [], text = '', big = false } = {}) {
+    if (busy) ai?.cancel?.('chat');
+    const normalized = normalizeThreadMessages(messages, text);
+    const firstUser = normalized.find(m => m.role === 'user')?.content || '';
+    const resolvedTitle = String(title || firstUser || 'Ask AI').replace(/\s+/g, ' ').trim() || 'Ask AI';
+    history = normalized;
+    conversation = id || newId();
+    chatTitle = resolvedTitle;
+    topic = '';
+    follow = null;
+    attachments = [];
+    renderAttachments();
+
+    const list = $('chatMessages');
+    list?.replaceChildren?.();
+    const renders = [];
+    for (const [i, m] of normalized.entries()) {
+      const { item, rendered } = bubble(m.role, m.content);
+      if (m.role === 'assistant') {
+        if (rendered) renders.push(rendered);
+        actions(item, m.content, normalized.slice(0, i + 1));
+      }
+    }
+    setHeading(title || firstUser || '');
+
+    const w = win || windowOf($('chatPanel'));
+    if (big) w?.setLarge?.(true);
+    else w?.setLarge?.(false);
+
+    if (ai) {
+      await open();
+    } else if ($('chatPanel')) {
+      $('chatPanel').hidden = false;
+      if ($('chatPageLabel')) $('chatPageLabel').textContent = sectioned() ? 'This part' : 'This page';
+      if ($('chatPage')?.parentElement) $('chatPage').parentElement.title = sectioned() ? 'The part of the document you are reading' : '';
+      if ($('chatInput')) $('chatInput').placeholder = sectioned() ? 'Ask about what you are reading, or select a passage first' : 'Ask about this page, or select something first with Select';
+    }
+
+    if (big) w?.openLarge?.();
+    await Promise.all(renders);
+    list?.lastElementChild?.scrollIntoView?.({ block: 'end' });
+    $('chatInput')?.focus?.();
+  }
   return {
     attach,
+    openThread,
     // A conversation started in a quiz or flashcard window carries on here: its topic goes
     // with every request until New, its turns join the history, then the new question is asked.
     async continueThread({ title, about, messages = [], image = null, label = 'the part of the notes it is about', extraImages = [], useNote = false, question, onAnswer = null }) {

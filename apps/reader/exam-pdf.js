@@ -115,6 +115,18 @@ async function pageElementToJpeg(pageEl, widthPx = 1488, heightPx = 2104) {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
+async function waitForHostImages(host) {
+  const imgs = Array.from(host.querySelectorAll('img'));
+  await Promise.all(imgs.map((im) => {
+    if (im.complete && im.naturalWidth > 0) return Promise.resolve();
+    if (typeof im.decode === 'function') return im.decode().catch(() => {});
+    return new Promise((resolve) => {
+      im.addEventListener('load', resolve, { once: true });
+      im.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
 async function webFallbackPdf(html, title, call) {
   const host = document.createElement('div');
   Object.assign(host.style, {
@@ -129,6 +141,7 @@ async function webFallbackPdf(html, title, call) {
   }
   document.body.append(host);
   try {
+    await waitForHostImages(host);
     const { pages, tapes } = paginateAndMeasureDom(host);
     const jpegs = [];
     for (const p of pages) {

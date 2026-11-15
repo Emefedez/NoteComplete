@@ -5,9 +5,8 @@
 //! positions to slots with `Editor::slot`.
 use crate::{
     editor::Edit,
-    export::f,
     scene::{color, Page},
-    Editor, Error, PdfBackground, Result, WireValue as V,
+    Editor, Error, PdfBackground, Result,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
@@ -475,24 +474,9 @@ impl Editor {
     pub(crate) fn inserted_background(page: &NewPage) -> Vec<crate::Field> {
         match &page.pdf {
             Some(p) => {
-                let mut bg = vec![
-                    f(0, 0x11, V::UInt(1)),
-                    f(1, 0x21, V::Pair(page.size)),
-                    f(2, 1, V::UInt(0)),
-                    f(3, 2, V::UInt(p.page_index)),
-                    f(4, 5, V::Text(p.resource.clone())),
-                    f(5, 2, V::UInt(0)),
-                ];
-                if let Some(r) = p.rect {
-                    bg.push(f(9, 0x23, V::Rect(r)));
-                }
-                bg
+                crate::native::pdf_background_fields(page.size, &p.resource, p.page_index, p.rect)
             }
-            None => vec![
-                f(0, 1, V::UInt(0)),
-                f(1, 0x21, V::Pair(page.size)),
-                f(6, 5, V::Text("{\"pc\":16777215}".into())),
-            ],
+            None => crate::native::blank_background_fields(page.size),
         }
     }
     /// The NewPage behind an inserted slot.

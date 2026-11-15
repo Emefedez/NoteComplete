@@ -88,7 +88,10 @@ export function allQuizzes({
   appendNotes = null,
   canNote = () => false,
   markdown = null,
+  onOpenScratchChat = null,
+  openScratch = null,
 }) {
+  const openScratchChat = onOpenScratchChat || openScratch;
   let data = null;
   const scopes = { quizzes: 'note', decks: 'note', exams: 'note', scratch: 'note' };
 
@@ -342,6 +345,27 @@ export function allQuizzes({
         };
 
         const extras = [];
+        if (openScratchChat) {
+          const askBtn = document.createElement('button');
+          askBtn.type = 'button';
+          askBtn.className = 'scratch-open-chat';
+          askBtn.title = 'Open in Ask AI';
+          askBtn.setAttribute('aria-label', 'Open in Ask AI');
+          const label = document.createElement('span');
+          label.textContent = 'Open in Ask AI';
+          askBtn.append(icon('spark'), label);
+          askBtn.onclick = async () => {
+            try {
+              $('allQuizzesDialog')?.close?.();
+              await openScratchChat(entry, { fp: g.fp, doc: g.doc, current });
+            } catch (error) {
+              const msg = error?.message || String(error);
+              status?.(msg, true);
+              if ($('allQuizzesStatus')) $('allQuizzesStatus').textContent = msg;
+            }
+          };
+          extras.push(askBtn);
+        }
         if (g.fp !== current && g.doc?.entryKey) {
           extras.push(makeIconBtn('open', `Open note “${heading}”`, async () => {
             if (await openEntry(g.doc.entryKey)) $('allQuizzesDialog').close();

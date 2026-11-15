@@ -122,9 +122,1183 @@ export function renderRichExamHtml(value, katex = katexMod) {
   }).join('');
 }
 
+// ---- Structured Math / Engineering Visuals & Safe SVG Sanitizers ----
+
+const MATH_FUNCS = Object.assign(Object.create(null), {
+  sin: Math.sin,
+  cos: Math.cos,
+  tan: Math.tan,
+  asin: Math.asin,
+  acos: Math.acos,
+  atan: Math.atan,
+  sinh: Math.sinh,
+  cosh: Math.cosh,
+  tanh: Math.tanh,
+  sqrt: Math.sqrt,
+  cbrt: Math.cbrt,
+  abs: Math.abs,
+  ln: Math.log,
+  log: (v, base) => (base == null ? Math.log(v) : Math.log(v) / Math.log(base)),
+  log10: Math.log10,
+  log2: Math.log2,
+  exp: Math.exp,
+  floor: Math.floor,
+  ceil: Math.ceil,
+  round: Math.round,
+  sign: Math.sign,
+  min: Math.min,
+  max: Math.max,
+});
+
+const MATH_CONSTS = Object.assign(Object.create(null), {
+  pi: Math.PI,
+  π: Math.PI,
+  e: Math.E,
+  tau: Math.PI * 2,
+});
+
+/**
+ * Pure, safe recursive-descent mathematical expression evaluator (no eval/Function).
+ * Supports +, -, *, /, %, ^, **, parentheses, implicit multiplication (2x, 2sin(x)), and common math functions.
+ */
+export function evalMathExpr(expr, vars = { x: 0 }) {
+  const src = String(expr ?? '').trim();
+  if (!src || src.length > 300) return NaN;
+  const normSrc = src
+    .replace(/−/g, '-')
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/π/g, 'pi');
+
+  // Tokenize
+  const rawTokens = [];
+  let i = 0;
+  while (i < normSrc.length) {
+    const ch = normSrc[i];
+    if (/\s/.test(ch)) { i++; continue; }
+    if (/\d/.test(ch) || (ch === '.' && /\d/.test(normSrc[i + 1] || ''))) {
+      let end = i + 1;
+      while (end < normSrc.length && /[\d.]/.test(normSrc[end])) end++;
+      if ((normSrc[end] === 'e' || normSrc[end] === 'E') && /[+\-\d]/.test(normSrc[end + 1] || '')) {
+        end++;
+        if (normSrc[end] === '+' || normSrc[end] === '-') end++;
+        while (end < normSrc.length && /\d/.test(normSrc[end])) end++;
+      }
+      const num = Number(normSrc.slice(i, end));
+      if (!Number.isFinite(num)) return NaN;
+      rawTokens.push({ t: 'num', v: num });
+      i = end;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) {
+      let end = i + 1;
+      while (end < normSrc.length && /[A-Za-z0-9_]/.test(normSrc[end])) end++;
+      rawTokens.push({ t: 'id', v: normSrc.slice(i, end) });
+      i = end;
+      continue;
+    }
+    if (ch === '*' && normSrc[i + 1] === '*') {
+      rawTokens.push({ t: 'op', v: '^' });
+      i += 2;
+      continue;
+    }
+    if ('+-*/%^(),'.includes(ch)) {
+      rawTokens.push({ t: ch === '(' || ch === ')' || ch === ',' ? ch : 'op', v: ch });
+      i++;
+      continue;
+    }
+    return NaN;
+  }
+
+  // Insert implicit multiplication tokens (e.g. 2x, 3(x+1), (x+1)(x-1), 2sin(x))
+  const tokens = [];
+  for (let k = 0; k < rawTokens.length; k++) {
+    const cur = rawTokens[k];
+    const prev = tokens[tokens.length - 1];
+    if (prev) {
+      const prevIsVal = prev.t === 'num' || prev.t === ')' || (prev.t === 'id' && !(prev.v.toLowerCase() in MATH_FUNCS));
+      const curStartsVal = cur.t === 'num' || cur.t === '(' || cur.t === 'id';
+      if (prevIsVal && curStartsVal) tokens.push({ t: 'op', v: '*' });
+    }
+    tokens.push(cur);
+  }
+
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+
+  function parseExpr() {
+    let val = parseTerm();
+    while (peek()?.t === 'op' && (peek().v === '+' || peek().v === '-')) {
+      const op = next().v;
+      const rhs = parseTerm();
+      val = op === '+' ? val + rhs : val - rhs;
+    }
+    return val;
+  }
+
+  function parseTerm() {
+    let val = parseUnary();
+    while (peek()?.t === 'op' && (peek().v === '*' || peek().v === '/' || peek().v === '%')) {
+      const op = next().v;
+      const rhs = parseUnary();
+      val = op === '*' ? val * rhs : op === '/' ? val / rhs : val % rhs;
+    }
+    return val;
+  }
+
+  function parseUnary() {
+    if (peek()?.t === 'op' && (peek().v === '+' || peek().v === '-')) {
+      const op = next().v;
+      const v = parseUnary();
+      return op === '-' ? -v : v;
+    }
+    return parsePower();
+  }
+
+  function parsePower() {
+    const base = parseAtom();
+    if (peek()?.t === 'op' && peek().v === '^') {
+      next();
+      const exp = parseUnary();
+      return Math.pow(base, exp);
+    }
+    return base;
+  }
+
+  function parseAtom() {
+    const tok = next();
+    if (!tok) return NaN;
+    if (tok.t === 'num') return tok.v;
+    if (tok.t === '(') {
+      const val = parseExpr();
+      if (next()?.t !== ')') return NaN;
+      return val;
+    }
+    if (tok.t === 'id') {
+      const lower = tok.v.toLowerCase();
+      if (peek()?.t === '(' && lower in MATH_FUNCS) {
+        next(); // consume '('
+        const args = [];
+        if (peek()?.t !== ')') {
+          args.push(parseExpr());
+          while (peek()?.t === ',') {
+            next();
+            args.push(parseExpr());
+          }
+        }
+        if (next()?.t !== ')') return NaN;
+        return MATH_FUNCS[lower](...args);
+      }
+      if (vars && Object.prototype.hasOwnProperty.call(vars, tok.v)) return Number(vars[tok.v]);
+      if (vars && Object.prototype.hasOwnProperty.call(vars, lower)) return Number(vars[lower]);
+      if (lower in MATH_CONSTS) return MATH_CONSTS[lower];
+      return NaN;
+    }
+    return NaN;
+  }
+
+  const out = parseExpr();
+  if (pos !== tokens.length || !Number.isFinite(out)) return NaN;
+  return out;
+}
+
+const SAFE_SVG_TAGS = new Set([
+  'svg', 'g', 'defs', 'line', 'rect', 'circle', 'ellipse',
+  'path', 'polygon', 'polyline', 'text', 'tspan', 'marker',
+]);
+const DROP_WITH_CONTENT_TAGS = new Set([
+  'script', 'style', 'foreignobject', 'iframe', 'object', 'embed', 'audio', 'video',
+]);
+const SVG_ATTR_CASE = {
+  viewbox: 'viewBox',
+  preserveaspectratio: 'preserveAspectRatio',
+  markerwidth: 'markerWidth',
+  markerheight: 'markerHeight',
+  refx: 'refX',
+  refy: 'refY',
+  markerunits: 'markerUnits',
+};
+const SAFE_SVG_ATTRS = new Set([
+  'xmlns', 'viewbox', 'preserveaspectratio', 'width', 'height',
+  'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'dx', 'dy',
+  'd', 'points', 'transform', 'fill', 'fill-opacity', 'fill-rule',
+  'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset',
+  'stroke-linecap', 'stroke-linejoin', 'stroke-opacity', 'opacity',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor',
+  'dominant-baseline', 'id', 'class', 'style',
+  'markerwidth', 'markerheight', 'refx', 'refy', 'orient', 'markerunits',
+  'marker-start', 'marker-mid', 'marker-end',
+]);
+const SAFE_STYLE_PROPS = new Set([
+  'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-dasharray',
+  'stroke-linecap', 'stroke-linejoin', 'stroke-opacity', 'opacity',
+  'font-size', 'font-weight', 'font-style', 'font-family', 'text-anchor',
+  'dominant-baseline', 'display',
+]);
+
+function sanitizeSvgStyle(rawStyle) {
+  return String(rawStyle || '')
+    .split(';')
+    .map((decl) => {
+      const idx = decl.indexOf(':');
+      if (idx === -1) return '';
+      const prop = decl.slice(0, idx).trim().toLowerCase();
+      const val = decl.slice(idx + 1).trim();
+      if (!SAFE_STYLE_PROPS.has(prop) || !val) return '';
+      if (/url\(|expression\(|javascript:|vbscript:|data:/i.test(val)) return '';
+      return `${prop}:${val}`;
+    })
+    .filter(Boolean)
+    .join(';');
+}
+
+/**
+ * Strictly sanitizes raw SVG markup into safe pure SVG primitives (`<svg>`, `<g>`, `<defs>`,
+ * `<line>`, `<rect>`, `<circle>`, `<ellipse>`, `<path>`, `<polygon>`, `<polyline>`, `<text>`, `<tspan>`, `<marker>`).
+ * Strips scripts, foreignObject, images, use, event handlers, and unsafe URLs.
+ */
+export function sanitizeSvg(rawSvg) {
+  const src = String(rawSvg ?? '').trim();
+  if (!src) return '';
+  const match = src.match(/<svg\b[\s\S]*?<\/svg>|<svg\b[^>]*\/>/i);
+  if (!match) return '';
+  let body = match[0]
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, '')
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+  for (const dangerous of DROP_WITH_CONTENT_TAGS) {
+    body = body.replace(new RegExp(`<${dangerous}\\b[\\s\\S]*?<\\/${dangerous}>`, 'gi'), '');
+    body = body.replace(new RegExp(`<${dangerous}\\b[^>]*\\/?>`, 'gi'), '');
+  }
+
+  const out = [];
+  const stack = [];
+  let cursor = 0;
+  const tagRe = /<(\/?)([A-Za-z][A-Za-z0-9:_-]*)([^>]*?)(\/?)>/g;
+  let m;
+  while ((m = tagRe.exec(body)) !== null) {
+    if (m.index > cursor) {
+      const txt = body.slice(cursor, m.index)
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      if (txt) out.push(escapeHtml(txt));
+    }
+    cursor = m.index + m[0].length;
+    const isClose = m[1] === '/';
+    const rawName = m[2].includes(':') ? m[2].split(':').pop() : m[2];
+    const tag = rawName.toLowerCase();
+    const attrText = m[3] || '';
+    const selfClose = m[4] === '/';
+
+    if (!SAFE_SVG_TAGS.has(tag)) continue;
+    if (isClose) {
+      while (stack.length) {
+        const top = stack.pop();
+        out.push(`</${top}>`);
+        if (top === tag) break;
+      }
+      continue;
+    }
+
+    const attrs = new Map();
+    const attrRe = /([A-Za-z_:][A-Za-z0-9_.:-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+    let am;
+    while ((am = attrRe.exec(attrText)) !== null) {
+      const rawKey = am[1];
+      const lowerKey = rawKey.toLowerCase();
+      if (lowerKey.startsWith('on') || !SAFE_SVG_ATTRS.has(lowerKey)) continue;
+      const val = am[2] ?? am[3] ?? am[4] ?? '';
+      if (/javascript:|vbscript:|data:|expression\s*\(/i.test(val)) continue;
+      if (/url\(/i.test(val)) {
+        if (!/^marker-(start|mid|end)$/.test(lowerKey) || !/^url\(\s*#[A-Za-z_][A-Za-z0-9_-]*\s*\)$/.test(val.trim())) {
+          continue;
+        }
+      }
+      const cleanVal = lowerKey === 'style' ? sanitizeSvgStyle(val) : val;
+      if (lowerKey === 'style' && !cleanVal) continue;
+      const canonKey = SVG_ATTR_CASE[lowerKey] || lowerKey;
+      attrs.set(canonKey, cleanVal);
+    }
+
+    if (tag === 'svg') {
+      attrs.set('xmlns', 'http://www.w3.org/2000/svg');
+      if (!attrs.has('viewBox')) attrs.set('viewBox', '0 0 520 260');
+    }
+
+    const attrStr = [...attrs.entries()]
+      .map(([k, v]) => ` ${k}="${escapeHtml(v)}"`)
+      .join('');
+    out.push(`<${tag}${attrStr}${selfClose ? '/>' : '>'}`);
+    if (!selfClose) stack.push(tag);
+  }
+  if (cursor < body.length) {
+    out.push(escapeHtml(body.slice(cursor)));
+  }
+  while (stack.length) {
+    out.push(`</${stack.pop()}>`);
+  }
+  const finalSvg = out.join('');
+  return finalSvg.startsWith('<svg') ? finalSvg : '';
+}
+
+const VISUAL_PALETTE = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4f46e5'];
+const DATA_IMG_URI_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i;
+
+function clampBbox01(bbox) {
+  if (!bbox) return null;
+  const arr = Array.isArray(bbox)
+    ? bbox
+    : typeof bbox === 'object'
+      ? [bbox.x ?? bbox.left, bbox.y ?? bbox.top, bbox.w ?? bbox.width, bbox.h ?? bbox.height]
+      : null;
+  if (!arr || arr.length < 4) return null;
+  const nums = arr.slice(0, 4).map(Number);
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  const x = Math.max(0, Math.min(0.99, nums[0]));
+  const y = Math.max(0, Math.min(0.99, nums[1]));
+  const w = Math.max(0, Math.min(1 - x, nums[2]));
+  const h = Math.max(0, Math.min(1 - y, nums[3]));
+  if (w < 0.01 || h < 0.01) return null;
+  return [Number(x.toFixed(4)), Number(y.toFixed(4)), Number(w.toFixed(4)), Number(h.toFixed(4))];
+}
+
+function safeColor(c, fallback = '#2563eb') {
+  const s = String(c || '').trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(s) || /^[a-z]{3,20}$/i.test(s)) return s;
+  return fallback;
+}
+
+/** Normalizes any structured visual / figure spec (`plot`, `histogram`, `timeline`, `tree`, `graph_nodes`, `custom_svg`, `cutout`). */
+export function normalizeVisualSpec(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const rawType = String(raw.type || raw.kind || '').trim().toLowerCase();
+  const caption = String(raw.caption ?? raw.title ?? '').trim();
+  const blank = Boolean(raw.blank ?? raw.fill ?? raw.empty);
+
+  if (['cutout', 'crop', 'image', 'source_image'].includes(rawType)) {
+    const rawUrl = String(raw.dataUrl || raw.src || '').replace(/\s+/g, '');
+    const dataUrl = DATA_IMG_URI_RE.test(rawUrl) ? rawUrl : '';
+    const bbox = raw.bbox != null ? clampBbox01(raw.bbox) : null;
+    const sourceIndex = Number.isInteger(Number(raw.sourceIndex)) && Number(raw.sourceIndex) >= 0 ? Number(raw.sourceIndex) : 0;
+    const page = Number.isInteger(Number(raw.page)) && Number(raw.page) >= 1 ? Number(raw.page) : null;
+    const imageIndex = Number.isInteger(Number(raw.imageIndex)) && Number(raw.imageIndex) >= 0 ? Number(raw.imageIndex) : null;
+    if (!dataUrl && page == null && imageIndex == null) return null;
+    return {
+      type: 'cutout',
+      dataUrl,
+      sourceIndex,
+      page,
+      imageIndex,
+      bbox,
+      caption,
+      alt: String(raw.alt || caption || 'Source figure').trim(),
+    };
+  }
+
+  if (['plot', 'graph', 'function', 'axes', 'curve'].includes(rawType)) {
+    let xMin = Number.isFinite(Number(raw.xMin)) ? Number(raw.xMin) : -5;
+    let xMax = Number.isFinite(Number(raw.xMax)) ? Number(raw.xMax) : 5;
+    if (xMax <= xMin) { xMin = -5; xMax = 5; }
+    let yMin = Number.isFinite(Number(raw.yMin)) ? Number(raw.yMin) : -5;
+    let yMax = Number.isFinite(Number(raw.yMax)) ? Number(raw.yMax) : 5;
+    if (yMax <= yMin) { yMin = -5; yMax = 5; }
+    const fnsRaw = Array.isArray(raw.functions) ? raw.functions : Array.isArray(raw.curves) ? raw.curves : Array.isArray(raw.series) ? raw.series : [];
+    const functions = fnsRaw
+      .map((f, idx) => {
+        if (typeof f === 'string') return { expr: f, points: null, label: f, color: VISUAL_PALETTE[idx % VISUAL_PALETTE.length], dashed: false };
+        if (!f || typeof f !== 'object') return null;
+        const expr = String(f.expr ?? f.fn ?? f.formula ?? '').trim();
+        const points = Array.isArray(f.points)
+          ? f.points.filter((pt) => Array.isArray(pt) && pt.length >= 2 && Number.isFinite(Number(pt[0])) && Number.isFinite(Number(pt[1]))).map((pt) => [Number(pt[0]), Number(pt[1])])
+          : null;
+        if (!expr && (!points || !points.length)) return null;
+        return {
+          expr,
+          points,
+          label: String(f.label || expr || '').trim(),
+          color: safeColor(f.color, VISUAL_PALETTE[idx % VISUAL_PALETTE.length]),
+          dashed: Boolean(f.dashed),
+        };
+      })
+      .filter(Boolean);
+    const points = (Array.isArray(raw.points) ? raw.points : [])
+      .filter((p) => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)))
+      .map((p) => ({
+        x: Number(p.x),
+        y: Number(p.y),
+        label: String(p.label || '').trim(),
+        color: safeColor(p.color, '#dc2626'),
+        open: Boolean(p.open),
+      }));
+    const areas = (Array.isArray(raw.areas) ? raw.areas : Array.isArray(raw.shaded) ? raw.shaded : [])
+      .filter((a) => a && Number.isFinite(Number(a.from)) && Number.isFinite(Number(a.to)) && (a.expr || functions[0]?.expr))
+      .map((a) => ({
+        expr: String(a.expr || functions[0]?.expr || '').trim(),
+        y0: Number.isFinite(Number(a.y0)) ? Number(a.y0) : 0,
+        from: Math.min(Number(a.from), Number(a.to)),
+        to: Math.max(Number(a.from), Number(a.to)),
+        color: safeColor(a.color, '#3b82f6'),
+      }));
+    return {
+      type: 'plot',
+      title: String(raw.title || '').trim(),
+      caption,
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+      xStep: Number.isFinite(Number(raw.xStep)) && Number(raw.xStep) > 0 ? Number(raw.xStep) : null,
+      yStep: Number.isFinite(Number(raw.yStep)) && Number(raw.yStep) > 0 ? Number(raw.yStep) : null,
+      xLabel: String(raw.xLabel || 'x').trim(),
+      yLabel: String(raw.yLabel || 'y').trim(),
+      grid: raw.grid !== false,
+      blank,
+      functions,
+      points,
+      areas,
+    };
+  }
+
+  if (['histogram', 'bar', 'barchart', 'freq', 'frequency'].includes(rawType)) {
+    const rawBins = Array.isArray(raw.bins) ? raw.bins : Array.isArray(raw.bars) ? raw.bars : Array.isArray(raw.data) ? raw.data : [];
+    const bins = rawBins
+      .map((b, idx) => {
+        if (Array.isArray(b)) {
+          const v = b[1] == null || b[1] === '' ? null : Number(b[1]);
+          return { label: String(b[0] ?? idx + 1).trim(), value: Number.isFinite(v) ? v : null, color: VISUAL_PALETTE[idx % VISUAL_PALETTE.length] };
+        }
+        if (typeof b === 'string') return { label: b.trim(), value: null, color: VISUAL_PALETTE[idx % VISUAL_PALETTE.length] };
+        if (!b || typeof b !== 'object') return null;
+        const rawVal = b.value ?? b.count ?? b.freq ?? b.y;
+        const v = rawVal == null || rawVal === '' ? null : Number(rawVal);
+        return {
+          label: String(b.label ?? b.bin ?? b.name ?? idx + 1).trim(),
+          value: Number.isFinite(v) ? v : null,
+          color: safeColor(b.color, VISUAL_PALETTE[idx % VISUAL_PALETTE.length]),
+        };
+      })
+      .filter((b) => b && b.label);
+    if (!bins.length) return null;
+    const maxVal = Math.max(0, ...bins.map((b) => (b.value != null ? b.value : 0)));
+    const yMin = Number.isFinite(Number(raw.yMin)) ? Number(raw.yMin) : 0;
+    const yMax = Number.isFinite(Number(raw.yMax)) && Number(raw.yMax) > yMin
+      ? Number(raw.yMax)
+      : (maxVal > 0 ? Math.ceil(maxVal * 1.15) : 10);
+    return {
+      type: 'histogram',
+      title: String(raw.title || '').trim(),
+      caption,
+      xLabel: String(raw.xLabel || '').trim(),
+      yLabel: String(raw.yLabel || 'Frequency').trim(),
+      yMin,
+      yMax,
+      yStep: Number.isFinite(Number(raw.yStep)) && Number(raw.yStep) > 0 ? Number(raw.yStep) : null,
+      contiguous: typeof raw.contiguous === 'boolean' ? raw.contiguous : rawType === 'histogram' || rawType === 'freq' || rawType === 'frequency',
+      showValues: raw.showValues !== false,
+      blank: blank || bins.every((b) => b.value == null),
+      bins,
+    };
+  }
+
+  if (['timeline', 'gantt', 'cpu', 'schedule', 'timing'].includes(rawType)) {
+    const normalizeInterval = (it, idx) => {
+      if (Array.isArray(it) && it.length >= 3) {
+        const s = Number(it[1]);
+        const e = Number(it[2]);
+        if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+        return { label: String(it[0] ?? '').trim(), start: s, end: e, color: safeColor(it[3], ''), row: '' };
+      }
+      if (!it || typeof it !== 'object') return null;
+      const s = Number(it.start ?? it.from ?? it.t0);
+      const e = Number(it.end ?? it.to ?? it.t1);
+      if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+      return {
+        label: String(it.label ?? it.proc ?? it.process ?? it.name ?? `T${idx + 1}`).trim(),
+        start: s,
+        end: e,
+        color: safeColor(it.color, ''),
+        row: String(it.row || '').trim(),
+      };
+    };
+
+    const rawRows = Array.isArray(raw.rows) ? raw.rows : Array.isArray(raw.lanes) ? raw.lanes : Array.isArray(raw.processes) ? raw.processes : [];
+    const topIntervals = (Array.isArray(raw.intervals) ? raw.intervals : []).map(normalizeInterval).filter(Boolean);
+    let rows = rawRows
+      .map((r, ri) => {
+        if (typeof r === 'string') return { label: r.trim(), intervals: [] };
+        if (!r || typeof r !== 'object') return null;
+        const lbl = String(r.label ?? r.name ?? r.process ?? `Row ${ri + 1}`).trim();
+        const ivs = (Array.isArray(r.intervals) ? r.intervals : []).map(normalizeInterval).filter(Boolean);
+        return { label: lbl, intervals: ivs };
+      })
+      .filter((r) => r && r.label);
+
+    if (!rows.length) {
+      const grouped = new Map();
+      for (const iv of topIntervals) {
+        const key = iv.row || 'CPU';
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(iv);
+      }
+      rows = grouped.size
+        ? [...grouped.entries()].map(([label, intervals]) => ({ label, intervals }))
+        : [{ label: 'CPU', intervals: [] }];
+    } else if (topIntervals.length) {
+      for (const iv of topIntervals) {
+        const target = (iv.row && rows.find((r) => r.label === iv.row)) || rows[0];
+        target.intervals.push(iv);
+      }
+    }
+
+    const allIntervals = rows.flatMap((r) => r.intervals);
+    const tStart = Number.isFinite(Number(raw.tStart)) ? Number(raw.tStart) : 0;
+    const maxEnd = allIntervals.reduce((mx, iv) => Math.max(mx, iv.end), tStart);
+    const tEnd = Number.isFinite(Number(raw.tEnd)) && Number(raw.tEnd) > tStart
+      ? Number(raw.tEnd)
+      : (maxEnd > tStart ? maxEnd : tStart + 12);
+    const unit = String(raw.unit ?? 'ms').trim();
+    const markers = (Array.isArray(raw.markers) ? raw.markers : Array.isArray(raw.arrivals) ? raw.arrivals : [])
+      .filter((m) => m && Number.isFinite(Number(m.t ?? m.time)))
+      .map((m) => ({ t: Number(m.t ?? m.time), label: String(m.label || '').trim() }));
+
+    return {
+      type: 'timeline',
+      title: String(raw.title || '').trim(),
+      caption,
+      tStart,
+      tEnd,
+      tStep: Number.isFinite(Number(raw.tStep)) && Number(raw.tStep) > 0 ? Number(raw.tStep) : null,
+      unit,
+      xLabel: String(raw.xLabel || (unit ? `Time (${unit})` : 'Time')).trim(),
+      blank: blank || allIntervals.length === 0,
+      rows,
+      markers,
+    };
+  }
+
+  if (['tree', 'graph_nodes', 'fsm', 'automaton', 'network', 'dag'].includes(rawType)
+    || (!raw.svg && Array.isArray(raw.nodes) && raw.nodes.length)) {
+    const nodes = (Array.isArray(raw.nodes) ? raw.nodes : [])
+      .map((n, idx) => {
+        if (typeof n === 'string' || typeof n === 'number') {
+          return { id: String(n), label: String(n), x: null, y: null, shape: 'circle', color: '' };
+        }
+        if (!n || typeof n !== 'object') return null;
+        const id = String(n.id ?? n.name ?? n.label ?? idx).trim();
+        if (!id) return null;
+        return {
+          id,
+          label: String(n.label ?? n.name ?? id).trim(),
+          x: Number.isFinite(Number(n.x)) ? Number(n.x) : null,
+          y: Number.isFinite(Number(n.y)) ? Number(n.y) : null,
+          shape: ['circle', 'rect', 'doublecircle'].includes(String(n.shape || '').toLowerCase())
+            ? String(n.shape).toLowerCase()
+            : 'circle',
+          color: safeColor(n.color, ''),
+        };
+      })
+      .filter(Boolean);
+    if (!nodes.length) return null;
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const defaultDirected = ['tree', 'fsm', 'automaton', 'dag'].includes(rawType) || raw.directed === true;
+    const edges = (Array.isArray(raw.edges) ? raw.edges : [])
+      .map((e) => {
+        if (Array.isArray(e) && e.length >= 2) {
+          return { from: String(e[0]), to: String(e[1]), label: String(e[2] ?? '').trim(), directed: defaultDirected, dashed: false };
+        }
+        if (!e || typeof e !== 'object') return null;
+        const from = String(e.from ?? e.source ?? e.u ?? '').trim();
+        const to = String(e.to ?? e.target ?? e.v ?? '').trim();
+        if (!from || !to || !nodeIds.has(from) || !nodeIds.has(to)) return null;
+        return {
+          from,
+          to,
+          label: String(e.label ?? e.weight ?? '').trim(),
+          directed: typeof e.directed === 'boolean' ? e.directed : defaultDirected,
+          dashed: Boolean(e.dashed),
+        };
+      })
+      .filter(Boolean);
+    return {
+      type: rawType === 'tree' ? 'tree' : 'graph_nodes',
+      title: String(raw.title || '').trim(),
+      caption,
+      directed: defaultDirected,
+      nodes,
+      edges,
+    };
+  }
+
+  if (['diagram', 'circuit', 'custom_svg', 'svg'].includes(rawType) || typeof raw.svg === 'string') {
+    const clean = sanitizeSvg(raw.svg || '');
+    if (!clean) return null;
+    return {
+      type: 'custom_svg',
+      svg: clean,
+      caption,
+    };
+  }
+
+  return null;
+}
+
+function niceTickStep(span, targetTicks = 6) {
+  if (!(span > 0)) return 1;
+  const rough = span / Math.max(2, targetTicks);
+  const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+  const frac = rough / pow;
+  const nice = frac <= 1.2 ? 1 : frac <= 2.5 ? 2 : frac <= 5.5 ? 5 : 10;
+  return nice * pow;
+}
+
+function fmtTick(v) {
+  if (Math.abs(v) < 1e-9) return '0';
+  return String(Number(v.toFixed(4)));
+}
+
+function tickValues(min, max, explicitStep = null, target = 6) {
+  const step = explicitStep && explicitStep > 0 ? explicitStep : niceTickStep(max - min, target);
+  const start = Math.ceil((min - 1e-9) / step) * step;
+  const out = [];
+  for (let v = start; v <= max + 1e-9 && out.length < 40; v += step) {
+    out.push(Number(v.toFixed(6)));
+  }
+  return { step, values: out };
+}
+
+function arrowHeadPoly(x1, y1, x2, y2, size = 7, color = '#0f172a') {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const ax = x2 - size * Math.cos(angle - Math.PI / 6);
+  const ay = y2 - size * Math.sin(angle - Math.PI / 6);
+  const bx = x2 - size * Math.cos(angle + Math.PI / 6);
+  const by = y2 - size * Math.sin(angle + Math.PI / 6);
+  return `<polygon points="${x2.toFixed(1)},${y2.toFixed(1)} ${ax.toFixed(1)},${ay.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}" fill="${color}"/>`;
+}
+
+function renderPlotSvg(spec, { forMcp = false } = {}) {
+  const W = 540;
+  const H = 270;
+  const pad = { left: 48, right: 24, top: spec.title ? 30 : 18, bottom: 38 };
+  const pw = W - pad.left - pad.right;
+  const ph = H - pad.top - pad.bottom;
+  const fs = forMcp ? 13 : 10.5;
+  const mapX = (x) => pad.left + ((x - spec.xMin) / (spec.xMax - spec.xMin)) * pw;
+  const mapY = (y) => pad.top + ((spec.yMax - y) / (spec.yMax - spec.yMin)) * ph;
+
+  const els = [];
+  els.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
+  if (spec.title) {
+    els.push(`<text x="${(W / 2).toFixed(1)}" y="18" font-size="${fs + 2}" font-weight="700" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.title)}</text>`);
+  }
+
+  const xTicks = tickValues(spec.xMin, spec.xMax, spec.xStep, 8).values;
+  const yTicks = tickValues(spec.yMin, spec.yMax, spec.yStep, 6).values;
+
+  if (spec.grid) {
+    for (const xv of xTicks) {
+      const px = mapX(xv).toFixed(1);
+      els.push(`<line x1="${px}" y1="${pad.top}" x2="${px}" y2="${pad.top + ph}" stroke="#e2e8f0" stroke-width="1"/>`);
+    }
+    for (const yv of yTicks) {
+      const py = mapY(yv).toFixed(1);
+      els.push(`<line x1="${pad.left}" y1="${py}" x2="${pad.left + pw}" y2="${py}" stroke="#e2e8f0" stroke-width="1"/>`);
+    }
+  }
+
+  els.push(`<rect x="${pad.left}" y="${pad.top}" width="${pw}" height="${ph}" fill="none" stroke="#cbd5e1" stroke-width="1"/>`);
+
+  // Shaded areas under curves (when not blank)
+  if (!spec.blank) {
+    for (const area of spec.areas || []) {
+      const pts = [];
+      const steps = 60;
+      const baseY = Math.max(spec.yMin, Math.min(spec.yMax, area.y0));
+      pts.push(`${mapX(area.from).toFixed(1)},${mapY(baseY).toFixed(1)}`);
+      for (let s = 0; s <= steps; s++) {
+        const xv = area.from + ((area.to - area.from) * s) / steps;
+        const yv = evalMathExpr(area.expr, { x: xv, t: xv });
+        if (!Number.isFinite(yv)) continue;
+        const cy = Math.max(spec.yMin, Math.min(spec.yMax, yv));
+        pts.push(`${mapX(xv).toFixed(1)},${mapY(cy).toFixed(1)}`);
+      }
+      pts.push(`${mapX(area.to).toFixed(1)},${mapY(baseY).toFixed(1)}`);
+      if (pts.length >= 4) {
+        els.push(`<polygon points="${pts.join(' ')}" fill="${escapeHtml(area.color)}" fill-opacity="0.22" stroke="none"/>`);
+      }
+    }
+  }
+
+  // Axes
+  const zeroXInRange = spec.xMin <= 0 && spec.xMax >= 0;
+  const zeroYInRange = spec.yMin <= 0 && spec.yMax >= 0;
+  const axisX = zeroXInRange ? mapX(0) : pad.left;
+  const axisY = zeroYInRange ? mapY(0) : pad.top + ph;
+  els.push(`<line x1="${pad.left}" y1="${axisY.toFixed(1)}" x2="${(pad.left + pw + 6).toFixed(1)}" y2="${axisY.toFixed(1)}" stroke="#0f172a" stroke-width="1.6"/>`);
+  els.push(arrowHeadPoly(pad.left, axisY, pad.left + pw + 8, axisY, 7, '#0f172a'));
+  els.push(`<line x1="${axisX.toFixed(1)}" y1="${pad.top + ph}" x2="${axisX.toFixed(1)}" y2="${(pad.top - 6).toFixed(1)}" stroke="#0f172a" stroke-width="1.6"/>`);
+  els.push(arrowHeadPoly(axisX, pad.top + ph, axisX, pad.top - 8, 7, '#0f172a'));
+
+  // Tick marks & numbers
+  for (const xv of xTicks) {
+    if (zeroXInRange && Math.abs(xv) < 1e-9 && zeroYInRange) continue;
+    const px = mapX(xv);
+    const ty = Math.min(pad.top + ph + 13, axisY + 14);
+    els.push(`<line x1="${px.toFixed(1)}" y1="${(axisY - 3).toFixed(1)}" x2="${px.toFixed(1)}" y2="${(axisY + 3).toFixed(1)}" stroke="#334155" stroke-width="1"/>`);
+    els.push(`<text x="${px.toFixed(1)}" y="${ty.toFixed(1)}" font-size="${fs - 1}" text-anchor="middle" fill="#334155">${escapeHtml(fmtTick(xv))}</text>`);
+  }
+  for (const yv of yTicks) {
+    if (zeroYInRange && Math.abs(yv) < 1e-9 && zeroXInRange) continue;
+    const py = mapY(yv);
+    const tx = Math.max(pad.left - 6, axisX - 6);
+    els.push(`<line x1="${(axisX - 3).toFixed(1)}" y1="${py.toFixed(1)}" x2="${(axisX + 3).toFixed(1)}" y2="${py.toFixed(1)}" stroke="#334155" stroke-width="1"/>`);
+    els.push(`<text x="${tx.toFixed(1)}" y="${(py + 3.5).toFixed(1)}" font-size="${fs - 1}" text-anchor="end" fill="#334155">${escapeHtml(fmtTick(yv))}</text>`);
+  }
+
+  // Axis labels
+  if (spec.xLabel) {
+    els.push(`<text x="${(pad.left + pw).toFixed(1)}" y="${H - 6}" font-size="${fs}" font-weight="600" text-anchor="end" fill="#0f172a">${escapeHtml(spec.xLabel)}</text>`);
+  }
+  if (spec.yLabel) {
+    els.push(`<text x="${Math.max(10, axisX + 10).toFixed(1)}" y="${pad.top + 10}" font-size="${fs}" font-weight="600" text-anchor="start" fill="#0f172a">${escapeHtml(spec.yLabel)}</text>`);
+  }
+
+  // Curves (skipped when blank === true)
+  const legendItems = [];
+  if (!spec.blank) {
+    const ySpan = spec.yMax - spec.yMin;
+    for (const fn of spec.functions || []) {
+      const segs = [];
+      let cur = [];
+      let prevY = null;
+      const samples = fn.points?.length
+        ? fn.points
+        : Array.from({ length: 161 }, (_, i) => {
+            const x = spec.xMin + ((spec.xMax - spec.xMin) * i) / 160;
+            return [x, evalMathExpr(fn.expr, { x, t: x })];
+          });
+      for (const [xv, yv] of samples) {
+        if (!Number.isFinite(xv) || !Number.isFinite(yv) || yv < spec.yMin - ySpan * 0.25 || yv > spec.yMax + ySpan * 0.25) {
+          if (cur.length >= 2) segs.push(cur);
+          cur = [];
+          prevY = null;
+          continue;
+        }
+        if (prevY != null && Math.abs(yv - prevY) > ySpan * 0.9) {
+          if (cur.length >= 2) segs.push(cur);
+          cur = [];
+        }
+        const cy = Math.max(spec.yMin, Math.min(spec.yMax, yv));
+        cur.push(`${cur.length === 0 ? 'M' : 'L'}${mapX(xv).toFixed(1)},${mapY(cy).toFixed(1)}`);
+        prevY = yv;
+      }
+      if (cur.length >= 2) segs.push(cur);
+      for (const seg of segs) {
+        const dash = fn.dashed ? ' stroke-dasharray="6 4"' : '';
+        els.push(`<path d="${seg.join(' ')}" fill="none" stroke="${escapeHtml(fn.color)}" stroke-width="2.2"${dash}/>`);
+      }
+      if (fn.label) legendItems.push({ label: fn.label, color: fn.color });
+    }
+  }
+
+  // Points (shown in both blank and filled modes as given/anchor points)
+  for (const pt of spec.points || []) {
+    if (pt.x < spec.xMin || pt.x > spec.xMax || pt.y < spec.yMin || pt.y > spec.yMax) continue;
+    const px = mapX(pt.x).toFixed(1);
+    const py = mapY(pt.y).toFixed(1);
+    const fill = pt.open ? '#ffffff' : escapeHtml(pt.color);
+    els.push(`<circle cx="${px}" cy="${py}" r="4" fill="${fill}" stroke="${escapeHtml(pt.color)}" stroke-width="2"/>`);
+    if (pt.label) {
+      els.push(`<text x="${(Number(px) + 6).toFixed(1)}" y="${(Number(py) - 6).toFixed(1)}" font-size="${fs - 0.5}" font-weight="600" fill="#0f172a">${escapeHtml(pt.label)}</text>`);
+    }
+  }
+
+  if (legendItems.length) {
+    let lx = pad.left + 8;
+    const ly = pad.top + 12;
+    for (const item of legendItems.slice(0, 4)) {
+      els.push(`<line x1="${lx}" y1="${ly - 3}" x2="${lx + 14}" y2="${ly - 3}" stroke="${escapeHtml(item.color)}" stroke-width="2.4"/>`);
+      els.push(`<text x="${lx + 18}" y="${ly}" font-size="${fs - 1}" font-weight="600" fill="#0f172a">${escapeHtml(item.label)}</text>`);
+      lx += Math.min(130, 32 + item.label.length * 6.5);
+    }
+  }
+
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${els.join('')}</svg>`,
+    width: W,
+    height: H,
+  };
+}
+
+function renderHistogramSvg(spec, { forMcp = false } = {}) {
+  const W = 540;
+  const H = 260;
+  const pad = { left: 50, right: 20, top: spec.title ? 30 : 18, bottom: spec.xLabel ? 46 : 34 };
+  const pw = W - pad.left - pad.right;
+  const ph = H - pad.top - pad.bottom;
+  const fs = forMcp ? 13 : 10.5;
+  const mapY = (v) => pad.top + ((spec.yMax - v) / (spec.yMax - spec.yMin)) * ph;
+
+  const els = [];
+  els.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
+  if (spec.title) {
+    els.push(`<text x="${(W / 2).toFixed(1)}" y="18" font-size="${fs + 2}" font-weight="700" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.title)}</text>`);
+  }
+
+  const yTicks = tickValues(spec.yMin, spec.yMax, spec.yStep, 5).values;
+  for (const yv of yTicks) {
+    const py = mapY(yv).toFixed(1);
+    els.push(`<line x1="${pad.left}" y1="${py}" x2="${pad.left + pw}" y2="${py}" stroke="#e2e8f0" stroke-width="1"/>`);
+    els.push(`<line x1="${pad.left - 3}" y1="${py}" x2="${pad.left}" y2="${py}" stroke="#334155" stroke-width="1"/>`);
+    els.push(`<text x="${pad.left - 6}" y="${(Number(py) + 3.5).toFixed(1)}" font-size="${fs - 1}" text-anchor="end" fill="#334155">${escapeHtml(fmtTick(yv))}</text>`);
+  }
+
+  const n = spec.bins.length;
+  const slotW = pw / n;
+  const gap = spec.contiguous ? 0 : Math.min(14, slotW * 0.22);
+  const barW = Math.max(8, slotW - gap);
+
+  spec.bins.forEach((bin, i) => {
+    const bx = pad.left + i * slotW + gap / 2;
+    const cx = bx + barW / 2;
+    // Vertical column guide when blank
+    if (spec.blank || bin.value == null) {
+      els.push(`<rect x="${bx.toFixed(1)}" y="${pad.top}" width="${barW.toFixed(1)}" height="${ph}" fill="#f8fafc" fill-opacity="0.45" stroke="#cbd5e1" stroke-width="1"/>`);
+    } else {
+      const clampedVal = Math.max(spec.yMin, Math.min(spec.yMax, bin.value));
+      const topY = mapY(clampedVal);
+      const bh = Math.max(1, pad.top + ph - topY);
+      els.push(`<rect x="${bx.toFixed(1)}" y="${topY.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${escapeHtml(bin.color)}" fill-opacity="0.78" stroke="#1e293b" stroke-width="1.2"/>`);
+      if (spec.showValues) {
+        els.push(`<text x="${cx.toFixed(1)}" y="${Math.max(pad.top + 10, topY - 4).toFixed(1)}" font-size="${fs - 1}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(fmtTick(bin.value))}</text>`);
+      }
+    }
+    els.push(`<text x="${cx.toFixed(1)}" y="${(pad.top + ph + 14).toFixed(1)}" font-size="${fs - 1}" text-anchor="middle" fill="#1e293b">${escapeHtml(bin.label)}</text>`);
+  });
+
+  // Axes
+  els.push(`<line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + ph}" stroke="#0f172a" stroke-width="1.6"/>`);
+  els.push(`<line x1="${pad.left}" y1="${pad.top + ph}" x2="${pad.left + pw}" y2="${pad.top + ph}" stroke="#0f172a" stroke-width="1.6"/>`);
+
+  if (spec.yLabel) {
+    els.push(`<text x="14" y="${(pad.top + ph / 2).toFixed(1)}" font-size="${fs}" font-weight="600" text-anchor="middle" fill="#0f172a" transform="rotate(-90 14 ${(pad.top + ph / 2).toFixed(1)})">${escapeHtml(spec.yLabel)}</text>`);
+  }
+  if (spec.xLabel) {
+    els.push(`<text x="${(pad.left + pw / 2).toFixed(1)}" y="${H - 6}" font-size="${fs}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.xLabel)}</text>`);
+  }
+
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${els.join('')}</svg>`,
+    width: W,
+    height: H,
+  };
+}
+
+function renderTimelineSvg(spec, { forMcp = false } = {}) {
+  const W = 560;
+  const maxLblLen = spec.rows.reduce((m, r) => Math.max(m, r.label.length), 3);
+  const leftPad = Math.max(54, Math.min(120, 18 + maxLblLen * 7));
+  const topPad = (spec.title ? 30 : 14) + (spec.markers?.length ? 16 : 0);
+  const bottomPad = 38;
+  const laneH = Math.max(28, Math.min(44, Math.floor(170 / Math.max(1, spec.rows.length))));
+  const ph = spec.rows.length * laneH;
+  const H = topPad + ph + bottomPad;
+  const pad = { left: leftPad, right: 20, top: topPad, bottom: bottomPad };
+  const pw = W - pad.left - pad.right;
+  const fs = forMcp ? 12.5 : 10.5;
+  const mapT = (t) => pad.left + ((t - spec.tStart) / (spec.tEnd - spec.tStart)) * pw;
+
+  const els = [];
+  els.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
+  if (spec.title) {
+    els.push(`<text x="${(W / 2).toFixed(1)}" y="18" font-size="${fs + 2}" font-weight="700" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.title)}</text>`);
+  }
+
+  // Deterministic colors per interval label
+  const colorMap = new Map();
+  const colorFor = (label, explicit) => {
+    if (explicit) return explicit;
+    const key = String(label || '').toUpperCase();
+    if (/^(IDLE|WAIT|STALL|-)$/.test(key)) return '#e2e8f0';
+    if (!colorMap.has(key)) colorMap.set(key, VISUAL_PALETTE[colorMap.size % VISUAL_PALETTE.length]);
+    return colorMap.get(key);
+  };
+
+  // Lanes background
+  spec.rows.forEach((row, ri) => {
+    const ry = pad.top + ri * laneH;
+    els.push(`<rect x="${pad.left}" y="${ry}" width="${pw}" height="${laneH}" fill="${ri % 2 === 0 ? '#ffffff' : '#f8fafc'}" stroke="#cbd5e1" stroke-width="1"/>`);
+    els.push(`<text x="${pad.left - 8}" y="${(ry + laneH / 2 + 4).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="end" fill="#0f172a">${escapeHtml(row.label)}</text>`);
+  });
+
+  // Vertical time gridlines & bottom ticks
+  const ticks = tickValues(spec.tStart, spec.tEnd, spec.tStep, 12).values;
+  for (const tv of ticks) {
+    const px = mapT(tv).toFixed(1);
+    els.push(`<line x1="${px}" y1="${pad.top}" x2="${px}" y2="${pad.top + ph}" stroke="#cbd5e1" stroke-width="1"/>`);
+    els.push(`<line x1="${px}" y1="${pad.top + ph}" x2="${px}" y2="${pad.top + ph + 4}" stroke="#0f172a" stroke-width="1.2"/>`);
+    els.push(`<text x="${px}" y="${pad.top + ph + 15}" font-size="${fs - 1}" text-anchor="middle" fill="#334155">${escapeHtml(fmtTick(tv))}</text>`);
+  }
+
+  // Intervals (skipped if blank === true)
+  if (!spec.blank) {
+    spec.rows.forEach((row, ri) => {
+      const ry = pad.top + ri * laneH + 4;
+      const ih = Math.max(14, laneH - 8);
+      for (const iv of row.intervals || []) {
+        const s = Math.max(spec.tStart, Math.min(spec.tEnd, iv.start));
+        const e = Math.max(spec.tStart, Math.min(spec.tEnd, iv.end));
+        if (e <= s) continue;
+        const x1 = mapT(s);
+        const x2 = mapT(e);
+        const bw = Math.max(2, x2 - x1);
+        const fill = colorFor(iv.label, iv.color);
+        const isIdle = fill === '#e2e8f0';
+        els.push(`<rect x="${x1.toFixed(1)}" y="${ry}" width="${bw.toFixed(1)}" height="${ih}" rx="3" fill="${escapeHtml(fill)}" fill-opacity="${isIdle ? '0.9' : '0.82'}" stroke="#1e293b" stroke-width="1.2"/>`);
+        if (iv.label && bw >= 16) {
+          const textColor = isIdle ? '#475569' : '#ffffff';
+          els.push(`<text x="${(x1 + bw / 2).toFixed(1)}" y="${(ry + ih / 2 + 3.5).toFixed(1)}" font-size="${fs - 0.5}" font-weight="700" text-anchor="middle" fill="${textColor}">${escapeHtml(iv.label)}</text>`);
+        }
+      }
+    });
+  }
+
+  // Optional arrival / deadline markers
+  for (const mk of spec.markers || []) {
+    if (mk.t < spec.tStart || mk.t > spec.tEnd) continue;
+    const mx = mapT(mk.t).toFixed(1);
+    els.push(`<line x1="${mx}" y1="${pad.top - 5}" x2="${mx}" y2="${pad.top + ph}" stroke="#dc2626" stroke-width="1.4"/>`);
+    if (mk.label) {
+      els.push(`<text x="${mx}" y="${pad.top - 8}" font-size="${fs - 1.5}" font-weight="600" text-anchor="middle" fill="#dc2626">${escapeHtml(mk.label)}</text>`);
+    }
+  }
+
+  els.push(`<rect x="${pad.left}" y="${pad.top}" width="${pw}" height="${ph}" fill="none" stroke="#0f172a" stroke-width="1.4"/>`);
+  if (spec.xLabel) {
+    els.push(`<text x="${(pad.left + pw / 2).toFixed(1)}" y="${H - 5}" font-size="${fs}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.xLabel)}</text>`);
+  }
+
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${els.join('')}</svg>`,
+    width: W,
+    height: H,
+  };
+}
+
+function renderGraphSvg(spec, { forMcp = false } = {}) {
+  const W = 520;
+  const H = 260;
+  const pad = { x: 46, y: spec.title ? 46 : 34, bottom: 32 };
+  const fs = forMcp ? 13 : 11;
+  const nodes = spec.nodes.map((n) => ({ ...n }));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  const hasCoords = nodes.every((n) => n.x != null && n.y != null);
+  if (hasCoords) {
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanX = maxX - minX || 1;
+    const spanY = maxY - minY || 1;
+    for (const n of nodes) {
+      n.px = pad.x + ((n.x - minX) / spanX) * (W - pad.x * 2);
+      n.py = pad.y + ((n.y - minY) / spanY) * (H - pad.y - pad.bottom);
+    }
+  } else if (spec.type === 'tree') {
+    // BFS level layout
+    const inDeg = new Map(nodes.map((n) => [n.id, 0]));
+    const adj = new Map(nodes.map((n) => [n.id, []]));
+    for (const e of spec.edges) {
+      adj.get(e.from)?.push(e.to);
+      inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1);
+    }
+    const roots = nodes.filter((n) => (inDeg.get(n.id) || 0) === 0);
+    const queue = (roots.length ? roots : [nodes[0]]).map((n) => ({ id: n.id, depth: 0 }));
+    const depthOf = new Map();
+    while (queue.length) {
+      const { id, depth } = queue.shift();
+      if (depthOf.has(id)) continue;
+      depthOf.set(id, depth);
+      for (const nxt of adj.get(id) || []) {
+        if (!depthOf.has(nxt)) queue.push({ id: nxt, depth: depth + 1 });
+      }
+    }
+    for (const n of nodes) if (!depthOf.has(n.id)) depthOf.set(n.id, 0);
+    const layers = new Map();
+    for (const n of nodes) {
+      const d = depthOf.get(n.id);
+      if (!layers.has(d)) layers.set(d, []);
+      layers.get(d).push(n);
+    }
+    const maxDepth = Math.max(1, ...layers.keys());
+    const usableW = W - pad.x * 2;
+    const usableH = H - pad.y - pad.bottom;
+    for (const [d, list] of layers.entries()) {
+      const y = layers.size === 1 ? pad.y + usableH / 2 : pad.y + (d / maxDepth) * usableH;
+      list.forEach((n, idx) => {
+        n.px = pad.x + ((idx + 1) / (list.length + 1)) * usableW;
+        n.py = y;
+      });
+    }
+  } else {
+    // Circle layout
+    const cx = W / 2;
+    const cy = (pad.y + H - pad.bottom) / 2;
+    const rx = Math.min(W * 0.36, 175);
+    const ry = Math.min((H - pad.y - pad.bottom) * 0.42, 85);
+    nodes.forEach((n, i) => {
+      const ang = -Math.PI / 2 + (2 * Math.PI * i) / nodes.length;
+      n.px = nodes.length === 1 ? cx : cx + rx * Math.cos(ang);
+      n.py = nodes.length === 1 ? cy : cy + ry * Math.sin(ang);
+    });
+  }
+
+  const els = [];
+  els.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
+  if (spec.title) {
+    els.push(`<text x="${(W / 2).toFixed(1)}" y="18" font-size="${fs + 1.5}" font-weight="700" text-anchor="middle" fill="#0f172a">${escapeHtml(spec.title)}</text>`);
+  }
+
+  const edgeKeys = new Set(spec.edges.map((e) => `${e.from}->${e.to}`));
+  const nodeR = nodes.length > 8 ? 16 : 20;
+
+  for (const e of spec.edges) {
+    const a = byId.get(e.from);
+    const b = byId.get(e.to);
+    if (!a || !b) continue;
+    const dash = e.dashed ? ' stroke-dasharray="5 3"' : '';
+    if (a === b) {
+      // Self-loop above node
+      const lx = a.px;
+      const ly = a.py - nodeR;
+      els.push(`<path d="M${(lx - 8).toFixed(1)},${ly.toFixed(1)} C${(lx - 22).toFixed(1)},${(ly - 34).toFixed(1)} ${(lx + 22).toFixed(1)},${(ly - 34).toFixed(1)} ${(lx + 8).toFixed(1)},${ly.toFixed(1)}" fill="none" stroke="#334155" stroke-width="1.6"${dash}/>`);
+      if (e.directed) els.push(arrowHeadPoly(lx + 12, ly - 10, lx + 8, ly, 6, '#334155'));
+      if (e.label) {
+        els.push(`<text x="${lx.toFixed(1)}" y="${(ly - 28).toFixed(1)}" font-size="${fs - 1}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(e.label)}</text>`);
+      }
+      continue;
+    }
+
+    const dx = b.px - a.px;
+    const dy = b.py - a.py;
+    const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const hasReverse = edgeKeys.has(`${e.to}->${e.from}`);
+    const sx = a.px + ux * nodeR;
+    const sy = a.py + uy * nodeR;
+    const ex = b.px - ux * (nodeR + (e.directed ? 2 : 0));
+    const ey = b.py - uy * (nodeR + (e.directed ? 2 : 0));
+
+    if (hasReverse) {
+      const mx = (sx + ex) / 2 - uy * 22;
+      const my = (sy + ey) / 2 + ux * 22;
+      els.push(`<path d="M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}" fill="none" stroke="#334155" stroke-width="1.6"${dash}/>`);
+      if (e.directed) els.push(arrowHeadPoly(mx, my, ex, ey, 6.5, '#334155'));
+      if (e.label) {
+        els.push(`<text x="${mx.toFixed(1)}" y="${(my - 3).toFixed(1)}" font-size="${fs - 1}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(e.label)}</text>`);
+      }
+    } else {
+      els.push(`<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="#334155" stroke-width="1.6"${dash}/>`);
+      if (e.directed) els.push(arrowHeadPoly(sx, sy, ex, ey, 6.5, '#334155'));
+      if (e.label) {
+        const lx = (sx + ex) / 2 - uy * 9;
+        const ly = (sy + ey) / 2 + ux * 9;
+        els.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="${fs - 1}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(e.label)}</text>`);
+      }
+    }
+  }
+
+  for (const n of nodes) {
+    const fill = n.color || '#eff6ff';
+    if (n.shape === 'rect') {
+      const rw = Math.max(42, n.label.length * 7.5 + 14);
+      const rh = 28;
+      els.push(`<rect x="${(n.px - rw / 2).toFixed(1)}" y="${(n.py - rh / 2).toFixed(1)}" width="${rw.toFixed(1)}" height="${rh}" rx="5" fill="${escapeHtml(fill)}" stroke="#1e293b" stroke-width="1.6"/>`);
+    } else {
+      els.push(`<circle cx="${n.px.toFixed(1)}" cy="${n.py.toFixed(1)}" r="${nodeR}" fill="${escapeHtml(fill)}" stroke="#1e293b" stroke-width="1.6"/>`);
+      if (n.shape === 'doublecircle') {
+        els.push(`<circle cx="${n.px.toFixed(1)}" cy="${n.py.toFixed(1)}" r="${nodeR - 4}" fill="none" stroke="#1e293b" stroke-width="1.2"/>`);
+      }
+    }
+    els.push(`<text x="${n.px.toFixed(1)}" y="${(n.py + 4).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="middle" fill="#0f172a">${escapeHtml(n.label)}</text>`);
+  }
+
+  return {
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${els.join('')}</svg>`,
+    width: W,
+    height: H,
+  };
+}
+
+/** Generates deterministic safe inline `<svg>` markup for structured visual specs (`plot`, `histogram`, `timeline`, `tree`, `graph_nodes`, `custom_svg`). */
+export function renderVisualSvg(rawSpec, { forMcp = false } = {}) {
+  const spec = normalizeVisualSpec(rawSpec);
+  if (!spec || spec.type === 'cutout') return null;
+  if (spec.type === 'custom_svg') {
+    return { svg: spec.svg, width: 520, height: 260, caption: spec.caption };
+  }
+  if (spec.type === 'plot') return { ...renderPlotSvg(spec, { forMcp }), caption: spec.caption };
+  if (spec.type === 'histogram') return { ...renderHistogramSvg(spec, { forMcp }), caption: spec.caption };
+  if (spec.type === 'timeline') return { ...renderTimelineSvg(spec, { forMcp }), caption: spec.caption };
+  if (spec.type === 'tree' || spec.type === 'graph_nodes') return { ...renderGraphSvg(spec, { forMcp }), caption: spec.caption };
+  return null;
+}
+
+/** Renders a normalized visual spec (inline `<svg>` or `cutout` `<img>`) into safe `.prob-visual` HTML. */
+export function renderVisualHtml(rawSpec) {
+  const spec = normalizeVisualSpec(rawSpec);
+  if (!spec) return '';
+  if (spec.type === 'cutout') {
+    if (!spec.dataUrl) return '';
+    return (
+      `<figure class="prob-visual prob-visual-cutout">`
+      + `<img src="${escapeHtml(spec.dataUrl)}" alt="${escapeHtml(spec.alt || spec.caption || 'Source figure')}" />`
+      + (spec.caption ? `<figcaption class="prob-visual-caption">${renderRichExamHtml(spec.caption)}</figcaption>` : '')
+      + `</figure>`
+    );
+  }
+  const rendered = renderVisualSvg(spec, { forMcp: false });
+  if (!rendered?.svg) return '';
+  return (
+    `<figure class="prob-visual">`
+    + rendered.svg
+    + (spec.caption ? `<figcaption class="prob-visual-caption">${renderRichExamHtml(spec.caption)}</figcaption>` : '')
+    + `</figure>`
+  );
+}
+
+/** Converts a visual spec into a NoteComplete MCP `!draw` block (or caption note for raster cutouts). */
+export function renderVisualMcpMarkdown(rawSpec) {
+  const spec = normalizeVisualSpec(rawSpec);
+  if (!spec) return '';
+  if (spec.type === 'cutout') {
+    return spec.caption ? `> [Figure: ${spec.caption}]` : '';
+  }
+  const rendered = renderVisualSvg(spec, { forMcp: true });
+  if (!rendered?.svg) return '';
+  const parts = [`!draw 540`, rendered.svg, `!end`];
+  if (spec.caption) parts.push(`_${spec.caption}_`);
+  return parts.join('\n');
+}
+
+const VISUAL_PROMPT_GUIDE = [
+  'Optional `visual` (or `answerBox.visual` / `solutionVisual`) lets you include real math/CS diagrams, blank graphs-to-fill, histograms, CPU timelines, or source cutouts:',
+  '- Function/coordinate plot (set `"blank": true` + omit `functions` when asking students to sketch/fill the graph, and put the filled plot in `answerBox.visual`!):',
+  '  `{"type":"plot","title":"f(x)","xMin":-4,"xMax":4,"yMin":-4,"yMax":6,"xLabel":"x","yLabel":"y","grid":true,"blank":false,"functions":[{"expr":"x^2 - 1","label":"f(x)"}],"points":[{"x":0,"y":-1,"label":"(0,-1)"}],"areas":[{"expr":"x^2","from":0,"to":2}]}`',
+  '- Histogram / bar chart (set `"blank": true` + `value: null` on bins for students to fill):',
+  '  `{"type":"histogram","title":"Latency Distribution","xLabel":"Bucket (ms)","yLabel":"Count","yMax":12,"blank":false,"bins":[{"label":"0-5","value":3},{"label":"5-10","value":9}]}`',
+  '- CPU scheduling / execution timeline / Gantt chart (set `"blank": true` with empty `intervals` so students draw the schedule, and put the completed Gantt chart in `answerBox.visual` / `solutionVisual`!):',
+  '  `{"type":"timeline","title":"CPU Schedule (RR q=2)","tStart":0,"tEnd":10,"tStep":1,"unit":"ms","blank":false,"rows":[{"label":"CPU","intervals":[{"label":"P1","start":0,"end":2},{"label":"P2","start":2,"end":5}]}]}`',
+  '- Tree / FSM / node-edge graph: `{"type":"tree","directed":true,"nodes":[{"id":"A","label":"10"},{"id":"B","label":"5"}],"edges":[{"from":"A","to":"B","label":"L"}]}` (or `"type":"graph_nodes"` / `"type":"custom_svg"` with pure `<svg viewBox="0 0 520 260">...</svg>`).',
+  '- Source figure cutout (ONLY when attached visual source pages/images exist): `{"type":"cutout","sourceIndex":0,"page":2,"bbox":[x,y,w,h],"caption":"Figure from source"}` with normalized `0..1` `[x,y,w,h]`.',
+].join('\n');
+
 export function examPrompt({
   title = '',
   sourcesText = '',
+  visualCatalogText = '',
   types = ['mcq', 'fill', 'calculation', 'open', 'table', 'code'],
   countMode = 'auto',
   count = 12,
@@ -185,6 +1359,7 @@ export function examPrompt({
     '          "sourceRef": "Short source attribution if helpful",',
     '          "points": 1.5,',
     '          "prompt": "Complete problem statement or sub-question instructions",',
+    '          "visual": null,',
     '          "options": ["Option A text", "Option B text", "Option C text", "Option D text"],',
     '          "expressions": [{"label": "a) Convert 0x3F to binary:", "answerWidth": "medium"}],',
     '          "writingLines": 4,',
@@ -193,6 +1368,7 @@ export function examPrompt({
     '          "answerBox": {',
     '            "summary": "Clear direct final answer (visible under tape!)",',
     '            "steps": "Step-by-step justification / calculation / explanation",',
+    '            "visual": null,',
     '            "trap": "Optional common mistake or exam trap to avoid"',
     '          }',
     '        }',
@@ -209,7 +1385,11 @@ export function examPrompt({
     '- `table`: include `table` with `headers` and partially blank `rows`, plus the completed values/explanation in `answerBox`.',
     '- `code`: include `code` snippet (and optional `writingLines`), plus execution output / bug fix / complexity in `answerBox`.',
     '',
+    VISUAL_PROMPT_GUIDE,
+    'Use `visual` whenever a question involves functions/plots, distributions/histograms, CPU scheduling/timing Gantt charts, trees/FSMs/graphs, circuits, or source figures.',
+    '',
     'IMPORTANT: Answers are NOT inside dropdowns — they render inside printable solution boxes that get covered by removable Noteful Tape. Keep every `answerBox` concise, crisp, self-contained, and scannable!',
+    visualCatalogText ? `\nAVAILABLE VISUAL SOURCES FOR CUTOUTS:\n${visualCatalogText}` : '',
     '',
     'STUDY SOURCES:',
     sourcesText,
@@ -247,12 +1427,15 @@ export function cleanExamData(raw) {
         const summary = String(ans.summary ?? ans.final ?? '').trim();
         const steps = String(ans.steps ?? ans.explanation ?? '').trim();
         const trap = String(ans.trap ?? ans.warning ?? '').trim();
+        const visual = normalizeVisualSpec(p.visual ?? p.figure ?? null);
+        const ansVisual = normalizeVisualSpec(ans.visual ?? ans.figure ?? null);
         return {
           number: String(p.number || `${si + 1}.${pi + 1 || seq++}`),
           kind,
           sourceRef: String(p.sourceRef || '').trim(),
           points: Number.isFinite(Number(p.points)) && Number(p.points) > 0 ? Number(p.points) : null,
           prompt: p.prompt.trim(),
+          visual,
           options: Array.isArray(p.options) ? p.options.map((o) => String(o ?? '').trim()).filter(Boolean) : [],
           expressions: Array.isArray(p.expressions)
             ? p.expressions
@@ -265,6 +1448,7 @@ export function cleanExamData(raw) {
           answerBox: {
             summary: summary || steps || 'See worked solution.',
             steps: summary && steps && steps !== summary ? steps : (summary ? steps : ''),
+            visual: ansVisual,
             trap,
           },
         };
@@ -552,6 +1736,38 @@ export const EXAM_PRINT_CSS = `
   .solve-part-ans .ans-final { font-weight: 700; color: #064e3b; }
   .solve-part-ans .ans-work { margin-top: 3px; white-space: pre-wrap; }
   .solve-card-free { break-inside: auto; }
+  .prob-visual {
+    margin: 6px 0;
+    padding: 5px 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: #ffffff;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .prob-visual svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    max-height: 280px;
+  }
+  .prob-visual img {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  .prob-visual-caption {
+    margin-top: 3px;
+    font-size: 7.8pt;
+    color: #475569;
+    font-style: italic;
+  }
   @media screen {
     body { background: #e2e8f0; padding: 14px 0; }
     .exam-page { margin: 0 auto 14px auto; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16); }
@@ -572,6 +1788,10 @@ function renderProblemHtml(p) {
   );
   parts.push(`<p class="prob-prompt">${renderRichExamHtml(p.prompt)}</p>`);
 
+  if (p.visual) {
+    const visHtml = renderVisualHtml(p.visual);
+    if (visHtml) parts.push(visHtml);
+  }
   if (p.code) {
     parts.push(`<pre class="exam-code"><code>${escapeHtml(p.code)}</code></pre>`);
   }
@@ -596,10 +1816,12 @@ function renderProblemHtml(p) {
     parts.push(`<div class="writing-lines">${'<div class="wline"></div>'.repeat(p.writingLines)}</div>`);
   }
 
+  const ansVisHtml = p.answerBox?.visual ? renderVisualHtml(p.answerBox.visual) : '';
   parts.push(
     `<div class="key" data-tape-answer="solution">`
       + `<strong class="lbl">Solution</strong> · ${renderRichExamHtml(p.answerBox.summary)}`
       + (p.answerBox.steps ? `<div class="key-steps">${renderRichExamHtml(p.answerBox.steps)}</div>` : '')
+      + ansVisHtml
       + (p.answerBox.trap ? `<div class="bad"><strong>Watch out:</strong> ${renderRichExamHtml(p.answerBox.trap)}</div>` : '')
       + `</div>`,
   );
@@ -860,7 +2082,7 @@ export function splitExamHeuristically(sourcesText = '', title = 'Solved Exam') 
   }));
 }
 
-export function solveSplitPrompt({ title = '', sourcesText = '', language = 'auto', instructions = '' } = {}) {
+export function solveSplitPrompt({ title = '', sourcesText = '', visualCatalogText = '', language = 'auto', instructions = '' } = {}) {
   const langLine = language && language !== 'auto'
     ? `Detected/target language hint: ${language}. Keep the exact problem wording in its original language.`
     : 'Preserve the original language and verbatim wording of every question.';
@@ -873,6 +2095,7 @@ export function solveSplitPrompt({ title = '', sourcesText = '', language = 'aut
     'Rules:',
     '- Preserve EVERY exercise/problem/question and all sub-parts (a), b), c)...) accurately; keep formulas in $...$ or $$...$$ LaTeX.',
     '- Keep tables, code snippets, numeric values, and MCQ options intact inside their exercise object.',
+    '- If an exercise has a figure/graph/diagram/circuit on an attached source page/image, preserve it in `visual` using `{"type":"cutout","sourceIndex":0,"page":P,"bbox":[x,y,w,h],"caption":"..."}` (normalized `0..1` coordinates) OR reconstruct a structured `visual` (`plot`, `histogram`, `timeline`, `tree`, `graph_nodes`).',
     '- Do NOT solve the questions yet — ONLY split and transcribe each exercise cleanly.',
     '',
     'Reply with ONLY valid JSON:',
@@ -886,6 +2109,7 @@ export function solveSplitPrompt({ title = '', sourcesText = '', language = 'aut
     '      "kind": "mcq | fill | calculation | open | table | code",',
     '      "points": 2.5,',
     '      "statement": "Complete problem statement (preserve formulas in $...$ and sub-parts)",',
+    '      "visual": null,',
     '      "parts": ["a) First sub-question...", "b) Second sub-question..."],',
     '      "options": [],',
     '      "code": "",',
@@ -893,6 +2117,7 @@ export function solveSplitPrompt({ title = '', sourcesText = '', language = 'aut
     '    }',
     '  ]',
     '}',
+    visualCatalogText ? `\nAVAILABLE VISUAL SOURCES FOR CUTOUTS:\n${visualCatalogText}` : '',
     '',
     'EXAM CONTENT TO SPLIT:',
     sourcesText,
@@ -909,6 +2134,7 @@ export function cleanSplitExercises(raw, fallbackText = '', title = 'Solved Exam
       kind: VALID_KINDS.has(String(ex.kind || '').toLowerCase()) ? String(ex.kind).toLowerCase() : 'open',
       points: Number.isFinite(Number(ex.points)) && Number(ex.points) > 0 ? Number(ex.points) : null,
       statement: String(ex.statement || ex.prompt || '').trim(),
+      visual: normalizeVisualSpec(ex.visual ?? ex.figure ?? null),
       parts: Array.isArray(ex.parts) ? ex.parts.map((p) => String(p || '').trim()).filter(Boolean) : [],
       options: Array.isArray(ex.options) ? ex.options.map((o) => String(o || '').trim()).filter(Boolean) : [],
       code: typeof ex.code === 'string' ? ex.code.trim() : '',
@@ -941,6 +2167,9 @@ export function solveChunkPrompt({
   const langRule = langTarget
     ? `Write ALL headings ("Pasos" / "Steps", "Solución (Ejercicio N)" / "Solution (Exercise N)"), hints, and worked explanations strictly in ${langTarget}.`
     : 'Write ALL headings ("Steps"/"Pasos", "Solution (Exercise N)"/"Solución (Ejercicio N)"), hints, and worked explanations in the SAME language as the exercise.';
+  const exForPrompt = exercise?.visual?.type === 'cutout' && exercise.visual.dataUrl
+    ? { ...exercise, visual: { ...exercise.visual, dataUrl: '[attached image]' } }
+    : exercise;
   return [
     `You are an expert Solver subagent solving ONE exercise from "${examTitle || 'Exam'}".`,
     langRule,
@@ -950,6 +2179,9 @@ export function solveChunkPrompt({
     'Produce TWO clearly separated pieces for an alternating Study-then-Solution layout:',
     '1) `partSteps`: For the QUESTION page, break each sub-part a), b), c)... down into a short guiding step / approach hint (NO final answers revealed — leave room for the student to solve it).',
     '2) `partSolutions`: For the NEW PAGE right after it, provide the complete, rigorous worked solution for each sub-part a), b), c)... showing every intermediate formula, substitution, unit, completed table row, or code trace.',
+    '3) Optional `solutionVisual` (or `partSolutions[i].visual`): whenever a visual solution helps (filled function `plot`, filled `histogram`, completed CPU scheduling `timeline`/Gantt chart, `tree`, `graph_nodes`), emit a structured visual spec!',
+    '',
+    VISUAL_PROMPT_GUIDE,
     '',
     'Reply with ONLY valid JSON matching this schema:',
     '{',
@@ -959,19 +2191,21 @@ export function solveChunkPrompt({
     '  "stepsHeading": "Steps (or localized: Pasos / Étapes / Schritte)",',
     '  "solutionHeading": "Solution (Exercise 1) (or localized: Solución (Ejercicio 1))",',
     '  "statement": "Clean problem statement with $LaTeX$ formulas",',
+    '  "visual": null,',
     '  "theory": "Concise key formula / theorem used (1-3 sentences)",',
     '  "partSteps": [',
     '    { "label": "a)", "hint": "Sub-part statement + brief method step hint (without giving away the final answer)" }',
     '  ],',
     '  "partSolutions": [',
-    '    { "label": "a)", "answer": "Direct final answer / chosen option", "work": "Full step-by-step derivation with $...$ / $$...$$ math" }',
+    '    { "label": "a)", "answer": "Direct final answer / chosen option", "work": "Full step-by-step derivation with $...$ / $$...$$ math", "visual": null }',
     '  ],',
     '  "solvedTable": null,',
+    '  "solutionVisual": null,',
     '  "trap": "Common mistake or exam trap to double-check"',
     '}',
     '',
     'EXERCISE TO SOLVE:',
-    JSON.stringify(exercise, null, 2),
+    JSON.stringify(exForPrompt, null, 2),
     referenceText ? `\nREFERENCE NOTES:\n${referenceText}` : '',
   ].filter(Boolean).join('\n');
 }
@@ -993,12 +2227,21 @@ export function cleanSolvedExercise(raw, fallbackEx = {}, index = 0) {
         label: String(s?.label || partSteps[idx]?.label || `${String.fromCharCode(97 + idx)})`).trim(),
         answer: String(s?.answer || s?.final || '').trim(),
         work: String(s?.work || s?.steps || s?.explanation || '').trim(),
-      })).filter((s) => s.answer || s.work)
+        visual: normalizeVisualSpec(s?.visual ?? s?.figure ?? null),
+      })).filter((s) => s.answer || s.work || s.visual)
     : [{
         label: 'a)',
         answer: String(raw?.answer || raw?.summary || 'See solution below.').trim(),
         work: String(raw?.work || raw?.solution || raw?.steps || '').trim(),
+        visual: null,
       }];
+
+  const fallbackVisual = normalizeVisualSpec(fallbackEx.visual ?? fallbackEx.figure ?? null);
+  const rawVisual = normalizeVisualSpec(raw?.visual ?? raw?.figure ?? null);
+  // Preserve resolved cutout dataUrl from fallbackEx if the LLM echoed cutout without dataUrl
+  const visual = fallbackVisual?.type === 'cutout' && fallbackVisual.dataUrl && (!rawVisual || (rawVisual.type === 'cutout' && !rawVisual.dataUrl))
+    ? fallbackVisual
+    : (rawVisual || fallbackVisual);
 
   return {
     number: num,
@@ -1009,10 +2252,12 @@ export function cleanSolvedExercise(raw, fallbackEx = {}, index = 0) {
     stepsHeading: String(raw?.stepsHeading || 'Steps').trim(),
     solutionHeading: String(raw?.solutionHeading || `Solution (Exercise ${num})`).trim(),
     statement: String(raw?.statement || fallbackEx.statement || '').trim(),
+    visual,
     options: Array.isArray(fallbackEx.options) ? fallbackEx.options : [],
     code: fallbackEx.code || '',
     table: fallbackEx.table || null,
     solvedTable: raw?.solvedTable && Array.isArray(raw.solvedTable.headers) ? raw.solvedTable : null,
+    solutionVisual: normalizeVisualSpec(raw?.solutionVisual ?? raw?.solutionFigure ?? null),
     theory: String(raw?.theory || '').trim(),
     partSteps,
     partSolutions,
@@ -1049,6 +2294,10 @@ export function buildSolvedExamHtml(solvedExam, { showTheory = true, tapeSolutio
         + `</h2></div>`,
     );
     qParts.push(`<p class="prob-prompt">${renderRichExamHtml(ex.statement)}</p>`);
+    if (ex.visual) {
+      const qVisHtml = renderVisualHtml(ex.visual);
+      if (qVisHtml) qParts.push(qVisHtml);
+    }
     if (ex.code) qParts.push(`<pre class="exam-code"><code>${escapeHtml(ex.code)}</code></pre>`);
     if (ex.options?.length) {
       qParts.push(
@@ -1097,14 +2346,20 @@ export function buildSolvedExamHtml(solvedExam, { showTheory = true, tapeSolutio
     const solTapeAttr = tapeSolutions ? ' data-tape-answer="solution"' : '';
     sParts.push(`<div class="key"${solTapeAttr}>`);
     for (const sol of ex.partSolutions || []) {
+      const partVisHtml = sol.visual ? renderVisualHtml(sol.visual) : '';
       sParts.push(
         `<div class="solve-part-ans">`
           + `<div><strong>${escapeHtml(sol.label)}</strong> `
           + (sol.answer ? `<span class="ans-final">${renderRichExamHtml(sol.answer)}</span>` : '')
           + `</div>`
           + (sol.work ? `<div class="ans-work">${renderRichExamHtml(sol.work)}</div>` : '')
+          + partVisHtml
           + `</div>`,
       );
+    }
+    if (ex.solutionVisual) {
+      const solVisHtml = renderVisualHtml(ex.solutionVisual);
+      if (solVisHtml) sParts.push(solVisHtml);
     }
     if (ex.solvedTable?.headers?.length) {
       const ths = ex.solvedTable.headers.map((h) => `<th>${renderRichExamHtml(h)}</th>`).join('');
@@ -1125,7 +2380,7 @@ export function buildSolvedExamHtml(solvedExam, { showTheory = true, tapeSolutio
   return wrapExamHtmlDocument(solvedExam.title || 'Solved Exam', blocks, { interactiveFallback: interactiveFallback && tapeSolutions });
 }
 
-// Deterministic Stage-3 Composer (MCP Ink Engine): emits NoteComplete dialect Markdown with \pagebreak, !tape, and $...$/$$...$$ native math boxes.
+// Deterministic Stage-3 Composer (MCP Ink Engine): emits NoteComplete dialect Markdown with \pagebreak, !tape, !draw, and $...$/$$...$$ native math boxes.
 export function buildSolvedExamMcpMarkdown(solvedExam, { tapeSolutions = false, showTheory = true } = {}) {
   const exercises = Array.isArray(solvedExam?.exercises) ? solvedExam.exercises : [];
   if (!exercises.length) throw Error('No solved exercises to compose.');
@@ -1135,6 +2390,10 @@ export function buildSolvedExamMcpMarkdown(solvedExam, { tapeSolutions = false, 
     if (idx > 0) out.push('\\pagebreak', '');
     out.push(`## ${ex.exerciseHeading}`, '');
     out.push(ex.statement, '');
+    if (ex.visual) {
+      const drawMd = renderVisualMcpMarkdown(ex.visual);
+      if (drawMd) out.push(drawMd, '');
+    }
     if (ex.code) {
       out.push('```', ex.code, '```', '');
     }
@@ -1163,7 +2422,15 @@ export function buildSolvedExamMcpMarkdown(solvedExam, { tapeSolutions = false, 
         if (tapeSolutions) out.push('!tape yellow');
         out.push(sol.work);
       }
+      if (sol.visual) {
+        const pDraw = renderVisualMcpMarkdown(sol.visual);
+        if (pDraw) out.push(pDraw);
+      }
       out.push('');
+    }
+    if (ex.solutionVisual) {
+      const sDraw = renderVisualMcpMarkdown(ex.solutionVisual);
+      if (sDraw) out.push(sDraw, '');
     }
     if (ex.trap) {
       out.push(`> **Watch out:** ${ex.trap}`, '');

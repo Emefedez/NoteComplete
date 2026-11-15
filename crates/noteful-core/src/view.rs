@@ -76,6 +76,16 @@ fn part_entry(item: &str, part: &Part) -> Value {
 fn shape_entry(id: &str, line: &Line) -> Value {
     json!({"id": id, "line": line})
 }
+/// Hit bounds for a native tape strip or stroke tape item from the parsed scene.
+pub(crate) fn imported_tape_bounds(item: &crate::scene::Item) -> [f64; 4] {
+    let [x, y, w, h] = item.bounds;
+    if item.stroke.is_some() {
+        let r = item.radius;
+        [x - r, y - r, w + 2. * r, h + 2. * r]
+    } else {
+        item.bounds
+    }
+}
 /// An added strip of tape, as `view` lists it in `tapes`.
 fn tape_entry(id: &str, line: &Line) -> Value {
     let [x, y, w, h] = bounds(&line.points);
@@ -401,7 +411,7 @@ impl Editor {
 
         let imported_tapes = p.items.iter().filter(|i| shown(&i.id)).filter_map(|i| {
             let open = i.tape()?;
-            Some(json!({"id": i.id, "bounds": i.bounds, "revealed": open}))
+            Some(json!({"id": i.id, "bounds": imported_tape_bounds(i), "revealed": open}))
         });
         let added_tapes = facts
             .added

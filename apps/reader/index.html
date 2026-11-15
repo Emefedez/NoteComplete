@@ -41,10 +41,7 @@
           <button id="newHandwritten" data-icon="text" data-palette="New handwritten note from Markdown…" title="Write Markdown as real handwriting ink: a new note">New from Markdown…</button>
           <button id="newWithAi" data-icon="spark" data-palette="New note with AI…" title="Your AI tool writes a note about a topic or from what you paste, as handwriting" hidden>New note with AI…</button>
           <button id="takeNotesAi" data-icon="batchNotes" data-palette="Take notes with AI…" title="Batch-create handwritten notebooks from Recents, folders, PDFs, Office docs or topics">Take notes with AI…</button>
-          <button id="fileCreateExam" data-icon="exam" data-palette="Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders or files">Create exam (AI)…</button>
-          <button id="fileSolveExam" data-icon="check" data-palette="Solve exam (AI)…" title="Feed an exam PDF or note: splits questions, solves them in parallel, and formats Exercise → New Page → Solution">Solve exam (AI)…</button>
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
-          <hr />
           <hr />
           <button id="save" data-icon="save" disabled title="Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, added recordings, quizzes, flashcards and scratchpad."><span class="menu-label">Save project (.nfedit)</span><kbd>Ctrl S</kbd></button>
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
@@ -93,6 +90,7 @@
             <button type="button" class="menu-icon" data-align-menu="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
             <button type="button" class="menu-icon" data-align-menu="free" title="Free position: pages stay where you scroll them, with no centring" aria-label="Free position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
           </div>
+          <button id="viewSpread" data-icon="spread" role="menuitemcheckbox" aria-checked="false" data-palette="Side-by-side pages" title="Show two pages side by side">Side-by-side pages</button>
           <hr />
           <button id="themeToggle" data-icon="moon" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
           <button id="themeSystem" data-icon="monitor" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
@@ -159,7 +157,7 @@
           <button id="studyQuiz" data-icon="help" disabled>Quiz me…<kbd>Shift Q</kbd></button>
           <button id="studyCreateExam" data-icon="exam" data-palette="Study: Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders, notes or topics">Create exam (AI)…</button>
           <button id="studySolveExam" data-icon="check" data-palette="Study: Solve exam (AI)…" title="Feed an exam PDF or note: cuts it into exercises, solves them in parallel with KaTeX math &amp; MCP, and separates Questions from Solutions onto new pages">Solve exam (AI)…</button>
-          <button id="studyCheck" data-icon="check" disabled title="The AI checks pages for errors, inconsistencies, unclear and missing points; its corrections go into your notes under each page">Fact check…<kbd>Shift F</kbd></button>
+          <button id="studyCheck" data-icon="doubleCheck" disabled title="The AI checks pages for errors, inconsistencies, unclear and missing points; its corrections go into your notes under each page">Fact check…<kbd>Shift F</kbd></button>
           <hr />
           <button id="studyResume" data-icon="play" disabled>Resume quiz<kbd>Q</kbd></button>
           <button id="studyRetake" data-icon="restart" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
@@ -739,6 +737,16 @@
             aria-label="Go to page"
             value="1" /></label
         ><span id="pageLabel"></span><span id="counts" class="muted"></span
+        ><button
+          id="navExamHtml"
+          type="button"
+          class="nav-exam-html"
+          data-icon="exam"
+          title="View interactive exam HTML"
+          aria-label="View interactive exam HTML"
+          hidden
+          disabled
+        ><span>HTML</span></button
         ><span class="spacer"></span>
         <div id="pageAlign" class="page-align" role="radiogroup" aria-label="Page position when narrower than the window">
           <button type="button" role="radio" data-align="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button
@@ -746,6 +754,7 @@
           ><button type="button" role="radio" data-align="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
         </div>
         <button id="pageAlignFree" type="button" class="page-free" aria-pressed="false" title="Free position: pages stay where you scroll them (trackpad), with no centring" aria-label="Free page position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/></svg></button>
+        <button id="pagesSpread" type="button" class="pages-spread-toggle" data-icon="spread" aria-pressed="false" title="Side-by-side pages" aria-label="Side-by-side pages"></button>
         <button id="dockCycle" type="button" class="dock-cycle" aria-label="Move the tool bar" title="Move the tool bar: top, left or right"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.5h18"/></svg></button>
         <div class="zoom-controls" role="group" aria-label="Page zoom">
           <button id="zoomFit" aria-label="Fit page width" aria-pressed="true">

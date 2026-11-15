@@ -10,6 +10,16 @@ import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { icon } from './icons.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
+/** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
+export function shouldSkipCoverFile({ name = '', kind = '' } = {}) {
+  if (kind === 'text') return true;
+  if (kind && ['project', 'noteful', 'pdf', 'image', 'blank', 'handwritten', 'notecomplete'].includes(kind)) return false;
+  return Boolean(name && isTextName(name));
+}
+/** Return true when a cover image is missing or a tiny placeholder (<= 24px, e.g. 16x16 BLANK_COVER_JPEG). */
+export function isTinyCoverSize(width, height) {
+  return !(Number(width) > 24 && Number(height) > 24);
+}
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
@@ -200,8 +210,13 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
       button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, opened: entry.openedAt || 0, favourite: favourites.has(entry.key), size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
       if (!quick) {
+        cover.onerror = () => {
+          cover.removeAttribute?.('src');
+          cover.classList.add('missing');
+        };
         library.cover(coverKey(entry)).then(async url => {
           if (url) {
+            cover.classList.remove('missing');
             cover.src = url;
           } else {
             try {
@@ -209,7 +224,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
               if (file) {
                 await rememberCover(coverKey(entry), file);
                 const next = await library.cover(coverKey(entry));
-                if (next) { cover.src = next; return; }
+                if (next) { cover.classList.remove('missing'); cover.src = next; return; }
               }
             } catch (e) {}
             cover.classList.add('missing');
@@ -587,13 +602,15 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // Keep a cover for files opened from disk so Recent can show them.
   async function rememberCover(key, file) {
     try {
-      if (await library.cover(key)) return;
-      if (/\.(jpe?g|png|webp)$/i.test(file.name) || file.type?.startsWith('image/')) {
+      if (!key || !file || await library.cover(key)) return;
+      const name = file.name || '';
+      if (/\.nfedit$/i.test(name)) return;
+      if (/\.(jpe?g|png|webp)$/i.test(name) || file.type?.startsWith('image/')) {
         const url = await shrink(file);
         if (url) await library.saveCover(key, url);
         return;
       }
-      if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      if (/\.pdf$/i.test(name) || file.type === 'application/pdf') {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const pdf = await openPdf(bytes);
         try {
@@ -614,14 +631,14 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         }
         return;
       }
-      if (/\.html?$/i.test(file.name) || file.type === 'text/html') {
+      if (/\.html?$/i.test(name) || file.type === 'text/html') {
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="40" y="30" width="240" height="180" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/><text x="160" y="115" font-family="system-ui, sans-serif" font-size="32" font-weight="bold" fill="#0284c7" text-anchor="middle">&lt;HTML/&gt;</text><text x="160" y="150" font-family="system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Interactive Exercise</text></svg>`;
         const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
         await library.saveCover(key, url);
         return;
       }
       // Text and Markdown: the first lines, drawn like a page.
-      if (isTextName(file.name)) {
+      if (isTextName(name)) {
         const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
         const lines = (await file.slice(0, 4000).text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 14);
         const rows = lines.map((l, i) => `<text x="22" y="${34 + i * 15}" font-size="${i === 0 ? 13 : 10}" font-weight="${i === 0 ? 700 : 400}" fill="${i === 0 ? '#1d2433' : '#5b6478'}">${esc(l.replace(/^#+\s*/, '').slice(0, 44))}</text>`).join('');
@@ -630,8 +647,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         return;
       }
       // Noteful notes, and NoteComplete's tar packages (.notecomp, .notepart, .tar) holding one.
-      const cover = /\.noteful$/i.test(file.name) ? await noteCover(blobReader(file), file.size)
-        : /\.(notecomp|notecomplete|notepart|tar)$/i.test(file.name) ? await archiveCover(blobReader(file), file.size) : null;
+      const cover = /\.noteful$/i.test(name) ? await noteCover(blobReader(file), file.size)
+        : /\.(notecomp|notecomplete|notepart|tar)$/i.test(name) ? await archiveCover(blobReader(file), file.size) : null;
       if (cover) await library.saveCover(key, await shrink(new Blob([cover.bytes], { type: cover.mime })));
     } catch { /* A missing cover only affects the Recent card. */ }
   }

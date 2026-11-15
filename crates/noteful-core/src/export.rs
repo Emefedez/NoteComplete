@@ -361,14 +361,17 @@ impl Editor {
             };
             let spec = &spec;
             let set = page_assets.get(&page.id).cloned().unwrap_or_default();
+            let link_uuid = crate::native::deterministic_uuid(page.id.as_bytes());
             added.push((
                 page.id.clone(),
-                V::Fields(vec![
-                    f(1, 5, V::Text(page.id.clone())),
-                    f(2, 7, V::Fields(vec![f(0, 5, V::Text(set))])),
-                    f(4, 7, V::Fields(Self::inserted_background(spec))),
-                    f(5, 5, V::Text(key.clone())),
-                ]),
+                V::Fields(crate::native::page_record_fields(
+                    page.id.clone(),
+                    set,
+                    Self::inserted_background(spec),
+                    key.clone(),
+                    link_uuid,
+                    time,
+                )),
             ));
             previous = key;
         }
@@ -460,7 +463,10 @@ impl Editor {
         strip_native_audio: bool,
     ) -> Result<Vec<u8>> {
         if self.cursor == 0 && !strip_pdfs && !strip_native_audio {
-            return Ok(self.source.clone());
+            let pkg = Package::parse(&self.source)?;
+            if !crate::native::is_legacy_notecomplete_package(&pkg) {
+                return Ok(self.source.clone());
+            }
         }
         let (blocks, trailer) = self.noteful_parts_with(strip_pdfs, strip_native_audio)?;
         let body: usize = blocks.iter().map(|(_, b)| b.len()).sum();
@@ -924,7 +930,7 @@ impl Editor {
                     for v in array(nested(&mut fields, 2)?, 0)? {
                         if let V::Fields(fs) = v {
                             if field(fs, 1).and_then(V::as_text) == Some(id.as_str()) {
-                                set(fs, 4, 7, V::Fields(bg_fields.clone()), time);
+                                set(fs, 4, 0x807, V::Fields(bg_fields.clone()), time);
                             }
                         }
                     }
@@ -951,7 +957,7 @@ impl Editor {
                                 .and_then(V::as_text)
                                 .and_then(|id| rank_by_id.get(id))
                             {
-                                set(fs, 5, 5, V::Text(rank.clone()), time);
+                                set(fs, 5, 0x805, V::Text(rank.clone()), time);
                             }
                         }
                     }
@@ -1053,12 +1059,24 @@ impl Editor {
                     Cow::Owned(crate::encode_fields(&fields)?);
             }
         }
+        if !strip_pdfs
+            && !strip_native_audio
+            && crate::native::is_legacy_notecomplete_package(&package)
+        {
+            crate::native::upgrade_package_parts(&mut blocks, &mut index, time, false)?;
+        }
         let trailer = canonical_trailer(
             index,
             blocks.iter().map(|(id, bytes)| (id.clone(), bytes.len())),
         )?;
         Ok((blocks, trailer))
     }
+}
+pub(crate) fn build_canonical_trailer(
+    index: Vec<Field>,
+    blocks: impl Iterator<Item = (String, usize)>,
+) -> Result<Vec<u8>> {
+    canonical_trailer(index, blocks)
 }
 fn canonical_trailer(
     mut index: Vec<Field>,

@@ -1476,6 +1476,12 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 .chat-error { color: var(--danger); }
 .chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); align-items: center; }
 .chat-form textarea { flex: 1; resize: none; padding: 5px 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 13px; }
+.chat-panel.window-large .chat-head { padding: 10px 14px; }
+.chat-panel.window-large .chat-context { padding: 8px 16px; }
+.chat-panel.window-large .chat-messages { padding: 16px 22px; gap: 12px; }
+.chat-panel.window-large .chat-messages li { max-width: min(76ch, 86%); padding: 10px 14px; font-size: 14px; line-height: 1.6; }
+.chat-panel.window-large .chat-form { padding: 10px 14px; gap: 8px; }
+.chat-panel.window-large .chat-form textarea { padding: 8px 11px; font-size: 14px; }
 /* Background jobs in the bar */
 .job-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 360px; min-width: 0; min-height: var(--control); padding: 2px 2px 2px 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 12px; color: var(--muted); }
 .job-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -1999,6 +2005,12 @@ details[open] > summary::after, .has-caret[aria-expanded="true"] .caret { transf
 
 /* Shorter page bar: its buttons are smaller than the toolbar's. */
 .navigation > button, .navigation .zoom-controls > button { min-height: 28px; padding-block: 2px; }
+.pages-spread-toggle { flex: none; color: var(--muted); }
+.pages-spread-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.navigation .nav-exam-html { display: inline-flex; align-items: center; gap: 5px; flex: none; min-height: 26px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
+.navigation .nav-exam-html:hover:not(:disabled) { background: var(--accent-hover); }
+.navigation .nav-exam-html[hidden] { display: none; }
+.navigation .nav-exam-html svg { width: 14px; height: 14px; flex: none; }
 .page-align { display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--line); border-radius: 7px; }
 .page-align button { min-height: 24px; width: 26px; padding: 0; border-radius: 5px; color: var(--muted); }
 .page-align button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
@@ -2046,6 +2058,13 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 .page-free[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--line); }
 /* Free position: room on both sides, so the trackpad can leave the pages anywhere. */
 #pages[data-align="free"] { align-items: flex-start; padding-inline: 50vw; }
+/* Side-by-side 2-up spread: keeps left/center/right/free alignment and centers the trailing "+ New page" button. */
+#pages[data-spread="2"] { display: grid; grid-template-columns: repeat(2, auto); justify-content: center; align-items: start; gap: 24px; }
+#pages[data-spread="2"]:has(> .sheet:only-of-type) { grid-template-columns: auto; }
+#pages[data-spread="2"][data-align="left"] { justify-content: start; }
+#pages[data-spread="2"][data-align="right"] { justify-content: end; }
+#pages[data-spread="2"][data-align="free"] { justify-content: start; }
+#pages[data-spread="2"] .add-page-end { grid-column: 1 / -1; justify-self: center; }
 @media (max-width: 700px) { .page-free { display: none; } }
 
 /* Selectable PDF and recognized text: invisible words over the page; with the
@@ -2459,6 +2478,9 @@ body.bar-compact .tab { height: 22px; }
 .all-study .saved-delete.armed { background: var(--danger-soft); color: var(--danger); }
 .scratch-saved-item { display: flex; flex-direction: column; align-items: stretch !important; padding: 0 !important; background: transparent !important; border: 0 !important; gap: 4px; }
 .scratch-saved-row { display: flex; align-items: stretch; gap: 4px; width: 100%; min-width: 0; }
+.scratch-open-chat { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.scratch-open-chat:hover:not(:disabled) { background: var(--accent-hover); }
+.scratch-open-chat svg { width: 14px; height: 14px; flex: none; }
 .scratch-saved-detail { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-height: 240px; overflow: auto; }
 .scratch-chat { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 860px) {
@@ -3416,6 +3438,7 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation .spacer { display: none; }
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation .dock-cycle { order: -1; }
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation > button, body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation #zoomFit { flex: none; width: 38px; min-width: 38px; padding: 6px; }
+  body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation .nav-exam-html span { display: none; }
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation .zoom-controls { flex: none; }
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) .navigation .toolbar-actions { flex: none; flex-direction: column; overflow: visible; padding: 2px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   body:is([data-landscape-dock="left"], [data-landscape-dock="right"]) #editor > .toolbar { flex-direction: column; align-items: stretch; min-height: 0; padding: 4px 3px; border-bottom: 0; }

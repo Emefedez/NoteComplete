@@ -211,6 +211,39 @@ pub fn paper_pdf(styles: &[Paper]) -> Vec<u8> {
     pdf.finish()
 }
 
+/// Pure white PDF pages matching Noteful `sizes` (converted from Noteful units to points).
+pub(crate) fn blank_pdf(sizes: &[[f64; 2]]) -> Vec<u8> {
+    let mut pdf = Pdf::new();
+    let (catalog, tree, info) = (Ref::new(1), Ref::new(2), Ref::new(3));
+    let mut kids = Vec::with_capacity(sizes.len());
+    let mut next = 4;
+    let mut alloc = || {
+        next += 1;
+        Ref::new(next - 1)
+    };
+    for &[w_u, h_u] in sizes {
+        let (w, h) = ((w_u / PAGE_SCALE) as f32, (h_u / PAGE_SCALE) as f32);
+        let (page_id, content_id) = (alloc(), alloc());
+        kids.push(page_id);
+        let mut content = Content::new();
+        content.set_fill_rgb(1., 1., 1.);
+        content.rect(0., 0., w, h);
+        content.fill_nonzero();
+        let mut page = pdf.page(page_id);
+        page.media_box(Rect::new(0., 0., w, h));
+        page.parent(tree);
+        page.contents(content_id);
+        page.finish();
+        pdf.stream(content_id, &content.finish());
+    }
+    pdf.catalog(catalog).pages(tree);
+    pdf.pages(tree)
+        .kids(kids.iter().copied())
+        .count(kids.len() as i32);
+    pdf.document_info(info).producer(TextStr("NoteComplete"));
+    pdf.finish()
+}
+
 fn hex(c: [f32; 3]) -> String {
     format!(
         "#{:02x}{:02x}{:02x}",

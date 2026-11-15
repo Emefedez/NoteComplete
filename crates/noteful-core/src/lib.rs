@@ -46,6 +46,8 @@ pub use manipulation::Adjustment;
 pub mod canvas;
 mod export;
 mod layer;
+mod native;
+pub use native::repair_noteful;
 mod pages;
 pub use pages::{InkWord, NewPage, NewPdf, PageBackground, PageResize, PdfPlacement};
 mod part;

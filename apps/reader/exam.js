@@ -8,7 +8,13 @@ import { jsonFrom, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationProm
 import { modelPicker } from './model-picker.js';
 import { runAI } from './small-model.js';
 import { createSourcePicker } from './source-picker.js';
-import { resolveSources, formatSourceBundle } from './source-extract.js';
+import {
+  resolveSources,
+  formatSourceBundle,
+  collectVisualCandidates,
+  resolveExamVisualCutouts,
+  dataUrlToBytes,
+} from './source-extract.js';
 import {
   PROBLEM_TYPES,
   FOCUS_MODES,
@@ -564,6 +570,7 @@ export function examController({
         const providerName = el('examTool').selectedOptions?.[0]?.textContent || provider;
         if (!checkpoint?.exercises?.length) {
           const bundle = formatSourceBundle(resolved, { maxChars: 90000 });
+          const vis = await collectVisualCandidates(resolved, { maxImages: 6, maxWidth: 1000, renderMissing: caps.vision !== false });
           const defaultTitle = userTitle || `${resolved[0].title} — Solved`;
           const sourceLinks = await collectSourceLinks(sources, resolved, { groups, openDocResource });
 
@@ -574,6 +581,7 @@ export function examController({
           const splitPromptText = solveSplitPrompt({
             title: defaultTitle,
             sourcesText: bundle.promptText,
+            visualCatalogText: vis.manifest,
             language: prefs.language,
             instructions: extraInstructions,
           });
@@ -583,7 +591,7 @@ export function examController({
               provider,
               model: m,
               prompt: splitPromptText,
-              images: caps.vision === false ? [] : bundle.images,
+              images: caps.vision === false ? [] : (vis.images.length ? vis.images : bundle.images),
               tag: 'solve-split',
               label: 'Splitter · cut exam into exercises',
               peek: () => splitStream,
@@ -599,7 +607,13 @@ export function examController({
 
           let splitRaw = null;
           try { splitRaw = jsonFrom(splitRes.text); } catch { splitRaw = null; }
-          const splitData = cleanSplitExercises(splitRaw, bundle.promptText, userTitle || defaultTitle);
+          const rawSplitData = cleanSplitExercises(splitRaw, bundle.promptText, userTitle || defaultTitle);
+          const resolvedSplit = await resolveExamVisualCutouts(
+            { exercises: rawSplitData.exercises },
+            resolved,
+            { preloadedImages: vis.images },
+          );
+          const splitData = { ...rawSplitData, exercises: resolvedSplit.exercises || rawSplitData.exercises };
           checkpoint = {
             mode: 'solve',
             title: userTitle || splitData.title || defaultTitle,
@@ -632,6 +646,13 @@ export function examController({
             const idx = pendingIndices[nextCursor++];
             const ex = exercises[idx];
             let workerStream = '';
+            const exImages = [];
+            if (caps.vision !== false && ex.visual?.type === 'cutout' && ex.visual.dataUrl) {
+              const dec = dataUrlToBytes(ex.visual.dataUrl);
+              if (dec?.bytes?.length) {
+                exImages.push({ bytes: dec.bytes, type: dec.type, label: ex.visual.caption || `exercise-${ex.number || idx + 1}` });
+              }
+            }
             const prompt = solveChunkPrompt({
               exercise: ex,
               examTitle: checkpoint.title,
@@ -645,17 +666,20 @@ export function examController({
                 provider,
                 model: m,
                 prompt,
-                images: [],
+                images: exImages,
                 tag: 'solve-chunk',
                 label: `Solver · Ex ${ex.number || idx + 1}`,
                 peek: () => workerStream,
                 signal: ac.signal,
               },
               (chunk) => { workerStream += chunk; },
-              { small: model.small, vision: false },
+              { small: model.small, vision: exImages.length > 0 && caps.vision !== false },
             );
             if (ac.signal.aborted) return;
-            solved[idx] = cleanSolvedExercise(jsonFrom(res.text), ex, idx);
+            const cleanedEx = cleanSolvedExercise(jsonFrom(res.text), ex, idx);
+            solved[idx] = resolved.length
+              ? (await resolveExamVisualCutouts({ exercises: [cleanedEx] }, resolved)).exercises[0]
+              : cleanedEx;
             doneCount++;
             checkpoint.solved = solved;
             saveAiDraft(store, DRAFT_KEY, checkpoint);
@@ -827,14 +851,17 @@ export function examController({
             };
           }
 
-          const chunkTasks = plan.chunks.map((chunk, ci) => {
+          const chunkTasks = await Promise.all(plan.chunks.map(async (chunk) => {
             const docs = chunk.docIndices.map((idx) => resolved[idx]).filter(Boolean);
             const chunkBundle = formatSourceBundle(docs, { maxChars: 26000 });
+            const chunkVis = await collectVisualCandidates(docs, { maxImages: 4, maxWidth: 1000, renderMissing: caps.vision !== false });
+            const chunkImages = caps.vision === false ? [] : (chunkVis.images.length ? chunkVis.images : chunkBundle.images);
             const chunkCountMode = chunk.count > 0 ? 'exact' : prefs.countMode;
             const chunkCount = chunk.count > 0 ? chunk.count : prefs.count;
             const prompt = examPrompt({
               title: `${userTitle || plan.title || defaultTitle} — ${chunk.heading}`,
               sourcesText: chunkBundle.promptText,
+              visualCatalogText: chunkVis.manifest,
               types: prefs.types,
               countMode: chunkCountMode,
               count: chunkCount,
@@ -852,30 +879,33 @@ export function examController({
               heading: chunk.heading,
               badge: chunk.badge,
               prompt,
-              imageCount: chunkBundle.images.length,
-              images: caps.vision === false ? [] : chunkBundle.images,
+              imageCount: chunkImages.length,
+              images: chunkImages,
+              docs,
             };
-          });
+          }));
 
           checkpoint = {
             mode: 'create',
             parallel: true,
             title: userTitle || plan.title || defaultTitle,
             subtitle: plan.subtitle || '',
-            chunkTasks: chunkTasks.map(({ images: _imgs, ...rest }) => rest),
+            chunkTasks: chunkTasks.map(({ images: _imgs, docs: _docs, ...rest }) => rest),
             completed: Array(chunkTasks.length).fill(null),
             prefs,
             provider,
             resourceKeys: sourceLinks.resourceKeys,
             resourceLabels: sourceLinks.resourceLabels,
             _runtimeImages: chunkTasks.map((t) => t.images),
+            _runtimeDocs: chunkTasks.map((t) => t.docs),
           };
-          saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined });
+          saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined, _runtimeDocs: undefined });
         }
 
         const chunkTasks = checkpoint.chunkTasks;
         const completed = [...(checkpoint.completed || Array(chunkTasks.length).fill(null))];
         const runtimeImages = checkpoint._runtimeImages || [];
+        const runtimeDocs = checkpoint._runtimeDocs || [];
         const pendingIdx = chunkTasks.map((_, i) => i).filter((i) => !completed[i]);
         let cursor = 0;
         let finished = chunkTasks.length - pendingIdx.length;
@@ -904,10 +934,15 @@ export function examController({
               { small: model.small, vision: caps.vision !== false },
             );
             if (ac.signal.aborted) return;
-            completed[ci] = cleanExamData(jsonFrom(res.text));
+            const cleanedChunk = cleanExamData(jsonFrom(res.text));
+            completed[ci] = await resolveExamVisualCutouts(
+              cleanedChunk,
+              runtimeDocs[ci] || resolved,
+              { preloadedImages: runtimeImages[ci] || [] },
+            );
             finished++;
             checkpoint.completed = completed;
-            saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined });
+            saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined, _runtimeDocs: undefined });
             el('examStatus').textContent = `Stage 2/3 · Finished ${finished}/${chunkTasks.length} exam blocks…`;
             job?.progress?.(`Blocks ${finished}/${chunkTasks.length}`);
           }
@@ -927,13 +962,17 @@ export function examController({
         // Single short source path with streaming + resume support.
         let basePrompt = draft?.prompt || '';
         let images = [];
+        let visImages = [];
         if (!draft) {
           const bundle = formatSourceBundle(resolved);
-          images = bundle.images;
+          const vis = await collectVisualCandidates(resolved, { maxImages: 6, maxWidth: 1000, renderMissing: caps.vision !== false });
+          visImages = vis.images;
+          images = vis.images.length ? vis.images : bundle.images;
           const defaultTitle = userTitle || `${resolved[0].title} — Exam`;
           basePrompt = examPrompt({
             title: userTitle || defaultTitle,
             sourcesText: bundle.promptText,
+            visualCatalogText: vis.manifest,
             types: prefs.types,
             countMode: prefs.countMode,
             count: prefs.count,
@@ -991,7 +1030,11 @@ export function examController({
         const parsed = draft?.partialText
           ? mergePartialExamJson(draft.partialText, res.text)
           : jsonFrom(res.text);
-        exam = cleanExamData(parsed);
+        exam = await resolveExamVisualCutouts(
+          cleanExamData(parsed),
+          resolved,
+          { preloadedImages: visImages },
+        );
       }
 
       if (userTitle) exam.title = userTitle;
@@ -1050,6 +1093,7 @@ export function examController({
       if (checkpoint) {
         const cleanCheckpoint = { ...checkpoint };
         delete cleanCheckpoint._runtimeImages;
+        delete cleanCheckpoint._runtimeDocs;
         if (!cleanCheckpoint.parallel && cleanCheckpoint.mode !== 'solve') {
           cleanCheckpoint.partialText = `${draft?.partialText || ''}${streamed}`;
         }

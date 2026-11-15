@@ -17,7 +17,7 @@ import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library, entrySourceLabel } from "./library.js";
-import { homeScreen } from "./home.js";
+import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
@@ -111,6 +111,10 @@ let epoch = 0,
   doc = null,
   sideFp = "",
   page = 0,
+  spread = 1,
+  activeFileName = "",
+  activeDocKind = "",
+  activeCoverKeyOverride = "",
   tool = "pan",
   activeLayer = 0,
   gesture = null,
@@ -414,6 +418,9 @@ function reset({ opening = false, keepSession = false } = {}) {
   panels = [];
   doc = null;
   sideFp = "";
+  activeFileName = "";
+  activeDocKind = "";
+  activeCoverKeyOverride = "";
   embeddedExam = null;
   htmlView?.close();
   textView?.close();
@@ -492,9 +499,13 @@ async function load(file, preparedDocument = null) {
     const recovering = autosave.takeRecoveringKey();
     const fingerprint = recovering ? Promise.resolve(recovering) : noteFingerprint(file).catch(() => "");
     const prepared = preparedDocument || await prepareDocument(file);
+    const nextFileName = file?.name || prepared.title || "";
+    const nextDocKind = prepared.kind || "";
     // HTML pages and text/Markdown files have their own views instead of the page editor.
     if (prepared.kind === "html" || prepared.kind === "text") {
       reset({ opening: true });
+      activeFileName = nextFileName;
+      activeDocKind = nextDocKind;
       if (prepared.converted) { convertedImages = prepared.images || []; convertedFolder = prepared.imageFolder || ""; converted = true; }
       sideFp = await fingerprint;
       const sideTitle = prepared.title || file.name || "Document";
@@ -530,6 +541,8 @@ async function load(file, preparedDocument = null) {
     });
     // Both worker and UI retain the previous document until the replacement validates.
     reset({ opening: true, keepSession: true });
+    activeFileName = nextFileName;
+    activeDocKind = nextDocKind;
     engine.opened(openedBytes);
     tapeMode = "note";
     tapeTaps.clear();
@@ -576,6 +589,7 @@ async function load(file, preparedDocument = null) {
     }
     rememberDocument();
     await renderPage(panels[0], result);
+    void ensureDocumentCover({ skipExisting: true });
     status("Document opened.");
     collab?.documentChanged();
     autosave.opened(recovering);
@@ -1249,6 +1263,11 @@ function placeholder(p) {
   p.el.replaceChildren(span);
   backgrounds?.release(raster);
 }
+function spreadFitWidth(space, colGap, spreadMode, pageCount) {
+  const gap = Number.isFinite(colGap) && colGap >= 0 ? colGap : 24;
+  if (spreadMode === 2 && pageCount > 1) return Math.max(1, (space - gap) / 2);
+  return Math.max(1, space);
+}
 function resize() {
   if (!doc) return;
   const fit = zoom === "fit",
@@ -1260,10 +1279,12 @@ function resize() {
     ? 2 * parseFloat(styles.paddingTop)
     : parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
   const space = Math.max(1, $("viewport").clientWidth - gutter);
+  const colGap = parseFloat(styles.columnGap) || parseFloat(styles.gap) || 24;
+  const fitWidth = spreadFitWidth(space, colGap, spread, panels.length);
   const reraster = [];
   for (const p of panels) {
     p.el.style.width =
-      (fit ? space : p.size[0] * zoom) + "px";
+      (fit ? fitWidth : p.size[0] * zoom) + "px";
     const width = p.el.clientWidth;
     if (
       p.view?.pdf_background &&
@@ -1478,14 +1499,26 @@ $("viewport").onscroll = () => {
   scrollFrame = requestAnimationFrame(() => {
     if (!doc) return;
     const top = $("viewport").getBoundingClientRect().top + 80;
+    const rowBottom = (i) => {
+      if (spread !== 2) return panels[i].el.getBoundingClientRect().bottom;
+      const start = i & ~1;
+      const a = panels[start].el.getBoundingClientRect().bottom;
+      const b = panels[start + 1]?.el.getBoundingClientRect().bottom ?? -Infinity;
+      return Math.max(a, b);
+    };
     // Usually still on the same page (or its neighbour): two reads instead of a search.
     const here = panels[page]?.el.getBoundingClientRect();
-    if (here && here.bottom >= top && (page === 0 || panels[page - 1].el.getBoundingClientRect().bottom < top)) return;
+    if (spread === 2) {
+      const prevRowStart = (page & ~1) - 2;
+      if (here && here.bottom >= top && (prevRowStart < 0 || rowBottom(prevRowStart) < top)) return;
+    } else if (here && here.bottom >= top && (page === 0 || panels[page - 1].el.getBoundingClientRect().bottom < top)) {
+      return;
+    }
     let low = 0,
       high = panels.length - 1;
     while (low < high) {
       const mid = (low + high) >> 1;
-      if (panels[mid].el.getBoundingClientRect().bottom < top) low = mid + 1;
+      if (rowBottom(mid) < top) low = mid + 1;
       else high = mid;
     }
     setPage(low);
@@ -3922,12 +3955,21 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
       as === "project" ? "application/json" : "application/octet-stream",
     );
     if (token !== epoch) return;
+    if (delivery.cancelled) {
+      status("Export cancelled.");
+      return;
+    }
     if (as === "markdown") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
-      await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
+      const mdDelivery = await download(new TextEncoder().encode(text), filename() + ".md", "text/markdown");
+      if (mdDelivery.cancelled) {
+        status("Export cancelled.");
+        return;
+      }
     }
     if (!delivery.shared) {
       autosave.markManual();
+      if (as === "project" || as === "noteful") void ensureDocumentCover({ skipExisting: false });
     }
     if (as === saveAs && !chosenOptions && !delivery.shared) {
       dirty = changed = false;
@@ -4254,6 +4296,21 @@ for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick 
 $("pageAlignFree").onclick = () => setPageAlign($("pages").dataset.align === "free" ? "center" : "free");
 for (const b of document.querySelectorAll("[data-align-menu]")) b.onclick = () => { setPageAlign(b.dataset.alignMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
 try { setPageAlign(["left", "right", "free"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
+// Side-by-side 2-up page spread toggle; remembered on this device.
+function setPageSpread(value) {
+  const next = Number(value) === 2 ? 2 : 1;
+  const sheet = panels[page]?.el, before = sheet?.getBoundingClientRect().top;
+  spread = next;
+  $("pages").dataset.spread = String(next);
+  if ($("pagesSpread")) $("pagesSpread").setAttribute("aria-pressed", String(next === 2));
+  if ($("viewSpread")) $("viewSpread").setAttribute("aria-checked", String(next === 2));
+  if (doc) resize();
+  if (sheet && before !== undefined) $("viewport").scrollTop += sheet.getBoundingClientRect().top - before;
+  try { localStorage.setItem("notecomplete-page-spread", String(next)); } catch { /* Optional. */ }
+}
+if ($("pagesSpread")) $("pagesSpread").onclick = () => setPageSpread(spread === 2 ? 1 : 2);
+if ($("viewSpread")) $("viewSpread").onclick = () => { setPageSpread(spread === 2 ? 1 : 2); closeMenus(); };
+try { setPageSpread(localStorage.getItem("notecomplete-page-spread") === "2" ? 2 : 1); } catch { setPageSpread(1); }
 // Audio for transcription: a small popover under the transport row.
 $("speechSettingsToggle").onclick = () => {
   const open = $("speechSettings").hidden;
@@ -4421,23 +4478,70 @@ const drive = driveBrowser({
     const opened = await openChosen(file);
     exportRequested(`drive:${driveFile.id}`, opened).catch((error) => status(error.message, true));
     if (opened) {
-      home.rememberCover(library.coverKey(driveFile), file);
-      home.rememberFacts(library.coverKey(driveFile), file);
+      const cKey = library.coverKey(driveFile);
+      activeCoverKeyOverride = cKey;
+      home.rememberFacts(cKey, file);
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
       noteEntryKey = library.key(driveFile);
       rememberDocument(noteEntryKey);
       setDocMember({ key: noteEntryKey, name: driveFile.name, source: "drive" });
+      void Promise.resolve(home.rememberCover(cKey, file)).then(() => ensureDocumentCover({ skipExisting: true }));
     }
     return opened;
   },
 });
 // The kept copy's MD5 (the core computes it), to match Drive's md5Checksum.
 library.md5 = (bytes) => call("md5", { bytes: bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer });
+function activeCoverKey() {
+  return activeCoverKeyOverride || noteEntryKey || "";
+}
+async function coverImageDimensions(url) {
+  if (!url || typeof Image !== "function") return null;
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    return null;
+  }
+  return { width: img.naturalWidth || 0, height: img.naturalHeight || 0 };
+}
+/** Screengrab page 0 as a JPEG thumbnail when a non-text document's cover is missing or a tiny placeholder. */
+async function ensureDocumentCover({ skipExisting = true } = {}) {
+  try {
+    if (!doc || !panels.length) return;
+    if (shouldSkipCoverFile({ name: activeFileName || docMember?.name || "", kind: activeDocKind })) return;
+    const key = activeCoverKey();
+    if (!key) return;
+    const token = epoch;
+    if (skipExisting) {
+      const existing = await library.cover(key).catch(() => null);
+      if (token !== epoch || !doc) return;
+      if (existing) {
+        if (existing.startsWith("data:image/svg+xml")) return;
+        const dims = await coverImageDimensions(existing);
+        if (token !== epoch || !doc) return;
+        if (dims && !isTinyCoverSize(dims.width, dims.height)) return;
+      }
+    }
+    const rendered = await pageCanvas(0, 320);
+    if (token !== epoch || !doc || !rendered?.canvas) return;
+    const dataUrl = rendered.canvas.toDataURL("image/jpeg", 0.82);
+    rendered.canvas.width = rendered.canvas.height = 0;
+    if (!dataUrl) return;
+    await library.saveCover(key, dataUrl);
+    if (home?.visible) home.renderRecent?.();
+  } catch { /* Optional cover fallback. */ }
+}
 async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
+    activeCoverKeyOverride = entry?.source === "drive"
+      ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
+      : (entry?.key || "");
     setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: "drive" } : null);
+    void ensureDocumentCover({ skipExisting: true });
   }
   return opened;
 }
@@ -4772,10 +4876,11 @@ async function openedLocal(path, name, file) {
   notePath = path;
   const entry = await library.rememberLocal(path, name, file.size);
   noteEntryKey = entry.key;
+  activeCoverKeyOverride = entry.key;
   rememberDocument(entry.key);
-  home.rememberCover(entry.key, file);
   home.rememberFacts(entry.key, file);
   setDocMember(localMember(path, name));
+  void Promise.resolve(home.rememberCover(entry.key, file)).then(() => ensureDocumentCover({ skipExisting: true }));
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
@@ -5017,10 +5122,14 @@ function documentControls() {
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
+  const canViewHtml = open && !!doc?.has_exam;
   if ($("viewExamHtml")) {
-    const canViewHtml = open && !!doc?.has_exam;
     $("viewExamHtml").hidden = !canViewHtml;
     $("viewExamHtml").disabled = !canViewHtml;
+  }
+  if ($("navExamHtml")) {
+    $("navExamHtml").hidden = !canViewHtml;
+    $("navExamHtml").disabled = !canViewHtml;
   }
   if ($("studyExpandAi")) $("studyExpandAi").disabled = !open || !!doc?.canvas;
   if ($("studyOpenDeck")) $("studyOpenDeck").disabled = false;
@@ -6066,9 +6175,8 @@ const expandMaker = expandController({
   status,
 });
 if ($("viewExamHtml")) $("viewExamHtml").onclick = () => { closeMenus(); openEmbeddedExamHtml(); };
+if ($("navExamHtml")) $("navExamHtml").onclick = () => openEmbeddedExamHtml();
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
-$("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
-$("fileSolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
 if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "note" }); };
@@ -6161,6 +6269,10 @@ const quizIndex = allQuizzes({
   appendNotes: async (markdown) => (await notesApi()).append(markdown),
   canNote: () => !!doc || htmlView.hasDocument,
   markdown: (text) => call("markdownHtml", { text }),
+  onOpenScratchChat: (entry) => {
+    if (doc || studyText()) showDocument();
+    return chat.openThread({ id: entry.id, title: entry.title, messages: entry.messages, text: entry.text, big: true });
+  },
 });
 // The desktop app's updater, or the Android app's (it says its version: App.js).
 updateNotice({ status, bridge: globalThis.notecompleteUpdates || (globalThis.notecompleteApp?.platform === "android" ? androidUpdates({ app: globalThis.notecompleteApp }) : undefined) });
@@ -6768,10 +6880,11 @@ async function openImportedFile(file, meta = {}) {
     }).catch(() => null);
     if (entry) {
       noteEntryKey = entry.key;
+      activeCoverKeyOverride = entry.key;
       rememberDocument(entry.key);
-      home.rememberCover(entry.key, file);
       home.rememberFacts(entry.key, file);
       setDocMember({ key: entry.key, name: entry.name, source: "imported" });
+      void Promise.resolve(home.rememberCover(entry.key, file)).then(() => ensureDocumentCover({ skipExisting: true }));
       if (home.visible) home.renderRecent();
     } else {
       setDocMember(null);

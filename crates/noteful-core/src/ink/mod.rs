@@ -305,7 +305,8 @@ pub fn new_notebook(title: &str, pages: &[InkPage]) -> Result<Editor> {
     }
     let (pdf, index, _) = paper_for(pages);
     let records: Vec<([f64; 2], Option<u64>)> = index.iter().map(|i| (A4, Some(*i))).collect();
-    let mut editor = Editor::create_document_with(title, &records, &pdf, "paper-1", 1.)?;
+    let mut editor =
+        Editor::create_document_with(title, &records, &pdf, "paper-1", 1.21_f32 as f64)?;
     for (slot, page) in pages.iter().enumerate() {
         editor.add_lines(slot, page.strokes().cloned().collect())?;
         for tb in &page.text_boxes {

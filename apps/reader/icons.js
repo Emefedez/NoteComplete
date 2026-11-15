@@ -1,4 +1,4 @@
-const paths = {
+export const paths = {
  menu:'M4 6h16M4 12h16M4 18h16',
  image:'M3 3h18v18H3zM3 17l6-6 4 4 3-3 5 5M15 7h.01',
  pages:'M4 3h16v18H4zM9 3v18M6 7h1M6 11h1M6 15h1',
@@ -61,6 +61,7 @@ const paths = {
  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
  unplug:'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5',
  check:'m5 12.5 4.5 4.5L19 7.5',
+ doubleCheck:'M2.5 12.5 6.5 16.5 15 8M8.5 14.5 11.5 17.5 21 8',
  link:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
  window:'M3 5h18v14H3zM3 9h18M6 7h.01',
  tablet:'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2',
@@ -103,7 +104,8 @@ const paths = {
  pdfBg:'M6 3h10l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm9 0v5h5M8 15l2.5-2.5 3 3 2-2 2.5 2.5',
  animation:'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm6 3.5v5l5-2.5-5-2.5Z',
  exam:'M9 3h6v3H9zM6 5h12a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 21H6a1.5 1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 6 5Zm3 6.5h6M9 15h4m2.5 1.5 1.5 1.5 3-3',
- batchNotes:'M8 4h10l3 3v11H8a1.5 1.5 0 0 1-1.5-1.5V5.5A1.5 1.5 0 0 1 8 4Zm-4 4v11.5A1.5 1.5 0 0 0 5.5 21H17M11.5 10h6M11.5 13.5h4.5'
+ batchNotes:'M8 4h10l3 3v11H8a1.5 1.5 0 0 1-1.5-1.5V5.5A1.5 1.5 0 0 1 8 4Zm-4 4v11.5A1.5 1.5 0 0 0 5.5 21H17M11.5 10h6M11.5 13.5h4.5',
+ spread:'M3 4h8v16H3zM13 4h8v16h-8zM5.5 8.5h3M5.5 12h3M15.5 8.5h3M15.5 12h3'
 };
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');

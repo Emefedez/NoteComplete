@@ -266,3 +266,225 @@ fn content_digest_matches_noteful_export_before_and_after_edits() {
     e.set_canvas(true).unwrap();
     assert!(e.content_digest().is_err());
 }
+
+fn find_field(fields: &[noteful_core::Field], tag: u16) -> Option<&noteful_core::Field> {
+    fields.iter().find(|f| f.tag == tag)
+}
+
+fn assert_noteful_native_structure(bytes: &[u8], expected_pages: usize) {
+    use noteful_core::{decode_fields, WireValue as V};
+
+    let package = Package::parse(bytes).unwrap();
+    let version = match find_field(&package.index, 1).unwrap().value {
+        V::Float(v) => v,
+        ref other => panic!("expected float version, got {other:?}"),
+    };
+    assert!(
+        (version - 1.21).abs() < 1e-4,
+        "unexpected index version {version}"
+    );
+    let note_ids = find_field(&package.index, 2)
+        .unwrap()
+        .value
+        .as_array()
+        .unwrap();
+    assert_eq!(note_ids.len(), 1);
+    let note_id = note_ids[0].as_text().unwrap();
+    assert_eq!(note_id.len(), 32);
+    assert!(note_id
+        .bytes()
+        .all(|b| matches!(b, b'0'..=b'9' | b'A'..=b'F')));
+
+    let note_raw = package.resource(&format!("n:{note_id}")).unwrap();
+    let note_fields = decode_fields(note_raw, 0).unwrap();
+    assert_eq!(
+        find_field(&note_fields, 1).unwrap().value.as_text(),
+        Some(note_id)
+    );
+    assert!(find_field(&note_fields, 3).unwrap().clock.is_some());
+    let cover_field = find_field(&note_fields, 7)
+        .unwrap()
+        .value
+        .as_fields()
+        .unwrap();
+    let cover_id = find_field(cover_field, 1).unwrap().value.as_text().unwrap();
+    assert!(package
+        .resource(cover_id)
+        .unwrap()
+        .starts_with(b"\xff\xd8\xff"));
+    assert_eq!(
+        find_field(&note_fields, 9).unwrap().value.as_text(),
+        Some("")
+    );
+
+    let draw_raw = package.resource(&format!("d:{note_id}")).unwrap();
+    let draw_fields = decode_fields(draw_raw, 0).unwrap();
+    assert_eq!(
+        find_field(&draw_fields, 1).unwrap().value.as_text(),
+        Some(note_id)
+    );
+    let layer_col = find_field(&draw_fields, 3)
+        .unwrap()
+        .value
+        .as_fields()
+        .unwrap();
+    let layers = find_field(layer_col, 0).unwrap().value.as_array().unwrap();
+    assert!(
+        !layers.is_empty(),
+        "drawing metadata must include at least one layer"
+    );
+
+    let page_col = find_field(&draw_fields, 2)
+        .unwrap()
+        .value
+        .as_fields()
+        .unwrap();
+    let pages = find_field(page_col, 0).unwrap().value.as_array().unwrap();
+    assert_eq!(pages.len(), expected_pages);
+    for page in pages {
+        let pfs = page.as_fields().expect("expected nested page fields");
+        assert!(find_field(pfs, 4).unwrap().clock.is_some());
+        assert!(find_field(pfs, 5).unwrap().clock.is_some());
+        assert!(find_field(pfs, 6).is_some());
+        assert!(find_field(pfs, 7).is_some());
+        assert!(find_field(pfs, 9).is_some());
+        let bg = find_field(pfs, 4).unwrap().value.as_fields().unwrap();
+        let bg_kind = find_field(bg, 0).unwrap();
+        assert_eq!(bg_kind.wire_type, 0x0011);
+        assert_eq!(bg_kind.value.as_uint(), Some(1));
+        assert!(find_field(bg, 2).is_some());
+        assert!(find_field(bg, 5).is_some());
+    }
+}
+
+#[test]
+fn created_blank_pdf_and_notebook_packages_match_noteful_structure() {
+    let blank_editor =
+        Editor::create_document("Blank Check", &[[595.28, 841.89], [595.28, 841.89]], &[]).unwrap();
+    let blank_bytes = blank_editor.export_noteful().unwrap();
+    assert_noteful_native_structure(&blank_bytes, 2);
+    let reopened_blank = Editor::open(&blank_bytes).unwrap();
+    assert_eq!(reopened_blank.scene.pages.len(), 2);
+    let bg_res = reopened_blank.scene.pages[0]
+        .pdf_background
+        .as_ref()
+        .unwrap()
+        .resource_id
+        .clone();
+    assert!(reopened_blank
+        .pdf_bytes(&bg_res)
+        .unwrap()
+        .starts_with(b"%PDF-"));
+    assert_eq!(
+        Package::parse(&blank_bytes).unwrap().rebuild().unwrap(),
+        blank_bytes
+    );
+
+    let dot_page = noteful_core::ink::InkPage {
+        lines: vec![],
+        under: vec![],
+        text_boxes: vec![],
+        paper: noteful_core::ink::Paper::DOT,
+        words: vec![],
+    };
+    let notebook_editor =
+        noteful_core::ink::new_notebook("Notebook Check", &[dot_page.clone(), dot_page]).unwrap();
+    let notebook_bytes = notebook_editor.export_noteful().unwrap();
+    assert_noteful_native_structure(&notebook_bytes, 2);
+    assert_eq!(
+        Package::parse(&notebook_bytes).unwrap().rebuild().unwrap(),
+        notebook_bytes
+    );
+}
+
+#[test]
+fn legacy_notecomplete_package_is_repaired_both_explicitly_and_on_export() {
+    use noteful_core::{encode_fields, repair_noteful, Field, WireValue as V};
+
+    let f = |tag: u16, wire_type: u16, value: V| Field {
+        tag,
+        wire_type,
+        value,
+        offset: 0,
+        size: 0,
+        clock: None,
+    };
+
+    let page_record = vec![
+        f(1, 0x0005, V::Text("page-0".into())),
+        f(
+            4,
+            0x0007,
+            V::Fields(vec![
+                f(0, 0x0001, V::UInt(0)),
+                f(1, 0x0021, V::Pair([595.28, 841.89])),
+            ]),
+        ),
+        f(5, 0x0005, V::Text(String::new())),
+    ];
+    let draw_meta = encode_fields(&[
+        f(
+            2,
+            0x0007,
+            V::Fields(vec![f(0, 0x0407, V::Array(vec![V::Fields(page_record)]))]),
+        ),
+        f(3, 0x0007, V::Fields(vec![f(0, 0x0407, V::Array(vec![]))])),
+    ])
+    .unwrap();
+    let note_meta = encode_fields(&[f(3, 0x0005, V::Text("Legacy Exam".into()))]).unwrap();
+    let blocks = [
+        ("n:imported", note_meta.as_slice()),
+        ("d:imported", draw_meta.as_slice()),
+    ];
+    let off0 = noteful_core::MAGIC.len() as u64;
+    let off1 = off0 + note_meta.len() as u64;
+    let index = vec![
+        f(1, 0x0003, V::Float(1.0)),
+        f(3, 0x0405, V::Array(vec![])),
+        f(4, 0x0405, V::Array(vec![])),
+        f(
+            10,
+            0x0405,
+            V::Array(blocks.iter().map(|(id, _)| V::Text((*id).into())).collect()),
+        ),
+        f(11, 0x0401, V::Array(vec![V::UInt(off0), V::UInt(off1)])),
+        f(
+            12,
+            0x0401,
+            V::Array(vec![
+                V::UInt(note_meta.len() as u64),
+                V::UInt(draw_meta.len() as u64),
+            ]),
+        ),
+    ];
+    let trailer = encode_fields(&index).unwrap();
+    let mut legacy = noteful_core::MAGIC.to_vec();
+    for (_, bytes) in &blocks {
+        legacy.extend_from_slice(bytes);
+    }
+    let idx_offset = legacy.len() as u64;
+    legacy.extend_from_slice(&trailer);
+    legacy.extend_from_slice(&noteful_core::MAGIC);
+    legacy.extend_from_slice(&idx_offset.to_be_bytes());
+    legacy.extend_from_slice(&(trailer.len() as u32).to_be_bytes());
+
+    // Explicit repair
+    let repaired = repair_noteful(&legacy).unwrap();
+    assert_noteful_native_structure(&repaired, 1);
+    let opened_repaired = Editor::open(&repaired).unwrap();
+    assert_eq!(opened_repaired.scene.title, "Legacy Exam");
+    let bg_res = opened_repaired.scene.pages[0]
+        .pdf_background
+        .as_ref()
+        .unwrap()
+        .resource_id
+        .clone();
+    assert!(opened_repaired
+        .pdf_bytes(&bg_res)
+        .unwrap()
+        .starts_with(b"%PDF-"));
+
+    // Automatic upgrade during Editor::open + export_noteful
+    let auto_exported = Editor::open(&legacy).unwrap().export_noteful().unwrap();
+    assert_noteful_native_structure(&auto_exported, 1);
+}

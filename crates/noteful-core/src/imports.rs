@@ -357,11 +357,17 @@ impl Editor {
             .enumerate()
             .map(|(i, s)| (*s, (!pdf.is_empty()).then_some(i as u64)))
             .collect();
-        Self::create_document_with(title, &pages, pdf, "imported-pdf", 1.)
+        Self::create_document_with(
+            title,
+            &pages,
+            pdf,
+            "imported-pdf",
+            crate::native::NATIVE_VERSION,
+        )
     }
     /// A new document whose pages each show a page of `pdf` (by index) or
-    /// Noteful's own white paper (None). `version` is the package format
-    /// written in the index (tag 1).
+    /// blank white pages generated as PDFs when `None`. `version` is the
+    /// package format written in the index (tag 1).
     pub fn create_document_with(
         title: &str,
         pages: &[([f64; 2], Option<u64>)],
@@ -390,54 +396,101 @@ impl Editor {
         if !pdf.is_empty() && !pdf.starts_with(b"%PDF-") {
             return Err(Error::new(0, "Invalid PDF header"));
         }
-        let mut records = collection(5);
-        let mut page_records: Vec<V> = vec![];
-        for (i, (size, pdf_page)) in pages.iter().enumerate() {
-            let mut background = vec![
-                f(0, 1, V::UInt(u64::from(pdf_page.is_some()))),
-                f(1, 0x21, V::Pair(*size)),
-            ];
-            match pdf_page {
-                None => background.push(f(6, 5, V::Text("{\"pc\":16777215}".into()))),
-                Some(index) => {
-                    background.extend([f(3, 2, V::UInt(*index)), f(4, 5, V::Text(pdf_id.into()))])
-                }
+        let clock = crate::native::APPLE_CLOCK_US;
+        let mut note_seed = Vec::from(title.as_bytes());
+        note_seed.extend_from_slice(&(pages.len() as u64).to_be_bytes());
+        for s in sizes {
+            note_seed.extend_from_slice(&s[0].to_be_bytes());
+            note_seed.extend_from_slice(&s[1].to_be_bytes());
+        }
+        note_seed.extend_from_slice(&(pdf.len() as u64).to_be_bytes());
+        let note_id = crate::native::deterministic_uuid(&note_seed);
+        let cover_id = crate::native::deterministic_uuid(format!("cover:{note_id}").as_bytes());
+
+        // Deduplicate blank page sizes into one generated white PDF when any page has pdf_page == None.
+        let mut blank_sizes: Vec<[f64; 2]> = Vec::new();
+        for (size, pdf_page) in pages {
+            if pdf_page.is_none() && !blank_sizes.contains(size) {
+                blank_sizes.push(*size);
             }
-            page_records.push(V::Fields(vec![
-                f(1, 5, V::Text(format!("page-{i}"))),
-                f(2, 7, V::Fields(vec![f(0, 5, V::Text(String::new()))])),
-                f(4, 7, V::Fields(background)),
-                f(5, 5, V::Text(format!("{i:020}"))),
-            ]));
+        }
+        let blank_pdf =
+            (!blank_sizes.is_empty()).then(|| crate::ink::paper::blank_pdf(&blank_sizes));
+        let blank_pdf_id = if pdf_id == "blank-paper" {
+            "blank-paper-0"
+        } else {
+            "blank-paper"
+        };
+
+        let mut records = collection(5);
+        let mut page_records: Vec<V> = Vec::with_capacity(pages.len());
+        let mut page_ids: Vec<V> = Vec::with_capacity(pages.len());
+        for (i, (size, pdf_page)) in pages.iter().enumerate() {
+            let (bg_res, bg_index) = match pdf_page {
+                Some(index) => (pdf_id, *index),
+                None => {
+                    let b_idx = blank_sizes.iter().position(|s| s == size).unwrap_or(0) as u64;
+                    (blank_pdf_id, b_idx)
+                }
+            };
+            let background = crate::native::pdf_background_fields(*size, bg_res, bg_index, None);
+            let page_id =
+                crate::native::deterministic_uuid(format!("page:{note_id}:{i}").as_bytes());
+            let link_uuid =
+                crate::native::deterministic_uuid(format!("page-link:{note_id}:{i}").as_bytes());
+            page_ids.push(V::Text(page_id.clone()));
+            page_records.push(V::Fields(crate::native::page_record_fields(
+                page_id,
+                String::new(),
+                background,
+                format!("{i:020}"),
+                link_uuid,
+                clock,
+            )));
         }
         for field in &mut records {
             field.value = match field.tag {
                 0 => V::Array(page_records.clone()),
-                1 => V::Array(
-                    (0..sizes.len())
-                        .map(|i| V::Text(format!("page-{i}")))
-                        .collect(),
-                ),
-                2 => V::Array(vec![V::UInt(0); sizes.len()]),
+                1 => V::Array(page_ids.clone()),
+                2 => V::Array(vec![V::UInt(clock); sizes.len()]),
                 _ => V::Array(vec![V::UInt(1); sizes.len()]),
             };
         }
-        let mut blocks = vec![
-            (
-                "n:imported".to_owned(),
-                crate::encode_fields(&[f(3, 5, V::Text(title.into()))])?,
-            ),
-            (
-                "d:imported".to_owned(),
-                crate::encode_fields(&[
-                    f(2, 7, V::Fields(records)),
-                    f(3, 7, V::Fields(collection(0x12))),
-                ])?,
-            ),
-        ];
+        let doc_uuid6 = crate::native::deterministic_uuid(format!("doc6:{note_id}").as_bytes());
+        let drawing_bytes = crate::encode_fields(&crate::native::build_drawing_metadata(
+            &note_id,
+            records,
+            crate::native::default_layers_collection(clock),
+            &doc_uuid6,
+            clock,
+        ))?;
+
+        let mut resource_ids = vec![cover_id.clone()];
+        let mut tail_blocks: Vec<(String, Vec<u8>)> = vec![(format!("d:{note_id}"), drawing_bytes)];
         if !pdf.is_empty() {
-            blocks.push((pdf_id.into(), pdf.to_vec()));
+            resource_ids.push(pdf_id.into());
+            tail_blocks.push((pdf_id.into(), pdf.to_vec()));
         }
+        if let Some(bpdf) = blank_pdf {
+            resource_ids.push(blank_pdf_id.into());
+            tail_blocks.push((blank_pdf_id.into(), bpdf));
+        }
+
+        let content_size: u64 = tail_blocks.iter().map(|(_, b)| b.len() as u64).sum();
+        let note_bytes = crate::encode_fields(&crate::native::build_note_metadata(
+            &note_id,
+            title,
+            &cover_id,
+            crate::native::APPLE_EPOCH_SECS,
+            clock,
+            content_size,
+        ))?;
+
+        let mut blocks = Vec::with_capacity(2 + tail_blocks.len());
+        blocks.push((format!("n:{note_id}"), note_bytes));
+        blocks.push((cover_id, crate::native::BLANK_COVER_JPEG.to_vec()));
+        blocks.extend(tail_blocks);
+
         let mut out = crate::MAGIC.to_vec();
         let mut keys = vec![];
         let mut offsets = vec![];
@@ -448,22 +501,15 @@ impl Editor {
             lengths.push(V::UInt(bytes.len() as u64));
             out.extend(bytes);
         }
-        let index = crate::encode_fields(&[
-            f(1, 3, V::Float(version)),
-            f(
-                3,
-                0x405,
-                V::Array(if pdf.is_empty() {
-                    vec![]
-                } else {
-                    vec![V::Text(pdf_id.into())]
-                }),
-            ),
-            f(4, 0x405, V::Array(vec![])),
-            f(10, 0x405, V::Array(keys)),
-            f(11, 0x402, V::Array(offsets)),
-            f(12, 0x402, V::Array(lengths)),
-        ])?;
+        let index = crate::encode_fields(&crate::native::build_index_fields(
+            version,
+            &note_id,
+            resource_ids,
+            vec![],
+            keys,
+            offsets,
+            lengths,
+        ))?;
         let at = out.len();
         let length = u32::try_from(index.len()).map_err(|_| Error::new(0, "Index too large"))?;
         out.extend(index);

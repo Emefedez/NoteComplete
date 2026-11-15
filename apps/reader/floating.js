@@ -18,6 +18,19 @@ export function clampRect({ left, top, width, height }, area, min = { width: 0, 
   return { left, top, width, height };
 }
 
+// A comfortable reading/workspace rect centered inside `area`, clamped to `area` and `min`.
+export function largeRect(area, { ratio = 0.88, maxWidth = 1040, maxHeight = 820, min = { width: 0, height: 0 } } = {}) {
+  const aw = Math.max(0, Number(area?.width) || 0);
+  const ah = Math.max(0, Number(area?.height) || 0);
+  const mw = Math.max(0, Number(min?.width) || 0);
+  const mh = Math.max(0, Number(min?.height) || 0);
+  const width = Math.max(Math.min(mw, aw), Math.min(maxWidth, Math.round(aw * ratio)));
+  const height = Math.max(Math.min(mh, ah), Math.min(maxHeight, Math.round(ah * ratio)));
+  const left = Math.round((aw - width) / 2);
+  const top = Math.round((ah - height) / 2);
+  return clampRect({ left, top, width, height }, { width: aw, height: ah }, { width: mw, height: mh });
+}
+
 // A rect resized by a pointer move (dx, dy) on some edges ('l', 'r', 't', 'b' combined).
 export function resizeRect(start, dx, dy, edges, min, area) {
   let { left, top, width, height } = start;
@@ -39,6 +52,8 @@ export function resizeRect(start, dx, dy, edges, min, area) {
 // Stacking: the window used last is in front. Layers start at --window-z, which the
 // focus dimming raises above its veil, so the order is the same with or without it.
 const stack = [];
+const windows = new WeakMap();
+export function windowOf(el) { return el ? windows.get(el) || null : null; }
 function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(var(--window-z, 26) + ${i})`; }); }
 function raise(el) {
   if (stack.at(-1) === el) return;
@@ -89,6 +104,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   };
   const min = { width: minWidth, height: minHeight };
   const isCompact = () => !!compact && el.classList.contains(compact.cls);
+  let large = false, beforeLarge = null;
   // The window's rect relative to its area, as placed now.
   function current() {
     const r = el.getBoundingClientRect(), a = area();
@@ -101,6 +117,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     Object.assign(el.style, { left: `${off.left + c.left}px`, top: `${off.top + c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
     if (!isCompact()) el.style.height = `${c.height}px`;
     if (save) {
+      if (large) {
+        large = false;
+        beforeLarge = null;
+        el.classList.remove('window-large');
+      }
       const keep = { left: c.left, top: c.top, width: c.width, height: isCompact() ? saved()?.height ?? c.height : c.height };
       try { localStorage.setItem(key, JSON.stringify(keep)); } catch { /* Optional. */ }
     }
@@ -112,6 +133,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   // instead of moving the head; width never changes with □.
   function place() {
     if (!visible()) return;
+    if (large) {
+      if (!el.classList.contains('screen-window')) el.classList.add('screen-window');
+      apply(largeRect(area(), { min }), false);
+      return;
+    }
     const s = saved();
     // First shown: placed by its CSS in the work area, then free on the whole screen.
     if (!el.classList.contains('screen-window')) {
@@ -200,6 +226,10 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     down.preventDefault();
   });
   head.classList.add('window-head');
+  head.addEventListener('dblclick', e => {
+    if (!enabled() || !visible() || e.target.closest('button, input, select, textarea, a, [contenteditable="true"]')) return;
+    setLarge(!large);
+  });
 
   // Anywhere on the window, as in a tiling window manager: Ctrl (⌘ on a Mac) + drag moves
   // it, Ctrl + right-button drag resizes it from the corner nearest the pointer. Text fields
@@ -261,12 +291,73 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     };
   }
 
+  function restoreFromLarge() {
+    large = false;
+    el.classList.remove('window-large');
+    const restore = saved() || beforeLarge;
+    beforeLarge = null;
+    if (restore) apply(restore);
+    else {
+      Object.assign(el.style, { left: '', top: '', width: '', height: '', right: '', bottom: '', margin: '' });
+      el.classList.remove('screen-window');
+    }
+    return restore;
+  }
+
+  /** Expand/center the window inside the screen area without overwriting the saved small rect. */
+  function setLarge(on = true) {
+    const next = !!on;
+    if (next === large) {
+      if (next && visible()) {
+        if (!el.classList.contains('screen-window')) el.classList.add('screen-window');
+        apply(largeRect(area(), { min }), false);
+        raise(el);
+      }
+      return;
+    }
+    if (next) {
+      if (!beforeLarge) beforeLarge = saved() || (el.classList.contains('screen-window') && visible() ? current() : null);
+      large = true;
+      el.classList.add('window-large');
+      if (compact && el.classList.contains(compact.cls)) {
+        el.classList.remove(compact.cls);
+        sizeIcon();
+      }
+      if (el.classList.contains('in-tray')) el.classList.remove('in-tray');
+      if (trayed.delete(el)) renderTray();
+      if (visible()) {
+        if (!el.classList.contains('screen-window')) el.classList.add('screen-window');
+        apply(largeRect(area(), { min }), false);
+        raise(el);
+      }
+      return;
+    }
+    const restored = restoreFromLarge();
+    if (visible() && !restored) place();
+  }
+
+  /** Ensure the floating window is visible and opened in large reading/workspace mode. */
+  function openLarge() {
+    if (el.tagName === 'DIALOG') {
+      if (!el.open) el.showModal?.();
+    } else if (el.hidden) {
+      el.hidden = false;
+    }
+    setLarge(true);
+  }
+
+  function toggleLarge() {
+    setLarge(!large);
+    return large;
+  }
+
   // Closing takes it out of the tray; showing it, or making it large again, puts it
   // back in place (only then: other class changes, like dragging, leave it alone).
   let wasShown = visible(), wasCompact = isCompact();
   new MutationObserver(() => {
     const closed = el.hidden || (el.tagName === 'DIALOG' && !el.open) || !enabled();
     if (closed && el.classList.contains('in-tray')) el.classList.remove('in-tray');
+    if (closed && large) restoreFromLarge();
     // Closed, or brought back by the app itself: off the tray.
     if ((closed || !el.classList.contains('in-tray')) && trayed.delete(el)) renderTray();
     const shown = visible(), small = isCompact();
@@ -275,7 +366,11 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     if (small !== wasCompact) sizeIcon();
     wasShown = shown; wasCompact = small;
   }).observe(el, { attributes: true, attributeFilter: ['hidden', 'open', 'class'] });
-  addEventListener('resize', () => { if (visible() && el.style.left) apply(current()); });
+  addEventListener('resize', () => {
+    if (!visible()) return;
+    if (large) apply(largeRect(area(), { min }), false);
+    else if (el.style.left) apply(current());
+  });
   // Grow to show what would scroll inside (an AI answer being written), up to the area,
   // moving up when it would pass the bottom. Not remembered: the saved size stays.
   let fitting = 0;
@@ -291,5 +386,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     });
   }
   place();
-  return { place, putAway, fit };
+  const api = { place, putAway, fit, setLarge, openLarge, toggleLarge, get large() { return large; } };
+  windows.set(el, api);
+  return api;
 }

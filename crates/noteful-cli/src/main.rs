@@ -9,7 +9,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let cmd = args
         .next()
-        .ok_or("Usage: noteful inspect|verify|render|export <file|->, noteful convert <notes.md> -o <out.noteful>, or noteful mcp")?;
+        .ok_or("Usage: noteful inspect|verify|render|export|repair <file|->, noteful convert <notes.md> -o <out.noteful>, or noteful mcp")?;
     if cmd == "mcp" {
         return mcp::serve();
     }
@@ -22,8 +22,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if args.next().is_some() {
         return Err("Too many arguments".into());
     }
-    if cmd != "inspect" && cmd != "verify" && cmd != "render" && cmd != "export" {
-        return Err("Expected inspect, verify, render or export".into());
+    if cmd != "inspect" && cmd != "verify" && cmd != "render" && cmd != "export" && cmd != "repair"
+    {
+        return Err("Expected inspect, verify, render, export or repair".into());
     }
     let mut input: Box<dyn Read> = if source == "-" {
         Box::new(io::stdin())
@@ -43,6 +44,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cmd == "export" {
         let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
         io::stdout().lock().write_all(&editor.export_noteful()?)?;
+        return Ok(());
+    }
+    if cmd == "repair" {
+        let repaired = if data.starts_with(&noteful_core::MAGIC) {
+            noteful_core::repair_noteful(&data)?
+        } else {
+            let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
+            noteful_core::repair_noteful(&editor.export_noteful()?)?
+        };
+        io::stdout().lock().write_all(&repaired)?;
         return Ok(());
     }
     if cmd == "render" {
