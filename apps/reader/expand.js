@@ -324,7 +324,7 @@ export function expandController({
         openTitle: openDocTitle(),
         openPages: openDocPages(),
       });
-      const m = model.value();
+      const m = model.value;
       const caps = ai.capabilities?.(provider, m) || {};
 
       if (mode === 'exam') {
@@ -484,19 +484,22 @@ export function expandController({
       dialog.showModal();
       await picker.refresh({ preselectOpen: false });
       const select = el('expTool');
-      select.replaceChildren(...(ai?.providers() || []).map((p) => {
-        const o = document.createElement('option');
-        o.value = p.id;
-        o.textContent = p.label + (p.available ? '' : ' — not found');
-        o.disabled = !p.available;
-        return o;
-      }));
-      let savedTool = '';
-      try { savedTool = store?.getItem('notecomplete-expand-ai') || ''; } catch {}
-      if (savedTool && select.querySelector(`option[value="${savedTool}"]:not([disabled])`)) select.value = savedTool;
-      else select.value = select.querySelector('option:not([disabled])')?.value || '';
-      if (select.value) await model.load(select.value);
-      else el('expStatus').textContent = 'No AI tool found. Install or connect an AI tool under Help → Connect AI tools…';
+      if (!select.options.length) {
+        const providers = (await ai?.providers?.()) || [];
+        select.replaceChildren(...providers.map((p) => {
+          const o = document.createElement('option');
+          o.value = p.id;
+          o.textContent = p.available ? p.label : `${p.label} (not installed)`;
+          o.disabled = !p.available;
+          return o;
+        }));
+        let savedTool = '';
+        try { savedTool = store?.getItem('notecomplete-expand-ai') || ''; } catch {}
+        if (savedTool && select.querySelector(`option[value="${savedTool}"]:not([disabled])`)) select.value = savedTool;
+        else select.value = select.querySelector('option:not([disabled])')?.value || '';
+        if (select.value) await model.load(select.value);
+        else el('expStatus').textContent = 'No AI tool found. Install or connect an AI tool under Help → Connect AI tools…';
+      }
     },
     get visible() { return !!dialog?.open; },
   };

@@ -247,9 +247,9 @@ export function batchNotesController({
       if (!resolved.length) throw Error('No readable content found in the selected sources.');
 
       const rawDialect = await call('dialect');
-      const m = model.value();
+      const m = model.value;
       const caps = ai.capabilities?.(provider, m) || {};
-      const dialect = caps.small ? compactDialect(rawDialect) : rawDialect;
+      const dialect = (model.small || caps.small) ? compactDialect(rawDialect) : rawDialect;
 
       const tasks = prefs.mode === 'combined'
         ? [{

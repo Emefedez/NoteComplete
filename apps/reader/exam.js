@@ -329,7 +329,7 @@ export function examController({
 
       el('examStatus').textContent = 'Generating exam problems with AI…';
       job?.progress?.('Writing exam questions…');
-      const m = model.value();
+      const m = model.value;
       const caps = ai.capabilities?.(provider, m) || {};
       const res = await runAI(
         ai,
@@ -337,7 +337,7 @@ export function examController({
         (chunk) => {
           el('examStatus').textContent = `Generating exam… (${chunk.length} chars received)`;
         },
-        { vision: caps.vision !== false },
+        { small: model.small, vision: caps.vision !== false },
       );
 
       if (ac.signal.aborted) throw Error('Cancelled.');
