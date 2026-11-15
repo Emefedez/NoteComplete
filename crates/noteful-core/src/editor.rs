@@ -157,6 +157,7 @@ pub struct ProjectExportOptions {
     pub include_ink_text: bool,
     pub include_recognized_text: bool,
     pub include_study: bool,
+    pub include_exam: bool,
 }
 impl Default for ProjectExportOptions {
     fn default() -> Self {
@@ -169,6 +170,7 @@ impl Default for ProjectExportOptions {
             include_ink_text: true,
             include_recognized_text: true,
             include_study: true,
+            include_exam: true,
         }
     }
 }
@@ -188,6 +190,7 @@ pub struct ProjectBreakdown {
     pub markdown_bytes: usize,
     pub text_bytes: usize,
     pub study_bytes: usize,
+    pub exam_bytes: usize,
     pub total_bytes: usize,
 }
 #[derive(Serialize, Deserialize)]
@@ -219,10 +222,16 @@ struct Project {
     /// Recordings added in NoteComplete bundled with the project (project version 11).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     added_audio: Vec<ProjectAddedAudio>,
+    /// Embedded interactive exam HTML and structured metadata kept with the project (project version 12).
+    #[serde(default, skip_serializing_if = "ProjectExam::is_empty")]
+    exam: ProjectExam,
 }
 
 /// Upper bound for the study data serialized inside a project (bytes).
 pub const STUDY_LIMIT: usize = 8 << 20;
+
+/// Upper bound for embedded interactive exam HTML/source data serialized inside a project (bytes).
+pub const EXAM_LIMIT: usize = 16 << 20;
 
 /// Study sets kept alongside a note inside `.nfedit` projects (version 10).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -239,6 +248,22 @@ impl ProjectStudy {
     /// True when no decks, quizzes, or scratchpad entries are stored.
     pub fn is_empty(&self) -> bool {
         self.decks.is_empty() && self.quizzes.is_empty() && self.scratch.is_empty()
+    }
+}
+
+/// Interactive exam HTML and optional structured exam source kept inside `.nfedit` (version 12).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectExam {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub html: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<serde_json::Value>,
+}
+impl ProjectExam {
+    /// True when neither embedded exam HTML nor structured exam data is stored.
+    pub fn is_empty(&self) -> bool {
+        self.html.is_empty() && self.source.is_none()
     }
 }
 fn is_zero(n: &usize) -> bool {
@@ -299,6 +324,8 @@ pub struct Editor {
     pub(crate) study: ProjectStudy,
     /// Recordings added in NoteComplete kept with the project; not part of edit history.
     pub(crate) added_audio: Vec<(crate::AddedAudio, Vec<u8>)>,
+    /// Embedded interactive exam HTML and structured metadata; not part of edit history.
+    pub(crate) exam: ProjectExam,
     /// The SVG of added lines, by the place of their `Add` edit in the history, so a view
     /// does not format every line again (view.rs). Emptied from the cursor on by `commit`.
     pub(crate) added_svg: std::cell::RefCell<Vec<Option<Box<str>>>>,
@@ -373,6 +400,7 @@ impl Editor {
             floor: 0,
             study: ProjectStudy::default(),
             added_audio: Vec::new(),
+            exam: ProjectExam::default(),
             added_svg: Default::default(),
         })
     }
@@ -703,7 +731,9 @@ impl Editor {
     }
     fn serialize_project(mut project: Project) -> Result<String> {
         project.format = "noteful-re-project".to_owned();
-        project.version = if !project.added_audio.is_empty() {
+        project.version = if !project.exam.is_empty() {
+            12
+        } else if !project.added_audio.is_empty() {
             11
         } else if !project.study.is_empty() {
             10
@@ -774,6 +804,7 @@ impl Editor {
             floor: self.floor,
             study: self.study.clone(),
             added_audio: Self::encode_added_audio(&self.added_audio),
+            exam: self.exam.clone(),
         })
     }
     /// Serializes the project keeping only the resource categories chosen in `options`.
@@ -861,6 +892,11 @@ impl Editor {
         } else {
             Vec::new()
         };
+        let exam = if options.include_exam {
+            self.exam.clone()
+        } else {
+            ProjectExam::default()
+        };
         Self::serialize_project(Project {
             format: String::new(),
             version: 0,
@@ -874,6 +910,7 @@ impl Editor {
             floor,
             study,
             added_audio,
+            exam,
         })
     }
     /// Size breakdown of each optional resource category inside a full `.nfedit` export.
@@ -971,13 +1008,22 @@ impl Editor {
                 .len()
                 + 9
         };
+        let exam_bytes = if self.exam.is_empty() {
+            0
+        } else {
+            serde_json::to_string(&self.exam)
+                .map_err(|e| Error::new(0, e.to_string()))?
+                .len()
+                + 8
+        };
         let optional = pdf_bytes
             + native_audio_bytes
             + added_audio_bytes
             + history_bytes
             + markdown_bytes
             + text_bytes
-            + study_bytes;
+            + study_bytes
+            + exam_bytes;
         let base_bytes = full_bytes.saturating_sub(optional);
         let total_bytes = base_bytes + optional;
         Ok(ProjectBreakdown {
@@ -993,6 +1039,7 @@ impl Editor {
             markdown_bytes,
             text_bytes,
             study_bytes,
+            exam_bytes,
             total_bytes,
         })
     }
@@ -1073,6 +1120,21 @@ impl Editor {
         self.study = study;
         Ok(())
     }
+    /// Interactive exam HTML and optional structured exam data kept inside the project.
+    pub fn exam(&self) -> &ProjectExam {
+        &self.exam
+    }
+    /// Replaces the interactive exam HTML and structured metadata kept with the project.
+    pub fn set_exam(&mut self, exam: ProjectExam) -> Result<()> {
+        let encoded_len = serde_json::to_string(&exam)
+            .map_err(|e| Error::new(0, e.to_string()))?
+            .len();
+        if encoded_len > EXAM_LIMIT {
+            return Err(Error::new(0, "Exam HTML data is too large"));
+        }
+        self.exam = exam;
+        Ok(())
+    }
     /// Keeps the words written on an original page (a notebook made from Markdown).
     pub fn set_ink_words(&mut self, slot: usize, words: Vec<crate::InkWord>) -> Result<()> {
         if slot >= self.scene.pages.len() || !crate::pages::words_valid(&words) {
@@ -1113,7 +1175,7 @@ impl Editor {
         let project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
         if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=11)
+            || !matches!(project.version, 1..=12)
             || project
                 .ink_text
                 .values()
@@ -1254,6 +1316,7 @@ impl Editor {
             ));
         }
         editor.set_added_audio(decoded_audio)?;
+        editor.set_exam(project.exam)?;
         Ok(editor)
     }
 }

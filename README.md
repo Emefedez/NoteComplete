@@ -135,7 +135,6 @@ NoteComplete also **opens to read**: PDFs and PNG, JPEG and WebP images (as note
 
 ### Exam Generator & Interactive Solutions
 
-- Embed editable HTML source inside generated `.nfedit` assets (no sidecar folders) for easy manual updates.
 - Preserve structured solution formats (e.g. render table exercises as completed solved tables) and improve readability/typography toward clean handwritten/printed study sheets.
 - Support step-by-step solution animations, either via the audio/animation system or self-contained HTML widget assets opened in a tab from clickable internal links (without creating separate external folders).
 

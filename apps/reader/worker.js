@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf"]);
+const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -58,10 +58,12 @@ const standalone = {
       // Recordings added in NoteComplete travel inside .notecomp files.
       if (args.notecomplete)
         result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
-      // Study sets (decks, quizzes, scratchpad) and added audio travel inside .nfedit projects.
+      // Study sets, embedded exam HTML, and added audio travel inside .nfedit projects.
       if (args.project) {
         const study = JSON.parse(candidate.study());
         if (study.decks?.length || study.quizzes?.length || study.scratch?.length) result.study = study;
+        const exam = JSON.parse(candidate.exam());
+        if (exam?.html || exam?.source) result.has_exam = true;
         const addedMeta = JSON.parse(candidate.project_added_audio_meta());
         if (addedMeta.length) {
           result.added_audio = addedMeta.map((meta, i) => ({ ...meta, bytes: candidate.project_added_audio_bytes(i) }));
@@ -85,8 +87,8 @@ const standalone = {
   },
   // Handwriting preview of Markdown; needs no open document.
   composePreview: (args) => JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)),
-  composeNoteFile: (args) => JSON.parse(compose_note_file(args.title || "Untitled note", args.markdown || "", JSON.stringify(args.options || {}))),
-  createPdfNoteWithTapes: (args) => create_pdf_note_with_tapes(args.title || "Exam", JSON.stringify(args.sizes || []), new Uint8Array(args.pdf || []), JSON.stringify(args.tapes || [])),
+  composeNoteFile: (args) => JSON.parse(compose_note_file(args.title || "Untitled note", args.markdown || "", JSON.stringify(args.options || {}), args.exam ? JSON.stringify(args.exam) : undefined)),
+  createPdfNoteWithTapes: (args) => create_pdf_note_with_tapes(args.title || "Exam", JSON.stringify(args.sizes || []), new Uint8Array(args.pdf || []), JSON.stringify(args.tapes || []), args.exam ? JSON.stringify(args.exam) : undefined),
   extractNoteSummary: (args) => JSON.parse(extract_note_summary(new Uint8Array(args.bytes || []), args.maxPages || 0)),
   extractNotePdf: (args) => extract_note_pdf(new Uint8Array(args.bytes || []), args.pdfId || ""),
   md5: (args) => md5_hex(new Uint8Array(args.bytes)),
@@ -140,6 +142,11 @@ const onDocument = {
   getStudy: () => JSON.parse(session.study()),
   study(args) {
     session.set_study(JSON.stringify(args.study || {}));
+    return true;
+  },
+  getExam: () => JSON.parse(session.exam()),
+  setExam(args) {
+    session.set_exam(JSON.stringify(args.exam || {}));
     return true;
   },
   digest: () => session.history_digest(),

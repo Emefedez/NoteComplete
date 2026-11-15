@@ -59,6 +59,12 @@ export const NFEDIT_RESOURCE_DEFS = [
     label: 'Flashcards, quizzes & scratchpad (.ncstudy)',
     detail: 'Study sets saved with this note (can also be exported standalone)',
   },
+  {
+    key: 'include_exam',
+    bytesKey: 'exam_bytes',
+    label: 'Embedded exam HTML',
+    detail: 'Interactive HTML source kept inside .nfedit for viewing, manual editing, and AI expansion',
+  },
 ];
 
 export function normalizeExportOptions(options = {}) {
@@ -73,6 +79,7 @@ export function normalizeExportOptions(options = {}) {
     include_markdown: options.include_markdown !== false,
     include_text: options.include_text !== false,
     include_study: options.include_study !== false,
+    include_exam: options.include_exam !== false,
     historyLocked,
   };
 }
@@ -88,6 +95,7 @@ export function toCoreExportOptions(options = {}) {
     include_ink_text: n.include_text,
     include_recognized_text: n.include_text,
     include_study: n.include_study,
+    include_exam: n.include_exam,
   };
 }
 
@@ -101,6 +109,7 @@ export function estimateExportBytes(breakdown = {}, options = {}) {
   if (n.include_markdown) total += Number(breakdown.markdown_bytes) || 0;
   if (n.include_text) total += Number(breakdown.text_bytes) || 0;
   if (n.include_study) total += Number(breakdown.study_bytes) || 0;
+  if (n.include_exam) total += Number(breakdown.exam_bytes) || 0;
   return total;
 }
 

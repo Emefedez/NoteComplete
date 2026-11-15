@@ -9,7 +9,7 @@ import {
 } from './exam-html.js';
 import { tapeLinesFromNormalized, A4_UNITS } from './exam-pdf.js';
 import { collectSourceLinks, uniqueExamTitle, resolveUniqueExamTitle } from './exam.js';
-import { detectExpandMode, buildExpandGuidance, summarizeExistingDocument, dedupeNewExamProblems, dedupeNewMarkdownSections } from './expand.js';
+import { detectExpandMode, buildExpandGuidance, summarizeExistingDocument, dedupeNewExamProblems, dedupeNewMarkdownSections, mergeEmbeddedExam } from './expand.js';
 
 test('examPrompt encodes focus modes (important, everything, random), auto vs exact count, and diverse problem kinds', () => {
   assert.deepEqual(FOCUS_MODES.map(([id]) => id), ['important', 'everything', 'random']);
@@ -357,4 +357,36 @@ test('uniqueExamTitle and resolveUniqueExamTitle never collide with existing ent
   };
   const chosen = await resolveUniqueExamTitle('Examen SO', { library: fakeLibrary });
   assert.equal(chosen, 'Examen SO (4)');
+});
+
+test('mergeEmbeddedExam appends structured sections cleanly and splices fallback HTML without dropping header', async () => {
+  await ensureExamMathRenderer();
+  const baseExam = {
+    title: 'Parcial SO',
+    sections: [{ heading: 'Bloque 1', problems: [{ kind: 'open', prompt: 'Describe PCB.', answerBox: { summary: 'Struct.' } }] }],
+  };
+  const extraExam = {
+    title: 'Parcial SO',
+    sections: [{ heading: 'Bloque 2', problems: [{ kind: 'calculation', prompt: 'Calc TT for $$2+3$$.', answerBox: { summary: '5' } }] }],
+  };
+  const initialHtml = buildPaginatedExamHtml(baseExam, { showTheory: true, interactiveFallback: true });
+
+  const mergedStructured = mergeEmbeddedExam(
+    { html: initialHtml, source: { mode: 'create', exam: baseExam, prefs: { includeTheory: true } } },
+    extraExam,
+    { showTheory: true },
+  );
+  assert.equal(mergedStructured.source.exam.sections.length, 2);
+  assert.match(mergedStructured.html, /Bloque 1/);
+  assert.match(mergedStructured.html, /Bloque 2/);
+  assert.match(mergedStructured.html, /<math/);
+
+  const mergedRawHtml = mergeEmbeddedExam(
+    { html: initialHtml.replace('Describe PCB.', 'Edited PCB prompt.'), source: null },
+    extraExam,
+    { showTheory: true },
+  );
+  assert.match(mergedRawHtml.html, /Edited PCB prompt\./);
+  assert.match(mergedRawHtml.html, /Bloque 2/);
+  assert.equal((mergedRawHtml.html.match(/<header class="exam-hdr"/g) || []).length, 1);
 });

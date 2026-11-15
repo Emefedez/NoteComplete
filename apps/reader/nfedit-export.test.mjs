@@ -55,11 +55,12 @@ test('estimateExportBytes sums base and selected resource sizes accurately', () 
       include_markdown: false,
       include_text: false,
       include_study: false,
+      include_exam: false,
     }),
     sampleBreakdown.base_bytes,
   );
   assert.deepEqual(
-    toCoreExportOptions({ include_text: false, include_study: false }),
+    toCoreExportOptions({ include_text: false, include_study: false, include_exam: false }),
     {
       include_history: true,
       include_pdfs: true,
@@ -69,6 +70,7 @@ test('estimateExportBytes sums base and selected resource sizes accurately', () 
       include_ink_text: false,
       include_recognized_text: false,
       include_study: false,
+      include_exam: false,
     },
   );
 });
@@ -144,5 +146,6 @@ test('chooseNfeditExport populates checkboxes, couples history to PDFs/native au
     include_ink_text: true,
     include_recognized_text: true,
     include_study: false,
+    include_exam: false,
   });
 });

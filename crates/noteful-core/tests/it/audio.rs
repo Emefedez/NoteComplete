@@ -252,6 +252,7 @@ fn nfedit_v11_bundles_added_audio_and_filtered_export_strips_selected_resources(
             include_ink_text: false,
             include_recognized_text: false,
             include_study: false,
+            include_exam: false,
         })
         .unwrap();
     assert!(stripped.len() < project.len());

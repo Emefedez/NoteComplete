@@ -686,6 +686,12 @@ export function examController({
         let tapeCount = 0;
 
         if (prefs.solveFormat === 'mcp') {
+          await ensureExamMathRenderer();
+          interactiveHtml = buildSolvedExamHtml(solvedExam, {
+            showTheory: prefs.includeTheory,
+            tapeSolutions: prefs.tapeSolutions,
+            interactiveFallback: true,
+          });
           const md = buildSolvedExamMcpMarkdown(solvedExam, {
             tapeSolutions: prefs.tapeSolutions,
             showTheory: prefs.includeTheory,
@@ -699,7 +705,12 @@ export function examController({
             pen: 'fountain',
             accent: 'navy',
           });
-          const composed = await call('composeNoteFile', { title: solvedExam.title, markdown: md, options: composeOpts });
+          const composed = await call('composeNoteFile', {
+            title: solvedExam.title,
+            markdown: md,
+            options: composeOpts,
+            exam: { html: interactiveHtml, source: { mode: 'solve', exam: solvedExam, prefs } },
+          });
           outFile = new File([composed.project], fileName, { type: 'application/json' });
           pageCount = composed.pages || solvedExam.exercises.length * 2;
         } else {
@@ -721,6 +732,7 @@ export function examController({
             sizes: rendered.sizes,
             pdf: pdfTransfer,
             tapes: prefs.tapeSolutions ? rendered.tapes : [],
+            exam: { html: interactiveHtml, source: { mode: 'solve', exam: solvedExam, prefs } },
           }, [pdfTransfer]);
           outFile = new File([projectJson], fileName, { type: 'application/json' });
           pdfBytes = rendered.pdf;
@@ -998,6 +1010,7 @@ export function examController({
         sizes: rendered.sizes,
         pdf: pdfTransfer,
         tapes: rendered.tapes,
+        exam: { html: interactiveHtml, source: { mode: 'create', exam, prefs } },
       }, [pdfTransfer]);
 
       const fileName = `${safeFileBase(exam.title)}.nfedit`;

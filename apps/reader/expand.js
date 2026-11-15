@@ -226,6 +226,57 @@ export function dedupeNewMarkdownSections(markdown, existingText = '') {
 }
 
 /**
+ * Merges newly generated expansion problems into an existing `.nfedit` embedded
+ * exam payload (`{ html, source }`), preserving structured exam JSON when available
+ * or splicing rendered HTML sections into an existing interactive HTML document.
+ * @param {object|null} currentExam
+ * @param {object} newExam
+ * @param {{ showTheory?: boolean }} [prefs]
+ * @returns {{ html: string, source: object|null }}
+ */
+export function mergeEmbeddedExam(currentExam, newExam, prefs = {}) {
+  const showTheory = Boolean(prefs.showTheory ?? currentExam?.source?.prefs?.includeTheory ?? true);
+  if (currentExam?.source?.mode === 'create' && currentExam.source.exam?.sections) {
+    const mergedExam = {
+      ...currentExam.source.exam,
+      sections: [...currentExam.source.exam.sections, ...(newExam?.sections || [])],
+    };
+    return {
+      html: buildPaginatedExamHtml(mergedExam, { showTheory, interactiveFallback: true }),
+      source: {
+        ...currentExam.source,
+        exam: mergedExam,
+        prefs: { ...(currentExam.source.prefs || {}), includeTheory: showTheory },
+      },
+    };
+  }
+  const freshHtml = buildPaginatedExamHtml(newExam, { showTheory, interactiveFallback: true });
+  const existingHtml = String(currentExam?.html || '');
+  if (!existingHtml.trim()) {
+    return {
+      html: freshHtml,
+      source: { mode: 'create', exam: newExam, prefs: { includeTheory: showTheory } },
+    };
+  }
+  const flowMatch = freshHtml.match(/<div class="exam-flow">([\s\S]*?)<\/div>\s*<div class="exam-pages"><\/div>/i);
+  const rawFragment = flowMatch ? flowMatch[1] : freshHtml;
+  const fragment = rawFragment.replace(/^[\s\S]*?<\/header>/i, '').trim();
+  const injection = `\n<div class="page-break"></div>\n${fragment}\n`;
+  let mergedHtml = existingHtml;
+  if (/<\/div>\s*<div class="exam-pages"><\/div>/i.test(existingHtml)) {
+    mergedHtml = existingHtml.replace(/(<\/div>\s*<div class="exam-pages"><\/div>)/i, `${injection}$1`);
+  } else if (/<\/body>/i.test(existingHtml)) {
+    mergedHtml = existingHtml.replace(/<\/body>/i, `<div class="exam-flow">${injection}</div></body>`);
+  } else {
+    mergedHtml = `${existingHtml}${injection}`;
+  }
+  return {
+    html: mergedHtml,
+    source: currentExam?.source || null,
+  };
+}
+
+/**
  * Builds concise guidance so AI generates expansion pages rather than repeating the open document.
  * @param {{ existingSummary?: string, instructions?: string, kind: 'note'|'exam', openTitle?: string, openPages?: number, selfOnly?: boolean }} opts
  * @returns {string}
@@ -285,6 +336,7 @@ export function expandController({
   notesText,
   insertHandwrittenPages,
   insertPdfPagesWithTapes,
+  markEmbeddedExamUpdated = null,
   jobs,
   ai,
   status,
@@ -712,6 +764,13 @@ export function expandController({
           pdf: { id: pdfId, base64: uint8ToBase64(rendered.pdf) },
           tapes: rendered.tapes,
         });
+
+        if (call) {
+          const currentExam = await call('getExam').catch(() => null);
+          const nextEmbedded = mergeEmbeddedExam(currentExam, exam, { showTheory: prefs.includeTheory });
+          await call('setExam', { exam: nextEmbedded }).catch(() => {});
+          markEmbeddedExamUpdated?.();
+        }
 
         // Update linked exam metadata so Saved resources reflects any new source files used here.
         const openRes = openDocResource() || {};

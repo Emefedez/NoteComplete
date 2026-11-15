@@ -444,6 +444,19 @@ impl EditorSession {
         let parsed: noteful_core::ProjectStudy = serde_json::from_str(study)?;
         Ok(self.inner.set_study(parsed)?)
     }
+    /// Interactive exam HTML and optional structured data kept inside a `.nfedit` project.
+    pub fn exam(&self) -> Result<String, Failure> {
+        Ok(serde_json::to_string(self.inner.exam())?)
+    }
+    /// Sets the embedded interactive exam HTML/source (`{html, source}` JSON) on the project.
+    pub fn set_exam(&mut self, exam: &str) -> Result<(), Failure> {
+        let parsed: noteful_core::ProjectExam = if exam.trim().is_empty() {
+            noteful_core::ProjectExam::default()
+        } else {
+            serde_json::from_str(exam)?
+        };
+        Ok(self.inner.set_exam(parsed)?)
+    }
     /// Keeps text recognized in the handwriting (OCR) of page slots, so it is saved with
     /// the note: `pages` is JSON {slot: [{text, bounds}]}. A page the note refuses (a slot
     /// it does not have, or words that are not valid) is skipped and the others are kept;
@@ -689,10 +702,19 @@ fn open_any_editor(data: &[u8]) -> Result<noteful_core::Editor, Failure> {
 /// Composes Markdown as a standalone handwritten `.nfedit` project without
 /// replacing the currently open session. Returns JSON `{project, pages, warnings}`.
 #[wasm_bindgen]
-pub fn compose_note_file(title: &str, markdown: &str, options: &str) -> Result<String, Failure> {
+pub fn compose_note_file(
+    title: &str,
+    markdown: &str,
+    options: &str,
+    exam_json: Option<String>,
+) -> Result<String, Failure> {
     let (pages, warnings) = compose_with(title, markdown, options)?;
     let page_count = pages.len();
-    let editor = ink::new_notebook(title, &pages)?;
+    let mut editor = ink::new_notebook(title, &pages)?;
+    if let Some(raw) = exam_json.filter(|s| !s.trim().is_empty()) {
+        let parsed: noteful_core::ProjectExam = serde_json::from_str(&raw)?;
+        editor.set_exam(parsed)?;
+    }
     let project = editor.save_project()?;
     Ok(json!({
         "project": project,
@@ -703,13 +725,15 @@ pub fn compose_note_file(title: &str, markdown: &str, options: &str) -> Result<S
 }
 
 /// Builds a standalone `.nfedit` project from `pdf` and `sizes` (`[[w, h], …]`),
-/// pre-applying Noteful Tape strokes from `tapes_json` (`[{page, x, y, w, h, angle?, rgba?}]`).
+/// pre-applying Noteful Tape strokes from `tapes_json` (`[{page, x, y, w, h, angle?, rgba?}]`),
+/// and optionally embedding interactive exam HTML/metadata from `exam_json`.
 #[wasm_bindgen]
 pub fn create_pdf_note_with_tapes(
     title: &str,
     sizes_json: &str,
     pdf: &[u8],
     tapes_json: &str,
+    exam_json: Option<String>,
 ) -> Result<String, Failure> {
     let sizes: Vec<[f64; 2]> = serde_json::from_str(sizes_json)?;
     let tapes: Vec<serde_json::Value> = if tapes_json.trim().is_empty() {
@@ -739,6 +763,10 @@ pub fn create_pdf_note_with_tapes(
         let slot = editor.slot(page)?;
         let line = ink::tape(x, y, w, h, angle, rgba);
         editor.add_line(slot, line)?;
+    }
+    if let Some(raw) = exam_json.filter(|s| !s.trim().is_empty()) {
+        let parsed: noteful_core::ProjectExam = serde_json::from_str(&raw)?;
+        editor.set_exam(parsed)?;
     }
     Ok(editor.save_project()?)
 }
@@ -930,7 +958,7 @@ mod tests {
     #[test]
     fn composes_standalone_note_creates_pdf_with_tapes_and_extracts_summary() {
         let composed: serde_json::Value = serde_json::from_str(
-            &super::compose_note_file("Batch Test", "# Title\n\n- Key idea", "{}").unwrap(),
+            &super::compose_note_file("Batch Test", "# Title\n\n- Key idea", "{}", None).unwrap(),
         )
         .unwrap();
         assert!(composed["pages"].as_u64().unwrap() >= 1);
@@ -954,9 +982,24 @@ mod tests {
             {"page": 0, "x": 80.0, "y": 240.0, "w": 600.0, "h": 90.0}
         ])
         .to_string();
-        let exam_project =
-            super::create_pdf_note_with_tapes("ACII Exam", &sizes, fake_pdf, &tapes).unwrap();
+        let exam_payload = serde_json::json!({
+            "html": "<html><body><h1>ACII Exam</h1></body></html>",
+            "source": {"mode": "create", "title": "ACII Exam"}
+        })
+        .to_string();
+        let exam_project = super::create_pdf_note_with_tapes(
+            "ACII Exam",
+            &sizes,
+            fake_pdf,
+            &tapes,
+            Some(exam_payload),
+        )
+        .unwrap();
         let ed = noteful_core::Editor::open_project(&exam_project).unwrap();
+        assert_eq!(
+            ed.exam().html,
+            "<html><body><h1>ACII Exam</h1></body></html>"
+        );
         let view = ed.view(ed.slot(0).unwrap()).unwrap();
         assert_eq!(view["title"], "ACII Exam");
         assert_eq!(view["tapes"].as_array().unwrap().len(), 1);

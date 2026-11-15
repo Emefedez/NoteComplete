@@ -63,7 +63,8 @@ mod wire;
 pub use text::{decode_rich_text, text_svg, RichText, TextRun};
 
 pub use editor::{
-    Editor, Line, ProjectAddedAudio, ProjectBreakdown, ProjectExportOptions, ProjectStudy,
+    Editor, Line, ProjectAddedAudio, ProjectBreakdown, ProjectExam, ProjectExportOptions,
+    ProjectStudy,
 };
 pub use scene::{Page, Scene, TAPE_OPEN};
 

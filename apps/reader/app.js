@@ -414,6 +414,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   panels = [];
   doc = null;
   sideFp = "";
+  embeddedExam = null;
   htmlView?.close();
   textView?.close();
   textFinder?.close();
@@ -430,6 +431,8 @@ function reset({ opening = false, keepSession = false } = {}) {
   tabBar.update({ title: "Home", dirty: false });
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
+  $("htmlBackToNote").hidden = $("htmlExportCopy").hidden = true;
+  $("htmlNotes").hidden = false;
   converted = false;
   sharedText = false;
   releaseImages();
@@ -3759,7 +3762,7 @@ document.addEventListener("keydown", (e) => {
     else find.open();
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && (textView.hasDocument || htmlView.hasDocument)) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !doc && (textView.hasDocument || htmlView.hasDocument)) {
     e.preventDefault();
     saveText();
     return;
@@ -4487,6 +4490,7 @@ const loadDarkReader = () => (darkReader ||= fetch("vendor/darkreader/darkreader
   if (!r.ok) throw Error("Dark Reader is missing from this build.");
   return r.text();
 }).catch((error) => { darkReader = null; status(error.message, true); throw error; }));
+let embeddedExam = null;
 const htmlView = htmlViewer({
   root: $("htmlView"),
   frame: $("htmlFrame"),
@@ -4494,11 +4498,18 @@ const htmlView = htmlViewer({
   reload: $("htmlReload"),
   clear: $("htmlClear"),
   status,
-  // Edit: the HTML source in the plain editor; Save / Ctrl S writes it like a text file.
+  // Edit: the HTML source in the plain editor; Save / Ctrl S writes it like a text file (or back into .nfedit).
   editorHost: $("htmlEditor"), edit: $("htmlEdit"),
   onChange: () => {
     dirty = changed = true;
     $("htmlSave").hidden = false;
+    if (embeddedExam?.active && doc) {
+      embeddedExam.data = { ...(embeddedExam.data || {}), html: htmlView.text };
+      call("setExam", { exam: embeddedExam.data }).catch(() => {});
+      savedState();
+      tabBar.update({ title: doc?.title || htmlView.name, dirty: true });
+      return;
+    }
     tabBar.update({ title: htmlView.name, dirty: true });
   },
   darkScript: loadDarkReader,
@@ -4618,7 +4629,48 @@ async function saveText() {
     }
   } catch (error) { status(error.message, true); }
 }
-$("textSave").onclick = $("htmlSave").onclick = () => saveText();
+$("textSave").onclick = () => saveText();
+$("htmlSave").onclick = async () => {
+  if (embeddedExam?.active && doc) {
+    await save(false);
+    $("htmlSave").hidden = true;
+    return;
+  }
+  await saveText();
+};
+async function openEmbeddedExamHtml() {
+  if (!doc) return;
+  const data = await call("getExam").catch(() => null);
+  if (!data?.html) { status("No embedded interactive HTML is saved inside this note.", true); return; }
+  embeddedExam = { active: true, data };
+  const name = doc.title || $("title").textContent || "Exam";
+  htmlView.open({ text: data.html, fingerprint: find.fingerprint || docMember?.name || name, name });
+  $("htmlBackToNote").hidden = false;
+  $("htmlExportCopy").hidden = false;
+  $("htmlSave").hidden = !(dirty && changed);
+  $("htmlNotes").hidden = true;
+  if (docMember) groupList.mount($("htmlGroupSlot"));
+  showDocument();
+  documentControls();
+}
+function closeEmbeddedExamHtml() {
+  if (!embeddedExam?.active) return;
+  embeddedExam = null;
+  htmlView.close();
+  $("htmlBackToNote").hidden = true;
+  $("htmlExportCopy").hidden = true;
+  $("htmlNotes").hidden = false;
+  if (doc) groupList.mount($("pagesGroupSlot"));
+  showDocument();
+  documentControls();
+}
+$("htmlBackToNote").onclick = () => closeEmbeddedExamHtml();
+$("htmlExportCopy").onclick = async () => {
+  const html = htmlView.text || embeddedExam?.data?.html;
+  if (!html) return;
+  const base = (doc?.title || "Exam").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim() || "Exam";
+  await download(html, `${base}.html`, "text/html");
+};
 // A text document open instead of a note: studied by sections.
 function studyText() { return !doc && textView.hasDocument; }
 // The open HTML or text document, when one is open instead of a note.
@@ -4965,6 +5017,11 @@ function documentControls() {
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
+  if ($("viewExamHtml")) {
+    const canViewHtml = open && !!doc?.has_exam;
+    $("viewExamHtml").hidden = !canViewHtml;
+    $("viewExamHtml").disabled = !canViewHtml;
+  }
   if ($("studyExpandAi")) $("studyExpandAi").disabled = !open || !!doc?.canvas;
   if ($("studyOpenDeck")) $("studyOpenDeck").disabled = false;
   if (!open) $("svg").disabled = true;
@@ -5999,10 +6056,16 @@ const expandMaker = expandController({
       await action("drawMany", { page: targetPage, lines: pageLines });
     }
   },
+  call,
+  markEmbeddedExamUpdated: () => {
+    if (doc) doc.has_exam = true;
+    documentControls();
+  },
   jobs,
   ai,
   status,
 });
+if ($("viewExamHtml")) $("viewExamHtml").onclick = () => { closeMenus(); openEmbeddedExamHtml(); };
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("fileCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("fileSolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };

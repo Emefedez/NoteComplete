@@ -1,4 +1,4 @@
-# Noteful RE Project (.nfedit), versions 1–10
+# Noteful RE Project (.nfedit), versions 1–12
 
 Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
 
@@ -124,6 +124,14 @@ A project may have `"canvas": true`. Such a note has exactly one page, which gro
 ## Study sets (project version 10)
 
 A project may include `"study": { "decks": […], "quizzes": […], "scratch": […] }`, keeping this note's flashcard decks, generated quizzes, and scratchpad notes/conversations alongside the source archive, edit history, Markdown notes, and recognized handwriting text (`STUDY_LIMIT` 8 MiB; omitted when empty so earlier versions remain valid). Opening an `.nfedit` merges incoming `decks`, `quizzes`, and `scratch` by `id` into local library storage. Added audio recordings stay on-device and travel in `.notecomp` rather than `.nfedit`.
+
+## Added audio recordings (project version 11)
+
+A project may include `"added_audio": [ { "id": "…", "name": "…", "mime": "…", "created": …, "bytes_base64": "…" }, … ]` carrying audio recordings created or imported in NoteComplete alongside the note.
+
+## Embedded exam HTML (project version 12)
+
+A project may include `"exam": { "html": "…", "source": { … } }` keeping an AI-generated or solved exam's self-contained interactive HTML source (and optional structured exam JSON used when expanding or editing the exam) directly inside `.nfedit` (`EXAM_LIMIT` 16 MiB; omitted when empty so earlier versions remain valid). Opening the `.nfedit` shows its paginated PDF and tape pages as usual, while **View → Interactive exam HTML** lets users view, manually edit, export, or expand the embedded HTML alongside the note.
 
 ## Filled shapes
 

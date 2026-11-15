@@ -270,3 +270,50 @@ fn project_round_trips_study_sets_and_compaction_keeps_them() {
     bad_version["version"] = 99.into();
     assert!(Editor::open_project(&bad_version.to_string()).is_err());
 }
+
+#[test]
+fn project_round_trips_exam_html_and_respects_compaction_and_export_filter() {
+    let mut e = exam();
+    let baseline: Value = serde_json::from_str(&e.save_project().unwrap()).unwrap();
+    assert!(baseline.get("exam").is_none());
+
+    let embedded = noteful_core::ProjectExam {
+        html: "<!doctype html><html><body><div class=\"exam-flow\"><p>Q1</p></div></body></html>"
+            .into(),
+        source: Some(serde_json::json!({
+            "mode": "create",
+            "exam": {"title": "OS Mock", "sections": [{"heading": "CPU", "problems": []}]}
+        })),
+    };
+    e.set_exam(embedded.clone()).unwrap();
+    e.add_line(0, line()).unwrap();
+    e.add_line(0, line()).unwrap();
+
+    let saved = e.save_project().unwrap();
+    let raw: Value = serde_json::from_str(&saved).unwrap();
+    assert_eq!(raw["version"], 12);
+    assert_eq!(raw["exam"]["html"], embedded.html);
+
+    let mut reopened = Editor::open_project(&saved).unwrap();
+    assert_eq!(reopened.exam(), &embedded);
+
+    let breakdown = reopened.project_breakdown().unwrap();
+    assert!(breakdown.exam_bytes > embedded.html.len());
+    assert_eq!(breakdown.total_bytes, saved.len());
+
+    // Compacting history preserves version 12 and the embedded exam HTML/source.
+    reopened.compact_history(1).unwrap();
+    assert_eq!(reopened.exam(), &embedded);
+    let compacted_raw: Value = serde_json::from_str(&reopened.save_project().unwrap()).unwrap();
+    assert_eq!(compacted_raw["version"], 12);
+
+    // Filtered export can strip or retain the embedded exam HTML.
+    let stripped = reopened
+        .export_filtered_project(noteful_core::ProjectExportOptions {
+            include_exam: false,
+            ..noteful_core::ProjectExportOptions::default()
+        })
+        .unwrap();
+    let stripped_ed = Editor::open_project(&stripped).unwrap();
+    assert!(stripped_ed.exam().is_empty());
+}
