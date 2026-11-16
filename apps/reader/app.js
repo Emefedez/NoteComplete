@@ -716,12 +716,19 @@ async function importImages(files) {
 // A blank page after page `after`, the size of that page (one undoable edit). Not on an
 // infinite canvas, which grows instead. Used by the button below the last page and by a
 // drawing tablet's dock (collab.js).
-async function addBlankPage(after) {
+async function addBlankPage(after, before = false) {
   if (!doc || busy() || doc.canvas) return;
   const size = panels[after]?.size;
   if (!size) return;
-  const at = after + 1;
+  const at = before ? after : after + 1;
   await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+}
+// The right-click entries for a blank page before or after page `index`.
+function blankPageEntries(index) {
+  return [
+    { label: "Insert blank page before", icon: "plus", run: () => addBlankPage(index, true) },
+    { label: "Insert blank page after", icon: "plus", run: () => addBlankPage(index) },
+  ];
 }
 // Below the last page: scrolling past the end offers a new blank page of the same size.
 function addPageButton() {
@@ -949,6 +956,10 @@ function buildPageList() {
       meta.append(actions);
     }
     item.append(button, meta);
+    if (!doc?.canvas) item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openContextMenu(e.clientX, e.clientY, blankPageEntries(panel.index), { title: `Page ${panel.index + 1}` });
+    });
     panel.pageButton = item;
     fragment.append(item);
   }
@@ -6285,16 +6296,15 @@ async function pasteClip(p = panels[page], at = null) {
 // let go, in one undo step.
 async function moveToPage(item, target, start, client) {
   const from = panels[item.page], to = panels[target];
-  if (!doc || !from || !to || editing) return;
+  if (!doc || !from || !to || editing) return from && renderPage(from);
   try {
     const copied = await copiedItems(item);
     const r = to.el.getBoundingClientRect();
     const there = [((client[0] - r.left) / r.width) * to.size[0], ((client[1] - r.top) / r.height) * to.size[1]];
     const moved = shifted(copied, [there[0] - start[0], there[1] - start[1]], false);
     await action("drawMany", { page: target, cut: { page: item.page, ids: itemIds(item) }, lines: moved.lines, images: moved.images });
-    await renderPage(from);
     status(`Moved to page ${target + 1}. One undo moves it back.`);
-  } catch (e) { status(e.message, true); }
+  } catch (e) { status(e.message, true); } finally { await renderPage(from); }
 }
 // Ctrl C / X with an item selected, Ctrl V with a copy kept. The keys do it (Safari sends no
 // copy or paste event when nothing on the page is selected or editable); the clipboard
@@ -6565,6 +6575,7 @@ async function pageMenu(p, at, x, y) {
     clip && "-",
     ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
     "-",
+    ...(doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
     { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
   ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
 }

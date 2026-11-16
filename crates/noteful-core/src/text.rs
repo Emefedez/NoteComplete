@@ -239,6 +239,7 @@ pub fn text_svg(text: &RichText, width: f64) -> String {
             } else if lower.contains("noteworthy")
                 || lower.contains("marker")
                 || lower.contains("chalk")
+                || lower.contains("comic")
             {
                 "'Comic Neue', 'Comic Sans MS', cursive"
             } else {

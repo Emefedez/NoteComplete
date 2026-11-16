@@ -13,6 +13,7 @@ export const FONT_STACKS = {
   "Times New Roman": "'Times New Roman', Times, serif",
   "Courier New": "'Courier New', monospace",
   Noteworthy: "Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive",
+  "Comic Sans MS": "'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive",
 };
 export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 export const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
