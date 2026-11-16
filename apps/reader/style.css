@@ -3902,3 +3902,39 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-menu kbd { font-size: 11px; color: var(--muted); }
 .context-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line); }
 @media (pointer: coarse) { .context-menu button { min-height: 42px; } }
+/* Tool settings as a compact card instead of one long row: the tool's own choices on top,
+   then the colours (a 3 × 3 grid with the custom colour last) beside the widths (two per
+   row), each under a small caption. */
+#drawingOptions { display: grid; grid-template-columns: auto auto; align-items: start; justify-content: start; gap: 8px 12px; }
+#drawingOptions > [hidden], #drawingOptions .opt-section[hidden] { display: none; }
+#drawingOptions .opt-section { display: grid; justify-items: start; align-content: start; gap: 3px; min-width: 0; }
+#drawingOptions .opt-section::before { content: attr(data-caption); grid-column: 1 / -1; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); line-height: 1.2; white-space: nowrap; }
+#drawingOptions > :is(#shapeOptions, #highlightOptions, #tapeOptions, #eraseOptions) { grid-column: 1 / -1; }
+#drawingOptions .choice-row, #drawingOptions .shape-picker { display: inline-grid; grid-auto-flow: row; }
+#drawingOptions .choice-row[data-for="color"] { grid-template-columns: repeat(3, auto); gap: 4px; padding: 4px; }
+#drawingOptions .opt-color { grid-template-columns: auto; position: relative; justify-self: start; }
+/* The custom colour sits in the swatch grid's ninth place. */
+#drawingOptions .opt-color .color-label { position: absolute; right: 5px; bottom: 5px; width: 24px; height: 24px; padding: 3px; border: 0; border-radius: 50%; overflow: hidden; background: conic-gradient(#e5484d, #ffb224, #f5d90a, #30a46c, #0091ff, #8e4ec6, #e5484d); }
+#drawingOptions .opt-color .color-label input { width: 18px; height: 18px; padding: 0; border: 2px solid var(--surface); border-radius: 50%; overflow: hidden; }
+#drawingOptions .opt-color .color-label input::-webkit-color-swatch-wrapper { padding: 0; }
+#drawingOptions .opt-color .color-label input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+#drawingOptions .opt-color .color-label input::-moz-color-swatch { border: 0; border-radius: 50%; }
+#drawingOptions .opt-color .choice-row[data-for="color"]::after { content: ""; width: 24px; height: 24px; }
+#drawingOptions .choice-row[data-for="width"], #drawingOptions .choice-row[data-for="eraserSize"] { grid-template-columns: repeat(2, auto); }
+/* The tape's three widths stack in one column, thin to thick. */
+#drawingOptions[data-for-tool="tape"] .choice-row[data-for="width"] { grid-template-columns: auto; }
+#drawingOptions .choice-row[data-for="highlightMode"], #drawingOptions .choice-row[data-for="shapeSnap"], #drawingOptions .choice-row[data-for="tapeMode"] { grid-template-columns: repeat(4, auto); }
+/* Shapes: the six shapes (3 × 2) over the three fills, and beside them a Prefab tile that
+   opens the prefab picker (tables, graphs, diagrams…). Drawing a shape is a drag on the page. */
+#drawingOptions #shapeOptions { grid-template-columns: auto auto; align-items: stretch; gap: 4px 6px; }
+#drawingOptions #shapePicker { grid-template-columns: repeat(3, auto); grid-area: 2 / 1; }
+#drawingOptions #shapeFill { margin-left: 0; grid-template-columns: repeat(3, auto); grid-area: 3 / 1; }
+#drawingOptions #shapePrefab { grid-area: 2 / 2 / 4 / 3; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 64px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); font-size: 12px; }
+#drawingOptions #shapePrefab:hover { background: var(--accent-soft); color: var(--accent); }
+#drawingOptions #shapePrefab > svg:not(.chev) { width: 24px; height: 24px; margin: 0; }
+#drawingOptions #shapePrefab .chev { display: none; }
+/* On a phone the card is taller than the old row, so it may use more of the screen. */
+@media (max-width: 700px) { #toolOptions:has(> #drawingOptions:not([hidden])) { max-height: min(48dvh, 340px); } }
+/* The pen's three auto-shape buttons (and their caption) reach one place left, so their
+   right edge lines up with the widths below. */
+#drawingOptions #snapOptions .choice-row, #drawingOptions #snapOptions::before { margin-left: -32px; }
