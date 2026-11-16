@@ -316,10 +316,7 @@ pub(crate) fn needs_explicit_repair(package: &Package) -> bool {
         .and_then(|fs| field(fs, 0))
         .and_then(V::as_array)
         .is_none_or(|a| a.is_empty());
-    if empty_layers {
-        return true;
-    }
-    false
+    empty_layers
 }
 
 /// Upgrades an already-assembled list of blocks and index fields in-place so legacy
@@ -581,7 +578,7 @@ pub(crate) fn upgrade_package_parts(
             _ => None,
         })
         .unwrap_or(NATIVE_VERSION);
-    let version = if existing_version < 1.2 || existing_version > NATIVE_VERSION {
+    let version = if !(1.2..=NATIVE_VERSION).contains(&existing_version) {
         NATIVE_VERSION
     } else {
         existing_version

@@ -94,7 +94,8 @@ test('with WebGPU, requests go to the provider they name', async () => {
   assert.equal((await ai.run({ provider: 'claude', prompt: 'x' })).text, 'native');
   await ai.run({ provider: 'claude', prompt: 'x' }, () => {});
   // The desktop preload streams only when it is given a callback, so none is invented.
-  assert.deepEqual(native.calls, [['run', 1], ['run', 2]]);
+  await ai.run({ provider: 'claude', prompt: 'x' }, () => {}, () => {});
+  assert.deepEqual(native.calls, [['run', 1], ['run', 2], ['run', 3]]);
   assert.equal((await ai.run({ provider: LOCAL_ID, prompt: 'x' }, () => {})).text, 'local');
   ai.cancel('study');
   assert.deepEqual(native.calls.at(-1), ['cancel', 'study']);

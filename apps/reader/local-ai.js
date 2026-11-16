@@ -674,7 +674,8 @@ export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, na
     run(request, onDelta, onActivity) {
       if (request?.provider === LOCAL_ID) return local.run(request, onDelta);
       if (!native) return Promise.reject(Error('No AI tool is available here.'));
-      return typeof onDelta === 'function' ? native.run(request, onDelta, onActivity) : native.run(request);
+      if (typeof onDelta !== 'function') return native.run(request);
+      return typeof onActivity === 'function' ? native.run(request, onDelta, onActivity) : native.run(request, onDelta);
     },
     cancel(tag) {
       native?.cancel?.(tag);
