@@ -1275,6 +1275,12 @@ main.drag {
 .shape-picker button { width: 32px; min-height: 28px; padding: 3px; }
 .shape-picker svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .shape-picker button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Prefab is in the quick menu's shapes; in the bar it is its own button (#shapePrefab). */
+#shapePicker .quick-only { display: none; }
+#insertShape.icon-only { width: 32px; min-width: 32px; padding: 0; justify-content: center; }
+#insertShape.icon-only svg { margin: 0; }
+.shape-prefab { display: inline-flex; align-items: center; gap: 5px; }
+.shape-prefab .chev { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; opacity: .6; transform: rotate(90deg); }
 
 /* Tool settings as rows of visual choices. */
 .choice-row, .choice-toggle-box { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
@@ -3814,6 +3820,25 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 
 /* Prefabs (prefabs.js): a picker of cards with previews, and an exam figure's editor. */
 .prefab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+/* The picker (prefabs.js choosePrefab): search and groups, the list, a large preview. */
+.prefab-picker { width: min(980px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+.prefab-picker[open] { display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+.prefab-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.prefab-search { flex: 1 1 240px; box-sizing: border-box; font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.prefab-split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; min-height: 0; flex: 1 1 auto; }
+.prefab-picker .prefab-grid { grid-auto-rows: max-content; align-content: start; overflow: auto; min-height: 0; max-height: min(60dvh, 560px); padding: 2px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.prefab-picker .prefab-grid h4 { grid-column: 1 / -1; margin: 6px 2px 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.prefab-picker .prefab-grid h4:first-child { margin-top: 0; }
+.prefab-picker .prefab-card { height: auto; min-height: 0; grid-template-rows: 70px auto auto; }
+.prefab-picker .prefab-card .prefab-preview { height: 70px; }
+.prefab-picker .prefab-card[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.prefab-picker .prefab-card span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prefab-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--chrome); }
+.prefab-side p { margin: 0; font-size: 12.5px; }
+.prefab-big .prefab-preview { height: 240px; border: 1px solid var(--line); }
+.prefab-big .prefab-icon svg { width: 64px; height: 64px; }
+.prefab-picker > .ocr-actions { flex: none; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .prefab-split { grid-template-columns: 1fr; } .prefab-side { display: none; } }
 .prefab-card { display: grid; gap: 4px; align-content: start; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); color: inherit; cursor: pointer; }
 .prefab-card:hover, .prefab-card:focus-visible { border-color: var(--accent); }
 .prefab-card strong { font-size: 13px; }
@@ -3827,6 +3852,18 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-title input { flex: 1; }
 .prefab-help p { margin: 4px 0; font-size: 12px; color: var(--muted); }
 .prefab-data { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+/* A JSON box (prefabs.js codeBox): line numbers, and an error's line marked behind the text. */
+.json-code { display: grid; grid-template-columns: auto minmax(0, 1fr); height: 260px; min-height: 120px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.json-code.has-error { border-color: #d1453b; }
+.json-gutter, .json-back, .json-code .prefab-data { margin: 0; padding: 6px 8px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
+.json-gutter { min-width: 2ch; height: 100%; box-sizing: border-box; overflow: hidden; text-align: right; color: var(--muted); background: var(--chrome); border-right: 1px solid var(--line); user-select: none; padding-right: 6px; }
+.json-edit { position: relative; min-width: 0; height: 100%; }
+.json-back { position: absolute; inset: 0; overflow: hidden; white-space: pre; color: transparent; pointer-events: none; }
+.json-back .json-bad { display: inline-block; min-width: 100%; background: color-mix(in srgb, #d1453b 18%, transparent); box-shadow: inset 3px 0 #d1453b; }
+.json-code .prefab-data { position: relative; display: block; height: 100%; resize: none; border: 0; border-radius: 0; background: transparent; outline: none; white-space: pre; overflow: auto; }
+.json-goto { margin-right: 4px; padding: 1px 7px; min-height: 0; border: 1px solid #d1453b; border-radius: 6px; background: transparent; color: #b83228; font: inherit; font-weight: 600; cursor: pointer; }
+.prefab-picker .prefab-split { height: min(60dvh, 560px); }
+.prefab-picker .prefab-split .prefab-grid { max-height: none; }
 
 /* The menu at the pointer (context-menu.js): right-click, a long press, or a selection's ⋯. */
 .context-menu { position: fixed; z-index: 90; min-width: 190px; max-width: min(300px, calc(100vw - 16px)); padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; -webkit-user-select: none; user-select: none; }

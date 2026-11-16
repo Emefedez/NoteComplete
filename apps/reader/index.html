@@ -628,8 +628,7 @@
                 ><button type="button" data-shape="triangle" role="radio" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 19H3Z"/></svg></button
                 ><button type="button" data-shape="arrow" role="radio" title="Arrow"><svg viewBox="0 0 24 24"><path d="M4 19 19 5M10 5h9v9"/></svg></button
                 ><button type="button" data-shape="star" role="radio" title="Star"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.5 5.6 6.1.6-4.6 4 1.4 6-5.4-3.2-5.4 3.2 1.4-6-4.6-4 6.1-.6Z"/></svg></button
-                ><button type="button" data-shape="graph" role="radio" title="Prefab: drag its box, then choose a graph, histogram, CPU chart…"><svg viewBox="0 0 24 24"><path d="M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6"/></svg></button
-                ><button type="button" data-shape="table" role="radio" title="Table: drag its box, then type the cells"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 10h18M3 14.5h18M9 5v14M15 5v14"/></svg></button>
+                ><button type="button" data-shape="graph" class="quick-only" title="Prefab: a table, graph, histogram, CPU chart, UML diagram…"><svg viewBox="0 0 24 24"><path d="M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6"/></svg></button>
 
               </div>
               <div id="shapeFill" class="shape-picker fill-picker" role="radiogroup" aria-label="Fill (F)" title="Fill of rectangles, ellipses, triangles and stars (F)">
@@ -644,16 +643,22 @@
                 <option value="triangle">Triangle</option>
                 <option value="arrow">Arrow</option>
                 <option value="star">Star</option>
-                <option value="graph">Prefab</option>
-                <option value="table">Table</option></select
+                <option value="graph">Prefab</option></select
               ><button
                 id="insertShape"
-                aria-label="Insert shape"
-                title="Insert shape"
+                class="icon-only"
+                aria-label="Put the shape in the middle of the page"
+                title="Put the shape in the middle of the page (or drag on the page to draw it)"
                 data-icon="plus"
-              >
-                Insert
-              </button>
+              ></button
+              ><button
+                id="shapePrefab"
+                type="button"
+                class="shape-prefab"
+                aria-label="Insert prefab"
+                title="Insert prefab: a table, graph, histogram, CPU chart, UML diagram… Rest the pointer here for the ones used last (Shift X)"
+                data-icon="graph"
+              >Prefab<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
             <div id="eraseOptions" class="option-group" hidden>
               <div class="choice-row" data-for="eraserSize" role="radiogroup" aria-label="Eraser size"></div>

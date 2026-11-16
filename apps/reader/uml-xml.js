@@ -64,11 +64,11 @@ export function detectFormat(text) {
 }
 
 // A file's text → a model (normalized), or an error that says what is wrong.
-export function importUml(text) {
+export function importUml(text, options = {}) {
   const format = detectFormat(text);
   if (format === 'json') return normalizeModel(JSON.parse(text));
   if (format === 'xmi') return importXmi(text);
-  if (format === 'vp-xml') return importVp(text);
+  if (format === 'vp-xml') return importVp(text, options);
   throw Error('Not a UML file this can read: XMI, Visual Paradigm XML or a NoteComplete diagram (JSON).');
 }
 
@@ -407,7 +407,7 @@ function vpElementType(node) {
   const rank = (d) => (d.vp?.stereotype ? 2 : 0) + (d.vp?.composite ? 1 : 0);
   const order = Object.entries(ELEMENTS).sort(([, a], [, b]) => rank(b) - rank(a));
   for (const [type, def] of order) {
-    if (def.vp?.element !== tag) continue;
+    if (def.vp?.element !== tag && !def.vp?.also?.includes(tag)) continue;
     if (def.vp.stereotype && !st.includes(def.vp.stereotype.toLowerCase())) continue;
     if (def.vp.composite && !kids(node, VP.children)[0]?.children.length) continue;
     return type;
@@ -437,29 +437,57 @@ function vpConnectorType(node) {
   return null;
 }
 
-export function importVp(text) {
+// The diagrams of a Visual Paradigm project this can open, in the file's order.
+export function vpDiagrams(text) {
+  const doc = typeof text === 'string' ? parseXml(text) : text;
+  const diagrams = [...walk(doc)].find((n) => local(n.name) === VP.diagrams);
+  return (diagrams?.children || []).map((d, index) => ({ index, node: d, kind: Object.entries(DIAGRAMS).find(([, k]) => k.vp && k.vp === local(d.name))?.[0] || null, name: d.attrs[VP.name] || '', shapes: [...walk(d)].filter((s) => s.attrs[VP.element] || s.attrs.Model).length }))
+    .filter((d) => d.kind).map(({ node, ...d }) => Object.defineProperty(d, 'node', { value: node, enumerable: false }));
+}
+
+// VP's own sizes are for an 11 px font; ours is 13 px, so a diagram comes in this much larger
+// (and goes back out this much smaller) to keep its text inside its shapes.
+const VP_SCALE = 1.2;
+// Relationships VP stores the other way round from ours (its From is the arrow's head).
+const VP_REVERSED = new Set(['generalization', 'realization', 'extend']);
+
+// A Visual Paradigm project → the model of one of its diagrams (`diagram`: its index among
+// vpDiagrams, or the first one that has shapes): what that diagram shows, where it shows it.
+export function importVp(text, { diagram } = {}) {
   const doc = parseXml(text);
   const all = [...walk(doc)];
   const models = all.find((n) => local(n.name) === VP.models) || doc;
-  const diagrams = all.find((n) => local(n.name) === VP.diagrams);
-  const firstDiagram = diagrams?.children.find((c) => Object.values(DIAGRAMS).some((d) => d.vp === local(c.name))) || diagrams?.children[0];
-  const kind = Object.entries(DIAGRAMS).find(([, d]) => d.vp === local(firstDiagram?.name || ''))?.[0];
-  const model = { type: 'uml', version: UML_VERSION, diagram: kind || 'class', name: firstDiagram?.attrs[VP.name] || doc.attrs[VP.name] || '', badge: true, elements: [], connectors: [], source: { format: 'vp-xml', ids: {}, extra: {} } };
+  const list = vpDiagrams(doc);
+  const chosen = (diagram !== undefined ? list.find((d) => d.index === diagram) : null) || list.find((d) => d.shapes) || list[0];
+  const dg = chosen?.node || null;
+  const model = { type: 'uml', version: UML_VERSION, diagram: chosen?.kind || 'class', name: chosen?.name || doc.attrs[VP.name] || '', badge: true, elements: [], connectors: [], source: { format: 'vp-xml', ids: {}, extra: {}, scale: VP_SCALE } };
+  // What the diagram shows: its shapes by the element they show, and its lines.
+  const shapeOf = new Map(), shapeModel = new Map(), lineOf = new Map();
+  const dgShapes = dg ? [...walk(kids(dg, VP.shapes)[0] || { children: [] })] : [];
+  for (const s of dgShapes) {
+    const m = s.attrs[VP.element] || s.attrs.Model;
+    if (s.attrs[VP.id] && m) shapeModel.set(s.attrs[VP.id], m);
+    if (m && s.attrs[VP.x] !== undefined && !shapeOf.has(m)) shapeOf.set(m, s);
+  }
+  for (const c of kids(dg || { children: [] }, VP.connectors)[0]?.children || []) { const m = c.attrs[VP.element] || c.attrs.Model; if (m) lineOf.set(m, c); }
+  const shown = (id) => !shapeOf.size || shapeOf.has(id);
   const byVp = new Map();
   const value = (node, key) => node.attrs[key] ?? kids(node, key)[0]?.attrs[VP.name] ?? kids(node, key)[0]?.text ?? '';
   const typeOf = (node) => { const t = node.attrs[VP.type]; if (t) return byVp.get(t)?.e.name || t; const k = kids(node, VP.type)[0]; return k ? (k.attrs[VP.name] || k.children[0]?.attrs[VP.name] || k.text || '') : ''; };
   const childList = (node, tag) => (kids(node, VP.children)[0]?.children || []).filter((c) => local(c.name) === tag);
+  const mult = (m) => (!m || m === 'Unspecified' ? '' : m);
   for (const node of walk(models)) {
     const type = vpElementType(node);
-    if (!type || !node.attrs[VP.id]) continue;
+    if (!type || !node.attrs[VP.id] || !shown(node.attrs[VP.id])) continue;
     const id = `v${byVp.size + 1}`;
     model.source.ids[id] = node.attrs[VP.id];
     const e = { id, type, name: type === 'note' ? node.attrs[VP.documentation] || node.attrs[VP.name] || '' : node.attrs[VP.name] || '', props: {}, bounds: [NaN, NaN, ...ELEMENTS[type].size], parent: null };
     if (node.attrs[VP.abstract] === 'true') e.props.abstract = true;
-    const st = vpStereotypes(node).filter((s) => s.toLowerCase() !== (ELEMENTS[type].vp.stereotype || '').toLowerCase());
+    // VP marks every use case «UseCase» (and so on): that one is the type itself, not shown.
+    const st = vpStereotypes(node).filter((s) => ![ELEMENTS[type].vp.stereotype || '', local(node.name)].some((x) => x.toLowerCase() === s.toLowerCase()));
     if (st.length) e.props.stereotypes = st;
     const attrs = childList(node, VP.attribute);
-    if (attrs.length && type !== 'enumeration') e.props.attributes = attrs.map((a) => ({ visibility: VP_VIS_BACK[a.attrs[VP.visibility]] || '', name: a.attrs[VP.name] || '', type: typeOf(a), multiplicity: a.attrs[VP.multiplicity] || '', default: a.attrs[VP.initial] || '', static: a.attrs[VP.scope] === 'classifier' }));
+    if (attrs.length && type !== 'enumeration') e.props.attributes = attrs.map((a) => ({ visibility: VP_VIS_BACK[a.attrs[VP.visibility]] || '', name: a.attrs[VP.name] || '', type: typeOf(a), multiplicity: mult(a.attrs[VP.multiplicity]), default: a.attrs[VP.initial] || '', static: a.attrs[VP.scope] === 'classifier' }));
     const lits = [...childList(node, VP.literal), ...(type === 'enumeration' ? attrs : [])];
     if (lits.length) e.props.literals = lits.map((l) => ({ name: l.attrs[VP.name] || '' }));
     const ops = childList(node, VP.operation);
@@ -477,41 +505,69 @@ export function importVp(text) {
     byVp.set(node.attrs[VP.id], { e, node });
   }
   for (const { e, node } of byVp.values()) for (let p = node.parent; p; p = p.parent) { const o = byVp.get(p.attrs?.[VP.id]); if (o && ELEMENTS[o.e.type]?.container) { e.parent = o.e.id; break; } }
-  // Relationships: anything with From and To between two known elements.
+  // Relationships: anything with two ends among the elements shown (From and To, or the
+  // ends of an association), and on the diagram when it draws lines.
+  const seen = new Set();
   for (const node of all) {
-    const from = node.attrs[VP.from], to = node.attrs[VP.to];
-    if (!from || !to || !byVp.has(from) || !byVp.has(to)) continue;
+    if (!node.attrs[VP.id] || seen.has(node.attrs[VP.id])) continue;
     if (local(node.parent?.name || '') === VP.connectors) continue; // a diagram's view of one
+    const ends = [...walk(node)].filter((c) => local(c.name) === VP.end);
+    let from = node.attrs[VP.from] || node.attrs.EndRelationshipFromMetaModelElement || ends[0]?.attrs.EndModelElement;
+    let to = node.attrs[VP.to] || node.attrs.EndRelationshipToMetaModelElement || ends[1]?.attrs.EndModelElement;
+    if (!from || !to || !byVp.has(from) || !byVp.has(to)) continue;
+    if (lineOf.size && !lineOf.has(node.attrs[VP.id])) continue;
     const type = vpConnectorType(node);
     if (!type) continue;
+    seen.add(node.attrs[VP.id]);
     const id = `r${model.connectors.length + 1}`;
-    if (node.attrs[VP.id]) model.source.ids[id] = node.attrs[VP.id];
+    model.source.ids[id] = node.attrs[VP.id];
     const props = { name: node.attrs[VP.name] || '' };
     if (CONNECTORS[type].ends) {
-      const ends = [...walk(node)].filter((c) => local(c.name) === VP.end);
-      const endOf = (q) => ({ role: q?.attrs[VP.role] || '', multiplicity: q?.attrs[VP.multiplicity] || '', navigable: (q?.attrs[VP.navigable] || '').toLowerCase() === 'navigable' || q?.attrs[VP.navigable] === 'true' });
+      const endOf = (q) => ({ role: q?.attrs[VP.role] || '', multiplicity: mult(q?.attrs[VP.multiplicity]), navigable: (q?.attrs[VP.navigable] || '').toLowerCase() === 'navigable' || q?.attrs[VP.navigable] === 'true' });
       props.fromEnd = endOf(ends[0]); props.toEnd = endOf(ends[1]);
+      // Navigable both ways is drawn with no arrows at all.
+      if (props.fromEnd.navigable && props.toEnd.navigable) props.fromEnd.navigable = props.toEnd.navigable = false;
     }
     if (type === 'transition') Object.assign(props, { trigger: value(node, VP.trigger), guard: value(node, VP.guard), effect: value(node, VP.effect) });
     if (type === 'controlFlow' || type === 'objectFlow') props.guard = value(node, VP.guard);
     if (type === 'extend') props.condition = value(node, VP.condition);
     if (CONNECTORS[type].message) props.args = node.attrs.Arguments || '';
+    if (VP_REVERSED.has(type)) [from, to] = [to, from];
     model.connectors.push({ id, type, from: byVp.get(from).e.id, to: byVp.get(to).e.id, props: ownProps(type, props), waypoints: [] });
   }
-  // Layout from the diagram's shapes.
-  if (firstDiagram) {
-    for (const s of walk(firstDiagram)) {
-      const k = byVp.get(s.attrs[VP.element] || s.attrs.Model);
-      if (!k || s.attrs[VP.x] === undefined) continue;
-      k.e.bounds = [VP.x, VP.y, VP.w, VP.h].map((a) => Number(s.attrs[a]));
-      if (!k.e.bounds.every(Number.isFinite)) k.e.bounds = [NaN, NaN, ...ELEMENTS[k.e.type].size];
+  // Layout from the diagram's shapes, VP's sizes made ours.
+  const k = VP_SCALE;
+  const box = (s) => [VP.x, VP.y, VP.w, VP.h].map((a) => Math.round(Number(s.attrs[a]) * k));
+  for (const [vpId, s] of shapeOf) {
+    const o = byVp.get(vpId);
+    if (!o) continue;
+    const b = box(s);
+    if (b.every(Number.isFinite)) o.e.bounds = b;
+  }
+  // Swimlanes: VP draws a lane as a header plus a compartment below it, side by side; what
+  // sits in a compartment is in that lane.
+  for (const lanes of dgShapes.filter((s) => /^ActivitySwimlane/.test(local(s.name)) && !/Compartment$/.test(local(s.name)))) {
+    const inner = kids(lanes, 'DiagramElementChildren')[0]?.children || [];
+    const comps = inner.filter((c) => /Compartment$/.test(local(c.name)));
+    for (const h of inner.filter((c) => byVp.get(c.attrs[VP.element] || c.attrs.Model)?.e.type === 'partition')) {
+      const lane = byVp.get(h.attrs[VP.element] || h.attrs.Model).e;
+      const hb = box(h);
+      const vertical = !h.attrs[VP.w] || Number(h.attrs[VP.w]) >= Number(h.attrs[VP.h]);
+      const comp = comps.find((c) => (vertical ? Math.abs(Number(c.attrs[VP.x]) * k - hb[0]) < 2 : Math.abs(Number(c.attrs[VP.y]) * k - hb[1]) < 2));
+      if (comp) { const cb = box(comp); lane.bounds = vertical ? [hb[0], hb[1], hb[2], cb[1] + cb[3] - hb[1]] : [hb[0], hb[1], cb[0] + cb[2] - hb[0], hb[3]]; }
+      for (const s of comp ? walk(comp) : []) { const o = byVp.get(s.attrs[VP.element] || s.attrs.Model); if (o && o.e !== lane && !o.e.parent) o.e.parent = lane.id; }
     }
-    // Messages are drawn at a height in VP; keep it.
-    for (const s of walk(firstDiagram)) {
-      const theirs = s.attrs[VP.element];
-      const c = model.connectors.find((q) => model.source.ids[q.id] === theirs);
-      if (c && CONNECTORS[c.type]?.message && s.attrs[VP.y]) c.props.y = Number(s.attrs[VP.y]);
-    }
+  }
+  // Lines: their bends (VP's points, less the two ends), and a message's height.
+  for (const c of model.connectors) {
+    const line = lineOf.get(model.source.ids[c.id]);
+    if (!line) continue;
+    let pts = [...walk(line)].filter((p) => local(p.name) === 'Point').map((p) => [Math.round(Number(p.attrs.X) * k), Math.round(Number(p.attrs.Y) * k)]).filter((p) => p.every(Number.isFinite));
+    // Drawn from our `to` to our `from`: the bends go the other way.
+    const drawnFrom = shapeModel.get(line.attrs[VP.from]);
+    if (drawnFrom && byVp.get(drawnFrom)?.e.id === c.to && c.from !== c.to) pts = pts.reverse();
+    if (CONNECTORS[c.type]?.message) { if (line.attrs[VP.y]) c.props.y = Math.round(Number(line.attrs[VP.y]) * k); continue; }
+    if (pts.length > 2) c.waypoints = pts.slice(1, -1);
   }
   if (!model.elements.length) throw Error('No UML elements found in this Visual Paradigm file.');
   return normalizeModel(model);
@@ -539,13 +595,14 @@ export function exportVp(input) {
     if (e.type === 'fragment' && e.props?.guard) attrs[VP.guard] = e.props.guard;
     inner.push(...kidsOf(e.id).map(elementNode));
     if (inner.length) children.push(el(VP.children, {}, inner));
-    const tag = e.type === 'history' && e.props?.historyKind === 'deep' ? 'DeepHistoryPseudoState' : def.vp.element;
+    const tag = e.type === 'history' && e.props?.historyKind === 'deep' ? 'DeepHistoryPseudoState' : model.diagram === 'activity' && def.vp.activity ? def.vp.activity : def.vp.element;
     return el(tag, attrs, children);
   };
   const rel = (c) => {
     const def = CONNECTORS[c.type] || CONNECTORS.association;
     const p = c.props || {};
-    const attrs = { [VP.id]: vid(c.id), [VP.from]: vid(c.from), [VP.to]: vid(c.to), [VP.name]: p.name };
+    const [a, b] = VP_REVERSED.has(c.type) ? [c.to, c.from] : [c.from, c.to];
+    const attrs = { [VP.id]: vid(c.id), [VP.from]: vid(a), [VP.to]: vid(b), [VP.name]: p.name };
     const children = [];
     if (def.ends) {
       const end = (side, agg) => el(VP.end, { [VP.role]: p[side]?.role, [VP.multiplicity]: p[side]?.multiplicity, [VP.navigable]: p[side]?.navigable ? 'Navigable' : 'Unspecified', [VP.aggregation]: agg });
@@ -558,8 +615,15 @@ export function exportVp(input) {
     if (def.message) Object.assign(attrs, { Type: def.vp.kind, Arguments: p.args });
     return el(def.vp.element, attrs, children);
   };
-  const shapes = model.elements.map((e) => el(ELEMENTS[e.type]?.vp.element || 'Shape', { [VP.id]: `S_${vid(e.id)}`, [VP.element]: vid(e.id), [VP.x]: Math.round(e.bounds[0]), [VP.y]: Math.round(e.bounds[1]), [VP.w]: Math.round(e.bounds[2]), [VP.h]: Math.round(e.bounds[3]) }));
-  const lines = model.connectors.map((c) => el(CONNECTORS[c.type]?.vp.element || 'Connector', { [VP.id]: `C_${vid(c.id)}`, [VP.element]: vid(c.id), [VP.from]: `S_${vid(c.from)}`, [VP.to]: `S_${vid(c.to)}`, [VP.y]: CONNECTORS[c.type]?.message && Number.isFinite(c.props?.y) ? Math.round(c.props.y) : undefined }));
+  // Back to VP's sizes (see VP_SCALE).
+  const k = model.source?.format === 'vp-xml' && model.source.scale ? model.source.scale : VP_SCALE;
+  const r = (v) => Math.round(v / k);
+  const shapes = model.elements.map((e) => el(model.diagram === 'activity' && ELEMENTS[e.type]?.vp.activity ? ELEMENTS[e.type].vp.activity : ELEMENTS[e.type]?.vp.element || 'Shape', { [VP.id]: `S_${vid(e.id)}`, [VP.element]: vid(e.id), [VP.x]: r(e.bounds[0]), [VP.y]: r(e.bounds[1]), [VP.w]: r(e.bounds[2]), [VP.h]: r(e.bounds[3]) }));
+  const lines = model.connectors.map((c) => {
+    const [a, b] = VP_REVERSED.has(c.type) ? [c.to, c.from] : [c.from, c.to];
+    const way = VP_REVERSED.has(c.type) ? [...(c.waypoints || [])].reverse() : c.waypoints || [];
+    return el(CONNECTORS[c.type]?.vp.element || 'Connector', { [VP.id]: `C_${vid(c.id)}`, [VP.element]: vid(c.id), [VP.from]: `S_${vid(a)}`, [VP.to]: `S_${vid(b)}`, [VP.y]: CONNECTORS[c.type]?.message && Number.isFinite(c.props?.y) ? r(c.props.y) : undefined }, way.length ? [el('Points', {}, way.map(([x, y]) => el('Point', { X: r(x), Y: r(y) })))] : []);
+  });
   const doc = el(VP.project, { Xml_structure: 'simple', UmlVersion: '2.x', Name: model.name || DIAGRAMS[model.diagram].label, Author: 'NoteComplete' }, [
     el(VP.models, {}, [...kidsOf(null).map(elementNode), el(VP.relationships, { [VP.id]: 'NC_relationships' }, [el(VP.children, {}, model.connectors.map(rel))])]),
     el(VP.diagrams, {}, [el(DIAGRAMS[model.diagram].vp, { [VP.id]: 'NC_diagram', [VP.name]: model.name || DIAGRAMS[model.diagram].label }, [el(VP.shapes, {}, shapes), el(VP.connectors, {}, lines)])]),

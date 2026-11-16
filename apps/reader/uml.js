@@ -64,7 +64,7 @@ export const ELEMENTS = {
   // State machine
   state: { label: 'State', shape: 'state', size: [140, 60], fields: { actions: { list: 'action' } }, vp: { element: 'State2' }, xmi: { type: 'uml:State' } },
   compositeState: { label: 'Composite state', shape: 'composite', size: [300, 200], container: true, fields: { actions: { list: 'action' } }, vp: { element: 'State2', composite: true }, xmi: { type: 'uml:State', composite: true } },
-  initial: { label: 'Initial', shape: 'dot', size: [24, 24], noName: true, fields: {}, vp: { element: 'InitialPseudoState' }, xmi: { type: 'uml:Pseudostate', kind: 'initial', activity: 'uml:InitialNode' } },
+  initial: { label: 'Initial', shape: 'dot', size: [24, 24], noName: true, fields: {}, vp: { element: 'InitialPseudoState', also: ['InitialNode'], activity: 'InitialNode' }, xmi: { type: 'uml:Pseudostate', kind: 'initial', activity: 'uml:InitialNode' } },
   final: { label: 'Final state', shape: 'bullseye', size: [28, 28], noName: true, fields: {}, vp: { element: 'FinalState' }, xmi: { type: 'uml:FinalState' } },
   choice: { label: 'Choice', shape: 'diamond', size: [32, 32], noName: true, fields: {}, vp: { element: 'ChoicePseudoState' }, xmi: { type: 'uml:Pseudostate', kind: 'choice' } },
   fork: { label: 'Fork', shape: 'bar', size: [100, 8], noName: true, fields: {}, vp: { element: 'ForkNode' }, xmi: { type: 'uml:Pseudostate', kind: 'fork', activity: 'uml:ForkNode' } },
@@ -365,7 +365,7 @@ export const umlName = (model) => {
 // ---------------------------------------------------------------------------------------
 // Drawing
 
-const FONT = 13, LINE = 17, PAD = 8, CHAR = 0.58;
+const FONT = 13, LINE = 17, PAD = 8, CHAR = 0.55;
 const textWidth = (s, size = FONT) => String(s ?? '').length * size * CHAR;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const n = (v) => Math.round(v * 10) / 10;
@@ -417,8 +417,9 @@ export function fitBounds(e) {
     const need = textWidth(e.name) + 14;
     if (need > w) { w = need; h = Math.max(h, Math.min(need, h * 1.4)); }
   } else if (def?.shape === 'ellipse' || def?.shape === 'rounded' || def?.shape === 'note' || def?.shape === 'box') {
-    const ls = wrap(e.name, w - 2 * PAD - (def.shape === 'ellipse' ? 20 : 0));
-    h = Math.max(h, ls.length * LINE + 2 * PAD + (def.shape === 'ellipse' ? 16 : 0) + (e.props?.type ? LINE : 0));
+    const tight = def.shape === 'rounded' || def.shape === 'box';
+    const ls = wrap(e.name, w - (tight ? PAD : 2 * PAD) - (def.shape === 'ellipse' ? 20 : 0));
+    h = Math.max(h, ls.length * LINE + (tight ? PAD : 2 * PAD) + (def.shape === 'ellipse' ? 16 : 0) + (e.props?.type ? LINE : 0));
   }
   return [x, y, w, h];
 }
@@ -520,11 +521,11 @@ const SHAPES = {
     return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="2" fill="${INK}"/>`;
   },
   rounded(e, [x, y, w, h]) {
-    const ls = wrap(e.name, w - 2 * PAD);
+    const ls = wrap(e.name, w - PAD);
     return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(16, h / 2))}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, y + h / 2 - ((ls.length - 1) * LINE) / 2 + 4.5);
   },
   box(e, [x, y, w, h]) {
-    const ls = wrap(e.name, w - 2 * PAD);
+    const ls = wrap(e.name, w - PAD);
     if (e.props?.type) ls.push(`[${e.props.type}]`);
     return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, y + h / 2 - ((ls.length - 1) * LINE) / 2 + 4.5);
   },

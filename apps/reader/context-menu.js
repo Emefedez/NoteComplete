@@ -1,6 +1,6 @@
 // A menu at the pointer, as on a computer: right-click on the page, a long press of a finger,
 // or the ⋯ circle of a selection. Entries: { label, icon, run, danger?, disabled?, key? }, or
-// "-" for a divider. It closes on a choice, Escape, a press elsewhere, scrolling or resizing.
+// "-" for a divider. `host`: where it goes (a modal dialog it opens over). It closes on a choice, Escape, a press elsewhere, scrolling or resizing.
 import { icon } from './icons.js';
 
 let open = null;
@@ -17,7 +17,7 @@ export function contextMenuOpen() {
   return !!open;
 }
 
-export function openContextMenu(x, y, entries, { title = '' } = {}) {
+export function openContextMenu(x, y, entries, { title = '', host = null } = {}) {
   closeContextMenu();
   const list = entries.filter(Boolean);
   if (!list.some((e) => e !== '-')) return null;
@@ -52,7 +52,8 @@ export function openContextMenu(x, y, entries, { title = '' } = {}) {
   // Presses inside stay inside (no drawing or panning under the menu).
   el.addEventListener('pointerdown', (e) => e.stopPropagation());
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
-  document.body.append(el);
+  // Inside an open modal dialog when asked (the rest of the page is inert under one).
+  (host || document.body).append(el);
   // Inside the window: flipped to the left or up when it would run past an edge.
   const r = el.getBoundingClientRect(), vw = innerWidth, vh = innerHeight, m = 8;
   const left = x + r.width + m > vw ? Math.max(m, x - r.width) : x;

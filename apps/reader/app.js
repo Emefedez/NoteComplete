@@ -71,7 +71,7 @@ import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
-import { choosePrefab, editPrefab, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
+import { choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
@@ -3198,6 +3198,8 @@ function syncShapePicker() {
 }
 for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
   b.onclick = () => {
+    // Prefab (in the quick menu): its picker, at once.
+    if (b.dataset.shape === "graph") return doc && insertPrefab(panels[page]);
     $("shape").value = b.dataset.shape;
     try { localStorage.setItem("notecomplete-shape", b.dataset.shape); } catch { /* Optional. */ }
     syncShapePicker();
@@ -4369,6 +4371,32 @@ async function patchItem(item, adjustment, crop = null) {
   } finally {
     if (token === epoch) editing = false;
   }
+}
+// The Shapes bar's Prefab: a click opens the picker; resting on it shows the ones used
+// last, to insert one straight away.
+prefabFlyout($("shapePrefab"), () => panels[page]);
+function prefabFlyout(button, panel) {
+  let timer = 0, menu = null;
+  const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
+  button.onclick = () => { close(); if (doc) insertPrefab(panel()); };
+  button.addEventListener("pointerenter", (e) => {
+    if (e.pointerType === "touch" || !doc) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const recent = recentPrefabs(6);
+      if (!recent.length || editing) return;
+      const r = button.getBoundingClientRect();
+      menu = openContextMenu(r.left, r.bottom + 4, [
+        ...recent.map((choice) => ({ label: choice.label, icon: choice.icon, run: () => insertPrefab(panel(), null, choice) })),
+        "-",
+        { label: "All prefabs…", icon: "search", key: "⇧X", run: () => insertPrefab(panel()) },
+      ], { title: "Recently used" });
+      // It goes when the pointer has left both the button and it.
+      menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
+      menu?.addEventListener("pointerenter", () => clearTimeout(timer));
+    }, 300);
+  });
+  button.addEventListener("pointerleave", () => { clearTimeout(timer); if (menu) timer = setTimeout(close, 350); });
 }
 $("insertShape").onclick = () => {
   if (!doc || editing) return;
@@ -5736,10 +5764,12 @@ async function insertCompound(p, kind, box = null, spec = {}) {
 $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
 // `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
-async function insertPrefab(p, box = null) {
+// `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
+async function insertPrefab(p, box = null, choice = null) {
   if (!doc || !p || editing) return false;
-  const choice = await choosePrefab();
+  choice ||= await choosePrefab();
   if (!choice) return false;
+  notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
   const spec = choice.kind === "uml" ? await umlEditor(choice.spec) : await editPrefab({ spec: choice.spec });
@@ -5897,7 +5927,6 @@ async function pageMenu(p, at, x, y) {
   openContextMenu(x, y, [
     { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, [at[0], at[1], 0, 0]) },
     { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, [at[0], at[1], 0, 0]) },
-    { label: "Insert table here", icon: "table", run: () => insertCompound(p, "table", [at[0], at[1], 0, 0]) },
     { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } },
     { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() },
     "-",
