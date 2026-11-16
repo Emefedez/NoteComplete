@@ -9,6 +9,11 @@
   --c-line: var(--line, #dce0e5);
   --c-surface: var(--surface, #fff);
   --c-chrome: var(--chrome, #f7f8fa);
+  /* The canvas follows the app's theme; the figure on the page keeps its white paper. */
+  --c-lane: var(--c-surface);
+  --c-lane-odd: color-mix(in srgb, var(--c-ink) 4%, var(--c-surface));
+  --c-grid: color-mix(in srgb, var(--c-ink) 22%, var(--c-surface));
+  --c-grid-minor: color-mix(in srgb, var(--c-ink) 10%, var(--c-surface));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
@@ -27,13 +32,20 @@
 .chart-editor button:hover:not(:disabled) { background: var(--c-soft); }
 .chart-editor button:disabled { opacity: 0.45; cursor: default; }
 .chart-editor button.primary { background: var(--c-accent); border-color: var(--c-accent); color: #fff; font-weight: 600; }
+.chart-editor button.primary:hover:not(:disabled) { background: var(--c-accent); filter: brightness(1.08); }
+/* Buttons with an icon, and words beside it unless the icon says it all. */
+.chart-editor .ch-labeled, .chart-editor .ch-icon { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chart-editor .ch-icon { padding: 3px 7px; }
+.chart-editor .ch-labeled svg, .chart-editor .ch-icon svg { flex: none; width: 17px; height: 17px; }
+.chart-editor .ch-mini svg { width: 15px; height: 15px; }
 .chart-editor button[aria-pressed="true"] { background: var(--c-soft); color: var(--c-accent); border-color: var(--c-accent); }
 .chart-editor [hidden] { display: none !important; }
 .ch-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--c-line); }
 .ch-spacer { flex: 1; }
 .ch-mode { display: inline-flex; }
-.ch-mode button:first-child { border-radius: 6px 0 0 6px; }
-.ch-mode button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.ch-mode button { border-radius: 0; margin-left: -1px; }
+.ch-mode button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.ch-mode button:last-child { border-radius: 0 6px 6px 0; }
 .ch-main { display: grid; grid-template-columns: 150px minmax(0, 1fr) 300px; min-height: 0; }
 .ch-palette { overflow: auto; padding: 8px; border-right: 1px solid var(--c-line); display: flex; flex-direction: column; gap: 3px; }
 .ch-palette h4, .ch-panel h4, .ch-preview-box h4 { margin: 10px 4px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-muted); }
@@ -43,33 +55,45 @@
 .ch-hint { margin: 2px 4px; font-size: 12px; color: var(--c-muted); }
 .ch-hint.error { color: #b83228; }
 .ch-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.ch-canvas { flex: 0 1 auto; min-height: 120px; max-height: 62%; overflow: auto; padding: 8px; background: #fff; color: #0f172a; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ch-canvas { flex: 1 1 auto; min-height: 120px; overflow: auto; padding: 8px; background: var(--c-surface); color: var(--c-ink); outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
 .ch-canvas svg { display: block; cursor: crosshair; }
-.ch-canvas text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; fill: #334155; pointer-events: none; }
-.ch-canvas .ch-label { font-size: 14px; font-weight: 700; fill: #0f172a; font-family: Georgia, serif; }
+.ch-canvas text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; fill: var(--c-muted); pointer-events: none; }
+.ch-canvas .ch-label { font-size: 14px; font-weight: 700; fill: var(--c-ink); font-family: Georgia, serif; }
 .ch-canvas .ch-label.small { font: 600 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
 .ch-canvas .ch-len { font-weight: 700; font-size: 11px; }
 .ch-canvas .ch-ivl { fill: #fff; font-weight: 700; }
-.ch-canvas .ch-ivv { font-weight: 700; fill: #0f172a; }
-.ch-gl { stroke: #cbd5e1; stroke-width: 1; }
-.ch-gl.minor { stroke: #e5e9ef; }
-.ch-lane { fill: #fff; }
-.ch-lane.odd { fill: #f8fafc; }
-.ch-iv { stroke: #1e293b; stroke-width: 1; }
-.ch-arrival { fill: #0f172a; }
+.ch-canvas .ch-ivv { font-weight: 700; fill: var(--c-ink); }
+.ch-gl { stroke: var(--c-grid); stroke-width: 1; }
+.ch-gl.minor { stroke: var(--c-grid-minor); }
+.ch-lane { fill: var(--c-lane); }
+.ch-lane.odd { fill: var(--c-lane-odd); }
+.ch-iv { stroke: color-mix(in srgb, var(--c-ink) 70%, transparent); stroke-width: 1; }
+.ch-arrival { fill: var(--c-ink); }
 .ch-wrong { fill: #dc262622; stroke: #dc2626; stroke-width: 1.6; pointer-events: none; }
-.ch-axis { stroke: #0f172a; stroke-width: 1.6; }
+.ch-axis { stroke: var(--c-ink); stroke-width: 1.6; }
 .ch-bar-hit { fill: transparent; cursor: ns-resize; }
-.ch-barrect { stroke: #1e293b; stroke-width: 1.2; fill-opacity: 0.8; pointer-events: none; }
-.ch-grip { fill: #fff; stroke: #0a84ff; stroke-width: 1.4; pointer-events: none; }
-.ch-empty-bar { fill: #f8fafc; stroke: #cbd5e1; stroke-dasharray: 4 3; pointer-events: none; }
+.ch-barrect { stroke: color-mix(in srgb, var(--c-ink) 70%, transparent); stroke-width: 1.2; fill-opacity: 0.8; pointer-events: none; }
+.ch-grip { fill: var(--c-surface); stroke: var(--c-accent); stroke-width: 1.4; pointer-events: none; }
+.ch-empty-bar { fill: var(--c-lane-odd); stroke: var(--c-grid); stroke-dasharray: 4 3; pointer-events: none; }
 .ch-sol-line { stroke: #16a34a; stroke-width: 3; stroke-dasharray: 5 3; pointer-events: none; }
-.ch-preview-box { flex: 1 1 auto; min-height: 0; border-top: 1px solid var(--c-line); padding: 0 10px 8px; overflow: auto; }
+/* The figure as on the page: folded to its title bar under the canvas, or as tall as its top
+   edge was dragged. A plot has no canvas, so its figure takes the whole middle. */
+.ch-preview-box { position: relative; flex: none; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--c-line); background: var(--c-chrome); }
+.ch-preview-box:not(.open) .ch-preview { display: none; }
+.ch-preview-box.open .ch-preview { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0 10px 8px; }
+.chart-editor .ch-fold { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 30px; padding: 4px 10px; border: 0; border-radius: 0; background: transparent; color: var(--c-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; text-align: left; }
+.chart-editor .ch-fold svg { width: 16px; height: 16px; }
+.ch-grip-bar { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; touch-action: none; z-index: 1; }
+.ch-grip-bar::after { content: ""; position: absolute; left: 50%; top: 3px; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: var(--c-line); }
+.ch-grip-bar:hover::after { background: var(--c-accent); }
 .ch-preview { background: #fff; border: 1px solid var(--c-line); border-radius: 6px; padding: 6px; }
-.ch-preview svg { display: block; width: 100%; height: auto; max-height: 360px; }
-.chart-editor[data-kind="plot"] .ch-preview-box { border-top: 0; }
+.ch-preview svg { display: block; width: 100%; height: auto; max-height: 100%; }
+.chart-editor[data-kind="plot"] .ch-preview-box { flex: 1 1 auto; border-top: 0; background: transparent; }
+.chart-editor[data-kind="plot"] .ch-preview { margin-top: 8px; }
 .chart-editor[data-kind="plot"] .ch-preview svg { max-height: none; }
-.chart-editor[data-kind="bars"] .ch-canvas { flex: 0 0 auto; }
+/* JSON: the figure's data in place of the canvas. */
+.ch-json { flex: 1 1 auto; min-height: 120px; margin: 0; padding: 10px 12px; border: 0; border-radius: 0; resize: none; background: var(--c-surface); color: var(--c-ink); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; outline: none; tab-size: 2; }
+.ch-json.invalid { box-shadow: inset 3px 0 0 #dc2626; }
 .ch-panel { overflow: auto; padding: 10px 12px 20px; border-left: 1px solid var(--c-line); display: flex; flex-direction: column; gap: 7px; }
 .ch-panel h3 { margin: 2px 0 2px; font-size: 15px; }
 .ch-field { display: grid; gap: 3px; min-width: 0; }
@@ -110,3 +134,12 @@ html.chart-page, .chart-page body { height: 100%; margin: 0; }
   .ch-brushes { flex-direction: row; }
   .chart-editor .ch-brush kbd { display: none; }
 }
+/* Filling in: what to look at (the exercise's page, snippets, a picture or PDF), wider. */
+.chart-editor[data-mode="answer"] .ch-main { grid-template-columns: 150px minmax(0, 1fr) minmax(300px, 38%); }
+.ch-refs { display: flex; flex-direction: column; gap: 8px; }
+.ch-ref { margin: 0; border: 1px solid var(--c-line); border-radius: 6px; overflow: hidden; background: var(--c-surface); }
+.ch-ref figcaption { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; font-size: 12px; color: var(--c-muted); border-bottom: 1px solid var(--c-line); }
+.ch-ref figcaption span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-ref-img { display: block; width: 100%; height: auto; background: #fff; }
+.ch-ref-pdf { display: block; width: 100%; height: 60vh; border: 0; background: #fff; }
+@media (max-width: 760px) { .chart-editor[data-mode="answer"] .ch-main { grid-template-columns: minmax(0, 1fr); } }

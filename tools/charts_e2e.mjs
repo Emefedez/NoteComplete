@@ -19,6 +19,8 @@ try {
   const p = await b.newPage({ viewport: { width: 1300, height: 900 } });
   p.on('pageerror', (e) => errors.push(e.message));
   // A tab bridge as the desktop app gives: two tabs, and what is asked of it.
+  // The figure as on the page, unfolded under the canvas (it starts folded).
+  await p.addInitScript(() => { try { localStorage.setItem('notecomplete.chart.preview', JSON.stringify({ open: true, height: 240 })); } catch {} });
   await p.addInitScript(() => {
     const tabs = [{ id: 1, title: 'This note', current: true, active: true }, { id: 2, title: 'Other note', current: false }];
     window.tabCalls = [];
@@ -93,7 +95,27 @@ try {
   await p.waitForSelector('.context-menu');
   let entries = await p.locator('.context-menu button span').allTextContents();
   assert.ok(entries.includes('Edit process states…') && entries.includes('Edit its data as JSON…'), `entries: ${entries}`);
+  assert.ok(entries.includes('Solve process states…'), `a premade figure can be solved: ${entries}`);
+  // The JSON opens in the editor's own JSON view; a valid change shows at once.
+  await p.click('.context-menu button:has-text("Edit its data as JSON")');
+  await p.waitForSelector('.chart-dialog .ch-json:not([hidden])');
+  assert.equal(await p.getAttribute('.chart-editor', 'data-mode'), 'json');
+  const json = JSON.parse(await p.inputValue('.chart-dialog .ch-json'));
+  await p.fill('.chart-dialog .ch-json', '{ "type": ');
+  assert.equal(await p.locator('.chart-dialog button.primary').isDisabled(), true, 'invalid JSON cannot be applied');
+  await p.fill('.chart-dialog .ch-json', JSON.stringify({ ...json, title: 'From JSON' }, null, 2));
+  await p.waitForFunction(() => document.querySelector('.chart-dialog .ch-preview svg')?.textContent.includes('From JSON'));
+  // Back to the editor: the grid, with the folding figure under it.
+  await p.click('.chart-dialog .ch-mode button[aria-label="Editor"]');
+  await p.waitForSelector('.chart-dialog .ch-grid');
+  await p.click('.chart-dialog .ch-fold');
+  assert.equal(await p.locator('.chart-dialog .ch-preview-box.open').count(), 0, 'the figure folds away');
+  await p.click('.chart-dialog .ch-fold');
+  await p.waitForSelector('.chart-dialog .ch-preview-box.open .ch-preview svg');
+  // Both arrows on every process row.
+  assert.ok(await p.locator('.chart-dialog .ch-rowedit button[aria-label="Move down"]').count() > 0, 'rows move down too');
   await p.keyboard.press('Escape');
+  await p.waitForFunction(() => !document.querySelector('.chart-dialog'));
   await sleep(200);
 
   // 3. A scheduling exercise: inserted empty, filled in, checked.
@@ -115,6 +137,9 @@ try {
   await p.click('.context-menu button:has-text("Fill in process states")');
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.getAttribute('.chart-editor', 'data-mode'), 'answer');
+  // The exercise's page beside the canvas, to read its statement.
+  await p.waitForSelector('.chart-dialog .ch-ref img');
+  assert.match(await p.textContent('.chart-dialog .ch-ref figcaption'), /Page 1/);
   // Nothing is painted yet: the answer starts empty.
   assert.equal(await p.locator('.chart-dialog .ch-grid line[stroke="#2563eb"]').count(), 0);
   const g2 = await p.locator('.chart-dialog .ch-grid').boundingBox();
@@ -134,7 +159,7 @@ try {
   const said = await p.textContent('.chart-dialog .ch-status');
   assert.match(said, /^\d+ of 40 right/, said);
   assert.ok(await p.locator('.chart-dialog .ch-wrong').count() > 0, 'wrong cells marked');
-  await p.click('.chart-dialog button:has-text("Show solution")');
+  await p.click('.chart-dialog button[aria-label="Solution"]');
   if (DIR) await p.screenshot({ path: DIR + 'exercise-checked.png' });
   await p.click('.chart-dialog button.primary');
   await p.waitForFunction(() => !document.querySelector('.chart-dialog'));
@@ -165,6 +190,7 @@ try {
 
   // 5. The editor's own page.
   const q = await b.newPage({ viewport: { width: 1100, height: 760 } });
+  await q.addInitScript(() => { try { localStorage.setItem('notecomplete.chart.preview', JSON.stringify({ open: true, height: 240 })); } catch {} });
   q.on('pageerror', (e) => errors.push(`charts.html: ${e.message}`));
   for (const kind of ['timeline', 'bar', 'histogram', 'plot', 'states']) {
     await q.goto(`${server.origin}/charts.html?kind=${kind}`);
