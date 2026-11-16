@@ -326,7 +326,11 @@ fn find_prefabs_js() -> Option<std::path::PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         for anc in exe.ancestors().skip(1) {
-            for rel in ["reader/prefabs.js", "apps/reader/prefabs.js", "resources/reader/prefabs.js"] {
+            for rel in [
+                "reader/prefabs.js",
+                "apps/reader/prefabs.js",
+                "resources/reader/prefabs.js",
+            ] {
                 let p = anc.join(rel);
                 if p.is_file() {
                     return Some(p);
@@ -334,7 +338,10 @@ fn find_prefabs_js() -> Option<std::path::PathBuf> {
             }
         }
     }
-    let dev = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/reader/prefabs.js"));
+    let dev = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../apps/reader/prefabs.js"
+    ));
     dev.is_file().then(|| dev.to_path_buf())
 }
 
@@ -536,7 +543,12 @@ if (!out?.svg) throw new Error('Spec produced no prefab SVG');
 process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg }));
 "#;
         let mut node = Command::new("node")
-            .args(["--input-type=module", "-e", script, &prefabs_js.to_string_lossy()])
+            .args([
+                "--input-type=module",
+                "-e",
+                script,
+                &prefabs_js.to_string_lossy(),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -651,7 +663,8 @@ process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.heigh
         let title = editor.scene.title.clone();
         let (out, backup) = destination(args, Some(&source), &title)?;
         save(&editor, &out, Some(&data), backup.as_deref())?;
-        let report = json!({"written":out,"backup":backup,"page":display + 1,"part_id":id,"box":[x,y,w,h]});
+        let report =
+            json!({"written":out,"backup":backup,"page":display + 1,"part_id":id,"box":[x,y,w,h]});
         self.preview(&out, display, report)
     }
 
