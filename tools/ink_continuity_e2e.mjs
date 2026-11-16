@@ -68,7 +68,8 @@ async function settle(p, what) {
   assert.ok(w.frames > 10, `${what}: watched over many frames (${w.frames})`);
   return w;
 }
-const pen = (p) => p.evaluate(() => document.querySelector('#toolbar [data-tool="draw"], [data-tool="draw"]').click());
+// The Pen, with its settings closed (they open over the top of the page).
+const pen = (p) => p.evaluate(() => { document.querySelector('#toolbar [data-tool="draw"], [data-tool="draw"]').click(); const o = document.getElementById('toolOptions'); if (!o.hidden && !o.classList.contains('inline')) document.getElementById('toolbarToggle').click(); });
 
 const server = await startReader({ notes: 'edit', port: 0 });
 const browser = await chromium.launch();

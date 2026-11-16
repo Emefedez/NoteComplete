@@ -121,10 +121,10 @@ function pages() {
   const handlers = {};
   return {
     scrollLeft: 0, scrollTop: 0,
-    addEventListener(type, fn) { handlers[type] = fn; },
+    addEventListener(type, fn) { (handlers[type] ??= []).push(fn); },
     fire(type, touches, changed, timeStamp) {
       const e = { type, touches, changedTouches: changed, timeStamp, prevented: false, preventDefault() { this.prevented = true; } };
-      handlers[type]?.(e);
+      for (const fn of handlers[type] ?? []) fn(e);
       return e;
     },
     has: (type) => !!handlers[type],

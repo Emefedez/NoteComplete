@@ -1321,8 +1321,8 @@ impl Editor {
                     editor.commit(Edit::Erase { page, ids, joined })?;
                 }
             }
-            for i in from..editor.history.len() {
-                match &editor.history[i] {
+            for (i, edit) in editor.history.iter().enumerate().skip(from) {
+                match edit {
                     Edit::Add { page, .. } => {
                         live.entry(*page).or_default().insert(format!("new:{i}"), i);
                     }

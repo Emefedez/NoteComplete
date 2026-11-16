@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.15
+
+- **Copy, cut and paste.** With Select, use **Ctrl C**, **Ctrl X** and **Ctrl V** (⌘ on a Mac), or **Cut** and **Copy** in an item's right-click menu. To paste on any page, right-click and choose **Paste here**, or press Ctrl V. Strokes, shapes, pictures, text boxes and prefabs are copied as they are drawn now. A copied prefab can still be edited.
+- **Drag items onto another page.** With Select, let go of an item over another page and it moves there. One undo moves it back.
+- **Clearer diagram labels.** A connector's label sits beside its line, can be dragged anywhere, and is always drawn over the lines on its own background. Right-click → **Label back beside the line** resets it. The «include», «extend» and «create» tools now show their letter.
+- **Move the tool settings anywhere.** Drag them by their grip and they stay there. Double-click the grip, or use **View → Reset tool settings position**, to put them back.
+
 ## 1.2.14
 
 - **One view in the chart editor.** The figure "as on the page" is now a panel under the canvas. Fold it away with its arrow, or drag its top edge to resize it. Both choices are remembered on this device.

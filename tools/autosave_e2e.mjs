@@ -26,8 +26,9 @@ try {
   // Draw a stroke, then leave the page: a copy goes into a slot.
   await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
   const s = await p.locator('.sheet').first().boundingBox();
-  await p.mouse.move(s.x + 100, s.y + 100); await p.mouse.down();
-  for (let i = 1; i <= 8; i++) await p.mouse.move(s.x + 100 + i * 15, s.y + 120);
+  // Below the Pen's settings, which open over the top of the page.
+  await p.mouse.move(s.x + 100, s.y + 400); await p.mouse.down();
+  for (let i = 1; i <= 8; i++) await p.mouse.move(s.x + 100 + i * 15, s.y + 420);
   await p.mouse.up();
   await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length > n, before);
   await p.evaluate(() => dispatchEvent(new Event('pagehide')));
@@ -48,9 +49,9 @@ try {
   assert.equal(await p.evaluate(() => document.getElementById('saveState').classList.contains('dirty')), true, 'recovered, unsaved');
   console.log('· reopening asks; the automatic save brings the edit back, unsaved');
   // A manual save: no question next time.
-  const download = p.waitForEvent('download');
+  // On the web a save keeps the note in the app's library (no download).
   await p.keyboard.press('Control+s');
-  await download;
+  await p.waitForFunction(() => !document.getElementById('saveState').classList.contains('dirty'));
   await sleep(300);
   p.once('dialog', (d) => d.accept());
   await open();

@@ -2,6 +2,7 @@
 // a canvas to place, move, resize and connect them, and a property panel built from each
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
+import { imageReady } from './image-ready.js';
 import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { download } from './download.js';
@@ -34,8 +35,7 @@ function ensureStyles() {
 export async function umlPng(model, scale = 2) {
   const out = renderUml(model);
   const img = new Image();
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(out.svg)}`;
-  await img.decode();
+  await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(out.svg)}`);
   const canvas = make('canvas', { width: Math.round(out.width * scale), height: Math.round(out.height * scale) });
   canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));

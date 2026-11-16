@@ -1,5 +1,5 @@
 import { touchGestures, palmPointer } from "./touch.js";
-import { followPoint, smoothStroke, pressureRadii, extentOf } from "./stroke-smoothing.js";
+import { followPoint, smoothStroke, pressureRadii } from "./stroke-smoothing.js";
 import { textLines } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
@@ -43,6 +43,7 @@ import { SelectionController } from "./selection.js";
 import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
+import { imageReady } from "./image-ready.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
 import { saveDocumentInPlace } from "./save-target.js";
 import { welcomeWanted, setWelcomeWanted } from "./welcome-pref.js";
@@ -1265,16 +1266,20 @@ async function renderThumbnail(panel) {
       const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(source)], { type: "image/svg+xml" }));
       const image = new Image();
       try {
-        image.src = url;
-        await image.decode();
+        await imageReady(image, url);
         if (note !== epoch || edits !== pageEdits(panel)) return;
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+        // Encoded off the main thread (toDataURL would stall it while writing).
+        const blob = await new Promise((done) => canvas.toBlob(done, "image/png"));
+        canvas.width = canvas.height = 0;
+        if (!blob || note !== epoch || edits !== pageEdits(panel)) return;
         const preview = new Image();
         preview.alt = "";
-        preview.src = canvas.toDataURL("image/png");
-        canvas.width = canvas.height = 0;
+        preview.src = URL.createObjectURL(blob);
+        if (panel.thumbUrl) URL.revokeObjectURL(panel.thumbUrl);
+        panel.thumbUrl = preview.src;
         target.replaceChildren(preview);
       } finally { URL.revokeObjectURL(url); }
       panel.thumbnailReady = true;
@@ -2322,8 +2327,8 @@ function cancelGesture() {
 }
 // Overlay lines that outlast a gesture or an edit: finished strokes and others' live lines.
 const kept = (el) => el.classList.contains("pending-ink") || el.classList.contains("remote-ink");
-function point(e, p) {
-  const r = p.el.getBoundingClientRect();
+// `r`: the page's box, when the caller already has it (one read for a run of samples).
+function point(e, p, r = p.el.getBoundingClientRect()) {
   return [
     Math.max(
       0,
@@ -2743,6 +2748,31 @@ function showTextBands(g) {
     return rect;
   }));
 }
+// The line drawn meanwhile is updated once a frame (a stylus reports up to 240 moves a
+// second), and a freehand line only gets its new points rather than all of them again.
+let previewFrame = 0;
+function previewSoon() {
+  if (!previewFrame) previewFrame = requestAnimationFrame(() => { previewFrame = 0; preview(); });
+}
+function flushPreview() {
+  if (!previewFrame) return;
+  cancelAnimationFrame(previewFrame);
+  previewFrame = 0;
+  preview();
+}
+function showPoints(g) {
+  const list = g.el.points, svg = g.el.ownerSVGElement;
+  if (g.shown?.of === g.points && list && svg && list.numberOfItems === g.shown.count && g.shown.count <= g.points.length) {
+    for (let i = g.shown.count; i < g.points.length; i++) {
+      const q = svg.createSVGPoint();
+      q.x = g.points[i][0]; q.y = g.points[i][1];
+      list.appendItem(q);
+    }
+  } else {
+    g.el.setAttribute("points", g.points.map((p) => p.join(",")).join(" "));
+  }
+  g.shown = { of: g.points, count: g.points.length };
+}
 function preview() {
   const g = gesture;
   if (!g || g.tool === "pan" || g.textMode) return;
@@ -2751,7 +2781,7 @@ function preview() {
     for (const [k, v] of Object.entries({ x, y, width: w, height: h })) g.el.setAttribute(k, v);
     return;
   }
-  g.el.setAttribute("points", g.points.map((p) => p.join(",")).join(" "));
+  showPoints(g);
   // A filled shape shows its inside while it is drawn.
   if (g.tool === "shape") {
     const { fill } = fillFor($("shape").value, g.color);
@@ -2791,17 +2821,19 @@ function appendPoint(e) {
   } else {
     g.lastClient = [e.clientX, e.clientY];
     const samples = e.getCoalescedEvents?.() || [];
+    const box = g.panel.el.getBoundingClientRect();
     for (const sample of samples.length ? samples : [e]) {
-      const raw = point(sample, g.panel),
+      const raw = point(sample, g.panel, box),
         last = g.points.at(-1);
       g.raw = raw;
-      const p = followPoint(last, raw, g.smooth, g.smooth ? extentOf(g.points) : Infinity);
+      const p = followPoint(last, raw, g.smooth, g.smooth ? extentSoFar(g) : Infinity);
       if (
         Math.hypot(p[0] - last[0], p[1] - last[1]) >= 0.3 &&
         g.points.length < 8192
       ) {
         g.points.push(p);
         g.pressures.push(sample.pressure);
+        if (g.extent) grow(g.extent, p);
       }
     }
     // A stylus stroke is saved with its pressure: the line drawn meanwhile takes the
@@ -2813,8 +2845,24 @@ function appendPoint(e) {
     watchHold(g, e);
   }
   if (g.snapped) return collab?.drawing(g);
-  preview();
+  previewSoon();
   collab?.drawing(g);
+}
+// The size of the line so far, kept as it grows instead of measured again for every point.
+function extentSoFar(g) {
+  if (g.extent?.of !== g.points) {
+    g.extent = { of: g.points, box: [Infinity, Infinity, -Infinity, -Infinity] };
+    for (const p of g.points) grow(g.extent, p);
+  }
+  const [x0, y0, x1, y1] = g.extent.box;
+  return g.points.length ? Math.hypot(x1 - x0, y1 - y0) : 0;
+}
+function grow(extent, [x, y]) {
+  const b = extent.box;
+  if (x < b[0]) b[0] = x;
+  if (y < b[1]) b[1] = y;
+  if (x > b[2]) b[2] = x;
+  if (y > b[3]) b[3] = y;
 }
 // Shape recognition (shape-recognize.js; docs/SHAPES-TABLES-MATH.md): with the Pen, a stroke
 // held still for a moment becomes the shape it looks like (or, opt-in, on every lift).
@@ -2990,6 +3038,7 @@ function pointerUp(e) {
     return;
   }
   appendPoint(e);
+  flushPreview();
   const g = gesture;
   gesture = null;
   // A tap with tape lifts or covers it here only: the others drop the line drawn meanwhile.
@@ -6337,8 +6386,7 @@ async function itemPicture(item, scale = 3, type = "image/png", quality, out = n
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
     const image = new Image();
-    image.src = url;
-    await image.decode();
+    await imageReady(image, url);
     const canvas = Object.assign(document.createElement("canvas"), { width: w, height: h });
     const context = canvas.getContext("2d");
     if (type !== "image/png") { context.fillStyle = "#fff"; context.fillRect(0, 0, w, h); }
@@ -6880,8 +6928,7 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
     const image = new Image();
-    image.src = url;
-    await image.decode();
+    await imageReady(image, url);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;

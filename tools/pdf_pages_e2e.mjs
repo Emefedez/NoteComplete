@@ -92,13 +92,13 @@ for (const name of ['Practice book (vol. 1).noteful', 'Examen wuolah.noteful']) 
   // The largest zoom the app allows (400 %; beyond it the box keeps 400).
   await p.fill('#zoomValue', '900'); await p.press('#zoomValue', 'Enter');
   assert.equal(await p.inputValue('#zoomValue'), '400%');
-  await p.waitForFunction(() => document.querySelector('.sheet [data-background] > image'), null, { timeout: 30000 });
   const zoomed = await pdfShown(p, [], 'largest zoom');
   const sizes = await p.evaluate(() => [...document.querySelectorAll('.sheet .render > canvas.pdf-raster')].map((c) => [c.width, c.height]));
   for (const [w, h] of sizes) assert.ok(w <= 4096 && h <= 4096, `no canvas larger than 4096 px a side (${w}×${h})`);
-  assert.ok(zoomed.some((page) => page.kind === 'image'), 'the zoomed page is a picture');
+  // Fast zoom sharpening keeps the page's raster window-wide and redraws only the part on screen.
+  assert.ok(zoomed.length && zoomed.every((page) => page.ok), 'the zoomed page is shown');
   await scrollBy(p, 3000); await pdfShown(p, [], 'largest zoom, scrolled');
-  console.log('· at the largest zoom the PDF is shown, as a picture');
+  console.log('· at the largest zoom the PDF is shown, within the canvas size limit');
   await ctx.close();
 }
 
