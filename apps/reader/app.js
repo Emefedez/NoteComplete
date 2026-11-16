@@ -105,7 +105,10 @@ document.addEventListener("toggle", (event) => {
     if (menu !== event.target) menu.open = false;
 }, true);
 document.addEventListener("pointerdown", (event) => {
-  if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden && !$("toolOptions").classList.contains("inline"))
+  if (event.target.closest("#toolbar,.select-menu")) return;
+  // The settings opened as a panel from the inline strip go back into the strip.
+  if (optionsPopped) { optionsPopped = false; toolOptions(); return; }
+  if (!$("toolOptions").hidden && !$("toolOptions").classList.contains("inline"))
     setCompact(true);
 });
 let epoch = 0,
@@ -1725,6 +1728,9 @@ $("viewport").onscroll = () => {
 // Tool settings open when a tool is chosen (View menu can turn that off), and
 // pressing the selected tool again toggles them.
 let toolSettingsAuto = true, optionsOpen = true;
+// A wide tool bar shows the tool's settings inline; pressing the selected tool opens them as
+// the full panel under it too (bigger swatches and every option), until a press elsewhere.
+let optionsPopped = false;
 try { toolSettingsAuto = localStorage.getItem("notecomplete-tool-settings-auto") !== "0"; } catch { /* Optional. */ }
 $("toolSettingsAuto").setAttribute("aria-checked", String(toolSettingsAuto));
 $("toolSettingsAuto").onclick = () => {
@@ -1761,7 +1767,7 @@ function toolOptions() {
   // The text format bar, when docked here, shows while a text box is typed or selected.
   const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
-  const useInline = inlineToolOptionsSpace() >= 220;
+  const useInline = !optionsPopped && inlineToolOptionsSpace() >= 220;
   const opts = $("toolOptions");
   opts.classList.toggle("inline", useInline);
   if (useInline) {
@@ -1769,7 +1775,7 @@ function toolOptions() {
     opts.hidden = chromeState.compact || !canOpen;
     $("toolbarToggle").hidden = true;
   } else {
-    const usual = optionsOpen && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
+    const usual = (optionsOpen || optionsPopped) && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
     opts.hidden = chromeState.compact || !(usual || textDock);
     $("toolbarToggle").hidden = !canOpen;
   }
@@ -3147,7 +3153,14 @@ async function commitTextHighlight(g) {
 function selectTool(name, { fromMenu = false } = {}) {
   if (fromMenu && tool === name) return;
   cancelGesture();
-  // Pressing the selected tool again shows or hides its settings.
+  // Pressing the selected tool again shows or hides its settings: with them inline in a wide
+  // bar, as the full panel under the tool.
+  if (tool === name && !fromMenu && (optionsPopped || $("toolOptions").classList.contains("inline"))) {
+    optionsPopped = !optionsPopped;
+    toolOptions();
+    return;
+  }
+  optionsPopped = false;
   if (tool === name) {
     optionsOpen = chromeState.compact || !optionsOpen;
     setCompact(false);
@@ -5988,8 +6001,9 @@ function compoundBox(p, kind, box = null, size = COMPOUND_SIZE[kind]) {
 async function insertCompound(p, kind, box = null, spec = {}) {
   if (!doc || !p) return false;
   if (!ensureEditableLayer()) return false;
+  const note = epoch;
   const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec });
-  if (!chosen) return false;
+  if (!chosen || !sameNote(note)) return false;
   let items;
   try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
   await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
@@ -6007,8 +6021,9 @@ async function insertPrefab(p, box = null, choice = null) {
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
+  const note = epoch;
   const spec = await figureEditor(choice.spec);
-  if (!spec) return false;
+  if (!spec || !sameNote(note)) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
@@ -6019,6 +6034,13 @@ async function insertPrefab(p, box = null, choice = null) {
 // Snippets kept from the Grab tool (Keep for exercises), shown while filling a figure in; for
 // this session only.
 const exerciseRefs = [];
+// The menu bar stays usable over the editors: if another note was opened (or this one closed)
+// meanwhile, what the editor returns is not put on it.
+function sameNote(note) {
+  if (doc && note === epoch) return true;
+  status("Another note was opened while the editor was open; nothing was changed.", true);
+  return false;
+}
 async function figureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
   if (spec?.type === "uml") return umlEditor(spec, editing);
   if (editorKind(spec)) {
@@ -6070,8 +6092,9 @@ $("insertTable").onclick = () => doc && insertCompound(panels[page], "table");
 async function insertUml(p, box = null, diagram = "class") {
   if (!doc || !p || editing || !ensureEditableLayer()) return false;
   const { starterModel } = await import("./uml.js");
+  const note = epoch;
   const spec = await umlEditor(starterModel(diagram));
-  if (!spec) return false;
+  if (!spec || !sameNote(note)) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
@@ -6103,15 +6126,17 @@ async function editCompound(item, mode = "author") {
         canvas.width = canvas.height = 0;
       } catch { /* The editor opens without it. */ }
     }
+    const note = epoch;
     const chosen = await figureEditor(spec, { editing: true, mode, references });
-    if (!chosen) return;
+    if (!chosen || !sameNote(note)) return;
     const frame = await compoundFrame(item);
     selection.clear();
     if (await placePrefab(panels[item.page], chosen, frame, c.items, c.id)) status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
     return;
   }
+  const note = epoch;
   const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec, editing: true });
-  if (!chosen) return;
+  if (!chosen || !sameNote(note)) return;
   let items;
   try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
   selection.clear();
@@ -6274,7 +6299,8 @@ const itemKeys = (e) => !e.defaultPrevented && !typingIn(e.target) && !window.ge
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !itemKeys(e)) return;
   const key = e.key.toLowerCase();
-  if ((key === "c" || key === "x") && selection.item && tool === "select") {
+  // Whatever the tool: a selection (left from Select, or a long press) copies; a copy pastes.
+  if ((key === "c" || key === "x") && selection.item) {
     if (key === "x" && !selection.editable()) return;
     clipKeyAt = e.timeStamp;
     copyItem(selection.item, { cut: key === "x" });

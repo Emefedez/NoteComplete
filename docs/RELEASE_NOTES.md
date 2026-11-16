@@ -1,11 +1,12 @@
-## What's new in 1.2.16
+## What's new in 1.2.17
 
-- **Snappier writing.** The line you draw is updated once per screen refresh and only gets its new points, instead of being rebuilt with every pen sample, so long strokes stay smooth (most noticeable in Safari on iPad).
-- **Smoother page list.** Page previews are encoded in the background, so finishing a stroke no longer causes a short pause.
-- **Prefabs work on iPad.** Tapping a figure in the prefab picker now picks it the first time (Safari treated the tap as a hover), and prefabs are drawn in a way Safari accepts.
-- **Process states editor.** Right-click a cell to erase it, or hold the right button and drag to erase a stretch. Scroll over the grid (or use the new Length buttons) to paint 1, 5 or 10 units per click; an outline shows what a click will paint. On the page, processes are now drawn in the same top-to-bottom order as in the editor.
-- **Histogram editor squares.** The editor shows each bar's column, so the grid matches the page.
-- **Clearer while an editor is open.** The menu bar above a full-window editor is greyed out, since it can't be used until the editor closes (the tabs still work).
-- **Two-finger scrolling is reliable again.** Scrolling or pinching while a page redrew under your fingers could leave the gesture stuck, so the pages stopped gliding on after you lifted.
+- **Tool settings panel is back on wide screens.** With the settings shown inline in the tool bar, press the selected tool again to open its full panel underneath. Press anywhere else to close it.
+- **The menu bar works while a chart or diagram editor is open.** File, Edit, View and the rest stay usable above the editor, and their menus open over it. If another note is opened in the meantime, the editor's result is not put on it.
+- **Diagram connectors.** «extend» now points from the extension to the base use case by default, and its icon points that way too. Hold Shift when letting go of a new connection to pick its type and direction. Right-click a connector to change its type, or swap its direction.
+- **Diagram text size and colour.** Right-click an element or connector and choose **Text size** or **Colour**.
+- **More diagram elements.** Decision, merge and choice nodes can have a name (shown above them). New: activation bars for sequence diagrams, plus input and output pins and interruptible regions for activity diagrams.
+- **Copy, cut and paste in the diagram editor**, with Ctrl C, Ctrl X and Ctrl V, from the right-click menu, or with **Paste here**. On the page, Ctrl C and Ctrl X now work with whatever tool is active.
+- **Process states editor.** Every time cell now has its own line, with stronger lines and labels at each "Ticks every" interval and a little more room per process.
+- **JSON tab.** The JSON text now fills the editor's width instead of a narrow strip.
 
 Earlier versions: [changelog](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; SHA256SUMS.txt has the checksums. Not signed or notarized; see docs/BUILDS.md.

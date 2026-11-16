@@ -345,7 +345,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         };
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
-      palette.append(make('h4', { textContent: 'Length' }), lengthBox());
+      palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
       palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length; right-click or right-drag erases.' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
@@ -380,7 +380,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const box = make('div', { className: 'ch-lengths', role: 'group' });
     box.setAttribute('aria-label', 'How much a click paints');
     LENGTHS.forEach((units, i) => {
-      const b = make('button', { type: 'button', className: 'ch-length', textContent: `${units}${base.unit ? ` ${base.unit}` : ''}`, title: `A click paints ${units} time unit${units === 1 ? '' : 's'} (scroll over the grid to switch)` });
+      const b = make('button', { type: 'button', className: 'ch-length', textContent: String(units), title: `A click paints ${units} time unit${units === 1 ? '' : 's'} (scroll over the grid to switch)` });
       b.setAttribute('aria-pressed', String(i === lengthAt));
       b.onclick = () => setLength(i);
       box.append(b);
@@ -416,15 +416,18 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const longest = g.rows.reduce((m, r) => Math.max(m, r.label.length), 2);
     const left = Math.min(140, 22 + longest * 8), top = 30;
     const cw = Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n)));
-    const rh = showSolution ? 46 : 36;
+    const rh = showSolution ? 50 : 42;
     geo = { left, top, cw, rh, n };
     const W = left + cw * n + 10, H = top + rh * g.rows.length + 10;
     const s = svgEl('svg', { class: 'ch-grid', width: W, height: H, viewBox: `0 0 ${W} ${H}` });
-    // Times along the top, every cell or fewer when they are narrow.
-    const every = Math.max(1, Math.ceil(26 / cw));
+    // A line at every cell, so each unit of time can be counted; stronger, and labelled, every
+    // "Ticks every" (or as often as the labels fit).
+    const step = Number(base.tStep) > 0 ? Math.max(1, Math.round(Number(base.tStep) / g.cell)) : 0;
+    const fits = Math.max(1, Math.ceil(26 / cw));
+    const every = step ? step * Math.ceil(fits / step) : fits;
     for (let k = 0; k <= n; k++) {
-      const x = left + k * cw;
-      s.append(svgEl('line', { x1: x, y1: top - 4, x2: x, y2: top + rh * g.rows.length, class: k % every ? 'ch-gl minor' : 'ch-gl' }));
+      const x = left + k * cw, major = step ? k % step === 0 : k % every === 0;
+      s.append(svgEl('line', { x1: x, y1: top - (major ? 6 : 2), x2: x, y2: top + rh * g.rows.length, class: major ? 'ch-gl' : 'ch-gl minor' }));
       if (k % every === 0) s.append(Object.assign(svgEl('text', { x, y: top - 9, class: 'ch-time', 'text-anchor': 'middle' }), { textContent: fmt(g.tStart + k * g.cell) }));
     }
     if (base.unit) s.append(Object.assign(svgEl('text', { x: left - 6, y: top - 9, class: 'ch-time', 'text-anchor': 'end' }), { textContent: base.unit }));
@@ -466,6 +469,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       if (kind === 'states' && arrival != null) s.append(svgEl('circle', { cx: left + ((arrival - g.tStart) / g.cell) * cw, cy: yc, r: 4.2, class: 'ch-arrival' }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
+    // The lanes' backgrounds under the cell lines (they were drawn over them).
+    for (const lane of [...s.querySelectorAll('.ch-lane')].reverse()) s.prepend(lane);
     const outline = svgEl('rect', { class: 'ch-stamp', rx: 3 });
     outline.style.display = 'none';
     s.append(outline);

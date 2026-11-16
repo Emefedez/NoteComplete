@@ -8,6 +8,10 @@
 
 // The tab strip's elements (tab-strip.js): kept usable over any dialog.
 const TABS = ['tabStrip', 'tabCount', 'tabMenu'];
+// Full-window editors (charts, diagrams) belong to the open note: the menu bar above them stays
+// usable while they are open, and its menus open over them.
+const FULL = '.chart-dialog, .uml-dialog';
+const BAR = 'commandBar';
 
 export function installModalDialogs({ doc = globalThis.document } = {}) {
   const win = doc?.defaultView;
@@ -20,7 +24,8 @@ export function installModalDialogs({ doc = globalThis.document } = {}) {
 
   // The space the tab bar takes at the top: full-window dialogs start under it.
   function measureTop() {
-    const bar = doc.body.classList.contains('has-tabs') && doc.getElementById('commandBar');
+    const full = stack[stack.length - 1]?.matches?.(FULL);
+    const bar = (full || doc.body.classList.contains('has-tabs')) && doc.getElementById(BAR);
     const top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0;
     doc.documentElement.style.setProperty('--modal-top', `${top}px`);
   }
@@ -32,8 +37,11 @@ export function installModalDialogs({ doc = globalThis.document } = {}) {
   function apply() {
     release();
     const top = stack[stack.length - 1];
+    const full = !!top?.matches?.(FULL);
+    doc.body.classList.toggle('nc-full-editor', full);
     if (!top) return;
-    const keep = [top, ...TABS.map((id) => doc.getElementById(id)).filter(Boolean)];
+    measureTop();
+    const keep = [top, ...[...TABS, ...(full ? [BAR] : [])].map((id) => doc.getElementById(id)).filter(Boolean)];
     const path = new Set();
     for (const el of keep) for (let n = el; n && n !== doc.documentElement; n = n.parentElement) path.add(n);
     for (const n of path) {

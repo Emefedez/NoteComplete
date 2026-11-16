@@ -3,7 +3,7 @@
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
 import { imageReady } from './image-ready.js';
-import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
+import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { download } from './download.js';
 import { sortable } from './reorder.js';
@@ -282,22 +282,28 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const kind = ELEMENTS[from.type]?.container || from.type === 'note' ? DIAGRAMS[model.diagram].elements[0] : from.type;
     snapshot();
     const def = ELEMENTS[kind];
-    const e = makeElement(kind, [Math.round(at[0] - def.size[0] / 2), Math.round(at[1] - def.size[1] / 2)], { name: def.noName ? '' : model.diagram === 'graph' ? '' : def.label }, model);
+    const e = makeElement(kind, [Math.round(at[0] - def.size[0] / 2), Math.round(at[1] - def.size[1] / 2)], { name: def.noName || def.optionalName ? '' : model.diagram === 'graph' ? '' : def.label }, model);
     if (def.shape.toLowerCase().includes('lifeline')) e.bounds[1] = from.bounds[1];
     model.elements.push(e);
     e.parent = containerFor(e);
     const extra = CONNECTORS[type]?.message ? { props: { y: Math.round(start[1]) } } : {};
-    model.connectors.push(makeConnector(type, from.id, e.id, extra, model));
+    const [a, b] = ends(type, from, e);
+    model.connectors.push(makeConnector(type, a.id, b.id, extra, model));
     lastConnector = type;
     selected = { kind: 'element', id: e.id };
     changed();
-    rename(e);
+    if (!def.noName && !def.optionalName) rename(e);
   }
-  function connect(type, from, to, at = null) {
+  // Which way a new connector points, dragged from `a` to `b`: toward `b`, except one drawn
+  // back toward where the drag started («extend»: from the extension to the base use case).
+  const ends = (type, a, b) => (CONNECTORS[type]?.drawnBack ? [b, a] : [a, b]);
+  // `exact`: from `from` to `to` as given (the Shift picker chose the direction).
+  function connect(type, from, to, at = null, exact = false) {
     lastConnector = type;
     snapshot();
     const extra = {};
     if (CONNECTORS[type].message) extra.props = { y: Math.round(at?.[1] ?? 120) };
+    if (!exact) [from, to] = ends(type, from, to);
     const c = makeConnector(type, from.id, to.id, extra, model);
     model.connectors.push(c);
     selected = { kind: 'connector', id: c.id };
@@ -453,6 +459,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       d.line?.remove();
       const pt = toModel(ev);
       const to = elementAt(pt, d.grow ? d.from.id : null) || (!d.grow ? elementAt(pt) : null);
+      if (to && ev.shiftKey && to !== d.from) return pickLink(d, to, ev);
       if (to) return connect(d.type, d.from, to, d.start);
       if (!d.grow) return say('Let go on an element to connect to it.');
       // Let go on empty space: a new element like the one it started from, connected to it.
@@ -564,6 +571,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     else if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing && selected) { ev.preventDefault(); removeSelected(); }
     else if (ev.key === 'F2' && !typing && selected) { ev.preventDefault(); rename(current()); }
     else if (mod && ev.key.toLowerCase() === 'd' && !typing && selected?.kind === 'element') { ev.preventDefault(); duplicate(); }
+    else if (mod && ev.key.toLowerCase() === 'c' && !typing && selected?.kind === 'element') { ev.preventDefault(); copySelected(); say('Copied. Ctrl V pastes it.'); }
+    else if (mod && ev.key.toLowerCase() === 'x' && !typing && selected?.kind === 'element') { ev.preventDefault(); if (copySelected()) removeSelected(); }
+    else if (mod && ev.key.toLowerCase() === 'v' && !typing && clip) { ev.preventDefault(); ev.stopPropagation(); pasteClip(); }
     else if (ev.key === 'Escape' && !typing && pending) { ev.preventDefault(); ev.stopPropagation(); pending.line?.remove(); pending = null; say(''); }
     else if (ev.key === 'Escape' && !typing) { if (tool.kind !== 'select') { ev.preventDefault(); ev.stopPropagation(); setTool({ kind: 'select' }); } else if (selected) { ev.preventDefault(); ev.stopPropagation(); selected = null; changed(); } }
     else if (!typing && !mod && (ev.key === '+' || ev.key === '=')) zoom(1 / 1.25);
@@ -753,6 +763,80 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     selected = { kind: 'element', id: copies.get(e.id).id };
     changed();
   }
+  // Shift held when letting go: the connector's type and direction, picked from a menu (the
+  // type it would have been, pointing the way it would have, comes first).
+  const nameOf = (e) => e.name || ELEMENTS[e.type]?.label || 'element';
+  function pickLink(d, to, ev) {
+    const from = d.from;
+    const entry = (t) => {
+      const [a, b] = ends(t, from, to);
+      return {
+        label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === d.type,
+        run: () => connect(t, from, to, d.start),
+        submenu: [
+          { label: `${nameOf(a)} → ${nameOf(b)}`, icon: 'arrowRight', checked: true, run: () => connect(t, a, b, d.start, true) },
+          { label: `${nameOf(b)} → ${nameOf(a)}`, icon: 'arrowLeft', run: () => connect(t, b, a, d.start, true) },
+        ],
+      };
+    };
+    const types = DIAGRAMS[model.diagram].connectors;
+    // After the click that ends this press, which would close a menu opened now.
+    const [x, y] = [ev.clientX, ev.clientY];
+    setTimeout(() => menu(x, y, [entry(d.type), '-', ...types.filter((t) => t !== d.type).map(entry)], { title: 'Connect as' }), 0);
+  }
+  // A connector made another type, keeping its name, label place, colour and text size.
+  function retype(c, t) {
+    if (c.type === t) return;
+    snapshot();
+    const keep = c.props || {};
+    const fresh = makeConnector(t, c.from, c.to, { props: Object.fromEntries(Object.entries({ name: keep.name, labelOffset: keep.labelOffset, color: keep.color, textScale: keep.textScale, y: CONNECTORS[t].message ? keep.y : undefined }).filter(([, v]) => v !== undefined)) }, model);
+    c.type = t;
+    c.props = fresh.props;
+    changed();
+  }
+  // Text size and colour, for an element or a connector.
+  const SIZES = [0.8, 1, 1.25, 1.5, 2];
+  const COLORS = [['Ink', null], ['Blue', '#2563eb'], ['Green', '#16a34a'], ['Red', '#dc2626'], ['Orange', '#ea580c'], ['Purple', '#7c3aed'], ['Teal', '#0d9488'], ['Grey', '#64748b']];
+  function setProp(item, key, value) {
+    snapshot();
+    item.props ||= {};
+    if (value == null) delete item.props[key]; else item.props[key] = value;
+    changed();
+  }
+  const styleEntries = (item) => [
+    { label: 'Text size', icon: 'text', submenu: SIZES.map((k) => ({ label: k === 1 ? 'Normal' : `${Math.round(k * 100)} %`, checked: textScale(item) === k, run: () => setProp(item, 'textScale', k === 1 ? null : k) })) },
+    { label: 'Colour', icon: 'draw', submenu: COLORS.map(([label, c]) => ({ label, swatch: c || '#1f2328', checked: itemColor(item) === c, run: () => setProp(item, 'color', c) })) },
+  ];
+  // Copy, cut and paste of elements (with what they hold and the connectors among them).
+  let clip = null;
+  function copySelected() {
+    const e = selected?.kind === 'element' && current();
+    if (!e) return false;
+    const group = [e, ...descendants(e.id)], ids = new Set(group.map((q) => q.id));
+    clip = { elements: group.map(clone), connectors: model.connectors.filter((l) => ids.has(l.from) && ids.has(l.to)).map(clone), diagram: model.diagram, pastes: 0 };
+    return true;
+  }
+  function pasteClip(at = null) {
+    if (!clip) return say('Copy an element first (Ctrl C).');
+    const known = new Set(DIAGRAMS[model.diagram].elements);
+    if (!clip.elements.every((q) => known.has(q.type) || ELEMENTS[q.type])) return;
+    snapshot();
+    clip.pastes++;
+    const [x0, y0] = clip.elements[0].bounds;
+    const [dx, dy] = at ? [Math.round(at[0] - x0), Math.round(at[1] - y0)] : [20 * clip.pastes, 20 * clip.pastes];
+    const copies = new Map();
+    for (const q of clip.elements) {
+      const c = clone(q);
+      c.id = makeElement(q.type, [0, 0], {}, model).id;
+      c.bounds[0] += dx; c.bounds[1] += dy;
+      copies.set(q.id, c);
+      model.elements.push(c);
+    }
+    for (const c of copies.values()) c.parent = copies.has(c.parent) ? copies.get(c.parent).id : containerFor(c);
+    for (const l of clip.connectors) model.connectors.push({ ...clone(l), id: makeConnector(l.type, l.from, l.to, {}, model).id, from: copies.get(l.from).id, to: copies.get(l.to).id, waypoints: l.waypoints.map(([x, y]) => [x + dx, y + dy]) });
+    selected = { kind: 'element', id: copies.get(clip.elements[0].id).id };
+    changed();
+  }
   // Starts a connection from `from` that follows the pointer; the next click ends it.
   let pending = null;
   function startConnect(from) {
@@ -776,6 +860,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         props,
         { label: 'Connect to…', icon: 'link', run: () => startConnect(e) },
         { label: 'Duplicate', icon: 'copy', key: 'Ctrl D', run: duplicate },
+        { label: 'Cut', icon: 'scissors', key: 'Ctrl X', run: () => { if (copySelected()) removeSelected(); } },
+        { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: copySelected },
+        '-', ...styleEntries(e),
         '-', del,
       ], { title: e.name || def.label });
     }
@@ -784,9 +871,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       return menu(x, y, [
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
         props,
+        { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
         { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
+        '-', ...styleEntries(c),
         '-', del,
       ], { title: c.props.name || def.label });
     }
@@ -794,6 +883,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     return menu(x, y, [
       ...DIAGRAMS[model.diagram].elements.map((t) => ({ label: `Add ${ELEMENTS[t].label.toLowerCase()}`, icon: 'plus', run: () => place(t, at) })),
       '-',
+      clip && { label: 'Paste here', icon: 'import', key: 'Ctrl V', run: () => pasteClip(at) },
       { label: 'Show the whole diagram', icon: 'fit', run: fit },
       model.diagram !== 'sequence' && { label: 'Arrange as tree', icon: 'layers', disabled: !model.connectors.length, run: () => { snapshot(); treeLayout(model); changed(); fit(); } },
       { label: 'Diagram properties…', icon: 'settings', run: () => showPanel(true) },
