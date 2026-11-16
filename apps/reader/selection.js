@@ -14,8 +14,8 @@ function scaledWidth(item,before,scale){
  return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
 }
 export class SelectionController {
- constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw}){
-  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw});this.token=0;this.item=null;this.active=null;
+ constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo=null}){
+  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo});this.token=0;this.item=null;this.active=null;
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
@@ -260,6 +260,18 @@ export class SelectionController {
     g.element?.removeAttribute('transform');this.previewElement=null;
    }
    this.render(g.p);return;
+  }
+  // Let go over another page: the items move there (the host takes them across).
+  if(g.mode==='move'&&this.dropTo){
+   const sheet=document.elementFromPoint(g.currentClient[0],g.currentClient[1])?.closest?.('.sheet');
+   const target=sheet?Number(sheet.dataset.page):NaN;
+   if(Number.isInteger(target)&&target!==g.p.index){
+    const item=g.item;
+    if(item.kind==='group')for(const m of item.members)m.element?.removeAttribute('transform');else g.element?.removeAttribute('transform');
+    this.previewElement=null;this.clear();
+    this.dropTo(item,target,g.start,g.currentClient);
+    return;
+   }
   }
   this.commit(this.adjustment(g));
  }

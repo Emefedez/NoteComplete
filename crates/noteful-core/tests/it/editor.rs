@@ -317,3 +317,45 @@ fn project_round_trips_exam_html_and_respects_compaction_and_export_filter() {
     let stripped_ed = Editor::open_project(&stripped).unwrap();
     assert!(stripped_ed.exam().is_empty());
 }
+
+#[test]
+fn copied_items_are_lines_and_pictures_where_they_are_drawn_now() {
+    use noteful_core::Adjustment;
+    let mut e = exam();
+    e.add_line(0, line()).unwrap();
+    e.adjust_item(
+        0,
+        "new:0",
+        Adjustment {
+            translation: [5., 7.],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let imported = e.view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .split("data-item=\"stroke:")
+        .nth(1)
+        .map(|rest| format!("stroke:{}", &rest[..rest.find('"').unwrap()]))
+        .unwrap();
+    let copied = e
+        .copy_items(0, &["new:0".to_owned(), imported.clone()])
+        .unwrap();
+    assert_eq!(
+        copied.lines.len(),
+        2,
+        "the drawn line and the imported stroke"
+    );
+    let moved = copied
+        .lines
+        .iter()
+        .find(|l| l.rgba == [0., 0., 1., 1.])
+        .unwrap();
+    assert_eq!(moved.points[0], [15., 17.]);
+    assert!(copied.others.is_empty());
+    // Pasted on another page: the same lines there, in one step.
+    let before = e.view(1).unwrap()["svg"].as_str().unwrap().len();
+    e.add_lines(1, copied.lines).unwrap();
+    assert!(e.view(1).unwrap()["svg"].as_str().unwrap().len() > before);
+}

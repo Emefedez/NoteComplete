@@ -268,3 +268,17 @@ test('Visual Paradigm projects from VP 16: the diagram chosen, its swimlanes, be
   const again = importVp(exportVp(c));
   assert.equal(again.connectors.find((q) => q.type === 'generalization').to, again.elements.find((e) => e.name === 'Visitante').id);
 });
+
+test('connector labels go beside the line, move by their offset, and are drawn over every line', async () => {
+  const { renderUml, labelBox, normalizeModel } = await import('./uml.js');
+  const at = labelBox([[0, 0], [200, 0]], 'name');
+  assert.ok(at.y < 0, 'above a level line');
+  const moved = labelBox([[0, 0], [200, 0]], 'name', [10, 30]);
+  assert.equal(moved.x - at.x, 10);
+  assert.equal(moved.y - at.y, 30);
+  const model = normalizeModel({ diagram: 'useCase', elements: [{ id: 'a', type: 'actor', name: 'A', bounds: [0, 0, 60, 100] }, { id: 'u', type: 'useCase', name: 'U', bounds: [300, 20, 150, 64] }, { id: 'v', type: 'useCase', name: 'V', bounds: [300, 200, 150, 64] }], connectors: [{ id: 'c1', type: 'include', from: 'u', to: 'v' }, { id: 'c2', type: 'association', from: 'a', to: 'v' }] });
+  const { svg } = renderUml(model, { ids: true });
+  const label = svg.indexOf('data-uml-kind="label"'), lastLine = svg.lastIndexOf('data-uml-kind="connector"');
+  assert.ok(label > lastLine, 'labels after every connector');
+  assert.match(svg, /«include»/);
+});

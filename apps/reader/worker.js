@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam"]);
+const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -120,6 +120,7 @@ const onDocument = {
   pickLock: (args, page) => JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)),
   pickTimed: (args, page) => JSON.parse(session.pick_timed(page, args.x, args.y, args.tolerance)),
   selection: (args, page) => JSON.parse(session.selection(page, args.itemId)),
+  copyItems: (args, page) => JSON.parse(session.copy_items(page, JSON.stringify(args.ids))),
   crop: (args, page) => JSON.parse(session.crop_item(page, args.itemId, JSON.stringify(args.rect))),
   adjust: (args, page) => JSON.parse(session.adjust_item(page, args.itemId, JSON.stringify(args.adjustment))),
   // Markdown notes: kept in the session (saved with projects and .notecomplete).
@@ -188,6 +189,8 @@ const onDocument = {
     // `replace`: the items of a graph or table drawn again, removed first in the same step.
     let first = true;
     if (Array.isArray(args.replace) && args.replace.length) { session.remove_items(page, JSON.stringify(args.replace), false); first = false; }
+    // `cut`: items taken from another page in the same step (moved there, or cut and pasted).
+    if (args.cut && Array.isArray(args.cut.ids) && args.cut.ids.length) { session.remove_items(args.cut.page, JSON.stringify(args.cut.ids), !first); first = false; }
     for (const line of args.lines || []) { session.draw(page, JSON.stringify({ ...line, joined: !first })); first = false; }
     for (const image of args.images || []) { session.add_image(page, JSON.stringify({ ...image, joined: !first })); first = false; }
   }),

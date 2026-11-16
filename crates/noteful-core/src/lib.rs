@@ -9,6 +9,7 @@ pub mod ink;
 mod markdown;
 mod page_pdf;
 mod view;
+pub use view::Copied;
 #[cfg(test)]
 mod view_reference;
 pub use page_pdf::jpeg_pages_pdf;
