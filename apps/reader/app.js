@@ -6896,6 +6896,12 @@ if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expan
 if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : undefined }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
+// Scratchpad, saved resources, shortcuts and pen hover settings stay open beside the note.
+for (const [id, x, key, label, w, h] of [["scratchDialog", "scratchX", "scratch", "Scratchpad", 380, 240], ["allQuizzesDialog", "allQuizzesX", "saved", "Saved resources", 520, 320], ["shortcutsDialog", "shortcutsX", "shortcuts", "Shortcuts", 320, 220], ["hoverToolsDialog", "hoverToolsX", "hover-tools", "Pen hover", 340, 220]]) {
+  const dlg = $(id);
+  $(x).onclick = () => dlg.close();
+  floatingWindow(dlg, { screen: screenArea, key: `notecomplete-${key}-window`, head: dlg.querySelector(".float-head"), close: $(x), label, compact: { cls: "minimized" }, minWidth: w, minHeight: h, scroll: true });
+}
 practiceWindow = floatingWindow($("deckDialog"), { screen: screenArea, key: "notecomplete-practice-window", head: $("deckDialog").querySelector(".deck-head"), close: $("deckFloatClose"), label: "Flashcards", compact: { cls: "minimized", button: $("deckMinimize") }, enabled: () => $("deckDialog").classList.contains("floating"), minWidth: 380, minHeight: 240, buttonClass: "deck-float-only" });
 // Focus: the sun in the quiz and flashcard windows dims everything behind them
 // while one of them is open (the pages can still be scrolled underneath).

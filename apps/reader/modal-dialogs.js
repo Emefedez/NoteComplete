@@ -63,6 +63,8 @@ export function installModalDialogs({ doc = globalThis.document } = {}) {
 
   proto.showModal = function showModal() {
     if (this.dataset.modal === 'native') return nativeShow.call(this);
+    // A floating window (data-window): open beside the note, not over it; nothing goes inert.
+    if (this.dataset.window !== undefined) { if (!this.open) this.show(); return; }
     if (this.open) return;
     // Last in the page, out of any menu it was written in (a menu bar can clip or mask what
     // it holds; the top layer did that before), so what opens from it comes after it.

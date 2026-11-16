@@ -31,9 +31,9 @@
           <button data-proxy="homeButton" data-icon="home">Home</button>
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <button id="openFolder" data-icon="folder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
-          <button id="importAny" data-icon="import" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
           <button id="openLink" data-icon="link" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
           <button id="driveOpen" data-icon="cloud">Google Drive</button>
+          <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
           <button id="addDocuments" data-icon="plus" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
           <hr />
           <button id="newTab" data-icon="plus" hidden>New tab<kbd>Ctrl T</kbd></button>
@@ -46,9 +46,9 @@
           <button id="save" data-icon="save" disabled title="Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, added recordings, quizzes, flashcards and scratchpad."><span class="menu-label">Save project (.nfedit)</span><kbd>Ctrl S</kbd></button>
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
-          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="Export and share notes or study resources (PDF, images, .nfedit, .noteful, Anki, QR, and live collab)">Export and share…</button>
           <hr />
-          <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
+          <button id="importAny" data-icon="import" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
+          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="Export and share notes or study resources (PDF, images, .nfedit, .noteful, Anki, QR, and live collab)">Export and share…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="editMenu">
@@ -1285,18 +1285,18 @@
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
 
-<dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog" aria-labelledby="scratchTitle">
-  <h2 id="scratchTitle">Scratchpad</h2>
+<dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog float-dialog floating" data-window aria-labelledby="scratchTitle">
+  <div class="float-head"><h2 id="scratchTitle">Scratchpad</h2><button id="scratchX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
   <ul id="scratchList" class="scratch-list"></ul>
   <p id="scratchEmpty" class="muted" hidden>Nothing kept yet.</p>
   <div class="ocr-actions"><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
 </dialog>
 
-<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study" aria-labelledby="allQuizzesTitle">
+<dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study float-dialog floating" data-window aria-labelledby="allQuizzesTitle">
+  <div class="float-head"><h2 id="allQuizzesTitle" data-icon="storage">Saved resources</h2><button id="allQuizzesX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <div class="all-study-head">
     <div>
-      <h2 id="allQuizzesTitle" data-icon="storage">Saved resources</h2>
       <p id="allQuizzesSubtitle" class="muted"></p>
     </div>
     <input id="allQuizzesFilter" type="search" placeholder="Filter quizzes, decks, exams or scratchpad conversations…" aria-label="Filter saved resources" spellcheck="false" />
@@ -1415,8 +1415,8 @@
   </div>
 </dialog>
 
-<dialog id="shortcutsDialog" class="deck-dialog" aria-labelledby="shortcutsTitle">
-  <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
+<dialog id="shortcutsDialog" class="deck-dialog float-dialog floating" data-window aria-labelledby="shortcutsTitle">
+  <div class="float-head"><h2 id="shortcutsTitle">Keyboard shortcuts</h2><button id="shortcutsX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <table class="shortcuts"><tbody id="shortcutsList"></tbody></table>
   <div class="ocr-actions"><button id="shortcutsClose" type="button" class="primary">Close</button></div>
 </dialog>
@@ -1494,8 +1494,8 @@
   <div class="ocr-actions"><button id="widthReset" type="button">Default widths</button><span class="spacer"></span><button id="widthCancel" type="button">Cancel</button><button id="widthSave" type="button" class="primary">Save</button></div>
 </dialog>
 
-<dialog id="hoverToolsDialog" class="ocr-dialog" aria-labelledby="hoverToolsTitle">
-  <h2 id="hoverToolsTitle">Hover cursor per tool</h2>
+<dialog id="hoverToolsDialog" class="ocr-dialog float-dialog floating" data-window aria-labelledby="hoverToolsTitle">
+  <div class="float-head"><h2 id="hoverToolsTitle">Hover cursor per tool</h2><button id="hoverToolsX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <p class="muted">Choose which tools show an on-page hover cursor while a stylus hovers above the page.</p>
   <label class="hover-tools-master"><input id="hoverToolsMaster" type="checkbox" /> <span>Show pen hover cursor (same as View → Pen hover preview)</span></label>
   <div id="hoverToolsList" class="hover-tools-grid"></div>

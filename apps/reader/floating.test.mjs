@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clampRect, resizeRect } from './floating.js';
+import { clampRect, resizeRect, shownRect } from './floating.js';
 
 const area = { width: 1000, height: 700 }, min = { width: 300, height: 200 };
 
@@ -21,4 +21,19 @@ test('resizing from an edge or corner moves only those sides, within limits', ()
   assert.deepEqual(resizeRect(start, -300, -300, 'br', min, area), { left: 100, top: 100, width: 300, height: 200 });
   assert.deepEqual(resizeRect(start, 2000, 2000, 'br', min, area), { left: 100, top: 100, width: 900, height: 600 });
   assert.deepEqual(resizeRect(start, 250, 0, 'l', min, area), { left: 200, top: 100, width: 300, height: 300 });
+});
+
+test('clampRect with a grab lets a window leave the area but keeps its head reachable', () => {
+  const area = { width: 1000, height: 700 }, min = { width: 300, height: 200 };
+  assert.deepEqual(clampRect({ left: 900, top: -50, width: 400, height: 300 }, area, min, 56), { left: 900, top: -50, width: 400, height: 300 });
+  assert.deepEqual(clampRect({ left: 990, top: 690, width: 400, height: 300 }, area, min, 56), { left: 944, top: 644, width: 400, height: 300 });
+  assert.deepEqual(clampRect({ left: -900, top: 10, width: 400, height: 300 }, area, min, 56), { left: -344, top: 10, width: 400, height: 300 });
+});
+
+test('a pushed window is drawn smaller: only the part inside the area', () => {
+  const area = { width: 1000, height: 700 };
+  assert.deepEqual(shownRect({ left: 100, top: 100, width: 400, height: 300 }, area), { left: 100, top: 100, width: 400, height: 300 });
+  assert.deepEqual(shownRect({ left: 900, top: -50, width: 400, height: 300 }, area), { left: 900, top: 0, width: 100, height: 250 });
+  assert.deepEqual(shownRect({ left: -344, top: 644, width: 400, height: 300 }, area), { left: 0, top: 644, width: 56, height: 56 });
+  assert.deepEqual(clampRect({ left: 10, top: -900, width: 400, height: 300 }, area, { width: 300, height: 200 }, 56), { left: 10, top: -244, width: 400, height: 300 });
 });

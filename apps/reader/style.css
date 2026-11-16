@@ -3966,3 +3966,21 @@ body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible),
 :where(dialog.nc-modal) { box-shadow: var(--shadow-dialog, 0 18px 50px #0004), 0 0 0 1px #0001; }
 /* Menus opened over such a dialog (its quick menu, a tab's menu) are drawn over it. */
 .nc-modal ~ :is(.quick-menu, .context-menu) { z-index: 2000; }
+
+/* Windows for what you read next to the note: Scratchpad, Saved resources, shortcuts, pen hover. */
+.float-dialog.floating { position: fixed; inset: 0; margin: auto; z-index: var(--z-float, 27); padding: 0; width: min(520px, calc(100vw - 24px)); height: min(640px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); box-shadow: var(--shadow-pop); }
+.float-dialog.floating[open] { display: flex; flex-direction: column; overflow: hidden; }
+#allQuizzesDialog.float-dialog.floating { width: min(1100px, calc(100vw - 24px)); }
+.float-dialog.has-body > .panel-body { padding: 10px 14px 14px; gap: 10px; }
+.float-dialog.minimized { height: auto !important; }
+.float-dialog.minimized > .panel-body { display: none; }
+.float-head { display: flex; align-items: center; gap: 6px; flex: none; min-height: 40px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--line); }
+.float-head h2 { margin: 0; font-size: 14px; flex: 1 1 0; }
+.float-head button { width: 28px; padding: 0; }
+/* Pushed over an edge, a window is drawn smaller; its head gets shorter at the top, like the menu bar while scrolling. */
+.screen-window.pushed { min-width: 0 !important; min-height: 0 !important; }
+.window-head { max-height: 96px; transition: min-height .16s ease, max-height .16s ease, padding .16s ease; }
+.screen-window.tucked > .window-head { min-height: 0 !important; max-height: 20px; padding-block: 0 !important; margin: 0 !important; }
+.screen-window.tucked > .window-head > :is(select, input, .muted, .quiz-bar) { display: none; }
+.screen-window.tucked > .window-head > :is(button, a) { min-height: 0; height: 18px; }
+@media (prefers-reduced-motion: reduce) { .window-head { transition: none; } }

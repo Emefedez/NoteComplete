@@ -1,21 +1,39 @@
 // Floating windows (Ask AI, audio, quiz, flashcard practice): drag them by their
 // head, resize them from any edge or corner (or anywhere, like a tiling window manager:
-// Ctrl/⌘ + drag moves, Shift + drag resizes from the nearest corner), and they stay inside their area so
-// the head and its × are always reachable. The head gets _ (put away in the
+// Ctrl/⌘ + drag moves, Shift + drag resizes from the nearest corner), and they can be dragged mostly out of
+// their area to get the space back (a strip of the head always stays reachable). The head gets _ (put away in the
 // window tray at the bottom left, from which it comes back) and □ (small or
 // large) next to ×. Place and size are remembered per window.
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
+// How much of a window must stay on screen when it is dragged out of bounds.
+const GRAB = 56;
 const EDGES = { left: 'l', right: 'r', top: 't', bottom: 'b', 'bottom-left': 'bl', 'bottom-right': 'br', 'top-left': 'tl', 'top-right': 'tr' };
 
 // Keep a rect inside the area: no wider or taller than it, and fully on it.
-export function clampRect({ left, top, width, height }, area, min = { width: 0, height: 0 }) {
+// With `grab` > 0 a window may be pushed mostly out of the area on any side: only `grab` px
+// of it must stay in, so it can still be grabbed back (see shownRect for what is drawn).
+export function clampRect({ left, top, width, height }, area, min = { width: 0, height: 0 }, grab = 0) {
   width = Math.max(Math.min(min.width, area.width), Math.min(width, area.width));
   height = Math.max(Math.min(min.height, area.height), Math.min(height, area.height));
+  if (grab > 0) {
+    const g = Math.min(grab, width, height);
+    left = Math.max(g - width, Math.min(area.width - g, left));
+    top = Math.max(g - height, Math.min(area.height - g, top));
+    return { left, top, width, height };
+  }
   left = Math.max(0, Math.min(area.width - width, left));
   top = Math.max(0, Math.min(area.height - height, top));
   return { left, top, width, height };
+}
+
+// What of a pushed window is drawn: the part inside the area. A window pushed over an edge
+// gets smaller instead of being cut off, and grows back as it is moved back in.
+export function shownRect({ left, top, width, height }, area) {
+  const l = Math.max(0, left), t = Math.max(0, top);
+  const r = Math.min(area.width, left + width), b = Math.min(area.height, top + height);
+  return { left: l, top: t, width: Math.max(0, r - l), height: Math.max(0, b - t) };
 }
 
 // A comfortable reading/workspace rect centered inside `area`, clamped to `area` and `min`.
@@ -105,17 +123,26 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   const min = { width: minWidth, height: minHeight };
   const isCompact = () => !!compact && el.classList.contains(compact.cls);
   let large = false, beforeLarge = null;
-  // The window's rect relative to its area, as placed now.
-  function current() {
+  // The window's rect relative to its area, as drawn now.
+  function drawn() {
     const r = el.getBoundingClientRect(), a = area();
     return { left: r.left - a.left, top: r.top - a.top, width: r.width, height: r.height };
   }
+  // Where it is: the full rect while it is pushed over an edge (what is drawn is smaller).
+  let pushed = false, want = null;
+  function current() { return pushed && want ? { ...want } : drawn(); }
   function apply(rect, save = false) {
-    const a = area(), c = clampRect(rect, a, isCompact() ? { width: min.width, height: 0 } : min);
+    const a = area(), c = clampRect(rect, a, isCompact() ? { width: min.width, height: 0 } : min, GRAB);
     // Fixed windows are placed on the screen; the area may start below the top bar.
     const off = fixed() ? a : { left: 0, top: 0 };
-    Object.assign(el.style, { left: `${off.left + c.left}px`, top: `${off.top + c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
-    if (!isCompact()) el.style.height = `${c.height}px`;
+    // Pushed over an edge: the part inside is drawn (smaller), the head gets shorter at the top.
+    const v = shownRect(c, a);
+    pushed = v.left !== c.left || v.top !== c.top || v.width !== c.width || (!isCompact() && v.height !== c.height);
+    want = pushed ? c : null;
+    el.classList.toggle('pushed', pushed);
+    el.classList.toggle('tucked', c.top < 0 && !isCompact());
+    Object.assign(el.style, { left: `${off.left + v.left}px`, top: `${off.top + v.top}px`, width: `${v.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
+    if (!isCompact()) el.style.height = `${v.height}px`;
     if (save) {
       if (large) {
         large = false;
@@ -155,7 +182,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       // Position and width; the height too for windows stretched between two edges
       // (Ask AI, audio). Others keep following their content until resized by hand.
       const style = getComputedStyle(el), stretched = style.top !== 'auto' && style.bottom !== 'auto';
-      const c = clampRect(current(), area(), min);
+      const c = clampRect(current(), area(), min, GRAB);
       Object.assign(el.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
       if (stretched) el.style.height = `${c.height}px`;
     }
@@ -238,7 +265,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     const mod = down.ctrlKey || down.metaKey, moving = mod && down.button === 0, sizing = mod && down.button === 2;
     if (!enabled() || down.altKey || !(moving || sizing) || !down.buttons || !visible()) return;
     if (down.target.closest('input, textarea, select, [contenteditable="true"], .panel-grip')) return;
-    const start = current(), a = area(), r = el.getBoundingClientRect();
+    const start = moving ? current() : drawn(), a = area(), r = el.getBoundingClientRect();
     let edges = (down.clientX < r.left + r.width / 2 ? 'l' : 'r') + (down.clientY < r.top + r.height / 2 ? 't' : 'b');
     if (isCompact()) edges = edges.replace(/[tb]/, '');
     down.preventDefault();
@@ -280,7 +307,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       if (!enabled() || !down.buttons || isCompact() && /[tb]/.test(edges)) return;
       down.preventDefault();
       grip.setPointerCapture(down.pointerId);
-      const start = current(), a = area();
+      const start = drawn(), a = area();
       const finish = () => { grip.onpointermove = grip.onpointerup = grip.onpointercancel = null; apply(current(), true); };
       grip.onpointermove = e => {
         if (e.pointerId !== down.pointerId) return;
