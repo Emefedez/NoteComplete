@@ -347,7 +347,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -404,10 +404,20 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const a = Math.min(at.cell, geo.n - 1), b = Math.min(geo.n, a + spanCells());
     for (const [k, v] of Object.entries({ x: geo.left + a * geo.cw, y: geo.top + at.row * geo.rh + 2, width: (b - a) * geo.cw, height: geo.rh - 4 })) stamp.el.setAttribute(k, v);
   }
+  // Over the grid: the wheel changes the length painted; Ctrl (or ⌘, or a pinch) + wheel zooms
+  // the time axis in or out, keeping the time under the pointer where it is.
+  let zoom = 1;
   canvas.addEventListener('wheel', (e) => {
-    if (!(kind === 'states' || kind === 'timeline') || mode === 'json' || e.ctrlKey || e.shiftKey || !e.deltaY || !canvas.querySelector('.ch-grid')?.contains(e.target)) return;
+    if (!(kind === 'states' || kind === 'timeline') || mode === 'json' || e.shiftKey || !e.deltaY || !canvas.querySelector('.ch-grid')?.contains(e.target)) return;
     e.preventDefault();
-    setLength(lengthAt + (e.deltaY > 0 ? 1 : -1));
+    if (!(e.ctrlKey || e.metaKey)) return setLength(lengthAt + (e.deltaY > 0 ? 1 : -1));
+    if (!geo) return;
+    const r = canvas.firstChild.getBoundingClientRect(), cell = (e.clientX - r.left - geo.left) / geo.cw;
+    const before = geo.cw;
+    zoom = Math.max(0.25, Math.min(8, zoom * Math.exp(-Math.max(-60, Math.min(60, e.deltaY)) * 0.004)));
+    draw();
+    if (!geo || geo.cw === before) return;
+    canvas.scrollLeft += cell * (geo.cw - before);
   }, { passive: false });
   canvas.addEventListener('contextmenu', (e) => { if (canvas.querySelector('.ch-grid')?.contains(e.target)) e.preventDefault(); });
   function drawGrid() {
@@ -416,7 +426,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const width = Math.max(320, canvas.clientWidth - 16);
     const longest = g.rows.reduce((m, r) => Math.max(m, r.label.length), 2);
     const left = Math.min(140, 22 + longest * 8), top = 30;
-    const cw = Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n)));
+    const cw = Math.max(4, Math.min(160, Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n))) * zoom));
     const rh = showSolution ? 50 : 42;
     geo = { left, top, cw, rh, n };
     const W = left + cw * n + 10, H = top + rh * g.rows.length + 10;
