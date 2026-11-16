@@ -5947,7 +5947,7 @@ async function removeItem(item) {
   status("Removed. Press Ctrl+Z to bring it back.");
 }
 // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
-// fields (one undo step). Shapes keep the fill they were drawn with.
+// fields (one undo step). A closed shape's fill (rectangle, ellipse, triangle, star) changes too.
 const hexOf = (rgba) => "#" + rgba.slice(0, 3).map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
 const COLOUR_NAMES = { "#1f2328": "Black", "#246bce": "Blue", "#d13b2f": "Red", "#2a9d63": "Green", "#8a4fd0": "Purple", "#ff9f1c": "Orange", "#ffdf38": "Yellow", "#e3c6e6": "Pink" };
 async function restyle(item, change) {
@@ -5969,6 +5969,20 @@ function styleEntries(item) {
     ] },
     { label: "Thickness", icon: "minus", submenu: () => widths.map((w) => ({ label: `${w} px`, icon: "minus", checked: Math.abs(w - width) < 0.01, run: () => restyle(item, { width: w }) })) },
     { label: "Opacity", icon: "eye", submenu: () => [100, 75, 50, 25].map((o) => ({ label: `${o}%`, icon: "eye", checked: Math.round(rgba[3] * 100) === o, run: () => restyle(item, { rgba: [...rgba.slice(0, 3), o / 100] }) })) },
+    "fill" in item && { label: "Fill", icon: "shape", submenu: () => fillEntries(item, rgba, colours) },
+  ];
+}
+// A closed shape's inside: none, a light tint or solid, in its colour or another one.
+function fillEntries(item, rgba, colours) {
+  const fill = item.fill || null, base = fill ? fill.slice(0, 3) : rgba.slice(0, 3), now = fill && hexOf(fill);
+  const tint = !!fill && fill[3] < 0.6, set = (rgb, alpha) => restyle(item, { fill: [...rgb, alpha] });
+  return [
+    { label: "No fill", icon: "close", checked: !fill, run: () => set([0, 0, 0], 0) },
+    { label: "Light tint", icon: "shape", checked: tint, run: () => set(base, 0.25) },
+    { label: "Solid", icon: "shape", checked: !!fill && !tint, run: () => set(base, 1) },
+    "-",
+    ...colours.map((c) => ({ label: COLOUR_NAMES[c] || c.toUpperCase(), swatch: c, checked: c === now, run: () => set(rgbaOf(c).slice(0, 3), fill ? fill[3] : 0.25) })),
+    { label: "Other colour…", icon: "settings", run: () => pickColor(now || hexOf(rgba), (v) => set(rgbaOf(v).slice(0, 3), fill ? fill[3] : 0.25)) },
   ];
 }
 // The tape under page point `at`, the top one.

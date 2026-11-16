@@ -23,8 +23,77 @@ fn adjustment() -> Adjustment {
         rgba: Some([1., 0., 0., 1.]),
         locked: None,
         crop: None,
+        fill: None,
         joined: false,
     }
+}
+#[test]
+fn closed_shapes_change_fill_and_open_ones_refuse_it() {
+    let mut e = Editor::open(crate::samples::BLANK).unwrap();
+    let mut rect = Line::new(
+        vec![[10., 10.], [90., 10.], [90., 60.], [10., 60.], [10., 10.]],
+        2.,
+        [0., 0., 1., 1.],
+    );
+    rect.shape = Some(Shape {
+        kind: ShapeKind::Rectangle,
+        start: [10., 10.],
+        end: [90., 60.],
+        fill: None,
+    });
+    e.add_line(0, rect).unwrap();
+    assert_eq!(
+        e.selection(0, "new:0").unwrap()["fill"],
+        serde_json::Value::Null
+    );
+    let filled = Adjustment {
+        fill: Some([1., 0., 0., 0.25]),
+        ..Adjustment::default()
+    };
+    e.adjust_item(0, "new:0", filled).unwrap();
+    assert_eq!(
+        e.selection(0, "new:0").unwrap()["fill"],
+        serde_json::json!([1., 0., 0., 0.25])
+    );
+    let patch = e.item_patch(0, "new:0").unwrap();
+    assert!(patch["svg"].as_str().unwrap().contains("fill"));
+    // Alpha 0 takes it away again; undo brings it back.
+    e.adjust_item(
+        0,
+        "new:0",
+        Adjustment {
+            fill: Some([0., 0., 0., 0.]),
+            ..Adjustment::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        e.selection(0, "new:0").unwrap()["fill"],
+        serde_json::Value::Null
+    );
+    e.undo();
+    assert_eq!(
+        e.selection(0, "new:0").unwrap()["fill"],
+        serde_json::json!([1., 0., 0., 0.25])
+    );
+    let mut line = Line::new(vec![[10., 100.], [90., 100.]], 2., [0., 0., 0., 1.]);
+    line.shape = Some(Shape {
+        kind: ShapeKind::Line,
+        start: [10., 100.],
+        end: [90., 100.],
+        fill: None,
+    });
+    e.add_line(0, line).unwrap();
+    assert!(e
+        .adjust_item(
+            0,
+            "new:1",
+            Adjustment {
+                fill: Some([1., 0., 0., 1.]),
+                ..Adjustment::default()
+            }
+        )
+        .is_err());
 }
 #[test]
 fn added_items_transform_style_hit_erase_and_undo_as_one_operation() {
