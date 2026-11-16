@@ -55,6 +55,16 @@ export function sameContentOnce(entries) {
   }
   return entries.filter(e => !e.md5 || best.get(e.md5) === e);
 }
+// "Tema 3 (2).noteful": the first free numbered name. Notes are told apart by their key and
+// checksum, never by the file name, so no id or hash goes into it.
+export async function freeName(name, isTaken) {
+  if (!(await isTaken(name))) return name;
+  for (let n = 2; ; n++) {
+    const next = name.replace(/(\.[^.]*)?$/, ` (${n})$1`);
+    if (!(await isTaken(next))) return next;
+  }
+}
+
 export function safeName(name) {
   const cleaned = String(name || 'Note').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+/, '_').slice(0, 180).trim();
   return cleaned || 'Note';
@@ -206,9 +216,8 @@ export class Library {
   async keep(file, downloaded) {
     const folder = await this.location();
     const previous = await this.entry(file);
-    let filename = previous?.filename || safeName(file.name);
-    const taken = (await this.store.values('entries')).some(e => e.filename === filename && e.key !== this.key(file));
-    if (taken) filename = filename.replace(/(\.[^.]*)?$/, ` (${String(file.id || file.archiveId || 'arc').slice(0, 6)})$1`);
+    const others = (await this.store.values('entries')).filter(e => e.key !== this.key(file));
+    const filename = previous?.filename || await freeName(safeName(file.name), name => others.some(e => e.filename === name));
     await folder.write(filename, downloaded);
     const isArchive = file.source === 'archive' || !!file.archiveId;
     const entry = {
@@ -246,17 +255,8 @@ export class Library {
     const previous = await this.store.get('entries', key);
     const loc = await this.location();
     const entries = await this.store.values('entries');
-    const suffix = digest.replace(/[^a-z0-9]/gi, '').slice(0, 6) || 'imp';
-    let filename = previous?.filename || safeName(file.name);
-    let attempt = 0;
-    while (
-      entries.some(e => e.filename === filename && e.key !== key) ||
-      (!previous && await loc.read(filename).catch(() => null))
-    ) {
-      attempt++;
-      const tag = attempt === 1 ? suffix : `${suffix}-${attempt}`;
-      filename = safeName(file.name).replace(/(\.[^.]*)?$/, ` (${tag})$1`);
-    }
+    const filename = previous?.filename || await freeName(safeName(file.name),
+      async name => entries.some(e => e.filename === name && e.key !== key) || !!(await loc.read(name).catch(() => null)));
     await loc.write(filename, file);
     const entry = {
       key,

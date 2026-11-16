@@ -249,13 +249,32 @@ export function createSourcePicker(container, {
     listEl.replaceChildren(...folderList.map((g) => {
       const id = `group:${g.id}`;
       const sub = g.folder ? g.folder : `${(g.members || []).length} item${(g.members || []).length === 1 ? '' : 's'}`;
-      return renderCheckRow(
+      const row = renderCheckRow(
         id,
         g.name || 'Folder',
         sub,
         'folder',
         () => ({ id, kind: 'group', group: g, label: `Folder: ${g.name}` }),
       );
+      // Disk folders are a history; × forgets one here (the folder on disk is untouched).
+      if (g.folder && g.kind !== 'folder' && groups?.delete) {
+        const forget = document.createElement('button');
+        forget.type = 'button';
+        forget.className = 'sp-chip-rm sp-forget';
+        forget.title = `Remove ${g.name || 'folder'} from this list (the folder on disk is not touched)`;
+        forget.setAttribute('aria-label', forget.title);
+        forget.append(icon('close'));
+        forget.onclick = async (event) => {
+          event.preventDefault(); event.stopPropagation();
+          await groups.delete(g).catch(() => {});
+          selected.delete(id);
+          folderList = folderList.filter((x) => x.id !== g.id);
+          renderFolders();
+          syncSummary();
+        };
+        row.append(forget);
+      }
+      return row;
     }));
   }
 

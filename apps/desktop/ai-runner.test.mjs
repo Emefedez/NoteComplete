@@ -203,3 +203,10 @@ printf '{"type":"text","part":{"text":"%s %s"}}\\n' "$prompt" "$(printf %s "$OPE
   assert.deepEqual(seen, ['Reading.\n\n', 'Hola 1\n\n']);
   await assert.rejects(runner.run('w1', { provider: 'opencode', prompt: 'fail' }), /OpenCode failed: Model not found: x\/y/);
 });
+
+test('stream lines report thinking and file reads as activity, not answer text', async () => {
+  const { streamLine } = await import('./ai-runner.js');
+  assert.deepEqual(streamLine('claude', '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"hmm"}}}'), { activity: 'Thinking…' });
+  assert.deepEqual(streamLine('claude', '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/x/img-001.png"}}]}}'), { activity: 'Reading img-001.png…' });
+  assert.deepEqual(streamLine('claude', '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}'), {});
+});

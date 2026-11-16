@@ -6,6 +6,11 @@ import { TYPES, typeOf } from './note-facts.js';
 import { icon } from './icons.js';
 
 const PREFIX = 'group:';
+// Disk folders opened (File → Open folder, or chosen as AI sources) are a history: the most
+// recently opened ones are kept, older ones fall off. A folder holding your own changes
+// (documents added by hand, stars) is never dropped, nor are folders made in NoteComplete.
+export const FOLDER_HISTORY = 15;
+export const historyOnly = (g) => Boolean(g?.folder) && g.kind !== 'folder' && !(g.members || []).length && !(g.starred || []).length;
 const dirname = (p) => String(p || '').replace(/\/[^/]*$/, '');
 
 export function localMember(path, name) {
@@ -80,8 +85,16 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
     async openFolder({ folder, name }) {
       const id = 'folder:' + folder;
       const group = (await store.get('settings', PREFIX + id).catch(() => null)) || { id, name, folder, members: [] };
+      group.openedAt = Date.now();
       await save(group);
+      await this.prune();
       return group;
+    },
+    // Drops disk folders past the newest FOLDER_HISTORY that hold nothing of yours.
+    async prune(keep = FOLDER_HISTORY) {
+      const old = (await all()).filter(historyOnly).sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0)).slice(keep);
+      await Promise.all(old.map((g) => store.delete('settings', PREFIX + g.id).catch(() => {})));
+      return old.length;
     },
     // Adds documents to the current one's group; without a group, they start one with it.
     async add(current, added, name) {

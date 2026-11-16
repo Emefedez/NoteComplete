@@ -36,7 +36,7 @@ test('same-named notes from different Drive folders get distinct files', async (
   const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir } });
   await library.keep(drive({ id: 'first1' }), new Blob(['a']));
   await library.keep(drive({ id: 'second' }), new Blob(['b']));
-  assert.deepEqual([...dir.files.keys()].sort(), ['Memoria 1 (second).noteful', 'Memoria 1.noteful']);
+  assert.deepEqual([...dir.files.keys()].sort(), ['Memoria 1 (2).noteful', 'Memoria 1.noteful']);
   // Updating a note keeps its filename instead of creating another copy.
   await library.keep(drive({ id: 'second', modifiedTime: 'later' }), new Blob(['c']));
   assert.equal(dir.files.size, 2);

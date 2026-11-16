@@ -518,7 +518,12 @@ export function expandController({
       pill.onclick = () => setMode(pill.dataset.expMode);
     }
     el('expCountMode').onchange = syncModeFields;
-    el('expCloseX').onclick = () => el('expCancel').click();
+    // × only hides the window: a running expansion goes on in the background (job chip).
+    // Stop (the Cancel button while running) is the one that cancels it.
+    el('expCloseX').onclick = () => {
+      if (running) status?.('Still expanding in the background; the job chip shows its progress.');
+      dialog.close();
+    };
     el('expCancel').onclick = () => {
       if (running) { running.abort(); running = null; return; }
       dialog.close();
@@ -608,6 +613,11 @@ export function expandController({
 
     const ac = new AbortController();
     running = ac;
+    // Stopping also ends the AI tool's process, so it does not run on unseen.
+    ac.signal.addEventListener('abort', () => {
+      console.info('[NC] expand stopped by the user');
+      try { ai?.cancel?.(mode === 'exam' ? 'expand-exam' : 'expand-note'); } catch { /* Optional. */ }
+    });
     el('expRun').disabled = true;
     el('expContinueBtn').disabled = true;
     el('expRestartBtn').disabled = true;
@@ -643,6 +653,7 @@ export function expandController({
           },
         });
         if (ac.signal.aborted) throw Error('Cancelled.');
+        console.info(`[NC] expand ${mode}: ${sources.length} source(s) → ${resolved.length} read: ${resolved.map((r) => `${r.title} (${String(r.text || '').length} chars, ${r.images?.length || 0} img)`).join('; ')}`);
         if (!resolved.length) throw Error('Could not extract readable content from the selected sources.');
 
         existingSummary = await sampleOpenContext();
@@ -712,10 +723,17 @@ export function expandController({
         : basePrompt;
       let lastSavedAt = 0;
 
+      // A saved answer that is already complete JSON (stopped after it finished) is used as is.
+      let complete = null;
+      if (mode === 'exam' && draft?.partialText) {
+        try { const p = jsonFrom(draft.partialText); if (p?.sections?.length) complete = draft.partialText; } catch { /* Incomplete: continue it. */ }
+      }
+      if (complete) console.info(`[NC] expand exam: reusing the saved complete answer (${complete.length} chars)`);
+
       if (mode === 'exam') {
-        el('expStatus').textContent = draft ? 'Continuing new exam problems with AI…' : 'Generating new exam problems with AI…';
+        el('expStatus').textContent = complete ? 'Using the questions generated before…' : draft ? 'Continuing new exam problems with AI…' : 'Generating new exam problems with AI…';
         job?.progress?.('Writing expansion problems…');
-        const res = await runAI(
+        const res = complete ? { text: complete } : await runAI(
           ai,
           {
             provider,
@@ -740,11 +758,13 @@ export function expandController({
         );
         if (ac.signal.aborted) throw Error('Cancelled.');
 
-        const parsed = draft?.partialText
+        const parsed = complete ? jsonFrom(complete) : draft?.partialText
           ? mergePartialExamJson(draft.partialText, res.text)
           : jsonFrom(res.text);
         const rawExam = cleanExamData(parsed);
         const { exam, removed: dupRemoved } = dedupeNewExamProblems(rawExam, existingSummary);
+        const count = (e) => (e?.sections || []).reduce((n, s) => n + (s.problems || []).length, 0);
+        console.info(`[NC] expand exam: answer ${res.text?.length || 0} chars → ${count(rawExam)} problem(s), ${dupRemoved} duplicate(s) dropped, ${count(exam)} kept; doc "${openDocTitle()}" ${openDocPages()} pages, insert at ${at}`);
         if (!exam.sections.length) {
           throw Error('All generated questions already exist in this exam. Add extra sources or specific topics and try again.');
         }
@@ -756,6 +776,7 @@ export function expandController({
         const sizesInPt = rendered.sizes.map(([w, h]) => [w / UNITS_PER_POINT, h / UNITS_PER_POINT]);
         const pdfId = 'pdf-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
         const pages = pdfPages(pdfId, sizesInPt, 0, sizesInPt.length - 1, 'none', UNITS_PER_POINT);
+        console.info(`[NC] expand exam: rendered ${rendered.pageCount} page(s), ${rendered.tapes.length} tape(s), pdf ${rendered.pdf?.length || 0} bytes`);
 
         el('expStatus').textContent = 'Inserting pages & pre-applied tape into open exam…';
         await insertPdfPagesWithTapes({
@@ -768,8 +789,9 @@ export function expandController({
         if (call) {
           const currentExam = await call('getExam').catch(() => null);
           const nextEmbedded = mergeEmbeddedExam(currentExam, exam, { showTheory: prefs.includeTheory });
-          await call('setExam', { exam: nextEmbedded }).catch(() => {});
-          markEmbeddedExamUpdated?.();
+          await call('setExam', { exam: nextEmbedded });
+          await markEmbeddedExamUpdated?.();
+          console.info(`[NC] expand exam: embedded exam ${currentExam?.source?.mode || (currentExam?.html ? 'html' : 'none')} → ${count(nextEmbedded.source?.exam) || '?'} problem(s); doc now ${openDocPages()} pages`);
         }
 
         // Update linked exam metadata so Saved resources reflects any new source files used here.
@@ -803,6 +825,7 @@ export function expandController({
         syncDraftBar();
         const dedupNote = dupRemoved ? ` (skipped ${dupRemoved} duplicate question${dupRemoved === 1 ? '' : 's'})` : '';
         const msg = `Added ${rendered.pageCount} exam page${rendered.pageCount === 1 ? '' : 's'} with ${rendered.tapes.length} taped answers${dedupNote}.`;
+        console.info(`[NC] expand exam: ${msg}`);
         job?.done?.(msg);
         status?.(msg);
         dialog.close();
@@ -866,6 +889,7 @@ export function expandController({
         dialog.close();
       }
     } catch (e) {
+      console.warn(`[NC] expand failed: ${e?.message || e}`);
       if (checkpoint) {
         saveAiDraft(store, DRAFT_KEY, {
           ...checkpoint,

@@ -67,3 +67,21 @@ test('starred documents come first in their folder and follow a rename', async (
   await groups.star(fresh, 'local:/f/B 2.md', false);
   assert.deepEqual((await groups.members((await groups.folders())[0])).map((m) => m.name), ['a.md', 'B 2.md']);
 });
+
+test('opened disk folders are a capped history; folders holding your changes stay', async (t) => {
+  let now = 1e12;
+  t.mock.method(Date, 'now', () => ++now);
+  const groups = groupStore({ store: memoryStore(), bridge: null });
+  const mine = await groups.create('Mine');
+  const starred = await groups.openFolder({ folder: '/d/starred', name: 'starred' });
+  await groups.star(starred, 'local:/d/starred/a.md', true);
+  for (let i = 0; i < 20; i++) await groups.openFolder({ folder: `/d/f${i}`, name: `f${i}` });
+  const ids = (await groups.all()).map((g) => g.id);
+  assert.ok(ids.includes(mine.id) && ids.includes(starred.id));
+  const disk = (await groups.folders()).filter((g) => g.folder && g.id !== starred.id).map((g) => g.name);
+  assert.equal(disk.length, 15);
+  assert.equal(disk[0], 'f19', 'newest first');
+  assert.ok(!disk.includes('f0') && !disk.includes('f4'));
+  await groups.openFolder({ folder: '/d/f5', name: 'f5' });
+  assert.equal((await groups.folders())[0].name, 'f5', 'reopening moves it to the top');
+});

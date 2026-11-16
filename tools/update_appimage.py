@@ -49,7 +49,10 @@ def main():
     if args.no_install: return
     args.target.parent.mkdir(parents=True, exist_ok=True)
     if args.target.exists():
-        shutil.copy2(args.target, args.target.with_name(args.target.name + '.previous'))
+        # Through a rename: the old .previous may itself be running (copying over it fails with ETXTBSY).
+        prev = args.target.with_name(args.target.name + '.previous')
+        shutil.copy2(args.target, prev.with_name(prev.name + '.partial'))
+        os.replace(prev.with_name(prev.name + '.partial'), prev)
     partial = args.target.with_name(args.target.name + '.partial')
     shutil.copy2(built, partial)
     os.chmod(partial, 0o755)

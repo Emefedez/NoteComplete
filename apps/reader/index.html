@@ -179,6 +179,11 @@
           <hr />
           <button id="installApp" data-icon="import" data-palette="Add this site as an app…" title="Install NoteComplete from this site: it opens from your Home Screen or app list, offline">Add this site as an app…</button>
           <button id="agentsOpen" data-icon="share" data-palette="Connect AI tools to your notes…" title="Let Claude Code, Codex, Antigravity or OpenCode read and write your notes" hidden>Connect AI tools…</button>
+          <div id="logItems" class="menu-group" hidden>
+            <hr />
+            <button id="logToggle" data-icon="note" role="menuitemcheckbox" aria-checked="false" data-palette="Help: Keep a diagnostic log" title="Write warnings, errors and the steps of AI runs, Expand and saves to a log file (no note contents), to find out what went wrong">Keep a diagnostic log</button>
+            <button id="logOpen" data-icon="open" data-palette="Help: Open the diagnostic log" title="Open the log file (or its folder when nothing was logged yet)">Open the log</button>
+          </div>
           <div id="updateItems" class="menu-group" hidden>
             <hr />
             <button id="updateCheck" data-icon="restart">Check for updates…</button>
@@ -1418,10 +1423,10 @@
   <div class="ocr-actions"><button id="penSetupStart" type="button">Start</button><button id="penSetupSave" type="button" class="primary">Save</button><button id="penSetupClose" type="button">Close</button></div>
 </dialog>
 
-<dialog id="recoverDialog" class="ocr-dialog" aria-labelledby="recoverTitle">
-  <h2 id="recoverTitle">Recover your work?</h2>
+<dialog id="recoverDialog" class="ocr-dialog recover-toast" aria-labelledby="recoverTitle">
+  <h2 id="recoverTitle">Newer automatic save</h2>
   <p id="recoverText"></p>
-  <div class="ocr-actions"><button id="recoverManual" type="button">Manual save</button><button id="recoverAuto" type="button" class="primary">Automatic save</button></div>
+  <div class="ocr-actions"><button id="recoverManual" type="button">Keep the file</button><button id="recoverAuto" type="button" class="primary">Open it</button><button id="recoverDismiss" type="button" class="recover-x" aria-label="Keep the file">×</button></div>
 </dialog>
 
 <dialog id="autosavesDialog" class="ocr-dialog saved-dialog" aria-labelledby="autosavesTitle">

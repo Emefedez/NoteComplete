@@ -670,10 +670,11 @@ export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, na
       if (provider === LOCAL_ID) return local.models();
       return native?.models ? native.models(provider, options) : [];
     },
-    run(request, onDelta) {
+    // onActivity: the desktop tool's notes before its answer starts ("Thinking…", "Reading x…").
+    run(request, onDelta, onActivity) {
       if (request?.provider === LOCAL_ID) return local.run(request, onDelta);
       if (!native) return Promise.reject(Error('No AI tool is available here.'));
-      return typeof onDelta === 'function' ? native.run(request, onDelta) : native.run(request);
+      return typeof onDelta === 'function' ? native.run(request, onDelta, onActivity) : native.run(request);
     },
     cancel(tag) {
       native?.cancel?.(tag);

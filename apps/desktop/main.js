@@ -18,10 +18,14 @@ import { menuTemplate, uiZoomStep } from './app-menu.js';
 export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
+import { appLog } from './app-log.js';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
 const home = 'notecomplete://reader/';
+// Warnings, errors and [NC] progress lines of every tab (app-log.js).
+const log = appLog(path.join(app.getPath('userData'), 'logs'));
+log.write(`[NC] start ${app.getVersion()} pid ${process.pid}`);
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
 protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true,
@@ -175,6 +179,7 @@ function openTab(win, file = null) {
   view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
+  log.attach(contents, id);
   if (file) launchPending.set(id, file);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(({ url }) => {
@@ -424,7 +429,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:launched', guarded(async event => {
     const file = launchPending.get(event.sender.id);
     launchPending.delete(event.sender.id);
-    if (!openablePath(file)) return null;
+    // The diagnostic log (Help → Open the log) is not a system file type but opens as text.
+    if (!openablePath(file) && file !== log.file) return null;
     const bytes = new Uint8Array(await readFile(file));
     await files.remember(file);
     return { path: file, name: path.basename(file), bytes };
@@ -487,13 +493,28 @@ app.whenReady().then(async () => {
   const agents = agentSetup({ tools: () => ai.tools(), server: () => stableServer });
   ipcMain.handle('agents:status', guarded(async () => { await serverReady; return { server: stableServer, tools: await agents.status() }; }));
   ipcMain.handle('agents:connect', guarded(async (_event, id) => { await serverReady; return agents.connect(String(id)); }));
+  // Help → Keep a diagnostic log / Open the log (app-log.js).
+  ipcMain.handle('log:get', guarded(() => ({ on: log.on, file: log.file })));
+  ipcMain.handle('log:set', guarded((_event, on) => ({ on: log.setOn(on === true), file: log.file })));
+  // Opens the log as a text document in a new NoteComplete tab (no system handler needed).
+  ipcMain.handle('log:open', guarded(async event => {
+    if (!existsSync(log.file)) return false;
+    const win = windowOf(event.sender);
+    if (win) openTab(win, log.file);
+    return true;
+  }));
   ipcMain.handle('ai:providers', guarded(() => ai.providers()));
   ipcMain.handle('ai:models', guarded((_event, provider, options) => ai.models(String(provider), { fresh: options?.fresh === true })));
   // A request with a stream id gets its answer's pieces as 'ai:delta' messages.
   ipcMain.handle('ai:run', guarded((event, request) => {
     const id = typeof request?.stream === 'string' && /^[\w-]{1,40}$/.test(request.stream) ? request.stream : null;
     const { stream: _stream, ...rest } = request || {};
-    return ai.run(event.sender.id, rest, id ? text => { if (!event.sender.isDestroyed()) event.sender.send('ai:delta', id, text); } : null);
+    const send = (channel) => (text) => { if (!event.sender.isDestroyed()) event.sender.send(channel, id, text); };
+    const begun = Date.now(), what = `[NC] ai ${rest.provider || '?'}${rest.model ? '/' + rest.model : ''} tag=${rest.tag || '-'} tab ${event.sender.id}`;
+    log.write(`${what} start prompt=${String(rest.prompt || '').length} chars images=${(rest.images || []).length}`);
+    return ai.run(event.sender.id, rest, id ? send('ai:delta') : null, id ? send('ai:activity') : null).then(
+      (out) => { log.write(`${what} done in ${Math.round((Date.now() - begun) / 1000)} s, ${String(out?.text ?? out ?? '').length} chars`); return out; },
+      (error) => { log.write(`${what} failed in ${Math.round((Date.now() - begun) / 1000)} s: ${error?.message}`); throw error; });
   }));
   ipcMain.on('ai:cancel', (event, tag) => { if (trusted(event)) ai.cancel(event.sender.id, typeof tag === 'string' ? tag : ''); });
   // Other transcription backends; pieces stream back to the reader as they finish.

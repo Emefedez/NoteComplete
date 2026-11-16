@@ -18,17 +18,52 @@ export const PAGINATE_AND_MEASURE_SCRIPT = `(() => {
     root.remove();
     let page = createPage();
     const maxH = () => page.clientHeight || 1122;
-    for (const block of blocks) {
-      if (block.classList?.contains('page-break')) {
+    const over = () => page.scrollHeight > maxH() + 1;
+    const limit = () => {
+      const r = page.getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(page).paddingBottom) || 0;
+      return r.top + maxH() - pad;
+    };
+    // Same splitting as the reader's paginateAndMeasureDom (exam-pdf.js): only these are
+    // split, between their parts, and the rest goes first on the next page.
+    const SPLITTABLE = '.prob-card, .key, .key-sum, .key-steps, p.sp, .writing-lines, .solve-steps-box, .solve-part-ans, .theory-box';
+    const splitToFit = (el, bottom) => {
+      if (!el.matches || !el.matches(SPLITTABLE)) return null;
+      const kids = Array.from(el.children);
+      let i = kids.findIndex((k) => k.getBoundingClientRect().bottom > bottom + 0.5);
+      if (i < 0) return null;
+      const rest = el.cloneNode(false);
+      rest.classList.add('split-cont');
+      rest.removeAttribute('id');
+      // The part across the page bottom is split inside when it starts with room left
+      // (always for the first part, or nothing would stay); otherwise it moves whole.
+      const top = kids[i].getBoundingClientRect().top;
+      const inner = (i === 0 || bottom - top > 48) ? splitToFit(kids[i], bottom) : null;
+      if (inner) { rest.appendChild(inner); i += 1; }
+      else if (i === 0) return null;
+      for (const k of kids.slice(i)) rest.appendChild(k);
+      return rest;
+    };
+    for (let b = 0; b < blocks.length; b++) {
+      const block = blocks[b];
+      if (block.classList && block.classList.contains('page-break')) {
         if (page.children.length > 0) page = createPage();
         continue;
       }
       page.appendChild(block);
-      if (page.children.length > 1 && page.scrollHeight > maxH() + 1) {
+      if (!over()) continue;
+      const alone = page.children.length === 1;
+      const room = limit() - block.getBoundingClientRect().top;
+      if (!alone && (block.getBoundingClientRect().height <= maxH() * 0.9 || room < maxH() * 0.2)) {
         block.remove();
         page = createPage();
         page.appendChild(block);
+        if (!over()) continue;
       }
+      const rest = splitToFit(block, limit());
+      if (rest && block.children.length) blocks.splice(b + 1, 0, rest);
+      else if (rest) { block.remove(); blocks.splice(b + 1, 0, rest); }
+      page = createPage();
     }
     const pages = Array.from(host.querySelectorAll('.exam-page'));
     if (pages.length > 1 && pages[pages.length - 1].children.length === 0) {

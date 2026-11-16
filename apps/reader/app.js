@@ -3988,6 +3988,7 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     if (delivery.kind === "handle" && delivery.handle) {
       saveFileHandle = delivery.handle;
     }
+    console.info(`[NC] save ${as}${inPlace ? " in place" : ""}: ${delivery.kind || "?"} ${delivery.path || delivery.name || ""}${delivery.cancelled ? " (cancelled)" : ""} ${doc?.pages || 0} pages`);
     if (delivery.kind === "local" && delivery.path) {
       const boundChanged = !delivery.overwritten || notePath !== delivery.path || docMember?.path !== delivery.path;
       notePath = delivery.path;
@@ -6194,7 +6195,12 @@ const expandMaker = expandController({
     await action("insertHandwritten", { at, markdown, options, focus });
   },
   insertPdfPagesWithTapes: async ({ at, pages, pdf, tapes }) => {
+    // action() skips silently while the note is busy; Expand must not then report pages it never added.
+    const before = doc?.pages || 0;
+    console.info(`[NC] insertPages at ${at}: ${pages.length} page(s) into "${doc?.title || "?"}" (${before} pages, editing=${editing}, pending=${mutationPending}, dirty=${dirty})`);
     await action("insertPages", { at, pages, pdf, focus: at });
+    console.info(`[NC] insertPages done: ${doc?.pages || 0} pages now`);
+    if (!doc || (doc.pages || 0) < before + pages.length) throw Error("The new exam pages could not be inserted (the note was busy or closed). Nothing was added; try again.");
     const byPage = new Map();
     for (const t of tapes || []) {
       const targetPage = at + t.page;
@@ -6212,8 +6218,14 @@ const expandMaker = expandController({
     }
   },
   call,
-  markEmbeddedExamUpdated: () => {
-    if (doc) doc.has_exam = true;
+  // The merged exam lives in the note: mark it unsaved so it is written, and refresh an open HTML exam view.
+  markEmbeddedExamUpdated: async () => {
+    if (!doc) return;
+    doc.has_exam = true;
+    dirty = changed = true;
+    savedState();
+    tabBar.update({ title: doc.title || $("title").textContent, dirty: true });
+    if (embeddedExam?.active) await openEmbeddedExamHtml();
     documentControls();
   },
   jobs,
@@ -6222,6 +6234,23 @@ const expandMaker = expandController({
 });
 if ($("viewExamHtml")) $("viewExamHtml").onclick = () => { closeMenus(); openEmbeddedExamHtml(); };
 if ($("navExamHtml")) $("navExamHtml").onclick = () => openEmbeddedExamHtml();
+// Help → Keep a diagnostic log / Open the log (desktop app only; apps/desktop/app-log.js).
+if (window.notecompleteLog && $("logItems")) {
+  $("logItems").hidden = false;
+  const showLog = (s) => $("logToggle").setAttribute("aria-checked", String(!!s?.on));
+  window.notecompleteLog.get().then(showLog).catch(() => {});
+  $("logToggle").onclick = async () => {
+    const s = await window.notecompleteLog.set($("logToggle").getAttribute("aria-checked") !== "true").catch((e) => { status(e.message, true); return null; });
+    if (!s) return;
+    showLog(s);
+    status(s.on ? `Diagnostic log on: ${s.file}` : "Diagnostic log off.");
+  };
+  $("logOpen").onclick = async () => {
+    closeMenus();
+    const had = await window.notecompleteLog.open().catch((e) => { status(e.message, true); return true; });
+    if (!had) status("Nothing logged yet. Turn on Help → Keep a diagnostic log first.");
+  };
+}
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };

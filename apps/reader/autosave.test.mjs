@@ -90,6 +90,7 @@ test('autosaveController saves changed notes, offers recovery only when differen
     addEventListener() {},
     replaceChildren() {},
     showModal() { this.shown = true; },
+    show() { this.shown = true; this.open = true; },
     close() { this.shown = false; },
   });
   for (const id of ['title', 'autosaveToggle', 'recoverDialog', 'recoverText', 'recoverAuto', 'recoverManual']) {

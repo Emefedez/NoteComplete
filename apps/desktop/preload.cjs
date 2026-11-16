@@ -70,14 +70,23 @@ contextBridge.exposeInMainWorld('notecompleteAI', {
   providers: () => ipcRenderer.invoke('ai:providers'),
   models: (provider, options) => ipcRenderer.invoke('ai:models', provider, { fresh: options?.fresh === true }),
   // onDelta(text) receives the answer while it is written, when the tool streams.
-  run: (request, onDelta) => {
+  // onActivity(note) gets what the tool is doing before its answer starts ("Thinking…").
+  run: (request, onDelta, onActivity) => {
     if (typeof onDelta !== 'function') return ipcRenderer.invoke('ai:run', request);
     const stream = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const listener = (_event, id, text) => { if (id === stream) onDelta(text); };
+    const activity = (_event, id, text) => { if (id === stream && typeof onActivity === 'function') onActivity(text); };
     ipcRenderer.on('ai:delta', listener);
-    return ipcRenderer.invoke('ai:run', { ...request, stream }).finally(() => ipcRenderer.removeListener('ai:delta', listener));
+    ipcRenderer.on('ai:activity', activity);
+    return ipcRenderer.invoke('ai:run', { ...request, stream }).finally(() => { ipcRenderer.removeListener('ai:delta', listener); ipcRenderer.removeListener('ai:activity', activity); });
   },
   cancel: tag => ipcRenderer.send('ai:cancel', typeof tag === 'string' ? tag : ''),
+});
+// Help → Keep a diagnostic log, Open the log.
+contextBridge.exposeInMainWorld('notecompleteLog', {
+  get: () => ipcRenderer.invoke('log:get'),
+  set: on => ipcRenderer.invoke('log:set', on === true),
+  open: () => ipcRenderer.invoke('log:open'),
 });
 contextBridge.exposeInMainWorld('notecompleteUpdates', {
   check: (manual = false) => ipcRenderer.invoke('update:check', manual === true),

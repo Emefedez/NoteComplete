@@ -78,6 +78,7 @@ export function createAiMonitor({ maxChars = 64000, onChange = () => {} } = {}) 
         peek: typeof peek === 'function' ? peek : null,
         text: '',
         chars: 0,
+        activity: '',
       };
       agents.set(id, entry);
       if (watching) notify();
@@ -93,6 +94,13 @@ export function createAiMonitor({ maxChars = 64000, onChange = () => {} } = {}) 
           const combined = live.text + s;
           live.text = combined.length > maxChars ? combined.slice(-maxChars) : combined;
           notify();
+        },
+        // What the tool is doing while no answer text has come (thinking, reading files).
+        activity(note) {
+          const live = agents.get(id);
+          if (!live || !note || live.activity === note) return;
+          live.activity = String(note);
+          if (watching) notify();
         },
         finish() {
           const had = agents.delete(id);
@@ -119,7 +127,7 @@ export function createAiMonitor({ maxChars = 64000, onChange = () => {} } = {}) 
             : (watching ? (chunk) => handle.append(chunk) : undefined);
           let out;
           try {
-            out = forward ? ai.run(cleanReq, forward) : ai.run(cleanReq);
+            out = forward ? ai.run(cleanReq, forward, (note) => handle.activity(note)) : ai.run(cleanReq);
           } catch (e) {
             handle.finish();
             throw e;
@@ -215,7 +223,7 @@ export function jobChip({ status }) {
       const pre = card.querySelector('pre');
       const stickBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 24;
       const text = a.text || (a.streams
-        ? 'Connected — waiting for first model token…'
+        ? (a.activity ? `Connected — ${a.activity}` : 'Connected — waiting for first model token…')
         : 'Running batch (opened mid-step); next parallel batch will stream live…');
       pre.classList.toggle('is-streaming', !!a.text);
       if (pre.textContent !== text) pre.textContent = text;

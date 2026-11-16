@@ -370,3 +370,28 @@ test('source-extract bbox clamping, headless crop fallbacks, PDF figure page det
   }, docs);
   assert.equal(resolvedExam.sections[0].problems[0].visual.dataUrl, url);
 });
+
+test('process-state diagrams: states type, and timelines of states drawn that way', async () => {
+  const { renderExamParagraphs } = await import('./exam-html.js');
+  const spec = normalizeVisualSpec({ type: 'states', title: 'FIFO', tStart: 0, tEnd: 20, processes: [
+    { label: 'A', arrival: 0, segments: [{ state: 'cpu', start: 0, end: 5 }, { state: 'E/S', start: 5, end: 10 }] },
+    { label: 'B', segments: [{ state: 'listo', start: 2, end: 5 }, { state: 'activo', start: 5, end: 9 }] } ] });
+  assert.equal(spec.type, 'states');
+  assert.deepEqual(spec.processes[0].segments.map((s) => s.state), ['run', 'blocked']);
+  assert.equal(spec.processes[1].arrival, 2);
+  const svg = renderVisualSvg(spec).svg;
+  assert.match(svg, /stroke-dasharray="6 4"/, 'ready is dashed');
+  assert.ok(svg.indexOf('>B<') < svg.indexOf('>A<'), 'the last process is drawn on top');
+  // A timeline with one row per process and state-named intervals becomes a state diagram.
+  const tl = normalizeVisualSpec({ type: 'timeline', rows: [{ label: 'A', intervals: [{ label: 'CPU', start: 0, end: 4 }, { label: 'Espera', start: 4, end: 6 }] }] });
+  assert.equal(tl.type, 'states');
+  // Resource rows (CPU, E/S) stay a bar timeline, overlapping bars on separate sub-lanes.
+  const res = renderVisualSvg({ type: 'timeline', tEnd: 12, rows: [{ label: 'CPU', intervals: [{ label: 'A', start: 0, end: 4 }] }, { label: 'E/S', intervals: [{ label: 'A', start: 4, end: 10 }, { label: 'B', start: 7, end: 11 }] }] });
+  const ys = [...res.svg.matchAll(/<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="[\d.]+" rx="3"/g)].map((m) => Number(m[1]));
+  assert.equal(new Set(ys).size, 3, 'two sub-lanes in the E/S row plus the CPU row');
+  // Steps bold, their parts indented, headings bold.
+  const html = renderExamParagraphs('1. Ejecución secuencial:\n  A ocupa 12\nMonolítico — ventaja');
+  assert.match(html, /<strong class="step-n">1\.<\/strong> <strong class="sp-head">Ejecución secuencial:<\/strong>/);
+  assert.match(html, /class="ln in1">A ocupa 12/);
+  assert.doesNotMatch(renderExamParagraphs('t = 0–4: CPU'), /sp-head/);
+});

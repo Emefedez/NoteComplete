@@ -100,6 +100,44 @@ function formatInlinePlain(s) {
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
 }
 
+// Text with line breaks as separate lines and blank lines as paragraphs, each its own element
+// so a long solution can be split between pages (exam-pdf.js) and reads airy once the tape is off.
+// A step starts a line: "1." "2)" "a)" "Paso 3:" "Step 2 —"; its label goes bold.
+const STEP_RE = /^((?:\d{1,2}|[a-z])[.)]|(?:Paso|Step|Fase|Phase|Parte|Part|Caso|Case)\s+\w{1,3}\s*[:.)\u2014-])\s+/i;
+const BULLET_RE = /^[-*\u2022\u2013]\s+/;
+// A heading prefix ("Ejecución secuencial:", "Monolítico —") or a short line ending in ":"
+// goes bold, as section titles of a solution; formulas ("t = 0–4:") do not.
+const HEAD_RE = /^([\p{L}][\p{L}\p{N} ()'’/.,-]{0,38}?)(\s*(?::|\u2014|\u2013 ))(?=\s|$)/u;
+function boldHead(text, katex) {
+  if (/\*\*/.test(text.slice(0, 4))) return renderRichExamHtml(text, katex);
+  const m = text.match(HEAD_RE);
+  if (!m || /[=<>$]/.test(m[1]) || /^\d/.test(m[1])) return renderRichExamHtml(text, katex);
+  return `<strong class="sp-head">${renderRichExamHtml(m[1], katex)}${escapeHtml(m[2])}</strong>${renderRichExamHtml(text.slice(m[0].length), katex)}`;
+}
+export function renderExamParagraphs(value, katex = katexMod) {
+  const paras = String(value ?? '').replace(/\r\n?/g, '\n').replace(/\t/g, '  ').replace(/^\s*\n|\n\s*$/g, '').split(/\n\s*\n+/).filter((p) => p.trim());
+  return paras.map((para) => {
+    let inStep = false;
+    const lines = para.split('\n').filter((l) => l.trim()).map((raw) => {
+      // Indent: spaces in the text (2 per level), or being a line under a step.
+      const lead = Math.min(3, Math.floor((raw.match(/^ */)[0].length) / 2));
+      const line = raw.trim();
+      const step = line.match(STEP_RE);
+      if (step && lead === 0) {
+        inStep = true;
+        return `<span class="ln step"><strong class="step-n">${escapeHtml(step[1])}</strong> ${boldHead(line.slice(step[0].length), katex)}</span>`;
+      }
+      const bullet = line.match(BULLET_RE);
+      const level = Math.max(lead, inStep ? 1 : 0);
+      const body = bullet ? line.slice(bullet[0].length) : line;
+      const cls = `ln${level ? ` in${level}` : ''}${bullet ? ' bul' : ''}${step ? ' step' : ''}`;
+      const html = step ? `<strong class="step-n">${escapeHtml(step[1])}</strong> ${boldHead(line.slice(step[0].length), katex)}` : boldHead(body, katex);
+      return `<span class="${cls}">${html}</span>`;
+    });
+    return `<p class="sp">${lines.join('')}</p>`;
+  }).join('');
+}
+
 // Renders LaTeX ($...$, $$...$$) using bundled KaTeX MathML so formulas print natively in offline A4 PDFs.
 export function renderRichExamHtml(value, katex = katexMod) {
   const source = String(value ?? '');
@@ -470,6 +508,56 @@ function safeColor(c, fallback = '#2563eb') {
 }
 
 /** Normalizes any structured visual / figure spec (`plot`, `histogram`, `timeline`, `tree`, `graph_nodes`, `custom_svg`, `cutout`). */
+// Process states in occupancy diagrams: running (solid blue), ready (dashed green),
+// blocked / doing I/O (red hatching).
+const STATE_WORDS = [
+  ['run', /^(cpu|run(ning)?|activo|active|ejec(uci[oó]n|utando)?|exec(uting)?)$/i],
+  ['ready', /^(ready|listo|espera|wait(ing)?|preparado)$/i],
+  ['blocked', /^(blocked|bloq(ueado|\.)?|block|e\/s|i\/o|io|es|disco|disk|impresora|printer)\d*$/i],
+];
+function stateOf(label) {
+  const t = String(label || '').trim();
+  for (const [state, re] of STATE_WORDS) if (re.test(t)) return state;
+  return '';
+}
+function normalizeStatesSpec(raw, { caption = '', blank = false } = {}) {
+  const rawRows = Array.isArray(raw.processes) ? raw.processes : Array.isArray(raw.rows) ? raw.rows : [];
+  const processes = rawRows.map((r, ri) => {
+    if (!r || typeof r !== 'object') return null;
+    const segments = (Array.isArray(r.segments) ? r.segments : Array.isArray(r.intervals) ? r.intervals : [])
+      .map((sg) => {
+        const start = Number(sg?.start ?? sg?.from), end = Number(sg?.end ?? sg?.to);
+        const state = stateOf(sg?.state ?? sg?.label);
+        return Number.isFinite(start) && Number.isFinite(end) && end > start && state ? { state, start, end } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.start - b.start);
+    const arrival = Number.isFinite(Number(r.arrival)) ? Number(r.arrival) : (segments[0]?.start ?? null);
+    return { label: String(r.label ?? r.name ?? r.process ?? `P${ri + 1}`).trim(), arrival, segments, done: r.done !== false };
+  }).filter((p) => p && p.label);
+  const all = processes.flatMap((p) => p.segments);
+  const tStart = Number.isFinite(Number(raw.tStart)) ? Number(raw.tStart) : 0;
+  const maxEnd = all.reduce((m, sg) => Math.max(m, sg.end), tStart);
+  const tEnd = Number.isFinite(Number(raw.tEnd)) && Number(raw.tEnd) > tStart ? Number(raw.tEnd) : (maxEnd > tStart ? maxEnd : tStart + 20);
+  const legend = raw.legend && typeof raw.legend === 'object' ? raw.legend : {};
+  return {
+    type: 'states',
+    title: String(raw.title || '').trim(),
+    caption: caption && caption !== String(raw.title || '').trim() ? caption : '',
+    tStart,
+    tEnd,
+    tStep: Number.isFinite(Number(raw.tStep)) && Number(raw.tStep) > 0 ? Number(raw.tStep) : null,
+    unit: String(raw.unit ?? '').trim(),
+    blank: blank || all.length === 0,
+    processes,
+    legend: {
+      run: String(legend.run ?? legend.cpu ?? 'Activo').trim(),
+      ready: String(legend.ready ?? 'Listo').trim(),
+      blocked: String(legend.blocked ?? 'Bloqueado').trim(),
+    },
+  };
+}
+
 export function normalizeVisualSpec(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const rawType = String(raw.type || raw.kind || '').trim().toLowerCase();
@@ -601,6 +689,10 @@ export function normalizeVisualSpec(raw) {
     };
   }
 
+  if (['states', 'process_states', 'occupancy', 'ocupacion', 'ocupación', 'estados'].includes(rawType)) {
+    return normalizeStatesSpec(raw, { caption, blank });
+  }
+
   if (['timeline', 'gantt', 'cpu', 'schedule', 'timing'].includes(rawType)) {
     const normalizeInterval = (it, idx) => {
       if (Array.isArray(it) && it.length >= 3) {
@@ -652,6 +744,12 @@ export function normalizeVisualSpec(raw) {
     }
 
     const allIntervals = rows.flatMap((r) => r.intervals);
+    // One row per process with intervals named by state (CPU, E/S, Listo…): the
+    // process-state style (lines, dashes, hatching), as these diagrams are drawn by hand.
+    if (allIntervals.length && rows.length >= 1 && allIntervals.every((iv) => stateOf(iv.label))
+      && !rows.some((r) => /^(CPU|E\/S|I\/O|IO)$/i.test(r.label))) {
+      return normalizeStatesSpec({ ...raw, processes: rows.map((r) => ({ label: r.label, segments: r.intervals.map((iv) => ({ state: iv.label, start: iv.start, end: iv.end })) })) }, { caption, blank });
+    }
     const tStart = Number.isFinite(Number(raw.tStart)) ? Number(raw.tStart) : 0;
     const maxEnd = allIntervals.reduce((mx, iv) => Math.max(mx, iv.end), tStart);
     const tEnd = Number.isFinite(Number(raw.tEnd)) && Number(raw.tEnd) > tStart
@@ -994,14 +1092,108 @@ function renderHistogramSvg(spec, { forMcp = false } = {}) {
   };
 }
 
+// The process-state diagram drawn as by hand: one line per process (the last one on top)
+// over a grid, running solid blue, ready dashed green, blocked red hatching, each stretch's
+// length written under it in its colour, a dot on arrival and * when it ends.
+function renderStatesSvg(spec, { forMcp = false } = {}) {
+  const W = 600;
+  const COLORS = { run: '#2563eb', ready: '#16a34a', blocked: '#dc2626' };
+  const fs = forMcp ? 12.5 : 10.5;
+  const rows = [...spec.processes].reverse();
+  const maxLbl = rows.reduce((m, r) => Math.max(m, r.label.length), 1);
+  const pad = { left: Math.max(30, 16 + maxLbl * 8), right: 36, top: (spec.title ? 50 : 34), bottom: 34 };
+  const laneH = 46;
+  // Half a lane under the last process, so its numbers do not sit on the axis.
+  const ph = Math.max(1, rows.length) * laneH + laneH / 2;
+  const H = pad.top + ph + pad.bottom;
+  const pw = W - pad.left - pad.right;
+  const mapT = (t) => pad.left + ((t - spec.tStart) / (spec.tEnd - spec.tStart)) * pw;
+  const els = [`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`];
+  if (spec.title) els.push(`<text x="${pad.left}" y="18" font-size="${fs + 2.5}" font-weight="700" fill="#0f172a">${escapeHtml(spec.title)}</text>`);
+  // Legend.
+  const ly = spec.title ? 36 : 16;
+  let lx = spec.title ? W - pad.right - 300 : pad.left;
+  const legendItem = (state, label) => {
+    const x = lx, y = ly;
+    if (state === 'run') els.push(`<line x1="${x}" y1="${y}" x2="${x + 26}" y2="${y}" stroke="${COLORS.run}" stroke-width="3" stroke-linecap="round"/>`);
+    if (state === 'ready') els.push(`<line x1="${x}" y1="${y}" x2="${x + 26}" y2="${y}" stroke="${COLORS.ready}" stroke-width="2.6" stroke-dasharray="6 4"/>`);
+    if (state === 'blocked') for (let k = 0; k < 26; k += 4.5) els.push(`<line x1="${x + k}" y1="${y + 4}" x2="${x + k + 3.5}" y2="${y - 4}" stroke="${COLORS.blocked}" stroke-width="1.8"/>`);
+    els.push(`<text x="${x + 32}" y="${y + 3.8}" font-size="${fs}" font-weight="700" fill="${COLORS[state]}">${escapeHtml(label)}</text>`);
+    lx += 40 + label.length * (fs * 0.62) + 14;
+  };
+  legendItem('run', spec.legend.run);
+  legendItem('ready', spec.legend.ready);
+  legendItem('blocked', spec.legend.blocked);
+  // Grid: every tick across, two lines per lane down.
+  const ticks = tickValues(spec.tStart, spec.tEnd, spec.tStep, 20).values;
+  const minor = ticks.length > 1 ? (ticks[1] - ticks[0]) : (spec.tEnd - spec.tStart);
+  for (let t = spec.tStart; t <= spec.tEnd + 1e-9; t += minor) {
+    const x = mapT(t).toFixed(1);
+    els.push(`<line x1="${x}" y1="${pad.top}" x2="${x}" y2="${pad.top + ph}" stroke="#d6dbe3" stroke-width="0.8"/>`);
+  }
+  for (let y = pad.top; y <= pad.top + ph - laneH / 2 + 0.1; y += laneH / 2) {
+    els.push(`<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${pad.left + pw}" y2="${y.toFixed(1)}" stroke="#d6dbe3" stroke-width="0.8"/>`);
+  }
+  // Axes.
+  const ax = pad.top + ph;
+  els.push(`<line x1="${pad.left}" y1="${pad.top - 8}" x2="${pad.left}" y2="${ax}" stroke="#0f172a" stroke-width="1.6"/>`);
+  els.push(`<line x1="${pad.left}" y1="${ax}" x2="${pad.left + pw + 10}" y2="${ax}" stroke="#0f172a" stroke-width="1.6"/>`);
+  els.push(`<path d="M${pad.left + pw + 10} ${ax} l-6 -3.5 v7 z" fill="#0f172a"/>`);
+  for (const tv of ticks) {
+    const x = mapT(tv).toFixed(1);
+    els.push(`<line x1="${x}" y1="${ax - 4}" x2="${x}" y2="${ax + 4}" stroke="#0f172a" stroke-width="1.4"/>`);
+    els.push(`<text x="${x}" y="${ax + 17}" font-size="${fs - 1}" font-weight="600" text-anchor="middle" fill="#0f172a">${escapeHtml(fmtTick(tv))}</text>`);
+  }
+  if (spec.unit) els.push(`<text x="${pad.left + pw + 14}" y="${ax - 6}" font-size="${fs - 1.5}" fill="#475569" text-anchor="middle">${escapeHtml(spec.unit)}</text>`);
+  // Processes.
+  rows.forEach((p, ri) => {
+    const y = pad.top + ri * laneH + laneH / 2;
+    els.push(`<line x1="${pad.left - 6}" y1="${y}" x2="${pad.left + 6}" y2="${y}" stroke="#0f172a" stroke-width="1.6"/>`);
+    els.push(`<text x="${pad.left - 10}" y="${y + 4}" font-size="${fs + 1.5}" font-weight="700" text-anchor="end" fill="#0f172a" font-family="Georgia, serif">${escapeHtml(p.label)}</text>`);
+    if (spec.blank) return;
+    for (const sg of p.segments) {
+      const x1 = mapT(Math.max(spec.tStart, sg.start)), x2 = mapT(Math.min(spec.tEnd, sg.end));
+      if (x2 - x1 < 1) continue;
+      const c = COLORS[sg.state];
+      if (sg.state === 'run') els.push(`<line x1="${x1.toFixed(1)}" y1="${y}" x2="${x2.toFixed(1)}" y2="${y}" stroke="${c}" stroke-width="3.2" stroke-linecap="round"/>`);
+      else if (sg.state === 'ready') els.push(`<line x1="${x1.toFixed(1)}" y1="${y}" x2="${x2.toFixed(1)}" y2="${y}" stroke="${c}" stroke-width="2.6" stroke-dasharray="6 4"/>`);
+      else for (let x = x1 + 1; x < x2 - 2; x += 4.5) els.push(`<line x1="${x.toFixed(1)}" y1="${y + 5}" x2="${(x + 3.5).toFixed(1)}" y2="${y - 5}" stroke="${c}" stroke-width="1.8"/>`);
+      if (x2 - x1 >= 12) els.push(`<text x="${((x1 + x2) / 2).toFixed(1)}" y="${y + 19}" font-size="${fs + 0.5}" font-weight="700" text-anchor="middle" fill="${c}">${escapeHtml(fmtTick(sg.end - sg.start))}</text>`);
+    }
+    if (p.arrival != null && p.arrival >= spec.tStart && p.arrival <= spec.tEnd) {
+      const first = p.segments[0];
+      els.push(`<circle cx="${mapT(p.arrival).toFixed(1)}" cy="${y}" r="3.6" fill="${first ? COLORS[first.state] : COLORS.ready}"/>`);
+    }
+    const last = p.segments[p.segments.length - 1];
+    if (last && p.done && last.end <= spec.tEnd) {
+      els.push(`<text x="${(mapT(last.end) + 4).toFixed(1)}" y="${y + 6}" font-size="${fs + 6}" font-weight="700" fill="${COLORS.run}">*</text>`);
+    }
+  });
+  return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${escapeHtml(spec.title || 'Process states')}">${els.join('')}</svg>`, width: W, height: H };
+}
+
 function renderTimelineSvg(spec, { forMcp = false } = {}) {
   const W = 560;
   const maxLblLen = spec.rows.reduce((m, r) => Math.max(m, r.label.length), 3);
   const leftPad = Math.max(54, Math.min(120, 18 + maxLblLen * 7));
   const topPad = (spec.title ? 30 : 14) + (spec.markers?.length ? 16 : 0);
   const bottomPad = 38;
-  const laneH = Math.max(28, Math.min(44, Math.floor(170 / Math.max(1, spec.rows.length))));
-  const ph = spec.rows.length * laneH;
+  // Overlapping intervals of one row (two devices busy at once, say) go on stacked
+  // sub-lanes instead of drawing over each other.
+  const packed = spec.rows.map((row) => {
+    const ends = [], placed = [];
+    for (const iv of [...(row.intervals || [])].sort((a, b) => a.start - b.start)) {
+      let lane = ends.findIndex((end) => end <= iv.start + 1e-9);
+      if (lane < 0) { lane = ends.length; ends.push(iv.end); } else ends[lane] = iv.end;
+      placed.push({ iv, lane });
+    }
+    return { placed, lanes: spec.blank ? 1 : Math.max(1, ends.length) };
+  });
+  const subLanes = packed.reduce((n, r) => n + r.lanes, 0);
+  const laneH = Math.max(26, Math.min(44, Math.floor(170 / Math.max(1, subLanes))));
+  const rowY = [];
+  packed.reduce((y, r, i) => { rowY[i] = y; return y + r.lanes * laneH; }, 0);
+  const ph = subLanes * laneH;
   const H = topPad + ph + bottomPad;
   const pad = { left: leftPad, right: 20, top: topPad, bottom: bottomPad };
   const pw = W - pad.left - pad.right;
@@ -1018,17 +1210,20 @@ function renderTimelineSvg(spec, { forMcp = false } = {}) {
   const colorMap = new Map();
   const colorFor = (label, explicit) => {
     if (explicit) return explicit;
-    const key = String(label || '').toUpperCase();
-    if (/^(IDLE|WAIT|STALL|-)$/.test(key)) return '#e2e8f0';
+    const key = String(label || '').toUpperCase().trim();
+    if (/^(IDLE|WAIT|WAITING|STALL|ESPERA|LISTO|READY|BLOQ(UEADO)?|BLOCKED|-)$/.test(key)) return '#e2e8f0';
+    // Process-state charts (one row per process): the same colour for each state in every chart.
+    if (/^(CPU|EJEC(UCI[OÓ]N)?|RUN(NING)?)$/.test(key)) return '#2563eb';
+    if (/^(E\/S|I\/O|IO|ES|DISCO|DISK|IMPRESORA|PRINTER)\d*$/.test(key)) return '#f59e0b';
     if (!colorMap.has(key)) colorMap.set(key, VISUAL_PALETTE[colorMap.size % VISUAL_PALETTE.length]);
     return colorMap.get(key);
   };
 
   // Lanes background
   spec.rows.forEach((row, ri) => {
-    const ry = pad.top + ri * laneH;
-    els.push(`<rect x="${pad.left}" y="${ry}" width="${pw}" height="${laneH}" fill="${ri % 2 === 0 ? '#ffffff' : '#f8fafc'}" stroke="#cbd5e1" stroke-width="1"/>`);
-    els.push(`<text x="${pad.left - 8}" y="${(ry + laneH / 2 + 4).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="end" fill="#0f172a">${escapeHtml(row.label)}</text>`);
+    const ry = pad.top + rowY[ri], rh = packed[ri].lanes * laneH;
+    els.push(`<rect x="${pad.left}" y="${ry}" width="${pw}" height="${rh}" fill="${ri % 2 === 0 ? '#ffffff' : '#f8fafc'}" stroke="#cbd5e1" stroke-width="1"/>`);
+    els.push(`<text x="${pad.left - 8}" y="${(ry + rh / 2 + 4).toFixed(1)}" font-size="${fs}" font-weight="700" text-anchor="end" fill="#0f172a">${escapeHtml(row.label)}</text>`);
   });
 
   // Vertical time gridlines & bottom ticks
@@ -1043,9 +1238,9 @@ function renderTimelineSvg(spec, { forMcp = false } = {}) {
   // Intervals (skipped if blank === true)
   if (!spec.blank) {
     spec.rows.forEach((row, ri) => {
-      const ry = pad.top + ri * laneH + 4;
       const ih = Math.max(14, laneH - 8);
-      for (const iv of row.intervals || []) {
+      for (const { iv, lane } of packed[ri].placed) {
+        const ry = pad.top + rowY[ri] + lane * laneH + 4;
         const s = Math.max(spec.tStart, Math.min(spec.tEnd, iv.start));
         const e = Math.max(spec.tStart, Math.min(spec.tEnd, iv.end));
         if (e <= s) continue;
@@ -1242,6 +1437,7 @@ export function renderVisualSvg(rawSpec, { forMcp = false } = {}) {
   if (spec.type === 'plot') return { ...renderPlotSvg(spec, { forMcp }), caption: spec.caption };
   if (spec.type === 'histogram') return { ...renderHistogramSvg(spec, { forMcp }), caption: spec.caption };
   if (spec.type === 'timeline') return { ...renderTimelineSvg(spec, { forMcp }), caption: spec.caption };
+  if (spec.type === 'states') return { ...renderStatesSvg(spec, { forMcp }), caption: spec.caption };
   if (spec.type === 'tree' || spec.type === 'graph_nodes') return { ...renderGraphSvg(spec, { forMcp }), caption: spec.caption };
   return null;
 }
@@ -1264,7 +1460,8 @@ export function renderVisualHtml(rawSpec) {
   return (
     `<figure class="prob-visual">`
     + rendered.svg
-    + (spec.caption ? `<figcaption class="prob-visual-caption">${renderRichExamHtml(spec.caption)}</figcaption>` : '')
+    // A caption that only repeats the figure's title (drawn inside it) is left out.
+    + (rendered.caption && rendered.caption !== spec.title ? `<figcaption class="prob-visual-caption">${renderRichExamHtml(rendered.caption)}</figcaption>` : '')
     + `</figure>`
   );
 }
@@ -1289,7 +1486,9 @@ const VISUAL_PROMPT_GUIDE = [
   '  `{"type":"plot","title":"f(x)","xMin":-4,"xMax":4,"yMin":-4,"yMax":6,"xLabel":"x","yLabel":"y","grid":true,"blank":false,"functions":[{"expr":"x^2 - 1","label":"f(x)"}],"points":[{"x":0,"y":-1,"label":"(0,-1)"}],"areas":[{"expr":"x^2","from":0,"to":2}]}`',
   '- Histogram / bar chart (set `"blank": true` + `value: null` on bins for students to fill):',
   '  `{"type":"histogram","title":"Latency Distribution","xLabel":"Bucket (ms)","yLabel":"Count","yMax":12,"blank":false,"bins":[{"label":"0-5","value":3},{"label":"5-10","value":9}]}`',
-  '- CPU scheduling / execution timeline / Gantt chart (set `"blank": true` with empty `intervals` so students draw the schedule, and put the completed Gantt chart in `answerBox.visual` / `solutionVisual`!):',
+  '- PREFERRED for multiprogramming / process scheduling exercises (FIFO, SJF, SRT, RR, priorities): the process-state diagram, one line per process (listed A, B, C; drawn with the last on top), each stretch `run` (activo, CPU), `ready` (listo) or `blocked` (bloqueado / E/S); set `"blank": true` with no segments for the student version and put the solved one in `answerBox.visual`. Legend labels in the exam language:',
+  '  `{"type":"states","title":"FIFO","tStart":0,"tEnd":90,"tStep":5,"unit":"u.t.","legend":{"run":"Activo","ready":"Listo","blocked":"Bloqueado"},"processes":[{"label":"A","arrival":0,"segments":[{"state":"run","start":0,"end":10},{"state":"blocked","start":10,"end":25},{"state":"run","start":25,"end":30}]},{"label":"B","arrival":5,"segments":[{"state":"ready","start":5,"end":10},{"state":"run","start":10,"end":15}]}]}`',
+  '- CPU scheduling / execution timeline / Gantt chart (set `"blank": true` with empty `intervals` so students draw the schedule, and put the completed Gantt chart in `answerBox.visual` / `solutionVisual`!). For multiprogramming / resource occupancy diagrams use ONE ROW PER PROCESS, the last process on top (rows "C", "B", "A"), and label each interval with what the process is doing: "CPU", "E/S" (or the device) or "Espera" — each state keeps its own colour:',
   '  `{"type":"timeline","title":"CPU Schedule (RR q=2)","tStart":0,"tEnd":10,"tStep":1,"unit":"ms","blank":false,"rows":[{"label":"CPU","intervals":[{"label":"P1","start":0,"end":2},{"label":"P2","start":2,"end":5}]}]}`',
   '- Tree / FSM / node-edge graph: `{"type":"tree","directed":true,"nodes":[{"id":"A","label":"10"},{"id":"B","label":"5"}],"edges":[{"from":"A","to":"B","label":"L"}]}` (or `"type":"graph_nodes"` / `"type":"custom_svg"` with pure `<svg viewBox="0 0 520 260">...</svg>`).',
   '- Source figure cutout (ONLY when attached visual source pages/images exist): `{"type":"cutout","sourceIndex":0,"page":2,"bbox":[x,y,w,h],"caption":"Figure from source"}` with normalized `0..1` `[x,y,w,h]`.',
@@ -1388,7 +1587,7 @@ export function examPrompt({
     VISUAL_PROMPT_GUIDE,
     'Use `visual` whenever a question involves functions/plots, distributions/histograms, CPU scheduling/timing Gantt charts, trees/FSMs/graphs, circuits, or source figures.',
     '',
-    'IMPORTANT: Answers are NOT inside dropdowns — they render inside printable solution boxes that get covered by removable Noteful Tape. Keep every `answerBox` concise, crisp, self-contained, and scannable!',
+    'IMPORTANT: Answers are NOT inside dropdowns — they print as the solution under removable Noteful Tape. Keep every `answerBox` crisp, self-contained and scannable: use **bold** for the titles of the parts of a solution ("**Ejecución secuencial:**"), put each step on its own line starting with its number ("1. ", "2. " or "Paso 1: "), put the parts of a step on the following lines indented with two spaces (or as "- " bullets), and separate paragraphs with a blank line (\\n\\n) instead of one dense block. When a figure explains the answer better (completed Gantt chart, filled plot/histogram/table, tree, graph), give it as `answerBox.visual`, alone or alongside the text.',
     visualCatalogText ? `\nAVAILABLE VISUAL SOURCES FOR CUTOUTS:\n${visualCatalogText}` : '',
     '',
     'STUDY SOURCES:',
@@ -1442,7 +1641,7 @@ export function cleanExamData(raw) {
                 .map((ex) => (typeof ex === 'string' ? { label: ex, answerWidth: 'medium' } : ex))
                 .filter((ex) => ex && String(ex.label || '').trim())
             : [],
-          writingLines: Math.max(0, Math.min(10, Number(p.writingLines) || (kind === 'open' ? 4 : kind === 'calculation' ? 5 : 0))),
+          writingLines: Math.max(0, Math.min(10, Number(p.writingLines) || (kind === 'open' ? 6 : kind === 'calculation' ? 7 : 0))),
           table: p.table && Array.isArray(p.table.headers) && Array.isArray(p.table.rows) ? p.table : null,
           code: typeof p.code === 'string' ? p.code.trim() : '',
           answerBox: {
@@ -1579,11 +1778,11 @@ export const EXAM_PRINT_CSS = `
     display: block;
     margin-bottom: 4px;
   }
+  /* No card box: problems use the page's full width, separated by a thin rule. */
   .prob-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 5px;
-    padding: 9px 11px;
-    margin-bottom: 11px;
+    padding: 4px 0 14px 0;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #e2e8f0;
     background: #ffffff;
     break-inside: avoid;
   }
@@ -1643,8 +1842,8 @@ export const EXAM_PRINT_CSS = `
     border-bottom: 1.5px solid #475569;
     height: 18px;
   }
-  .writing-lines { margin: 7px 0; }
-  .wline { border-bottom: 1px solid #cbd5e1; height: 22px; }
+  .writing-lines { margin: 10px 0 4px 0; }
+  .wline { border-bottom: 1px solid #cbd5e1; height: 32px; }
   table.exam-tbl {
     width: 100%;
     border-collapse: collapse;
@@ -1675,36 +1874,50 @@ export const EXAM_PRINT_CSS = `
     white-space: pre-wrap;
     word-break: break-word;
   }
+  /* The solution (covered by answer tape): plain text across the full width, no box,
+     larger and airier than the question so it reads well once the tape is peeled. */
   .key {
-    background: #ecfdf5;
-    border: 1px solid #6ee7b7;
-    border-left: 4px solid #10b981;
-    padding: 9px 12px;
-    border-radius: 5px;
-    margin-top: 10px;
-    font-size: 9.5pt;
-    line-height: 1.54;
-    color: #064e3b;
+    margin-top: 16px;
+    padding: 6px 0 4px 0;
+    font-size: 10.6pt;
+    line-height: 1.72;
+    color: #14532d;
   }
   .key strong.lbl {
-    display: inline-block;
-    color: #047857;
-    font-size: 8.4pt;
+    display: block;
+    color: #15803d;
+    font-size: 8.2pt;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-    margin-bottom: 3px;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
   }
-  .key-steps { margin-top: 6px; line-height: 1.56; white-space: pre-wrap; }
+  .key p.sp { margin: 0 0 10px 0; }
+  .key p.sp:last-child { margin-bottom: 0; }
+  .key .ln { display: block; }
+  /* Steps: bold label with a hanging indent; their parts and bullets indented under them. */
+  .key .ln.step { padding-left: 1.7em; text-indent: -1.7em; margin-top: 4px; }
+  .key .ln.step:first-child { margin-top: 0; }
+  .key .step-n { font-weight: 700; color: #0f172a; }
+  .key .sp-head { font-weight: 700; color: #0f172a; }
+  .key .key-sum .sp-head { color: inherit; }
+  .key .ln.in1 { padding-left: 1.7em; }
+  .key .ln.in2 { padding-left: 3.2em; }
+  .key .ln.in3 { padding-left: 4.7em; }
+  .key .ln.bul { position: relative; }
+  .key .ln.bul::before { content: "•"; position: absolute; margin-left: -0.9em; color: #64748b; }
+  .key .ln.in1.step { padding-left: 3.4em; text-indent: -1.7em; }
+  .key-steps { margin-top: 12px; line-height: 1.75; color: #1f2937; }
+  .key .prob-visual { margin: 12px 0; border: 0; }
+  /* The rest of a problem or solution continued on the next page (exam-pdf.js splitting). */
+  .split-cont { border-top: 0; margin-top: 0; padding-top: 0; }
   .bad {
-    background: #fef2f2;
-    border-left: 3px solid #ef4444;
-    padding: 5px 9px;
-    margin-top: 8px;
-    font-size: 9pt;
-    line-height: 1.48;
-    color: #7f1d1d;
-    border-radius: 3px;
+    margin-top: 12px;
+    font-size: 10pt;
+    line-height: 1.65;
+    color: #991b1b;
   }
+  .bad strong { color: #b91c1c; }
   math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Noto Serif", Georgia, serif; font-size: 1.05em; }
   .math-block { display: block; margin: 7px 0; text-align: center; }
   .solve-steps-box {
@@ -1737,9 +1950,9 @@ export const EXAM_PRINT_CSS = `
     font-size: 11.2pt;
     font-weight: 700;
   }
-  .solve-part-ans { margin: 9px 0; padding: 8px 11px; background: rgba(255,255,255,0.7); border-radius: 5px; border: 1px solid #a7f3d0; line-height: 1.55; }
-  .solve-part-ans .ans-final { font-weight: 700; color: #064e3b; }
-  .solve-part-ans .ans-work { margin-top: 6px; line-height: 1.56; white-space: pre-wrap; }
+  .solve-part-ans { margin: 14px 0; padding: 4px 0; font-size: 10.6pt; line-height: 1.72; }
+  .solve-part-ans .ans-final { font-weight: 700; color: #14532d; }
+  .solve-part-ans .ans-work { margin-top: 8px; line-height: 1.75; white-space: pre-wrap; color: #1f2937; }
   .solve-card-free { break-inside: auto; }
   .prob-visual {
     margin: 6px 0;
@@ -1824,8 +2037,9 @@ function renderProblemHtml(p) {
   const ansVisHtml = p.answerBox?.visual ? renderVisualHtml(p.answerBox.visual) : '';
   parts.push(
     `<div class="key" data-tape-answer="solution">`
-      + `<strong class="lbl">Solution</strong> · ${renderRichExamHtml(p.answerBox.summary)}`
-      + (p.answerBox.steps ? `<div class="key-steps">${renderRichExamHtml(p.answerBox.steps)}</div>` : '')
+      + `<strong class="lbl">Solution</strong>`
+      + `<div class="key-sum">${renderExamParagraphs(p.answerBox.summary)}</div>`
+      + (p.answerBox.steps ? `<div class="key-steps">${renderExamParagraphs(p.answerBox.steps)}</div>` : '')
       + ansVisHtml
       + (p.answerBox.trap ? `<div class="bad"><strong>Watch out:</strong> ${renderRichExamHtml(p.answerBox.trap)}</div>` : '')
       + `</div>`,

@@ -273,12 +273,20 @@ export function autosaveController({
         return;
       }
       if (!$('recoverDialog')) return;
-      $('recoverText').textContent = `An automatic save of “${latest.title}” from ${when(latest.time)} is newer than ${manual ? `your last save (${when(manual)})` : 'the file you opened'}. Which do you want to open?`;
-      $('recoverAuto').textContent = `Automatic save (${when(latest.time)})`;
-      $('recoverManual').textContent = manual ? `Manual save (${when(manual)})` : 'The file';
-      $('recoverAuto').onclick = () => { $('recoverDialog').close(); openSlot(latest); };
-      $('recoverManual').onclick = () => { $('recoverDialog').close(); store.markManual(key).catch(() => { /* Optional. */ }); };
-      $('recoverDialog').showModal();
+      // A quiet card in the corner, not a modal: the note stays usable. Ignored, it hides
+      // after a while and the save stays in File → Automatic saves.
+      const dialog = $('recoverDialog');
+      $('recoverText').textContent = `“${latest.title}” has an automatic save from ${when(latest.time)}, newer than ${manual ? `your last save (${when(manual)})` : 'the file you opened'}.`;
+      $('recoverAuto').textContent = 'Open it';
+      $('recoverManual').textContent = 'Keep the file';
+      clearTimeout(dialog._hide);
+      const keep = () => { clearTimeout(dialog._hide); dialog.close(); store.markManual(key).catch(() => { /* Optional. */ }); };
+      $('recoverAuto').onclick = () => { clearTimeout(dialog._hide); dialog.close(); openSlot(latest); };
+      $('recoverManual').onclick = keep;
+      if ($('recoverDismiss')) $('recoverDismiss').onclick = keep;
+      if (dialog.open) dialog.close();
+      dialog.show();
+      dialog._hide = setTimeout(() => dialog.close(), 20_000);
     } catch { /* No storage: nothing to offer. */ }
   }
 

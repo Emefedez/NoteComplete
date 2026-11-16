@@ -36,24 +36,42 @@ export function findTools(shell = process.env.SHELL || '/bin/bash') {
 // Streamed output, one JSON object per line: the text pieces of the answer as
 // they are written (Claude Code stream events, Antigravity step updates) and
 // the final answer.
+// "Reading img-001.png…" for a tool call shown in the live output while no answer text has come.
+export function toolActivity(name, input = {}) {
+  const file = input?.file_path || input?.filePath || input?.path;
+  const base = typeof file === 'string' ? file.split(/[\\/]/).pop() : '';
+  if (/read/i.test(String(name || '')) && base) return `Reading ${base}…`;
+  return `Using ${String(name || 'a tool').replace(/^mcp__\w+__/, '')}…`;
+}
+
 export function streamLine(provider, line) {
   let value;
   try { value = JSON.parse(line); } catch { return {}; }
   if (provider === 'claude') {
     if (value.type === 'result') return { final: value.result };
+    if (value.type === 'system' && value.subtype === 'init') return { activity: `Claude Code started${value.model ? ` (${value.model})` : ''}…` };
+    // What the model is doing before its answer starts: thinking, or reading attached files.
+    if (value.type === 'assistant') {
+      const use = (value.message?.content || []).find(c => c?.type === 'tool_use');
+      if (use) return { activity: toolActivity(use.name, use.input) };
+      return {};
+    }
     const e = value.type === 'stream_event' ? value.event : null;
+    if (e?.type === 'content_block_start' && e.content_block?.type === 'thinking') return { activity: 'Thinking…' };
+    if (e?.type === 'content_block_delta' && e.delta?.type === 'thinking_delta') return { activity: 'Thinking…' };
     return e?.type === 'content_block_delta' && e.delta?.type === 'text_delta' ? { delta: e.delta.text } : {};
   }
   if (provider === 'antigravity') {
     if (value.event === 'result') return { final: value.result?.response };
     const step = value.event === 'step_update' ? value.step_update : null;
-    return step?.step_type === 'agent_response' && typeof step.text_delta === 'string' ? { delta: step.text_delta } : {};
+    if (step?.step_type === 'agent_response' && typeof step.text_delta === 'string') return { delta: step.text_delta };
+    return step?.step_type ? { activity: `Working (${String(step.step_type).replace(/_/g, ' ')})…` } : {};
   }
   if (provider === 'opencode') {
     // OpenCode writes each text part whole once it ends; tool calls separate the
     // agent's working notes from its answer.
     if (value.type === 'text' && typeof value.part?.text === 'string') return { delta: value.part.text + '\n\n', part: value.part.text };
-    if (value.type === 'tool_use') return { tool: true };
+    if (value.type === 'tool_use') return { tool: true, activity: toolActivity(value.part?.tool, value.part?.state?.input) };
     if (value.type === 'error') return { error: String(value.error?.data?.message || value.error?.message || value.error?.name || 'unknown error') };
   }
   return {};
@@ -201,7 +219,8 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
     },
     // One request: write images, run the tool in the temporary folder, return its answer.
     // `onDelta` receives the answer's text pieces while it is written (tools that stream).
-    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }, onDelta = null) {
+    // `onActivity` gets short notes ("Thinking…", "Reading x.png…") while no answer text comes.
+    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }, onDelta = null, onActivity = null) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
@@ -258,8 +277,9 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
             const lines = pending.split('\n');
             pending = lines.pop();
             for (const line of lines) {
-              const { delta } = streamLine(provider, line);
+              const { delta, activity } = streamLine(provider, line);
               if (delta) onDelta(delta);
+              else if (activity && onActivity) onActivity(activity);
             }
           });
           child.stderr.on('data', d => { bumpIdle(); err += d; });

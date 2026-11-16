@@ -8,7 +8,12 @@ const MAX_FULL_HASH_BYTES = 64 * 1024 * 1024;
 const MAX_NFEDIT_PARSE_BYTES = 48 * 1024 * 1024;
 
 const STRIP_EXT_RE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|pdf|markdown|md|html?|txt|docx|odt|xlsx|ods|png|jpe?g|webp)$/i;
+// Copy markers: "(2)", "(copy)", and the id/hash tags older versions added: "(a1b2c3)", "(12oD0v)".
 const COPY_SUFFIX_RE = /(?:\s*(?:\((?:\d+|[a-f0-9]{5,8}(?:-\d+)?|copy|copia)\)|[-_ ]+(?:copy|copia)(?:\s*\d+)?))+$/gi;
+
+// A Drive id tag ("(12oD0v)"): six letters/digits with a digit and a lower→upper case change,
+// which words like "(Tema12)" do not have. Case-sensitive, unlike COPY_SUFFIX_RE.
+const ID_TAG_RE = /\s*\((?=[\w-]*\d)(?=[\w-]*[a-z][A-Z])[\w-]{6}\)$/;
 
 export function normalizeNoteName(raw) {
   let s = String(raw || '').trim();
@@ -18,7 +23,7 @@ export function normalizeNoteName(raw) {
   let prev = '';
   while (s !== prev) {
     prev = s;
-    s = s.replace(COPY_SUFFIX_RE, '').trim();
+    s = s.replace(COPY_SUFFIX_RE, '').replace(ID_TAG_RE, '').trim();
   }
   return s
     .normalize('NFKD')

@@ -2007,8 +2007,9 @@ details[open] > summary::after, .has-caret[aria-expanded="true"] .caret { transf
 .navigation > button, .navigation .zoom-controls > button { min-height: 28px; padding-block: 2px; }
 .pages-spread-toggle { flex: none; color: var(--muted); }
 .pages-spread-toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.navigation .nav-exam-html { display: inline-flex; align-items: center; gap: 5px; flex: none; min-height: 26px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
-.navigation .nav-exam-html:hover:not(:disabled) { background: var(--accent-hover); }
+/* Like the HTML view's bar buttons: neutral fill, button corners; the accent only on hover. */
+.navigation .nav-exam-html { display: inline-flex; align-items: center; gap: 5px; flex: none; min-height: 26px; padding: 0 8px; border: 0; border-radius: var(--radius); background: var(--fill); color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.navigation .nav-exam-html:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
 .navigation .nav-exam-html[hidden] { display: none; }
 .navigation .nav-exam-html svg { width: 14px; height: 14px; flex: none; }
 .page-align { display: inline-flex; gap: 1px; padding: 1px; border: 1px solid var(--line); border-radius: 7px; }
@@ -3749,6 +3750,10 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .sp-item-meta { display: flex; flex-direction: column; min-width: 0; }
 .sp-item-meta strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-item-meta small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-item:has(.sp-forget) { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+.sp-item .sp-forget { opacity: 0; }
+.sp-item:hover .sp-forget, .sp-item .sp-forget:focus-visible { opacity: 1; }
+@media (hover: none) { .sp-item .sp-forget { opacity: 1; } }
 .sp-actions-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .sp-actions-row button, .sp-clear { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; min-height: 28px; }
 .sp-actions-row button svg, .sp-clear svg { width: 14px; height: 14px; }
@@ -3796,3 +3801,9 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .hover-tool-opt svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
 #penHover[data-tool="pan"], #penHover[data-tool="select"], #penHover[data-tool="text"], #penHover[data-tool="shape"], #penHover[data-tool="grab"] { background: color-mix(in srgb, var(--accent) 18%, transparent); box-shadow: 0 0 0 1.5px var(--surface), inset 0 0 0 2px var(--accent); }
 body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.92) hue-rotate(180deg); }
+/* Recovery offer: a non-modal card in the corner (autosave.js). */
+#recoverDialog.recover-toast { position: fixed; inset: auto 16px 16px auto; margin: 0; width: min(380px, calc(100vw - 32px)); padding: 12px 14px; z-index: 60; }
+#recoverDialog.recover-toast h2 { font-size: 14px; margin: 0 0 4px; }
+#recoverDialog.recover-toast p { font-size: 12.5px; margin: 0 0 10px; color: var(--muted); }
+#recoverDialog.recover-toast .ocr-actions { align-items: center; }
+#recoverDialog .recover-x { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; min-width: 0; min-height: 0; padding: 2px 6px; color: var(--muted); font-size: 16px; line-height: 1; }

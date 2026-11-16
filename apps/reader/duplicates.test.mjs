@@ -190,3 +190,10 @@ test('combineDuplicateGroup merges study resources, cover, groups/stars, exams, 
   assert.deepEqual(grp.members.map((m) => m.key), [e2.key]);
   assert.deepEqual(grp.starred, [e2.key]);
 });
+
+test('normalizeNoteName also drops the Drive id tags older versions put in file names', () => {
+  assert.equal(normalizeNoteName('Tema 3 (12oD0v).noteful'), 'tema 3');
+  assert.equal(normalizeNoteName('Resumen T1+2 (1PdNjm).noteful'), 'resumen t1 2');
+  assert.equal(normalizeNoteName('Tema 3 (2).noteful'), 'tema 3');
+  assert.equal(normalizeNoteName('Apuntes (Tema12)'), 'apuntes tema12', 'a word in brackets is kept');
+});
