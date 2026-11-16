@@ -151,7 +151,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const refs = [...references];
   const refList = make('div', { className: 'ch-refs' });
   const refFile = make('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true });
-  const refAdd = button('image', 'Picture or PDF…', 'Open a picture or a PDF to look at while filling in (or paste a snippet: Ctrl V)');
+  const refAdd = button('image', 'Picture or PDF…', 'Open a picture or a PDF to look at while drawing or filling in (or paste a snippet: Ctrl V)');
   refAdd.onclick = () => refFile.click();
   const addRef = (ref) => { refs.push(ref); onReference?.(ref); buildRefs(); };
   refFile.onchange = () => {
@@ -168,7 +168,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: 'Nothing to look at yet: open a picture or PDF, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).' }));
   }
   const onPaste = (e) => {
-    if (mode !== 'answer' || !root.isConnected) return;
+    if (mode === 'json' || !root.isConnected) return;
     const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
     if (!file) return;
     e.preventDefault();
@@ -716,6 +716,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (grid) out.push(...gridPanel());
     else if (bars) out.push(...barsPanel());
     else out.push(...plotPanel());
+    // Something to copy from while drawing: a picture or PDF, or a snippet grabbed from a note.
+    buildRefs();
+    out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList);
     panel.replaceChildren(...out);
   }
   function retime(changes) {
