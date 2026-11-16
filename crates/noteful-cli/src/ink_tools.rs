@@ -306,7 +306,36 @@ pub(super) fn tools() -> Vec<Value> {
             json!({"path":path,"page":page,"image":{"type":"boolean"},"width":{"type":"integer","minimum":200,"maximum":2400}}), &["path","page"]),
         tool("example_pages", "Example pages and drawings to imitate before create_notebook, add_pages, clean_copy or a drawing. Without name: the list and the style guide. With name: its source (study Markdown or SVG) and how it looks.",
             json!({"name":{"type":"string","enum":EXAMPLES.iter().map(|e| e.name).collect::<Vec<_>>()}}), &[]),
+        tool("add_prefab", "Insert an editable NoteComplete prefab (histogram, bar chart, process states / scheduling exercise, CPU timeline, exam plot, or UML / node graph) onto a page, written to a copy unless in_place. Users can edit it in the chart or diagram editor and resize it cleanly.\n\
+            Spec shapes:\n\
+            - Process states: {\"type\":\"states\",\"title\":\"FIFO\",\"tStart\":0,\"tEnd\":30,\"tStep\":5,\"unit\":\"u.t.\",\"legend\":{\"run\":\"Activo\",\"ready\":\"Listo\",\"blocked\":\"Block\"},\"processes\":[{\"label\":\"A\",\"arrival\":0,\"segments\":[{\"state\":\"run\",\"start\":0,\"end\":10}]}]} (add \"exercise\":true for an interactive blank/checkable scheduling exercise)\n\
+            - CPU timeline: {\"type\":\"timeline\",\"title\":\"CPU (RR q=2)\",\"tStart\":0,\"tEnd\":10,\"tStep\":1,\"unit\":\"ms\",\"rows\":[{\"label\":\"CPU\",\"intervals\":[{\"label\":\"P1\",\"start\":0,\"end\":2}]}]}\n\
+            - Histogram / bar: {\"type\":\"histogram\"|\"bar\",\"title\":\"...\",\"xLabel\":\"...\",\"yLabel\":\"...\",\"bins\":[{\"label\":\"0-10\",\"value\":3}]}\n\
+            - Exam plot: {\"type\":\"plot\",\"title\":\"f(x)\",\"xMin\":-4,\"xMax\":4,\"yMin\":-2,\"yMax\":6,\"functions\":[{\"expr\":\"x^2-1\",\"label\":\"f(x)\"}],\"points\":[{\"x\":0,\"y\":-1,\"label\":\"(0,-1)\"}]}\n\
+            - UML / node graph: {\"type\":\"uml\",\"diagram\":\"class\"|\"sequence\"|\"state\"|\"activity\"|\"usecase\"|\"graph\", ...}",
+            merge(json!({"path":path,"page":page,"spec":{"type":"object","description":"Prefab spec object"},"box":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Optional [x, y, w, h] in page units"}}), &[&write_props]), &["path","page","spec"]),
     ]
+}
+
+fn find_prefabs_js() -> Option<std::path::PathBuf> {
+    if let Some(dir) = std::env::var_os("NOTEFUL_READER_DIR") {
+        let p = Path::new(&dir).join("prefabs.js");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        for anc in exe.ancestors().skip(1) {
+            for rel in ["reader/prefabs.js", "apps/reader/prefabs.js", "resources/reader/prefabs.js"] {
+                let p = anc.join(rel);
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    let dev = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/reader/prefabs.js"));
+    dev.is_file().then(|| dev.to_path_buf())
 }
 
 impl Server {
@@ -316,6 +345,7 @@ impl Server {
             "add_pages" => self.add_pages(args, None),
             "clean_copy" => self.add_pages(args, Some(page_arg(args).map(|p| p + 1))),
             "write_on_page" => self.write_on_page(args),
+            "add_prefab" => self.add_prefab(args),
             "page_layout" => self.layout(args),
             "example_pages" => self.example(args),
             _ => return None,
@@ -468,6 +498,160 @@ impl Server {
         let (out, backup) = destination(args, Some(&source), &title)?;
         save(&editor, &out, Some(&data), backup.as_deref())?;
         let report = json!({"written":out,"backup":backup,"page":display + 1,"strokes":strokes,"under_ink":under,"text_boxes":boxes,"warnings":warnings,"handwriting_text":kept_text(&out)});
+        self.preview(&out, display, report)
+    }
+
+    fn add_prefab(&mut self, args: &Value) -> Res<Value> {
+        let source = note_path(args)?;
+        let display = page_arg(args)?;
+        let spec = &args["spec"];
+        if !spec.is_object() {
+            return Err("spec must be a JSON object".into());
+        }
+        let (mut editor, data) = open_for_edit(&source)?;
+        let slot = editor.slot(display).map_err(|_| {
+            format!(
+                "Page {} does not exist; the note has {} pages",
+                display + 1,
+                editor.page_order().len()
+            )
+        })?;
+        let layer = writable_layer(&editor)?;
+        let size = editor.view(slot)?["size"].clone();
+        let (page_w, page_h) = (
+            size[0].as_f64().unwrap_or(A4[0]),
+            size[1].as_f64().unwrap_or(A4[1]),
+        );
+
+        let prefabs_js = find_prefabs_js()
+            .ok_or("Could not locate apps/reader/prefabs.js (set NOTEFUL_READER_DIR)")?;
+        let spec_json = serde_json::to_string(spec)?;
+        let script = r#"
+import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
+const { prefabSvg } = await import(pathToFileURL(process.argv[1]).href);
+const spec = JSON.parse(fs.readFileSync(0, 'utf8'));
+const out = prefabSvg(spec);
+if (!out?.svg) throw new Error('Spec produced no prefab SVG');
+process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg }));
+"#;
+        let mut node = Command::new("node")
+            .args(["--input-type=module", "-e", script, &prefabs_js.to_string_lossy()])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Could not start node to render prefab: {e}"))?;
+        if let Some(mut stdin) = node.stdin.take() {
+            stdin.write_all(spec_json.as_bytes())?;
+        }
+        let node_out = node.wait_with_output()?;
+        if !node_out.status.success() {
+            return Err(format!(
+                "Prefab render failed: {}",
+                String::from_utf8_lossy(&node_out.stderr).trim()
+            )
+            .into());
+        }
+        let rendered: Value = serde_json::from_slice(&node_out.stdout)?;
+        let svg = rendered["svg"].as_str().ok_or("Missing prefab SVG")?;
+        let svg_w = rendered["width"].as_f64().unwrap_or(540.0).max(1.0);
+        let svg_h = rendered["height"].as_f64().unwrap_or(300.0).max(1.0);
+
+        let [x, y, w, h] = if let Some(arr) = args["box"].as_array() {
+            if arr.len() != 4 {
+                return Err("box must be [x, y, w, h]".into());
+            }
+            [
+                arr[0].as_f64().ok_or("box[0] must be a number")?,
+                arr[1].as_f64().ok_or("box[1] must be a number")?,
+                arr[2].as_f64().ok_or("box[2] must be a number")?.max(10.0),
+                arr[3].as_f64().ok_or("box[3] must be a number")?.max(10.0),
+            ]
+        } else {
+            let aspect = svg_h / svg_w;
+            let mut w = (page_w * 0.84).min(920.0);
+            let mut h = w * aspect;
+            if h > page_h * 0.72 {
+                h = page_h * 0.72;
+                w = h / aspect.max(1e-6);
+            }
+            [(page_w - w) / 2.0, (page_h - h) / 2.0, w, h]
+        };
+
+        let px_w = (w * 2.5).round().clamp(600.0, 2200.0) as u32;
+        let mut rsvg = Command::new("rsvg-convert")
+            .args(["-w", &px_w.to_string(), "-f", "png"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Could not start rsvg-convert: {e}"))?;
+        if let Some(mut stdin) = rsvg.stdin.take() {
+            stdin.write_all(svg.as_bytes())?;
+        }
+        let png_out = rsvg.wait_with_output()?;
+        if !png_out.status.success() || png_out.stdout.is_empty() {
+            return Err(format!(
+                "rsvg-convert failed: {}",
+                String::from_utf8_lossy(&png_out.stderr).trim()
+            )
+            .into());
+        }
+
+        let id = format!(
+            "p{:x}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(1)
+        );
+        editor.add_line(
+            slot,
+            noteful_core::Line {
+                points: vec![[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]],
+                pressure: None,
+                width: 0.5,
+                rgba: [0.8, 0.84, 0.9, 1.0],
+                tool: 0,
+                layer,
+                square: false,
+                under: false,
+                joined: false,
+                shape: Some(noteful_core::Shape {
+                    kind: noteful_core::ShapeKind::Rectangle,
+                    start: [x, y],
+                    end: [x + w, y + h],
+                    fill: None,
+                }),
+                part: Some(noteful_core::Part {
+                    id: id.clone(),
+                    kind: "prefab".into(),
+                    spec: Some(spec_json),
+                }),
+            },
+        )?;
+        editor.add_image(
+            slot,
+            noteful_core::Image {
+                base64: STANDARD.encode(&png_out.stdout),
+                mime: "image/png".into(),
+                bounds: [x, y, w, h],
+                layer,
+                text: None,
+                part: Some(noteful_core::Part {
+                    id: id.clone(),
+                    kind: "prefab".into(),
+                    spec: None,
+                }),
+                joined: true,
+            },
+        )?;
+
+        let title = editor.scene.title.clone();
+        let (out, backup) = destination(args, Some(&source), &title)?;
+        save(&editor, &out, Some(&data), backup.as_deref())?;
+        let report = json!({"written":out,"backup":backup,"page":display + 1,"part_id":id,"box":[x,y,w,h]});
         self.preview(&out, display, report)
     }
 
@@ -822,6 +1006,7 @@ pub(super) fn resource_templates() -> Value {
         {"uriTemplate":"noteful://examples/{name}","name":"example-source","description":"Source of an example: study Markdown for a page, SVG for a drawing","mimeType":"text/plain"},
         {"uriTemplate":"noteful://examples/{name}/preview","name":"example-preview","description":"How an example looks once written","mimeType":"image/png"}]})
 }
+
 impl Server {
     pub(super) fn read_resource(&mut self, uri: &str) -> Res<Value> {
         let text =

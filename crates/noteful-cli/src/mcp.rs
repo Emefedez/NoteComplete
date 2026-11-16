@@ -115,7 +115,7 @@ impl Server {
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
+                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots or UML prefabs, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
@@ -966,7 +966,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 18);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 19);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
