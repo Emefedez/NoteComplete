@@ -165,10 +165,10 @@ impl Image {
             }
         }
         crate::scene::Item {
-            id, stroke: None,
-            object: Some(json!({"2":{"1":[x+w/2.,y+h/2.,w,h,0.]},"4":self.layer,"6":{"1":1,"2":[w,h]}})),
+            id: id.clone(), stroke: None,
+            object: Some(json!({"1":id,"2":{"1":[x+w/2.,y+h/2.,w,h,0.]},"4":self.layer,"6":{"1":1,"2":[w,h]}})),
             bounds:self.bounds, hit:vec![], radius:0., z:0, layer:self.layer, text:None,
-            svg:format!("<image x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" href=\"data:{};base64,{}\"/>",self.mime,self.base64),
+            svg:format!("<image x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"data:{};base64,{}\"/>",self.mime,self.base64),
         }
     }
     pub(crate) fn native_object(

@@ -26,9 +26,12 @@ export function resizeAdjustment(item,index,moving,free=false){
  if(free)a.scale=[clamp(lx0/w),clamp(ly0/h)];
  else{
   // The pointer projected on the diagonal of the box as it is: one factor for both sides.
-  const W=w*item.adjustment.scale[0],H=h*item.adjustment.scale[1];
-  const k=clamp((lx0*W+ly0*H)/Math.max(1e-9,W*W+H*H));
-  a.scale=[clamp(item.adjustment.scale[0]*k),clamp(item.adjustment.scale[1]*k)];
+  const sx=Math.max(1e-9,item.adjustment.scale[0]),sy=Math.max(1e-9,item.adjustment.scale[1]);
+  const W=w*sx,H=h*sy;
+  const minK=Math.max(.001/sx,.001/sy),maxK=Math.min(1000/sx,1000/sy);
+  const rawK=(lx0*W+ly0*H)/Math.max(1e-9,W*W+H*H);
+  const k=minK<=maxK?Math.max(minK,Math.min(maxK,rawK)):clamp(rawK);
+  a.scale=[clamp(sx*k),clamp(sy*k)];
  }
  const lx=signX*w*a.scale[0]/2,ly=signY*h*a.scale[1]/2;
  a.translation=[fixed[0]+c*lx-s*ly-item.bounds[0]-item.bounds[2]/2,fixed[1]+s*lx+c*ly-item.bounds[1]-item.bounds[3]/2];

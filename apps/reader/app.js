@@ -104,7 +104,7 @@ document.addEventListener("toggle", (event) => {
     if (menu !== event.target) menu.open = false;
 }, true);
 document.addEventListener("pointerdown", (event) => {
-  if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden)
+  if (!event.target.closest("#toolbar,.select-menu") && !$("toolOptions").hidden && !$("toolOptions").classList.contains("inline"))
     setCompact(true);
 });
 let epoch = 0,
@@ -1371,11 +1371,15 @@ function fitTools() {
   cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(() => {
     const bar = $("toolbar"), tools = bar.querySelector(".segmented"), actions = document.querySelector(".toolbar-actions");
+    const opts = $("toolOptions");
+    const wasInline = opts.classList.contains("inline");
+    if (wasInline) opts.classList.remove("inline");
     bar.classList.remove("tools-icons");
     const overflowing = phoneLayout.matches
       ? tools.scrollWidth > tools.clientWidth + 1
       : bar.scrollWidth > bar.clientWidth + 1 || tools.getBoundingClientRect().right > bar.getBoundingClientRect().right || actions.offsetTop > tools.offsetTop + 4;
     bar.classList.toggle("tools-icons", !toolNamesOn() || overflowing);
+    toolOptions();
   });
 }
 // View → Hide the menu bar: the bar with File, Edit, View… slides up out of sight and peeks
@@ -1419,7 +1423,7 @@ function setLandscapeDock(side) {
   $("dockCycle").title = `Tool bar: ${side}. Move it to the ${next} (also View → Tool bar)`;
   $("dockCycle").setAttribute("aria-label", `Move the tool bar to the ${next}`);
   try { localStorage.setItem("notecomplete-landscape-dock", side); } catch { /* Optional. */ }
-  if (doc) requestAnimationFrame(() => { resize(); if (!$("toolOptions").hidden) toolOptions(); });
+  if (doc) requestAnimationFrame(() => { resize(); toolOptions(); });
 }
 const DOCK_NEXT = { top: "bottom", bottom: "left", left: "right", right: "top" };
 $("dockCycle").onclick = () => setLandscapeDock(DOCK_NEXT[document.body.dataset.landscapeDock] || "bottom");
@@ -1726,6 +1730,15 @@ function hasToolSettings() {
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
   return ["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && !!selection.item) || textDock;
 }
+function inlineToolOptionsSpace() {
+  const dock = document.body.dataset.landscapeDock;
+  if (chromeState.compact || phoneLayout.matches || dock === "left" || dock === "right") return 0;
+  const bar = $("toolbar"), seg = bar?.querySelector(".segmented"), act = bar?.querySelector(".toolbar-actions");
+  if (!bar || !seg || !act || !bar.clientWidth) return 0;
+  const cs = getComputedStyle(bar);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  return bar.clientWidth - pad - seg.offsetWidth - act.offsetWidth - 24;
+}
 function toolOptions() {
   $("shapeOptions").hidden = tool !== "shape";
   $("highlightOptions").hidden = tool !== "highlight";
@@ -1741,20 +1754,29 @@ function toolOptions() {
   // The text format bar, when docked here, shows while a text box is typed or selected.
   const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
-  const usual = optionsOpen && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
-  $("toolOptions").hidden = chromeState.compact || !(usual || textDock);
-  $("toolbarToggle").hidden = !canOpen;
-  $("toolbarToggle").setAttribute("aria-expanded", String(!$("toolOptions").hidden));
+  const useInline = inlineToolOptionsSpace() >= 220;
+  const opts = $("toolOptions");
+  opts.classList.toggle("inline", useInline);
+  if (useInline) {
+    opts.style.left = "";
+    opts.hidden = chromeState.compact || !canOpen;
+    $("toolbarToggle").hidden = true;
+  } else {
+    const usual = optionsOpen && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
+    opts.hidden = chromeState.compact || !(usual || textDock);
+    $("toolbarToggle").hidden = !canOpen;
+  }
+  $("toolbarToggle").setAttribute("aria-expanded", String(!opts.hidden));
   syncChoices();
-  if (!$("toolOptions").hidden) {
+  if (!opts.hidden && !useInline) {
     const anchor = document.querySelector(`#toolbar [data-tool="${tool}"]`), bar = $("toolbar").getBoundingClientRect();
     if (anchor && !matchMedia("(max-width: 700px)").matches) {
       const left = anchor.getBoundingClientRect().left - bar.left;
-      $("toolOptions").style.left = `${Math.max(8, Math.min(left, bar.width - $("toolOptions").offsetWidth - 8))}px`;
+      opts.style.left = `${Math.max(8, Math.min(left, bar.width - opts.offsetWidth - 8))}px`;
     }
   }
   textBox.syncFormat();
-  const settingsLabel = $("toolOptions").hidden ? "Show tool settings" : "Hide tool settings";
+  const settingsLabel = opts.hidden ? "Show tool settings" : "Hide tool settings";
   $("toolbarToggle").setAttribute("aria-label", settingsLabel);
   $("toolbarToggle").title = settingsLabel;
 }

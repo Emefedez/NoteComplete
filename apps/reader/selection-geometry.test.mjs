@@ -21,6 +21,8 @@ test('resizing keeps proportions by default, the opposite corner fixed',()=>{
  close(next[0],old[0]);
  assert.ok(Math.abs(a.scale[0]/a.scale[1]-1.4/.8)<1e-9,'same proportions');
  assert.ok(a.scale[0]>1.4,'grows toward the pointer');
+ const tiny=resizeAdjustment(item,2,old[0]);
+ assert.ok(Math.abs(tiny.scale[0]/tiny.scale[1]-1.4/.8)<1e-9,'same proportions even when clamped small');
 });
 test('the region eraser reaches every point of the region and barely past it',()=>{
  for(const rect of [[10,20,300,40],[0,0,50,700],[5,5,3,2],[100,100,800,600]]){

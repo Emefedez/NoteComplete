@@ -3940,6 +3940,28 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 /* The pen's three auto-shape buttons (and their caption) reach one place left, so their
    right edge lines up with the widths below. */
 #drawingOptions #snapOptions .choice-row, #drawingOptions #snapOptions::before { margin-left: -32px; }
+/* When the horizontal toolbar has spare space, dock the current tool's options and colours
+   inline between the tools and the right-hand actions instead of a floating card. */
+#toolbar > .segmented { order: 1; }
+#toolbar > .toolbar-actions { order: 3; }
+#toolOptions.inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
+#toolOptions.inline[hidden] { display: none; }
+#toolOptions.inline::-webkit-scrollbar { display: none; }
+#toolOptions.inline #drawingOptions { display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+#toolOptions.inline #drawingOptions .opt-section { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+#toolOptions.inline #drawingOptions .opt-section::before { display: none; }
+#toolOptions.inline #drawingOptions :is(#snapOptions, .opt-color, .opt-width) { border-left: 1px solid var(--line); padding-left: 8px; }
+#toolOptions.inline #drawingOptions .choice-row,
+#toolOptions.inline #drawingOptions .shape-picker { display: inline-flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 2px; }
+#toolOptions.inline #drawingOptions .choice-row[data-for="color"] { gap: 3px; padding: 2px; }
+#toolOptions.inline #drawingOptions .choice-row[data-for="color"]::after { display: none; }
+#toolOptions.inline #drawingOptions .opt-color .color-label { position: static; width: 24px; height: 24px; flex-shrink: 0; }
+#toolOptions.inline #drawingOptions #snapOptions .choice-row { margin-left: 0; }
+#toolOptions.inline #drawingOptions #shapeOptions { display: flex; align-items: center; gap: 6px; }
+#toolOptions.inline #drawingOptions #shapePrefab { flex-direction: row; align-items: center; min-width: auto; height: 30px; padding: 4px 8px; gap: 5px; }
+#toolOptions.inline #drawingOptions #shapePrefab > svg:not(.chev) { width: 16px; height: 16px; }
+#toolOptions.inline #selectionOptions fieldset { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; border: 0; padding: 0; margin: 0; }
+#toolOptions.inline .text-format { flex-wrap: nowrap; }
 /* View → Tool bar → bottom: the pages first, then the page row and the tools under them;
    the tool settings open upwards. */
 @media (min-width: 701px), (orientation: landscape) and (max-height: 500px) {
