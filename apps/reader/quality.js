@@ -17,11 +17,15 @@ export function loadQuality() {
 }
 // Fast zoom sharpening: zoomed PDF pages keep a fit-to-window raster and draw only what is on
 // screen at full resolution (app.js drawDetail), seconds sooner on phones and tablets than a
-// whole page at the zoomed size. Off by default: panning redraws that part each time it stops.
+// whole page at the zoomed size. On by default (it draws fewer pixels in all than a whole zoomed
+// page); "0" stored when turned off. Panning redraws the on-screen part each time it pauses.
 const detailKey = "notecomplete-zoom-detail-v1";
+export function zoomDetailFrom(stored) {
+  return stored === null || stored === undefined || stored === "1";
+}
 export function loadZoomDetail() {
-  try { return localStorage.getItem(detailKey) === "1"; }
-  catch { return false; }
+  try { return zoomDetailFrom(localStorage.getItem(detailKey)); }
+  catch { return true; }
 }
 export function qualitySettings(onApply) {
   const dialog = document.getElementById("qualityDialog");
@@ -50,7 +54,7 @@ export function qualitySettings(onApply) {
     detail = nextDetail;
     try {
       localStorage.setItem(storageKey, JSON.stringify(current));
-      localStorage.setItem(detailKey, detail ? "1" : "");
+      localStorage.setItem(detailKey, detail ? "1" : "0");
     } catch { /* Session settings still work without storage. */ }
     onApply(current, rasterChanged, detail);
     dialog.close();

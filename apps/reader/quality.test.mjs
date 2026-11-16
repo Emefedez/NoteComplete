@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeQuality, presets } from './quality.js';
+import { normalizeQuality, presets, zoomDetailFrom } from './quality.js';
 import { rasterTarget } from './pdf-background.js';
 
 test('quality preferences reject invalid storage and bound memory controls', () => {
@@ -40,4 +40,10 @@ test('fast zoom sharpening draws only the part on screen, at the zoomed resoluti
   // Out-of-range boxes are clamped to the page.
   const clamped = regionTarget(page, 612, [-1, -1, 2, 2], 2, balanced);
   assert.deepEqual(clamped.box, [0, 0, 1, 1]);
+});
+test('fast zoom sharpening is on unless turned off', () => {
+  assert.equal(zoomDetailFrom(null), true, 'never set: on');
+  assert.equal(zoomDetailFrom('1'), true);
+  assert.equal(zoomDetailFrom('0'), false);
+  assert.equal(zoomDetailFrom(''), false, 'turned off before it was the default');
 });
