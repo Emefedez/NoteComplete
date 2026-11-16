@@ -33,6 +33,8 @@ try {
   if (DIR) await p.screenshot({ path: DIR + 'picker.png' });
   await p.click('.prefab-card:has-text("Histogram")');
   await p.waitForSelector('.chart-dialog .ch-bars');
+  // The figure as on the page, folded under the canvas until its arrow opens it.
+  if (!(await p.locator('.chart-dialog .ch-preview-box.open').count())) await p.click('.chart-dialog .ch-fold');
   assert.ok(await p.locator('.chart-dialog .ch-preview svg').count(), 'a live preview');
   await p.fill('.chart-dialog .ch-panel input[type="text"]', 'Notas del examen');
   await p.click('.chart-dialog button.primary');

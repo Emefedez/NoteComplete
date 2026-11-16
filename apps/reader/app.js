@@ -5669,6 +5669,14 @@ $("grabAsk").onclick = async () => {
   clearGrab();
 };
 $("grabCancel").onclick = clearGrab;
+$("grabKeep").onclick = async () => {
+  if (!grabbed) return;
+  try {
+    exerciseRefs.push({ name: `Snippet, page ${grabbed.page + 1}`, src: await grabImage(), kind: "image" });
+    status("Kept: it shows beside the canvas when you fill in or solve a figure (right-click it → Fill in / Solve).");
+    clearGrab();
+  } catch (e) { status(e.message, true); }
+};
 let tapeAllLifted = false;
 $("tapeReveal").onclick = () => { tapeAllLifted = true; setTapeMode("revealed"); };
 $("tapeCover").onclick = () => { tapeAllLifted = false; setTapeMode("covered"); };
@@ -5918,12 +5926,15 @@ async function insertPrefab(p, box = null, choice = null) {
 // The editor of a prefab's figure: the diagram editor for UML and node graphs, the chart
 // editor (chart-editor.js) for process states, CPU timelines, charts and plots, and the JSON
 // one for the rest or when asked (`mode` "json"). `mode` "answer" fills an exercise in.
-async function figureEditor(spec, { editing = false, mode = "author" } = {}) {
+// Snippets kept from the Grab tool (Keep for exercises), shown while filling a figure in; for
+// this session only.
+const exerciseRefs = [];
+async function figureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
   if (spec?.type === "uml") return umlEditor(spec, editing);
-  if (mode !== "json" && editorKind(spec)) {
+  if (editorKind(spec)) {
     try {
       const { openChartEditor } = await import("./chart-editor.js");
-      return await openChartEditor(spec, { editing, mode });
+      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); } });
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
@@ -5993,7 +6004,16 @@ async function editCompound(item, mode = "author") {
   let spec = {};
   try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
   if (c.kind === "prefab") {
-    const chosen = await figureEditor(spec, { editing: true, mode });
+    // Filling in: the page the exercise is on, to read its statement beside the canvas.
+    let references = [];
+    if (mode === "answer") {
+      try {
+        const { canvas } = await pageCanvas(item.page, 1400);
+        references = [{ name: `Page ${item.page + 1}`, src: canvas.toDataURL("image/jpeg", 0.85), kind: "image" }];
+        canvas.width = canvas.height = 0;
+      } catch { /* The editor opens without it. */ }
+    }
+    const chosen = await figureEditor(spec, { editing: true, mode, references });
     if (!chosen) return;
     const frame = await compoundFrame(item);
     selection.clear();
@@ -6224,14 +6244,14 @@ function itemMenu(item, x, y, { tape = null } = {}) {
   const c = item.compound, name = c ? compoundLabel(c) : isTape ? "Tape" : ITEM_NAMES[item.kind] || "Item";
   let figure = null;
   if (c?.kind === "prefab") { try { figure = JSON.parse(c.spec || "{}"); } catch { /* Not one. */ } }
-  const chart = Boolean(editorKind(figure)), exercise = chart && Boolean(figure.exercise) && canBeExercise(figure);
+  const chart = Boolean(editorKind(figure)), solvable = chart && canBeExercise(figure), exercise = solvable && Boolean(figure.exercise);
   const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
   // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so.
   const lower = name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
     ...tapeEntries(p, tape),
     tape && "-",
-    exercise && { label: `Fill in ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
+    solvable && { label: `${exercise ? "Fill in" : "Solve"} ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
     c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
     chart && { label: "Edit its data as JSON…", icon: "note", run: () => editCompound(item, "json") },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },

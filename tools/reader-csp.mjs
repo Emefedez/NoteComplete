@@ -84,6 +84,7 @@ const sources = {
   ],
   'frame-src': [
     ["'self'", 'tabs.html shows the reader in one frame per tab (tab-host.js). The HTML document frame is srcdoc, which frame-src does not govern; <webview> on the desktop is not a frame of this page'],
+    ['blob:', 'a PDF opened beside the chart editor while filling in an exercise (chart-editor.js)'],
     ['https://accounts.google.com/gsi/', 'Google sign-in, if it shows its own interface'],
   ],
   'object-src': [["'none'", 'no plugins, <object> or <embed> anywhere']],

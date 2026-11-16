@@ -10,6 +10,7 @@ import { renderVisualSvg } from './exam-html.js';
 import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
+import { icon } from './icons.js';
 import { STATES, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -24,6 +25,16 @@ const svgEl = (tag, attrs = {}) => {
   return node;
 };
 const clone = (v) => JSON.parse(JSON.stringify(v));
+// A button with an icon, and its words beside it unless `iconOnly`.
+const button = (name, label, title, { iconOnly = false, className = '' } = {}) => {
+  const b = make('button', { type: 'button', title, className: `${className} ${iconOnly ? 'ch-icon' : 'ch-labeled'}`.trim() }, icon(name), !iconOnly && make('span', { textContent: label }));
+  b.setAttribute('aria-label', label);
+  return b;
+};
+// The figure as it will look on the page: shown or folded away, and how tall (this device).
+const PREVIEW_KEY = 'notecomplete.chart.preview';
+const previewPrefs = () => { try { return { open: false, height: 220, ...JSON.parse(localStorage.getItem(PREVIEW_KEY) || '{}') }; } catch { return { open: false, height: 220 }; } };
+const savePreview = (prefs) => { try { localStorage.setItem(PREVIEW_KEY, JSON.stringify(prefs)); } catch { /* Not kept. */ } };
 const fmt = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000));
 export const STATE_NAMES = { run: 'Running', ready: 'Ready', blocked: 'Blocked' };
 const STATE_COLORS = { run: '#2563eb', ready: '#16a34a', blocked: '#dc2626' };
@@ -55,7 +66,10 @@ function ensureStyles() {
 // Mounts the editor in `root` for `spec` (an exam visual spec of a kind editorKind knows).
 // `mode`: 'author' edits the figure (the solution of an exercise); 'answer' fills an exercise
 // in. Returns { spec(), set(spec), mode(), destroy() }.
-export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [] } = {}) {
+// `references`: [{ name, src, kind: 'image' | 'pdf' }] shown beside the canvas while filling
+// in (the exercise's page, snippets kept from the Grab tool); `onReference(ref)` hears of one
+// added here, so it can be offered again.
+export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null } = {}) {
   ensureStyles();
   let base, kind, grid, bars, ans, mode, brush, check = null, showSolution = false;
   const undo = [], redo = [];
@@ -67,7 +81,10 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     root.dataset.kind = kind || '';
     grid = kind === 'states' || kind === 'timeline' ? gridOf(base) : null;
     bars = kind === 'bars' ? barsOf(base) : null;
-    mode = m === 'answer' && base.exercise && canBeExercise(base) ? 'answer' : 'author';
+    // Filling in a figure that is not an exercise yet makes it one: the figure is the
+    // solution, and the answer starts empty.
+    if (m === 'answer' && !base.exercise && canBeExercise(base)) base.exercise = true;
+    mode = m === 'json' ? 'json' : m === 'answer' && base.exercise && canBeExercise(base) ? 'answer' : 'author';
     ans = null;
     if (base.exercise && canBeExercise(base)) ans = grid ? answerGrid(base) : barsOf(base.answer || emptyAnswer(base));
     brush = kind === 'states' ? 'run' : kind === 'timeline' ? (labelsOf(grid)[0] || 'P1') : null;
@@ -102,31 +119,93 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   // --- Layout --------------------------------------------------------------------------
   root.classList.add('chart-editor');
   root.replaceChildren();
-  const undoBtn = make('button', { type: 'button', textContent: 'Undo', title: 'Undo (Ctrl Z)' });
-  const redoBtn = make('button', { type: 'button', textContent: 'Redo', title: 'Redo (Ctrl Y)' });
+  const undoBtn = button('undo', 'Undo', 'Undo (Ctrl Z)', { iconOnly: true });
+  const redoBtn = button('redo', 'Redo', 'Redo (Ctrl Y)', { iconOnly: true });
   const modeBox = make('div', { className: 'ch-mode', role: 'group' });
-  modeBox.setAttribute('aria-label', 'What the canvas edits');
-  const authorBtn = make('button', { type: 'button', textContent: 'Editor', title: 'Edit the figure itself, which is what the answer is checked against' });
-  const answerBtn = make('button', { type: 'button', textContent: 'Fill in', title: 'Fill the exercise in, as a student: the rows and times stay as they are' });
-  modeBox.append(authorBtn, answerBtn);
-  const checkBtn = make('button', { type: 'button', textContent: 'Check', title: 'Mark what is wrong in the answer' });
-  const solBtn = make('button', { type: 'button', textContent: 'Show solution', title: 'Draw the solution under the answer' });
-  const clearBtn = make('button', { type: 'button', textContent: 'Clear answer', title: 'Start the answer again' });
+  modeBox.setAttribute('aria-label', 'What the editor shows');
+  const authorBtn = button('draw', 'Editor', 'Edit the figure itself (for an exercise, the solution the answer is checked against)');
+  const answerBtn = button('select', 'Fill in', 'Fill the exercise in, as a student: the rows and times stay as they are');
+  const jsonBtn = button('hash', 'JSON', 'Edit the figure\'s data as JSON');
+  modeBox.append(authorBtn, answerBtn, jsonBtn);
+  const checkBtn = button('check', 'Check', 'Mark what is wrong in the answer');
+  const solBtn = button('eye', 'Solution', 'Draw the solution under the answer');
+  const clearBtn = button('trash', 'Clear', 'Start the answer again');
   const spacer = make('span', { className: 'ch-spacer' });
-  const cancelBtn = onCancel && make('button', { type: 'button', textContent: 'Cancel' });
-  const applyBtn = onApply && make('button', { type: 'button', className: 'primary', textContent: applyLabel });
+  const cancelBtn = onCancel && button('close', 'Cancel', 'Close without changing the note (Esc)');
+  const applyBtn = onApply && button('check', applyLabel, `${applyLabel} on the note`, { className: 'primary' });
   const bar = make('div', { className: 'ch-bar' }, ...extraBar, undoBtn, redoBtn, modeBox, checkBtn, solBtn, clearBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'ch-palette', role: 'toolbar' });
   palette.setAttribute('aria-label', 'Brushes');
   const canvas = make('div', { className: 'ch-canvas', tabIndex: 0 });
+  const jsonArea = make('textarea', { className: 'ch-json', spellcheck: false, hidden: true });
+  jsonArea.setAttribute('aria-label', 'The figure as JSON');
   const preview = make('div', { className: 'ch-preview' });
+  // The figure as on the page: a panel under the canvas, folded with its arrow and as tall
+  // as its top edge is dragged.
+  const prefs = previewPrefs();
+  const fold = make('button', { type: 'button', className: 'ch-fold', title: 'Show or hide the figure as it will look on the page' }, icon('arrowUp'), make('span', { textContent: 'On the page' }));
+  const grip = make('div', { className: 'ch-grip-bar', title: 'Drag to make it taller or shorter' });
+  const previewBox = make('div', { className: 'ch-preview-box' }, grip, fold, preview);
   const panel = make('div', { className: 'ch-panel' });
+  // What to look at while filling in: the exercise's page, kept snippets, a picture or PDF.
+  const refs = [...references];
+  const refList = make('div', { className: 'ch-refs' });
+  const refFile = make('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true });
+  const refAdd = button('image', 'Picture or PDF…', 'Open a picture or a PDF to look at while filling in (or paste a snippet: Ctrl V)');
+  refAdd.onclick = () => refFile.click();
+  const addRef = (ref) => { refs.push(ref); onReference?.(ref); buildRefs(); };
+  refFile.onchange = () => {
+    for (const file of refFile.files) addRef({ name: file.name, src: URL.createObjectURL(file), kind: file.type === 'application/pdf' ? 'pdf' : 'image' });
+    refFile.value = '';
+  };
+  function buildRefs() {
+    refList.replaceChildren(...refs.map((r, i) => {
+      const view = r.kind === 'pdf' ? make('iframe', { src: r.src, title: r.name, className: 'ch-ref-pdf' }) : make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
+      const remove = button('close', 'Remove', `Take ${r.name} away`, { iconOnly: true, className: 'ch-mini' });
+      remove.onclick = () => { refs.splice(i, 1); buildRefs(); };
+      return make('figure', { className: 'ch-ref' }, make('figcaption', {}, make('span', { textContent: r.name }), remove), view);
+    }));
+    if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: 'Nothing to look at yet: open a picture or PDF, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).' }));
+  }
+  const onPaste = (e) => {
+    if (mode !== 'answer' || !root.isConnected) return;
+    const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    addRef({ name: 'Pasted snippet', src: URL.createObjectURL(file), kind: 'image' });
+  };
+  document.addEventListener('paste', onPaste, true);
   const status = make('div', { className: 'ch-status', role: 'status' });
-  root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, make('div', { className: 'ch-preview-box' }, make('h4', { textContent: 'On the page' }), preview)), panel), status);
+  root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonArea, previewBox), panel), status);
+  function layoutPreview() {
+    // A plot has no canvas: its figure is the view, always shown.
+    const open = kind === 'plot' || prefs.open;
+    previewBox.classList.toggle('open', open);
+    previewBox.style.height = open && kind !== 'plot' ? `${Math.max(90, prefs.height)}px` : '';
+    fold.replaceChild(icon(open ? 'arrowDown' : 'arrowUp'), fold.firstChild);
+    fold.setAttribute('aria-expanded', String(open));
+    fold.hidden = grip.hidden = kind === 'plot';
+  }
+  fold.onclick = () => { prefs.open = !prefs.open; savePreview(prefs); layoutPreview(); draw(); };
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const y0 = e.clientY, h0 = previewBox.getBoundingClientRect().height;
+    if (!prefs.open) { prefs.open = true; layoutPreview(); }
+    try { grip.setPointerCapture(e.pointerId); } catch { /* A synthetic event. */ }
+    const max = () => root.querySelector('.ch-center').getBoundingClientRect().height - 80;
+    const move = (ev) => { prefs.height = Math.round(Math.max(90, Math.min(max(), h0 + (y0 - ev.clientY)))); layoutPreview(); };
+    const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); savePreview(prefs); draw(); };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
   const say = (text, error = false) => { status.textContent = text; status.classList.toggle('error', error); };
 
-  function changed({ panel: rebuild = true, palette: repaint = false } = {}) {
+  function changed({ panel: rebuild = true, palette: repaint = false, json = true } = {}) {
     if (repaint) buildPalette();
+    if (json && mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
     draw();
     if (rebuild) buildPanel();
     updateButtons();
@@ -136,23 +215,45 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     undoBtn.disabled = !undo.length;
     redoBtn.disabled = !redo.length;
     const ex = Boolean(base.exercise && canBeExercise(base));
-    modeBox.hidden = !ex;
+    answerBtn.hidden = !ex;
     authorBtn.setAttribute('aria-pressed', String(mode === 'author'));
     answerBtn.setAttribute('aria-pressed', String(mode === 'answer'));
+    jsonBtn.setAttribute('aria-pressed', String(mode === 'json'));
     checkBtn.hidden = solBtn.hidden = clearBtn.hidden = mode !== 'answer';
-    solBtn.textContent = showSolution ? 'Hide solution' : 'Show solution';
+    solBtn.replaceChild(icon(showSolution ? 'eyeOff' : 'eye'), solBtn.firstChild);
+    solBtn.title = showSolution ? 'Hide the solution under the answer' : 'Draw the solution under the answer';
     solBtn.setAttribute('aria-pressed', String(showSolution));
+    if (applyBtn) applyBtn.disabled = Boolean(jsonError);
     root.dataset.mode = mode;
   }
   function setMode(m) {
+    if (mode === 'json' && jsonError) return say('Fix the JSON first: it is not a figure this editor knows.', true);
     mode = m;
     check = null;
     showSolution = false;
-    say(m === 'answer' ? 'Fill in: paint the answer on the rows; Check marks what is wrong.' : 'Editor: what you draw here is the figure, and the answer is checked against it.');
+    say(m === 'answer' ? 'Fill in: paint the answer on the rows; Check marks what is wrong.' : m === 'json' ? 'JSON: the figure\'s data. Changes show as soon as they are valid.' : 'Editor: what you draw here is the figure, and the answer is checked against it.');
+    if (m === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
     changed({ palette: true });
+    if (m === 'json') jsonArea.focus();
   }
   authorBtn.onclick = () => mode !== 'author' && setMode('author');
   answerBtn.onclick = () => mode !== 'answer' && setMode('answer');
+  jsonBtn.onclick = () => mode !== 'json' && setMode('json');
+  // JSON: each valid change is the figure (one undo step per pause in typing).
+  let jsonError = '';
+  jsonArea.addEventListener('input', () => {
+    let spec = null;
+    try { spec = JSON.parse(jsonArea.value); } catch (e) { jsonError = e.message; }
+    if (spec) jsonError = editorKind(spec) ? '' : 'This JSON is not a process-state diagram, CPU timeline, chart or plot.';
+    jsonArea.classList.toggle('invalid', Boolean(jsonError));
+    if (jsonError) { say(jsonError, true); updateButtons(); return; }
+    snapshot('json');
+    const keepBrush = brush;
+    load(spec, 'json');
+    if (kind === 'timeline' || kind === 'states') brush = keepBrush;
+    say('JSON: the figure\'s data. Changes show as soon as they are valid.');
+    changed({ panel: true, palette: true, json: false });
+  });
   checkBtn.onclick = () => {
     check = checkAnswer(current());
     say(check.done ? `All right: ${check.right} of ${check.total}.` : `${check.right} of ${check.total} right; the ones marked in red are not.`, !check.done);
@@ -168,12 +269,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   undoBtn.onclick = () => { if (!undo.length) return; redo.push(JSON.stringify({ spec: current(), mode })); restore(undo.pop()); changed({ palette: true }); };
   redoBtn.onclick = () => { if (!redo.length) return; undo.push(JSON.stringify({ spec: current(), mode })); restore(redo.pop()); changed({ palette: true }); };
   cancelBtn && (cancelBtn.onclick = () => onCancel());
-  applyBtn && (applyBtn.onclick = () => onApply(current()));
+  applyBtn && (applyBtn.onclick = () => !jsonError && onApply(current()));
   function keys(e) {
     const t = e.target;
     // In the editor, or with nothing in it focused (a brush just dragged, the dialog itself).
     if (!root.isConnected || !(t instanceof Node) || !(root.contains(t) || t.contains(root)) || e.defaultPrevented) return;
     const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
+    if (mode === 'json' && t === jsonArea) return;
     if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? redoBtn : undoBtn).click(); }
     else if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); redoBtn.click(); }
     else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
@@ -249,7 +351,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     } else {
       palette.append(make('p', { className: 'ch-hint', textContent: 'Curves, points and shaded areas are on the right; the figure follows.' }));
     }
-    palette.hidden = kind === 'plot';
+    palette.hidden = kind === 'plot' || mode === 'json';
   }
   // Shift S: the brushes in a ring at the pointer (editor-quick.js).
   const ring = editorQuickMenu(root, {
@@ -452,10 +554,14 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   }
 
   function draw() {
-    if (grid) drawGrid();
+    if (mode === 'json') { /* The text is the view. */ }
+    else if (grid) drawGrid();
     else if (bars) drawBars();
     else canvas.replaceChildren(make('p', { className: 'ch-hint', textContent: 'An exam plot is drawn from its curves, points and areas: change them on the right.' }));
-    canvas.hidden = kind === 'plot';
+    canvas.hidden = kind === 'plot' || mode === 'json';
+    jsonArea.hidden = mode !== 'json';
+    layoutPreview();
+    if (!previewBox.classList.contains('open')) { preview.replaceChildren(); return; }
     const shown = displaySpec(current());
     const out = renderVisualSvg(shown, { forMcp: false });
     if (out?.svg) preview.innerHTML = out.svg; else preview.replaceChildren(make('p', { className: 'ch-hint error', textContent: 'Nothing to draw yet.' }));
@@ -479,15 +585,16 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     return make('label', { className: 'ch-check', title }, input, ` ${label}`);
   }
   const edit = (key, fn, opts) => (v) => { snapshot(key); fn(v); changed(opts); };
-  function iconBtn(label, title, onclick) { return make('button', { type: 'button', className: 'ch-mini', textContent: label, title, onclick }); }
+  function iconBtn(name, title, onclick) { const b = button(name, title, title, { iconOnly: true, className: 'ch-mini' }); b.onclick = onclick; return b; }
 
   function buildPanel() {
     const out = [];
-    const locked = mode === 'answer';
+    const locked = mode !== 'author';
     out.push(make('h3', { textContent: chartName(base) }));
     out.push(field('Title', text(base.title, edit('title', (v) => { base.title = v; }, { panel: false }), { disabled: locked })));
     if (locked) {
-      out.push(make('p', { className: 'ch-hint', textContent: 'Filling in: the rows, times and names are the exercise\'s. Switch to Editor to change them.' }));
+      out.push(make('p', { className: 'ch-hint', textContent: mode === 'json' ? 'Editing the JSON: the fields come back in Editor.' : 'Filling in: the rows, times and names are the exercise\'s. Switch to Editor to change them.' }));
+      if (mode === 'answer') { buildRefs(); out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList); }
       panel.replaceChildren(...out);
       return;
     }
@@ -534,11 +641,16 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         done.onchange = edit(`done-${i}`, () => { r.done = done.checked; }, { panel: false });
         parts.push(make('label', { className: 'ch-check', title: 'Ends: * after its last stretch' }, done, '*'));
       }
-      parts.push(iconBtn('↑', 'Move up', () => { if (!i) return; snapshot(); for (const g of [grid, ans]) if (g) [g.rows[i - 1], g.rows[i]] = [g.rows[i], g.rows[i - 1]]; changed(); }));
-      parts.push(iconBtn('×', 'Remove', () => { if (grid.rows.length < 2) return; snapshot(); for (const g of [grid, ans]) g?.rows.splice(i, 1); changed({ palette: true }); }));
+      const swap = (a, b) => { snapshot(); for (const g of [grid, ans]) if (g) [g.rows[a], g.rows[b]] = [g.rows[b], g.rows[a]]; changed(); };
+      const up = iconBtn('arrowUp', 'Move up', () => i && swap(i - 1, i));
+      const down = iconBtn('arrowDown', 'Move down', () => i < grid.rows.length - 1 && swap(i, i + 1));
+      up.disabled = !i;
+      down.disabled = i === grid.rows.length - 1;
+      parts.push(up, down);
+      parts.push(iconBtn('trash', 'Remove', () => { if (grid.rows.length < 2) return; snapshot(); for (const g of [grid, ans]) g?.rows.splice(i, 1); changed({ palette: true }); }));
       out.push(make('div', { className: 'ch-rowedit' }, ...parts));
     });
-    out.push(make('button', { type: 'button', textContent: kind === 'states' ? 'Add process' : 'Add row', onclick: () => {
+    out.push(Object.assign(button('plus', kind === 'states' ? 'Add process' : 'Add row', kind === 'states' ? 'Add a process (a row)' : 'Add a row'), { onclick: () => {
       snapshot();
       const n = grid.rows[0]?.cells.length || Math.round((grid.tEnd - grid.tStart) / grid.cell);
       const names = grid.rows.map((r) => r.label);
@@ -566,9 +678,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       out.push(make('div', { className: 'ch-rowedit' },
         text(b.label, edit(`bl-${i}`, (v) => { b.label = v; if (ans?.[i]) ans[i].label = v; }, { panel: false }), { 'aria-label': 'Name', className: 'ch-name' }),
         number(b.value, edit(`bv-${i}`, (v) => { b.value = v; }, { panel: false }), { 'aria-label': 'Value', className: 'ch-num' }),
-        iconBtn('×', 'Remove', () => { if (bars.length < 2) return; snapshot(); bars.splice(i, 1); ans?.splice(i, 1); changed(); })));
+        iconBtn('trash', 'Remove', () => { if (bars.length < 2) return; snapshot(); bars.splice(i, 1); ans?.splice(i, 1); changed(); })));
     });
-    out.push(make('button', { type: 'button', textContent: 'Add bar', onclick: () => {
+    out.push(Object.assign(button('plus', 'Add bar', 'Add a bar'), { onclick: () => {
       snapshot();
       const last = bars[bars.length - 1]?.label || '';
       const m = last.match(/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/);
@@ -597,9 +709,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
           if (type === 'check') { const c = make('input', { type: 'checkbox', checked: Boolean(it[f]), title: label }); c.onchange = edit(`${key}-${i}-${f}`, () => { it[f] = c.checked; }, { panel: false }); return make('label', { className: 'ch-check', title: label }, c, label); }
           const set = edit(`${key}-${i}-${f}`, (v) => { it[f] = v; }, { panel: false });
           return type === 'number' ? number(it[f], set, { 'aria-label': label, placeholder: label, className: 'ch-num' }) : text(it[f], set, { 'aria-label': label, placeholder: label, className: f === 'expr' ? 'ch-name' : 'ch-short' });
-        }), iconBtn('×', 'Remove', () => { snapshot(); items.splice(i, 1); changed(); })));
+        }), iconBtn('trash', 'Remove', () => { snapshot(); items.splice(i, 1); changed(); })));
       });
-      out.push(make('button', { type: 'button', textContent: addLabel, onclick: () => { snapshot(); items.push(blank()); changed(); } }));
+      out.push(Object.assign(button('plus', addLabel, addLabel), { onclick: () => { snapshot(); items.push(blank()); changed(); } }));
     };
     list('Curves (functions of x: x^2 - 1, sin(x), 2*x + 1)', 'functions', [['expr', 'f(x)', 'text'], ['label', 'label', 'text'], ['dashed', 'dashed', 'check']], () => ({ expr: 'x', label: '' }), 'Add curve');
     list('Points', 'points', [['x', 'x', 'number'], ['y', 'y', 'number'], ['label', 'label', 'text'], ['open', 'open', 'check']], () => ({ x: 0, y: 0, label: '' }), 'Add point');
@@ -609,6 +721,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 
   // --- Start -------------------------------------------------------------------------------
   load(initial);
+  if (mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
   buildPalette();
   buildPanel();
   updateButtons();
@@ -616,18 +729,19 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   resize.observe(canvas);
   draw();
   // Keys (1–9, Shift S, Ctrl Z) go to the editor from the start.
-  canvas.focus({ preventScroll: true });
+  (mode === 'json' ? jsonArea : canvas).focus({ preventScroll: true });
+  if (mode === 'json') say('JSON: the figure\'s data. Changes show as soon as they are valid.');
   if (mode === 'answer') say('Fill in: choose a brush and drag over the cells; Check marks what is wrong.');
   return {
     spec: current,
     mode: () => mode,
     set(spec, m = 'author') { snapshot(); load(spec, m); buildPalette(); changed(); },
-    destroy() { ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
+    destroy() { document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
   };
 }
 
 // The editor over the whole window, for a figure on a note. Resolves with the spec, or null.
-export function openChartEditor(spec, { editing = false, mode = 'author' } = {}) {
+export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'chart-dialog' });
@@ -641,6 +755,6 @@ export function openChartEditor(spec, { editing = false, mode = 'author' } = {})
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     dialog.showModal();
-    editor = mountChartEditor(host, spec, { mode, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
+    editor = mountChartEditor(host, spec, { mode, references, onReference, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
   });
 }
