@@ -3938,7 +3938,6 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 /* The pen's three auto-shape buttons (and their caption) reach one place left, so their
    right edge lines up with the widths below. */
 #drawingOptions #snapOptions .choice-row, #drawingOptions #snapOptions::before { margin-left: -32px; }
-<<<<<<< HEAD
 /* View → Tool bar → bottom: the pages first, then the page row and the tools under them;
    the tool settings open upwards. */
 @media (min-width: 701px), (orientation: landscape) and (max-height: 500px) {
@@ -3960,5 +3959,3 @@ body.menubar-autohide header.chrome.command-bar { position: fixed; top: 0; left:
 body.menubar-autohide { box-sizing: border-box; padding-top: 6px; }
 body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible), :has(details[open]), :has([aria-expanded="true"])) { transform: none; transition-delay: 0s; box-shadow: var(--shadow-pop); }
 @media (prefers-reduced-motion: reduce) { body.menubar-autohide header.chrome.command-bar { transition: none; } }
-=======
->>>>>>> origin/main
