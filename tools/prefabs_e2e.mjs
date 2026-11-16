@@ -48,7 +48,16 @@ try {
   const entries = await p.locator('.context-menu button span').allTextContents();
   assert.ok(entries.includes('Edit histogram…'), `edit entry: ${entries}`);
   assert.ok(entries.includes('Delete'), `delete entry: ${entries}`);
-  assert.equal(await p.locator('.context-menu button svg').count(), entries.length, 'every entry has an icon');
+  assert.equal(await p.locator('.context-menu button > :first-child:is(svg, i)').count(), entries.length, 'every entry has an icon');
+  assert.ok(entries.includes('Export'), `export entry: ${entries}`);
+  await p.hover('.context-menu button:has-text("Export")');
+  await p.waitForSelector('.context-submenu');
+  const exportEntries = await p.locator('.context-submenu button span').allTextContents();
+  assert.ok(exportEntries.includes('Download PNG') && exportEntries.includes('Send by QR…'), `export menu: ${exportEntries}`);
+  const [png] = await Promise.all([p.waitForEvent('download'), p.click('.context-submenu button:has-text("Download PNG")')]);
+  assert.match(png.suggestedFilename(), /Histogram\.png$/);
+  await p.mouse.click(...mid, { button: 'right' });
+  await p.waitForSelector('.context-menu');
   if (DIR) await p.screenshot({ path: DIR + 'menu.png' });
   await p.click('.context-menu button:has-text("Edit histogram")');
   await p.waitForSelector('.prefab-dialog');
@@ -84,9 +93,73 @@ try {
   await p.mouse.click(sheet.x + sheet.width * 0.5, Math.min(mid[1] + img.height / 2 + 120, 860), { button: 'right' });
   await p.waitForSelector('.context-menu');
   const pageEntries = await p.locator('.context-menu button span').allTextContents();
-  assert.ok(pageEntries.includes('Insert prefab here…') && pageEntries.includes('Quick menu'), `page menu: ${pageEntries}`);
+  for (const e of ['Insert prefab here…', 'Insert shape', 'Type text here', 'Insert image…', 'Export this page', 'Undo', 'Customize this menu…']) assert.ok(pageEntries.includes(e), `page menu: ${pageEntries}`);
+  assert.ok(!pageEntries.includes('Quick menu') && !pageEntries.includes('Insert UML diagram here…'), `page menu: ${pageEntries}`);
+  // Resting on Insert prefab here…: the ones used last.
+  await p.hover('.context-menu:not(.context-submenu) button:has-text("Insert prefab here")');
+  await p.waitForSelector('.context-submenu');
+  assert.ok((await p.locator('.context-submenu button span').allTextContents()).includes('Histogram'), 'recently used');
+  // Insert shape → Rectangle: one more item, where it was asked.
+  const before = await items();
+  await p.hover('.context-menu:not(.context-submenu) button:has-text("Insert shape")');
+  await p.click('.context-submenu button:has-text("Rectangle")');
+  await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render :is([data-item^="new:"], [data-item^="image:"])').length === n + 1, before);
+  // Its menu: colour, thickness and opacity, changed in place.
+  const rectBox = await p.locator('.sheet[data-page="0"] .render [data-item^="new:"]').last().boundingBox();
+  await p.mouse.click(rectBox.x + 2, rectBox.y + rectBox.height / 2, { button: 'right' });
+  await p.waitForSelector('.context-menu');
+  const shapeEntries = await p.locator('.context-menu button span').allTextContents();
+  for (const e of ['Colour', 'Thickness', 'Opacity', 'Export']) assert.ok(shapeEntries.includes(e), `shape menu: ${shapeEntries}`);
+  await p.hover('.context-menu:not(.context-submenu) button:has-text("Colour")');
+  await p.waitForSelector('.context-submenu .context-swatch');
+  if (DIR) await p.screenshot({ path: DIR + 'colour.png' });
+  await p.click('.context-submenu button:has-text("Red")');
+  await p.waitForFunction(() => [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"]')].pop()?.innerHTML.toLowerCase().includes('#d13b2f') || [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"] [stroke]')].some((e) => /209, ?59, ?47|d13b2f/i.test(e.getAttribute('stroke'))), null, { timeout: 5000 });
+  await p.keyboard.press('Control+z');
+  await sleep(400);
   await p.keyboard.press('Escape');
-  console.log('· right-click on the page: insert here, quick menu, undo');
+  await p.keyboard.press('Control+z');
+  await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render :is([data-item^="new:"], [data-item^="image:"])').length === n, before);
+  // Customize: add the quick menu and a prefab of one's own; kept.
+  await p.mouse.click(sheet.x + sheet.width * 0.5, Math.min(mid[1] + img.height / 2 + 120, 860), { button: 'right' });
+  await p.click('.context-menu button:has-text("Customize this menu")');
+  await p.waitForSelector('.menu-config');
+  await p.selectOption('.menu-config select', 'quick');
+  await p.click('.menu-config button:has-text("Add")');
+  await p.selectOption('.menu-config select', 'prefab:timeline');
+  await p.click('.menu-config button:has-text("Add")');
+  await p.click('.menu-config li[data-id="export"] button[aria-label="Remove"]');
+  await p.click('.menu-config button.primary');
+  await p.mouse.click(sheet.x + sheet.width * 0.5, Math.min(mid[1] + img.height / 2 + 120, 860), { button: 'right' });
+  await p.waitForSelector('.context-menu');
+  const mine = await p.locator('.context-menu button span').allTextContents();
+  assert.ok(mine.includes('Quick menu') && !mine.includes('Export this page') && mine.some((e) => /^Insert CPU/.test(e)), `customized: ${mine}`);
+  await p.keyboard.press('Escape');
+  await p.evaluate(() => localStorage.removeItem('notecomplete-page-menu'));
+  console.log('· right-click on the page: insert prefab (recent ones), shape, text, image, export; customizable');
+
+  // 4b. Resized with Select: drawn again at the new size (a new picture, not stretched), still
+  // selected, in one undo step.
+  await p.mouse.click(...mid, { button: 'right' });
+  await p.click('.context-menu button:has-text("Move, resize or rotate")');
+  await p.waitForSelector('.selection-overlay [data-selection-handle="2"]');
+  const imageNow = () => p.evaluate(() => { const i = document.querySelector('.sheet[data-page="0"] .render [data-item^="image:"] image'); const r = i.getBoundingClientRect(); return { href: i.getAttribute('href')?.slice(0, 80) + i.getAttribute('href')?.length, w: r.width, h: r.height }; });
+  const old = await imageNow();
+  const corner = await p.locator('[data-selection-handle="2"]').boundingBox();
+  await p.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(corner.x + corner.width / 2 + 90, corner.y + corner.height / 2 + 90, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForFunction((h) => { const i = document.querySelector('.sheet[data-page="0"] .render [data-item^="image:"] image'); return i && i.getAttribute('href')?.slice(0, 80) + i.getAttribute('href')?.length !== h; }, old.href, { timeout: 10000 });
+  const grown = await imageNow();
+  assert.ok(grown.w > old.w + 40, `bigger: ${old.w} → ${grown.w}`);
+  assert.ok(Math.abs(grown.w / grown.h - old.w / old.h) < 0.03, `same proportions: ${old.w / old.h} vs ${grown.w / grown.h}`);
+  assert.equal(await items(), 2, 'redrawn in place, not added');
+  await p.waitForSelector('.selection-overlay');
+  await p.keyboard.press('Control+z');
+  await p.waitForFunction((w) => Math.abs(document.querySelector('.sheet[data-page="0"] .render [data-item^="image:"] image').getBoundingClientRect().width - w) < 2, old.w);
+  await p.keyboard.press('Escape');
+  console.log('· a resized prefab is drawn again at its new size, in one undo step');
 
   // 5. Shift + right-click: removed at once, as right-click did before.
   await p.keyboard.down('Shift');

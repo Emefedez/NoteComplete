@@ -3,12 +3,13 @@
 // sideways, and a tab dragged out of the strip opens in a window of its own.
 // A single tab is shown as a tab too: the bar never switches to a centred title.
 // (Without a tab bridge there are no tabs and #title stays.) Narrow windows, where the
-// strip has no room, show the number of tabs instead; it opens a list of them.
+// strip has no room, show the number of tabs instead; it opens a list of them. A right-click
+// on a tab opens its menu (onMenu).
 import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
 
-export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = null } = {}) {
+export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = null, onMenu = null } = {}) {
   if (!bridge) return { update() {} };
   const strip = $('tabStrip');
   let tabs = [], wasActive = null;
@@ -39,6 +40,8 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = 
       el.append(label, close);
       el.onclick = () => (tab.current ? onCurrent?.() : bridge.activate(tab.id));
       el.onauxclick = event => event.button === 1 && bridge.close(tab.id);
+      // Right-click: the tab's menu (save, export, share; switch, close).
+      el.oncontextmenu = event => { if (!onMenu) return; event.preventDefault(); onMenu(tab, event.clientX, event.clientY); };
       return el;
     }) : [];
     const add = document.createElement('button');

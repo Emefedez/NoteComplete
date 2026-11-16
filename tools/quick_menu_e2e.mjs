@@ -86,8 +86,9 @@ try {
   assert.equal(await p.inputValue('#color'), '#123456');
   await p.keyboard.press('Escape');
   console.log('· every tool’s colours on top and sizes below; colours can be moved and changed');
-  // A right-click opens the menu at the pointer (its Quick menu entry opens this one), and
-  // removes nothing.
+  // A right-click opens the menu at the pointer, and removes nothing. The quick menu is not in
+  // it unless added with Customize this menu… (as here).
+  await p.evaluate(() => localStorage.setItem('notecomplete-page-menu', JSON.stringify(['prefab', 'quick', 'undo'])));
   const kept = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
   // On an empty part of the page (an item has its own menu instead).
   for (const [dx, dy] of [[300, 300], [40, 40], [s.width - 40, 40], [40, 600]]) {
@@ -100,7 +101,8 @@ try {
   await p.waitForSelector('.quick-menu');
   await p.keyboard.press('Escape');
   assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length), kept);
-  console.log('· right-click: the menu at the pointer, with the quick menu in it');
+  await p.evaluate(() => localStorage.removeItem('notecomplete-page-menu'));
+  console.log('· right-click: the menu at the pointer, with the quick menu when added to it');
   await p.evaluate(() => document.querySelector('[data-tool=select]').click());
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
   await p.keyboard.press('Shift+S');

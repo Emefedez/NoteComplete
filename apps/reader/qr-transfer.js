@@ -358,6 +358,7 @@ export class QrReceiver {
 
 export function describeQrEnvelope(envelope) {
   if (envelope?.kind === 'note') return envelope.name ? `Note “${envelope.name}”` : 'note file';
+  if (envelope?.kind === 'file') return envelope.name ? `“${envelope.name}”` : 'file';
   if (envelope?.kind === 'anki') return `Anki deck “${envelope.name || 'Study'}”`;
   if (envelope?.kind === 'study' && envelope.pack) {
     const { decks = [], quizzes = [], notes = '' } = envelope.pack;

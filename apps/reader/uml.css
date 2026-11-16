@@ -49,6 +49,7 @@
 .uml-page .context-menu button.danger { color: #c2410c; }
 .uml-page .context-menu button svg { flex: none; width: 17px; height: 17px; }
 .uml-page .context-menu button span { flex: 1; }
+.uml-page .context-menu .context-chevron { width: 14px; height: 14px; opacity: .55; }
 .uml-page .context-menu kbd { font-size: 11px; color: var(--muted, #626b76); }
 @media (prefers-color-scheme: dark) { .uml-page .context-menu { --line: #3b4048; --surface: #24272c; --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff; } }
 .uml-palette { overflow: auto; padding: 8px; border-right: 1px solid var(--u-line); display: flex; flex-direction: column; gap: 3px; }

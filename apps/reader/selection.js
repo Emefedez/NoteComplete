@@ -14,8 +14,8 @@ function scaledWidth(item,before,scale){
  return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
 }
 export class SelectionController {
- constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu}){
-  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu});this.token=0;this.item=null;this.active=null;
+ constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw}){
+  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw});this.token=0;this.item=null;this.active=null;
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
@@ -90,6 +90,9 @@ export class SelectionController {
   const item=this.item;if(!item)return;
   $('selectionFields').disabled=true;
   try{
+   // A graph, table or prefab made bigger or smaller is drawn again at its new size (sharp, not
+   // stretched), in one undo step; turned, its parts turn as they are.
+   if(item.compound&&this.redraw&&!adjustment.rotation&&adjustment.scale.every(s=>s>0)&&(adjustment.scale[0]!==1||adjustment.scale[1]!==1)&&await this.redraw(item,adjustment))return;
    if(item.kind==='group'){
     const delta=multiply(matrix(item,adjustment),inverse(matrix(item)));
     // One undo step for the whole group: every move after the first one made is joined to it.
