@@ -9,7 +9,7 @@ import { jsonFrom, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationProm
 import { modelPicker } from './model-picker.js';
 import { compactDialect, runAI } from './small-model.js';
 import { createSourcePicker } from './source-picker.js';
-import { resolveSources, formatSourceBundle } from './source-extract.js';
+import { resolveSources, formatSourceBundle, collectVisualCandidates } from './source-extract.js';
 import { PROBLEM_TYPES, FOCUS_MODES, ensureExamMathRenderer, examPrompt, cleanExamData, buildPaginatedExamHtml } from './exam-html.js';
 import { renderExamPdfAndTapes } from './exam-pdf.js';
 import { pdfPages, insertAt, UNITS_PER_POINT } from './insert-pages.js';
@@ -308,6 +308,28 @@ export function buildExpandGuidance({ existingSummary = '', instructions = '', k
 }
 
 /**
+ * Detects image-only (textless / scanned) sources so Expand with AI can warn the user
+ * without blocking vision-capable models (or letting the user proceed anyway).
+ * @param {Array<object>} resolved
+ * @param {{ vision?: boolean, modelLabel?: string }} opts
+ * @returns {{ hasImageOnly: boolean, vision: boolean, names: string[], message: string }}
+ */
+export function classifyImageOnlySources(resolved = [], { vision = true, modelLabel = '' } = {}) {
+  const imageOnly = (resolved || []).filter((r) => {
+    const hasText = Boolean(String(r?.text || '').trim());
+    const hasVisual = Boolean(r?.images?.length || r?.figurePages?.length || r?.pageCount);
+    return !hasText && hasVisual;
+  });
+  if (!imageOnly.length) return { hasImageOnly: false, vision: vision !== false, names: [], message: '' };
+  const names = imageOnly.map((r) => r.title || r.name || 'PDF').filter(Boolean);
+  const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` (+${names.length - 3} more)` : '');
+  const message = vision === false
+    ? `Warning: ${shown} has no selectable text (image-only PDF). ${modelLabel || 'The selected model'} does not report vision support, so results may be incomplete — proceeding.`
+    : `Warning: ${shown} has no selectable text (image-only PDF) — using page images with vision AI.`;
+  return { hasImageOnly: true, vision: vision !== false, names, message };
+}
+
+/**
  * Detects whether the open document is best expanded as an exam (pre-applied tape PDF)
  * or as handwritten notebook ink pages.
  * @param {{ existingExam?: object|null, hasTapeOnPages?: boolean, openTitle?: string }} info
@@ -475,6 +497,7 @@ export function expandController({
             <select id="expModel" data-native aria-label="Model"></select>
             <input id="expModelOther" type="text" placeholder="Model name" aria-label="Model name" hidden />
           </div>
+          <p id="expWarning" class="page-bg-note warn" role="status" hidden></p>
           <p id="expStatus" class="muted hw-ai-status" role="status"></p>
           <div id="expDraftBar" class="exam-ready" hidden>
             <strong id="expDraftLabel"></strong>
@@ -506,7 +529,11 @@ export function expandController({
       openDocTitle,
       openDocPages,
       openDocKey: () => (typeof openDocResource === 'function' ? openDocResource()?.entryKey || '' : ''),
-      onChange: () => { el('expStatus').textContent = ''; },
+      onChange: () => {
+        el('expStatus').textContent = '';
+        el('expWarning').textContent = '';
+        el('expWarning').hidden = true;
+      },
     });
 
     if (ai) {
@@ -623,12 +650,16 @@ export function expandController({
     el('expRestartBtn').disabled = true;
     el('expCancel').textContent = 'Stop';
     el('expDraftBar').hidden = true;
+    el('expWarning').textContent = '';
+    el('expWarning').hidden = true;
     el('expStatus').textContent = draft ? 'Resuming from saved progress…' : 'Reading selected sources…';
     const job = jobs?.start?.(draft ? `Resuming “${openDocTitle()}”…` : `Expanding "${openDocTitle()}"…`, { onCancel: () => ac.abort() });
 
     let checkpoint = draft ? { ...draft } : null;
     let streamed = '';
     try {
+      const m = model.value;
+      const caps = ai.capabilities?.(provider, m) || {};
       let existingSummary = draft?.existingSummary ?? '';
       let basePrompt = draft?.prompt || '';
       let headingFallback = draft?.headingFallback || openDocTitle();
@@ -656,11 +687,20 @@ export function expandController({
         console.info(`[NC] expand ${mode}: ${sources.length} source(s) → ${resolved.length} read: ${resolved.map((r) => `${r.title} (${String(r.text || '').length} chars, ${r.images?.length || 0} img)`).join('; ')}`);
         if (!resolved.length) throw Error('Could not extract readable content from the selected sources.');
 
+        const imgWarn = classifyImageOnlySources(resolved, { vision: caps.vision !== false, modelLabel: m || provider });
+        if (imgWarn.hasImageOnly) {
+          el('expWarning').textContent = imgWarn.message;
+          el('expWarning').hidden = false;
+          status?.(imgWarn.message);
+          console.info(`[NC] expand ${mode}: ${imgWarn.message}`);
+        }
+
         existingSummary = await sampleOpenContext();
         if (ac.signal.aborted) throw Error('Cancelled.');
 
         const bundle = formatSourceBundle(resolved);
-        images = bundle.images;
+        const vis = await collectVisualCandidates(resolved, { maxImages: 6, maxWidth: 1000, renderMissing: caps.vision !== false });
+        images = vis.images.length ? vis.images : bundle.images;
         headingFallback = resolved[0]?.title || openDocTitle();
         const userNotes = el('expInstructions').value.trim();
         const guidance = buildExpandGuidance({
@@ -716,8 +756,6 @@ export function expandController({
         saveAiDraft(store, DRAFT_KEY, checkpoint);
       }
 
-      const m = model.value;
-      const caps = ai.capabilities?.(provider, m) || {};
       const finalPrompt = draft
         ? buildContinuationPrompt({ basePrompt, partialText: draft.partialText || '', kind: mode })
         : basePrompt;
@@ -943,6 +981,8 @@ export function expandController({
         el(`exp-${k}`).value = prefs.style?.[k] ?? LOOK_FIELDS[k][0][0];
       }
       el('expTargetDesc').textContent = `Add new questions or handwritten notes to “${openDocTitle()}” (${openDocPages()} page${openDocPages() === 1 ? '' : 's'}). Leave sources empty to expand directly from this open document, or add extra notes/folders/topics below.`;
+      el('expWarning').textContent = '';
+      el('expWarning').hidden = true;
       el('expStatus').textContent = '';
       syncDraftBar();
       dialog.showModal();

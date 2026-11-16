@@ -9,7 +9,7 @@ import {
 } from './exam-html.js';
 import { tapeLinesFromNormalized, A4_UNITS } from './exam-pdf.js';
 import { collectSourceLinks, uniqueExamTitle, resolveUniqueExamTitle } from './exam.js';
-import { detectExpandMode, buildExpandGuidance, summarizeExistingDocument, dedupeNewExamProblems, dedupeNewMarkdownSections, mergeEmbeddedExam } from './expand.js';
+import { detectExpandMode, classifyImageOnlySources, buildExpandGuidance, summarizeExistingDocument, dedupeNewExamProblems, dedupeNewMarkdownSections, mergeEmbeddedExam } from './expand.js';
 
 test('examPrompt encodes focus modes (important, everything, random), auto vs exact count, and diverse problem kinds', () => {
   assert.deepEqual(FOCUS_MODES.map(([id]) => id), ['important', 'everything', 'random']);
@@ -416,4 +416,28 @@ test('EXAM_PRINT_CSS uses >= 10pt body typography and generous solution spacing'
     }],
   });
   assert.match(md, /\*\*a\)\*\* 42\n\n6 \* 7/);
+});
+
+test('classifyImageOnlySources warns without blocking for vision and non-vision models', () => {
+  const withText = classifyImageOnlySources([{ title: 'Notes', text: 'Cache coherence', images: [] }], { vision: true });
+  assert.equal(withText.hasImageOnly, false);
+  assert.equal(withText.message, '');
+
+  const scanVision = classifyImageOnlySources(
+    [{ title: 'ScanExam.pdf', text: '', images: [{ bytes: new Uint8Array([1]), type: 'image/jpeg' }], pageCount: 3 }],
+    { vision: true, modelLabel: 'gemini-4-argon-high' },
+  );
+  assert.equal(scanVision.hasImageOnly, true);
+  assert.equal(scanVision.vision, true);
+  assert.match(scanVision.message, /ScanExam\.pdf/);
+  assert.match(scanVision.message, /vision AI/i);
+
+  const scanNoVision = classifyImageOnlySources(
+    [{ title: 'ScanExam.pdf', text: '', figurePages: [1, 2], pageCount: 2 }],
+    { vision: false, modelLabel: 'qwen3-0.6b' },
+  );
+  assert.equal(scanNoVision.hasImageOnly, true);
+  assert.equal(scanNoVision.vision, false);
+  assert.match(scanNoVision.message, /qwen3-0\.6b/);
+  assert.match(scanNoVision.message, /proceeding/i);
 });

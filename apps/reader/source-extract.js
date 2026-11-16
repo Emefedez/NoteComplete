@@ -415,10 +415,22 @@ export async function extractFileBytes(name, bytes, { call, openPdf, maxPages = 
   const lower = String(name || '').toLowerCase();
   if (ARCHIVE_EXT.test(lower)) {
     const note = await extractNoteArchive(buf, { call, openPdf, maxPages });
+    const images = [];
+    if (!String(note.text || '').trim() && note.renderPage && typeof globalThis.document !== 'undefined') {
+      for (const pNum of (note.figurePages || [])) {
+        if (images.length >= 4) break;
+        const canvas = await note.renderPage(pNum, 1100).catch(() => null);
+        if (canvas && typeof canvas.toBlob === 'function') {
+          try {
+            images.push({ ...(await canvasImage(canvas, `page-${pNum}`, 1100)), page: pNum });
+          } catch { /* Optional page image. */ }
+        }
+      }
+    }
     return {
       title: note.title || cleanTitle(name),
       text: note.text,
-      images: [],
+      images,
       pageCount: note.pageCount,
       figurePages: note.figurePages || [],
       renderPage: note.renderPage,
@@ -649,7 +661,7 @@ export async function resolveSources(sources, deps) {
   }
   return resolved
     .map((r) => ({ ...r, text: coerceSourceText(r.text) }))
-    .filter((r) => r.text || r.images?.length);
+    .filter((r) => r.text || r.images?.length || (r.renderPage && r.figurePages?.length));
 }
 
 // Distributes character budget fairly across all extracted sources so later chapters aren't starved.
@@ -660,6 +672,11 @@ export function formatSourceBundle(docs, { maxChars = 72000 } = {}) {
   const images = [];
   for (const d of docs) {
     let body = String(d.text || '').trim();
+    if (!body && (d.images?.length || d.figurePages?.length || d.pageCount)) {
+      const pagesInfo = d.pageCount ? `${d.pageCount} page(s)` : 'scanned pages';
+      const imgInfo = d.images?.length ? `, ${d.images.length} page image(s) attached for vision` : '';
+      body = `[Image-only / scanned source (${pagesInfo}${imgInfo})]`;
+    }
     if (body.length > budgetPerDoc) {
       const head = Math.floor(budgetPerDoc * 0.72);
       const tail = Math.max(0, budgetPerDoc - head - 40);

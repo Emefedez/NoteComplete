@@ -148,3 +148,29 @@ test('extractNoteArchive sends transferable ArrayBuffers without detaching sourc
   // Expected unique resolved docs: 1 open doc + 1 unique a.noteful + 1 unique markdown body = 3 (all cross-source dupes dropped).
   assert.equal(resolved.length, 3);
 });
+
+test('resolveSources keeps image-only PDFs/archives with renderPage and formatSourceBundle labels them', async () => {
+  const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+  const resolved = await resolveSources(
+    [
+      {
+        kind: 'file',
+        file: { name: 'scan.pdf', size: pdfBytes.length, lastModified: 1, arrayBuffer: async () => pdfBytes.buffer },
+      },
+    ],
+    {
+      openPdf: async () => ({
+        numPages: 2,
+        getPage: async () => ({ getTextContent: async () => ({ items: [] }) }),
+      }),
+    },
+  );
+  assert.equal(resolved.length, 1);
+  assert.equal(resolved[0].text, '');
+  assert.deepEqual(resolved[0].figurePages, [1, 2]);
+  assert.equal(typeof resolved[0].renderPage, 'function');
+
+  const bundle = formatSourceBundle(resolved);
+  assert.match(bundle.promptText, /=== SOURCE: scan ===/);
+  assert.match(bundle.promptText, /Image-only \/ scanned source \(2 page\(s\)\)/);
+});
