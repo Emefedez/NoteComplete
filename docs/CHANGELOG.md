@@ -4,6 +4,17 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.17
+
+- **Tool settings panel is back on wide screens.** With the settings shown inline in the tool bar, press the selected tool again to open its full panel underneath. Press anywhere else to close it.
+- **The menu bar works while a chart or diagram editor is open.** File, Edit, View and the rest stay usable above the editor, and their menus open over it. If another note is opened in the meantime, the editor's result is not put on it.
+- **Diagram connectors.** «extend» now points from the extension to the base use case by default, and its icon points that way too. Hold Shift when letting go of a new connection to pick its type and direction. Right-click a connector to change its type, or swap its direction.
+- **Diagram text size and colour.** Right-click an element or connector and choose **Text size** or **Colour**.
+- **More diagram elements.** Decision, merge and choice nodes can have a name (shown above them). New: activation bars for sequence diagrams, plus input and output pins and interruptible regions for activity diagrams.
+- **Copy, cut and paste in the diagram editor**, with Ctrl C, Ctrl X and Ctrl V, from the right-click menu, or with **Paste here**. On the page, Ctrl C and Ctrl X now work with whatever tool is active.
+- **Process states editor.** Every time cell now has its own line, with stronger lines and labels at each "Ticks every" interval and a little more room per process.
+- **JSON tab.** The JSON text now fills the editor's width instead of a narrow strip.
+
 ## 1.2.16
 
 - **Snappier writing.** The line you draw is updated once per screen refresh and only gets its new points, instead of being rebuilt with every pen sample, so long strokes stay smooth (most noticeable in Safari on iPad).

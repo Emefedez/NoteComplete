@@ -509,9 +509,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     // A click on a cell already painted with the brush clears it; a drag paints the run.
     const span = spanCells();
     const value = erasing ? '' : row.cells[from] === brush && brush ? '' : brush;
+    // The run follows the pointer both ways: moving back (without letting go) gives the cells
+    // passed over back as they were before the press.
+    const before = [...row.cells];
     const paint = (to) => {
       const a = Math.min(from, to), b = Math.min(geo.n - 1, Math.max(from, to) + span - 1);
-      for (let k = a; k <= b; k++) row.cells[k] = value;
+      for (let k = 0; k < before.length; k++) row.cells[k] = k >= a && k <= b ? value : before[k];
     };
     paint(from);
     draw();
