@@ -395,12 +395,14 @@ test('EXAM_PRINT_CSS uses >= 10pt body typography and generous solution spacing'
   const bodySize = /html,\s*body\s*\{[^}]*font-size:\s*([\d.]+)pt/.exec(EXAM_PRINT_CSS);
   assert.ok(bodySize && Number(bodySize[1]) >= 10);
   const keyBlock = /\.key\s*\{[^}]+\}/.exec(EXAM_PRINT_CSS)?.[0] || '';
-  assert.match(keyBlock, /margin-top:\s*10px/);
-  assert.match(keyBlock, /padding:\s*9px 12px/);
-  assert.match(keyBlock, /font-size:\s*9\.5pt/);
+  // Solutions are unboxed (no side padding) with room to write between them.
+  assert.match(keyBlock, /margin-top:\s*16px/);
+  assert.match(keyBlock, /padding:\s*6px 0 4px 0/);
+  assert.match(keyBlock, /font-size:\s*10\.6pt/);
+  assert.doesNotMatch(keyBlock, /border:/);
   const partBlock = /\.solve-part-ans\s*\{[^}]+\}/.exec(EXAM_PRINT_CSS)?.[0] || '';
-  assert.match(partBlock, /margin:\s*9px 0/);
-  assert.match(partBlock, /padding:\s*8px 11px/);
+  assert.match(partBlock, /margin:\s*14px 0/);
+  assert.match(partBlock, /padding:\s*4px 0/);
 
   const md = buildSolvedExamMcpMarkdown({
     title: 'Spacing Check',
