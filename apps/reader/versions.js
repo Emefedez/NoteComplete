@@ -164,31 +164,30 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
   }
 
   // Side by side, page by page: unchanged pages are counted, the rest shown in pairs.
-  async function compare(entry, local, newest) {
+  async function compareFiles({ title, leftLabel, rightLabel, localFile, remoteFile, remoteName = 'updated copy' }) {
     const dialog = $('compareDialog'), rows = $('compareRows'), urls = [];
-    $('compareTitle').textContent = `Compare “${entry.name.replace(/\.noteful$/i, '')}”`;
-    $('compareLeftLabel').textContent = `Your copy · ${when(entry.modifiedTime)}`;
-    $('compareRightLabel').textContent = `Google Drive · ${when(newest.modifiedTime)}`;
-    $('compareSummary').textContent = 'Downloading and reading both versions…';
+    $('compareTitle').textContent = `Compare “${String(title || '').replace(/\.(noteful|nfedit|notecomp)$/i, '')}”`;
+    $('compareLeftLabel').textContent = leftLabel || 'Your copy';
+    $('compareRightLabel').textContent = rightLabel || remoteName;
+    $('compareSummary').textContent = 'Reading both versions…';
     rows.replaceChildren();
     const left = sideDocument(), right = sideDocument();
     let stopped = false;
     const done = choose(dialog, { compareMine: 'mine', compareBoth: 'both', compareDrive: 'drive' });
     try {
-      const driveFile = await fetchDrive(newest);
-      const [a, b] = await Promise.all([left.open(local), right.open(driveFile)]);
+      const [a, b] = await Promise.all([left.open(localFile), right.open(remoteFile)]);
       const hashes = async (side, count) => { const out = []; for (let i = 0; i < count && !stopped; i++) out.push(pageHash(await side.view(i))); return out; };
       const [ha, hb] = await Promise.all([hashes(left, a.pages), hashes(right, b.pages)]);
       const steps = pageDiff(ha, hb), diff = steps.filter(s => s.type !== 'same');
       const count = type => diff.filter(s => s.type === type).length;
       $('compareSummary').textContent = diff.length
-        ? [count('changed') && `${count('changed')} changed`, count('added') && `${count('added')} only in Drive`, count('removed') && `${count('removed')} only in your copy`].filter(Boolean).join(' · ') + ` · ${steps.length - diff.length} the same`
+        ? [count('changed') && `${count('changed')} changed`, count('added') && `${count('added')} only in ${remoteName}`, count('removed') && `${count('removed')} only in your copy`].filter(Boolean).join(' · ') + ` · ${steps.length - diff.length} the same`
         : 'Every page is the same; only the file differs.';
       for (const step of diff.slice(0, 60)) {
         if (stopped || !dialog.open) break;
         const row = document.createElement('li'), label = document.createElement('p');
         row.className = `compare-row ${step.type}`;
-        label.textContent = step.type === 'changed' ? `Page ${step.left + 1} → ${step.right + 1} changed` : step.type === 'added' ? `Page ${step.right + 1} only in Drive` : `Page ${step.left + 1} only in your copy`;
+        label.textContent = step.type === 'changed' ? `Page ${step.left + 1} → ${step.right + 1} changed` : step.type === 'added' ? `Page ${step.right + 1} only in ${remoteName}` : `Page ${step.left + 1} only in your copy`;
         const pair = document.createElement('div');
         pair.className = 'compare-pair';
         for (const [side, index] of [[left, step.left], [right, step.right]]) {
@@ -205,16 +204,35 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
         rows.append(row);
       }
       if (diff.length > 60) rows.append(Object.assign(document.createElement('li'), { className: 'muted', textContent: `${diff.length - 60} more differences not shown.` }));
-      const choice = await done;
-      return { choice, driveFile };
+      return await done;
     } catch (error) {
       $('compareSummary').textContent = error.message;
-      return { choice: await done, driveFile: null };
+      return await done;
     } finally {
       stopped = true;
       left.close(); right.close();
       setTimeout(() => urls.forEach(u => URL.revokeObjectURL(u)), 1000);
     }
+  }
+
+  async function compare(entry, local, newest) {
+    $('compareSummary').textContent = 'Downloading and reading both versions…';
+    let driveFile = null;
+    try {
+      driveFile = await fetchDrive(newest);
+    } catch (error) {
+      $('compareSummary').textContent = error.message;
+      return { choice: 'cancel', driveFile: null };
+    }
+    const choice = await compareFiles({
+      title: entry.name,
+      leftLabel: `Your copy · ${when(entry.modifiedTime)}`,
+      rightLabel: `Google Drive · ${when(newest.modifiedTime)}`,
+      localFile: local,
+      remoteFile: driveFile,
+      remoteName: 'Drive',
+    });
+    return { choice, driveFile };
   }
 
   // Opening a Drive note from Recent: true when handled here (opened or cancelled).
@@ -269,5 +287,5 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
     } catch (error) { status(error.message, true); }
     return true;
   }
-  return { openRecent, compare, offerStudy };
+  return { openRecent, compare, compareFiles, offerStudy };
 }

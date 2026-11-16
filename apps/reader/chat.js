@@ -48,7 +48,7 @@ export function normalizeThreadMessages(messages = [], fallbackText = '') {
 
 // Text documents (documentInfo().unit 'section') send the section being read and
 // the selected text instead of page images; their answers have no page to go on.
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '', win = null }) {
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '', win = null, onNoteChanged = null }) {
   const sectioned = () => documentInfo().unit === 'section';
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
@@ -224,11 +224,13 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
       const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
+      const targetNotePath = useNote ? notePath() : '';
+      const beforeStat = targetNotePath ? await globalThis.notecompleteFiles?.statLocalNote?.(targetNotePath).catch(() => null) : null;
       // The answer appears while it is written; Markdown is re-rendered at most
       // every 120 ms so long answers stay cheap.
       let streamed = '', timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
-      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: useNote ? notePath() : '', tag: 'chat', label: 'Ask AI', peek: () => streamed }, delta => {
+      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: targetNotePath, tag: 'chat', label: 'Ask AI', peek: () => streamed }, delta => {
         if (!streamed) { waiting.querySelector('small')?.remove(); dots.remove(); }
         streamed += delta;
         timer ||= setTimeout(show, 120);
@@ -241,6 +243,12 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       await answer(waiting, text);
       actions(waiting, text.trim());
       follow?.(question, text.trim());
+      if (targetNotePath && onNoteChanged) {
+        const afterStat = await globalThis.notecompleteFiles?.statLocalNote?.(targetNotePath).catch(() => null);
+        if (afterStat && (!beforeStat || afterStat.mtimeMs > beforeStat.mtimeMs || afterStat.size !== beforeStat.size)) {
+          await onNoteChanged(targetNotePath);
+        }
+      }
       return text.trim();
     } catch (error) {
       waiting.replaceChildren(error.message);

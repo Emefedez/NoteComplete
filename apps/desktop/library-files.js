@@ -255,6 +255,16 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       await opened(file);
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },
+    async statLocalNote(file) {
+      if (typeof file !== 'string' || !file || file.includes('\0') || !path.isAbsolute(file)) return null;
+      if (!NOTE.test(path.basename(file))) return null;
+      try {
+        const info = await stat(await realpath(file));
+        return info.isFile() ? { mtimeMs: info.mtimeMs, size: info.size } : null;
+      } catch {
+        return null;
+      }
+    },
     // Opens a local note/document linked from AI chat (e.g. a generated prefab .noteful file).
     async readLocalNote(file) {
       if (typeof file !== 'string' || !file || file.includes('\0') || !path.isAbsolute(file)) throw Error('Invalid note path.');

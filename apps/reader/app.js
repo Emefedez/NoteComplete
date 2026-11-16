@@ -6727,7 +6727,58 @@ const studyDeps = {
   notesText: async () => (doc ? (await notesApi()).text : ""),
   status,
 };
-const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: (text) => textBox.answerToTextBox(text) });
+async function reloadNoteFromDisk(targetPath) {
+  if (!targetPath || !window.notecompleteFiles?.readLocalNote) return;
+  if (targetPath !== notePath && targetPath !== docMember?.path) return;
+  const opened = await window.notecompleteFiles.readLocalNote(targetPath).catch(() => null);
+  if (!opened) return;
+  const diskFile = new File([opened.bytes], opened.name);
+  if (dirty || busy()) {
+    try {
+      const current = await call(opened.name.endsWith(".nfedit") ? "saveProject" : "export", { note: await notesPayload() });
+      const localBytes = current?.bytes || (typeof current === "string" ? new TextEncoder().encode(current) : current);
+      if (localBytes) {
+        const localFile = new File([localBytes], opened.name);
+        const choice = await versions.compareFiles({
+          title: opened.name,
+          leftLabel: "Your copy (current work)",
+          rightLabel: "Updated on disk (AI)",
+          localFile,
+          remoteFile: diskFile,
+          remoteName: "AI update",
+        });
+        if (choice === "both") {
+          await library.add(diskFile).catch(() => null);
+          home?.renderRecent?.();
+          status("Kept your copy open and saved the AI update to Recent.");
+          return;
+        }
+        if (choice !== "drive") return;
+      } else {
+        status("Note updated on disk by AI. Reopen it to see changes.", true);
+        return;
+      }
+    } catch {
+      status("Note updated on disk by AI. Reopen it to see changes.", true);
+      return;
+    }
+  }
+  const keepPage = page;
+  await load(diskFile);
+  if (docMember?.source === "local") {
+    await openedLocal(opened.path, opened.name, diskFile);
+  } else {
+    notePath = opened.path;
+    const entry = await library.rememberLocal(opened.path, opened.name, diskFile.size);
+    noteEntryKey = entry.key;
+    home.rememberFacts(entry.key, diskFile);
+    void home.rememberCover(entry.key, diskFile);
+  }
+  if (doc && keepPage > 0) jump(Math.min(doc.pages - 1, keepPage));
+  home?.renderRecent?.();
+  status("Note updated with AI changes.");
+}
+const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: (text) => textBox.answerToTextBox(text), onNoteChanged: reloadNoteFromDisk });
 audio.transcript.jobs = jobs;
 audio.transcript.ai = ai;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
