@@ -574,7 +574,9 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   overflow: visible;
 }
 .sheet[data-tool="pan"] {
-  touch-action: pan-x pan-y;
+  /* Not pan-x pan-y: with the browser scrolling, a second finger never reached the pinch
+     (touch.js) on phones, so Pan could not zoom. A finger drag pans in script (app.js). */
+  touch-action: none;
   cursor: grab;
 }
 .sheet[data-tool="pan"] [data-timed-ink] { cursor: pointer; }

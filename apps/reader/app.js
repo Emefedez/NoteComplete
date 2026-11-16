@@ -2504,8 +2504,9 @@ function pointerDown(e, p) {
   if (e.target.closest?.(".ink-link") && (tool === "pan" || tool === "select")) return;
   setPage(p.index);
   // While a stylus is in use, fingers move the page instead of drawing (palm and finger
-  // rejection, as in drawing apps); with the stylus put away, a finger draws again.
-  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && penActive() && FINGER_PANS.has(tool));
+  // rejection, as in drawing apps); with the stylus put away, a finger draws again. With Pan
+  // a finger always moves the page, in script, so a second finger can pinch (touch.js).
+  const touchPan = collab?.touchPans(e) || (e.pointerType === "touch" && (tool === "pan" || (penActive() && FINGER_PANS.has(tool))));
   // Text with a finger or stylus: the box opens when the tap lifts, since phones open the
   // keyboard only for a focus made then (not when the tap starts); a drag moves the page.
   const textTap = tool === "text" && e.pointerType !== "mouse" && !textBox.active;
