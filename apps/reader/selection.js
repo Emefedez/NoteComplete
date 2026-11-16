@@ -14,14 +14,15 @@ function scaledWidth(item,before,scale){
  return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
 }
 export class SelectionController {
- constructor({call,patch,remove,removeWhole,panel,editable,changed,status}){
-  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status});this.token=0;this.item=null;this.active=null;
+ constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu}){
+  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu});this.token=0;this.item=null;this.active=null;
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
   $('clearSelection').onclick=()=>this.clear();$('cropSelection').onclick=()=>this.startCrop();$('deleteSelection').onclick=async()=>{if(this.item&&this.editable()){const item=this.item;this.clear();if(item.compound&&this.removeWhole){await this.removeWhole(item);}else if(item.kind==='group'){for(const m of item.members){try{await this.remove(m);}catch{}}}else{await this.remove(item);}}};
  }
  clear(){this.token++;this.cropping?.cancel();this.cancel();this.item=null;this.overlay?.remove();this.overlay=null;$('selectionOptions').hidden=true;this.changed();}
+ show(item){this.token++;this.cancel();this.item=item;this.inspect();this.render(this.panel(item.page));this.changed();}
  async selectId(page,id){
   const token=++this.token;
   try{const item=await this.call('selection',{page,itemId:id});if(token===this.token){this.item=item;this.inspect();this.render(this.panel(page));this.changed();}}catch{if(token===this.token)this.clear();}
@@ -48,8 +49,8 @@ export class SelectionController {
   const item=this.item;if(!item)return;const a=item.adjustment;
   if(item.kind==='group'){
    // A graph or table (several parts) says what it is and offers its editor.
-   $('selectionOptions').hidden=false;$('selectionKind').textContent=item.compound?(item.compound.kind==='graph'?'Graph':'Table'):`Group (${item.members.length})`;
-   $('editCompound').hidden=!item.compound;if(item.compound)$('editCompound').textContent=item.compound.kind==='graph'?'Edit graph…':'Edit table…';
+   $('selectionOptions').hidden=false;$('selectionKind').textContent=item.compound?({graph:'Graph',table:'Table',prefab:'Prefab'}[item.compound.kind]||'Object'):`Group (${item.members.length})`;
+   $('editCompound').hidden=!item.compound;if(item.compound)$('editCompound').textContent={graph:'Edit graph…',table:'Edit table…',prefab:'Edit prefab…'}[item.compound.kind]||'Edit…';
    $('selectedStyle').hidden=true;$('cropSelection').hidden=true;
    $('selectedW').value=+(item.bounds[2]*a.scale[0]).toFixed(2);$('selectedW').disabled=false;
    $('selectedH').value=+(item.bounds[3]*a.scale[1]).toFixed(2);$('selectedH').disabled=false;
@@ -157,6 +158,19 @@ export class SelectionController {
    handle.onkeydown=event=>{const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!delta||!this.editable())return;event.preventDefault();event.stopPropagation();const step=event.shiftKey?10:1;const a=i===4?{...clone(item.adjustment),rotation:item.adjustment.rotation+(delta[0]||delta[1])*step}:resizeAdjustment(item,i,[at[0]+delta[0]*step,at[1]+delta[1]*step]);this.commit(a);};
    overlay.append(handle);
   }
+  // The ⋯ circle past the top-right corner: the item's menu (edit, lock, delete…), for
+  // fingers and pens as much as for a mouse.
+  if(this.menu){
+   const out=[points[1][0]+(points[1][0]-points[0][0])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*22*unit,points[1][1]+(points[1][1]-points[0][1])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*22*unit];
+   const more=svg('g',{class:'selection-menu',tabindex:0,role:'button','data-selection-handle':'menu','aria-label':'Item menu'});
+   more.append(svg('circle',{cx:out[0],cy:out[1],r:10*unit,fill:'#1683ed',stroke:'white','stroke-width':1.5*unit}));
+   for(const dx of [-4,0,4])more.append(svg('circle',{cx:out[0]+dx*unit,cy:out[1],r:1.6*unit,fill:'white'}));
+   more.style.pointerEvents='all';more.style.cursor='pointer';
+   // Its own press (not the page's): a finger on it never pans or draws, whatever the tool.
+   more.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();if(this.item)this.menu(this.item,event.clientX,event.clientY);};
+   more.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();const r=more.getBoundingClientRect();this.menu(this.item,r.right,r.bottom);}};
+   overlay.append(more);
+  }
   p.el.append(overlay);this.overlay=overlay;
  }
  coords(event,p){const r=p.el.getBoundingClientRect();return [(event.clientX-r.left)/r.width*p.size[0],(event.clientY-r.top)/r.height*p.size[1]];}
@@ -166,6 +180,7 @@ export class SelectionController {
   const last=this.lastDown;this.lastDown={time:event.timeStamp,x:event.clientX,y:event.clientY};
   if(last&&event.timeStamp-last.time<450&&Math.hypot(event.clientX-last.x,event.clientY-last.y)<8&&tool==='select'&&this.item?.kind==='image'&&this.item.page===p.index&&!event.target.closest('[data-selection-handle]')){event.preventDefault();this.lastDown=null;this.startCrop();return true;}
   const handle=event.target.closest('[data-selection-handle]');
+  if(handle?.dataset.selectionHandle==='menu'){event.preventDefault();event.stopPropagation();if(this.item)this.menu?.(this.item,event.clientX,event.clientY);return true;}
   if(!handle&&tool!=='select')return false;
   if(!this.editable()||!p.view||event.button!==0)return true;
   event.preventDefault();p.el.setPointerCapture(event.pointerId);

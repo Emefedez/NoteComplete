@@ -71,6 +71,8 @@ import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
+import { choosePrefab, editPrefab, prefabAspect, prefabItems, prefabName, prefabPng } from "./prefabs.js";
+import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
 import { tabStrip } from "./tab-strip.js";
@@ -206,6 +208,8 @@ const selection = new SelectionController({
   editable: () => !!doc && !busy(),
   changed: toolOptions,
   status,
+  // The ⋯ circle of a selection: the item's menu.
+  menu: (item, x, y) => itemMenu(item, x, y),
 });
 // Status is a transient toast, not a permanent strip; errors stay up longer.
 let statusTimer = 0;
@@ -705,15 +709,17 @@ function buildPages(sizes) {
     el.onpointerdown = (e) => {
       if (e.target.closest(".text-editor, .text-discard, .text-format, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
+      longPress.down(e, p);
       pointerDown(e, p);
     };
     el.onpointermove = (e) => {
       if (p.audioTap && Math.hypot(e.clientX - p.audioTap[0], e.clientY - p.audioTap[1]) > 6)
         p.audioTap = null;
+      longPress.move(e);
       pointerMove(e);
     };
-    el.onpointerup = pointerUp;
-    el.onpointercancel = () => { p.audioTap = null; cancelGesture(); };
+    el.onpointerup = (e) => { longPress.end(); pointerUp(e); };
+    el.onpointercancel = () => { p.audioTap = null; longPress.end(); cancelGesture(); };
     // Double-clicking a typed text box with Select types into it.
     el.ondblclick = (event) => {
       const item = selection.item;
@@ -724,11 +730,13 @@ function buildPages(sizes) {
       textBox.open(p, point(event, p), existing);
     };
     el.oncontextmenu = async (event) => {
-      // Right-click removes the element under the pointer; Ctrl+Z brings it back.
+      // Right-click: a menu for what is under the pointer (or the page). Shift + right-click
+      // removes it at once, as right-click did before; Ctrl+Z brings it back.
       event.preventDefault();
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
       if (selectedText(window.getSelection())) return status("Press Ctrl+C to copy the selected text.");
+      if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
       const [x, y] = point(event, p);
       try {
         const item = await call("pick", { page: p.index, x, y,
@@ -2860,12 +2868,13 @@ function pointerUp(e) {
     if (shape) snapTo(g, shape, true);
   }
   if (g.snapped) return commitSnapped(g);
-  // The Shapes tool's Graph and Table: the box dragged is where the object goes, after its editor.
+  // The Shapes tool's Prefab and Table: the box dragged is where the object goes, after its editor.
   if (g.tool === "shape" && (g.kind === "graph" || g.kind === "table")) {
     g.el.remove();
     g.dot.remove();
     const end = point(e, g.panel), box = [Math.min(g.start[0], end[0]), Math.min(g.start[1], end[1]), Math.abs(end[0] - g.start[0]), Math.abs(end[1] - g.start[1])];
-    insertCompound(g.panel, g.kind, box);
+    if (g.kind === "graph") insertPrefab(g.panel, box);
+    else insertCompound(g.panel, g.kind, box);
     return;
   }
   if (g.tool === "erase")
@@ -3638,8 +3647,8 @@ document.addEventListener("contextmenu", (e) => {
   const type = e.pointerType || "";
   const button = penBtn.contextmenu({ pointerType: type, time: e.timeStamp, android, last: lastPointerType }) === "menu";
   const mouse = type === "mouse" || (!type && lastPointerType === "mouse");
-  if (button || (mouse && e.shiftKey) || Date.now() - penMenuAt <= 800) {
-    // The pen's button (or Shift + right-click): the menu. Our menu just opened from the
+  if (button || Date.now() - penMenuAt <= 800) {
+    // The pen's button: the quick menu. Our menu just opened from the
     // pen: the browser's own menu must not follow it.
     e.preventDefault();
     e.stopPropagation();
@@ -3648,8 +3657,8 @@ document.addEventListener("contextmenu", (e) => {
     if (button || mouse) penMenu(e);
     return;
   }
-  // Only a mouse right-click removes what is under it; a long press of a finger or a pen
-  // (Samsung's button + touch included) never does.
+  // Only a mouse right-click opens the item menu (Shift: removes it); a long press of a finger
+  // has its own timer (longPress), and a pen's (Samsung's button + touch included) never does.
   if (!mouse) { e.preventDefault(); e.stopPropagation(); }
 }, true);
 function uiZoomStepForEvent(e) {
@@ -3758,7 +3767,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert graph: a function of x, or axes and a grid to draw on"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, tree or table"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -4363,7 +4372,8 @@ async function patchItem(item, adjustment, crop = null) {
 }
 $("insertShape").onclick = () => {
   if (!doc || editing) return;
-  if (["graph", "table"].includes($("shape").value)) return insertCompound(panels[page], $("shape").value);
+  if ($("shape").value === "graph") return insertPrefab(panels[page]);
+  if ($("shape").value === "table") return insertCompound(panels[page], "table");
   document.querySelector('[data-tool="shape"]').click();
   const p = panels[page],
     r = p.el.getBoundingClientRect(),
@@ -5699,9 +5709,9 @@ function compoundItems(kind, box, spec, id = compoundId(kind)) {
 }
 // A box on the page for a new graph or table: centred on `at` (or the middle of the view),
 // inside the page with room for a graph's axis names past its edges.
-function compoundBox(p, kind, box = null) {
+function compoundBox(p, kind, box = null, size = COMPOUND_SIZE[kind]) {
   if (box && box[2] >= 40 && box[3] >= 30) return box;
-  const [w, h] = [Math.min(COMPOUND_SIZE[kind][0], p.size[0] - 60), COMPOUND_SIZE[kind][1]];
+  const [w, h] = [Math.min(size[0], p.size[0] - 60), size[1]];
   let x, y;
   if (box) [x, y] = box;
   else {
@@ -5723,7 +5733,42 @@ async function insertCompound(p, kind, box = null, spec = {}) {
   status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
   return true;
 }
-$("insertGraph").onclick = () => doc && insertCompound(panels[page], "graph");
+$("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
+// Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
+// `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
+async function insertPrefab(p, box = null) {
+  if (!doc || !p || editing) return false;
+  const choice = await choosePrefab();
+  if (!choice) return false;
+  if (choice.kind !== "prefab") return insertCompound(p, choice.kind, box);
+  if (!ensureEditableLayer()) return false;
+  const spec = await editPrefab({ spec: choice.spec });
+  if (!spec) return false;
+  const done = await placePrefab(p, spec, box);
+  if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+  return done;
+}
+// An exam figure drawn into `box` (its width kept, its height from the figure), or a new box;
+// `replace`: the items of the prefab it replaces, in the same undo step.
+async function placePrefab(p, spec, box = null, replace = null, id = undefined) {
+  const aspect = prefabAspect(spec);
+  let at;
+  if (box && box[2] >= 40) at = [box[0], box[1], box[2], box[2] * aspect];
+  else {
+    // A tap (no box dragged) places it from that point; nothing, in the middle of the view.
+    const w = Math.min(440, p.size[0] - 60), h = w * aspect;
+    at = box ? [Math.max(20, Math.min(box[0], p.size[0] - w - 20)), Math.max(20, Math.min(box[1], p.size[1] - h - 20)), w, h] : compoundBox(p, "graph", null, [w, h]);
+  }
+  try {
+    const png = await prefabPng(spec, [at[2], at[3]]);
+    const items = prefabItems(at, spec, png, { layer: activeLayer, ...(id ? { id } : {}) });
+    await action("drawMany", { page: p.index, ...(replace ? { replace } : {}), lines: items.lines, images: items.images });
+    return true;
+  } catch (e) {
+    status(e.message, true);
+    return false;
+  }
+}
 $("insertTable").onclick = () => doc && insertCompound(panels[page], "table");
 // The box a graph or table has now: its frame's (moved or resized since it was drawn).
 async function compoundFrame(item) {
@@ -5738,6 +5783,14 @@ async function editCompound(item) {
   if (!c || !doc) return;
   let spec = {};
   try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
+  if (c.kind === "prefab") {
+    const chosen = await editPrefab({ spec, editing: true });
+    if (!chosen) return;
+    const frame = await compoundFrame(item);
+    selection.clear();
+    if (await placePrefab(panels[item.page], chosen, frame, c.items, c.id)) status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
+    return;
+  }
   const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec, editing: true });
   if (!chosen) return;
   let items;
@@ -5768,6 +5821,88 @@ async function pickWhole(args) {
   };
 }
 $("editCompound").onclick = () => editCompound(selection.item);
+// The menu at the pointer (context-menu.js): right-click on a page, a finger held still, or a
+// selection's ⋯ circle. What is under it can be edited without changing tools first.
+const ITEM_NAMES = { ink: "Ink", shape: "Shape", image: "Image", text: "Text box", group: "Group" };
+function compoundLabel(c) {
+  if (c.kind === "prefab") { try { return prefabName(JSON.parse(c.spec || "{}")); } catch { return "Prefab"; } }
+  return c.kind === "graph" ? "Graph" : "Table";
+}
+function editTextItem(item) {
+  const p = panels[item.page], existing = (p?.view?.texts || []).find((t) => t.id === item.id);
+  if (!existing) return status("This text box cannot be edited here.", true);
+  document.querySelector('#toolbar [data-tool="text"]').click();
+  textBox.open(p, [item.bounds[0] + 2, item.bounds[1] + 2], existing);
+}
+async function removeItem(item) {
+  if (selection.item?.page === item.page && selection.item?.id === item.id) selection.clear();
+  if (item.compound) await action("drawMany", { page: item.page, replace: item.compound.items, lines: [], images: [] });
+  else if (item.kind === "group") for (const m of item.members) await action("remove", { page: item.page, itemId: m.id }).catch(() => {});
+  else await action("remove", { page: item.page, itemId: item.id });
+  status("Removed. Press Ctrl+Z to bring it back.");
+}
+function itemMenu(item, x, y) {
+  if (!doc || !item) return;
+  const c = item.compound, name = c ? compoundLabel(c) : ITEM_NAMES[item.kind] || "Item";
+  openContextMenu(x, y, [
+    c && { label: `Edit ${name.toLowerCase()}…`, icon: c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
+    item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
+    item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
+    { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
+    !c && item.kind !== "group" && { label: "Lock in place", icon: "lock", run: () => action("lock", { page: item.page, itemId: item.id, locked: true }).then(() => status("Locked: Select passes over it. Right-click it to unlock it.")) },
+    "-",
+    { label: "Delete", icon: "trash", danger: true, key: "⇧ Right-click", run: () => removeItem(item).catch((e) => status(e.message, true)) },
+  ], { title: name });
+}
+// What is at page point `at` of `p`: its menu (and it selected), or the page's.
+async function pageMenu(p, at, x, y) {
+  if (!doc || !p?.view) return;
+  const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
+  try {
+    const item = await pickWhole(args);
+    if (item) { selection.show(item); return itemMenu(item, x, y); }
+    const locked = await call("pickLock", args);
+    if (locked?.locked) {
+      return openContextMenu(x, y, [{ label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
+    }
+  } catch (e) { return status(e.message, true); }
+  openContextMenu(x, y, [
+    { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, [at[0], at[1], 0, 0]) },
+    { label: "Insert table here", icon: "table", run: () => insertCompound(p, "table", [at[0], at[1], 0, 0]) },
+    { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } },
+    { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() },
+    "-",
+    { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) },
+    { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() },
+  ], { title: `Page ${p.index + 1}` });
+}
+// A finger held still for a moment opens the menu (as a right-click). Not while it draws: a
+// finger that pans, selects or types does; a second finger (two-finger hold, pinch) cancels it.
+const longPress = (() => {
+  let timer = 0, at = null;
+  const end = () => { clearTimeout(timer); timer = 0; at = null; };
+  return {
+    end,
+    down(e, p) {
+      if (timer) return end();
+      if (e.pointerType !== "touch" || !doc || editing) return;
+      at = { x: e.clientX, y: e.clientY, id: e.pointerId, p };
+      timer = setTimeout(() => {
+        const a = at;
+        end();
+        if (!a || editing || busy()) return;
+        if (gesture && !(gesture.id === a.id && gesture.tool === "pan")) return;
+        cancelGesture();
+        selection.cancel?.();
+        navigator.vibrate?.(12);
+        pageMenu(a.p, point({ clientX: a.x, clientY: a.y }, a.p), a.x, a.y);
+      }, 550);
+    },
+    move(e) {
+      if (at && e.pointerId === at.id && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 10) end();
+    },
+  };
+})();
 $("insertPdf").onclick = () => doc && $("pdfPagesFile").click();
 $("pdfPagesFile").onchange = async (event) => {
   const file = event.target.files[0];

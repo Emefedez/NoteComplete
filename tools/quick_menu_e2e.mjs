@@ -86,15 +86,21 @@ try {
   assert.equal(await p.inputValue('#color'), '#123456');
   await p.keyboard.press('Escape');
   console.log('· every tool’s colours on top and sizes below; colours can be moved and changed');
-  // Shift + right-click opens it too, and removes nothing.
+  // A right-click opens the menu at the pointer (its Quick menu entry opens this one), and
+  // removes nothing.
   const kept = await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length);
-  await p.keyboard.down('Shift');
-  await p.mouse.click(s.x + 300, s.y + 300, { button: 'right' });
-  await p.keyboard.up('Shift');
+  // On an empty part of the page (an item has its own menu instead).
+  for (const [dx, dy] of [[300, 300], [40, 40], [s.width - 40, 40], [40, 600]]) {
+    await p.mouse.click(s.x + dx, s.y + dy, { button: 'right' });
+    await p.waitForSelector('.context-menu');
+    if (await p.locator('.context-menu button:has-text("Quick menu")').count()) break;
+    await p.keyboard.press('Escape');
+  }
+  await p.click('.context-menu button:has-text("Quick menu")');
   await p.waitForSelector('.quick-menu');
   await p.keyboard.press('Escape');
   assert.equal(await p.evaluate(() => document.querySelectorAll('.sheet [data-item]').length), kept);
-  console.log('· Shift + right-click opens it');
+  console.log('· right-click: the menu at the pointer, with the quick menu in it');
   await p.evaluate(() => document.querySelector('[data-tool=select]').click());
   // Holding a tool lifts it; dropped on another place, the ring keeps that order.
   await p.keyboard.press('Shift+S');
@@ -331,7 +337,6 @@ try {
   const penAt = (type, x, y, extra) => cdp.send('Input.dispatchMouseEvent', { type, x, y, clickCount: 1, pointerType: 'pen', ...extra });
   await p.mouse.move(...free);
   await p.keyboard.press('Shift+S'); await grabKept('Shift + S');
-  await p.keyboard.down('Shift'); await p.mouse.click(...free, { button: 'right' }); await p.keyboard.up('Shift'); await grabKept('Shift + right-click');
   await penAt('mousePressed', ...free, { button: 'left', buttons: 1, modifiers: 8 }); await penAt('mouseReleased', ...free, { button: 'left', buttons: 0, modifiers: 8 }); await grabKept('Shift + pen');
   await penAt('mousePressed', ...free, { button: 'right', buttons: 2 }); await penAt('mouseReleased', ...free, { button: 'right', buttons: 0 }); await grabKept('the pen\'s button on the page');
   await penAt('mouseMoved', free[0] + 10, free[1], { button: 'none', buttons: 0 }); await penAt('mouseMoved', free[0] + 12, free[1], { button: 'none', buttons: 1 }); await grabKept('the pen\'s button while hovering');
