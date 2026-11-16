@@ -250,3 +250,14 @@ test('app.js wires spread persistence, navExamHtml, big scratchpad chat, and rem
   assert.match(appJs, /onOpenScratchChat:\s*\(entry\)\s*=>[\s\S]*chat\.openThread\(\{\s*id:\s*entry\.id,\s*title:\s*entry\.title,\s*messages:\s*entry\.messages,\s*text:\s*entry\.text,\s*big:\s*true\s*\}\)/);
   assert.match(appJs, /async function ensureDocumentCover\(/);
 });
+
+test('text file covers wrap long lines inside the card and stop at its bottom', async () => {
+  const { textCoverSvg, TEXT_COVER } = await import('./home.js');
+  const long = '2026-11-16T06:38:18.342Z [tab 1] warning No available adapters. (reader:0) ' + 'x'.repeat(120);
+  const svg = textCoverSvg(`Title line\n${long}\n${'line\n'.repeat(80)}`);
+  assert.ok(svg.includes(TEXT_COVER));
+  const texts = [...svg.matchAll(/<text x="(\d+)" y="([\d.]+)" font-size="(\d+)"[^>]*>([^<]*)<\/text>/g)];
+  for (const [, x, , fs, body] of texts) assert.ok(Number(x) + body.length * Number(fs) * 0.58 <= 240 - 20 + 1, `fits: ${body}`);
+  assert.ok(Math.max(...texts.map((t) => Number(t[2]))) <= 320 - 14, 'stops at the page end');
+  assert.ok(texts.length > 4, 'long line wrapped onto several rows');
+});

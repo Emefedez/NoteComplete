@@ -12,6 +12,44 @@ import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
+// The cover of a text or Markdown file: its first lines drawn like a page, each wrapped to
+// the card's width (long words broken) and stopped where the page ends. `TEXT_COVER` marks
+// covers made this way; older ones (lines cut off past the edge) are drawn again.
+export const TEXT_COVER = 'data-cover="text2"';
+export function textCoverSvg(text) {
+  const W = 240, H = 320, X = 20, usable = W - 2 * X;
+  const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  const wrap = (line, chars) => {
+    const out = [];
+    let cur = '';
+    for (let word of line.split(/\s+/)) {
+      while (word.length > chars) {
+        if (cur) { out.push(cur); cur = ''; }
+        out.push(word.slice(0, chars));
+        word = word.slice(chars);
+      }
+      if (!word) continue;
+      if (cur && (cur + ' ' + word).length > chars) { out.push(cur); cur = word; } else cur = cur ? `${cur} ${word}` : word;
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  const source = String(text || '').split(/\r?\n/).map((l) => l.trim().replace(/^#+\s*/, '')).filter(Boolean);
+  const rows = [];
+  let y = 30;
+  source.some((line, i) => {
+    const fs = i === 0 ? 13 : 10, lh = i === 0 ? 17 : 13.5;
+    for (const piece of wrap(line, Math.floor(usable / (fs * 0.58)))) {
+      if (y > H - 14) return true;
+      rows.push(`<text x="${X}" y="${y.toFixed(1)}" font-size="${fs}" font-weight="${i === 0 ? 700 : 400}" fill="${i === 0 ? '#1d2433' : '#5b6478'}">${esc(piece)}</text>`);
+      y += lh;
+    }
+    y += i === 0 ? 4 : 1.5;
+    return false;
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" ${TEXT_COVER} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#ffffff"/><g font-family="system-ui, sans-serif">${rows.join('')}</g></svg>`;
+}
+
 export function shouldSkipCoverFile({ name = '', kind = '' } = {}) {
   if (kind === 'text') return true;
   if (kind && ['project', 'noteful', 'pdf', 'image', 'blank', 'handwritten', 'notecomplete'].includes(kind)) return false;
@@ -216,6 +254,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
           cover.classList.add('missing');
         };
         library.cover(coverKey(entry)).then(async url => {
+          // An old text cover (lines running off the card) is drawn again, wrapped.
+          if (url && isTextName(entry.name || '') && !String(url).includes(encodeURIComponent(TEXT_COVER))) url = null;
           if (url) {
             cover.classList.remove('missing');
             cover.src = url;
@@ -603,8 +643,11 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // Keep a cover for files opened from disk so Recent can show them.
   async function rememberCover(key, file) {
     try {
-      if (!key || !file || await library.cover(key)) return;
+      if (!key || !file) return;
       const name = file.name || '';
+      const kept = await library.cover(key);
+      // A text cover from before wrapping is drawn again; any other kept cover stays.
+      if (kept && !(isTextName(name) && !String(kept).includes(encodeURIComponent(TEXT_COVER)))) return;
       if (/\.nfedit$/i.test(name)) return;
       if (/\.(jpe?g|png|webp)$/i.test(name) || file.type?.startsWith('image/')) {
         const url = await shrink(file);
@@ -640,10 +683,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       }
       // Text and Markdown: the first lines, drawn like a page.
       if (isTextName(name)) {
-        const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-        const lines = (await file.slice(0, 4000).text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 14);
-        const rows = lines.map((l, i) => `<text x="22" y="${34 + i * 15}" font-size="${i === 0 ? 13 : 10}" font-weight="${i === 0 ? 700 : 400}" fill="${i === 0 ? '#1d2433' : '#5b6478'}">${esc(l.replace(/^#+\s*/, '').slice(0, 44))}</text>`).join('');
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320"><rect width="240" height="320" fill="#ffffff"/><g font-family="system-ui, sans-serif">${rows}</g></svg>`;
+        const svg = textCoverSvg(await file.slice(0, 4000).text());
         await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
         return;
       }
