@@ -7,6 +7,9 @@
 // (chart-model.js). "Fill in" mode paints the answer over the solution's rows and times, which
 // cannot be changed; Check marks what is wrong and Show solution draws it under the answer.
 import { renderVisualSvg } from './exam-html.js';
+import { sortable } from './reorder.js';
+import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
+import { editorQuickMenu } from './editor-quick.js';
 import { STATES, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -103,7 +106,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const redoBtn = make('button', { type: 'button', textContent: 'Redo', title: 'Redo (Ctrl Y)' });
   const modeBox = make('div', { className: 'ch-mode', role: 'group' });
   modeBox.setAttribute('aria-label', 'What the canvas edits');
-  const authorBtn = make('button', { type: 'button', textContent: 'Solution', title: 'Edit the figure itself: the solution of the exercise' });
+  const authorBtn = make('button', { type: 'button', textContent: 'Editor', title: 'Edit the figure itself, which is what the answer is checked against' });
   const answerBtn = make('button', { type: 'button', textContent: 'Fill in', title: 'Fill the exercise in, as a student: the rows and times stay as they are' });
   modeBox.append(authorBtn, answerBtn);
   const checkBtn = make('button', { type: 'button', textContent: 'Check', title: 'Mark what is wrong in the answer' });
@@ -145,7 +148,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     mode = m;
     check = null;
     showSolution = false;
-    say(m === 'answer' ? 'Fill in: paint the answer on the rows; Check marks what is wrong.' : 'Solution: what you draw here is the figure, and the answer an exercise is checked against.');
+    say(m === 'answer' ? 'Fill in: paint the answer on the rows; Check marks what is wrong.' : 'Editor: what you draw here is the figure, and the answer is checked against it.');
     changed({ palette: true });
   }
   authorBtn.onclick = () => mode !== 'author' && setMode('author');
@@ -168,25 +171,32 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   applyBtn && (applyBtn.onclick = () => onApply(current()));
   function keys(e) {
     const t = e.target;
+    // In the editor, or with nothing in it focused (a brush just dragged, the dialog itself).
+    if (!root.isConnected || !(t instanceof Node) || !(root.contains(t) || t.contains(root)) || e.defaultPrevented) return;
     const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
     if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? redoBtn : undoBtn).click(); }
     else if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); redoBtn.click(); }
     else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
-      const b = palette.querySelectorAll('.ch-brush')[e.key === '0' ? 9 : Number(e.key) - 1];
+      const b = palette.querySelectorAll('.ch-brush')[indexOfKey(e.key)];
       if (b) { e.preventDefault(); b.click(); }
     }
   }
-  root.addEventListener('keydown', keys);
+  document.addEventListener('keydown', keys, true);
 
   // --- Palette -------------------------------------------------------------------------
   // The working rows: the solution's, or the answer's when filling in.
   const work = () => (mode === 'answer' ? ans : grid);
-  function brushButton(value, label, swatch) {
-    const b = make('button', { type: 'button', className: 'ch-brush', title: `${label}: drag over the cells to paint` }, swatch, make('span', { textContent: label }));
+  function brushButton(value, label, swatch, index) {
+    const key = keyFor(index);
+    const b = make('button', { type: 'button', className: 'ch-brush', title: `${label}: drag over the cells to paint${key ? ` (${key})` : ''}. Drag it up or down to reorder` }, swatch, make('span', { textContent: label }), key && make('kbd', { textContent: key }));
     b.dataset.value = value;
     b.setAttribute('aria-pressed', String(brush === value));
-    b.onclick = () => { brush = value; for (const q of palette.querySelectorAll('.ch-brush')) q.setAttribute('aria-pressed', String(q.dataset.value === brush)); };
+    b.onclick = () => choose(value);
     return b;
+  }
+  function choose(value) {
+    brush = value;
+    for (const q of palette.querySelectorAll('.ch-brush')) q.setAttribute('aria-pressed', String(q.dataset.value === brush));
   }
   function swatchOf(value, order) {
     const s = svgEl('svg', { viewBox: '0 0 28 14', width: 28, height: 14, 'aria-hidden': 'true' });
@@ -196,29 +206,44 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     else s.append(svgEl('rect', { x: 2, y: 2, width: 24, height: 10, rx: 2, fill: labelColor(value, order) }));
     return s;
   }
+  // The brushes in the order the person left them (palette-order.js): [{ value, label }].
+  const orderName = () => (kind === 'states' ? 'chart-states' : 'chart-timeline');
+  function brushes() {
+    let list = [];
+    if (kind === 'states') {
+      list = [...STATES.map((v) => ({ value: v, label: base.legend?.[v] || STATE_NAMES[v] })), { value: '', label: 'Erase' }];
+      if (mode === 'author') list.push({ value: '@arrival', label: 'Arrival' });
+    } else if (kind === 'timeline') {
+      const names = [...new Set([...labelsOf(grid), ...labelsOf(ans || { rows: [] }), ...grid.rows.map((r) => r.label).filter((l) => /^P\d+$|^[A-Z]$/.test(l)), ...(base.palette || [])])];
+      if (brush && !names.includes(brush)) names.push(brush);
+      list = [...names.map((n) => ({ value: n, label: n })), { value: '', label: 'Erase' }];
+    }
+    const ids = orderedIds(orderName(), list.map((b) => b.value));
+    return ids.map((id) => list.find((b) => b.value === id));
+  }
   function buildPalette() {
     palette.replaceChildren();
-    if (kind === 'states') {
-      palette.append(make('h4', { textContent: 'Paint' }), ...STATES.map((s) => brushButton(s, base.legend?.[s] || STATE_NAMES[s], swatchOf(s))), brushButton('', 'Erase', swatchOf('')));
-      if (mode === 'author') palette.append(make('h4', { textContent: 'Mark' }), brushButton('@arrival', 'Arrival', swatchOf('@arrival')));
-      if (!STATES.includes(brush) && brush !== '' && !(brush === '@arrival' && mode === 'author')) brush = 'run';
-    } else if (kind === 'timeline') {
-      const order = labelsOf(grid);
-      const names = [...new Set([...order, ...labelsOf(ans || { rows: [] }), ...grid.rows.map((r) => r.label).filter((l) => /^P\d+$|^[A-Z]$/.test(l)), ...(base.palette || [])])];
-      if (!names.includes(brush) && brush !== '') brush = names[0] || 'P1';
-      if (!names.includes(brush) && brush) names.push(brush);
-      palette.append(make('h4', { textContent: 'Paint' }), ...names.map((n) => brushButton(n, n, swatchOf(n, order))), brushButton('', 'Erase', swatchOf('')));
-      const input = make('input', { type: 'text', placeholder: 'New: P4, Idle…', className: 'ch-new-label', spellcheck: false });
-      input.setAttribute('aria-label', 'New label to paint with');
-      input.onkeydown = (e) => {
-        if (e.key !== 'Enter' || !input.value.trim()) return;
-        e.preventDefault();
-        brush = input.value.trim();
-        base.palette = [...new Set([...(base.palette || []), brush])];
-        buildPalette();
-        palette.querySelector('.ch-new-label')?.focus();
-      };
-      palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
+    if (kind === 'states' || kind === 'timeline') {
+      const list = brushes();
+      if (!list.some((b) => b.value === brush)) brush = list[0]?.value ?? '';
+      const order = kind === 'timeline' ? labelsOf(grid) : null;
+      const box = make('div', { className: 'ch-brushes' }, ...list.map((b, i) => brushButton(b.value, b.label, swatchOf(b.value, order), i)));
+      sortable(box, { items: '.ch-brush', key: (el) => el.dataset.value, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
+      palette.append(make('h4', { textContent: 'Paint' }), box);
+      if (kind === 'timeline') {
+        const input = make('input', { type: 'text', placeholder: 'New: P4, Idle…', className: 'ch-new-label', spellcheck: false });
+        input.setAttribute('aria-label', 'New label to paint with');
+        input.onkeydown = (e) => {
+          if (e.key !== 'Enter' || !input.value.trim()) return;
+          e.preventDefault();
+          brush = input.value.trim();
+          base.palette = [...new Set([...(base.palette || []), brush])];
+          buildPalette();
+          palette.querySelector('.ch-new-label')?.focus();
+        };
+        palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
+      }
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them.' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -226,6 +251,15 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     }
     palette.hidden = kind === 'plot';
   }
+  // Shift S: the brushes in a ring at the pointer (editor-quick.js).
+  const ring = editorQuickMenu(root, {
+    entries: () => (kind === 'states' || kind === 'timeline' ? brushes().map((b) => {
+      const icon = swatchOf(b.value, kind === 'timeline' ? labelsOf(grid) : null);
+      icon.setAttribute('width', 22);
+      return { key: b.value, label: b.label, icon, active: () => brush === b.value, run: () => choose(b.value) };
+    }) : []),
+    onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); },
+  });
 
   // --- Canvas: grids ----------------------------------------------------------------------
   function appendState(g, state, x1, x2, y) {
@@ -453,7 +487,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     out.push(make('h3', { textContent: chartName(base) }));
     out.push(field('Title', text(base.title, edit('title', (v) => { base.title = v; }, { panel: false }), { disabled: locked })));
     if (locked) {
-      out.push(make('p', { className: 'ch-hint', textContent: 'Filling in: the rows, times and names are the exercise\'s. Switch to Solution to change them.' }));
+      out.push(make('p', { className: 'ch-hint', textContent: 'Filling in: the rows, times and names are the exercise\'s. Switch to Editor to change them.' }));
       panel.replaceChildren(...out);
       return;
     }
@@ -581,12 +615,14 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const resize = new ResizeObserver(() => draw());
   resize.observe(canvas);
   draw();
+  // Keys (1–9, Shift S, Ctrl Z) go to the editor from the start.
+  canvas.focus({ preventScroll: true });
   if (mode === 'answer') say('Fill in: choose a brush and drag over the cells; Check marks what is wrong.');
   return {
     spec: current,
     mode: () => mode,
     set(spec, m = 'author') { snapshot(); load(spec, m); buildPalette(); changed(); },
-    destroy() { resize.disconnect(); root.removeEventListener('keydown', keys); root.replaceChildren(); root.classList.remove('chart-editor'); },
+    destroy() { ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
   };
 }
 

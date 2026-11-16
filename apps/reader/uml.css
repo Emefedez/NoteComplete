@@ -100,3 +100,12 @@ html.uml-page, .uml-page body { height: 100%; margin: 0; }
   .uml-editor .uml-tool span { display: none; }
   .uml-panel { border-left: 0; border-top: 1px solid var(--u-line); }
 }
+/* The tools in their own order (drag to reorder), each with its number key. */
+.uml-tools { display: flex; flex-direction: column; gap: 3px; }
+.uml-editor .uml-tool kbd { margin-left: auto; padding: 0 4px; border: 1px solid var(--u-line); border-radius: 4px; color: var(--u-muted); font: 600 10px/1.5 ui-monospace, Menlo, monospace; }
+.uml-tools .uml-tool.dragging { position: relative; z-index: 2; background: var(--u-surface); box-shadow: 0 4px 14px #0003; }
+.uml-palette .uml-hint { margin: 10px 4px 0; }
+@media (max-width: 760px) {
+  .uml-tools { flex-direction: row; }
+  .uml-palette .uml-hint, .uml-editor .uml-tool kbd { display: none; }
+}

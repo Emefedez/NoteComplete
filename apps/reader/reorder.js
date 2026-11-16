@@ -17,11 +17,15 @@ export function slotFor(x, centres) {
   return centres.filter(c => c < x).length;
 }
 
-export function sortable(container, { items, key, onReorder, onDetach = null, ignore = '' }) {
+// `axis`: 'x' (a row), 'y' (a column), or 'auto': the container's flex direction.
+export function sortable(container, { items, key, onReorder, onDetach = null, ignore = '', axis = 'x' }) {
   container.addEventListener('pointerdown', down => {
     const item = down.target.closest(items);
     if (!item || down.button !== 0 || !container.contains(item) || (ignore && down.target.closest(ignore))) return;
     const startX = down.clientX, startY = down.clientY, pointer = down.pointerId;
+    const y = axis === 'y' || (axis === 'auto' && getComputedStyle(container).flexDirection.startsWith('column'));
+    const at = (e) => (y ? e.clientY : e.clientX), start = y ? startY : startX;
+    const lead = (r) => (y ? r.top : r.left), size = (r) => (y ? r.height : r.width), shift = (d) => (y ? `translateY(${d}px)` : `translateX(${d}px)`);
     const touch = down.pointerType === 'touch' || down.pointerType === 'pen';
     let dragging = false, grab = 0, out = false, held = !touch, holdTimer = 0;
     const siblings = () => [...container.querySelectorAll(items)];
@@ -44,9 +48,9 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
         return;
       }
       if (!dragging) {
-        if (!touch && Math.abs(event.clientX - startX) < THRESHOLD) return;
+        if (!touch && Math.abs(at(event) - start) < THRESHOLD) return;
         dragging = true;
-        grab = startX - item.getBoundingClientRect().left;
+        grab = start - lead(item.getBoundingClientRect());
         item.classList.add('dragging');
         container.classList.add('reordering');
         try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
@@ -59,32 +63,35 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
       }
       // Near an edge of a row that scrolls, it scrolls to reach the items beyond.
       const box = container.getBoundingClientRect();
-      if (container.scrollWidth > container.clientWidth) {
+      if (y && container.scrollHeight > container.clientHeight) {
+        if (event.clientY < box.top + EDGE) container.scrollTop -= 8;
+        else if (event.clientY > box.bottom - EDGE) container.scrollTop += 8;
+      } else if (!y && container.scrollWidth > container.clientWidth) {
         if (event.clientX < box.left + EDGE) container.scrollLeft -= 8;
         else if (event.clientX > box.right - EDGE) container.scrollLeft += 8;
       }
       // Lay the item where its centre now falls, animating the others (FLIP).
       item.style.transform = '';
       const others = siblings().filter(el => el !== item);
-      const left = event.clientX - grab, centre = left + item.offsetWidth / 2;
-      const index = slotFor(centre, others.map(el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; }));
+      const left = at(event) - grab, centre = left + (y ? item.offsetHeight : item.offsetWidth) / 2;
+      const index = slotFor(centre, others.map(el => { const r = el.getBoundingClientRect(); return lead(r) + size(r) / 2; }));
       const ref = others[index];
       const inPlace = ref ? item.nextElementSibling === ref : others.at(-1)?.nextElementSibling === item;
       if (!inPlace && others.length) {
-        const before = new Map(others.map(el => [el, el.getBoundingClientRect().left]));
+        const before = new Map(others.map(el => [el, lead(el.getBoundingClientRect())]));
         if (ref) container.insertBefore(item, ref);
         else others.at(-1).after(item);
         for (const el of others) {
-          const dx = before.get(el) - el.getBoundingClientRect().left;
+          const dx = before.get(el) - lead(el.getBoundingClientRect());
           if (!dx) continue;
           el.style.transition = 'none';
-          el.style.transform = `translateX(${dx}px)`;
+          el.style.transform = shift(dx);
           el.getBoundingClientRect();
           el.style.transition = '';
           el.style.transform = '';
         }
       }
-      item.style.transform = `translateX(${left - item.getBoundingClientRect().left}px)`;
+      item.style.transform = shift(left - lead(item.getBoundingClientRect()));
     };
     const up = event => { if (event.pointerId === pointer) finish(event, false); };
     function finish(event, scrolled) {

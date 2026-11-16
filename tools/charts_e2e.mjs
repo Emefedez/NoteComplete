@@ -58,7 +58,15 @@ try {
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.locator('.sheet').first().evaluate((el) => el.closest('[inert]') !== null), true);
   const before = await p.locator('.chart-dialog .ch-preview svg line').count();
-  await p.click('.chart-dialog .ch-brush[data-value="blocked"]');
+  // Shift S over the canvas: the brushes in a ring, over the dialog.
+  const cbox = await p.locator('.chart-dialog .ch-canvas').boundingBox();
+  await p.mouse.move(cbox.x + cbox.width / 2, cbox.y + cbox.height / 2);
+  await p.keyboard.press('Shift+S');
+  await p.waitForSelector('.quick-menu .qm-inner');
+  const onTop = await p.evaluate(() => { const b = document.querySelector('.quick-menu .qm-inner').getBoundingClientRect(); return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest('.quick-menu') !== null; });
+  assert.ok(onTop, 'the ring is drawn over the dialog');
+  await p.click('.quick-menu .qm-inner[aria-label="Blocked"]');
+  assert.equal(await p.getAttribute('.chart-dialog .ch-brush[aria-pressed="true"]', 'data-value'), 'blocked');
   const grid = await p.locator('.chart-dialog .ch-grid').boundingBox();
   const geo = await p.evaluate(() => {
     const g = document.querySelector('.chart-dialog .ch-grid');
@@ -94,7 +102,7 @@ try {
   await p.fill('.prefab-search', 'scheduling exercise');
   await p.click('.prefab-card:has-text("Scheduling exercise")');
   await p.waitForSelector('.chart-dialog .ch-grid');
-  assert.equal(await p.locator('.chart-dialog .ch-mode').isVisible(), true, 'Solution / Fill in');
+  assert.equal(await p.locator('.chart-dialog .ch-mode').isVisible(), true, 'Editor / Fill in');
   await p.click('.chart-dialog button.primary');
   await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, ADDED);
   await sleep(400);
@@ -103,7 +111,7 @@ try {
   await p.waitForSelector('.context-menu');
   entries = await p.locator('.context-menu button span').allTextContents();
   assert.ok(entries.includes('Fill in process states…'), `entries: ${entries}`);
-  assert.ok(entries.includes('Edit process states (solution)…'), `entries: ${entries}`);
+  assert.ok(entries.includes('Edit process states…'), `entries: ${entries}`);
   await p.click('.context-menu button:has-text("Fill in process states")');
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.getAttribute('.chart-editor', 'data-mode'), 'answer');
@@ -168,6 +176,60 @@ try {
   await q.waitForSelector('.ch-preview svg');
   assert.equal(await q.inputValue('.ch-panel input[type="text"]'), 'Round robin', 'kept between visits');
   console.log('· charts.html: every kind opens, and what is drawn is kept');
+
+  // 6. Brushes: number keys in their order, dragged into another order, and Shift S.
+  await q.goto(`${server.origin}/charts.html?kind=states`);
+  await q.waitForSelector('.ch-grid');
+  await q.evaluate(() => localStorage.removeItem('notecomplete.palette.chart-states'));
+  await q.reload();
+  await q.waitForSelector('.ch-grid');
+  const pressed = () => q.getAttribute('.ch-brush[aria-pressed="true"]', 'data-value');
+  const keysShown = () => q.locator('.ch-brush kbd').allTextContents();
+  assert.deepEqual(await keysShown(), ['1', '2', '3', '4', '5']);
+  await q.click('.ch-canvas');
+  await q.keyboard.press('2');
+  assert.equal(await pressed(), 'ready', '2 picks the second brush');
+  const run = await q.locator('.ch-brush[data-value="run"]').boundingBox();
+  const blocked = await q.locator('.ch-brush[data-value="blocked"]').boundingBox();
+  await q.mouse.move(blocked.x + 30, blocked.y + blocked.height / 2);
+  await q.mouse.down();
+  await q.mouse.move(blocked.x + 30, run.y + 2, { steps: 10 });
+  await q.mouse.up();
+  const order = await q.$$eval('.ch-brush', (bs) => bs.map((b) => b.dataset.value));
+  assert.equal(order[0], 'blocked', `dragged first: ${order}`);
+  await sleep(100);
+  await q.keyboard.press('1');
+  assert.equal(await pressed(), 'blocked', '1 follows the new order');
+  await q.reload();
+  await q.waitForSelector('.ch-grid');
+  assert.equal(await q.getAttribute('.ch-brush >> nth=0', 'data-value'), 'blocked', 'the order is kept');
+  const canvasBox = await q.locator('.ch-canvas').boundingBox();
+  await q.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 80);
+  await q.click('.ch-canvas', { position: { x: 5, y: canvasBox.height - 5 } });
+  await q.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 80);
+  await q.keyboard.press('Shift+S');
+  await q.waitForSelector('.quick-menu .qm-inner');
+  assert.equal(await q.locator('.quick-menu .qm-inner').count(), 5, 'the brushes in a ring');
+  const ringBg = await q.$eval('.quick-menu .qm-disc', (d) => getComputedStyle(d).position);
+  assert.equal(ringBg, 'absolute', 'quick-menu.css is loaded on the own page');
+  await q.click('.quick-menu .qm-inner[aria-label="Erase"]');
+  assert.equal(await q.locator('.quick-menu').count(), 0);
+  assert.equal(await pressed(), '', 'picked from the ring');
+  if (DIR) await q.screenshot({ path: DIR + 'page-reordered.png' });
+  // The UML editor: the same keys and ring.
+  await q.goto(`${server.origin}/uml.html?diagram=class`);
+  await q.waitForSelector('.uml-canvas [data-uml-id]');
+  const first = await q.$eval('.uml-tools .uml-tool', (b) => b.dataset.type);
+  await q.click('.uml-canvas', { position: { x: 5, y: 5 } });
+  await q.keyboard.press('1');
+  assert.equal(await q.getAttribute(`.uml-tools .uml-tool[data-type="${first}"]`, 'aria-pressed'), 'true', 'UML: 1 picks the first tool');
+  await q.keyboard.press('Escape');
+  await q.keyboard.press('Shift+S');
+  await q.waitForSelector('.quick-menu .qm-inner');
+  assert.equal(await q.locator('.quick-menu .qm-inner').count(), await q.locator('.uml-tools .uml-tool').count());
+  await q.keyboard.press('Escape');
+  assert.equal(await q.locator('.quick-menu').count(), 0);
+  console.log('· palettes: number keys follow an order dragged by hand and kept; Shift S rings in both editors');
   assert.deepEqual(errors, []);
   console.log('charts e2e: ok');
 } finally {

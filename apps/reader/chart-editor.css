@@ -102,3 +102,11 @@ html.chart-page, .chart-page body { height: 100%; margin: 0; }
   .ch-new-label { width: 120px; margin: 0; flex: none; }
   .ch-panel { border-left: 0; border-top: 1px solid var(--c-line); }
 }
+/* The brushes in their own order (drag to reorder), each with its number key. */
+.ch-brushes { display: flex; flex-direction: column; gap: 3px; }
+.chart-editor .ch-brush kbd { margin-left: auto; padding: 0 4px; border: 1px solid var(--c-line); border-radius: 4px; color: var(--c-muted); font: 600 10px/1.5 ui-monospace, Menlo, monospace; }
+.ch-brushes .ch-brush.dragging { position: relative; z-index: 2; background: var(--c-surface); box-shadow: 0 4px 14px #0003; }
+@media (max-width: 760px) {
+  .ch-brushes { flex-direction: row; }
+  .chart-editor .ch-brush kbd { display: none; }
+}

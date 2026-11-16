@@ -3943,3 +3943,5 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
    backdrop, and under nothing; the tab strip stays usable. Their own rules win over these. */
 :where(dialog.nc-modal) { position: fixed; inset: 0; margin: auto; max-width: calc(100% - 6px - 2em); max-height: calc(100% - 6px - 2em); overflow: auto; }
 :where(dialog.nc-modal) { box-shadow: var(--shadow-dialog, 0 18px 50px #0004), 0 0 0 1px #0001; }
+/* Menus opened over such a dialog (its quick menu, a tab's menu) are drawn over it. */
+.nc-modal ~ :is(.quick-menu, .context-menu) { z-index: 2000; }

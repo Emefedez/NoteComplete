@@ -6121,7 +6121,7 @@ function itemMenu(item, x, y, { tape = null } = {}) {
     ...tapeEntries(p, tape),
     tape && "-",
     exercise && { label: `Fill in ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
-    c && { label: `Edit ${lower}${exercise ? " (solution)" : ""}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
+    c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
     chart && { label: "Edit its data as JSON…", icon: "note", run: () => editCompound(item, "json") },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
     item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
