@@ -181,7 +181,8 @@ export class SelectionController {
   if(last&&event.timeStamp-last.time<450&&Math.hypot(event.clientX-last.x,event.clientY-last.y)<8&&tool==='select'&&this.item?.kind==='image'&&this.item.page===p.index&&!event.target.closest('[data-selection-handle]')){event.preventDefault();this.lastDown=null;this.startCrop();return true;}
   const handle=event.target.closest('[data-selection-handle]');
   if(handle?.dataset.selectionHandle==='menu'){event.preventDefault();event.stopPropagation();if(this.item)this.menu?.(this.item,event.clientX,event.clientY);return true;}
-  if(!handle&&tool!=='select')return false;
+  // Another tool: a tap away from the selection lets go of it (and then draws, pans…).
+  if(!handle&&tool!=='select'){if(this.item&&event.button===0)this.clear();return false;}
   if(!this.editable()||!p.view||event.button!==0)return true;
   event.preventDefault();p.el.setPointerCapture(event.pointerId);
   const at=this.coords(event,p),g={id:event.pointerId,p,start:at,current:at,startClient:[event.clientX,event.clientY],currentClient:[event.clientX,event.clientY],ended:false,mode:handle?handle.dataset.selectionHandle==='move'?'move':Number(handle.dataset.selectionHandle):'pick'};this.active=g;

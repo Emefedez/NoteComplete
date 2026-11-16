@@ -3887,6 +3887,12 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
+    // Escape lets go of what is selected first.
+    if (selection.item && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+      e.preventDefault();
+      selection.clear();
+      return;
+    }
     endResizeDrag();
     cancelGesture();
     setCompact(true);
@@ -7302,3 +7308,8 @@ $("joinTablet").onclick = () => startCollab("join-tablet");
 $("joinNotes").onclick = () => startCollab("join-notes");
 // Opened from an invite (/join#… or /tablet#…, served by the host's computer).
 if (/^\/(join|tablet|send)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");
+
+// A tap on the grey around the pages lets go of the selection too.
+$("viewport").addEventListener("pointerdown", (e) => {
+  if (selection.item && e.button === 0 && !e.target.closest?.(".sheet, [data-selection-handle], .selection-options, .context-menu")) selection.clear();
+});

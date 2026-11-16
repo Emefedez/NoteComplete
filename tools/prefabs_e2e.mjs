@@ -74,7 +74,10 @@ try {
   assert.ok((await p.locator('.context-menu button span').allTextContents()).includes('Edit histogram…'));
   await p.keyboard.press('Escape');
   await p.waitForFunction(() => !document.querySelector('.context-menu'));
-  console.log('· the selection’s ⋯ opens its menu');
+  // Escape again lets go of the selection.
+  await p.keyboard.press('Escape');
+  await p.waitForFunction(() => !document.querySelector('.selection-overlay'));
+  console.log('· the selection’s ⋯ opens its menu; Escape lets go of it');
 
   // 4. The empty page: insert here, the quick menu, undo.
   const sheet = await p.locator('.sheet').first().boundingBox();
