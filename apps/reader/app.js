@@ -45,6 +45,7 @@ import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
 import { saveDocumentInPlace } from "./save-target.js";
+import { welcomeWanted, setWelcomeWanted } from "./welcome-pref.js";
 import { zipFiles } from "./zip.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
@@ -284,6 +285,23 @@ if ($("installApp")) {
   $("installApp").hidden = !!(window.notecompleteUpdates || window.ReactNativeWebView);
   $("installApp").onclick = () => installApp();
 }
+// Help → Open the welcome note at start: only on the website, which has one (site.json).
+// Remembered in this browser (welcome-pref.js); tabs-main.js reads it at start.
+function welcomeChecked() { $("welcomeToggle").setAttribute("aria-checked", String(welcomeWanted())); }
+if ($("welcomeToggle") && !window.notecompleteUpdates && !window.ReactNativeWebView) {
+  fetch("./site.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((site) => {
+    if (!site?.welcome) return;
+    $("welcomeToggle").hidden = false;
+    welcomeChecked();
+  }).catch(() => { /* No website here. */ });
+  $("welcomeToggle").onclick = () => {
+    closeMenus();
+    const wanted = !welcomeWanted();
+    setWelcomeWanted(wanted);
+    welcomeChecked();
+    status(wanted ? "The welcome note opens each time this site starts." : "The welcome note will not open at start any more. Help → Open the welcome note at start brings it back.");
+  };
+}
 let deferredInstall = null;
 window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredInstall = event; });
 function installPrompt() {
@@ -305,6 +323,12 @@ async function openFromAddress() {
     const response = await fetch(url);
     if (!response.ok) throw Error(`Could not open ${url.pathname.split("/").pop()} (${response.status}).`);
     await load(new File([await response.blob()], decodeURIComponent(url.pathname.split("/").pop())));
+    // The website's welcome note, opened at start: say once how to stop that.
+    if (welcomeWanted() && window.parent !== window && /^welcome\./i.test(url.pathname.split("/").pop())) {
+      let told = false;
+      try { told = localStorage.getItem("notecomplete-welcome-told") === "1"; localStorage.setItem("notecomplete-welcome-told", "1"); } catch { told = true; }
+      if (!told) status("To stop this welcome note opening at start: Help → Open the welcome note at start.");
+    }
     // notes=1: the Notes panel open, formatted, so its links can be followed.
     if (tabParams.get("notes") === "1") {
       // Once the panel is open (its notes loaded), not after a guessed delay.
@@ -4166,8 +4190,18 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
       } else if (savedEntry && home?.visible) {
         home.renderRecent?.();
       }
-    } else if (delivery.kind === "imported" && home?.visible) {
-      home.renderRecent?.();
+    } else if (delivery.kind === "imported" && delivery.entry) {
+      // Kept in the library (web, phone, or an imported note): this note is now that entry,
+      // so Recent reopens what was saved and the next save updates it.
+      const entry = delivery.entry, boundChanged = noteEntryKey !== entry.key || docMember?.name !== entry.name;
+      notePath = await library.pathOf(entry).catch(() => "");
+      if (boundChanged) {
+        noteEntryKey = entry.key;
+        activeCoverKeyOverride = entry.key;
+        rememberDocument(entry.key);
+        await setDocMember({ key: entry.key, name: entry.name, source: "imported" });
+      }
+      if (home?.visible) home.renderRecent?.();
     }
     if (as === "markdown") {
       const text = await call("exportMarkdown", { title: doc.title || filename() });
@@ -4184,7 +4218,9 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     if (as === saveAs && !chosenOptions && !delivery.shared) {
       dirty = changed = false;
       savedState();
-      status(`Saved ${delivery.name || suggestedName}.`);
+      status(delivery.created
+        ? `Saved ${delivery.name || suggestedName} in NoteComplete: it is in Recent. File → Export gives a copy as a file.`
+        : `Saved ${delivery.name || suggestedName}.`);
       return;
     }
     if (as === "markdown") {

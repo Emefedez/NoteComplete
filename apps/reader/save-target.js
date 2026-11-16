@@ -91,42 +91,30 @@ export async function saveDocumentInPlace({
     };
   }
 
-  // 3. Imported library copy (browser OPFS / Desktop storage) when extension matches.
+  // 3. A note kept in the library (imported, or saved here before): its copy is updated, and
+  // Recent follows it. Saved in another format, the copy takes the new extension.
   const importedKey = docMember?.source === 'imported'
     ? docMember.key
     : (typeof noteEntryKey === 'string' && noteEntryKey.startsWith('imported:') ? noteEntryKey : '');
-  if (importedKey && library) {
+  if (importedKey && typeof library?.keepSaved === 'function') {
     const entry = await library.entry(importedKey).catch(() => null);
-    if (
-      entry?.source === 'imported'
-      && entry.filename
-      && hasMatchingExtension(entry.filename, targetExt)
-      && hasMatchingExtension(entry.name || entry.filename, targetExt)
-    ) {
-      const loc = await library.location();
-      if (loc && loc.kind !== 'none' && typeof loc.write === 'function') {
-        await loc.write(entry.filename, new Blob([payload], { type: mime }));
-        const updated = {
-          ...entry,
-          size: String(payload.byteLength),
-          openedAt: typeof library.now === 'function' ? library.now() : Date.now(),
-        };
-        await library.store.set('entries', entry.key, updated);
-        return {
-          kind: 'imported',
-          overwritten: true,
-          cancelled: false,
-          shared: false,
-          entry: updated,
-          name: updated.name || entry.filename,
-          size: payload.byteLength,
-        };
-      }
+    if (entry?.source === 'imported' && entry.filename) {
+      const same = hasMatchingExtension(entry.filename, targetExt) && hasMatchingExtension(entry.name || entry.filename, targetExt);
+      const updated = await library.keepSaved(same ? entry.name || entry.filename : suggestedName, new Blob([payload], { type: mime }), { key: entry.key });
+      return {
+        kind: 'imported',
+        overwritten: same,
+        cancelled: false,
+        shared: false,
+        entry: updated,
+        name: updated.name,
+        size: payload.byteLength,
+      };
     }
   }
 
   // 4. First save of a new/converted document (or saving .noteful/.pdf as .nfedit):
-  // ask once on Desktop or Chromium so later Ctrl+S overwrites that chosen file.
+  // the desktop app asks once where, so later Ctrl+S overwrites that chosen file.
   if (typeof bridge?.saveFile === 'function') {
     const chosen = await bridge.saveFile(suggestedName, payload, saveFiltersFor(targetExt));
     if (!chosen) return { kind: 'cancelled', overwritten: false, cancelled: true, shared: false };
@@ -138,6 +126,23 @@ export async function saveDocumentInPlace({
       path: chosen.path,
       name: chosen.name,
       size: chosen.size ?? payload.byteLength,
+    };
+  }
+
+  // 5. Web and phone: kept in NoteComplete's library (browser storage, or the folder chosen
+  // on Home), so it is in Recent on every device and Ctrl+S updates the same copy. A file
+  // elsewhere is File → Export.
+  if (typeof library?.keepSaved === 'function') {
+    const entry = await library.keepSaved(suggestedName, new Blob([payload], { type: mime }));
+    return {
+      kind: 'imported',
+      overwritten: false,
+      created: true,
+      cancelled: false,
+      shared: false,
+      entry,
+      name: entry.name,
+      size: payload.byteLength,
     };
   }
 
@@ -170,7 +175,7 @@ export async function saveDocumentInPlace({
     }
   }
 
-  // 5. Fallback (iOS/Firefox/Safari without File System Access): regular download.
+  // 6. Fallback (iOS/Firefox/Safari without File System Access): regular download.
   if (typeof download !== 'function') throw Error('No save handler available.');
   const delivery = await download(payload, suggestedName, mime);
   return {

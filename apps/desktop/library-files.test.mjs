@@ -205,3 +205,12 @@ test('saveChosen writes to a chosen file, remembers it in Recent, and allows wri
 
   await assert.rejects(files.saveChosen(path.join(root, 'bad.exe'), new Uint8Array([1])), /Invalid file name/);
 });
+
+test('a note saved from the Save dialog without an extension gets the chosen type', async () => {
+  const { withExtension } = await import('./library-files.js');
+  const nfedit = [{ name: 'NoteComplete project', extensions: ['nfedit'] }];
+  assert.equal(withExtension('/home/me/Lecture 4', nfedit), '/home/me/Lecture 4.nfedit');
+  assert.equal(withExtension('/home/me/Lecture 4.NFEDIT', nfedit), '/home/me/Lecture 4.NFEDIT');
+  assert.equal(withExtension('/home/me/Tema.v2', [{ extensions: ['noteful'] }]), '/home/me/Tema.v2.noteful');
+  assert.equal(withExtension('/home/me/x', null), '/home/me/x');
+});

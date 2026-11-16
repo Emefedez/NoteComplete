@@ -14,7 +14,8 @@ async function textStart(file) {
   try { const { buffer, bytesRead } = await handle.read(Buffer.alloc(4096), 0, 4096, 0); return !buffer.subarray(0, bytesRead).includes(0); }
   finally { await handle.close(); }
 }
-const RECENT = 50, FOLDERS = 50;
+// Recent paths stay reopenable and writable; the reader lists far fewer, so this is generous.
+const RECENT = 500, FOLDERS = 50;
 // Pictures a document may show from beside it, and what a saved copy may hold.
 const PICTURE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const MAX_PICTURE = 25 * 1048576, MAX_PICTURES = 300;
@@ -26,6 +27,14 @@ async function writeAtomic(file, bytes) {
   const partial = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.partial`);
   await writeFile(partial, bytes);
   await rename(partial, file);
+}
+
+// The Save dialog's file name with the chosen type's extension: GTK and some Windows
+// dialogs return the name as typed, and a note saved without one would ask again next time.
+export function withExtension(file, filters) {
+  const ext = Array.isArray(filters) ? filters[0]?.extensions?.[0] : '';
+  if (typeof file !== 'string' || typeof ext !== 'string' || !/^\w+$/.test(ext)) return file;
+  return file.toLowerCase().endsWith('.' + ext.toLowerCase()) ? file : `${file}.${ext}`;
 }
 
 export function plainName(name) {
@@ -136,20 +145,6 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       const partial = path.join(folder, `.${path.basename(file)}.${process.pid}.partial`);
       await writeFile(partial, bytes);
       await rename(partial, file);
-    },
-    // Saves a user-chosen file from the native Save dialog and remembers it in Recent so later
-    // saves can update it in place with writeOpened.
-    async saveChosen(file, bytes) {
-      if (typeof file !== 'string' || !path.isAbsolute(file)) throw Error('Choose an absolute path.');
-      const base = path.basename(file);
-      if (!base || base.startsWith('.') || /[\\/\x00-\x1f]/.test(base) || !NOTE.test(base)) throw Error('Invalid file name.');
-      if (!(bytes instanceof Uint8Array)) throw Error('Expected file bytes.');
-      await mkdir(path.dirname(file), { recursive: true });
-      await writeAtomic(file, bytes);
-      const s = await load();
-      s.recent = [file, ...s.recent.filter(p => p !== file)].slice(0, RECENT);
-      await save();
-      return { path: file, name: base, size: bytes.byteLength };
     },
     async remove(name) {
       await rm(path.join((await load()).folder, plainName(name)), { force: true });
