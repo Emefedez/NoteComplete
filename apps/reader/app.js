@@ -1687,7 +1687,7 @@ function toolOptions() {
   $("drawingOptions").hidden = tool === "select" || tool === "text";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
-  $("drawingOptions").dataset.tool = tool;
+  $("drawingOptions").dataset.forTool = tool;
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   // The text format bar, when docked here, shows while a text box is typed or selected.
