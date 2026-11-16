@@ -9,12 +9,12 @@ import { HTML_DOCUMENTS_INHERIT_POLICY, policy, header, strictPolicy, strictHead
 
 const reader = new URL('../apps/reader/', import.meta.url);
 const read = (name) => readFileSync(new URL(name, reader), 'utf8');
-const PAGES = ['index.html', 'tabs.html'];
+const PAGES = ['index.html', 'tabs.html', 'uml.html'];
 // The kinds of address the same files are served from.
 const ORIGINS = ['https://example.github.io', 'http://localhost:8767', 'notecomplete://reader', 'http://127.0.0.1:8768', 'http://192.168.1.20:41237', 'https://example.trycloudflare.com'];
 const tags = (html) => [...html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].map(([whole, name, attrs]) => ({ whole, name: name.toLowerCase(), attrs }));
 
-test('index.html and tabs.html carry the policy of reader-csp.mjs, before anything loads', () => {
+test('index.html, tabs.html and uml.html carry the policy of reader-csp.mjs, before anything loads', () => {
   for (const page of PAGES) {
     const html = read(page);
     const found = html.match(/<meta http-equiv="Content-Security-Policy"[^>]*>/g) || [];
@@ -112,6 +112,8 @@ const NOT_REQUESTED = [
   ['https://…', 'example text shown to the person (index.html, collab.js)'],
   ['http://${text}', 'sync.js parses a typed invite; the connection it makes is ws: or wss:'],
   ['https://${value}', 'web-view.js completes a typed link, opened in <webview> or the browser, never fetched by the page'],
+  ['http://schema.omg.org/spec/', 'XMI and UML namespaces and type references written into exported files (uml-xml.js)'],
+  ['https://notecomplete.app/xmi/layout', 'the XML namespace of the layout NoteComplete keeps in XMI files (uml-xml.js)'],
 ];
 
 test('every address named in the reader\'s code is in the inventory and allowed', () => {

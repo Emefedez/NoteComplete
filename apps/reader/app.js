@@ -71,7 +71,7 @@ import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
-import { choosePrefab, editPrefab, prefabAspect, prefabItems, prefabName, prefabPng } from "./prefabs.js";
+import { choosePrefab, editPrefab, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
@@ -3668,7 +3668,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, tree or table"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -5187,7 +5187,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "insertGraph", "insertTable", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "insertGraph", "insertTable", "insertUml", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -5641,13 +5641,23 @@ async function insertPrefab(p, box = null) {
   if (!doc || !p || editing) return false;
   const choice = await choosePrefab();
   if (!choice) return false;
-  if (choice.kind !== "prefab") return insertCompound(p, choice.kind, box);
+  if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
-  const spec = await editPrefab({ spec: choice.spec });
+  const spec = choice.kind === "uml" ? await umlEditor(choice.spec) : await editPrefab({ spec: choice.spec });
   if (!spec) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
+}
+// The UML diagram editor (uml-editor.js), loaded the first time it is needed.
+async function umlEditor(spec, editing = false) {
+  try {
+    const { openUmlEditor } = await import("./uml-editor.js");
+    return await openUmlEditor(spec, { editing });
+  } catch (e) {
+    status(`The diagram editor could not open: ${e.message}`, true);
+    return null;
+  }
 }
 // An exam figure drawn into `box` (its width kept, its height from the figure), or a new box;
 // `replace`: the items of the prefab it replaces, in the same undo step.
@@ -5657,7 +5667,9 @@ async function placePrefab(p, spec, box = null, replace = null, id = undefined) 
   if (box && box[2] >= 40) at = [box[0], box[1], box[2], box[2] * aspect];
   else {
     // A tap (no box dragged) places it from that point; nothing, in the middle of the view.
-    const w = Math.min(440, p.size[0] - 60), h = w * aspect;
+    // A UML diagram keeps its own size (its units are the page's), when it fits.
+    const natural = spec?.type === "uml" ? prefabSvg(spec)?.width || 440 : 440;
+    const w = Math.min(natural, p.size[0] - 60, (p.size[1] - 60) / aspect), h = w * aspect;
     at = box ? [Math.max(20, Math.min(box[0], p.size[0] - w - 20)), Math.max(20, Math.min(box[1], p.size[1] - h - 20)), w, h] : compoundBox(p, "graph", null, [w, h]);
   }
   try {
@@ -5671,6 +5683,19 @@ async function placePrefab(p, spec, box = null, replace = null, id = undefined) 
   }
 }
 $("insertTable").onclick = () => doc && insertCompound(panels[page], "table");
+// A UML diagram straight away (the picker's UML cards do the same): a class diagram to start.
+async function insertUml(p, box = null, diagram = "class") {
+  if (!doc || !p || editing || !ensureEditableLayer()) return false;
+  const { starterModel } = await import("./uml.js");
+  const spec = await umlEditor(starterModel(diagram));
+  if (!spec) return false;
+  const done = await placePrefab(p, spec, box);
+  if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+  return done;
+}
+$("insertUml").onclick = () => doc && insertUml(panels[page]);
+// The editor on a page of its own (a window of its own in the desktop app).
+$("openUmlPage").onclick = () => { if (!window.open("./uml.html", "_blank")) status("The UML editor page could not open here; it is at uml.html next to the app.", true); };
 // The box a graph or table has now: its frame's (moved or resized since it was drawn).
 async function compoundFrame(item) {
   const c = item.compound, info = await call("selection", { page: item.page, itemId: c.frame });
@@ -5685,7 +5710,7 @@ async function editCompound(item) {
   let spec = {};
   try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
   if (c.kind === "prefab") {
-    const chosen = await editPrefab({ spec, editing: true });
+    const chosen = spec.type === "uml" ? await umlEditor(spec, true) : await editPrefab({ spec, editing: true });
     if (!chosen) return;
     const frame = await compoundFrame(item);
     selection.clear();
@@ -5745,8 +5770,11 @@ async function removeItem(item) {
 function itemMenu(item, x, y) {
   if (!doc || !item) return;
   const c = item.compound, name = c ? compoundLabel(c) : ITEM_NAMES[item.kind] || "Item";
+  const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
+  // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so.
+  const lower = name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
-    c && { label: `Edit ${name.toLowerCase()}…`, icon: c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
+    c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
     item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
     { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
@@ -5769,6 +5797,7 @@ async function pageMenu(p, at, x, y) {
   } catch (e) { return status(e.message, true); }
   openContextMenu(x, y, [
     { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, [at[0], at[1], 0, 0]) },
+    { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, [at[0], at[1], 0, 0]) },
     { label: "Insert table here", icon: "table", run: () => insertCompound(p, "table", [at[0], at[1], 0, 0]) },
     { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } },
     { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() },

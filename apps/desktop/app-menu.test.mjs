@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { menuTemplate, uiZoomStep } from './app-menu.js';
+import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
 
 const roles = (items) => items.flatMap((item) => [item.role, ...(item.submenu ? roles(item.submenu) : [])]).filter(Boolean);
 
@@ -28,4 +28,16 @@ test('Ctrl/Cmd + Shift + resize shortcuts recognize US, Spanish, and numpad keys
   // Unshifted or Alt-modified chords are ignored by UI zoom.
   assert.equal(uiZoomStep({ control: true, shift: false, key: '+' }), null);
   assert.equal(uiZoomStep({ control: true, shift: true, alt: true, key: '+' }), null);
+});
+
+test('Tools opens the UML editor page, and only the reader pages open in windows', () => {
+  let opened = null;
+  const tools = menuTemplate('linux', { openPage: (page) => { opened = page; } }).find((m) => m.label === 'Tools');
+  tools.submenu.find((i) => i.label === 'UML diagram editor').click();
+  assert.equal(opened, 'uml.html');
+  const home = 'notecomplete://reader/';
+  assert.equal(ownPage(`${home}uml.html`, home), 'uml.html');
+  assert.equal(ownPage(`${home}uml.html?diagram=state`, home), 'uml.html');
+  assert.equal(ownPage(`${home}index.html`, home), null);
+  assert.equal(ownPage('https://example.com/uml.html', home), null);
 });
