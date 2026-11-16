@@ -190,12 +190,19 @@ impl Server {
             "page_text" => {
                 let (path, display) = (note_path(args)?, page_arg(args)?);
                 let v = self.view(args, display)?;
-                let pdf = match v["pdf_background"].as_object() {
-                    Some(bg) => self.pdf_page_text(&path, bg)?,
-                    None => String::new(),
+                // Without poppler the PDF text is left out, not the typed and handwritten text.
+                let (pdf, pdf_error) = match v["pdf_background"].as_object() {
+                    Some(bg) => match self.pdf_page_text(&path, bg) {
+                        Ok(t) => (t, None),
+                        Err(e) => (String::new(), Some(e.to_string())),
+                    },
+                    None => (String::new(), None),
                 };
                 let (handwriting, source) = handwriting_text(&v);
                 let mut out = json!({"page":display + 1,"typed_text":typed_text(&v),"pdf_text":pdf,"handwriting_text":handwriting});
+                if let Some(e) = pdf_error {
+                    out["pdf_text_note"] = e.into();
+                }
                 if let Some(source) = source {
                     out["handwriting_source"] = source.into();
                 } else {
