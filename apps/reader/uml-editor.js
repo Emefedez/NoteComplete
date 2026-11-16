@@ -2,7 +2,7 @@
 // a canvas to place, move, resize and connect them, and a property panel built from each
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
-import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName } from './uml.js';
+import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp } from './uml-xml.js';
 import { download } from './download.js';
 
@@ -99,6 +99,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function buildPalette() {
     const d = DIAGRAMS[model.diagram];
     kindSelect.value = model.diagram;
+    for (const o of exportSelect.options) if (o.value === 'vp' || o.value === 'xmi') o.disabled = !!d.notUml;
     const button = (kind, type, label) => {
       const b = make('button', { type: 'button', className: 'uml-tool', title: kind === 'element' ? `${label}: tap the canvas to place it` : `${label}: drag from one element to another` }, umlIcon(kind, type), make('span', { textContent: label }));
       b.dataset.kind = kind; b.dataset.type = type;
@@ -171,7 +172,21 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const s = 10 * k;
         const handle = document.createElementNS(SVG, 'rect');
         Object.entries({ x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
-        svg.append(handle);
+        // The arrow handle: drag it to another element to connect them, or to empty canvas
+        // to add a new element there, connected (how trees and automata grow).
+        const g = document.createElementNS(SVG, 'g');
+        g.setAttribute('class', 'uml-connect');
+        g.dataset.handle = 'connect';
+        const cx = x + w + 16 * k, cy = y + h / 2, r = 9 * k;
+        const dot = document.createElementNS(SVG, 'circle');
+        Object.entries({ cx, cy, r }).forEach(([a, v]) => dot.setAttribute(a, v));
+        const arrow = document.createElementNS(SVG, 'path');
+        arrow.setAttribute('d', `M${cx - 4 * k} ${cy}H${cx + 4 * k}M${cx + 1 * k} ${cy - 3 * k}L${cx + 4 * k} ${cy}L${cx + 1 * k} ${cy + 3 * k}`);
+        g.append(dot, arrow);
+        const title = document.createElementNS(SVG, 'title');
+        title.textContent = 'Drag to another element to connect, or to empty space to add a connected one';
+        g.append(title);
+        svg.append(handle, g);
       }
     } else if (selected?.kind === 'connector') {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -222,7 +237,34 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     changed();
     focusName();
   }
+  // The connector a drag from an element's arrow handle makes: the last one used in this
+  // diagram, or the kind it already has, or the diagram's first (a note link from a note).
+  let lastConnector = null;
+  function connectorFor(from) {
+    const list = DIAGRAMS[model.diagram].connectors;
+    if (from?.type === 'note') return 'anchor';
+    if (lastConnector && list.includes(lastConnector) && lastConnector !== 'anchor') return lastConnector;
+    // Otherwise what it is already connected with (a tree goes on with lines), or the first.
+    const own = [...model.connectors].reverse().find((c) => (c.from === from?.id || c.to === from?.id) && c.type !== 'anchor' && list.includes(c.type));
+    return own?.type || list.find((t) => t !== 'anchor') || list[0];
+  }
+  function grow(from, type, at, start) {
+    const kind = ELEMENTS[from.type]?.container || from.type === 'note' ? DIAGRAMS[model.diagram].elements[0] : from.type;
+    snapshot();
+    const def = ELEMENTS[kind];
+    const e = makeElement(kind, [Math.round(at[0] - def.size[0] / 2), Math.round(at[1] - def.size[1] / 2)], { name: def.noName ? '' : model.diagram === 'graph' ? '' : def.label }, model);
+    if (def.shape.toLowerCase().includes('lifeline')) e.bounds[1] = from.bounds[1];
+    model.elements.push(e);
+    e.parent = containerFor(e);
+    const extra = CONNECTORS[type]?.message ? { props: { y: Math.round(start[1]) } } : {};
+    model.connectors.push(makeConnector(type, from.id, e.id, extra, model));
+    lastConnector = type;
+    selected = { kind: 'element', id: e.id };
+    changed();
+    focusName();
+  }
   function connect(type, from, to, at = null) {
+    lastConnector = type;
     snapshot();
     const extra = {};
     if (CONNECTORS[type].message) extra.props = { y: Math.round(at?.[1] ?? 120) };
@@ -282,7 +324,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (tool.kind === 'connector') {
       const from = elementAt(pt);
       if (!from) return say('Start on an element, and let go on another.');
-      drag = { mode: 'connect', from, start: pt, line: null };
+      drag = { mode: 'connect', type: tool.type, from, start: pt, line: null };
+      return;
+    }
+    if (handle === 'connect') {
+      const from = model.elements.find((q) => q.id === selected.id);
+      drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true };
       return;
     }
     if (handle === 'resize') {
@@ -348,7 +395,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     } else if (drag.mode === 'connect') {
       if (!drag.line) { drag.line = document.createElementNS(SVG, 'line'); drag.line.setAttribute('class', 'uml-rubber'); }
       const b = fitBounds(drag.from);
-      Object.entries({ x1: b[0] + b[2] / 2, y1: CONNECTORS[tool.type]?.message ? drag.start[1] : b[1] + b[3] / 2, x2: pt[0], y2: pt[1] }).forEach(([a, v]) => drag.line.setAttribute(a, v));
+      Object.entries({ x1: b[0] + b[2] / 2, y1: CONNECTORS[drag.type]?.message ? drag.start[1] : b[1] + b[3] / 2, x2: pt[0], y2: pt[1] }).forEach(([a, v]) => drag.line.setAttribute(a, v));
       svg.append(drag.line);
     }
   });
@@ -359,9 +406,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (d.mode === 'connect') {
       d.line?.remove();
       const pt = toModel(ev);
-      const to = elementAt(pt);
-      if (!to) return say('Let go on an element to connect to it.');
-      connect(tool.type, d.from, to, d.start);
+      const to = elementAt(pt, d.grow ? d.from.id : null) || (!d.grow ? elementAt(pt) : null);
+      if (to) return connect(d.type, d.from, to, d.start);
+      if (!d.grow) return say('Let go on an element to connect to it.');
+      // Let go on empty space: a new element like the one it started from, connected to it.
+      if (Math.hypot(pt[0] - d.start[0], pt[1] - d.start[1]) < 12) return;
+      grow(d.from, d.type, pt, d.start);
       return;
     }
     if (d.mode === 'move' && d.snapped) {
@@ -398,7 +448,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       selected = { kind: 'connector', id: c.id };
       return changed();
     }
-    if (hit?.dataset.umlKind === 'element') focusName();
+    if (hit?.dataset.umlKind === 'element') return focusName();
+    // On empty canvas: a new element of the diagram's first kind (a node in a node graph).
+    if (!hit && !elementAt(pt)) place(DIAGRAMS[model.diagram].elements[0], pt);
   });
   canvas.addEventListener('wheel', (ev) => {
     ev.preventDefault();
@@ -496,8 +548,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       title.oninput = () => { snapshot('diagram:title'); model.title = title.value; changed({ panel: false }); };
       const badge = make('input', { type: 'checkbox', checked: model.badge !== false });
       badge.onchange = () => { snapshot(); model.badge = badge.checked; changed({ panel: false }); };
-      out.push(field('Name', name), field('Title', title), make('label', { className: 'uml-check' }, badge, ' Show the UML badge on the note'),
-        make('p', { className: 'uml-hint', textContent: 'Pick an element on the left and tap the canvas to place it; pick a connector and drag between two elements. Drag to move, the corner to resize, the empty canvas to pan; double-click a line to bend it.' }));
+      out.push(field('Name', name), field('Title', title), make('label', { className: 'uml-check' }, badge, DIAGRAMS[model.diagram].notUml ? ' Show a badge on the note' : ' Show the UML badge on the note'));
+      if (model.diagram !== 'sequence') {
+        const arrange = make('button', { type: 'button', textContent: 'Arrange as tree', title: 'Lay it out top down, each element under the one that connects to it', disabled: !model.connectors.length });
+        arrange.onclick = () => { snapshot(); treeLayout(model); changed(); fit(); };
+        out.push(make('div', { className: 'uml-row' }, arrange));
+      }
+      out.push(make('p', { className: 'uml-hint', textContent: 'Tap an element on the left, then the canvas, to place it (or double-click empty canvas). Select an element and drag its arrow handle to another to connect them, or to empty space to add a connected one. Drag to move, the corner to resize, the empty canvas to pan; double-click a line to bend it.' }));
     } else if (selected.kind === 'element') {
       const e = model.elements.find((q) => q.id === selected.id);
       if (!e) { selected = null; return buildPanel(); }

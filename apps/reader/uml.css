@@ -43,6 +43,9 @@
 .uml-svg [data-uml-kind="connector"] { cursor: pointer; }
 .uml-handle { fill: #fff; stroke: #0a84ff; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
 circle.uml-handle { cursor: grab; }
+.uml-connect { cursor: crosshair; }
+.uml-connect circle { fill: #0a84ff; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.uml-connect path { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .uml-rubber { stroke: #0a84ff; stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .uml-panel { overflow: auto; padding: 10px 12px 20px; border-left: 1px solid var(--u-line); display: flex; flex-direction: column; gap: 8px; }
 .uml-panel h3 { display: flex; align-items: center; gap: 6px; margin: 2px 0 4px; font-size: 15px; }

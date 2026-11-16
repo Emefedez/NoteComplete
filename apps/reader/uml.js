@@ -23,6 +23,8 @@ export const DIAGRAMS = {
   state: { label: 'State machine diagram', elements: ['state', 'compositeState', 'initial', 'final', 'choice', 'fork', 'join', 'history', 'note'], connectors: ['transition', 'anchor'], vp: 'StateDiagram' },
   activity: { label: 'Activity diagram', elements: ['action', 'initial', 'activityFinal', 'flowFinal', 'decision', 'merge', 'fork', 'join', 'objectNode', 'partition', 'note'], connectors: ['controlFlow', 'objectFlow', 'anchor'], vp: 'ActivityDiagram' },
   sequence: { label: 'Sequence diagram', elements: ['lifeline', 'actorLifeline', 'fragment', 'note'], connectors: ['syncMessage', 'asyncMessage', 'replyMessage', 'createMessage', 'anchor'], vp: 'InteractionDiagram' },
+  // Not UML: nodes and arrows for trees, automata and graphs (no UML badge, no UML files).
+  graph: { label: 'Node graph', notUml: true, elements: ['node', 'boxNode', 'note'], connectors: ['edge', 'line', 'anchor'], vp: null },
 };
 
 // Field kinds understood by the property panel: text, longText, bool, tags (a list of words),
@@ -80,6 +82,9 @@ export const ELEMENTS = {
   lifeline: { label: 'Lifeline', shape: 'lifeline', size: [120, 320], fields: { type: 'text' }, vp: { element: 'InteractionLifeLine' }, xmi: { type: 'uml:Lifeline' } },
   actorLifeline: { label: 'Actor lifeline', shape: 'actorLifeline', size: [80, 320], fields: { type: 'text' }, vp: { element: 'InteractionActor' }, xmi: { type: 'uml:Lifeline', actor: true } },
   fragment: { label: 'Combined fragment', shape: 'fragment', size: [300, 120], fields: { operator: 'operator', guard: 'text' }, vp: { element: 'CombinedFragment' }, xmi: { type: 'uml:CombinedFragment' } },
+  // Node graph
+  node: { label: 'Node', shape: 'node', size: [48, 48], fields: { start: 'bool', accepting: 'bool' }, vp: { element: 'NCNode' }, xmi: { type: 'nc:Node' } },
+  boxNode: { label: 'Box node', shape: 'rounded', size: [110, 44], fields: {}, vp: { element: 'NCBoxNode' }, xmi: { type: 'nc:BoxNode' } },
   // Any diagram
   note: { label: 'Note', shape: 'note', size: [160, 70], fields: {}, longName: true, vp: { element: 'NOTE' }, xmi: { type: 'uml:Comment' } },
 };
@@ -102,6 +107,8 @@ export const CONNECTORS = {
   asyncMessage: { label: 'Asynchronous message', message: true, line: 'solid', start: 'none', end: 'open', fields: { name: 'text', args: 'text', y: 'number' }, vp: { element: 'Message', kind: 'asynchCall' }, xmi: { type: 'uml:Message', sort: 'asynchCall' } },
   replyMessage: { label: 'Reply', message: true, line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', y: 'number' }, vp: { element: 'Message', kind: 'reply' }, xmi: { type: 'uml:Message', sort: 'reply' } },
   createMessage: { label: 'Create message', message: true, line: 'dashed', start: 'none', end: 'open', keyword: 'create', fields: { name: 'text', y: 'number' }, vp: { element: 'Message', kind: 'createMessage' }, xmi: { type: 'uml:Message', sort: 'createMessage' } },
+  edge: { label: 'Arrow', line: 'solid', start: 'none', end: 'filled', fields: { name: 'text' }, vp: { element: 'NCEdge' }, xmi: { type: 'nc:Edge' } },
+  line: { label: 'Line', line: 'solid', start: 'none', end: 'none', fields: { name: 'text' }, vp: { element: 'NCLine' }, xmi: { type: 'nc:Line' } },
   anchor: { label: 'Note link', line: 'dashed', start: 'none', end: 'none', fields: {}, vp: { element: 'Anchor' }, xmi: { type: 'nc:Anchor' } },
 };
 
@@ -224,7 +231,7 @@ export function normalizeModel(input) {
     const base = def?.ends ? { fromEnd: { role: '', multiplicity: '', navigable: false }, toEnd: { role: '', multiplicity: '', navigable: false } } : {};
     return { id: String(c.id || `c${i + 1}`), type: String(c.type || 'association'), from: String(c.from), to: String(c.to), props: { ...defaultProps(def), ...base, ...(c.props && typeof c.props === 'object' ? c.props : {}) }, waypoints: Array.isArray(c.waypoints) ? c.waypoints.filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) : [] };
   });
-  const out = { type: 'uml', version: UML_VERSION, diagram, name: String(m.name ?? ''), title: String(m.title ?? ''), badge: m.badge !== false, elements, connectors, source: m.source && typeof m.source === 'object' ? m.source : null };
+  const out = { type: 'uml', version: UML_VERSION, diagram, name: String(m.name ?? ''), title: String(m.title ?? ''), badge: m.badge === undefined ? !DIAGRAMS[diagram].notUml : m.badge !== false, elements, connectors, source: m.source && typeof m.source === 'object' ? m.source : null };
   if (!out.source) delete out.source;
   autoLayout(out);
   return out;
@@ -258,7 +265,7 @@ export function autoLayout(model) {
 
 // A starting diagram for each kind (the picker's previews and the editor's first view).
 export function starterModel(diagram = 'class') {
-  const m = { type: 'uml', version: UML_VERSION, diagram, name: '', badge: true, elements: [], connectors: [] };
+  const m = { type: 'uml', version: UML_VERSION, diagram, name: '', badge: !DIAGRAMS[diagram]?.notUml, elements: [], connectors: [] };
   const el = (type, x, y, extra = {}) => { const e = makeElement(type, [x, y], extra, m); m.elements.push(e); return e; };
   const link = (type, a, b, extra = {}) => { const c = makeConnector(type, a.id, b.id, extra, m); m.connectors.push(c); return c; };
   if (diagram === 'useCase') {
@@ -295,6 +302,11 @@ export function starterModel(diagram = 'class') {
     link('controlFlow', d, b, { props: { guard: 'not in stock' } });
     link('controlFlow', d, c, { props: { guard: 'in stock' } });
     link('controlFlow', c, f);
+  } else if (diagram === 'graph') {
+    // A small binary search tree; drag from a node to grow it.
+    const [r, a, b, c, d] = ['10', '5', '15', '3', '7'].map((name) => el('node', 0, 0, { name }));
+    link('line', r, a); link('line', r, b); link('line', a, c); link('line', a, d);
+    treeLayout(m);
   } else if (diagram === 'sequence') {
     const u = el('actorLifeline', 20, 20, { name: 'Member', bounds: [20, 20, 80, 260] });
     const a = el('lifeline', 160, 20, { name: ':Library', bounds: [160, 20, 120, 260] });
@@ -307,7 +319,48 @@ export function starterModel(diagram = 'class') {
   return m;
 }
 
-export const umlName = (model) => DIAGRAMS[model?.diagram]?.label ? `UML ${DIAGRAMS[model.diagram].label.replace(/ diagram$/, '').toLowerCase()} diagram` : 'UML diagram';
+// Arranges what the connectors join as a tree, top down: each element under the one that
+// connects to it, leaves side by side, parents centred over their children. Elements in no
+// connection keep their place. Returns the model.
+export function treeLayout(model, { gapX = 30, gapY = 60, origin = [40, 40] } = {}) {
+  const joins = model.connectors.filter((c) => c.type !== 'anchor' && c.from !== c.to);
+  const children = new Map(), hasParent = new Set();
+  for (const c of joins) {
+    if (hasParent.has(c.to)) continue; // the first parent wins (a graph with cycles still lays out)
+    if (!children.has(c.from)) children.set(c.from, []);
+    children.get(c.from).push(c.to);
+    hasParent.add(c.to);
+  }
+  const inTree = new Set(joins.flatMap((c) => [c.from, c.to]));
+  const byId = new Map(model.elements.map((e) => [e.id, e]));
+  const roots = model.elements.filter((e) => inTree.has(e.id) && !hasParent.has(e.id));
+  if (!roots.length && inTree.size) roots.push(byId.get(joins[0].from));
+  const seen = new Set();
+  let nextX = origin[0];
+  const levelH = Math.max(...model.elements.filter((e) => inTree.has(e.id)).map((e) => fitBounds(e)[3]), 40) + gapY;
+  // Returns the middle x of the subtree.
+  const place = (e, depth) => {
+    seen.add(e.id);
+    const [, , w, h] = fitBounds(e);
+    const kids = (children.get(e.id) || []).map((id) => byId.get(id)).filter((k) => k && !seen.has(k.id));
+    let mid;
+    if (!kids.length) { mid = nextX + w / 2; nextX += w + gapX; }
+    else { const xs = kids.map((k) => place(k, depth + 1)); mid = (xs[0] + xs[xs.length - 1]) / 2; nextX = Math.max(nextX, mid + w / 2 + gapX); }
+    e.bounds = [Math.round(mid - w / 2), Math.round(origin[1] + depth * levelH + (levelH - gapY - h) / 2), e.bounds[2], e.bounds[3]];
+    return mid;
+  };
+  for (const r of roots) if (!seen.has(r.id)) place(r, 0);
+  for (const id of inTree) if (!seen.has(id) && byId.get(id)) place(byId.get(id), 0);
+  for (const c of joins) c.waypoints = [];
+  return model;
+}
+
+export const umlName = (model) => {
+  const d = DIAGRAMS[model?.diagram];
+  if (!d) return 'UML diagram';
+  if (d.notUml) return d.label;
+  return `UML ${d.label.replace(/ diagram$/, '').toLowerCase()} diagram`;
+};
 
 // ---------------------------------------------------------------------------------------
 // Drawing
@@ -360,6 +413,9 @@ export function fitBounds(e) {
     const acts = (e.props?.actions || []).length;
     w = Math.max(w, textWidth(e.name) + 2 * PAD + 10, ...(e.props?.actions || []).map((a) => textWidth(formatLine('action', a)) + 2 * PAD));
     h = Math.max(h, LINE + 2 * PAD + (acts ? acts * LINE + PAD : 0));
+  } else if (def?.shape === 'node') {
+    const need = textWidth(e.name) + 14;
+    if (need > w) { w = need; h = Math.max(h, Math.min(need, h * 1.4)); }
   } else if (def?.shape === 'ellipse' || def?.shape === 'rounded' || def?.shape === 'note' || def?.shape === 'box') {
     const ls = wrap(e.name, w - 2 * PAD - (def.shape === 'ellipse' ? 20 : 0));
     h = Math.max(h, ls.length * LINE + 2 * PAD + (def.shape === 'ellipse' ? 16 : 0) + (e.props?.type ? LINE : 0));
@@ -374,7 +430,7 @@ function clip(e, b, toward) {
   let dx = toward[0] - cx, dy = toward[1] - cy;
   if (!dx && !dy) return [cx, cy];
   const shape = ELEMENTS[e?.type]?.shape;
-  if (shape === 'ellipse' || shape === 'dot' || shape === 'bullseye' || shape === 'flowFinal' || shape === 'history') {
+  if (shape === 'node' || shape === 'ellipse' || shape === 'dot' || shape === 'bullseye' || shape === 'flowFinal' || shape === 'history') {
     const t = 1 / Math.sqrt((dx * dx) / ((w / 2) ** 2) + (dy * dy) / ((h / 2) ** 2));
     return [cx + dx * t, cy + dy * t];
   }
@@ -483,6 +539,15 @@ const SHAPES = {
     const cx = x + w / 2, head = 70;
     return `<line x1="${n(cx)}" y1="${n(y + head)}" x2="${n(cx)}" y2="${n(y + h)}" stroke="${INK}" stroke-dasharray="6 4"/>` + SHAPES.stickman({ ...e, name: e.props?.type ? `${e.name}: ${e.props.type}` : e.name }, [x, y, w, head - 4]);
   },
+  node(e, [x, y, w, h]) {
+    const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+    let out = `<ellipse cx="${n(cx)}" cy="${n(cy)}" rx="${n(rx)}" ry="${n(ry)}" fill="${FILL}" stroke="${INK}" stroke-width="1.4"/>`;
+    if (e.props?.accepting) out += `<ellipse cx="${n(cx)}" cy="${n(cy)}" rx="${n(Math.max(2, rx - 4))}" ry="${n(Math.max(2, ry - 4))}" fill="none" stroke="${INK}" stroke-width="1.2"/>`;
+    // A start state: an arrow coming in from the left.
+    if (e.props?.start) out += `<path d="M${n(x - 28)} ${n(cy)}H${n(x - 1)}" stroke="${INK}" stroke-width="1.3"/>` + mark('filled', [x - 1, cy], 1, 0);
+    const ls = wrap(e.name, w - 8);
+    return out + lines(ls, cx, cy - ((ls.length - 1) * LINE) / 2 + 4.5);
+  },
   fragment(e, [x, y, w, h]) {
     const op = e.props?.operator || 'alt', tw = Math.max(44, textWidth(op) + 18), th = 20;
     return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="${INK}" stroke-width="1.3"/><path d="M${n(x)} ${n(y + th)}H${n(x + tw - 8)}L${n(x + tw)} ${n(y + th - 8)}V${n(y)}" fill="${FILL}" stroke="${INK}" stroke-width="1.1"/>` + text(x + 6, y + 14, op, { anchor: 'start', weight: 'bold' }) + (e.props?.guard ? text(x + tw + 8, y + 14, `[${e.props.guard}]`, { anchor: 'start' }) : '') + (e.name ? text(x + 8, y + th + LINE, e.name, { anchor: 'start', fill: MUTED }) : '');
@@ -544,6 +609,15 @@ export function connectorPath(model, c, fitted = null) {
     return [[x + w * 0.7, y], [x + w * 0.7, y - 30], [x + w + 30, y - 30], [x + w + 30, y + 20], [x + w, y + 20]];
   }
   const first = way[0] || mid(b), last = way[way.length - 1] || mid(a);
+  // Two connectors between the same two elements (a → b and b → a in an automaton) are
+  // drawn apart instead of on top of each other.
+  if (!way.length && model.connectors.some((q) => q !== c && !q.waypoints?.length && ((q.from === c.to && q.to === c.from) || (q.from === c.from && q.to === c.to)))) {
+    const [ax, ay] = mid(a), [bx, by] = mid(b), l = Math.hypot(bx - ax, by - ay) || 1;
+    // To the left of its own direction: a → b and b → a then fall on opposite sides.
+    const ox = (-(by - ay) / l) * 7, oy = ((bx - ax) / l) * 7;
+    const p = clip(A, a, [bx + ox, by + oy]), q = clip(B, b, [ax + ox, ay + oy]);
+    return [[p[0] + ox, p[1] + oy], [q[0] + ox, q[1] + oy]];
+  }
   return [clip(A, a, first), ...way, clip(B, b, last)];
 }
 
@@ -653,6 +727,7 @@ export const SHAPE_ICONS = {
   lifeline: 'M6 3h12v6H6zM12 9v12',
   actorLifeline: 'M12 2.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6ZM12 6v4M9 8h6M9.5 12.5 12 10l2.5 2.5M12 14v1.5M12 18v1.5M12 22v.5',
   fragment: 'M3 4h18v16H3zM3 9h6l2-2V4',
+  node: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm-3 7h6',
 };
 // Connectors: a diagonal line with the mark at its upper end (a diamond at the start of an
 // aggregation or composition is drawn at that end too).

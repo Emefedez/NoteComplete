@@ -12,6 +12,7 @@ import { DIAGRAMS, renderUml, starterModel, umlName } from './uml.js';
 // edited in the diagram editor (uml-editor.js) and kept as a prefab whose spec has type "uml".
 export const PREFABS = [
   { id: 'graph', kind: 'graph', label: 'Function graph', hint: 'Axes and a grid, with functions of x', icon: 'graph' },
+  { id: 'table', kind: 'table', label: 'Table', hint: 'Rows and columns of typed cells, with headers; edit cells in place later', icon: 'table' },
   {
     id: 'histogram', kind: 'prefab', label: 'Histogram', hint: 'Frequencies of intervals, bars touching', icon: 'graph',
     spec: { type: 'histogram', title: 'Histogram', xLabel: 'Interval', yLabel: 'Frequency', bins: [{ label: '0-10', value: 3 }, { label: '10-20', value: 7 }, { label: '20-30', value: 5 }, { label: '30-40', value: 2 }] },
@@ -34,16 +35,13 @@ export const PREFABS = [
     id: 'timeline', kind: 'prefab', label: 'CPU timeline', hint: 'Gantt chart of what runs on each row', icon: 'monitor',
     spec: { type: 'timeline', title: 'CPU (RR q=2)', tStart: 0, tEnd: 10, tStep: 1, unit: 'ms', rows: [{ label: 'CPU', intervals: [{ label: 'P1', start: 0, end: 2 }, { label: 'P2', start: 2, end: 4 }, { label: 'P1', start: 4, end: 6 }, { label: 'P3', start: 6, end: 9 }] }] },
   },
-  {
-    id: 'tree', kind: 'prefab', label: 'Tree or node graph', hint: 'Nodes and edges: trees, automata, graphs', icon: 'share',
-    spec: { type: 'tree', directed: true, nodes: [{ id: 'A', label: '10' }, { id: 'B', label: '5' }, { id: 'C', label: '15' }], edges: [{ from: 'A', to: 'B' }, { from: 'A', to: 'C' }] },
-  },
+  // Drawn in the diagram editor: nodes, and arrows dragged from one to another.
+  { id: 'tree', kind: 'uml', label: 'Tree or node graph', hint: 'Nodes and arrows: trees, automata, graphs. Drag from a node to connect or grow it', icon: 'share', spec: starterModel('graph') },
   {
     id: 'plot', kind: 'prefab', label: 'Exam plot', hint: 'A plot as exams draw it: curves, points and shaded areas', icon: 'graph',
     spec: { type: 'plot', title: 'f(x)', xMin: -4, xMax: 4, yMin: -2, yMax: 6, functions: [{ expr: 'x^2 - 1', label: 'f(x)' }], points: [{ x: 0, y: -1, label: '(0,-1)' }] },
   },
-  { id: 'table', kind: 'table', label: 'Table', hint: 'Rows and columns of typed cells', icon: 'table' },
-  ...Object.entries(DIAGRAMS).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', label: `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
+  ...Object.entries(DIAGRAMS).filter(([, d]) => !d.notUml).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', label: `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
 ];
 
 const NAMES = { plot: 'Exam plot', histogram: 'Histogram', states: 'Process states', timeline: 'CPU timeline', tree: 'Tree or node graph', graph_nodes: 'Tree or node graph' };

@@ -2,12 +2,12 @@
 // UML lines, every diagram kind draws, and diagrams survive XMI and Visual Paradigm XML.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIAGRAMS, ELEMENTS, CONNECTORS, LISTS, ENUMS, SHAPE_ICONS, starterModel, normalizeModel, renderUml, parseLine, formatLine, makeElement, makeConnector, fitBounds, iconPath, umlName } from './uml.js';
+import { DIAGRAMS, ELEMENTS, CONNECTORS, LISTS, ENUMS, SHAPE_ICONS, starterModel, normalizeModel, renderUml, parseLine, formatLine, makeElement, makeConnector, fitBounds, iconPath, umlName, connectorPath } from './uml.js';
 import { exportXmi, importXmi, exportVp, importVp, importUml, parseXml, writeXml, detectFormat } from './uml-xml.js';
 
 test('every type in a diagram is in the registry, with a shape, an icon, and file names', () => {
   for (const [kind, d] of Object.entries(DIAGRAMS)) {
-    assert.ok(d.label && d.vp, kind);
+    assert.ok(d.label && (d.vp || d.notUml), kind);
     for (const t of d.elements) {
       const def = ELEMENTS[t];
       assert.ok(def, `${kind}: element ${t}`);
@@ -55,6 +55,7 @@ test('each diagram kind draws an SVG with its elements, and the badge can be tur
     // The root has no font-family (prefabs.js adds one when it draws the picture).
     assert.doesNotMatch(out.svg.slice(0, out.svg.indexOf('>')), /font-family/);
     for (const e of m.elements) assert.ok(out.svg.includes(`data-uml-id="${e.id}"`), `${kind}: ${e.type} drawn`);
+    if (DIAGRAMS[kind].notUml) continue;
     assert.match(out.svg, /class="uml-badge"/);
     assert.doesNotMatch(renderUml({ ...m, badge: false }).svg, /uml-badge/);
     assert.match(umlName(m), /^UML .* diagram$/);
@@ -146,7 +147,7 @@ function everything() {
 }
 
 test('every diagram kind survives XMI and Visual Paradigm XML, there and back', () => {
-  for (const m of everything()) {
+  for (const m of everything().filter((q) => !DIAGRAMS[q.diagram].notUml)) {
     same(m, importXmi(exportXmi(m)));
     same(m, importVp(exportVp(m)));
     same(m, importUml(JSON.stringify(m)));
@@ -196,4 +197,30 @@ test('the XML reader handles entities, CDATA, comments and self-closing tags', (
   assert.equal(doc.children[2].text, '<AB');
   assert.equal(writeXml({ name: 'x', attrs: { q: 'a"b' }, children: [] }), '<x q="a&quot;b"/>');
   assert.throws(() => importUml('just text'), /Not a UML file/);
+});
+
+test('node graphs: no UML badge or files, start and accepting nodes, tree layout, arrows both ways apart', () => {
+  const m = normalizeModel(starterModel('graph'));
+  assert.equal(m.badge, false);
+  assert.equal(umlName(m), 'Node graph');
+  assert.throws(() => exportXmi(m), /not a UML diagram/);
+  assert.throws(() => exportVp(m), /not a UML diagram/);
+  same(m, importUml(JSON.stringify(m)));
+  // The tree: each child below its parent, the root centred over its children.
+  const at = (name) => m.elements.find((e) => e.name === name).bounds;
+  assert.ok(at('5')[1] > at('10')[1] && at('3')[1] > at('5')[1]);
+  const mid = (b) => b[0] + b[2] / 2;
+  assert.ok(Math.abs(mid(at('10')) - (mid(at('5')) + mid(at('15'))) / 2) < 1);
+  assert.ok(Math.abs(mid(at('5')) - (mid(at('3')) + mid(at('7'))) / 2) < 1);
+  // An automaton: q0 → q1 and q1 → q0 are drawn apart; start and accepting are drawn.
+  const a = { type: 'uml', diagram: 'graph', elements: [], connectors: [] };
+  const q0 = makeElement('node', [0, 0], { name: 'q0', props: { start: true } }, a), q1 = makeElement('node', [200, 0], { name: 'q1', props: { accepting: true } }, a);
+  a.elements.push(q0, q1);
+  a.connectors.push(makeConnector('edge', q0.id, q1.id, { props: { name: 'a' } }, a), makeConnector('edge', q1.id, q0.id, { props: { name: 'b' } }, a));
+  const g = normalizeModel(a);
+  const [p, q] = g.connectors.map((c) => connectorPath(g, c));
+  assert.ok(Math.abs(p[0][1] - q[0][1]) > 8, 'two lines, not one');
+  const svg = renderUml(g).svg;
+  assert.equal((svg.match(/<ellipse/g) || []).length, 3, 'q1 has a second ring');
+  assert.match(svg, />q0</);
 });

@@ -90,8 +90,14 @@ function multiplicity(text) {
   return { lower: lo, upper: hi };
 }
 
+// A node graph is not UML: it has no place in these files.
+function umlOnly(model) {
+  if (DIAGRAMS[model.diagram]?.notUml) throw Error(`A ${DIAGRAMS[model.diagram].label.toLowerCase()} is not a UML diagram: export it as a picture or a NoteComplete diagram instead.`);
+  return model;
+}
+
 export function exportXmi(input) {
-  const model = normalizeModel(input);
+  const model = umlOnly(normalizeModel(input));
   const ids = { ...(model.source?.format === 'xmi' ? model.source.ids : {}) };
   const xid = (id) => ids[id] || id;
   const byId = new Map(model.elements.map((e) => [e.id, e]));
@@ -512,7 +518,7 @@ export function importVp(text) {
 }
 
 export function exportVp(input) {
-  const model = normalizeModel(input);
+  const model = umlOnly(normalizeModel(input));
   const ids = { ...(model.source?.format === 'vp-xml' ? model.source.ids : {}) };
   const vid = (id) => ids[id] || `NC_${id}`;
   const kidsOf = (parentId) => model.elements.filter((e) => (e.parent || null) === parentId);
