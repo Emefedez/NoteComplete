@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct Part {
     /// The object's id, the same on all its parts.
     pub id: String,
-    /// "graph" or "table".
+    /// "graph", "table" or "prefab" (an exam figure: a picture with a frame keeping its spec).
     pub kind: String,
     /// The object's description (JSON, written by the reader), on one of its parts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -24,7 +24,7 @@ impl Part {
                 .id
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || "-_:".contains(c))
-            && matches!(self.kind.as_str(), "graph" | "table")
+            && matches!(self.kind.as_str(), "graph" | "table" | "prefab")
             && self.spec.as_ref().is_none_or(|s| s.len() <= 256 * 1024)
     }
 }

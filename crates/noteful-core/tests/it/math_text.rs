@@ -161,3 +161,45 @@ fn graph_parts_are_listed_and_redrawing_one_is_one_undo_step() {
     };
     assert!(e.add_line(0, bad).is_err());
 }
+
+#[test]
+fn a_prefab_is_a_picture_with_a_frame_keeping_its_spec() {
+    use noteful_core::{Line, Part};
+    let part = |spec: Option<&str>| Part {
+        id: "p1".into(),
+        kind: "prefab".into(),
+        spec: spec.map(str::to_owned),
+    };
+    let mut e = Editor::create_document("Prefab", &[[600., 800.]], &[]).unwrap();
+    e.add_line(
+        0,
+        Line {
+            part: Some(part(Some(r#"{"type":"histogram"}"#))),
+            ..Line::new(vec![[10., 10.], [210., 10.]], 0.5, [0.8, 0.8, 0.9, 1.])
+        },
+    )
+    .unwrap();
+    e.add_image(
+        0,
+        Image {
+            base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=".into(),
+            mime: "image/png".into(),
+            bounds: [10., 10., 200., 100.],
+            layer: 0,
+            joined: true,
+            text: None,
+            part: Some(part(None)),
+        },
+    )
+    .unwrap();
+    let view = e.view(0).unwrap();
+    let parts = view["parts"].as_array().unwrap();
+    assert_eq!(parts.len(), 2);
+    assert!(parts.iter().all(|p| p["kind"] == "prefab"));
+    assert_eq!(parts[0]["spec"], r#"{"type":"histogram"}"#);
+    // Saved and opened again, it is still a prefab that can be edited.
+    let reopened = Editor::open_project(&e.save_project().unwrap()).unwrap();
+    let parts = reopened.view(0).unwrap()["parts"].clone();
+    assert_eq!(parts.as_array().unwrap().len(), 2);
+    assert_eq!(parts[0]["spec"], r#"{"type":"histogram"}"#);
+}

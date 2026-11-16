@@ -589,7 +589,7 @@ impl Editor {
             return Err(Error::new(0, "Invalid shape fill"));
         }
         if line.part.as_ref().is_some_and(|p| !p.valid()) {
-            return Err(Error::new(0, "Invalid graph or table part"));
+            return Err(Error::new(0, "Invalid graph, table or prefab part"));
         }
         let pressure_ok = line.pressure.as_ref().is_none_or(|p| {
             line.tool == 0

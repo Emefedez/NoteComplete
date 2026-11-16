@@ -276,7 +276,7 @@ impl Editor {
     pub fn add_image(&mut self, page: usize, image: Image) -> Result<()> {
         self.page(page)?;
         if image.part.as_ref().is_some_and(|p| !p.valid()) {
-            return Err(Error::new(0, "Invalid graph or table part"));
+            return Err(Error::new(0, "Invalid graph, table or prefab part"));
         }
         match &image.text {
             Some(text) if text.valid() && image.base64.is_empty() && image.mime.is_empty() => {}

@@ -3807,3 +3807,32 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 #recoverDialog.recover-toast p { font-size: 12.5px; margin: 0 0 10px; color: var(--muted); }
 #recoverDialog.recover-toast .ocr-actions { align-items: center; }
 #recoverDialog .recover-x { position: absolute; top: 6px; right: 8px; border: 0; background: transparent; min-width: 0; min-height: 0; padding: 2px 6px; color: var(--muted); font-size: 16px; line-height: 1; }
+
+/* Prefabs (prefabs.js): a picker of cards with previews, and an exam figure's editor. */
+.prefab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.prefab-card { display: grid; gap: 4px; align-content: start; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); color: inherit; cursor: pointer; }
+.prefab-card:hover, .prefab-card:focus-visible { border-color: var(--accent); }
+.prefab-card strong { font-size: 13px; }
+.prefab-card span { font-size: 11.5px; color: var(--muted); }
+.prefab-preview { display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 4px; overflow: hidden; }
+.prefab-card .prefab-preview { height: 78px; }
+.prefab-preview svg { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.compound-preview-box .prefab-preview svg { max-height: 300px; }
+.prefab-icon svg { width: 34px; height: 34px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.prefab-title { display: flex; gap: 6px; align-items: center; }
+.prefab-title input { flex: 1; }
+.prefab-help p { margin: 4px 0; font-size: 12px; color: var(--muted); }
+.prefab-data { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+
+/* The menu at the pointer (context-menu.js): right-click, a long press, or a selection's ⋯. */
+.context-menu { position: fixed; z-index: 90; min-width: 190px; max-width: min(300px, calc(100vw - 16px)); padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; -webkit-user-select: none; user-select: none; }
+.context-menu-title { padding: 5px 9px 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.context-menu button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 5px 9px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.context-menu button:hover:not(:disabled), .context-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
+.context-menu button:disabled { opacity: .45; cursor: default; }
+.context-menu button.danger { color: #c2410c; }
+.context-menu button svg { flex: none; width: 17px; height: 17px; }
+.context-menu button span { flex: 1; }
+.context-menu kbd { font-size: 11px; color: var(--muted); }
+.context-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line); }
+@media (pointer: coarse) { .context-menu button { min-height: 42px; } }
