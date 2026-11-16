@@ -5,9 +5,11 @@
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
 import { icon } from './icons.js';
+import { DIAGRAMS, renderUml, starterModel, umlName } from './uml.js';
 
 // What each prefab starts as. `kind`: "graph" and "table" open their own editors; "prefab"
-// is an exam figure, described by `spec` (the exam visual spec).
+// is an exam figure, described by `spec` (the exam visual spec); "uml" a UML diagram (uml.js),
+// edited in the diagram editor (uml-editor.js) and kept as a prefab whose spec has type "uml".
 export const PREFABS = [
   { id: 'graph', kind: 'graph', label: 'Function graph', hint: 'Axes and a grid, with functions of x', icon: 'graph' },
   {
@@ -41,11 +43,13 @@ export const PREFABS = [
     spec: { type: 'plot', title: 'f(x)', xMin: -4, xMax: 4, yMin: -2, yMax: 6, functions: [{ expr: 'x^2 - 1', label: 'f(x)' }], points: [{ x: 0, y: -1, label: '(0,-1)' }] },
   },
   { id: 'table', kind: 'table', label: 'Table', hint: 'Rows and columns of typed cells', icon: 'table' },
+  ...Object.entries(DIAGRAMS).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', label: `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
 ];
 
 const NAMES = { plot: 'Exam plot', histogram: 'Histogram', states: 'Process states', timeline: 'CPU timeline', tree: 'Tree or node graph', graph_nodes: 'Tree or node graph' };
 // The name of a prefab's figure, for menus ("Histogram").
 export function prefabName(spec) {
+  if (spec?.type === 'uml') return umlName(spec);
   const s = normalizeVisualSpec(spec);
   if (s?.type === 'histogram' && !s.contiguous) return 'Bar chart';
   return NAMES[s?.type] || 'Prefab';
@@ -53,6 +57,7 @@ export function prefabName(spec) {
 
 // The figure as SVG text with its size, or null when the spec draws nothing.
 export function prefabSvg(spec) {
+  if (spec?.type === 'uml') return renderUml(spec);
   const out = renderVisualSvg(spec, { forMcp: false });
   return out?.svg ? out : null;
 }

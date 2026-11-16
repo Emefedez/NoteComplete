@@ -14,7 +14,7 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
-import { menuTemplate, uiZoomStep } from './app-menu.js';
+import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
 export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
@@ -183,6 +183,7 @@ function openTab(win, file = null) {
   if (file) launchPending.set(id, file);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(({ url }) => {
+    if (ownPage(url, home)) { openPage(url.slice(home.length)); return { action: 'deny' }; }
     if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
   });
@@ -286,6 +287,17 @@ function closeTab(id) {
     win.close();
   } else activate(win, result.active);
 }
+// A page of the reader on its own (Tools → UML diagram editor, or the reader's Insert menu):
+// a plain window with no preload, so it has none of the app's file or system access.
+function openPage(page) {
+  const win = new BrowserWindow({ width: 1280, height: 860, minWidth: 360, minHeight: 420, backgroundColor: backdrop(), autoHideMenuBar: true, title: 'NoteComplete', webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false } });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => { if (!ownPage(url, home)) event.preventDefault(); });
+  win.loadURL(home + page);
+}
 function createWindow({ tab = true, files = [] } = {}) {
   const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480, backgroundColor: backdrop(),
     // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
@@ -376,7 +388,7 @@ app.whenReady().then(async () => {
     responseHeaders['cross-origin-resource-policy'] = ['cross-origin'];
     callback({ responseHeaders });
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate()));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, { openPage })));
   // Web pages may sign in (pop-ups in their own sandboxed windows) and copy text; nothing else.
   const web = session.fromPartition(WEB_SESSION);
   web.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'));

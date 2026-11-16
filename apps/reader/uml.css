@@ -1,0 +1,77 @@
+/* The UML diagram editor (uml-editor.js): on its own page (uml.html) and over a note. It uses
+   the reader's colours where they are defined, and its own otherwise. The diagram itself is
+   drawn on white paper in both themes, as it will look on the page. */
+.uml-editor {
+  --u-ink: var(--ink, #242830);
+  --u-muted: var(--muted, #626b76);
+  --u-accent: var(--accent, #245dc4);
+  --u-soft: var(--accent-soft, #eaf0fc);
+  --u-line: var(--line, #dce0e5);
+  --u-surface: var(--surface, #fff);
+  --u-chrome: var(--chrome, #f7f8fa);
+  --u-fill: var(--fill, #eef0f3);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  color: var(--u-ink);
+  background: var(--u-chrome);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  .uml-page .uml-editor { --u-ink: #e5e8ed; --u-muted: #a6aeb9; --u-accent: #91b4ff; --u-soft: #303e57; --u-line: #3b4048; --u-surface: #24272c; --u-chrome: #202328; --u-fill: #30343b; }
+}
+.uml-editor button, .uml-editor select, .uml-editor input, .uml-editor textarea { font: inherit; color: inherit; }
+.uml-editor button, .uml-editor select {
+  min-height: 30px; padding: 3px 10px; border: 1px solid var(--u-line); border-radius: 6px; background: var(--u-surface); cursor: pointer;
+}
+.uml-editor button:hover:not(:disabled) { background: var(--u-soft); }
+.uml-editor button:disabled { opacity: 0.45; cursor: default; }
+.uml-editor button.primary { background: var(--u-accent); border-color: var(--u-accent); color: #fff; font-weight: 600; }
+.uml-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--u-line); background: var(--u-chrome); }
+.uml-spacer { flex: 1; }
+.uml-main { display: grid; grid-template-columns: 168px minmax(0, 1fr) 280px; min-height: 0; }
+.uml-palette { overflow: auto; padding: 8px; border-right: 1px solid var(--u-line); display: flex; flex-direction: column; gap: 3px; }
+.uml-palette h4 { margin: 10px 4px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--u-muted); }
+.uml-editor .uml-tool { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; padding: 4px 8px; text-align: left; border-color: transparent; background: transparent; }
+.uml-editor .uml-tool svg { width: 22px; height: 22px; flex: none; }
+.uml-editor .uml-tool[aria-pressed="true"] { background: var(--u-soft); color: var(--u-accent); border-color: var(--u-accent); }
+.uml-canvas { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #fff; background-image: radial-gradient(#d5dae1 1px, transparent 1px); background-size: 20px 20px; touch-action: none; outline: none; }
+.uml-canvas[data-tool="element"], .uml-canvas[data-tool="connector"] { cursor: crosshair; }
+.uml-svg { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+.uml-svg [data-uml-kind] { cursor: move; }
+.uml-svg [data-uml-kind="connector"] { cursor: pointer; }
+.uml-handle { fill: #fff; stroke: #0a84ff; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
+circle.uml-handle { cursor: grab; }
+.uml-rubber { stroke: #0a84ff; stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.uml-panel { overflow: auto; padding: 10px 12px 20px; border-left: 1px solid var(--u-line); display: flex; flex-direction: column; gap: 8px; }
+.uml-panel h3 { display: flex; align-items: center; gap: 6px; margin: 2px 0 4px; font-size: 15px; }
+.uml-panel h3 svg { width: 22px; height: 22px; }
+.uml-panel h4 { margin: 6px 0 0; font-size: 12px; color: var(--u-muted); }
+.uml-field { display: grid; gap: 3px; }
+.uml-field > span { font-size: 12px; color: var(--u-muted); }
+.uml-field input, .uml-field select, .uml-field textarea { box-sizing: border-box; width: 100%; padding: 5px 8px; border: 1px solid var(--u-line); border-radius: 6px; background: var(--u-surface); }
+.uml-field textarea { resize: vertical; font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-size: 12.5px; line-height: 1.5; }
+.uml-check { display: flex; align-items: center; gap: 6px; }
+.uml-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.uml-hint { margin: 2px 0; font-size: 12px; color: var(--u-muted); }
+.uml-status { min-height: 20px; padding: 3px 10px; font-size: 12px; color: var(--u-muted); border-top: 1px solid var(--u-line); }
+.uml-status.error { color: #b83228; }
+/* Over a note: the whole window. */
+.uml-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
+.uml-dialog::backdrop { background: #0006; }
+.uml-host { height: 100%; }
+/* Its own page. */
+html.uml-page, .uml-page body { height: 100%; margin: 0; }
+.uml-page body { background: #f7f8fa; }
+@media (prefers-color-scheme: dark) { .uml-page body { background: #202328; } }
+.uml-page #umlRoot { height: 100%; }
+/* Narrow windows: the palette as a row above, the properties below the canvas. */
+@media (max-width: 760px) {
+  .uml-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(240px, 1fr) minmax(0, 38%); }
+  .uml-palette { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--u-line); }
+  .uml-palette h4 { display: none; }
+  .uml-editor .uml-tool { width: auto; flex: none; }
+  .uml-editor .uml-tool span { display: none; }
+  .uml-panel { border-left: 0; border-top: 1px solid var(--u-line); }
+}
