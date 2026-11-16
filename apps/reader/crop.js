@@ -37,7 +37,9 @@ export function dragRect(start, handle, [dx, dy], [sw, sh], min) {
   return [x0, y0, x1, y1];
 }
 
-export function cropMode({ p, item, coords, apply, done }) {
+// `drag`: { handle, event }: a corner already being dragged (Alt on the selection's corner);
+// letting go of it applies the crop.
+export function cropMode({ p, item, coords, apply, done, drag: quick = null }) {
   const element = p.render?.querySelector(`[data-item="${item.id}"]`), href = element?.querySelector('image')?.getAttribute('href');
   if (!href || !item.native || !item.crop) return null;
   const frame = cropFrame(item), [sw, sh] = item.native;
@@ -87,7 +89,7 @@ export function cropMode({ p, item, coords, apply, done }) {
     rect = dragRect(drag.start, drag.handle, [at[0] - drag.from[0], at[1] - drag.from[1]], [sw, sh], min);
     draw();
   };
-  const up = event => { if (drag?.id === event.pointerId) { event.stopPropagation(); drag = null; } };
+  const up = event => { if (drag?.id === event.pointerId) { event.stopPropagation(); const auto = drag.auto; drag = null; if (auto) finish(true); } };
   const key = event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
     else if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); finish(true); }
@@ -104,6 +106,7 @@ export function cropMode({ p, item, coords, apply, done }) {
   bar.style.left = `${((frameBox.left - box.left) / box.width) * 100}%`;
   bar.style.top = `calc(${((frameBox.top - box.top) / box.height) * 100}% - 40px)`;
   bar.querySelector('.primary').focus();
+  if (quick) drag = { id: quick.event.pointerId, handle: quick.handle, start: [...rect], from: frame.toNative(coords(quick.event, p)), auto: true };
   let ended = false;
   function finish(keep) {
     if (ended) return;

@@ -2106,7 +2106,7 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 /* Holds the focus between a tap with Text and its box opening, so the phone's keyboard opens
    (app.js primeKeyboard). 16px: iOS zooms into smaller fields. */
 .keyboard-primer { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; }
-.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--surface) 70%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, #fff 72%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
 /* Finished text, shown as typed until the page's render has it: no frame, no clicks. */
 .text-placeholder { border-color: transparent; background: none; pointer-events: none; }
 .sheet[data-tool="text"] { cursor: text; }
@@ -2175,6 +2175,11 @@ body.bar-compact .tab { height: 22px; }
 /* Docked (View → Text format bar in the tool bar): one more group in the settings row. */
 .text-format-docked #toolOptions .text-format { position: static; z-index: auto; transform: none; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .text-format select { min-height: 28px; padding: 0 6px; font-size: 12px; }
+/* It sits on the page, which keeps a light paper look: the bar takes the app's own colours. */
+.text-format { color: var(--ink); }
+.text-format select { border: 1px solid var(--line); border-radius: 6px; background-color: var(--surface); color: var(--ink); }
+.text-format button { color: var(--ink); }
+.text-format button:hover:not([aria-pressed="true"]) { background: var(--fill); }
 #textFont { width: 112px; }
 #textSize { width: 58px; }
 .text-format .fmt-bold, .text-format .fmt-italic { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 14px; }
@@ -2282,8 +2287,11 @@ body.bar-compact .tab { height: 22px; }
 .text-swatches .swatch { width: 22px; min-height: 22px; padding: 0; border: 0; background: transparent; display: grid; place-items: center; }
 .text-swatches .swatch::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px #0003; }
 .text-swatches .swatch[aria-checked="true"]::before { box-shadow: 0 0 0 2px var(--menu), 0 0 0 4px var(--accent); }
-.text-format .color-label { width: 28px; height: 28px; margin-left: 2px; }
-.text-format input[type="color"] { width: 18px; height: 18px; }
+.text-format .color-label { display: grid; place-items: center; width: 28px; height: 28px; margin-left: 2px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.text-format input[type="color"] { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); box-shadow: 0 0 0 1.5px var(--line); cursor: pointer; }
+.text-format input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.text-format input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.text-format input[type="color"]::-moz-color-swatch { border: 0; border-radius: 50%; }
 
 /* Drag to reorder (tools, tabs): the dragged item lifts and follows the
    pointer; the others slide out of its way. */

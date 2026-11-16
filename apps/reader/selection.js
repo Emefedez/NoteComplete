@@ -130,11 +130,12 @@ export class SelectionController {
   }
  }
  // Crop (images): the frame replaces the selection box until Done or Cancel.
- startCrop(){
+ // `drag`: { handle, event } to start dragging that corner of the crop at once, applied on release.
+ startCrop(drag=null){
   const item=this.item;if(!item||item.kind!=='image'||!this.editable()||this.cropping)return;
   const p=this.panel(item.page);if(!p?.view)return;
   this.overlay?.remove();this.overlay=null;
-  this.cropping=cropMode({p,item,coords:(e,q)=>this.coords(e,q),apply:async rect=>{this.cropping=null;$('selectionFields').disabled=true;try{const result=await this.patch(item,null,rect);if(result&&this.item?.id===item.id)this.item=result.selection;}finally{$('selectionFields').disabled=false;if(this.item){this.inspect();this.render(this.panel(this.item.page));}}},done:()=>{this.cropping=null;if(this.item)this.render(p);}});
+  this.cropping=cropMode({p,item,coords:(e,q)=>this.coords(e,q),apply:async rect=>{this.cropping=null;$('selectionFields').disabled=true;try{const result=await this.patch(item,null,rect);if(result&&this.item?.id===item.id)this.item=result.selection;}finally{$('selectionFields').disabled=false;if(this.item){this.inspect();this.render(this.panel(this.item.page));}}},done:()=>{this.cropping=null;if(this.item)this.render(p);},drag});
   if(!this.cropping)this.status('This image cannot be cropped here.',true);
  }
  render(p){
@@ -184,6 +185,9 @@ export class SelectionController {
   // Another tool: a tap away from the selection lets go of it (and then draws, pans…).
   if(!handle&&tool!=='select'){if(this.item&&event.button===0)this.clear();return false;}
   if(!this.editable()||!p.view||event.button!==0)return true;
+  // Alt on a corner of an image: crops from that corner instead of scaling (as Noteful does).
+  const corner=handle&&/^[0-3]$/.test(handle.dataset.selectionHandle)?Number(handle.dataset.selectionHandle):null;
+  if(event.altKey&&corner!==null&&this.item?.kind==='image'&&this.item.page===p.index){event.preventDefault();p.el.setPointerCapture(event.pointerId);this.startCrop({handle:corner,event});return true;}
   event.preventDefault();p.el.setPointerCapture(event.pointerId);
   const at=this.coords(event,p),g={id:event.pointerId,p,start:at,current:at,startClient:[event.clientX,event.clientY],currentClient:[event.clientX,event.clientY],ended:false,mode:handle?handle.dataset.selectionHandle==='move'?'move':Number(handle.dataset.selectionHandle):'pick'};this.active=g;
   if(handle&&this.item?.page===p.index){g.item=clone(this.item);g.mode=handle.dataset.selectionHandle==='move'?'move':Number(handle.dataset.selectionHandle);this.begin(g);}
@@ -212,12 +216,12 @@ export class SelectionController {
   }
   this.preview(g);
  }
- move(event){const g=this.active;if(!g||g.id!==event.pointerId)return false;g.currentClient=[event.clientX,event.clientY];g.current=this.coords(event,g.p);if(g.item&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.active===g)this.preview(g);});return true;}
+ move(event){const g=this.active;if(!g||g.id!==event.pointerId)return false;g.free=event.shiftKey;g.currentClient=[event.clientX,event.clientY];g.current=this.coords(event,g.p);if(g.item&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.active===g)this.preview(g);});return true;}
  adjustment(g){
   const a=clone(g.item.adjustment);
   if(g.mode==='move'){a.translation=[a.translation[0]+g.current[0]-g.start[0],a.translation[1]+g.current[1]-g.start[1]];return a;}
   if(g.mode===4){const [x,y,w,h]=g.item.bounds,c=[x+w/2+a.translation[0],y+h/2+a.translation[1]];a.rotation+=(Math.atan2(g.current[1]-c[1],g.current[0]-c[0])-Math.atan2(g.start[1]-c[1],g.start[0]-c[0]))*180/Math.PI;return a;}
-  return resizeAdjustment(g.item,g.mode,g.current);
+  return resizeAdjustment(g.item,g.mode,g.current,g.free);
  }
  preview(g){
   const a=this.adjustment(g);
@@ -242,7 +246,7 @@ export class SelectionController {
   const cs=corners(g.item,a);const polygon=this.overlay?.querySelector('polygon');if(polygon)polygon.setAttribute('points',cs.map(p=>p.join(',')).join(' '));
   this.overlay?.querySelectorAll('circle,line').forEach(el=>el.style.visibility='hidden');
  }
- up(event){const g=this.active;if(!g||g.id!==event.pointerId)return false;g.currentClient=[event.clientX,event.clientY];g.current=this.coords(event,g.p);g.ended=true;if(g.item)this.finish(g);return true;}
+ up(event){const g=this.active;if(!g||g.id!==event.pointerId)return false;g.free=event.shiftKey;g.currentClient=[event.clientX,event.clientY];g.current=this.coords(event,g.p);g.ended=true;if(g.item)this.finish(g);return true;}
  finish(g){
   this.active=null;cancelAnimationFrame(this.frame);this.frame=0;
   if(g.p.el.hasPointerCapture(g.id))g.p.el.releasePointerCapture(g.id);
