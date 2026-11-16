@@ -3,13 +3,15 @@
 // reported when it is dropped. A press without a drag stays a normal click.
 // With a finger or stylus the row may scroll sideways, so a drag starts only after a
 // press-and-hold (the item lifts); a quick swipe still scrolls the row.
+// A row laid out as a column (the tool bar docked at the side) is sorted top to bottom.
 const THRESHOLD = 6, HOLD_MS = 320, HOLD_SLOP = 10, EDGE = 32;
 
 // A drag counts as pulled out of the row once the pointer is this far above or
 // below it, or out of the window.
 const DETACH = 48;
-export function pulledOut({ x, y }, row, view) {
-  return y < row.top - DETACH || y > row.bottom + DETACH || x < 0 || y < 0 || x > view.width || y > view.height;
+export function pulledOut({ x, y }, row, view, vertical = false) {
+  const off = vertical ? x < row.left - DETACH || x > row.right + DETACH : y < row.top - DETACH || y > row.bottom + DETACH;
+  return off || x < 0 || y < 0 || x > view.width || y > view.height;
 }
 
 // Where an item at `x` (its centre) belongs among the others' centres.
@@ -24,6 +26,11 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
     const startX = down.clientX, startY = down.clientY, pointer = down.pointerId;
     const touch = down.pointerType === 'touch' || down.pointerType === 'pen';
     let dragging = false, grab = 0, out = false, held = !touch, holdTimer = 0;
+    // Along the row (x) or down a column (y): the start, size and pointer on that axis.
+    const vertical = getComputedStyle(container).flexDirection.startsWith('column');
+    const at = vertical ? (e) => e.clientY : (e) => e.clientX;
+    const start = (r) => (vertical ? r.top : r.left), size = (r) => (vertical ? r.height : r.width);
+    const translate = (d) => (vertical ? `translateY(${d}px)` : `translateX(${d}px)`);
     const siblings = () => [...container.querySelectorAll(items)];
     // Touch: lifted after a hold; until then a move is the row scrolling (or a tap).
     if (touch) {
@@ -44,47 +51,48 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
         return;
       }
       if (!dragging) {
-        if (!touch && Math.abs(event.clientX - startX) < THRESHOLD) return;
+        if (!touch && Math.abs(at(event) - (vertical ? startY : startX)) < THRESHOLD) return;
         dragging = true;
-        grab = startX - item.getBoundingClientRect().left;
+        grab = (vertical ? startY : startX) - start(item.getBoundingClientRect());
         item.classList.add('dragging');
         container.classList.add('reordering');
         try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
       }
       // Pulled out of the row: it will open in a window of its own when dropped.
       if (onDetach) {
-        out = siblings().length > 1 && pulledOut({ x: event.clientX, y: event.clientY }, container.getBoundingClientRect(), { width: innerWidth, height: innerHeight });
+        out = siblings().length > 1 && pulledOut({ x: event.clientX, y: event.clientY }, container.getBoundingClientRect(), { width: innerWidth, height: innerHeight }, vertical);
         item.classList.toggle('detaching', out);
         if (out) return;
       }
       // Near an edge of a row that scrolls, it scrolls to reach the items beyond.
       const box = container.getBoundingClientRect();
-      if (container.scrollWidth > container.clientWidth) {
-        if (event.clientX < box.left + EDGE) container.scrollLeft -= 8;
-        else if (event.clientX > box.right - EDGE) container.scrollLeft += 8;
+      if (vertical ? container.scrollHeight > container.clientHeight : container.scrollWidth > container.clientWidth) {
+        const scroll = vertical ? 'scrollTop' : 'scrollLeft';
+        if (at(event) < start(box) + EDGE) container[scroll] -= 8;
+        else if (at(event) > start(box) + size(box) - EDGE) container[scroll] += 8;
       }
       // Lay the item where its centre now falls, animating the others (FLIP).
       item.style.transform = '';
       const others = siblings().filter(el => el !== item);
-      const left = event.clientX - grab, centre = left + item.offsetWidth / 2;
-      const index = slotFor(centre, others.map(el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; }));
+      const left = at(event) - grab, centre = left + (vertical ? item.offsetHeight : item.offsetWidth) / 2;
+      const index = slotFor(centre, others.map(el => { const r = el.getBoundingClientRect(); return start(r) + size(r) / 2; }));
       const ref = others[index];
       const inPlace = ref ? item.nextElementSibling === ref : others.at(-1)?.nextElementSibling === item;
       if (!inPlace && others.length) {
-        const before = new Map(others.map(el => [el, el.getBoundingClientRect().left]));
+        const before = new Map(others.map(el => [el, start(el.getBoundingClientRect())]));
         if (ref) container.insertBefore(item, ref);
         else others.at(-1).after(item);
         for (const el of others) {
-          const dx = before.get(el) - el.getBoundingClientRect().left;
+          const dx = before.get(el) - start(el.getBoundingClientRect());
           if (!dx) continue;
           el.style.transition = 'none';
-          el.style.transform = `translateX(${dx}px)`;
+          el.style.transform = translate(dx);
           el.getBoundingClientRect();
           el.style.transition = '';
           el.style.transform = '';
         }
       }
-      item.style.transform = `translateX(${left - item.getBoundingClientRect().left}px)`;
+      item.style.transform = translate(left - start(item.getBoundingClientRect()));
     };
     const up = event => { if (event.pointerId === pointer) finish(event, false); };
     function finish(event, scrolled) {

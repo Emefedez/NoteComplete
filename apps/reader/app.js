@@ -1361,21 +1361,22 @@ $("toolNames").onclick = () => {
   status(on ? "Tool names shown when they fit." : "Tool bar: icons only.");
 };
 // View → Tool bar (or the page row's button): the page row and the tools at the top (default)
-// or as columns on the left or right, like the drawing tablet's dock. Every layout but a
+// or the bottom, or as columns on the left or right, like the drawing tablet's dock. Every layout but a
 // phone held upright uses it (style.css); remembered on this device.
 function setLandscapeDock(side) {
-  if (!["top", "left", "right"].includes(side)) side = "top";
+  if (!["top", "bottom", "left", "right"].includes(side)) side = "top";
   document.body.dataset.landscapeDock = side;
   for (const b of document.querySelectorAll("[data-dock-menu]")) b.setAttribute("aria-pressed", String(b.dataset.dockMenu === side));
-  // The page row's own button shows where the bar is now and moves it on: top → left → right.
-  const next = { top: "left", left: "right", right: "top" }[side];
+  // The page row's own button shows where the bar is now and moves it on: top → bottom → left → right.
+  const next = DOCK_NEXT[side];
   $("dockCycle").querySelector("svg").innerHTML = document.querySelector(`[data-dock-menu="${side}"] svg`).innerHTML;
   $("dockCycle").title = `Tool bar: ${side}. Move it to the ${next} (also View → Tool bar)`;
   $("dockCycle").setAttribute("aria-label", `Move the tool bar to the ${next}`);
   try { localStorage.setItem("notecomplete-landscape-dock", side); } catch { /* Optional. */ }
-  if (doc) requestAnimationFrame(resize);
+  if (doc) requestAnimationFrame(() => { resize(); if (!$("toolOptions").hidden) toolOptions(); });
 }
-$("dockCycle").onclick = () => setLandscapeDock({ top: "left", left: "right", right: "top" }[document.body.dataset.landscapeDock] || "left");
+const DOCK_NEXT = { top: "bottom", bottom: "left", left: "right", right: "top" };
+$("dockCycle").onclick = () => setLandscapeDock(DOCK_NEXT[document.body.dataset.landscapeDock] || "bottom");
 for (const b of document.querySelectorAll("[data-dock-menu]")) b.onclick = () => { setLandscapeDock(b.dataset.dockMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
 try { setLandscapeDock(localStorage.getItem("notecomplete-landscape-dock")); } catch { setLandscapeDock("top"); }
 phoneLayout.addEventListener("change", placeToolbarActions);

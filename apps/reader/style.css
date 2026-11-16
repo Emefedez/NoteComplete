@@ -3938,3 +3938,18 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 /* The pen's three auto-shape buttons (and their caption) reach one place left, so their
    right edge lines up with the widths below. */
 #drawingOptions #snapOptions .choice-row, #drawingOptions #snapOptions::before { margin-left: -32px; }
+/* View → Tool bar → bottom: the pages first, then the page row and the tools under them;
+   the tool settings open upwards. */
+@media (min-width: 701px), (orientation: landscape) and (max-height: 500px) {
+  body[data-landscape-dock="bottom"] #editor > .workspace { order: -1; }
+  body[data-landscape-dock="bottom"] #editor > .navigation { order: 1; border-bottom: 0; border-top: 1px solid var(--line); }
+  body[data-landscape-dock="bottom"] #editor > .toolbar { order: 2; border-bottom: 0; border-top: 1px solid var(--line); }
+  body[data-landscape-dock="bottom"] .tool-options { top: auto; bottom: calc(100% + 4px); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  body[data-landscape-dock="bottom"] #editor:not([hidden]) { grid-template-rows: minmax(0, 1fr) auto auto; }
+  body[data-landscape-dock="bottom"] #editor > .workspace { grid-area: 1 / 1 / 2 / 3; }
+  body[data-landscape-dock="bottom"] #editor > #warnings { grid-area: 2 / 1 / 3 / 3; }
+  body[data-landscape-dock="bottom"] #editor > .navigation { grid-area: 3 / 1; }
+  body[data-landscape-dock="bottom"] #editor > .toolbar { grid-area: 3 / 2; border-top: 1px solid var(--line); }
+}
