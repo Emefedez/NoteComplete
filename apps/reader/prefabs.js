@@ -30,6 +30,7 @@ export const PREFABS = [
       processes: [
         { label: 'A', arrival: 0, segments: [{ state: 'run', start: 0, end: 10 }, { state: 'blocked', start: 10, end: 20 }, { state: 'run', start: 20, end: 25 }] },
         { label: 'B', arrival: 5, segments: [{ state: 'ready', start: 5, end: 10 }, { state: 'run', start: 10, end: 20 }] },
+        { label: 'C', arrival: 10, segments: [{ state: 'ready', start: 10, end: 25 }, { state: 'run', start: 25, end: 30 }] },
       ],
     },
   },
@@ -44,6 +45,7 @@ export const PREFABS = [
       processes: [
         { label: 'A', arrival: 0, segments: [{ state: 'run', start: 0, end: 4 }, { state: 'blocked', start: 4, end: 8 }, { state: 'ready', start: 8, end: 10 }, { state: 'run', start: 10, end: 12 }] },
         { label: 'B', arrival: 2, segments: [{ state: 'ready', start: 2, end: 4 }, { state: 'run', start: 4, end: 10 }] },
+        { label: 'C', arrival: 4, segments: [{ state: 'ready', start: 4, end: 12 }, { state: 'run', start: 12, end: 16 }] },
       ],
     },
   },

@@ -303,6 +303,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   function swatchOf(value, order) {
     const s = svgEl('svg', { viewBox: '0 0 28 14', width: 28, height: 14, 'aria-hidden': 'true' });
     if (value === '') s.append(svgEl('path', { d: 'M4 3l20 8M4 11l20-8', stroke: '#64748b', 'stroke-width': 1.6 }));
+    else if (value === '@shift') s.append(svgEl('path', { d: 'M3 7h22M3 7l4-4M3 7l4 4M25 7l-4-4M25 7l-4 4', stroke: '#0f172a', 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round' }));
     else if (value === '@arrival') s.append(svgEl('circle', { cx: 14, cy: 7, r: 4, fill: '#0f172a' }));
     else if (kind === 'states') appendState(s, value, 2, 26, 7);
     else s.append(svgEl('rect', { x: 2, y: 2, width: 24, height: 10, rx: 2, fill: labelColor(value, order) }));
@@ -313,12 +314,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   function brushes() {
     let list = [];
     if (kind === 'states') {
-      list = [...STATES.map((v) => ({ value: v, label: base.legend?.[v] || STATE_NAMES[v] })), { value: '', label: 'Erase' }];
+      list = [...STATES.map((v) => ({ value: v, label: base.legend?.[v] || STATE_NAMES[v] })), { value: '', label: 'Erase' }, { value: '@shift', label: 'Shift' }];
       if (mode === 'author') list.push({ value: '@arrival', label: 'Arrival' });
     } else if (kind === 'timeline') {
       const names = [...new Set([...labelsOf(grid), ...labelsOf(ans || { rows: [] }), ...grid.rows.map((r) => r.label).filter((l) => /^P\d+$|^[A-Z]$/.test(l)), ...(base.palette || [])])];
-      if (brush && !names.includes(brush)) names.push(brush);
-      list = [...names.map((n) => ({ value: n, label: n })), { value: '', label: 'Erase' }];
+      if (brush && !brush.startsWith('@') && !names.includes(brush)) names.push(brush);
+      list = [...names.map((n) => ({ value: n, label: n })), { value: '', label: 'Erase' }, { value: '@shift', label: 'Shift' }];
     }
     const ids = orderedIds(orderName(), list.map((b) => b.value));
     return ids.map((id) => list.find((b) => b.value === id));
@@ -346,7 +347,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length; right-click or right-drag erases.' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -504,6 +505,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       changed();
       return;
     }
+    if (brush === '@shift' && !erasing) return shiftDrag(e, g, at);
     const row = g.rows[at.row];
     const from = Math.max(0, Math.min(geo.n - 1, at.cell));
     // A click on a cell already painted with the brush clears it; a drag paints the run.
@@ -529,6 +531,42 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       draw();
     };
     const up = () => {
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', up);
+      changed();
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+  }
+
+  // The Shift brush: what is painted from the pressed cell on slides left or right with the
+  // pointer (a skipped unit made room for, or an extra one taken out). Shift held: every row.
+  // Cells pushed past the end are kept while the drag lasts, so moving back brings them back.
+  function shiftDrag(e, g, at) {
+    const from = Math.max(0, Math.min(geo.n - 1, at.cell));
+    const rows = e.shiftKey ? g.rows : [g.rows[at.row]];
+    const before = rows.map((r) => [...r.cells]);
+    const apply = (d) => rows.forEach((r, i) => {
+      const old = before[i], n = old.length;
+      for (let k = from + Math.min(0, d); k < n; k++) {
+        if (d >= 0) r.cells[k] = k < from ? old[k] : k < from + d ? '' : old[k - d] ?? '';
+        else r.cells[k] = old[k - d] ?? '';
+      }
+    });
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* A synthetic event. */ }
+    canvas.style.cursor = 'ew-resize';
+    let last = 0;
+    const move = (ev) => {
+      const d = Math.max(-from, Math.round((cellAt(ev).x - at.x) / geo.cw));
+      if (d === last) return;
+      last = d;
+      apply(d);
+      draw();
+    };
+    const up = () => {
+      canvas.style.cursor = '';
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
       canvas.removeEventListener('pointercancel', up);
