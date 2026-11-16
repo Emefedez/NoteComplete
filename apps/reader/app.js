@@ -1687,6 +1687,7 @@ function toolOptions() {
   $("drawingOptions").hidden = tool === "select" || tool === "text";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
+  $("drawingOptions").dataset.tool = tool;
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   // The text format bar, when docked here, shows while a text box is typed or selected.
@@ -3098,10 +3099,11 @@ function restoreToolPrefs() {
 // Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
 // one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
 const WIDTH_DEFAULTS = {
-  // The pen: 4 px is the width that reads right next to Noteful's, so it is the second one, with
-  // a slightly thicker finest and a gentle ramp above it.
-  draw: [2, 4, 7, 11],
-  highlight: [8, 16, 24, 40],
+  // The pen: 4 px is the width that reads right next to Noteful's, with a slightly thicker
+  // finest and a gentle ramp around it.
+  draw: [2, 3, 4, 7, 11, 16],
+  // Six for the pen and the highlighter: they sit as a 2 × 3 grid beside the colours.
+  highlight: [8, 12, 16, 24, 32, 40],
   tape: [20, 40, 64],
   shape: [1, 2, 4, 8],
 };
@@ -3110,7 +3112,9 @@ let widthPresets = { ...WIDTH_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem("notecomplete-widths") || "{}");
   // The pen's earlier untouched presets (1, 2, 4, 8) give way to the new ones; edited ones stay.
-  if (JSON.stringify(saved.draw) === "[1,2,4,8]") delete saved.draw;
+  if (["[1,2,4,8]", "[2,4,7,11]"].includes(JSON.stringify(saved.draw))) delete saved.draw;
+  // Untouched four-width pens and highlighters get the six widths.
+  if (JSON.stringify(saved.highlight) === "[8,16,24,40]") delete saved.highlight;
   widthPresets = { ...WIDTH_DEFAULTS, ...saved };
 } catch { /* Optional. */ }
 const widthLabel = (v) => `${Number(v)} px`;

@@ -3921,6 +3921,8 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 #drawingOptions .opt-color .color-label input::-moz-color-swatch { border: 0; border-radius: 50%; }
 #drawingOptions .opt-color .choice-row[data-for="color"]::after { content: ""; width: 24px; height: 24px; }
 #drawingOptions .choice-row[data-for="width"], #drawingOptions .choice-row[data-for="eraserSize"] { grid-template-columns: repeat(2, auto); }
+/* The tape's three widths stack in one column, thin to thick. */
+#drawingOptions[data-tool="tape"] .choice-row[data-for="width"] { grid-template-columns: auto; }
 #drawingOptions .choice-row[data-for="highlightMode"], #drawingOptions .choice-row[data-for="shapeSnap"], #drawingOptions .choice-row[data-for="tapeMode"] { grid-template-columns: repeat(4, auto); }
 /* Shapes: the six shapes (3 × 2) over the three fills, and beside them a Prefab tile that
    opens the prefab picker (tables, graphs, diagrams…). Drawing a shape is a drag on the page. */
