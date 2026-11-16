@@ -573,6 +573,117 @@ impl Editor {
     }
 }
 
+/// Items copied from a page (`Editor::copy_items`): as lines and pictures that can be added to
+/// any page, in page units where they are now. `others`: the ones that cannot be copied as
+/// such (Noteful's own pictures, text and shapes, a rotated or cropped picture); a host can
+/// copy those as a picture of how they look.
+#[derive(Debug, Default, serde::Serialize)]
+pub struct Copied {
+    pub lines: Vec<Line>,
+    pub images: Vec<Image>,
+    pub others: Vec<String>,
+}
+
+impl Editor {
+    /// The items `ids` of `page` as they are drawn now (moves, resizes and restyles applied),
+    /// as new lines and pictures, in their order on the page.
+    pub fn copy_items(&self, page: usize, ids: &[String]) -> Result<Copied> {
+        let facts = self.page_facts(page)?;
+        let p = self.page(page)?;
+        let wanted: HashSet<&str> = ids.iter().map(String::as_str).collect();
+        let shown = |id: &str| wanted.contains(id) && !facts.deleted.contains(id);
+        let adjust = |id: &str| facts.adjustments.get(id).copied();
+        let mut out = Copied::default();
+        // A copy stands alone: not undone with another edit. A graph's or prefab's parts keep
+        // their part (the host gives the copy an id of its own).
+        let fresh = |mut line: Line| {
+            line.joined = false;
+            line
+        };
+        for item in p.items.iter().filter(|i| shown(&i.id)) {
+            match &item.stroke {
+                Some(stroke) => {
+                    let s = match adjust(&item.id) {
+                        Some(a) => crate::manipulation::adjusted_stroke(stroke, a),
+                        None => stroke.clone(),
+                    };
+                    let tool = s.style.tool.min(2);
+                    let mut line = Line::new(
+                        s.points.clone(),
+                        (s.radius * 2.).clamp(0.1, 100.),
+                        s.style.rgba,
+                    );
+                    line.tool = tool;
+                    line.layer = item.layer;
+                    if tool == 0
+                        && s.radii.len() == s.points.len()
+                        && s.radii.iter().any(|r| *r > 0.)
+                    {
+                        line.pressure = Some(s.radii.iter().map(|r| r.clamp(0., 50.)).collect());
+                    }
+                    out.lines.push(fresh(line));
+                }
+                None => out.others.push(item.id.clone()),
+            }
+        }
+        for a in facts.added.iter().filter(|a| shown(&a.id)) {
+            let line = match adjust(&a.id) {
+                Some(adj) => {
+                    let mut line = adjusted_line(a.line, adj);
+                    // A shape is kept as one when it was only moved or resized (its corners
+                    // follow); turned, it stays as the line it is drawn as.
+                    if let Some(shape) = line.shape.as_mut() {
+                        if adj.rotation == 0. {
+                            let m = adj.matrix(&crate::manipulation::line_geometry(a.line));
+                            let at = |p: [f64; 2]| {
+                                [
+                                    m[0] * p[0] + m[2] * p[1] + m[4],
+                                    m[1] * p[0] + m[3] * p[1] + m[5],
+                                ]
+                            };
+                            shape.start = at(shape.start);
+                            shape.end = at(shape.end);
+                        } else {
+                            line.shape = None;
+                        }
+                    }
+                    line
+                }
+                None => a.line.clone(),
+            };
+            out.lines.push(fresh(line));
+        }
+        for (id, image) in facts.images.iter().filter(|(id, _)| shown(id)) {
+            let mut copy = (*image).clone();
+            copy.joined = false;
+            match adjust(id) {
+                None => out.images.push(copy),
+                Some(a) if a.rotation == 0. && a.crop.is_none() => {
+                    let g = crate::manipulation::item_geometry(&image.item(id.clone()));
+                    let m = a.matrix(&g);
+                    let [x, y, w, h] = image.bounds;
+                    let at = |px: f64, py: f64| {
+                        [m[0] * px + m[2] * py + m[4], m[1] * px + m[3] * py + m[5]]
+                    };
+                    let (p0, p1) = (at(x, y), at(x + w, y + h));
+                    copy.bounds = [
+                        p0[0].min(p1[0]),
+                        p0[1].min(p1[1]),
+                        (p1[0] - p0[0]).abs(),
+                        (p1[1] - p0[1]).abs(),
+                    ];
+                    if let (Some(text), Some(c)) = (copy.text.as_mut(), a.rgba) {
+                        text.rgba = c;
+                    }
+                    out.images.push(copy);
+                }
+                Some(_) => out.others.push(id.clone()),
+            }
+        }
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

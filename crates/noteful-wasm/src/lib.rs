@@ -384,6 +384,13 @@ impl EditorSession {
         let ids: Vec<String> = serde_json::from_str(ids)?;
         Ok(self.inner.remove_items(page, &ids, joined)?)
     }
+    /// Items as they are drawn now, as new lines and pictures (JSON list of ids in, JSON
+    /// `{lines, images, others}` out): what Copy keeps, to add to any page.
+    pub fn copy_items(&self, page: usize, ids: &str) -> Result<String, Failure> {
+        let page = self.slot(page)?;
+        let ids: Vec<String> = serde_json::from_str(ids)?;
+        Ok(serde_json::to_string(&self.inner.copy_items(page, &ids)?)?)
+    }
     pub fn remove_item(&mut self, page: usize, id: &str) -> Result<(), Failure> {
         let page = self.slot(page)?;
         Ok(self.inner.remove_item(page, id)?)

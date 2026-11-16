@@ -591,6 +591,20 @@ export function connectorLabel(c) {
   return parts.join(' ');
 }
 
+// Where a connector's label goes: beside the middle of its longest segment (above a level
+// line, right of an upright one), moved by `offset` ([dx, dy], dragged in the editor).
+// { x, y (baseline), w }.
+export function labelBox(pts, label, offset = null) {
+  let best = 1, bl = -1;
+  for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (l > bl) { bl = l; best = i; } }
+  const mx = (pts[best][0] + pts[best - 1][0]) / 2, my = (pts[best][1] + pts[best - 1][1]) / 2;
+  const horizontal = Math.abs(pts[best][1] - pts[best - 1][1]) < Math.abs(pts[best][0] - pts[best - 1][0]);
+  const w = textWidth(label, FONT - 1);
+  let x = horizontal ? mx - w / 2 : mx + 9, y = horizontal ? my - 7 : my + 4;
+  if (Array.isArray(offset) && offset.length === 2 && offset.every(Number.isFinite)) { x += offset[0]; y += offset[1]; }
+  return { x, y, w };
+}
+
 // The points of a connector's line on the page of the diagram (after clipping to its ends).
 export function connectorPath(model, c, fitted = null) {
   const byId = fitted || new Map(model.elements.map((e) => [e.id, fitBounds(e)]));
@@ -634,7 +648,7 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
   const order = [...model.elements].sort((a, b) => (ELEMENTS[b.type]?.container ? 1 : 0) - (ELEMENTS[a.type]?.container ? 1 : 0) || depth(a) - depth(b));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const grow = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
-  let body = '';
+  let body = '', labels = '';
   for (const e of order) {
     const def = ELEMENTS[e.type] || { shape: 'box' };
     const b = fitted.get(e.id);
@@ -663,17 +677,14 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     let g = `<path d="${d}" fill="none" stroke="${sel.has(c.id) ? '#0a84ff' : INK}" stroke-width="${sel.has(c.id) ? 2.4 : 1.3}"${def.line === 'dashed' ? ' stroke-dasharray="7 5"' : ''}/>`;
     if (ids) g += `<path d="${d}" fill="none" stroke="transparent" stroke-width="14"/>`;
     g += mark(endMark, tip, eu, ev) + mark(fromMark, tail, su, sv);
-    // The label at the middle of the longest segment, above it.
+    // The label beside the middle of the longest segment (above a level line, right of an
+    // upright one), moved from there by `props.labelOffset`. Drawn after every line, on its
+    // own background, so a line never hides it.
     const label = connectorLabel(c);
     if (label) {
-      let best = 0, bl = -1;
-      for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (l > bl) { bl = l; best = i; } }
-      const mx = (pts[best][0] + pts[best - 1][0]) / 2, my = (pts[best][1] + pts[best - 1][1]) / 2;
-      const horizontal = Math.abs(pts[best][1] - pts[best - 1][1]) < Math.abs(pts[best][0] - pts[best - 1][0]);
-      const lx = horizontal ? mx : mx + 8, ly = horizontal ? my - 6 : my + 4;
-      const w = textWidth(label, FONT - 1);
-      g += `<rect x="${n(horizontal ? lx - w / 2 - 2 : lx - 2)}" y="${n(ly - FONT + 1)}" width="${n(w + 4)}" height="${FONT + 2}" fill="${FILL}" fill-opacity="0.85"/>` + text(lx, ly, label, { anchor: horizontal ? 'middle' : 'start', size: FONT - 1 });
-      grow(horizontal ? lx - w / 2 : lx, ly - FONT); grow(horizontal ? lx + w / 2 : lx + w, ly + 2);
+      const at = labelBox(pts, label, c.props?.labelOffset);
+      labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="label"` : ''}><rect x="${n(at.x - 3)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 6)}" height="${FONT + 3}" rx="2" fill="${FILL}"${sel.has(c.id) ? ' stroke="#0a84ff" stroke-width="1"' : ''}/>${text(at.x + at.w / 2, at.y, label, { anchor: 'middle', size: FONT - 1 })}</g>`;
+      grow(at.x - 3, at.y - FONT); grow(at.x + at.w + 3, at.y + 3);
     }
     // Role and multiplicity at each end.
     if (def.ends) {
@@ -700,7 +711,7 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
   const W = x1 - x0, H = y1 - y0;
   let head = title ? text(x0 + W / 2, y0 + LINE, title, { weight: 'bold', size: FONT + 2 }) : '';
   if (showBadge) head += `<g class="uml-badge"><rect x="${n(x1 - 38)}" y="${n(y0 + 4)}" width="34" height="15" rx="4" fill="#eef2ff" stroke="#8b95c9" stroke-width="0.8"/>${text(x1 - 21, y0 + 15, 'UML', { size: 9.5, weight: 'bold', fill: '#4b5596' })}</g>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(x0)} ${n(y0)} ${n(W)} ${n(H)}" width="${n(W)}" height="${n(H)}"><rect x="${n(x0)}" y="${n(y0)}" width="${n(W)}" height="${n(H)}" fill="${FILL}"/><g font-family="Helvetica, Arial, sans-serif">${head}${body}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(x0)} ${n(y0)} ${n(W)} ${n(H)}" width="${n(W)}" height="${n(H)}"><rect x="${n(x0)}" y="${n(y0)}" width="${n(W)}" height="${n(H)}" fill="${FILL}"/><g font-family="Helvetica, Arial, sans-serif">${head}${body}${labels}</g></svg>`;
   return { svg, width: W, height: H, box: [x0, y0, W, H] };
 }
 
@@ -756,5 +767,14 @@ export function umlIcon(kind, type, doc = globalThis.document) {
   if (kind === 'connector' && CONNECTORS[type]?.line === 'dashed') path.setAttribute('stroke-dasharray', '3 2.5');
   if ((kind === 'element' && ['dot', 'bar'].includes(ELEMENTS[type]?.shape)) || (kind === 'connector' && FILLED_ICONS.has(iconMark(type)))) path.setAttribute('fill', 'currentColor');
   svg.append(path);
+  // A connector known by its keyword («include», «extend», «create») also shows its letter,
+  // since the arrows alone look alike.
+  const keyword = kind === 'connector' && CONNECTORS[type]?.keyword;
+  if (keyword) {
+    const t = doc.createElementNS(svg.namespaceURI, 'text');
+    for (const [k, v] of Object.entries({ x: 2, y: 10.5, 'font-size': 10, 'font-weight': 700, 'font-family': 'system-ui, sans-serif', fill: 'currentColor', stroke: 'none' })) t.setAttribute(k, v);
+    t.textContent = keyword[0].toUpperCase();
+    svg.append(t);
+  }
   return svg;
 }

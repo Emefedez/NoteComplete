@@ -382,6 +382,14 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       changed();
       return;
     }
+    // A connector's label: dragged anywhere around its line (double-click to edit it).
+    if (kind === 'label') {
+      selected = { kind: 'connector', id };
+      const c = model.connectors.find((q) => q.id === id);
+      drag = { mode: 'label', c, start: pt, offset: [...(c.props.labelOffset || [0, 0])], snapped: false };
+      changed();
+      return;
+    }
     if (kind === 'connector') {
       selected = { kind: 'connector', id };
       const c = model.connectors.find((q) => q.id === id);
@@ -430,6 +438,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       once();
       drag.c.props.y = Math.round(drag.y + dy);
       draw();
+    } else if (drag.mode === 'label') {
+      if (!drag.snapped && Math.hypot(dx, dy) < 2) return;
+      once();
+      drag.c.props.labelOffset = [Math.round(drag.offset[0] + dx), Math.round(drag.offset[1] + dy)];
+      draw();
     } else if (drag.mode === 'connect') rubber(drag, pt);
   });
   const finish = (ev) => {
@@ -474,6 +487,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       return changed();
     }
     const hit = ev.target.closest?.('[data-uml-id]');
+    if (hit?.dataset.umlKind === 'label') {
+      const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
+      if (c) { selected = { kind: 'connector', id: c.id }; changed(); return rename(c); }
+    }
     if (hit?.dataset.umlKind === 'connector') {
       const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
       // On its words, or a message: rename it. Elsewhere on the line: a bend there.
@@ -747,7 +764,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function menuAt(x, y, pt) {
     const hit = document.elementFromPoint(x, y)?.closest?.('[data-uml-id]');
     const e = hit?.dataset.umlKind === 'element' ? model.elements.find((q) => q.id === hit.dataset.umlId) : !hit && pt ? elementAt(pt) : null;
-    const c = hit?.dataset.umlKind === 'connector' ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null;
+    const c = ['connector', 'label'].includes(hit?.dataset.umlKind) ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null;
     if (e || c) { selected = { kind: e ? 'element' : 'connector', id: (e || c).id }; changed(); }
     else if (selected) { selected = null; changed(); }
     const props = { label: 'Properties…', icon: 'settings', run: () => showPanel(true) };
@@ -769,6 +786,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         props,
         { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
+        { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
         '-', del,
       ], { title: c.props.name || def.label });
     }

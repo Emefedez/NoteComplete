@@ -236,6 +236,8 @@ const selection = new SelectionController({
   menu: (item, x, y) => itemMenu(item, x, y),
   // A graph, table or prefab resized: drawn again at the new size (redrawResized).
   redraw: (item, adjustment) => redrawResized(item, adjustment),
+  // Let go over another page: moved there.
+  dropTo: (item, target, start, client) => moveToPage(item, target, start, client),
 });
 // Status is a transient toast, not a permanent strip; errors stay up longer.
 let statusTimer = 0;
@@ -1768,7 +1770,8 @@ function toolOptions() {
   }
   $("toolbarToggle").setAttribute("aria-expanded", String(!opts.hidden));
   syncChoices();
-  if (!opts.hidden && !useInline) {
+  placeToolOptions();
+  if (!opts.hidden && !useInline && !toolOptionsPlace) {
     const anchor = document.querySelector(`#toolbar [data-tool="${tool}"]`), bar = $("toolbar").getBoundingClientRect();
     if (anchor && !matchMedia("(max-width: 700px)").matches) {
       const left = anchor.getBoundingClientRect().left - bar.left;
@@ -1780,6 +1783,44 @@ function toolOptions() {
   $("toolbarToggle").setAttribute("aria-label", settingsLabel);
   $("toolbarToggle").title = settingsLabel;
 }
+// Where the tool settings were dragged ({ x, y } in the window), kept on this device; none:
+// under their tool.
+const TOOL_PLACE_KEY = "notecomplete-tool-options-place";
+let toolOptionsPlace = null;
+try { const v = JSON.parse(localStorage.getItem(TOOL_PLACE_KEY) || "null"); if (Number.isFinite(v?.x) && Number.isFinite(v?.y)) toolOptionsPlace = v; } catch { /* Optional. */ }
+function placeToolOptions() {
+  const opts = $("toolOptions"), placed = !!toolOptionsPlace && !opts.classList.contains("inline");
+  opts.classList.toggle("placed", placed);
+  if (!placed) { opts.style.top = ""; if (opts.style.position) opts.style.position = ""; return; }
+  // Kept inside the window, however it was resized since.
+  const w = opts.offsetWidth || 200, h = opts.offsetHeight || 40;
+  opts.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, toolOptionsPlace.x))}px`;
+  opts.style.top = `${Math.max(4, Math.min(innerHeight - h - 4, toolOptionsPlace.y))}px`;
+}
+function resetToolOptionsPlace() {
+  toolOptionsPlace = null;
+  try { localStorage.removeItem(TOOL_PLACE_KEY); } catch { /* Optional. */ }
+  $("toolOptions").style.left = "";
+  toolOptions();
+}
+$("toolOptionsGrip").addEventListener("pointerdown", (down) => {
+  if (down.button !== 0) return;
+  down.preventDefault();
+  const opts = $("toolOptions"), r = opts.getBoundingClientRect(), dx = down.clientX - r.left, dy = down.clientY - r.top;
+  const grip = $("toolOptionsGrip");
+  try { grip.setPointerCapture(down.pointerId); } catch { /* Released already. */ }
+  opts.classList.add("dragging");
+  const move = (e) => { toolOptionsPlace = { x: Math.round(e.clientX - dx), y: Math.round(e.clientY - dy) }; placeToolOptions(); };
+  const up = () => {
+    grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
+    opts.classList.remove("dragging");
+    if (toolOptionsPlace) { try { localStorage.setItem(TOOL_PLACE_KEY, JSON.stringify(toolOptionsPlace)); } catch { /* Optional. */ } status("Tool settings stay here. Double-click their grip (or View → Reset tool settings position) to put them back."); }
+  };
+  grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+});
+$("toolOptionsGrip").addEventListener("dblclick", resetToolOptionsPlace);
+$("resetToolOptionsPlace").onclick = resetToolOptionsPlace;
+addEventListener("resize", () => toolOptionsPlace && placeToolOptions());
 function setCompact(compact) {
   const changed =
     document.body.classList.contains("compact-chrome") !== compact;
@@ -6098,6 +6139,115 @@ async function removeItem(item) {
   else await action("remove", { page: item.page, itemId: item.id });
   status("Removed. Press Ctrl+Z to bring it back.");
 }
+// Copy, cut and paste of items (Ctrl C / X / V, and the item and page menus), and items let go
+// over another page. A copy is kept here as lines and pictures (the engine's copyItems, as
+// they are drawn now); Noteful's own pictures and text go as a picture of how they look. The
+// system clipboard gets a marker, so a paste knows the copy is still the last thing copied.
+const CLIP_MARK = "NoteComplete items (paste them in NoteComplete)";
+let clip = null; // { page, lines, images, box, pastes }
+const typingIn = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
+const itemIds = (item) => (item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
+const blobBase64 = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(r.error); r.readAsDataURL(blob); });
+// The items of `item` as lines and pictures that can go on any page.
+async function copiedItems(item) {
+  const copied = await call("copyItems", { page: item.page, ids: itemIds(item) });
+  if (copied.others.length) {
+    const out = {};
+    const blob = await itemPicture({ page: item.page, kind: "group", members: copied.others.map((id) => ({ id })) }, 3, "image/png", undefined, out);
+    copied.images.push({ base64: await blobBase64(blob), mime: "image/png", bounds: out.box, layer: activeLayer });
+  }
+  return copied;
+}
+// Lines and pictures moved by [dx, dy]; a graph's or prefab's parts get an id of their own
+// (`fresh`), so the copy is a figure apart from the one it came from.
+function shifted({ lines, images }, [dx, dy], fresh = true) {
+  const ids = new Map(), rename = (part) => {
+    if (!part || !fresh) return part;
+    if (!ids.has(part.id)) ids.set(part.id, `${part.kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`);
+    return { ...part, id: ids.get(part.id) };
+  };
+  const at = ([x, y]) => [x + dx, y + dy];
+  return {
+    lines: lines.map((l) => ({ ...l, points: l.points.map(at), ...(l.shape ? { shape: { ...l.shape, start: at(l.shape.start), end: at(l.shape.end) } } : {}), ...(l.part ? { part: rename(l.part) } : {}) })),
+    images: images.map((i) => ({ ...i, bounds: [i.bounds[0] + dx, i.bounds[1] + dy, i.bounds[2], i.bounds[3]], ...(i.part ? { part: rename(i.part) } : {}) })),
+  };
+}
+function clipBox({ lines, images }) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const l of lines) for (const [x, y] of l.points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  for (const { bounds: [x, y, w, h] } of images) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h); }
+  return Number.isFinite(x0) ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
+}
+async function copyItem(item, { cut = false } = {}) {
+  if (!doc || !item) return;
+  try {
+    const copied = await copiedItems(item);
+    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0 };
+    try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
+    if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
+    else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
+  } catch (e) { status(e.message, true); }
+}
+// The copy on page `p`: at page point `at` (its top left corner), else where it was (a little
+// lower and to the right on its own page, again with each paste), kept on the page.
+async function pasteClip(p = panels[page], at = null) {
+  if (!doc || !clip || !p || editing || !ensureEditableLayer()) return;
+  const [x, y, w, h] = clip.box;
+  let to;
+  if (at) to = at;
+  else { const step = p.index === clip.page ? 16 * ++clip.pastes : 0; to = [x + step, y + step]; }
+  to = [Math.max(0, Math.min(p.size[0] - w, to[0])), Math.max(0, Math.min(p.size[1] - h, to[1]))];
+  const moved = shifted(clip, [to[0] - x, to[1] - y]);
+  const layer = activeLayer;
+  await action("drawMany", { page: p.index, lines: moved.lines.map((l) => ({ ...l, layer })), images: moved.images.map((i) => ({ ...i, layer })) });
+  status(`Pasted on page ${p.index + 1}. One undo takes it away.`);
+}
+// Items let go over another page (selection.js): taken off theirs and put where they were
+// let go, in one undo step.
+async function moveToPage(item, target, start, client) {
+  const from = panels[item.page], to = panels[target];
+  if (!doc || !from || !to || editing) return;
+  try {
+    const copied = await copiedItems(item);
+    const r = to.el.getBoundingClientRect();
+    const there = [((client[0] - r.left) / r.width) * to.size[0], ((client[1] - r.top) / r.height) * to.size[1]];
+    const moved = shifted(copied, [there[0] - start[0], there[1] - start[1]], false);
+    await action("drawMany", { page: target, cut: { page: item.page, ids: itemIds(item) }, lines: moved.lines, images: moved.images });
+    await renderPage(from);
+    status(`Moved to page ${target + 1}. One undo moves it back.`);
+  } catch (e) { status(e.message, true); }
+}
+// Ctrl C / X with an item selected, Ctrl V with a copy kept. The keys do it (Safari sends no
+// copy or paste event when nothing on the page is selected or editable); the clipboard
+// events, where they come, only carry the marker.
+let clipKeyAt = -Infinity, pastedAt = -Infinity;
+const itemKeys = (e) => !e.defaultPrevented && !typingIn(e.target) && !window.getSelection()?.toString() && doc && !editing;
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !itemKeys(e)) return;
+  const key = e.key.toLowerCase();
+  if ((key === "c" || key === "x") && selection.item && tool === "select") {
+    if (key === "x" && !selection.editable()) return;
+    clipKeyAt = e.timeStamp;
+    copyItem(selection.item, { cut: key === "x" });
+  } else if (key === "v" && clip) {
+    // The paste event says whether the copy is still the last thing copied; without one
+    // (Safari), the copy kept here is pasted.
+    const at = e.timeStamp;
+    setTimeout(() => { if (pastedAt < at) pasteClip(); }, 60);
+  }
+});
+for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
+  if (performance.now() - clipKeyAt > 1000 || !itemKeys(event)) return;
+  event.preventDefault();
+  event.clipboardData?.setData("text/plain", CLIP_MARK);
+});
+document.addEventListener("paste", (event) => {
+  if (!clip || !itemKeys(event)) return;
+  pastedAt = event.timeStamp;
+  if (event.clipboardData?.getData("text/plain") !== CLIP_MARK) return;
+  event.preventDefault();
+  pasteClip();
+});
 // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
 // fields (one undo step). A closed shape's fill (rectangle, ellipse, triangle, star) changes too.
 const hexOf = (rgba) => "#" + rgba.slice(0, 3).map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
@@ -6156,7 +6306,7 @@ function tapeEntries(p, tape) {
 // A picture of an item (as drawn, on nothing) or of a page, to download, copy, share or send by
 // QR. `make(scale, type, quality)` draws it.
 const safeName = (name) => String(name || "NoteComplete").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80);
-async function itemPicture(item, scale = 3, type = "image/png", quality) {
+async function itemPicture(item, scale = 3, type = "image/png", quality, out = null) {
   const p = panels[item.page];
   const ids = new Set(item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
   const svgNow = p?.render?.querySelector("svg");
@@ -6172,6 +6322,7 @@ async function itemPicture(item, scale = 3, type = "image/png", quality) {
   }
   if (!(x1 > x0 && y1 > y0)) throw Error("Nothing to export here.");
   const pad = 4, box = [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad];
+  if (out) out.box = box;
   const view = await call("view", { page: item.page });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
@@ -6258,6 +6409,8 @@ function itemMenu(item, x, y, { tape = null } = {}) {
     item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
     ...styleEntries(item),
     { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
+    { label: "Cut", icon: "scissors", key: "Ctrl X", run: () => copyItem(item, { cut: true }) },
+    { label: "Copy", icon: "copy", key: "Ctrl C", run: () => copyItem(item) },
     !c && item.kind !== "group" && { label: "Lock in place", icon: "lock", run: () => action("lock", { page: item.page, itemId: item.id, locked: true }).then(() => status("Locked: Select passes over it. Right-click it to unlock it.")) },
     "-",
     exportEntries(`${doc.title || "Note"} - ${name}`, (scale, type, quality) => itemPicture(item, scale, type, quality)),
@@ -6329,6 +6482,8 @@ async function pageMenu(p, at, x, y) {
   openContextMenu(x, y, [
     ...tapeEntries(p, tape),
     tape && "-",
+    clip && { label: "Paste here", icon: "copy", key: "Ctrl V", run: () => pasteClip(p, at) },
+    clip && "-",
     ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
     "-",
     { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
