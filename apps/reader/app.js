@@ -1767,9 +1767,14 @@ function toolOptions() {
   // The text format bar, when docked here, shows while a text box is typed or selected.
   const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
-  const useInline = !optionsPopped && inlineToolOptionsSpace() >= 220;
+  // Inline beside the tools when they leave room; otherwise inline too, as a row of its own
+  // under them (on any screen, not only wide ones), unless the bar is docked at a side.
+  const space = inlineToolOptionsSpace(), side = ["left", "right"].includes(document.body.dataset.landscapeDock);
+  const ownRow = space < 220 && !chromeState.compact && !side;
+  const useInline = !optionsPopped && (space >= 220 || ownRow);
   const opts = $("toolOptions");
   opts.classList.toggle("inline", useInline);
+  opts.classList.toggle("inline-row", useInline && ownRow);
   if (useInline) {
     opts.style.left = "";
     opts.hidden = chromeState.compact || !canOpen;

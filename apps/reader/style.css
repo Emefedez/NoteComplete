@@ -3994,6 +3994,14 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 #toolbar > .toolbar-actions { order: 3; }
 #toolOptions.inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
 #toolOptions.inline[hidden] { display: none; }
+/* No room beside the tools: the strip takes a row of its own under them. */
+#toolbar:has(> #toolOptions.inline-row:not([hidden])) { flex-wrap: wrap; }
+#toolOptions.inline.inline-row { order: 3; flex: 1 0 100%; padding: 4px 0 0; margin-top: 2px; border-left: 0; border-top: 1px solid var(--line); }
+/* A phone's bottom toolbar is a column: the strip is its top row, next to the page. */
+@media (max-width: 700px) {
+  #toolbar:has(> #toolOptions.inline-row:not([hidden])) { flex-wrap: nowrap; }
+  #toolOptions.inline.inline-row { order: 0; flex: none; width: 100%; padding: 0 0 4px; margin: 0; border-top: 0; border-bottom: 1px solid var(--line); }
+}
 #toolOptions.inline::-webkit-scrollbar { display: none; }
 #toolOptions.inline #drawingOptions { display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
 #toolOptions.inline #drawingOptions .opt-section { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }

@@ -381,9 +381,9 @@ try {
     await p.keyboard.press('Shift+S');
     await p.click(`.quick-menu .qm-inner[aria-label="${label}"]`);
     assert.equal(await tool(p), name);
-    assert.equal(await p.isVisible('#toolOptions'), false, `${label} chosen in the menu`);
+    assert.equal(await p.isVisible('#toolOptions:not(.inline)'), false, `${label} chosen in the menu`);
     await p.keyboard.press('Escape');
-    assert.equal(await p.isVisible('#toolOptions'), false, `${label} chosen in the menu, menu closed`);
+    assert.equal(await p.isVisible('#toolOptions:not(.inline)'), false, `${label} chosen in the menu, menu closed`);
   }
   await p.evaluate(() => document.querySelector('#toolbar [data-tool=highlight]').click());
   assert.equal(await p.isVisible('#toolOptions'), true, 'pressing the selected tool in the tool bar shows its settings');
