@@ -13,4 +13,8 @@ test('links to pages, images and the web are recognised', () => {
   assert.equal(resolveAiLink('x', 'https://a.b/c').external, true);
   assert.equal(resolveAiLink('x', '01-page-2.jpg').page, 2);
   assert.equal(resolveAiLink('x', 'region-1.png').aiFile, 'region-1');
+  assert.equal(
+    resolveAiLink('Prefab Ejercicio 1 - Planificación.noteful', 'file:///home/m1-max/Documents/NoteComplete/ink/Prefab%20Ejercicio%201%20-%20Planificaci%C3%B3n.noteful').localFile,
+    '/home/m1-max/Documents/NoteComplete/ink/Prefab Ejercicio 1 - Planificación.noteful',
+  );
 });

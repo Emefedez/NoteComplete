@@ -1701,7 +1701,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 /* Floating windows: dragged by their head; _ puts them in the tray, □ makes them small or large. */
 .window-head { cursor: move; touch-action: none; }
 /* A narrow window squeezes its head's selects and titles, never its buttons, so _ □ × stay inside. */
-.window-head { min-width: 0; overflow: hidden; }
+.window-head { min-width: 0; overflow: hidden; flex-wrap: nowrap; }
 .window-head > :is(button, a, .icon-button) { flex: none; }
 .window-head > :is(select, input, h2, strong, span) { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .window-head > h2 { flex: 1 1 0; }
@@ -3311,9 +3311,9 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
    title and the window's buttons; below, the lists with their search and Small model. */
 .chat-panel { container: chat-panel / inline-size; }
 @container chat-panel (max-width: 560px) {
-  .chat-head { flex-wrap: wrap; row-gap: 6px; }
+  .chat-head { flex-wrap: wrap; gap: 4px; row-gap: 6px; }
   .chat-head > * { order: 1; }
-  .chat-head > strong { order: 0; }
+  .chat-head > strong { order: 0; flex: 1 1 0; min-width: 0; margin-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chat-head::before { content: ""; order: 2; flex-basis: 100%; height: 0; }
   .chat-head > select, .chat-head > input, .chat-head > .model-search, .chat-head > .small-model, .chat-head > .text-only-badge { order: 3; }
   .chat-head > select { flex: 1 1 110px; min-width: 0; max-width: none; }

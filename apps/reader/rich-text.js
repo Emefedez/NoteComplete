@@ -15,6 +15,14 @@ export function resolveAiLink(label = '', url = '') {
   const raw = String(url || '').trim(), text = String(label || '').trim();
   if (/^(https?:|mailto:)/i.test(raw)) return { href: raw, external: true };
   if (/^data:image\//i.test(raw)) return { href: '#ai-image', image: raw };
+  if (/^file:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      let filePath = decodeURIComponent(u.pathname);
+      if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
+      if (filePath) return { href: raw, localFile: filePath };
+    } catch { /* Invalid file URL. */ }
+  }
   const combined = `${raw} ${text}`;
   const fileMatch = combined.match(/(?:^|[/\\:#]|\b)(?:\d+-)?(notes-region|region-\d+|selection|source)(?:\.(?:jpe?g|png|webp|pdf))?(?:$|[\s)#?])/i);
   if (fileMatch) return { href: `#ai-file:${fileMatch[1].toLowerCase()}`, aiFile: fileMatch[1].toLowerCase() };
@@ -40,7 +48,7 @@ export function normalizeMarkdown(markdown, { links = true } = {}) {
         const found = key && getAiFile(key);
         return found?.url ? `![${label}](${found.url})` : whole;
       }
-      return !resolved.external && !resolved.image ? `[${label}](${resolved.href})` : whole;
+      return !resolved.external && !resolved.image && !resolved.localFile ? `[${label}](${resolved.href})` : whole;
     })
     .replace(/\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$|\$(?!\$)\s*([^$\n]+?)\s*\$(?![$\d])/g, (whole, displayBracket, inlineParen, displayDollar, inlineDollar) => {
       if (displayBracket != null) return `$$\n${displayBracket.trim().replace(/\n\s*\n/g, '\n')}\n$$`;
@@ -105,6 +113,10 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
       a.setAttribute('href', '#ai-image');
       a.dataset.aiImage = resolved.image;
       a.title ||= 'Show image';
+    } else if (resolved?.localFile) {
+      a.setAttribute('href', resolved.href);
+      a.dataset.localFile = resolved.localFile;
+      a.title ||= `Open ${resolved.localFile}`;
     } else if (!own && !(a.getAttribute('href') || '').startsWith('#')) {
       // Relative links mean something only in a document (a file beside it).
       a.setAttribute('href', '#');

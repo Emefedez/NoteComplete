@@ -448,6 +448,7 @@ app.whenReady().then(async () => {
     return { path: file, name: path.basename(file), bytes };
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
+  ipcMain.handle('files:read-local-note', guarded((_event, file) => files.readLocalNote(file)));
   // Groups: a whole folder, or several files added to the open document.
   ipcMain.handle('files:open-folder', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a folder of notes', properties: ['openDirectory'] });

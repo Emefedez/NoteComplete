@@ -7253,7 +7253,7 @@ $("uiReset").onclick = () => applyUiSize(0);
 
 // Links in AI answers: page links jump to the page, attached images open large;
 // web links open through the desktop app's window handler (target=_blank).
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const a = e.target.closest?.(".chat-body a");
   if (!a) return;
   if (a.dataset.page) {
@@ -7262,6 +7262,26 @@ document.addEventListener("click", (e) => {
     for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
     showDocument();
     jump(Math.min(doc.pages, Number(a.dataset.page)) - 1);
+    return;
+  }
+  if (a.dataset.localFile) {
+    e.preventDefault();
+    const filePath = a.dataset.localFile;
+    if (!window.notecompleteFiles?.readLocalNote) {
+      status("Opening local file links is only available in the desktop app.", true);
+      return;
+    }
+    if (busy() || !canReplace()) return;
+    try {
+      const opened = await window.notecompleteFiles.readLocalNote(filePath);
+      if (!opened) return status(`File not found: ${filePath}`, true);
+      for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
+      const file = new File([opened.bytes], opened.name);
+      await load(file);
+      await openedLocal(opened.path, opened.name, file);
+    } catch (err) {
+      status(err?.message || `Could not open ${filePath}`, true);
+    }
     return;
   }
   const url = a.dataset.aiImage || (a.dataset.aiFile && getAiFile(a.dataset.aiFile)?.url);

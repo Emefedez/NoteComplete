@@ -255,5 +255,18 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       await opened(file);
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },
+    // Opens a local note/document linked from AI chat (e.g. a generated prefab .noteful file).
+    async readLocalNote(file) {
+      if (typeof file !== 'string' || !file || file.includes('\0') || !path.isAbsolute(file)) throw Error('Invalid note path.');
+      if (!NOTE.test(path.basename(file))) throw Error('Unsupported note file type.');
+      let real;
+      try { real = await realpath(file); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+      const info = await stat(real);
+      if (!info.isFile() || info.size > 256 * 1048576) return null;
+      const s = await load();
+      s.recent = [real, ...s.recent.filter(p => p !== real)].slice(0, RECENT);
+      await save(s);
+      return { path: real, name: path.basename(real), bytes: new Uint8Array(await readFile(real)) };
+    },
   };
 }

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   // The file the system asked this tab to open (Open with…), or null.
   launched: () => ipcRenderer.invoke('files:launched'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
+  readLocalNote: file => ipcRenderer.invoke('files:read-local-note', file),
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
   listFolder: folder => ipcRenderer.invoke('files:list-folder', folder),
   pickFiles: () => ipcRenderer.invoke('files:pick'),
