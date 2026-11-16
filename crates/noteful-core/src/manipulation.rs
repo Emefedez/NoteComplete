@@ -21,6 +21,10 @@ pub struct Adjustment {
     /// which also moves and scales the item so its box is the visible part.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<[f64; 4]>,
+    /// Closed drawn shapes only: their inside colour (RGBA 0–1). An alpha of 0 takes
+    /// the fill away, leaving the outline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<[f64; 4]>,
     /// Undo and redo this edit together with the one before it (moving a group of
     /// items is one adjustment per item, undone as one). Not part of the item's state.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -36,6 +40,7 @@ impl Default for Adjustment {
             rgba: None,
             locked: None,
             crop: None,
+            fill: None,
             joined: false,
         }
     }
@@ -190,6 +195,9 @@ impl Adjustment {
             && self
                 .crop
                 .is_none_or(|c| c.iter().all(|n| n.is_finite()) && c[2] > c[0] && c[3] > c[1])
+            && self
+                .fill
+                .is_none_or(|c| c.iter().all(|n| n.is_finite() && (0.0..=1.).contains(n)))
     }
     pub(crate) fn matrix(&self, g: &Geometry) -> [f64; 6] {
         let old = g.rotation.to_radians();
@@ -237,6 +245,11 @@ pub(crate) fn adjusted_line(line: &Line, a: &Adjustment) -> Line {
     }
     if let Some(c) = a.rgba {
         line.rgba = c;
+    }
+    if let (Some(f), Some(shape)) = (a.fill, line.shape.as_mut()) {
+        if shape.closed() {
+            shape.fill = (f[3] > 0.).then_some(f);
+        }
     }
     line
 }
@@ -357,6 +370,15 @@ impl Editor {
         }
         map
     }
+    /// A drawn rectangle, ellipse, triangle or star: its fill as drawn (`Some(None)` for
+    /// an outline), or `None` for anything else.
+    fn closed_shape(&self, page: usize, id: &str) -> Option<Option<[f64; 4]>> {
+        self.additions(page)
+            .find(|(key, _)| key == id)
+            .and_then(|(_, l)| l.shape.as_ref())
+            .filter(|s| s.closed())
+            .map(|s| s.fill)
+    }
     fn geometry(&self, page: usize, id: &str) -> Result<Geometry> {
         if let Some(item) = self.page(page)?.items.iter().find(|i| i.id == id) {
             return Ok(item_geometry(item));
@@ -461,6 +483,15 @@ impl Editor {
             || (!g.styled && (adjustment.width.is_some() || adjustment.rgba.is_some()))
         {
             return Err(Error::new(0, "Invalid item adjustment"));
+        }
+        if adjustment.fill.is_some()
+            && adjustment.fill != current.fill
+            && self.closed_shape(page, id).is_none()
+        {
+            return Err(Error::new(
+                0,
+                "Only rectangles, ellipses, triangles and stars take a fill",
+            ));
         }
         let m = adjustment.matrix(&g);
         if g.bounds.iter().any(|n| !n.is_finite())
@@ -576,6 +607,14 @@ impl Editor {
         let adjustments = self.adjustments(page);
         let a = adjustments.get(id).copied().cloned().unwrap_or_default();
         let mut out = json!({"id":id,"page":page,"bounds":g.bounds,"base_rotation":g.rotation,"base_width":g.width,"base_rgba":g.rgba,"styled":g.styled,"kind":g.kind,"adjustment":a});
+        // Closed drawn shapes: their fill now (null for an outline), for the menu.
+        if let Some(fill) = self.closed_shape(page, id) {
+            out["fill"] =
+                json!(a
+                    .fill
+                    .filter(|f| f[3] > 0.)
+                    .or(if a.fill.is_some() { None } else { fill }));
+        }
         // Images: their native size and visible part, for the crop handles.
         if g.kind == "image" {
             let object = if let Some(item) = self.page(page)?.items.iter().find(|i| i.id == id) {
