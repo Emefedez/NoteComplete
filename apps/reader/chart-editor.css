@@ -148,3 +148,9 @@ html.chart-page, .chart-page body { height: 100%; margin: 0; }
 .chart-editor .ch-length { flex: 1; padding: 4px 2px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .chart-editor .ch-length[aria-pressed="true"] { border-color: var(--c-accent); color: var(--c-accent); background: var(--c-soft); }
 .ch-stamp { fill: color-mix(in srgb, var(--c-accent) 12%, transparent); stroke: var(--c-accent); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+/* With no brushes (JSON, or a plot), the middle takes their column: the JSON text gets the
+   width of the canvas instead of the brushes' narrow strip. */
+@media (min-width: 761px) {
+  .ch-main:has(> .ch-palette[hidden]) { grid-template-columns: minmax(0, 1fr) 300px; }
+  .chart-editor[data-mode="answer"] .ch-main:has(> .ch-palette[hidden]) { grid-template-columns: minmax(0, 1fr) minmax(300px, 38%); }
+}

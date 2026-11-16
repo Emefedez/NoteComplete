@@ -21,8 +21,8 @@ export const DIAGRAMS = {
   useCase: { label: 'Use case diagram', elements: ['actor', 'useCase', 'system', 'note'], connectors: ['association', 'include', 'extend', 'generalization', 'anchor'], vp: 'UseCaseDiagram' },
   class: { label: 'Class diagram', elements: ['class', 'interface', 'enumeration', 'package', 'note'], connectors: ['association', 'aggregation', 'composition', 'generalization', 'realization', 'dependency', 'anchor'], vp: 'ClassDiagram' },
   state: { label: 'State machine diagram', elements: ['state', 'compositeState', 'initial', 'final', 'choice', 'fork', 'join', 'history', 'note'], connectors: ['transition', 'anchor'], vp: 'StateDiagram' },
-  activity: { label: 'Activity diagram', elements: ['action', 'initial', 'activityFinal', 'flowFinal', 'decision', 'merge', 'fork', 'join', 'objectNode', 'partition', 'note'], connectors: ['controlFlow', 'objectFlow', 'anchor'], vp: 'ActivityDiagram' },
-  sequence: { label: 'Sequence diagram', elements: ['lifeline', 'actorLifeline', 'fragment', 'note'], connectors: ['syncMessage', 'asyncMessage', 'replyMessage', 'createMessage', 'anchor'], vp: 'InteractionDiagram' },
+  activity: { label: 'Activity diagram', elements: ['action', 'initial', 'activityFinal', 'flowFinal', 'decision', 'merge', 'fork', 'join', 'objectNode', 'inputPin', 'outputPin', 'partition', 'region', 'note'], connectors: ['controlFlow', 'objectFlow', 'anchor'], vp: 'ActivityDiagram' },
+  sequence: { label: 'Sequence diagram', elements: ['lifeline', 'actorLifeline', 'activation', 'fragment', 'note'], connectors: ['syncMessage', 'asyncMessage', 'replyMessage', 'createMessage', 'anchor'], vp: 'InteractionDiagram' },
   // Not UML: nodes and arrows for trees, automata and graphs (no UML badge, no UML files).
   graph: { label: 'Node graph', notUml: true, elements: ['node', 'boxNode', 'note'], connectors: ['edge', 'line', 'anchor'], vp: null },
 };
@@ -66,7 +66,7 @@ export const ELEMENTS = {
   compositeState: { label: 'Composite state', shape: 'composite', size: [300, 200], container: true, fields: { actions: { list: 'action' } }, vp: { element: 'State2', composite: true }, xmi: { type: 'uml:State', composite: true } },
   initial: { label: 'Initial', shape: 'dot', size: [24, 24], noName: true, fields: {}, vp: { element: 'InitialPseudoState', also: ['InitialNode'], activity: 'InitialNode' }, xmi: { type: 'uml:Pseudostate', kind: 'initial', activity: 'uml:InitialNode' } },
   final: { label: 'Final state', shape: 'bullseye', size: [28, 28], noName: true, fields: {}, vp: { element: 'FinalState' }, xmi: { type: 'uml:FinalState' } },
-  choice: { label: 'Choice', shape: 'diamond', size: [32, 32], noName: true, fields: {}, vp: { element: 'ChoicePseudoState' }, xmi: { type: 'uml:Pseudostate', kind: 'choice' } },
+  choice: { label: 'Choice', shape: 'diamond', size: [32, 32], optionalName: true, fields: {}, vp: { element: 'ChoicePseudoState' }, xmi: { type: 'uml:Pseudostate', kind: 'choice' } },
   fork: { label: 'Fork', shape: 'bar', size: [100, 8], noName: true, fields: {}, vp: { element: 'ForkNode' }, xmi: { type: 'uml:Pseudostate', kind: 'fork', activity: 'uml:ForkNode' } },
   join: { label: 'Join', shape: 'bar', size: [100, 8], noName: true, fields: {}, vp: { element: 'JoinNode' }, xmi: { type: 'uml:Pseudostate', kind: 'join', activity: 'uml:JoinNode' } },
   history: { label: 'History', shape: 'history', size: [30, 30], noName: true, fields: { historyKind: 'historyKind' }, vp: { element: 'ShallowHistoryPseudoState' }, xmi: { type: 'uml:Pseudostate', kind: 'shallowHistory' } },
@@ -74,13 +74,17 @@ export const ELEMENTS = {
   action: { label: 'Action', shape: 'rounded', size: [140, 50], fields: {}, vp: { element: 'ActivityAction' }, xmi: { type: 'uml:OpaqueAction' } },
   activityFinal: { label: 'Activity final', shape: 'bullseye', size: [28, 28], noName: true, fields: {}, vp: { element: 'ActivityFinalNode' }, xmi: { type: 'uml:ActivityFinalNode' } },
   flowFinal: { label: 'Flow final', shape: 'flowFinal', size: [26, 26], noName: true, fields: {}, vp: { element: 'FlowFinalNode' }, xmi: { type: 'uml:FlowFinalNode' } },
-  decision: { label: 'Decision', shape: 'diamond', size: [36, 36], noName: true, fields: {}, vp: { element: 'DecisionNode' }, xmi: { type: 'uml:DecisionNode' } },
-  merge: { label: 'Merge', shape: 'diamond', size: [36, 36], noName: true, fields: {}, vp: { element: 'MergeNode' }, xmi: { type: 'uml:MergeNode' } },
+  decision: { label: 'Decision', shape: 'diamond', size: [36, 36], optionalName: true, fields: {}, vp: { element: 'DecisionNode' }, xmi: { type: 'uml:DecisionNode' } },
+  merge: { label: 'Merge', shape: 'diamond', size: [36, 36], optionalName: true, fields: {}, vp: { element: 'MergeNode' }, xmi: { type: 'uml:MergeNode' } },
+  inputPin: { label: 'Input pin', shape: 'pin', size: [14, 14], optionalName: true, fields: {}, vp: { element: 'InputPin' }, xmi: { type: 'uml:InputPin' } },
+  outputPin: { label: 'Output pin', shape: 'pin', size: [14, 14], optionalName: true, fields: {}, vp: { element: 'OutputPin' }, xmi: { type: 'uml:OutputPin' } },
+  region: { label: 'Interruptible region', shape: 'region', size: [260, 160], container: true, optionalName: true, fields: {}, vp: { element: 'InterruptibleActivityRegion' }, xmi: { type: 'uml:InterruptibleActivityRegion' } },
   objectNode: { label: 'Object node', shape: 'box', size: [120, 46], fields: { type: 'text' }, vp: { element: 'ObjectNode' }, xmi: { type: 'uml:CentralBufferNode' } },
   partition: { label: 'Swimlane', shape: 'lane', size: [220, 360], container: true, fields: {}, vp: { element: 'ActivityPartition' }, xmi: { type: 'uml:ActivityPartition' } },
   // Sequence
   lifeline: { label: 'Lifeline', shape: 'lifeline', size: [120, 320], fields: { type: 'text' }, vp: { element: 'InteractionLifeLine' }, xmi: { type: 'uml:Lifeline' } },
   actorLifeline: { label: 'Actor lifeline', shape: 'actorLifeline', size: [80, 320], fields: { type: 'text' }, vp: { element: 'InteractionActor' }, xmi: { type: 'uml:Lifeline', actor: true } },
+  activation: { label: 'Activation bar', shape: 'activation', size: [14, 90], noName: true, fields: {}, vp: { element: 'Activation' }, xmi: { type: 'uml:BehaviorExecutionSpecification' } },
   fragment: { label: 'Combined fragment', shape: 'fragment', size: [300, 120], fields: { operator: 'operator', guard: 'text' }, vp: { element: 'CombinedFragment' }, xmi: { type: 'uml:CombinedFragment' } },
   // Node graph
   node: { label: 'Node', shape: 'node', size: [48, 48], fields: { start: 'bool', accepting: 'bool' }, vp: { element: 'NCNode' }, xmi: { type: 'nc:Node' } },
@@ -99,7 +103,7 @@ export const CONNECTORS = {
   realization: { label: 'Realization', line: 'dashed', start: 'none', end: 'hollowTriangle', fields: {}, vp: { element: 'Realization' }, xmi: { type: 'uml:InterfaceRealization' } },
   dependency: { label: 'Dependency', line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', stereotypes: 'tags' }, vp: { element: 'Dependency' }, xmi: { type: 'uml:Dependency' } },
   include: { label: 'Include', line: 'dashed', start: 'none', end: 'open', keyword: 'include', fields: {}, vp: { element: 'Include' }, xmi: { type: 'uml:Include' } },
-  extend: { label: 'Extend', line: 'dashed', start: 'none', end: 'open', keyword: 'extend', fields: { condition: 'text' }, vp: { element: 'Extend' }, xmi: { type: 'uml:Extend' } },
+  extend: { label: 'Extend', line: 'dashed', start: 'none', end: 'open', keyword: 'extend', drawnBack: true, fields: { condition: 'text' }, vp: { element: 'Extend' }, xmi: { type: 'uml:Extend' } },
   transition: { label: 'Transition', line: 'solid', start: 'none', end: 'open', fields: { trigger: 'text', guard: 'text', effect: 'text' }, vp: { element: 'Transition2' }, xmi: { type: 'uml:Transition' } },
   controlFlow: { label: 'Control flow', line: 'solid', start: 'none', end: 'open', fields: { guard: 'text', name: 'text' }, vp: { element: 'ControlFlow' }, xmi: { type: 'uml:ControlFlow' } },
   objectFlow: { label: 'Object flow', line: 'solid', start: 'none', end: 'open', fields: { guard: 'text', name: 'text' }, vp: { element: 'ObjectFlow' }, xmi: { type: 'uml:ObjectFlow' } },
@@ -204,7 +208,7 @@ export function makeElement(type, at = [40, 40], extra = {}, model = null) {
   const def = ELEMENTS[type];
   if (!def) throw Error(`Unknown UML element: ${type}`);
   const [w, h] = def.size;
-  return { id: extra.id || newId('e', model), type, name: extra.name ?? (def.noName ? '' : def.label), props: { ...defaultProps(def), ...(extra.props || {}) }, bounds: extra.bounds || [at[0], at[1], w, h], parent: extra.parent ?? null };
+  return { id: extra.id || newId('e', model), type, name: extra.name ?? (def.noName || def.optionalName ? '' : def.label), props: { ...defaultProps(def), ...(extra.props || {}) }, bounds: extra.bounds || [at[0], at[1], w, h], parent: extra.parent ?? null };
 }
 
 export function makeConnector(type, from, to, extra = {}, model = null) {
@@ -399,7 +403,30 @@ function compartmentLines(e, key) {
 }
 
 // The size an element needs for what it shows (it never draws smaller than its bounds).
+// An element's text size (props.textScale): what it shows is drawn that much larger (or
+// smaller) inside the same box on the page.
+export const textScale = (item) => { const s = Number(item?.props?.textScale); return s > 0.2 && s < 5 ? s : 1; };
 export function fitBounds(e) {
+  const s = textScale(e);
+  if (s === 1) return fitRaw(e);
+  const [x, y, w, h] = e.bounds;
+  const inner = fitRaw({ ...e, bounds: [x, y, w / s, h / s] });
+  return [x, y, inner[2] * s, inner[3] * s];
+}
+// What a colour (props.color, #rrggbb) gives: the line colour and a light fill.
+const HEX = /^#[0-9a-f]{6}$/i;
+export const itemColor = (item) => (HEX.test(item?.props?.color || '') ? item.props.color : null);
+function tint(hex, share = 0.16) {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `#${c.map((v) => Math.round(255 - (255 - v) * share).toString(16).padStart(2, '0')).join('')}`;
+}
+function recolor(svg, color, { fill = true } = {}) {
+  if (!color) return svg;
+  let out = svg.replaceAll(`stroke="${INK}"`, `stroke="${color}"`);
+  if (fill) out = out.replaceAll(`fill="${FILL}"`, `fill="${tint(color)}"`).replaceAll(`fill="${SOFT}"`, `fill="${tint(color, 0.24)}"`);
+  return out;
+}
+function fitRaw(e) {
   const def = ELEMENTS[e.type];
   const [x, y, w0, h0] = e.bounds;
   let w = w0, h = h0;
@@ -516,6 +543,17 @@ const SHAPES = {
   diamond(e, [x, y, w, h]) {
     const cx = x + w / 2, cy = y + h / 2;
     return `<path d="M${n(cx)} ${n(y)}L${n(x + w)} ${n(cy)}L${n(cx)} ${n(y + h)}L${n(x)} ${n(cy)}Z" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(cx, y - 6, e.name, { size: FONT - 1 }) : '');
+  },
+  // A pin on the edge of an action: a small square, its name beside it.
+  pin(e, [x, y, w, h]) {
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(x + w + 4, y - 3, e.name, { anchor: 'start', size: FONT - 2 }) : '');
+  },
+  region(e, [x, y, w, h]) {
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="10" fill="none" stroke="${INK}" stroke-width="1.3" stroke-dasharray="7 5"/>` + (e.name ? text(x + PAD, y + LINE, e.name, { anchor: 'start', size: FONT - 1 }) : '');
+  },
+  // An execution on a lifeline: a narrow white bar over its dashed line.
+  activation(e, [x, y, w, h]) {
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>`;
   },
   bar(e, [x, y, w, h]) {
     return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="2" fill="${INK}"/>`;
@@ -654,7 +692,10 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     const b = fitted.get(e.id);
     const draw = SHAPES[def.shape] || SHAPES.box;
     const attr = ids ? ` data-uml-id="${esc(e.id)}" data-uml-kind="element"` : '';
-    body += `<g${attr}>${draw(e, b, def)}${sel.has(e.id) ? `<rect x="${n(b[0] - 4)}" y="${n(b[1] - 4)}" width="${n(b[2] + 8)}" height="${n(b[3] + 8)}" fill="none" stroke="#0a84ff" stroke-width="2" stroke-dasharray="5 3" rx="4"/>` : ''}</g>`;
+    const k = textScale(e);
+    let shape = k === 1 ? draw(e, b, def) : `<g transform="translate(${n(b[0])} ${n(b[1])}) scale(${n(k * 1000) / 1000}) translate(${n(-b[0])} ${n(-b[1])})">${draw(e, [b[0], b[1], b[2] / k, b[3] / k], def)}</g>`;
+    shape = recolor(shape, itemColor(e));
+    body += `<g${attr}>${shape}${sel.has(e.id) ? `<rect x="${n(b[0] - 4)}" y="${n(b[1] - 4)}" width="${n(b[2] + 8)}" height="${n(b[3] + 8)}" fill="none" stroke="#0a84ff" stroke-width="2" stroke-dasharray="5 3" rx="4"/>` : ''}</g>`;
     grow(b[0], b[1]); grow(b[0] + b[2], b[1] + b[3]);
     if (def.shape === 'stickman' || def.shape === 'actorLifeline') { const w = textWidth(e.name); grow(b[0] + b[2] / 2 - w / 2, b[1]); grow(b[0] + b[2] / 2 + w / 2, b[1] + b[3] + 6); }
     if (def.shape === 'diamond' && e.name) grow(b[0], b[1] - LINE - 4);
@@ -674,17 +715,19 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     if (BACK[fromMark]) { draw[0][0] -= su * BACK[fromMark]; draw[0][1] -= sv * BACK[fromMark]; }
     const attr = ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="connector"` : '';
     const d = draw.map((p, i) => `${i ? 'L' : 'M'}${n(p[0])} ${n(p[1])}`).join('');
-    let g = `<path d="${d}" fill="none" stroke="${sel.has(c.id) ? '#0a84ff' : INK}" stroke-width="${sel.has(c.id) ? 2.4 : 1.3}"${def.line === 'dashed' ? ' stroke-dasharray="7 5"' : ''}/>`;
+    const tone = itemColor(c), k = textScale(c);
+    let g = `<path d="${d}" fill="none" stroke="${sel.has(c.id) ? '#0a84ff' : tone || INK}" stroke-width="${sel.has(c.id) ? 2.4 : 1.3}"${def.line === 'dashed' ? ' stroke-dasharray="7 5"' : ''}/>`;
     if (ids) g += `<path d="${d}" fill="none" stroke="transparent" stroke-width="14"/>`;
-    g += mark(endMark, tip, eu, ev) + mark(fromMark, tail, su, sv);
+    g += recolor(mark(endMark, tip, eu, ev) + mark(fromMark, tail, su, sv), tone, { fill: false });
     // The label beside the middle of the longest segment (above a level line, right of an
     // upright one), moved from there by `props.labelOffset`. Drawn after every line, on its
     // own background, so a line never hides it.
     const label = connectorLabel(c);
     if (label) {
       const at = labelBox(pts, label, c.props?.labelOffset);
-      labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="label"` : ''}><rect x="${n(at.x - 3)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 6)}" height="${FONT + 3}" rx="2" fill="${FILL}"${sel.has(c.id) ? ' stroke="#0a84ff" stroke-width="1"' : ''}/>${text(at.x + at.w / 2, at.y, label, { anchor: 'middle', size: FONT - 1 })}</g>`;
-      grow(at.x - 3, at.y - FONT); grow(at.x + at.w + 3, at.y + 3);
+      const grown = k === 1 ? '' : ` transform="translate(${n(at.x + at.w / 2)} ${n(at.y - FONT / 2)}) scale(${n(k * 1000) / 1000}) translate(${n(-(at.x + at.w / 2))} ${n(-(at.y - FONT / 2))})"`;
+      labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="label"` : ''}${grown}><rect x="${n(at.x - 3)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 6)}" height="${FONT + 3}" rx="2" fill="${FILL}"${sel.has(c.id) ? ' stroke="#0a84ff" stroke-width="1"' : ''}/>${text(at.x + at.w / 2, at.y, label, { anchor: 'middle', size: FONT - 1, fill: tone || INK })}</g>`;
+      grow(at.x + at.w / 2 - (at.w / 2 + 3) * k, at.y - FONT / 2 - (FONT / 2) * k - 1); grow(at.x + at.w / 2 + (at.w / 2 + 3) * k, at.y - FONT / 2 + (FONT / 2 + 3) * k);
     }
     // Role and multiplicity at each end.
     if (def.ends) {
@@ -739,6 +782,9 @@ export const SHAPE_ICONS = {
   lifeline: 'M6 3h12v6H6zM12 9v12',
   actorLifeline: 'M12 2.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6ZM12 6v4M9 8h6M9.5 12.5 12 10l2.5 2.5M12 14v1.5M12 18v1.5M12 22v.5',
   fragment: 'M3 4h18v16H3zM3 9h6l2-2V4',
+  pin: 'M4 8h11v8H4zM15 10h3v4h-3zM18 12h3',
+  region: 'M4 6h16v12H4z M8 10l3 3-2 1 4 3',
+  activation: 'M12 2v4M12 18v4M9.5 6h5v12h-5z',
   node: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm-3 7h6',
 };
 // Connectors: a diagonal line with the mark at its upper end (a diamond at the start of an
@@ -764,6 +810,8 @@ export function umlIcon(kind, type, doc = globalThis.document) {
   for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(k, v);
   const path = doc.createElementNS(svg.namespaceURI, 'path');
   path.setAttribute('d', iconPath(kind, type));
+  // A connector drawn back toward where the drag started («extend») points the other way.
+  if (kind === 'connector' && CONNECTORS[type]?.drawnBack) path.setAttribute('transform', 'rotate(180 12 12)');
   if (kind === 'connector' && CONNECTORS[type]?.line === 'dashed') path.setAttribute('stroke-dasharray', '3 2.5');
   if ((kind === 'element' && ['dot', 'bar'].includes(ELEMENTS[type]?.shape)) || (kind === 'connector' && FILLED_ICONS.has(iconMark(type)))) path.setAttribute('fill', 'currentColor');
   svg.append(path);

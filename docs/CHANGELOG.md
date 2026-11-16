@@ -4,6 +4,16 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.16
+
+- **Snappier writing.** The line you draw is updated once per screen refresh and only gets its new points, instead of being rebuilt with every pen sample, so long strokes stay smooth (most noticeable in Safari on iPad).
+- **Smoother page list.** Page previews are encoded in the background, so finishing a stroke no longer causes a short pause.
+- **Prefabs work on iPad.** Tapping a figure in the prefab picker now picks it the first time (Safari treated the tap as a hover), and prefabs are drawn in a way Safari accepts.
+- **Process states editor.** Right-click a cell to erase it, or hold the right button and drag to erase a stretch. Scroll over the grid (or use the new Length buttons) to paint 1, 5 or 10 units per click; an outline shows what a click will paint. On the page, processes are now drawn in the same top-to-bottom order as in the editor.
+- **Histogram editor squares.** The editor shows each bar's column, so the grid matches the page.
+- **Clearer while an editor is open.** The menu bar above a full-window editor is greyed out, since it can't be used until the editor closes (the tabs still work).
+- **Two-finger scrolling is reliable again.** Scrolling or pinching while a page redrew under your fingers could leave the gesture stuck, so the pages stopped gliding on after you lifted.
+
 ## 1.2.15
 
 - **Copy, cut and paste.** With Select, use **Ctrl C**, **Ctrl X** and **Ctrl V** (⌘ on a Mac), or **Cut** and **Copy** in an item's right-click menu. To paste on any page, right-click and choose **Paste here**, or press Ctrl V. Strokes, shapes, pictures, text boxes and prefabs are copied as they are drawn now. A copied prefab can still be edited.
