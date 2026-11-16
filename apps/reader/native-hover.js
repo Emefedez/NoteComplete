@@ -72,19 +72,16 @@ export function installNativeHoverBridge({
     // synthetic buttons=0 pointermove during contact would look like a hover release and
     // make the next contact move look like a pen-button press.
     if (inContact) return false;
-    if (phase === 'move' && now() - lastTrustedHoverAt < dedupeMs) return false;
-
-    const target = phase === 'exit'
-      ? hoverTarget
-      : (doc.elementFromPoint?.(cx, cy) || doc.body || doc.documentElement);
-
+    // Leaving range is reported even when no hover target was set here (the browser's own
+    // hover events were used instead), so whatever the pen showed is taken away.
     if (phase === 'exit') {
-      if (hoverTarget) {
-        fire(hoverTarget, 'pointerout', { x: cx, y: cy, pointerType, relatedTarget: null });
-        hoverTarget = null;
-      }
+      fire(hoverTarget || doc.body || doc.documentElement, 'pointerout', { x: cx, y: cy, pointerType, relatedTarget: null });
+      hoverTarget = null;
       return true;
     }
+    if (phase === 'move' && now() - lastTrustedHoverAt < dedupeMs) return false;
+
+    const target = doc.elementFromPoint?.(cx, cy) || doc.body || doc.documentElement;
 
     if (target && target !== hoverTarget) {
       if (hoverTarget) fire(hoverTarget, 'pointerout', { x: cx, y: cy, pointerType, relatedTarget: target });

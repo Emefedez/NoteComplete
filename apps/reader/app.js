@@ -2158,7 +2158,11 @@ function savePenHoverTools() {
 const penHoverRing = document.createElement("div");
 penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
 document.body.append(penHoverRing);
-const hidePenHover = () => { penHoverRing.hidden = true; };
+let penHoverTimer = 0;
+const hidePenHover = () => { clearTimeout(penHoverTimer); penHoverRing.hidden = true; };
+// Leaving hover range is not always reported (the pen-out event can be lost, or name another
+// element): a ring with no pen move for a while is taken away.
+const PEN_HOVER_IDLE_MS = 1200;
 function showPenHover(e) {
   if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return hidePenHover();
   const sheet = e.target.closest?.(".sheet"), p = sheet && panels[Number(sheet.dataset.page)];
@@ -2176,11 +2180,17 @@ function showPenHover(e) {
   penHoverRing.dataset.tool = tool;
   style.setProperty("--hover-color", tool === "erase" ? "#ed6b55" : strokeTool || tool === "shape" ? $("color").value : "var(--accent)");
   penHoverRing.hidden = false;
+  clearTimeout(penHoverTimer);
+  penHoverTimer = setTimeout(hidePenHover, PEN_HOVER_IDLE_MS);
 }
 window.addEventListener("pointermove", showPenHover, { capture: true, passive: true });
 window.addEventListener("pointerdown", hidePenHover, { capture: true, passive: true });
-window.addEventListener("pointerout", (e) => { if (e.pointerType === "pen" && !e.relatedTarget) hidePenHover(); }, { capture: true, passive: true });
+// Out of range or off the page: no element under the pen, or one outside the document.
+window.addEventListener("pointerout", (e) => { if (e.pointerType === "pen" && !document.documentElement.contains(e.relatedTarget)) hidePenHover(); }, { capture: true, passive: true });
+document.documentElement.addEventListener("pointerleave", (e) => { if (e.pointerType === "pen") hidePenHover(); }, { passive: true });
+window.addEventListener("pointercancel", hidePenHover, { capture: true, passive: true });
 window.addEventListener("blur", hidePenHover);
+document.addEventListener("visibilitychange", () => { if (document.hidden) hidePenHover(); });
 // What a button does, as on a computer: a mouse hover shows the title natively, but a finger has
 // no hover. Pressing an icon for a moment (or a pen hovering over it) shows its name; a long
 // press that showed it does not also press the button.
@@ -2284,7 +2294,8 @@ $("hoverToolsReset").onclick = () => {
 };
 $("hoverToolsClose").onclick = () => $("hoverToolsDialog").close();
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
-const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape"]);
+// Select and Grab text too: with a stylus in hand, a finger drag moves the page, as in drawing apps.
+const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape", "select", "grab"]);
 let viewOnlyToldAt = -Infinity;
 function pointerDown(e, p) {
   // A view-only guest: say why nothing is drawn (at most every few seconds), and keep Pan.
@@ -2300,7 +2311,10 @@ function pointerDown(e, p) {
     if (e.pointerId === gesture.id) return;
     // A stylus has one tip: a new pen-down means the last stroke's lift never arrived
     // (iPadOS can swallow it). That stroke is kept and the new one starts at once.
-    if (e.pointerType === "pen" && gesture.pen && gesture.lastClient) {
+    // A finger while the stylus has sent nothing for a moment means the same: the pen is up
+    // (hovering or away), so its stroke is kept and the finger moves the page.
+    const penQuiet = e.pointerType === "touch" && e.timeStamp - (gesture.lastAt ?? -Infinity) > 250;
+    if (gesture.pen && gesture.lastClient && (e.pointerType === "pen" || penQuiet)) {
       const [clientX, clientY] = gesture.lastClient;
       pointerUp({ pointerId: gesture.id, clientX, clientY, timeStamp: e.timeStamp });
     } else {
@@ -2671,6 +2685,13 @@ middlePan($("textBody"));
 function pointerMove(e) {
   if (selection.move(e)) return;
   if (!gesture || gesture.id !== e.pointerId) return;
+  if (gesture.pen && e.isTrusted && e.pointerType === "pen" && !e.buttons && !e.pressure && gesture.lastClient) {
+    // The stylus is hovering again, so its lift never arrived: the stroke ends where it last touched.
+    const [clientX, clientY] = gesture.lastClient;
+    return pointerUp({ pointerId: gesture.id, clientX, clientY, timeStamp: e.timeStamp });
+  }
+  gesture.lastAt = e.timeStamp;
+  if (gesture.pen) gesture.lastClient = [e.clientX, e.clientY];
   e.preventDefault();
   if (gesture.tool === "pan") {
     gesture.speed?.add(e.clientX, e.clientY, e.timeStamp);
