@@ -72,6 +72,7 @@ import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
+import { editorKind, canBeExercise } from "./chart-model.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
@@ -84,6 +85,7 @@ import { autosaveController } from "./autosave.js";
 import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
+import { installModalDialogs } from "./modal-dialogs.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -146,6 +148,8 @@ if (!window.notecompleteTabs && tabParams.has("tab") && window.parent !== window
 }
 // Desktop tabs: the strip in the top bar; title and unsaved state go to the window.
 const navHistory = new NavHistory();
+// Dialogs leave the tabs usable and draw no grey backdrop (modal-dialogs.js).
+installModalDialogs();
 const tabBar = tabStrip(window.notecompleteTabs || null, {
   dirty: () => Boolean((doc || textView?.hasDocument || htmlView?.hasDocument) && dirty && changed),
   beforeClose: () => collab?.beforeClose?.() ?? true,
@@ -5850,11 +5854,27 @@ async function insertPrefab(p, box = null, choice = null) {
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
-  const spec = choice.kind === "uml" ? await umlEditor(choice.spec) : await editPrefab({ spec: choice.spec });
+  const spec = await figureEditor(choice.spec);
   if (!spec) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
+}
+// The editor of a prefab's figure: the diagram editor for UML and node graphs, the chart
+// editor (chart-editor.js) for process states, CPU timelines, charts and plots, and the JSON
+// one for the rest or when asked (`mode` "json"). `mode` "answer" fills an exercise in.
+async function figureEditor(spec, { editing = false, mode = "author" } = {}) {
+  if (spec?.type === "uml") return umlEditor(spec, editing);
+  if (mode !== "json" && editorKind(spec)) {
+    try {
+      const { openChartEditor } = await import("./chart-editor.js");
+      return await openChartEditor(spec, { editing, mode });
+    } catch (e) {
+      status(`The chart editor could not open: ${e.message}`, true);
+      return null;
+    }
+  }
+  return editPrefab({ spec, editing });
 }
 // The UML diagram editor (uml-editor.js), loaded the first time it is needed.
 async function umlEditor(spec, editing = false) {
@@ -5903,6 +5923,7 @@ async function insertUml(p, box = null, diagram = "class") {
 $("insertUml").onclick = () => doc && insertUml(panels[page]);
 // The editor on a page of its own (a window of its own in the desktop app).
 $("openUmlPage").onclick = () => { if (!window.open("./uml.html", "_blank")) status("The UML editor page could not open here; it is at uml.html next to the app.", true); };
+$("openChartsPage").onclick = () => { if (!window.open("./charts.html", "_blank")) status("The chart editor page could not open here; it is at charts.html next to the app.", true); };
 // The box a graph or table has now: its frame's (moved or resized since it was drawn).
 async function compoundFrame(item) {
   const c = item.compound, info = await call("selection", { page: item.page, itemId: c.frame });
@@ -5911,13 +5932,13 @@ async function compoundFrame(item) {
   return [cx - cw / 2, cy - ch / 2, cw, ch];
 }
 // Edit graph / Edit table: its editor with what it is, then drawn again where it is now.
-async function editCompound(item) {
+async function editCompound(item, mode = "author") {
   const c = item?.compound;
   if (!c || !doc) return;
   let spec = {};
   try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
   if (c.kind === "prefab") {
-    const chosen = spec.type === "uml" ? await umlEditor(spec, true) : await editPrefab({ spec, editing: true });
+    const chosen = await figureEditor(spec, { editing: true, mode });
     if (!chosen) return;
     const frame = await compoundFrame(item);
     selection.clear();
@@ -6146,13 +6167,18 @@ function itemMenu(item, x, y, { tape = null } = {}) {
   // The tape itself, or something under (or over) it.
   const isTape = tape && (p.render?.querySelector(`[data-tape="${CSS.escape(String(tape.id))}"]`)?.closest("[data-item]")?.dataset.item === String(item.id));
   const c = item.compound, name = c ? compoundLabel(c) : isTape ? "Tape" : ITEM_NAMES[item.kind] || "Item";
+  let figure = null;
+  if (c?.kind === "prefab") { try { figure = JSON.parse(c.spec || "{}"); } catch { /* Not one. */ } }
+  const chart = Boolean(editorKind(figure)), exercise = chart && Boolean(figure.exercise) && canBeExercise(figure);
   const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
   // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so.
   const lower = name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
     ...tapeEntries(p, tape),
     tape && "-",
+    exercise && { label: `Fill in ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
     c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
+    chart && { label: "Edit its data as JSON…", icon: "note", run: () => editCompound(item, "json") },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
     item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
     ...styleEntries(item),

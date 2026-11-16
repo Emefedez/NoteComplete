@@ -5,6 +5,9 @@
 import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { download } from './download.js';
+import { sortable } from './reorder.js';
+import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
+import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
 
@@ -109,25 +112,40 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const say = (text, error = false) => { status.textContent = text; status.classList.toggle('error', error); };
 
   // --- Palette ------------------------------------------------------------------------
-  function buildPalette() {
+  // Elements and connectors in the order the person left them (palette-order.js), 1–9 and 0
+  // for the first ten; Select stays first (Escape).
+  const orderName = () => `uml-${model.diagram}`;
+  function paletteTools() {
     const d = DIAGRAMS[model.diagram];
+    const all = [...d.elements.map((t) => ({ kind: 'element', type: t, label: ELEMENTS[t].label })), ...d.connectors.map((t) => ({ kind: 'connector', type: t, label: CONNECTORS[t].label }))];
+    return orderedIds(orderName(), all.map((t) => `${t.kind}:${t.type}`)).map((id) => all.find((t) => `${t.kind}:${t.type}` === id));
+  }
+  function chooseTool(kind, type) { setTool(tool.kind === kind && tool.type === type ? { kind: 'select' } : { kind, type }); }
+  function buildPalette() {
     kindSelect.value = model.diagram;
-    const button = (kind, type, label) => {
-      const b = make('button', { type: 'button', className: 'uml-tool', title: kind === 'element' ? `${label}: tap the canvas to place it` : `${label}: drag from one element to another` }, umlIcon(kind, type), make('span', { textContent: label }));
+    const button = ({ kind, type, label }, i) => {
+      const key = keyFor(i);
+      const b = make('button', { type: 'button', className: 'uml-tool', title: `${kind === 'element' ? `${label}: tap the canvas to place it` : `${label}: drag from one element to another`}${key ? ` (${key})` : ''}. Drag it up or down to reorder` }, umlIcon(kind, type), make('span', { textContent: label }), key && make('kbd', { textContent: key }));
       b.dataset.kind = kind; b.dataset.type = type;
-      b.onclick = () => setTool(tool.kind === kind && tool.type === type ? { kind: 'select' } : { kind, type });
+      b.onclick = () => chooseTool(kind, type);
       b.ondblclick = () => { if (kind === 'element') place(type, center()); };
       return b;
     };
-    const sel = make('button', { type: 'button', className: 'uml-tool', title: 'Select, move and resize (Escape)' }, umlIcon('connector', 'none'), make('span', { textContent: 'Select' }));
+    const sel = make('button', { type: 'button', className: 'uml-tool', title: 'Select, move and resize (Escape)' }, umlIcon('connector', 'none'), make('span', { textContent: 'Select' }), make('kbd', { textContent: 'Esc' }));
     sel.dataset.kind = 'select';
     sel.querySelector('path').setAttribute('d', 'm6 4 12 7-6 1.5-3 6Z');
     sel.onclick = () => setTool({ kind: 'select' });
-    palette.replaceChildren(sel,
-      make('h4', { textContent: 'Elements' }), ...d.elements.map((t) => button('element', t, ELEMENTS[t].label)),
-      make('h4', { textContent: 'Connectors' }), ...d.connectors.map((t) => button('connector', t, CONNECTORS[t].label)));
+    const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
+    sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
+    palette.replaceChildren(sel, make('h4', { textContent: 'Elements and connectors' }), list,
+      make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
+  // Shift S: the tools in a ring at the pointer (editor-quick.js).
+  const ring = editorQuickMenu(root, {
+    entries: () => paletteTools().map((t) => ({ key: `${t.kind}:${t.type}`, label: t.label, icon: umlIcon(t.kind, t.type), active: () => tool.kind === t.kind && tool.type === t.type, run: () => setTool({ kind: t.kind, type: t.type }) })),
+    onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); },
+  });
   function setTool(t) {
     tool = t;
     markTool();
@@ -533,6 +551,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     else if (ev.key === 'Escape' && !typing) { if (tool.kind !== 'select') { ev.preventDefault(); ev.stopPropagation(); setTool({ kind: 'select' }); } else if (selected) { ev.preventDefault(); ev.stopPropagation(); selected = null; changed(); } }
     else if (!typing && !mod && (ev.key === '+' || ev.key === '=')) zoom(1 / 1.25);
     else if (!typing && !mod && ev.key === '-') zoom(1.25);
+    else if (!typing && !mod && !ev.altKey && indexOfKey(ev.key) >= 0) {
+      const t = paletteTools()[indexOfKey(ev.key)];
+      if (t) { ev.preventDefault(); chooseTool(t.kind, t.type); }
+    }
   }
 
   // --- Property panel -----------------------------------------------------------------
@@ -849,7 +871,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     model: () => normalizeModel(model),
     set: (m) => setModel(m),
     select: (id) => { const e = model.elements.find((q) => q.id === id); selected = e ? { kind: 'element', id } : null; changed(); },
-    destroy: () => { resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    destroy: () => { ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 

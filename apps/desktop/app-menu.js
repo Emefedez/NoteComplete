@@ -10,14 +10,14 @@ export function menuTemplate(platform = process.platform, { openPage = () => {} 
     { role: 'fileMenu' },
     { role: 'editMenu' },
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
-    { label: 'Tools', submenu: [{ label: 'UML diagram editor', click: () => openPage(PAGES.uml) }] },
+    { label: 'Tools', submenu: [{ label: 'UML diagram editor', click: () => openPage(PAGES.uml) }, { label: 'Chart and timeline editor', click: () => openPage(PAGES.charts) }] },
     { role: 'windowMenu' },
   ];
 }
 
 // The reader's pages that open in a window of their own, from Tools or from the reader
 // (window.open), and nothing else of the app's.
-export const PAGES = { uml: 'uml.html' };
+export const PAGES = { uml: 'uml.html', charts: 'charts.html' };
 export function ownPage(url, home) {
   if (!String(url || '').startsWith(home)) return null;
   const rest = String(url).slice(home.length).replace(/[?#].*$/, '');

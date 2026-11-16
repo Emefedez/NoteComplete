@@ -5,6 +5,7 @@
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
 import { icon } from './icons.js';
+import { displaySpec } from './chart-model.js';
 import { DIAGRAMS, renderUml, starterModel, umlName } from './uml.js';
 
 // What each prefab starts as. `kind`: "graph" and "table" open their own editors; "prefab"
@@ -22,7 +23,7 @@ export const PREFABS = [
     spec: { type: 'bar', title: 'Bar chart', xLabel: '', yLabel: 'Value', bins: [{ label: 'A', value: 4 }, { label: 'B', value: 6 }, { label: 'C', value: 3 }] },
   },
   {
-    id: 'states', kind: 'prefab', group: 'exam', label: 'Process states', hint: 'Running, ready and blocked over time (scheduling)', icon: 'clock',
+    id: 'states', kind: 'prefab', group: 'exam', label: 'Process states', hint: 'Running, ready and blocked over time (scheduling), painted cell by cell', icon: 'clock',
     spec: {
       type: 'states', title: 'FIFO', tStart: 0, tEnd: 30, tStep: 5, unit: 'u.t.', legend: { run: 'Running', ready: 'Ready', blocked: 'Blocked' },
       processes: [
@@ -32,8 +33,18 @@ export const PREFABS = [
     },
   },
   {
-    id: 'timeline', kind: 'prefab', group: 'exam', label: 'CPU timeline', hint: 'Gantt chart of what runs on each row', icon: 'monitor',
+    id: 'timeline', kind: 'prefab', group: 'exam', label: 'CPU timeline', hint: 'Gantt chart of what runs on each row, painted cell by cell', icon: 'monitor',
     spec: { type: 'timeline', title: 'CPU (RR q=2)', tStart: 0, tEnd: 10, tStep: 1, unit: 'ms', rows: [{ label: 'CPU', intervals: [{ label: 'P1', start: 0, end: 2 }, { label: 'P2', start: 2, end: 4 }, { label: 'P1', start: 4, end: 6 }, { label: 'P3', start: 6, end: 9 }] }] },
+  },
+  {
+    id: 'states-exercise', kind: 'prefab', group: 'exam', label: 'Scheduling exercise', hint: 'Process states to fill in on the page: draw the solution, then Fill in paints the answer and Check marks it', icon: 'clock',
+    spec: {
+      type: 'states', title: 'FIFO', exercise: true, tStart: 0, tEnd: 20, tStep: 2, unit: 'u.t.', legend: { run: 'Running', ready: 'Ready', blocked: 'Blocked' },
+      processes: [
+        { label: 'A', arrival: 0, segments: [{ state: 'run', start: 0, end: 4 }, { state: 'blocked', start: 4, end: 8 }, { state: 'ready', start: 8, end: 10 }, { state: 'run', start: 10, end: 12 }] },
+        { label: 'B', arrival: 2, segments: [{ state: 'ready', start: 2, end: 4 }, { state: 'run', start: 4, end: 10 }] },
+      ],
+    },
   },
   // Drawn in the diagram editor: nodes, and arrows dragged from one to another.
   { id: 'tree', kind: 'uml', group: 'diagram', label: 'Tree or node graph', hint: 'Nodes and arrows: trees, automata, graphs. Drag from a node to connect or grow it', icon: 'share', spec: starterModel('graph') },
@@ -71,7 +82,8 @@ export function prefabName(spec) {
 // The figure as SVG text with its size, or null when the spec draws nothing.
 export function prefabSvg(spec) {
   if (spec?.type === 'uml') return renderUml(spec);
-  const out = renderVisualSvg(spec, { forMcp: false });
+  // An exercise shows the student's answer, not its solution (chart-model.js).
+  const out = renderVisualSvg(displaySpec(spec), { forMcp: false });
   return out?.svg ? out : null;
 }
 

@@ -3959,3 +3959,10 @@ body.menubar-autohide header.chrome.command-bar { position: fixed; top: 0; left:
 body.menubar-autohide { box-sizing: border-box; padding-top: 6px; }
 body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible), :has(details[open]), :has([aria-expanded="true"])) { transform: none; transition-delay: 0s; box-shadow: var(--shadow-pop); }
 @media (prefers-reduced-motion: reduce) { body.menubar-autohide header.chrome.command-bar { transition: none; } }
+
+/* Dialogs over the app (modal-dialogs.js): centred as the browser's modal ones, with no grey
+   backdrop, and under nothing; the tab strip stays usable. Their own rules win over these. */
+:where(dialog.nc-modal) { position: fixed; inset: 0; margin: auto; max-width: calc(100% - 6px - 2em); max-height: calc(100% - 6px - 2em); overflow: auto; }
+:where(dialog.nc-modal) { box-shadow: var(--shadow-dialog, 0 18px 50px #0004), 0 0 0 1px #0001; }
+/* Menus opened over such a dialog (its quick menu, a tab's menu) are drawn over it. */
+.nc-modal ~ :is(.quick-menu, .context-menu) { z-index: 2000; }

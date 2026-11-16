@@ -35,6 +35,9 @@ test('Tools opens the UML editor page, and only the reader pages open in windows
   const tools = menuTemplate('linux', { openPage: (page) => { opened = page; } }).find((m) => m.label === 'Tools');
   tools.submenu.find((i) => i.label === 'UML diagram editor').click();
   assert.equal(opened, 'uml.html');
+  tools.submenu.find((i) => i.label === 'Chart and timeline editor').click();
+  assert.equal(opened, 'charts.html');
+  assert.equal(ownPage('notecomplete://reader/charts.html?kind=states', 'notecomplete://reader/'), 'charts.html');
   const home = 'notecomplete://reader/';
   assert.equal(ownPage(`${home}uml.html`, home), 'uml.html');
   assert.equal(ownPage(`${home}uml.html?diagram=state`, home), 'uml.html');
