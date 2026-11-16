@@ -4,6 +4,14 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.1.75
+
+- **Android QR note sharing & camera scanning.** Added a LAN note-sharing HTTP server (`ShareHttpServer`) and WebView/camera-permission bridge on Android so **Export and share → Share note via QR…** and progressive `NCQR1` camera scanning work natively on Android as well as desktop.
+- **Automatic `.ncstudy` detection from WhatsApp and Android intents.** Declared `.ncstudy`, `application/x-ncstudy`, and `application/json` Android intent filters (`VIEW`, `SEND`, `SEND_MULTIPLE`), fixed byte/filename detection so `.ncstudy`, JSON decks, and Quiz Toolkit Markdown don't get misclassified as `.nfedit`, and routed native opens/drops through the unified importer.
+- **Pick a note or keep as General when importing quizzes and flashcards.** Added the import destination picker (`#importTargetDialog`) so imported `.ncstudy` packs, JSON flashcard decks, and Quiz Toolkit Markdown can be attached to any note on the device or kept as General quizzes/decks.
+- **Fixed unclickable General & standalone quizzes.** Standalone and imported quizzes/decks in **Study → All quizzes and decks…** are now always clickable, open directly, and save progress to their own storage keys.
+- **Rust CI fixes.** Fixed `rustfmt` and `clippy::collapsible_match` warnings in `noteful-core`.
+
 ## 1.1.74
 
 - **`.nfedit` v10 persists quizzes, flashcards, and scratchpad notes.** `.nfedit` projects now save and restore each note's flashcard decks, quizzes, and scratchpad conversations alongside the source archive, undo history, Markdown notes, and recognized handwriting text (while preserving versions `1..=9` when empty and keeping audio recordings on-device / in `.notecomp`), and every menu item, export row, new-note format picker, and File Formats help dialog documents what `.nfedit` keeps.
