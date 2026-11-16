@@ -19,3 +19,25 @@ test('presets change actual raster resolution and respect page budgets', () => {
     assert.ok(Math.max(target.width, target.height) <= 8192);
   }
 });
+test('fast zoom sharpening draws only the part on screen, at the zoomed resolution', async () => {
+  const { regionTarget } = await import('./pdf-background.js');
+  const page = { width: 612, height: 792 };
+  const balanced = presets.balanced;
+  // A page zoomed to 2448 CSS px (4× a 612 px fit) on a 2× screen: 4896 px across in all.
+  const whole = rasterTarget(page, 2448, 2, balanced);
+  assert.ok(whole.width < 4896, 'the whole page is capped by the pixel budget');
+  const part = regionTarget(page, 2448, [0.25, 0.25, 0.5, 0.5], 2, balanced);
+  assert.equal(Math.round(part.scale * page.width), 4896, 'the on-screen part keeps full resolution');
+  assert.ok(part.width <= 1225 && part.width >= 1223);
+  assert.ok(part.width * part.height < 2_000_000, 'a few megapixels, not a whole page');
+  // The box comes back snapped to whole pixels, covering what was asked.
+  assert.ok(part.box[0] <= 0.25 && part.box[1] <= 0.25 && part.box[2] >= 0.5 && part.box[3] >= 0.5);
+  assert.equal(part.left, Math.floor(0.25 * page.width * part.scale));
+  // Never larger than a GPU texture many Android tablets take, nor the pixel budget.
+  const huge = regionTarget(page, 24000, [0, 0, 1, 1], 3, presets.sharp);
+  assert.ok(Math.max(huge.width, huge.height) <= 4096);
+  assert.ok(huge.width * huge.height <= presets.sharp.megapixels * 1e6 + 10000);
+  // Out-of-range boxes are clamped to the page.
+  const clamped = regionTarget(page, 612, [-1, -1, 2, 2], 2, balanced);
+  assert.deepEqual(clamped.box, [0, 0, 1, 1]);
+});

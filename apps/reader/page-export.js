@@ -30,6 +30,8 @@ export async function pageSvg(p, { pdfImage, backgroundPlacement } = {}) {
     svg.querySelector('[data-background] > rect')?.setAttribute('fill', p.render.dataset.paper);
     svg.style.isolation = 'isolate';
   }
+  // Fast zoom sharpening's on-screen part is for the window, not the file.
+  for (const detail of svg.querySelectorAll('.pdf-detail')) detail.remove();
   const raster = p.render.querySelector(':scope > canvas.pdf-raster');
   if (raster && p.view?.pdf_background && pdfImage && backgroundPlacement)
     svg.querySelector('[data-background]')?.append(pdfImage(raster.toDataURL('image/png'), backgroundPlacement(p.view.pdf_background, p.size)));

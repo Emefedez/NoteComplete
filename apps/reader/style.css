@@ -557,7 +557,8 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   height: auto;
 }
 /* A PDF page drawn into a canvas under the ink (app.js placeRaster). */
-.sheet .render > .pdf-raster {
+.sheet .render > .pdf-raster,
+.sheet .render > .pdf-detail {
   position: absolute;
   display: block;
 }
@@ -1986,6 +1987,9 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 #qualityDialog label { display: block; margin: 12px 0; font-size: 13px; }
 #qualityDialog output { float: right; font-variant-numeric: tabular-nums; }
 #qualityDialog input[type="range"] { display: block; width: 100%; margin: 10px 0 0; }
+#qualityDialog label.quality-check { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
+.quality-check input { flex: none; margin: 2px 0 0; }
+.quality-check .muted { display: block; font-size: 12px; }
 .quality-presets, .quality-actions { display: flex; gap: 6px; }
 .quality-presets button { flex: 1; min-width: 0; padding: 3px 4px; font-size: 12px; background: var(--fill); }
 .quality-presets button:hover { background: var(--accent-soft); }

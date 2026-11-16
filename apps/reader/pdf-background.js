@@ -24,16 +24,19 @@ export async function openPdf(data) {
   }
 }
 
+// The quality setting's scale is for a 2× screen (tablets, phones, most laptops); a 1×
+// screen gets half as many pixels per side, never fewer than it shows (Balanced 2× → 1×,
+// Sharp 3× → 1.5×). Drawing at 2× for a 1× screen took four times the memory and time.
+function pixelsPerCssPixel(pixelRatio, prefs) {
+  const ratio = Math.max(1, Math.min(Number(pixelRatio) || 1, 3));
+  return prefs ? Math.min(prefs.scale, Math.max(1, (ratio * prefs.scale) / 2)) : Math.max(2, ratio);
+}
 // Keep raster output sharp when a page is shown wider than its PDF user units.
 // The cache is keyed by the resulting pixel size so zooming can request a
 // higher-resolution image without reusing a blurry fit-width raster.
 export function rasterTarget(original, cssWidth, pixelRatio = globalThis.devicePixelRatio || 1, settings) {
   const prefs = settings ? normalizeQuality(settings) : null;
-  const ratio = Math.max(1, Math.min(Number(pixelRatio) || 1, 3));
-  // The quality setting's scale is for a 2× screen (tablets, phones, most laptops); a 1×
-  // screen gets half as many pixels per side, never fewer than it shows (Balanced 2× → 1×,
-  // Sharp 3× → 1.5×). Drawing at 2× for a 1× screen took four times the memory and time.
-  const quality = prefs ? Math.min(prefs.scale, Math.max(1, (ratio * prefs.scale) / 2)) : Math.max(2, ratio);
+  const quality = pixelsPerCssPixel(pixelRatio, prefs);
   const maxPixels = 8192;
   const requestedWidth = Math.max(1, Math.ceil(cssWidth * quality));
   const scale = Math.min(
@@ -45,6 +48,32 @@ export function rasterTarget(original, cssWidth, pixelRatio = globalThis.deviceP
     scale,
     width: Math.min(requestedWidth, Math.ceil(original.width * scale)),
     height: Math.ceil(original.height * scale),
+  };
+}
+
+// Fast zoom sharpening (quality.js zoomDetail): the part of a zoomed PDF page on screen,
+// drawn at the zoomed resolution, over a page raster kept at fit-to-window size. `box` is
+// [left, top, right, bottom] as fractions of the PDF page as shown. The result is whole
+// device pixels, so `box` comes back snapped to them (place the tile by the returned box).
+export const DETAIL_MAX_SIDE = 4096;
+export function regionTarget(original, cssWidth, box, pixelRatio = globalThis.devicePixelRatio || 1, settings) {
+  const prefs = settings ? normalizeQuality(settings) : null;
+  const [x0, y0, x1, y1] = box.map((n) => Math.max(0, Math.min(1, n)));
+  const spanW = Math.max(1e-6, x1 - x0) * original.width, spanH = Math.max(1e-6, y1 - y0) * original.height;
+  const budget = (prefs?.megapixels ?? 12) * 1_000_000;
+  const scale = Math.min(
+    Math.ceil(cssWidth * pixelsPerCssPixel(pixelRatio, prefs)) / original.width,
+    DETAIL_MAX_SIDE / Math.max(spanW, spanH),
+    Math.sqrt(budget / (spanW * spanH)),
+  );
+  const pageW = original.width * scale, pageH = original.height * scale;
+  const left = Math.floor(x0 * pageW), top = Math.floor(y0 * pageH);
+  const right = Math.min(Math.ceil(pageW), Math.ceil(x1 * pageW)), bottom = Math.min(Math.ceil(pageH), Math.ceil(y1 * pageH));
+  return {
+    scale, left, top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+    box: [left / pageW, top / pageH, right / pageW, bottom / pageH],
   };
 }
 
@@ -226,6 +255,31 @@ export class PdfBackgrounds {
     })();
     this.drawing.set(key, job);
     try { return await job; } finally { this.drawing.delete(key); }
+  }
+  // A part of the PDF page (regionTarget) as a still canvas, or a PNG blob: URL with
+  // kind "url"; never cached: the caller owns it and drops it when the view moves on.
+  async region(background, cssWidth, box, settings, kind = "canvas") {
+    const doc = await this.document(background.resource_id);
+    const page = await doc.getPage(background.page_index + 1);
+    const canvas = document.createElement("canvas");
+    let shown;
+    try {
+      const target = regionTarget(page.getViewport({ scale: 1 }), cssWidth, box, undefined, settings);
+      const viewport = page.getViewport({ scale: target.scale, offsetX: -target.left, offsetY: -target.top });
+      canvas.width = target.width;
+      canvas.height = target.height;
+      await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
+      shown = kind === "url" ? URL.createObjectURL(await pngOf(canvas)) : await settled(canvas);
+      if (this.closed) throw Error("Document closed");
+      return { raster: shown, box: target.box };
+    } catch (error) {
+      if (typeof shown === "string") URL.revokeObjectURL(shown);
+      else if (shown && shown !== canvas) wipe(shown);
+      throw error;
+    } finally {
+      if (shown !== canvas) canvas.width = canvas.height = 0;
+      page.cleanup();
+    }
   }
   // A raster no longer shown: freed, unless it is kept or still on a page.
   release(raster) {
