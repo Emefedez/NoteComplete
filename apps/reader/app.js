@@ -162,9 +162,10 @@ let panels = [],
   thumbnailObserver = null,
   scrollFrame = 0,
   zoom = "fit";
-let displayQuality;
-qualitySettings((value, rasterChanged) => {
+let displayQuality, zoomDetail = true;
+qualitySettings((value, rasterChanged, detail) => {
   displayQuality = value;
+  zoomDetail = detail;
   // A filter list (never "none"): dark pages append invert() to it, and "none invert()" is
   // invalid CSS. At 100 % there is none at all (dark pages fall back to contrast(100%)): an
   // identity filter still makes every page a filtered layer, redrawn whole on each change.
@@ -177,6 +178,7 @@ qualitySettings((value, rasterChanged) => {
 function redrawPdfPages() {
   backgrounds?.clear();
   for (const panel of panels) {
+    dropDetail(panel);
     panel.token++;
     if (panel.near) renderPage(panel, panel.view);
   }
@@ -1030,7 +1032,98 @@ function underPaper(render) {
   svg.style.isolation = "auto";
 }
 // The raster a page shows (a canvas, or a picture's URL), to release.
-const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raster") || render?.querySelector("[data-background] > image")?.getAttribute("href");
+const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raster") || render?.querySelector("[data-background] > image:not(.pdf-detail)")?.getAttribute("href");
+// Fast zoom sharpening (Display quality; quality.js loadZoomDetail). A zoomed PDF page keeps
+// its raster at most window-wide, which zooming in never has to wait for, and the part of it on
+// screen (with a margin) is drawn again at the zoomed resolution: a few megapixels instead of a
+// whole page at up to 24, and as a canvas, where a whole zoomed page is too large for many
+// Android GPUs and goes through a PNG first. Redrawn when a pan or zoom pauses, and every
+// DETAIL_PAN_MS during a long pan.
+const DETAIL_PAUSE_MS = 90, DETAIL_PAN_MS = 350, DETAIL_MARGIN = 0.15;
+let detailTimer = 0, detailDue = 0, detailBusy = false, detailAgain = false;
+const rasterWidthFor = (width) => (zoomDetail ? Math.min(width, Math.max(1, $("viewport").clientWidth)) : width);
+function scheduleDetail() {
+  if (!zoomDetail || !doc) return;
+  const now = performance.now();
+  detailDue ||= now + DETAIL_PAN_MS;
+  clearTimeout(detailTimer);
+  detailTimer = setTimeout(drawDetail, Math.max(0, Math.min(DETAIL_PAUSE_MS, detailDue - now)));
+}
+async function drawDetail() {
+  detailDue = 0;
+  if (detailBusy) { detailAgain = true; return; }
+  detailBusy = true;
+  try {
+    // Nearest the middle of the window first: a long pan shows those sooner.
+    const middle = $("viewport").getBoundingClientRect(), y = (middle.top + middle.bottom) / 2;
+    const order = panels.filter((p) => p.near).sort((a, b) => {
+      const ra = a.el.getBoundingClientRect(), rb = b.el.getBoundingClientRect();
+      return Math.abs((ra.top + ra.bottom) / 2 - y) - Math.abs((rb.top + rb.bottom) / 2 - y);
+    });
+    for (const p of panels) if (!p.near) dropDetail(p);
+    for (const p of order) {
+      // A pinch scales the pages with a transform; its end (setZoom) asks again.
+      if (pinch || !zoomDetail) break;
+      await drawPageDetail(p).catch(() => { /* The page raster stays. */ });
+    }
+  } finally {
+    detailBusy = false;
+    if (detailAgain) { detailAgain = false; scheduleDetail(); }
+  }
+}
+const pageDetail = (p) => p.render?.querySelector(":scope > .pdf-detail, [data-background] > .pdf-detail");
+function dropDetail(p) {
+  const old = pageDetail(p);
+  if (!old) return;
+  old.remove();
+  if (old.localName === "image") URL.revokeObjectURL(old.getAttribute("href"));
+}
+// The part of the window over the PDF's rectangle, as fractions of that rectangle.
+function detailBox(pdf, view, margin) {
+  const mx = view.width * margin, my = view.height * margin;
+  return [
+    (Math.max(view.left - mx, pdf.left) - pdf.left) / pdf.width,
+    (Math.max(view.top - my, pdf.top) - pdf.top) / pdf.height,
+    (Math.min(view.right + mx, pdf.left + pdf.width) - pdf.left) / pdf.width,
+    (Math.min(view.bottom + my, pdf.top + pdf.height) - pdf.top) / pdf.height,
+  ];
+}
+async function drawPageDetail(p) {
+  const background = p.view?.pdf_background, render = p.render;
+  if (!background || !render || p.loading || !p.pdfReady) return;
+  const width = p.el.clientWidth;
+  if (width <= rasterWidthFor(width) * 1.05) return dropDetail(p);
+  const place = backgroundPlacement(background, p.size);
+  const r = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect();
+  const kx = r.width / p.size[0], ky = r.height / p.size[1];
+  const pdf = { left: r.left + place.x * kx, top: r.top + place.y * ky, width: place.width * kx, height: place.height * ky };
+  const seen = detailBox(pdf, view, 0);
+  if (seen[2] <= seen[0] || seen[3] <= seen[1]) return dropDetail(p);
+  const key = JSON.stringify([background, width, displayQuality, globalThis.devicePixelRatio || 1]);
+  const have = pageDetail(p)?.detail;
+  if (have?.key === key && have.box[0] <= seen[0] + 1e-3 && have.box[1] <= seen[1] + 1e-3 && have.box[2] >= seen[2] - 1e-3 && have.box[3] >= seen[3] - 1e-3) return;
+  // Under an SVG with its own paper (a picture-backed page, much ink) only a picture shows.
+  const kind = render.dataset.paper && !(p.inkItems > INK_HEAVY) ? "canvas" : "url";
+  const tile = await backgrounds.region(background, pdf.width, detailBox(pdf, view, DETAIL_MARGIN), displayQuality, kind);
+  if (p.render !== render || !render.isConnected || p.el.clientWidth !== width || !zoomDetail) {
+    if (typeof tile.raster === "string") URL.revokeObjectURL(tile.raster);
+    return;
+  }
+  const [x0, y0, x1, y1] = tile.box;
+  const at = { x: place.x + x0 * place.width, y: place.y + y0 * place.height, width: (x1 - x0) * place.width, height: (y1 - y0) * place.height };
+  let el;
+  if (typeof tile.raster === "string") {
+    el = pdfImage(tile.raster, at);
+    el.classList.add("pdf-detail");
+  } else {
+    el = placeRaster(tile.raster, at, p.size);
+    el.className = "pdf-detail";
+  }
+  el.detail = { key, box: tile.box };
+  dropDetail(p);
+  if (el.localName === "image") render.querySelector("[data-background]")?.append(el);
+  else render.querySelector(":scope > svg")?.before(el);
+}
 function pdfImage(href, place) {
   const el = document.createElementNS(ns, "image");
   for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
@@ -1269,6 +1362,7 @@ addEventListener("resize", fitTools);
 placeToolbarActions();
 syncPagePanel();
 function placeholder(p) {
+  dropDetail(p);
   const raster = shownRaster(p.render);
   p.render = null;
   p.overlay = null;
@@ -1304,7 +1398,7 @@ function resize() {
   for (const p of panels) {
     p.el.style.width =
       (fit ? fitWidth : p.size[0] * zoom) + "px";
-    const width = p.el.clientWidth;
+    const width = rasterWidthFor(p.el.clientWidth);
     if (
       p.view?.pdf_background &&
       p.rasterWidth > 0 &&
@@ -1316,6 +1410,7 @@ function resize() {
   updateZoom();
   selection.render(panels[selection.item?.page]);
   for (const p of reraster) renderPage(p, p.view);
+  scheduleDetail();
 }
 async function renderPage(p, provided) {
   clearTimeout(p.renderTimer);
@@ -1352,14 +1447,15 @@ async function renderPage(p, provided) {
     // An edit redraws the page's ink; the PDF raster under it stays the same,
     // so the existing image moves over at once instead of blinking out while
     // the background cache answers.
-    const displayWidth = p.el.clientWidth || p.size[0];
+    // With fast zoom sharpening the page raster stays at most window-wide (drawDetail).
+    const displayWidth = rasterWidthFor(p.el.clientWidth || p.size[0]);
     // At another width the old raster (placed in page units) stays as a
     // placeholder until the sharper one arrives.
     const inkItems = result.pdf_background ? inkCount(result.svg) : null;
     const kind = result.pdf_background && (inkItems > INK_HEAVY ? "url" : "canvas");
     const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality, globalThis.devicePixelRatio || 1, kind]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
-      ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image") : null;
+      ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image:not(.pdf-detail)") : null;
     // A canvas (this page's, or the previous one kept until the new raster is ready) lies
     // beneath the SVG, so the SVG's paper must let it through.
     if (kind === "canvas" || previous?.localName === "canvas") underPaper(render);
@@ -1373,6 +1469,7 @@ async function renderPage(p, provided) {
     // The new page goes in at once with what is still drawn over the old one: others' live
     // lines, and strokes waiting for a render with their edit. Nothing blinks out between.
     if (p.overlay) overlay.append(...p.overlay.querySelectorAll(":scope > .remote-ink"));
+    dropDetail(p);
     p.render = render;
     p.overlay = overlay;
     keepHeld(p, shows, true);
@@ -1443,6 +1540,7 @@ async function renderPage(p, provided) {
     if (note === epoch && panels[p.index] === p) {
       if (p.near && (p.retry || version !== revision || token !== p.token))
         renderPage(p);
+      else if (p.view?.pdf_background) scheduleDetail();
       if (p.index === page) $("svg").disabled = !p.pdfReady;
     }
   }
@@ -1514,6 +1612,7 @@ function scrollViewport(key, fast = false) {
 const barState = new ChromeState();
 $("viewport").onscroll = () => {
   document.body.classList.toggle("bar-compact", barState.observe($("viewport").scrollTop));
+  scheduleDetail();
   cancelAnimationFrame(scrollFrame);
   scrollFrame = requestAnimationFrame(() => {
     if (!doc) return;
