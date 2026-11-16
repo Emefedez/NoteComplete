@@ -109,7 +109,7 @@ try {
   await p.mouse.click(rectBox.x + 2, rectBox.y + rectBox.height / 2, { button: 'right' });
   await p.waitForSelector('.context-menu');
   const shapeEntries = await p.locator('.context-menu button span').allTextContents();
-  for (const e of ['Colour', 'Thickness', 'Opacity', 'Export']) assert.ok(shapeEntries.includes(e), `shape menu: ${shapeEntries}`);
+  for (const e of ['Colour', 'Thickness', 'Opacity', 'Fill', 'Export']) assert.ok(shapeEntries.includes(e), `shape menu: ${shapeEntries}`);
   await p.hover('.context-menu:not(.context-submenu) button:has-text("Colour")');
   await p.waitForSelector('.context-submenu .context-swatch');
   if (DIR) await p.screenshot({ path: DIR + 'colour.png' });
@@ -117,6 +117,21 @@ try {
   await p.waitForFunction(() => [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"]')].pop()?.innerHTML.toLowerCase().includes('#d13b2f') || [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"] [stroke]')].some((e) => /209, ?59, ?47|d13b2f/i.test(e.getAttribute('stroke'))), null, { timeout: 5000 });
   await p.keyboard.press('Control+z');
   await sleep(400);
+  // Fill: none to solid, then back with one undo.
+  const filled = () => p.evaluate(() => [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"]')].pop()?.querySelectorAll('[fill]:not([fill="none"])').length || 0);
+  const unfilled = await filled();
+  await p.mouse.click(rectBox.x + 2, rectBox.y + rectBox.height / 2, { button: 'right' });
+  await p.hover('.context-menu:not(.context-submenu) button:has-text("Fill")');
+  await p.waitForSelector('.context-submenu button:has-text("Solid")');
+  if (DIR) await p.screenshot({ path: DIR + 'fill.png' });
+  await p.click('.context-submenu button:has-text("Solid")');
+  await p.waitForFunction((n) => ([...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"]')].pop()?.querySelectorAll('[fill]:not([fill="none"])').length || 0) > n, unfilled, { timeout: 5000 });
+  await p.mouse.click(rectBox.x + 2, rectBox.y + rectBox.height / 2, { button: 'right' });
+  await p.hover('.context-menu:not(.context-submenu) button:has-text("Fill")');
+  assert.equal(await p.getAttribute('.context-submenu button:has-text("Solid")', 'aria-checked'), 'true', 'the fill it has is ticked');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Control+z');
+  await p.waitForFunction((n) => ([...document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="new:"]')].pop()?.querySelectorAll('[fill]:not([fill="none"])').length || 0) === n, unfilled, { timeout: 5000 });
   await p.keyboard.press('Escape');
   await p.keyboard.press('Control+z');
   await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render :is([data-item^="new:"], [data-item^="image:"])').length === n, before);
