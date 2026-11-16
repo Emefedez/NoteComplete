@@ -345,7 +345,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         };
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them.' }));
+      palette.append(make('h4', { textContent: 'Length' }), lengthBox());
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length; right-click or right-drag erases.' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -371,6 +372,43 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     else if (state === 'blocked') for (let x = x1; x < x2 - 2; x += 5) g.append(svgEl('line', { x1: x, y1: y + 5, x2: x + 4, y2: y - 5, stroke: c, 'stroke-width': 1.8 }));
   }
   let geo = null; // { left, top, cw, rh, n }
+  // How much a click paints: 1, 5 or 10 time units (the wheel over the grid switches them).
+  const LENGTHS = [1, 5, 10];
+  let lengthAt = 0, stamp = null;
+  const spanCells = () => Math.max(1, Math.round(LENGTHS[lengthAt] / (work()?.cell || 1)));
+  function lengthBox() {
+    const box = make('div', { className: 'ch-lengths', role: 'group' });
+    box.setAttribute('aria-label', 'How much a click paints');
+    LENGTHS.forEach((units, i) => {
+      const b = make('button', { type: 'button', className: 'ch-length', textContent: `${units}${base.unit ? ` ${base.unit}` : ''}`, title: `A click paints ${units} time unit${units === 1 ? '' : 's'} (scroll over the grid to switch)` });
+      b.setAttribute('aria-pressed', String(i === lengthAt));
+      b.onclick = () => setLength(i);
+      box.append(b);
+    });
+    return box;
+  }
+  function setLength(i) {
+    lengthAt = (i + LENGTHS.length) % LENGTHS.length;
+    for (const [k, b] of [...palette.querySelectorAll('.ch-length')].entries()) b.setAttribute('aria-pressed', String(k === lengthAt));
+    if (stamp?.at) showStamp(stamp.at);
+  }
+  // The cells a click would paint, outlined under the pointer.
+  function showStamp(at) {
+    if (!stamp || !geo) return;
+    stamp.at = at;
+    const g = work();
+    const ok = at && at.row >= 0 && at.row < g.rows.length && at.cell >= 0 && at.cell < geo.n && brush !== '@arrival';
+    stamp.el.style.display = ok ? '' : 'none';
+    if (!ok) return;
+    const a = Math.min(at.cell, geo.n - 1), b = Math.min(geo.n, a + spanCells());
+    for (const [k, v] of Object.entries({ x: geo.left + a * geo.cw, y: geo.top + at.row * geo.rh + 2, width: (b - a) * geo.cw, height: geo.rh - 4 })) stamp.el.setAttribute(k, v);
+  }
+  canvas.addEventListener('wheel', (e) => {
+    if (!(kind === 'states' || kind === 'timeline') || mode === 'json' || e.ctrlKey || e.shiftKey || !e.deltaY || !canvas.querySelector('.ch-grid')?.contains(e.target)) return;
+    e.preventDefault();
+    setLength(lengthAt + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', (e) => { if (canvas.querySelector('.ch-grid')?.contains(e.target)) e.preventDefault(); });
   function drawGrid() {
     const g = work();
     const n = g.rows[0]?.cells.length || Math.round((g.tEnd - g.tStart) / g.cell);
@@ -428,8 +466,15 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       if (kind === 'states' && arrival != null) s.append(svgEl('circle', { cx: left + ((arrival - g.tStart) / g.cell) * cw, cy: yc, r: 4.2, class: 'ch-arrival' }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
+    const outline = svgEl('rect', { class: 'ch-stamp', rx: 3 });
+    outline.style.display = 'none';
+    s.append(outline);
+    stamp = { el: outline, at: stamp?.at || null };
+    showStamp(stamp.at);
     canvas.replaceChildren(s);
     s.addEventListener('pointerdown', gridDown);
+    s.addEventListener('pointermove', (e) => { if (!e.buttons) showStamp(cellAt(e)); });
+    s.addEventListener('pointerleave', () => showStamp(null));
   }
   function cellAt(e) {
     const r = canvas.firstChild.getBoundingClientRect();
@@ -438,7 +483,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     return { row, cell, x };
   }
   function gridDown(e) {
-    if (e.button !== 0) return;
+    // The right button erases (a click or a drag), whatever the brush.
+    const erasing = e.button === 2;
+    if (e.button !== 0 && !erasing) return;
     const g = work();
     const at = cellAt(e);
     if (at.row < 0 || at.row >= g.rows.length || at.cell < -1 || at.cell > geo.n) return;
@@ -446,7 +493,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     canvas.focus({ preventScroll: true });
     snapshot();
     check = null;
-    if (brush === '@arrival') {
+    if (brush === '@arrival' && !erasing) {
       const t = g.tStart + Math.max(0, Math.min(geo.n, Math.round((at.x - geo.left) / geo.cw))) * g.cell;
       g.rows[at.row].arrival = g.rows[at.row].arrival === t ? null : t;
       changed();
@@ -455,9 +502,10 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const row = g.rows[at.row];
     const from = Math.max(0, Math.min(geo.n - 1, at.cell));
     // A click on a cell already painted with the brush clears it; a drag paints the run.
-    const value = row.cells[from] === brush && brush ? '' : brush;
+    const span = spanCells();
+    const value = erasing ? '' : row.cells[from] === brush && brush ? '' : brush;
     const paint = (to) => {
-      const a = Math.min(from, to), b = Math.max(from, to);
+      const a = Math.min(from, to), b = Math.min(geo.n - 1, Math.max(from, to) + span - 1);
       for (let k = a; k <= b; k++) row.cells[k] = value;
     };
     paint(from);
@@ -505,6 +553,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       s.append(svgEl('line', { x1: left, y1: y, x2: left + pw, y2: y, class: 'ch-gl minor' }));
       s.append(Object.assign(svgEl('text', { x: left - 6, y: y + 4, class: 'ch-time', 'text-anchor': 'end' }), { textContent: fmt(Math.round(v * 1000) / 1000) }));
     }
+    // A column per bar, as the page draws them: with the lines across, squares to place on.
+    for (let i = 0; i <= n; i++) s.append(svgEl('line', { x1: left + i * slot, y1: top, x2: left + i * slot, y2: top + ph, class: 'ch-gl minor' }));
     list.forEach((b, i) => {
       const x = left + i * slot + (slot - bw) / 2;
       const g = svgEl('g', { class: 'ch-bar-col', 'data-index': i });
@@ -632,7 +682,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     } else {
       out.push(field('Axis label', text(base.xLabel, edit('xlabel', (v) => { base.xLabel = v; }, { panel: false }), { placeholder: 'Time (ms)' })));
     }
-    out.push(make('h4', { textContent: kind === 'states' ? 'Processes (top to bottom as listed; drawn with the last on top)' : 'Rows' }));
+    out.push(make('h4', { textContent: kind === 'states' ? 'Processes (top to bottom, as on the page)' : 'Rows' }));
     grid.rows.forEach((r, i) => {
       const parts = [text(r.label, edit(`label-${i}`, (v) => { r.label = v; if (ans?.rows[i]) ans.rows[i].label = v; }, { panel: false }), { 'aria-label': 'Name', className: 'ch-name' })];
       if (kind === 'states') {

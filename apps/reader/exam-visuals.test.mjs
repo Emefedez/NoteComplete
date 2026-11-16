@@ -381,7 +381,7 @@ test('process-state diagrams: states type, and timelines of states drawn that wa
   assert.equal(spec.processes[1].arrival, 2);
   const svg = renderVisualSvg(spec).svg;
   assert.match(svg, /stroke-dasharray="6 4"/, 'ready is dashed');
-  assert.ok(svg.indexOf('>B<') < svg.indexOf('>A<'), 'the last process is drawn on top');
+  assert.ok(svg.indexOf('>A<') < svg.indexOf('>B<'), 'top to bottom as listed, as in the editor');
   // A timeline with one row per process and state-named intervals becomes a state diagram.
   const tl = normalizeVisualSpec({ type: 'timeline', rows: [{ label: 'A', intervals: [{ label: 'CPU', start: 0, end: 4 }, { label: 'Espera', start: 4, end: 6 }] }] });
   assert.equal(tl.type, 'states');

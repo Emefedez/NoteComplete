@@ -3,6 +3,7 @@
 // table.js; the exam figures (histogram, bar chart, process states, CPU timeline, tree, plot)
 // are drawn by exam-html.js, as in generated exams, and placed as a picture with a frame that
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
+import { imageReady } from './image-ready.js';
 import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
 import { icon } from './icons.js';
 import { displaySpec } from './chart-model.js';
@@ -168,7 +169,9 @@ export function choosePrefab() {
         const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => finish(p) }, thumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
         c.dataset.id = p.id;
         c.setAttribute('role', 'option');
-        c.onmouseenter = () => show(p);
+        // A mouse previews on hover. Not a finger or the Pencil: Safari on iPad treats a change
+        // made on its emulated hover as "show the hover state" and drops the tap's click.
+        c.onpointerenter = (e) => { if (e.pointerType === 'mouse') show(p); };
         c.onfocus = () => show(p);
         return c;
       };
@@ -323,8 +326,7 @@ export async function prefabPng(spec, size, scale = 3) {
   const img = new Image();
   // As a picture it has no page styles: its text takes a sans font, as in the exam pages.
   const svg = out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  await img.decode();
+  await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   const canvas = document.createElement('canvas');
   try {
     canvas.width = Math.max(1, Math.round(size[0] * scale));

@@ -2,6 +2,7 @@
 // Insert → Chart and timeline editor): process states, CPU timelines, bar charts, histograms
 // and exam plots. What is drawn is kept in this browser between visits; Export saves it as a
 // picture or as a NoteComplete figure (.json), which Insert prefab can bring into a note.
+import { imageReady } from './image-ready.js';
 import { mountChartEditor, chartName } from './chart-editor.js';
 import { editorKind, displaySpec } from './chart-model.js';
 import { PREFABS } from './prefabs.js';
@@ -61,8 +62,7 @@ exportSelect.onchange = async () => {
   const svg = out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
   if (how === 'svg') return download(svg, fileName(spec, 'svg'), 'image/svg+xml');
   const img = new Image();
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  await img.decode();
+  await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   const canvas = make('canvas', { width: out.width * 2, height: out.height * 2 });
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';

@@ -143,3 +143,8 @@ html.chart-page, .chart-page body { height: 100%; margin: 0; }
 .ch-ref-img { display: block; width: 100%; height: auto; background: #fff; }
 .ch-ref-pdf { display: block; width: 100%; height: 60vh; border: 0; background: #fff; }
 @media (max-width: 760px) { .chart-editor[data-mode="answer"] .ch-main { grid-template-columns: minmax(0, 1fr); } }
+/* How much a click paints (1, 5 or 10 units), and its outline under the pointer. */
+.ch-lengths { display: flex; gap: 4px; }
+.chart-editor .ch-length { flex: 1; padding: 4px 2px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chart-editor .ch-length[aria-pressed="true"] { border-color: var(--c-accent); color: var(--c-accent); background: var(--c-soft); }
+.ch-stamp { fill: color-mix(in srgb, var(--c-accent) 12%, transparent); stroke: var(--c-accent); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }

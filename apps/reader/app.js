@@ -43,6 +43,7 @@ import { SelectionController } from "./selection.js";
 import { regionSweep } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
+import { imageReady } from "./image-ready.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
 import { saveDocumentInPlace } from "./save-target.js";
 import { welcomeWanted, setWelcomeWanted } from "./welcome-pref.js";
@@ -1265,8 +1266,7 @@ async function renderThumbnail(panel) {
       const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(source)], { type: "image/svg+xml" }));
       const image = new Image();
       try {
-        image.src = url;
-        await image.decode();
+        await imageReady(image, url);
         if (note !== epoch || edits !== pageEdits(panel)) return;
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
@@ -6386,8 +6386,7 @@ async function itemPicture(item, scale = 3, type = "image/png", quality, out = n
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
     const image = new Image();
-    image.src = url;
-    await image.decode();
+    await imageReady(image, url);
     const canvas = Object.assign(document.createElement("canvas"), { width: w, height: h });
     const context = canvas.getContext("2d");
     if (type !== "image/png") { context.fillStyle = "#fff"; context.fillRect(0, 0, w, h); }
@@ -6929,8 +6928,7 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
     const image = new Image();
-    image.src = url;
-    await image.decode();
+    await imageReady(image, url);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;

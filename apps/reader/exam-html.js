@@ -1092,14 +1092,15 @@ function renderHistogramSvg(spec, { forMcp = false } = {}) {
   };
 }
 
-// The process-state diagram drawn as by hand: one line per process (the last one on top)
+// The process-state diagram drawn as by hand: one line per process, top to bottom as listed (as
+// the chart editor shows them)
 // over a grid, running solid blue, ready dashed green, blocked red hatching, each stretch's
 // length written under it in its colour, a dot on arrival and * when it ends.
 function renderStatesSvg(spec, { forMcp = false } = {}) {
   const W = 600;
   const COLORS = { run: '#2563eb', ready: '#16a34a', blocked: '#dc2626' };
   const fs = forMcp ? 12.5 : 10.5;
-  const rows = [...spec.processes].reverse();
+  const rows = spec.processes;
   const maxLbl = rows.reduce((m, r) => Math.max(m, r.label.length), 1);
   const pad = { left: Math.max(30, 16 + maxLbl * 8), right: 36, top: (spec.title ? 50 : 34), bottom: 34 };
   const laneH = 46;
@@ -1486,7 +1487,7 @@ const VISUAL_PROMPT_GUIDE = [
   '  `{"type":"plot","title":"f(x)","xMin":-4,"xMax":4,"yMin":-4,"yMax":6,"xLabel":"x","yLabel":"y","grid":true,"blank":false,"functions":[{"expr":"x^2 - 1","label":"f(x)"}],"points":[{"x":0,"y":-1,"label":"(0,-1)"}],"areas":[{"expr":"x^2","from":0,"to":2}]}`',
   '- Histogram / bar chart (set `"blank": true` + `value: null` on bins for students to fill):',
   '  `{"type":"histogram","title":"Latency Distribution","xLabel":"Bucket (ms)","yLabel":"Count","yMax":12,"blank":false,"bins":[{"label":"0-5","value":3},{"label":"5-10","value":9}]}`',
-  '- PREFERRED for multiprogramming / process scheduling exercises (FIFO, SJF, SRT, RR, priorities): the process-state diagram, one line per process (listed A, B, C; drawn with the last on top), each stretch `run` (activo, CPU), `ready` (listo) or `blocked` (bloqueado / E/S); set `"blank": true` with no segments for the student version and put the solved one in `answerBox.visual`. Legend labels in the exam language:',
+  '- PREFERRED for multiprogramming / process scheduling exercises (FIFO, SJF, SRT, RR, priorities): the process-state diagram, one line per process (drawn top to bottom in the order listed), each stretch `run` (activo, CPU), `ready` (listo) or `blocked` (bloqueado / E/S); set `"blank": true` with no segments for the student version and put the solved one in `answerBox.visual`. Legend labels in the exam language:',
   '  `{"type":"states","title":"FIFO","tStart":0,"tEnd":90,"tStep":5,"unit":"u.t.","legend":{"run":"Activo","ready":"Listo","blocked":"Bloqueado"},"processes":[{"label":"A","arrival":0,"segments":[{"state":"run","start":0,"end":10},{"state":"blocked","start":10,"end":25},{"state":"run","start":25,"end":30}]},{"label":"B","arrival":5,"segments":[{"state":"ready","start":5,"end":10},{"state":"run","start":10,"end":15}]}]}`',
   '- CPU scheduling / execution timeline / Gantt chart (set `"blank": true` with empty `intervals` so students draw the schedule, and put the completed Gantt chart in `answerBox.visual` / `solutionVisual`!). For multiprogramming / resource occupancy diagrams use ONE ROW PER PROCESS, the last process on top (rows "C", "B", "A"), and label each interval with what the process is doing: "CPU", "E/S" (or the device) or "Espera" — each state keeps its own colour:',
   '  `{"type":"timeline","title":"CPU Schedule (RR q=2)","tStart":0,"tEnd":10,"tStep":1,"unit":"ms","blank":false,"rows":[{"label":"CPU","intervals":[{"label":"P1","start":0,"end":2},{"label":"P2","start":2,"end":5}]}]}`',

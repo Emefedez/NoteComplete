@@ -4079,3 +4079,6 @@ body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible),
 #toolOptions:not(.inline) { padding-left: 18px; }
 #toolOptions.placed { position: fixed; top: auto; right: auto; bottom: auto; margin: 0; z-index: 45; }
 #toolOptions.dragging > .tool-options-grip { cursor: grabbing; }
+/* While such a dialog is open, the menu bar above it is out of use (only the tabs work):
+   it is greyed out so it does not look like it should answer a tap. */
+#commandBar [inert] { opacity: .38; filter: grayscale(1); transition: opacity .15s ease; }
