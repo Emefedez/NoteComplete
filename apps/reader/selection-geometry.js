@@ -14,12 +14,22 @@ export function corners(item,a=item.adjustment){
  const cx=x+w/2+a.translation[0],cy=y+h/2+a.translation[1],hw=Math.max(w,1)*a.scale[0]/2,hh=Math.max(h,1)*a.scale[1]/2;
  return [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([x,y])=>[cx+c*x-s*y,cy+s*x+c*y]);
 }
-export function resizeAdjustment(item,index,moving){
+// A corner dragged to `moving`, the opposite corner staying. It keeps the proportions the
+// item has now, unless `free` (Shift held): then width and height follow the pointer apart.
+export function resizeAdjustment(item,index,moving,free=false){
  const a=structuredClone(item.adjustment),fixed=corners(item)[(index+2)%4];
  const angle=(item.base_rotation+a.rotation)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
  const dx=moving[0]-fixed[0],dy=moving[1]-fixed[1],signX=[-1,1,1,-1][index],signY=[-1,-1,1,1][index];
  const w=Math.max(item.bounds[2],1),h=Math.max(item.bounds[3],1);
- a.scale=[Math.max(.001,Math.min(1000,(dx*c+dy*s)*signX/w)),Math.max(.001,Math.min(1000,(-dx*s+dy*c)*signY/h))];
+ const clamp=v=>Math.max(.001,Math.min(1000,v));
+ const lx0=(dx*c+dy*s)*signX,ly0=(-dx*s+dy*c)*signY;
+ if(free)a.scale=[clamp(lx0/w),clamp(ly0/h)];
+ else{
+  // The pointer projected on the diagonal of the box as it is: one factor for both sides.
+  const W=w*item.adjustment.scale[0],H=h*item.adjustment.scale[1];
+  const k=clamp((lx0*W+ly0*H)/Math.max(1e-9,W*W+H*H));
+  a.scale=[clamp(item.adjustment.scale[0]*k),clamp(item.adjustment.scale[1]*k)];
+ }
  const lx=signX*w*a.scale[0]/2,ly=signY*h*a.scale[1]/2;
  a.translation=[fixed[0]+c*lx-s*ly-item.bounds[0]-item.bounds[2]/2,fixed[1]+s*lx+c*ly-item.bounds[1]-item.bounds[3]/2];
  return a;

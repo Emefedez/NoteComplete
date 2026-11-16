@@ -2,12 +2,12 @@
 // UML lines, every diagram kind draws, and diagrams survive XMI and Visual Paradigm XML.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIAGRAMS, ELEMENTS, CONNECTORS, LISTS, ENUMS, SHAPE_ICONS, starterModel, normalizeModel, renderUml, parseLine, formatLine, makeElement, makeConnector, fitBounds, iconPath, umlName } from './uml.js';
-import { exportXmi, importXmi, exportVp, importVp, importUml, parseXml, writeXml, detectFormat } from './uml-xml.js';
+import { DIAGRAMS, ELEMENTS, CONNECTORS, LISTS, ENUMS, SHAPE_ICONS, starterModel, normalizeModel, renderUml, parseLine, formatLine, makeElement, makeConnector, fitBounds, iconPath, umlName, connectorPath } from './uml.js';
+import { exportXmi, importXmi, exportVp, importVp, importUml, parseXml, writeXml, detectFormat, vpDiagrams } from './uml-xml.js';
 
 test('every type in a diagram is in the registry, with a shape, an icon, and file names', () => {
   for (const [kind, d] of Object.entries(DIAGRAMS)) {
-    assert.ok(d.label && d.vp, kind);
+    assert.ok(d.label && (d.vp || d.notUml), kind);
     for (const t of d.elements) {
       const def = ELEMENTS[t];
       assert.ok(def, `${kind}: element ${t}`);
@@ -55,6 +55,7 @@ test('each diagram kind draws an SVG with its elements, and the badge can be tur
     // The root has no font-family (prefabs.js adds one when it draws the picture).
     assert.doesNotMatch(out.svg.slice(0, out.svg.indexOf('>')), /font-family/);
     for (const e of m.elements) assert.ok(out.svg.includes(`data-uml-id="${e.id}"`), `${kind}: ${e.type} drawn`);
+    if (DIAGRAMS[kind].notUml) continue;
     assert.match(out.svg, /class="uml-badge"/);
     assert.doesNotMatch(renderUml({ ...m, badge: false }).svg, /uml-badge/);
     assert.match(umlName(m), /^UML .* diagram$/);
@@ -81,14 +82,20 @@ test('a model read from anywhere is made whole: unknown types kept, broken links
 });
 
 // Compares what matters: types, names, positions, nesting, props; order aside.
-function same(a, b) {
+// `grid`: VP files hold whole numbers at VP's own scale, so a trip there moves a shape by up to
+// a couple of pixels.
+function same(a, b, grid = 1) {
   const nameOf = (m, id) => { const e = m.elements.find((q) => q.id === id); return `${e.type}:${e.name}`; };
   const key = (m) => ({
     diagram: m.diagram,
-    elements: m.elements.map((e) => JSON.stringify([e.type, e.name, e.bounds.map(Math.round), e.parent ? nameOf(m, e.parent) : null, Object.entries(e.props).sort()])).sort(),
+    elements: m.elements.map((e) => JSON.stringify([e.type, e.name, grid > 1 ? null : e.bounds.map(Math.round), e.parent ? nameOf(m, e.parent) : null, Object.entries(e.props).sort()])).sort(),
     connectors: m.connectors.map((c) => JSON.stringify([c.type, nameOf(m, c.from), nameOf(m, c.to), Object.entries(c.props).sort()])).sort(),
   });
   assert.deepEqual(key(b), key(a));
+  if (grid > 1) for (const e of a.elements) {
+    const o = b.elements.find((q) => q.type === e.type && q.name === e.name);
+    assert.ok(o.bounds.every((v, i) => Math.abs(v - e.bounds[i]) <= grid / 2), `${e.name}: ${o.bounds} ≈ ${e.bounds}`);
+  }
 }
 
 // A diagram of everything a kind has, nested where it can be.
@@ -146,9 +153,9 @@ function everything() {
 }
 
 test('every diagram kind survives XMI and Visual Paradigm XML, there and back', () => {
-  for (const m of everything()) {
+  for (const m of everything().filter((q) => !DIAGRAMS[q.diagram].notUml)) {
     same(m, importXmi(exportXmi(m)));
-    same(m, importVp(exportVp(m)));
+    same(m, importVp(exportVp(m)), 4);
     same(m, importUml(JSON.stringify(m)));
     // And again: the second trip keeps the file's ids.
     const back = importXmi(exportXmi(m));
@@ -196,4 +203,68 @@ test('the XML reader handles entities, CDATA, comments and self-closing tags', (
   assert.equal(doc.children[2].text, '<AB');
   assert.equal(writeXml({ name: 'x', attrs: { q: 'a"b' }, children: [] }), '<x q="a&quot;b"/>');
   assert.throws(() => importUml('just text'), /Not a UML file/);
+});
+
+test('node graphs: no UML badge or files, start and accepting nodes, tree layout, arrows both ways apart', () => {
+  const m = normalizeModel(starterModel('graph'));
+  assert.equal(m.badge, false);
+  assert.equal(umlName(m), 'Node graph');
+  assert.throws(() => exportXmi(m), /not a UML diagram/);
+  assert.throws(() => exportVp(m), /not a UML diagram/);
+  same(m, importUml(JSON.stringify(m)));
+  // The tree: each child below its parent, the root centred over its children.
+  const at = (name) => m.elements.find((e) => e.name === name).bounds;
+  assert.ok(at('5')[1] > at('10')[1] && at('3')[1] > at('5')[1]);
+  const mid = (b) => b[0] + b[2] / 2;
+  assert.ok(Math.abs(mid(at('10')) - (mid(at('5')) + mid(at('15'))) / 2) < 1);
+  assert.ok(Math.abs(mid(at('5')) - (mid(at('3')) + mid(at('7'))) / 2) < 1);
+  // An automaton: q0 → q1 and q1 → q0 are drawn apart; start and accepting are drawn.
+  const a = { type: 'uml', diagram: 'graph', elements: [], connectors: [] };
+  const q0 = makeElement('node', [0, 0], { name: 'q0', props: { start: true } }, a), q1 = makeElement('node', [200, 0], { name: 'q1', props: { accepting: true } }, a);
+  a.elements.push(q0, q1);
+  a.connectors.push(makeConnector('edge', q0.id, q1.id, { props: { name: 'a' } }, a), makeConnector('edge', q1.id, q0.id, { props: { name: 'b' } }, a));
+  const g = normalizeModel(a);
+  const [p, q] = g.connectors.map((c) => connectorPath(g, c));
+  assert.ok(Math.abs(p[0][1] - q[0][1]) > 8, 'two lines, not one');
+  const svg = renderUml(g).svg;
+  assert.equal((svg.match(/<ellipse/g) || []).length, 3, 'q1 has a second ring');
+  assert.match(svg, />q0</);
+});
+
+test('Visual Paradigm projects from VP 16: the diagram chosen, its swimlanes, bends and arrows', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sample = (d) => readFileSync(new URL(`../../samples/diagrams/${d}/project.xml`, import.meta.url), 'utf8');
+  // An activity diagram in two swimlanes.
+  const a = importUml(sample('a'));
+  assert.equal(a.diagram, 'activity');
+  const lanes = a.elements.filter((e) => e.type === 'partition');
+  assert.deepEqual(lanes.map((e) => e.name), ['Usuario Registrado', 'Sistema']);
+  assert.ok(lanes.every((l) => l.bounds[3] > 600), 'lanes run the height of the diagram');
+  const busca = a.elements.find((e) => e.name === 'Busca');
+  assert.equal(busca.parent, lanes[1].id);
+  assert.ok(a.elements.some((e) => e.type === 'initial'), 'an activity\'s InitialNode');
+  assert.equal(a.connectors.length, 21);
+  assert.ok(a.connectors.some((c) => c.waypoints.length >= 2), 'bends kept');
+  // A project with three diagrams: the first, or the one asked for.
+  assert.deepEqual(vpDiagrams(sample('b')).map((d) => d.kind), ['useCase', 'activity']);
+  const uc = importUml(sample('b'));
+  assert.equal(uc.diagram, 'useCase');
+  assert.ok(!uc.elements.some((e) => e.type === 'partition' || e.type === 'action'), 'only what the use case diagram shows');
+  const act = importUml(sample('b'), { diagram: vpDiagrams(sample('b'))[1].index });
+  assert.equal(act.diagram, 'activity');
+  assert.equal(act.elements.filter((e) => e.type === 'partition').length, 3);
+  assert.equal(act.elements.filter((e) => e.type === 'fork' || e.type === 'join').length, 2);
+  // Use cases: no «UseCase» on every one, actors linked by their association ends, and
+  // generalization and extend pointing where VP draws them.
+  const c = importUml(sample('c'));
+  const named = (s) => c.elements.find((e) => e.name === s);
+  assert.ok(c.elements.every((e) => !(e.props.stereotypes || []).length));
+  assert.equal(c.connectors.filter((q) => q.type === 'association').length, 7);
+  const gen = c.connectors.find((q) => q.type === 'generalization');
+  assert.equal(gen.to, named('Visitante').id);
+  const ext = c.connectors.filter((q) => q.type === 'extend');
+  assert.ok(ext.every((q) => q.from === named('Gestionar permisos de un usuario').id));
+  // And back out: VP's sizes and directions again.
+  const again = importVp(exportVp(c));
+  assert.equal(again.connectors.find((q) => q.type === 'generalization').to, again.elements.find((e) => e.name === 'Visitante').id);
 });

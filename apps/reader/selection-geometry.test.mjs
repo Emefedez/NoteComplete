@@ -10,9 +10,17 @@ test('transform and inverse preserve points and incremental preview matches fina
 });
 test('resizing a rotated object keeps its opposite corner fixed without accumulating transforms',()=>{
  const old=corners(item),moving=[old[2][0]+30,old[2][1]+50];
- const a=resizeAdjustment(item,2,moving),next=corners(item,a);
+ // Shift (free): the corner follows the pointer.
+ const a=resizeAdjustment(item,2,moving,true),next=corners(item,a);
  close(next[0],old[0]);close(next[2],moving);
  assert.deepEqual(item.adjustment.scale,[1.4,.8]);
+});
+test('resizing keeps proportions by default, the opposite corner fixed',()=>{
+ const old=corners(item),moving=[old[2][0]+30,old[2][1]+50];
+ const a=resizeAdjustment(item,2,moving),next=corners(item,a);
+ close(next[0],old[0]);
+ assert.ok(Math.abs(a.scale[0]/a.scale[1]-1.4/.8)<1e-9,'same proportions');
+ assert.ok(a.scale[0]>1.4,'grows toward the pointer');
 });
 test('the region eraser reaches every point of the region and barely past it',()=>{
  for(const rect of [[10,20,300,40],[0,0,50,700],[5,5,3,2],[100,100,800,600]]){

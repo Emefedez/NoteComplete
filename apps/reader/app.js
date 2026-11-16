@@ -71,7 +71,7 @@ import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
-import { choosePrefab, editPrefab, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
+import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
@@ -149,6 +149,25 @@ const tabBar = tabStrip(window.notecompleteTabs || null, {
   dirty: () => Boolean((doc || textView?.hasDocument || htmlView?.hasDocument) && dirty && changed),
   beforeClose: () => collab?.beforeClose?.() ?? true,
   onCurrent: () => { if (home?.visible && (doc || sideView())) showDocument(); },
+  // This tab: save it, export it, share it (as on the Export menu); another: switch or close.
+  onMenu: (tab, x, y) => {
+    const bridge = window.notecompleteTabs, here = tab.current && doc;
+    const click = (id) => () => { const b = $(id); if (b && !b.disabled) b.click(); };
+    openContextMenu(x, y, [
+      !tab.current && { label: "Switch to this tab", icon: "window", run: () => bridge.activate(tab.id) },
+      here && { label: "Save", icon: "save", key: "Ctrl S", run: click("save") },
+      here && { label: "Export", icon: "export", submenu: [
+        { label: "PDF (every page)", icon: "pages", run: click("exportPdf") },
+        { label: "NoteComplete project (.nfedit)…", icon: "save", run: click("exportProject") },
+        { label: "Export and share…", icon: "export", run: click("exportOpen") },
+      ] },
+      here && { label: "Share by QR or link…", icon: "qr", run: click("shareNoteQr") },
+      "-",
+      { label: "New tab", icon: "plus", key: "Ctrl T", run: () => bridge.open() },
+      !tabParams.has("tab") && { label: "Move to a new window", icon: "window", run: () => bridge.detach(tab.id) },
+      { label: "Close tab", icon: "close", run: () => bridge.close(tab.id) },
+    ], { title: tab.title });
+  },
 });
 if (window.notecompleteTabs) {
   $("newTab").hidden = false;
@@ -210,6 +229,8 @@ const selection = new SelectionController({
   status,
   // The ⋯ circle of a selection: the item's menu.
   menu: (item, x, y) => itemMenu(item, x, y),
+  // A graph, table or prefab resized: drawn again at the new size (redrawResized).
+  redraw: (item, adjustment) => redrawResized(item, adjustment),
 });
 // Status is a transient toast, not a permanent strip; errors stay up longer.
 let statusTimer = 0;
@@ -3198,6 +3219,8 @@ function syncShapePicker() {
 }
 for (const b of document.querySelectorAll("#shapePicker [data-shape]"))
   b.onclick = () => {
+    // Prefab (in the quick menu): its picker, at once.
+    if (b.dataset.shape === "graph") return doc && insertPrefab(panels[page]);
     $("shape").value = b.dataset.shape;
     try { localStorage.setItem("notecomplete-shape", b.dataset.shape); } catch { /* Optional. */ }
     syncShapePicker();
@@ -3767,7 +3790,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
-  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
+  ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, table, tree or node graph, or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
@@ -3885,6 +3908,12 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
+    // Escape lets go of what is selected first.
+    if (selection.item && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+      e.preventDefault();
+      selection.clear();
+      return;
+    }
     endResizeDrag();
     cancelGesture();
     setCompact(true);
@@ -4370,41 +4399,55 @@ async function patchItem(item, adjustment, crop = null) {
     if (token === epoch) editing = false;
   }
 }
+// The Shapes bar's Prefab: a click opens the picker; resting on it shows the ones used
+// last, to insert one straight away.
+prefabFlyout($("shapePrefab"), () => panels[page]);
+function prefabFlyout(button, panel) {
+  let timer = 0, menu = null;
+  const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
+  button.onclick = () => { close(); if (doc) insertPrefab(panel()); };
+  button.addEventListener("pointerenter", (e) => {
+    if (e.pointerType === "touch" || !doc) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const recent = recentPrefabs(6);
+      if (!recent.length || editing) return;
+      const r = button.getBoundingClientRect();
+      menu = openContextMenu(r.left, r.bottom + 4, [
+        ...recent.map((choice) => ({ label: choice.label, icon: choice.icon, run: () => insertPrefab(panel(), null, choice) })),
+        "-",
+        { label: "All prefabs…", icon: "search", key: "⇧X", run: () => insertPrefab(panel()) },
+      ], { title: "Recently used" });
+      // It goes when the pointer has left both the button and it.
+      menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
+      menu?.addEventListener("pointerenter", () => clearTimeout(timer));
+    }, 300);
+  });
+  button.addEventListener("pointerleave", () => { clearTimeout(timer); if (menu) timer = setTimeout(close, 350); });
+}
 $("insertShape").onclick = () => {
   if (!doc || editing) return;
   if ($("shape").value === "graph") return insertPrefab(panels[page]);
-  if ($("shape").value === "table") return insertCompound(panels[page], "table");
-  document.querySelector('[data-tool="shape"]').click();
   const p = panels[page],
     r = p.el.getBoundingClientRect(),
     v = $("viewport").getBoundingClientRect();
-  const cy = Math.max(
-    80,
-    Math.min(
-      p.size[1] - 80,
-      (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) /
-        r.height) *
-        p.size[1],
-    ),
-  );
-  const start = [p.size[0] / 2 - 100, Math.min(p.size[1] - 160, cy - 60)],
-    end = [p.size[0] / 2 + 100, Math.min(p.size[1] - 20, cy + 60)],
-    shape = { kind: $("shape").value, start, end, ...fillFor($("shape").value, $("color").value) },
-    rgba = [1, 3, 5].map(
-      (i) => parseInt($("color").value.slice(i, i + 2), 16) / 255,
-    );
-  action("draw", {
-    page,
-    line: {
-      points: shapePoints(shape.kind, start, end),
-      shape,
-      width: Number($("width").value),
-      rgba: [...rgba, 1],
-      tool: 0,
-      layer: activeLayer,
-    },
-  });
+  const cy = (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) / r.height) * p.size[1];
+  insertShapeAt(p, [p.size[0] / 2, cy], $("shape").value);
 };
+// A shape of `kind` centred on page point `at` (kept on the page), in the Shapes tool's
+// colour and thickness; the Shapes tool is chosen so it can be dragged out to size.
+function insertShapeAt(p, at, kind) {
+  if (!doc || editing || !p) return;
+  document.querySelector('[data-tool="shape"]').click();
+  const cx = Math.max(110, Math.min(p.size[0] - 110, at[0])), cy = Math.max(80, Math.min(p.size[1] - 80, at[1]));
+  const start = [cx - 100, cy - 60], end = [cx + 100, cy + 60],
+    shape = { kind, start, end, ...fillFor(kind, $("color").value) },
+    rgba = [1, 3, 5].map((i) => parseInt($("color").value.slice(i, i + 2), 16) / 255);
+  action("draw", {
+    page: p.index,
+    line: { points: shapePoints(kind, start, end), shape, width: Number($("width").value), rgba: [...rgba, 1], tool: 0, layer: activeLayer },
+  });
+}
 
 $("audioDownload").onclick = async (event) => {
   if (!window.ReactNativeWebView) return;
@@ -5736,10 +5779,12 @@ async function insertCompound(p, kind, box = null, spec = {}) {
 $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
 // `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
-async function insertPrefab(p, box = null) {
+// `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
+async function insertPrefab(p, box = null, choice = null) {
   if (!doc || !p || editing) return false;
-  const choice = await choosePrefab();
+  choice ||= await choosePrefab();
   if (!choice) return false;
+  notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
   const spec = choice.kind === "uml" ? await umlEditor(choice.spec) : await editPrefab({ spec: choice.spec });
@@ -5824,6 +5869,34 @@ async function editCompound(item) {
   await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
   status(`${c.kind === "graph" ? "Graph" : "Table"} changed. One undo brings back the one before.`);
 }
+// A graph, table or prefab resized with Select: drawn again into the box it was given, from
+// what it is (its spec), so text and lines stay sharp at any size, in one undo step. A prefab
+// keeps its own proportions (its width decides); a graph or table takes the box as it is.
+async function redrawResized(item, adjustment) {
+  const c = item.compound, p = panels[item.page];
+  if (!c || !p || !doc) return false;
+  let spec = {};
+  try { spec = JSON.parse(c.spec || "{}"); } catch { return false; }
+  try {
+    const [fx, fy, fw, fh] = await compoundFrame(item), [bx, by, bw, bh] = item.bounds;
+    const cx = bx + bw / 2, cy = by + bh / 2, [sx, sy] = adjustment.scale, [tx, ty] = adjustment.translation;
+    const box = [cx + (fx - cx) * sx + tx, cy + (fy - cy) * sy + ty, Math.max(20, fw * sx), Math.max(12, fh * sy)];
+    selection.clear();
+    if (c.kind === "prefab") {
+      if (!(await placePrefab(p, spec, box, c.items, c.id))) return false;
+    } else {
+      const items = compoundItems(c.kind, box, spec, c.id);
+      await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
+    }
+    // Still selected, as it was.
+    const again = await pickWhole({ page: item.page, x: box[0] + box[2] / 2, y: box[1] + box[3] / 2, tolerance: 4 }).catch(() => null);
+    if (again?.compound?.id === c.id) selection.show(again);
+    return true;
+  } catch (e) {
+    status(e.message, true);
+    return false;
+  }
+}
 // Any part picked selects the whole graph or table: a group of its parts, with what it is.
 async function pickWhole(args) {
   const item = await call("pick", args);
@@ -5866,44 +5939,222 @@ async function removeItem(item) {
   else await action("remove", { page: item.page, itemId: item.id });
   status("Removed. Press Ctrl+Z to bring it back.");
 }
-function itemMenu(item, x, y) {
+// Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
+// fields (one undo step). Shapes keep the fill they were drawn with.
+const hexOf = (rgba) => "#" + rgba.slice(0, 3).map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
+const COLOUR_NAMES = { "#1f2328": "Black", "#246bce": "Blue", "#d13b2f": "Red", "#2a9d63": "Green", "#8a4fd0": "Purple", "#ff9f1c": "Orange", "#ffdf38": "Yellow", "#e3c6e6": "Pink" };
+async function restyle(item, change) {
+  const adjustment = { ...structuredClone(item.adjustment), ...change };
+  if (selection.item?.page === item.page && selection.item?.id === item.id) return selection.commit(adjustment);
+  return patchItem(item, adjustment);
+}
+function styleEntries(item) {
+  if (!item.styled) return [];
+  const rgba = item.adjustment?.rgba || item.base_rgba, width = item.adjustment?.width ?? item.base_width, now = hexOf(rgba);
+  const tool = item.kind === "ink" ? "draw" : "shape";
+  const colours = [...new Set([...palettes[tool], ...SWATCHES].map((c) => c.toLowerCase()))].slice(0, 10);
+  const widths = [...new Set([...widthPresets[tool], ...WIDTH_LADDER.slice(0, 5)])].sort((a, b) => a - b);
+  return [
+    { label: "Colour", icon: "draw", submenu: () => [
+      ...colours.map((c) => ({ label: COLOUR_NAMES[c] || c.toUpperCase(), swatch: c, checked: c === now, run: () => restyle(item, { rgba: [...rgbaOf(c).slice(0, 3), rgba[3]] }) })),
+      "-",
+      { label: "Other colour…", icon: "settings", run: () => pickColor(now, (v) => restyle(item, { rgba: [...rgbaOf(v).slice(0, 3), rgba[3]] })) },
+    ] },
+    { label: "Thickness", icon: "minus", submenu: () => widths.map((w) => ({ label: `${w} px`, icon: "minus", checked: Math.abs(w - width) < 0.01, run: () => restyle(item, { width: w }) })) },
+    { label: "Opacity", icon: "eye", submenu: () => [100, 75, 50, 25].map((o) => ({ label: `${o}%`, icon: "eye", checked: Math.round(rgba[3] * 100) === o, run: () => restyle(item, { rgba: [...rgba.slice(0, 3), o / 100] }) })) },
+  ];
+}
+// The tape under page point `at`, the top one.
+function tapeAt(p, at) {
+  return [...(p.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => at[0] >= x && at[0] <= x + w && at[1] >= y && at[1] <= y + h) || null;
+}
+function tapeEntries(p, tape) {
+  if (!tape) return [];
+  const open = tapeOpen(p, tape);
+  return [
+    { label: open ? "Cover with this tape" : "Lift this tape", icon: open ? "eyeOff" : "eye", run: () => toggleTape(p, tape) },
+    { label: "All tape", icon: "tape", submenu: [
+      { label: "Lift all", icon: "eye", checked: tapeMode === "revealed", run: () => setTapeMode("revealed") },
+      { label: "Cover all", icon: "eyeOff", checked: tapeMode === "covered", run: () => setTapeMode("covered") },
+      { label: "As saved in the note", icon: "tape", checked: tapeMode === "note", run: () => setTapeMode("note") },
+    ] },
+  ];
+}
+// A picture of an item (as drawn, on nothing) or of a page, to download, copy, share or send by
+// QR. `make(scale, type, quality)` draws it.
+const safeName = (name) => String(name || "NoteComplete").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80);
+async function itemPicture(item, scale = 3, type = "image/png", quality) {
+  const p = panels[item.page];
+  const ids = new Set(item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
+  const svgNow = p?.render?.querySelector("svg");
+  if (!svgNow) throw Error("The page is not shown.");
+  // Where it is now, from what is drawn (moves, turns and crops included).
+  const frame = svgNow.getBoundingClientRect(), k = p.size[0] / frame.width;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const id of ids) {
+    const r = p.render.querySelector(`[data-item="${CSS.escape(String(id))}"]`)?.getBoundingClientRect();
+    if (!r || (!r.width && !r.height)) continue;
+    x0 = Math.min(x0, (r.left - frame.left) * k); y0 = Math.min(y0, (r.top - frame.top) * k);
+    x1 = Math.max(x1, (r.right - frame.left) * k); y1 = Math.max(y1, (r.bottom - frame.top) * k);
+  }
+  if (!(x1 > x0 && y1 > y0)) throw Error("Nothing to export here.");
+  const pad = 4, box = [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad];
+  const view = await call("view", { page: item.page });
+  const holder = document.createElement("div");
+  holder.innerHTML = view.svg;
+  for (const el of holder.querySelectorAll("[data-item]")) if (!ids.has(el.dataset.item)) el.remove();
+  holder.querySelector("[data-background]")?.replaceChildren();
+  // Tape as it is on the page now (lifted or covering).
+  for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", p.render.querySelector(`[data-tape="${CSS.escape(tape.dataset.tape)}"]`)?.dataset.revealed === "1" ? "0.18" : "1");
+  const svg = holder.querySelector("svg"), w = Math.max(1, Math.round(box[2] * scale)), h = Math.max(1, Math.round(box[3] * scale));
+  svg.setAttribute("viewBox", box.join(" "));
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const canvas = Object.assign(document.createElement("canvas"), { width: w, height: h });
+    const context = canvas.getContext("2d");
+    if (type !== "image/png") { context.fillStyle = "#fff"; context.fillRect(0, 0, w, h); }
+    context.drawImage(image, 0, 0, w, h);
+    return await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not draw the picture."))), type, quality));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+async function pagePicture(index, scale = 1, type = "image/png", quality) {
+  const { canvas } = await pageCanvas(index, Math.round(Math.min(2200, panels[index].size[0] * 2) * scale));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not draw the page."))), type, quality));
+}
+const QR_MAX = 48 * 1024;
+function exportEntries(name, make) {
+  const file = safeName(name), fail = (e) => e?.name !== "AbortError" && status(e?.message || String(e), true);
+  return { label: "Export", icon: "export", subtitle: name, submenu: () => [
+    { label: "Download PNG", icon: "save", run: () => make(3).then((b) => download(b, `${file}.png`, "image/png")).then(() => status(`Saved “${file}.png”.`)).catch(fail) },
+    navigator.clipboard?.write && window.ClipboardItem && { label: "Copy picture", icon: "copy", run: () => navigator.clipboard.write([new ClipboardItem({ "image/png": make(2) })]).then(() => status("Copied as a picture: paste it anywhere.")).catch(fail) },
+    navigator.share && { label: "Share…", icon: "share", run: async () => {
+      try {
+        const picture = new File([await make(2)], `${file}.png`, { type: "image/png" });
+        if (!navigator.canShare?.({ files: [picture] })) return status("This browser cannot share pictures. Download it instead.", true);
+        await navigator.share({ files: [picture], title: name });
+      } catch (e) { fail(e); }
+    } },
+    { label: "Send by QR…", icon: "qr", run: () => sendPictureByQr(name, file, make).catch(fail) },
+  ] };
+}
+// Offline, as a stream of QR codes: small pictures only (the smallest of a few renderings).
+async function sendPictureByQr(name, file, make) {
+  let blob = null, ext = "png";
+  for (const [scale, type, quality] of [[1.5, "image/png"], [1, "image/png"], [1, "image/jpeg", 0.8], [0.7, "image/jpeg", 0.65]]) {
+    blob = await make(scale, type, quality);
+    ext = type === "image/png" ? "png" : "jpg";
+    if (blob.size <= QR_MAX) break;
+  }
+  if (blob.size > QR_MAX) return status(`Too big to send by QR (${Math.round(blob.size / 1024)} KB). Download or share it instead.`, true);
+  const { showQrTransfer, base64UrlEncode } = await import("./qr-transfer.js");
+  await showQrTransfer({
+    title: `Send “${name}” by QR`,
+    subtitle: "On the other device: Export and share → Receive note via QR / P2P → Scan QR stream.",
+    payload: { kind: "file", name: `${file}.${ext}`, mime: blob.type, base64: base64UrlEncode(new Uint8Array(await blob.arrayBuffer())) },
+    onDownloadFallback: () => download(blob, `${file}.${ext}`, blob.type),
+    fallbackLabel: "Save the picture instead",
+    status,
+  });
+}
+function itemMenu(item, x, y, { tape = null } = {}) {
   if (!doc || !item) return;
-  const c = item.compound, name = c ? compoundLabel(c) : ITEM_NAMES[item.kind] || "Item";
+  const p = panels[item.page];
+  // The tape itself, or something under (or over) it.
+  const isTape = tape && (p.render?.querySelector(`[data-tape="${CSS.escape(String(tape.id))}"]`)?.closest("[data-item]")?.dataset.item === String(item.id));
+  const c = item.compound, name = c ? compoundLabel(c) : isTape ? "Tape" : ITEM_NAMES[item.kind] || "Item";
   const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
   // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so.
   const lower = name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
+    ...tapeEntries(p, tape),
+    tape && "-",
     c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
     item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
+    ...styleEntries(item),
     { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
     !c && item.kind !== "group" && { label: "Lock in place", icon: "lock", run: () => action("lock", { page: item.page, itemId: item.id, locked: true }).then(() => status("Locked: Select passes over it. Right-click it to unlock it.")) },
     "-",
+    exportEntries(`${doc.title || "Note"} - ${name}`, (scale, type, quality) => itemPicture(item, scale, type, quality)),
+    "-",
     { label: "Delete", icon: "trash", danger: true, key: "⇧ Right-click", run: () => removeItem(item).catch((e) => status(e.message, true)) },
   ], { title: name });
+}
+// The page menu's entries (menu-config.js keeps which, and their order).
+const PAGE_ACTIONS = [
+  { id: "prefab", label: "Insert prefab here…", icon: "graph" },
+  { id: "shape", label: "Insert shape", icon: "shape" },
+  { id: "text", label: "Type text here", icon: "text" },
+  { id: "image", label: "Insert image…", icon: "image" },
+  { id: "uml", label: "Insert UML diagram here…", icon: "uml" },
+  { id: "table", label: "Insert table here…", icon: "table" },
+  { id: "export", label: "Export this page", icon: "export" },
+  { id: "tape", label: "Tape (lift or cover all)", icon: "tape" },
+  { id: "quick", label: "Quick menu", icon: "menu" },
+  { id: "undo", label: "Undo", icon: "undo" },
+  { id: "redo", label: "Redo", icon: "redo" },
+];
+function pageEntry(id, p, at, x, y) {
+  const box = [at[0], at[1], 0, 0];
+  if (id === "-") return "-";
+  if (id.startsWith("prefab:")) {
+    const choice = PREFABS.find((q) => q.id === id.slice(7));
+    return choice && { label: `Insert ${choice.label}`, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) };
+  }
+  switch (id) {
+    case "prefab": return { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, box), subtitle: "Recently used", submenu: () => {
+      const recent = recentPrefabs(6);
+      return [...recent.map((choice) => ({ label: choice.label, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) })), recent.length && "-", { label: "All prefabs…", icon: "search", run: () => insertPrefab(p, box) }];
+    } };
+    case "shape": return { label: "Insert shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
+      label, icon: "shape", iconEl: document.querySelector(`#shapePicker [data-shape="${kind}"] svg`), run: () => insertShapeAt(p, at, kind),
+    })) };
+    case "text": return { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
+    case "image": return { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() };
+    case "uml": return { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, box) };
+    case "table": return { label: "Insert table here…", icon: "table", run: () => insertCompound(p, "table", box) };
+    case "export": return { ...exportEntries(`${doc.title || "Note"} - page ${p.index + 1}`, (scale, type, quality) => pagePicture(p.index, scale, type, quality)), label: "Export this page" };
+    case "tape": return p.view?.tapes?.length ? { label: "Tape", icon: "tape", submenu: tapeEntries(p, p.view.tapes[0])[1].submenu } : null;
+    case "quick": return { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) };
+    case "undo": return { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() };
+    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Y", disabled: $("redo").disabled, run: () => $("redo").click() };
+  }
+  return null;
+}
+function customizePageMenuNow() {
+  import("./menu-config.js").then(({ customizePageMenu }) => customizePageMenu({
+    actions: PAGE_ACTIONS,
+    prefabs: PREFABS.map((q) => ({ id: q.id, label: q.label, icon: q.icon })),
+  })).then((order) => order && status("Page menu saved. Right-click the page to see it.")).catch((e) => status(e.message, true));
 }
 // What is at page point `at` of `p`: its menu (and it selected), or the page's.
 async function pageMenu(p, at, x, y) {
   if (!doc || !p?.view) return;
   const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
+  const tape = tapeAt(p, at);
   try {
     const item = await pickWhole(args);
-    if (item) { selection.show(item); return itemMenu(item, x, y); }
+    if (item) { selection.show(item); return itemMenu(item, x, y, { tape }); }
     const locked = await call("pickLock", args);
     if (locked?.locked) {
-      return openContextMenu(x, y, [{ label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
+      return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
     }
   } catch (e) { return status(e.message, true); }
+  const { pageMenuOrder } = await import("./menu-config.js");
   openContextMenu(x, y, [
-    { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, [at[0], at[1], 0, 0]) },
-    { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, [at[0], at[1], 0, 0]) },
-    { label: "Insert table here", icon: "table", run: () => insertCompound(p, "table", [at[0], at[1], 0, 0]) },
-    { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } },
-    { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() },
+    ...tapeEntries(p, tape),
+    tape && "-",
+    ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
     "-",
-    { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) },
-    { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() },
-  ], { title: `Page ${p.index + 1}` });
+    { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
+  ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
 }
 // A finger held still for a moment opens the menu (as a right-click). Not while it draws: a
 // finger that pans, selects or types does; a second finger (two-finger hold, pinch) cancels it.
@@ -7273,3 +7524,8 @@ $("joinTablet").onclick = () => startCollab("join-tablet");
 $("joinNotes").onclick = () => startCollab("join-notes");
 // Opened from an invite (/join#… or /tablet#…, served by the host's computer).
 if (/^\/(join|tablet|send)$/.test(location.pathname) && location.hash.length > 1) startCollab("link");
+
+// A tap on the grey around the pages lets go of the selection too.
+$("viewport").addEventListener("pointerdown", (e) => {
+  if (selection.item && e.button === 0 && !e.target.closest?.(".sheet, [data-selection-handle], .selection-options, .context-menu")) selection.clear();
+});

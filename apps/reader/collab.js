@@ -196,6 +196,14 @@ async function deliverReceivedPayload(host, payload) {
     host.status(`Opened “${safeName}” received via offline QR.`);
     return;
   }
+  // A picture (or other small file) sent from a page's or an item's Export → Send by QR.
+  if (payload?.kind === 'file' && payload.base64) {
+    const safeName = String(payload.name || 'Received').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    await host.download(new Blob([base64UrlDecode(payload.base64)], { type: payload.mime || 'application/octet-stream' }), safeName, payload.mime);
+    closeDialog();
+    host.status(`Received “${safeName}” via QR.`);
+    return;
+  }
   throw Error('Scanned QR does not contain a NoteComplete note or study pack.');
 }
 
