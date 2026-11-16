@@ -253,12 +253,12 @@ try {
   // menu shows the same presets and edits them the same way.
   await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); });
   if (!(await p.isVisible('.choice-row[data-for="width"]'))) await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
-  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3 px', '4 px', '7 px', '11 px', '16 px']);
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#toolOptions .choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3 px', '4 px', '7 px', '11 px', '16 px']);
   await p.click('.choice-row[data-for="width"] button >> nth=1', { button: 'right' });
   await p.waitForSelector('#widthDialog[open]');
   await p.fill('#widthValue', '3.5');
   await p.click('#widthSave');
-  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3.5 px', '4 px', '7 px', '11 px', '16 px']);
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('#toolOptions .choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3.5 px', '4 px', '7 px', '11 px', '16 px']);
   assert.equal(await p.inputValue('#width'), '3.5', 'the edited width is in use');
   await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');

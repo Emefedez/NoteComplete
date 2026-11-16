@@ -1745,6 +1745,55 @@ let toolSettingsAuto = true, optionsOpen = true;
 // A wide tool bar shows the tool's settings inline; pressing the selected tool opens them as
 // the full panel under it too (bigger swatches and every option), until a press elsewhere.
 let optionsPopped = false;
+// While the full panel is open from the strip, the strip stays in the tool bar as a copy of
+// the panel: what is pressed or changed in it is done on the panel's own control (by its
+// place in the tree), and the copy is made again whenever the panel changes.
+const toolMirror = (() => {
+  let el = null, on = false, row = false, frame = 0, observer = null;
+  const pathOf = (node) => { const path = []; for (let n = node; n && n !== el; n = n.parentElement) path.unshift([...n.parentElement.children].indexOf(n)); return path; };
+  const original = (node) => pathOf(node).reduce((n, i) => n?.children[i], $("toolOptions"));
+  const build = () => {
+    frame = 0;
+    if (!on) { if (el) el.hidden = true; return; }
+    const copy = $("toolOptions").cloneNode(true);
+    copy.id = "toolOptionsMirror";
+    copy.hidden = false;
+    copy.removeAttribute("style");
+    copy.className = `tool-options inline${row ? " inline-row" : ""}`;
+    copy.setAttribute("aria-hidden", "false");
+    // Values typed or picked are properties, not attributes: carried across by hand.
+    const from = $("toolOptions").querySelectorAll("input, select"), to = copy.querySelectorAll("input, select");
+    from.forEach((f, i) => { if (to[i]) { to[i].value = f.value; if ("checked" in f) to[i].checked = f.checked; } });
+    if (el) el.replaceWith(copy); else $("toolOptions").after(copy);
+    el = copy;
+    el.addEventListener("click", (e) => {
+      const target = e.target.closest("button, label, [role=radio], [role=checkbox], summary");
+      if (!target || target.matches("input, select")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      original(target)?.click();
+    });
+    for (const type of ["input", "change"]) el.addEventListener(type, (e) => {
+      const o = original(e.target);
+      if (!o) return;
+      if ("checked" in e.target && (e.target.type === "checkbox" || e.target.type === "radio")) o.checked = e.target.checked;
+      else o.value = e.target.value;
+      o.dispatchEvent(new Event(type, { bubbles: true }));
+    });
+  };
+  const later = () => { if (!frame) frame = requestAnimationFrame(build); };
+  return {
+    show(next, ownRow) {
+      if (next === on && ownRow === row && (!on || el)) { if (on) later(); return; }
+      on = next; row = ownRow;
+      if (on && !observer) {
+        observer = new MutationObserver(() => { if (!el?.contains(document.activeElement) || document.activeElement.tagName !== "INPUT") later(); });
+        observer.observe($("toolOptions"), { attributes: true, childList: true, subtree: true, characterData: true });
+      } else if (!on && observer) { observer.disconnect(); observer = null; }
+      build();
+    },
+  };
+})();
 try { toolSettingsAuto = localStorage.getItem("notecomplete-tool-settings-auto") !== "0"; } catch { /* Optional. */ }
 $("toolSettingsAuto").setAttribute("aria-checked", String(toolSettingsAuto));
 $("toolSettingsAuto").onclick = () => {
@@ -1785,7 +1834,8 @@ function toolOptions() {
   // under them (on any screen, not only wide ones), unless the bar is docked at a side.
   const space = inlineToolOptionsSpace(), side = ["left", "right"].includes(document.body.dataset.landscapeDock);
   const ownRow = space < 220 && !chromeState.compact && !side;
-  const useInline = !optionsPopped && (space >= 220 || ownRow);
+  const fits = space >= 220 || ownRow;
+  const useInline = !optionsPopped && fits;
   const opts = $("toolOptions");
   opts.classList.toggle("inline", useInline);
   opts.classList.toggle("inline-row", useInline && ownRow);
@@ -1809,6 +1859,10 @@ function toolOptions() {
     }
   }
   textBox.syncFormat();
+  toolMirror.show(optionsPopped && fits && !opts.hidden && !chromeState.compact, ownRow);
+  // The panel opens under the strip's own row, not over it.
+  const mirror = $("toolOptionsMirror");
+  opts.style.top = !opts.classList.contains("placed") && !useInline && mirror && !mirror.hidden && ownRow ? `calc(100% + ${mirror.offsetHeight + 4}px)` : opts.classList.contains("placed") ? opts.style.top : "";
   const settingsLabel = opts.hidden ? "Show tool settings" : "Hide tool settings";
   $("toolbarToggle").setAttribute("aria-label", settingsLabel);
   $("toolbarToggle").title = settingsLabel;

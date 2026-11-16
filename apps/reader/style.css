@@ -3994,43 +3994,43 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
    inline between the tools and the right-hand actions instead of a floating card. */
 #toolbar > .segmented { order: 1; }
 #toolbar > .toolbar-actions { order: 3; }
-#toolOptions.inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
-#toolOptions.inline[hidden] { display: none; }
+:is(#toolOptions, #toolOptionsMirror).inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
+:is(#toolOptions, #toolOptionsMirror).inline[hidden] { display: none; }
 /* No room beside the tools: the strip is a row of its own under them, over the page's top
    edge, so the page does not jump when it comes and goes. */
-#toolOptions.inline.inline-row { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; padding: 4px 14px; border: 0; border-bottom: 1px solid var(--line); background: var(--chrome); box-shadow: 0 2px 6px #0001; }
+:is(#toolOptions, #toolOptionsMirror).inline.inline-row { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; padding: 4px 14px; border: 0; border-bottom: 1px solid var(--line); background: var(--chrome); box-shadow: 0 2px 6px #0001; }
 /* A phone's bottom toolbar is a column: the strip is its top row, next to the page. */
 @media (max-width: 700px) {
-  #toolOptions.inline.inline-row { position: static; order: 0; flex: none; width: 100%; padding: 0 0 4px; margin: 0; border-bottom: 1px solid var(--line); background: none; box-shadow: none; }
+  :is(#toolOptions, #toolOptionsMirror).inline.inline-row { position: static; order: 0; flex: none; width: 100%; padding: 0 0 4px; margin: 0; border-bottom: 1px solid var(--line); background: none; box-shadow: none; }
 }
-#toolOptions.inline::-webkit-scrollbar { display: none; }
-#toolOptions.inline #drawingOptions { display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
-#toolOptions.inline #drawingOptions .opt-section { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-#toolOptions.inline #drawingOptions .opt-section::before { display: none; }
-#toolOptions.inline #drawingOptions :is(#snapOptions, .opt-color, .opt-width) { border-left: 1px solid var(--line); padding-left: 8px; }
-#toolOptions.inline #drawingOptions .choice-row,
-#toolOptions.inline #drawingOptions .choice-toggle-box,
-#toolOptions.inline #drawingOptions .shape-picker { display: inline-flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 2px; padding: 1px; border-radius: 6px; }
-#toolOptions.inline #drawingOptions :is(.choice-row button, .choice-toggle, .shape-picker button) { width: 26px; min-height: 24px; height: 24px; padding: 2px; }
-#toolOptions.inline #drawingOptions :is(.choice-row svg, .choice-toggle svg, .shape-picker svg) { width: 16px; height: 16px; }
-#toolOptions.inline #drawingOptions .choice-row[data-for="color"] { gap: 2px; padding: 1px 2px; }
-#toolOptions.inline #drawingOptions .choice-row.swatches button { width: 22px; min-height: 22px; height: 22px; }
-#toolOptions.inline #drawingOptions .choice-row[data-for="color"]::after { display: none; }
-#toolOptions.inline #drawingOptions .opt-color .color-label { position: static; width: 22px; height: 22px; padding: 2px; flex-shrink: 0; }
-#toolOptions.inline #drawingOptions .opt-color .color-label input { width: 16px; height: 16px; }
-#toolOptions.inline #drawingOptions #snapOptions .choice-row { margin-left: 0; }
-#toolOptions.inline #drawingOptions #shapeOptions { display: flex; align-items: center; gap: 6px; }
-#toolOptions.inline #drawingOptions #shapePrefab { flex-direction: row; align-items: center; min-width: auto; min-height: 26px; height: 26px; padding: 2px 7px; gap: 4px; font-size: 11.5px; }
-#toolOptions.inline #drawingOptions #shapePrefab > svg:not(.chev) { width: 15px; height: 15px; }
-#toolOptions.inline #selectionOptions fieldset { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; border: 0; padding: 0; margin: 0; }
-#toolOptions.inline #selectionOptions label { font-size: 11.5px; gap: 4px; }
-#toolOptions.inline #selectionOptions input[type="number"] { width: 48px; min-height: 24px; height: 24px; padding: 0 5px; font-size: 11.5px; }
-#toolOptions.inline #selectionOptions #selectedStyle { padding-right: 6px; border-right: 1px solid var(--line); }
-#toolOptions.inline #selectionOptions #selectedColor { width: 22px; height: 22px; padding: 2px; border-radius: 50%; }
-#toolOptions.inline #selectionOptions button { min-height: 24px; height: 24px; padding: 0 8px; font-size: 11.5px; }
-#toolOptions.inline #selectionOptions #deleteSelection { width: 24px; padding: 0; }
-#toolOptions.inline #selectionOptions #selectionKind { padding: 1px 7px; font-size: 11px; }
-#toolOptions.inline .text-format { flex-wrap: nowrap; }
+:is(#toolOptions, #toolOptionsMirror).inline::-webkit-scrollbar { display: none; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions { display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .opt-section { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .opt-section::before { display: none; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions :is(#snapOptions, .opt-color, .opt-width) { border-left: 1px solid var(--line); padding-left: 8px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .choice-row,
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .choice-toggle-box,
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .shape-picker { display: inline-flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 2px; padding: 1px; border-radius: 6px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions :is(.choice-row button, .choice-toggle, .shape-picker button) { width: 26px; min-height: 24px; height: 24px; padding: 2px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions :is(.choice-row svg, .choice-toggle svg, .shape-picker svg) { width: 16px; height: 16px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .choice-row[data-for="color"] { gap: 2px; padding: 1px 2px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .choice-row.swatches button { width: 22px; min-height: 22px; height: 22px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .choice-row[data-for="color"]::after { display: none; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .opt-color .color-label { position: static; width: 22px; height: 22px; padding: 2px; flex-shrink: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions .opt-color .color-label input { width: 16px; height: 16px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions #snapOptions .choice-row { margin-left: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions #shapeOptions { display: flex; align-items: center; gap: 6px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions #shapePrefab { flex-direction: row; align-items: center; min-width: auto; min-height: 26px; height: 26px; padding: 2px 7px; gap: 4px; font-size: 11.5px; }
+:is(#toolOptions, #toolOptionsMirror).inline #drawingOptions #shapePrefab > svg:not(.chev) { width: 15px; height: 15px; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions fieldset { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; border: 0; padding: 0; margin: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions label { font-size: 11.5px; gap: 4px; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions input[type="number"] { width: 48px; min-height: 24px; height: 24px; padding: 0 5px; font-size: 11.5px; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions #selectedStyle { padding-right: 6px; border-right: 1px solid var(--line); }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions #selectedColor { width: 22px; height: 22px; padding: 2px; border-radius: 50%; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions button { min-height: 24px; height: 24px; padding: 0 8px; font-size: 11.5px; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions #deleteSelection { width: 24px; padding: 0; }
+:is(#toolOptions, #toolOptionsMirror).inline #selectionOptions #selectionKind { padding: 1px 7px; font-size: 11px; }
+:is(#toolOptions, #toolOptionsMirror).inline .text-format { flex-wrap: nowrap; }
 /* View → Tool bar → bottom: the pages first, then the page row and the tools under them;
    the tool settings open upwards. */
 @media (min-width: 701px), (orientation: landscape) and (max-height: 500px) {
@@ -4094,3 +4094,7 @@ body.nc-full-editor header.chrome.command-bar { z-index: 3000; }
 /* Over any other dialog the menu bar is out of use (only the tabs work): it is greyed out so it
    does not look like it should answer a tap. */
 #commandBar [inert] { opacity: .38; filter: grayscale(1); transition: opacity .15s ease; }
+
+/* The strip stays in the tool bar while the full panel is open (a copy, app.js toolMirror). */
+#toolOptionsMirror[hidden] { display: none !important; }
+#toolOptionsMirror > .tool-options-grip { display: none; }

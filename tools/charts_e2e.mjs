@@ -92,6 +92,13 @@ try {
   await p.mouse.up();
   const lanesData = await p.evaluate(() => document.querySelector('.chart-dialog .ch-grid').innerHTML.length);
   assert.notEqual(await p.innerHTML('.chart-dialog .ch-preview svg'), fig0, 'Shift slid the row');
+  // Ctrl + wheel zooms the time axis; the wheel alone changes the length.
+  const gw = async () => (await p.locator('.chart-dialog .ch-grid').boundingBox()).width;
+  const w0 = await gw();
+  await p.mouse.move(grid.x + lane.x + cw * 10, yB);
+  await p.keyboard.down('Control'); await p.mouse.wheel(0, -200); await p.keyboard.up('Control');
+  await sleep(100);
+  assert.ok(await gw() > w0 * 1.2, `Ctrl + wheel zooms in (${w0} → ${await gw()})`);
   assert.ok(lanesData > 0);
   if (DIR) await p.screenshot({ path: DIR + 'states-editor.png' });
   await p.click('.chart-dialog button.primary');
