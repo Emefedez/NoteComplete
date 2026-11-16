@@ -54,19 +54,44 @@ export function layoutSections(sections, base = OUTER, size = SIZE, gap = GAP) {
 }
 function placeSections(sections, base, size, gap) {
   const n = (k) => sections[k]?.length || 0;
-  const pairs = [['top', 'right'], ['right', 'bottom'], ['bottom', 'left'], ['left', 'top']];
-  const crowd = Math.max(1, ...pairs.map(([a, b]) => n(a) + n(b)));
-  // The angle between neighbours: the item size + gap at the base radius, or less, so two
-  // sections that meet at a corner (a quarter turn apart) fit in it.
-  const step = Math.min((size + gap) / base, Math.PI / crowd);
+  const keys = Object.keys(CENTRE).filter((k) => n(k));
+  // The angle between neighbours: the item size + gap at the base radius, or less when the
+  // whole ring would not hold every item at that spacing. The ring grows only as much as
+  // all its items need, not as much as the two most crowded neighbouring sections would
+  // need if neither could move (a long row of colours only nudges undo, redo and the modes
+  // along the ring).
+  const total = keys.reduce((sum, k) => sum + n(k), 0);
+  const step = Math.min((size + gap) / base, (2 * Math.PI) / Math.max(1, total));
   const radius = Math.max(base, Math.ceil((size + gap) / step));
+  // Each section is centred on its own side (top, right, bottom, left) where it fits; one
+  // that would run into its neighbour moves along the ring, away from the colours, which
+  // stay centred at the top.
+  const half = (k) => ((n(k) - 1) / 2) * step;
+  const centre = Object.fromEntries(keys.map((k) => [k, CENTRE[k]]));
+  if ('left' in centre) centre.left = Math.PI;
+  if ('top' in centre) centre.top = (3 * Math.PI) / 2;
+  const order = ['right', 'bottom', 'left', 'top'].filter((k) => k in centre);
+  for (let round = 0; round < 60 && order.length > 1; round++) {
+    let moved = false;
+    for (let i = 0; i < order.length; i++) {
+      const a = order[i], b = order[(i + 1) % order.length];
+      const gapAB = (i + 1 === order.length ? centre[b] + 2 * Math.PI : centre[b]) - centre[a];
+      const short = half(a) + half(b) + step - gapAB;
+      if (short <= 1e-9) continue;
+      moved = true;
+      if (a === 'top') centre[b] += short;
+      else if (b === 'top') centre[a] -= short;
+      else { centre[a] -= short / 2; centre[b] += short / 2; }
+    }
+    if (!moved) break;
+  }
   const at = (angle) => ({ x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) });
   const out = {};
   for (const key of Object.keys(CENTRE)) {
     const count = n(key);
     // Left to right on top and bottom, top to bottom at the sides.
     const dir = key === 'bottom' || key === 'left' ? -1 : 1;
-    out[key] = Array.from({ length: count }, (_, i) => at(CENTRE[key] + dir * (i - (count - 1) / 2) * step));
+    out[key] = Array.from({ length: count }, (_, i) => at((centre[key] ?? CENTRE[key]) + dir * (i - (count - 1) / 2) * step));
   }
   return { radius, positions: out };
 }
