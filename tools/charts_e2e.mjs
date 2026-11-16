@@ -100,6 +100,14 @@ try {
   await sleep(100);
   assert.ok(await gw() > w0 * 1.2, `Ctrl + wheel zooms in (${w0} → ${await gw()})`);
   assert.ok(lanesData > 0);
+  // N: notes beside the figure, kept with it; the note's own notes panel stays shut.
+  await p.click('.chart-dialog .ch-canvas', { position: { x: 4, y: 4 } });
+  await p.keyboard.press('n');
+  await p.waitForSelector('.chart-dialog .ch-notes .TinyMDE', { timeout: 10000 });
+  assert.equal(await p.isVisible('#notesPanel'), false, 'the note\'s notes stay shut');
+  await p.click('.chart-dialog .ch-notes .TinyMDE');
+  await p.keyboard.type('A blocks at 22');
+  await sleep(200);
   if (DIR) await p.screenshot({ path: DIR + 'states-editor.png' });
   await p.click('.chart-dialog button.primary');
   await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 1, ADDED);
@@ -118,6 +126,7 @@ try {
   await p.waitForSelector('.chart-dialog .ch-json:not([hidden])');
   assert.equal(await p.getAttribute('.chart-editor', 'data-mode'), 'json');
   const json = JSON.parse(await p.inputValue('.chart-dialog .ch-json'));
+  assert.equal(json.notes, 'A blocks at 22', 'the notes are kept with the figure');
   await p.fill('.chart-dialog .ch-json', '{ "type": ');
   assert.equal(await p.locator('.chart-dialog button.primary').isDisabled(), true, 'invalid JSON cannot be applied');
   await p.fill('.chart-dialog .ch-json', JSON.stringify({ ...json, title: 'From JSON' }, null, 2));

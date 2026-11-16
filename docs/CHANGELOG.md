@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.20
+
+- **Reference pictures while drawing.** The process states, timeline and chart editors now have a "To look at" section in Editor mode too, not only when filling in an exercise. Open a picture or PDF, or paste a snippet with Ctrl V.
+- **Cleaner mode switch.** Editor, Fill in and JSON at the top of the chart editor are now one segmented control, with no overlapping edges.
+
 ## 1.2.19
 
 - **Tool settings stay in the tool bar.** Clicking the selected tool again opens the full settings panel, and the strip in the tool bar now stays visible under it. Both work.

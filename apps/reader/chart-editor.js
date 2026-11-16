@@ -145,7 +145,49 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const prefs = previewPrefs();
   const fold = make('button', { type: 'button', className: 'ch-fold', title: 'Show or hide the figure as it will look on the page' }, icon('arrowUp'), make('span', { textContent: 'On the page' }));
   const grip = make('div', { className: 'ch-grip-bar', title: 'Drag to make it taller or shorter' });
-  const previewBox = make('div', { className: 'ch-preview-box' }, grip, fold, preview);
+  // Notes beside it (N): Markdown kept with the figure (`notes`), not drawn on the page.
+  const notesFold = make('button', { type: 'button', className: 'ch-fold ch-notes-fold', title: 'Notes on this figure, in Markdown, kept with it (N)' }, icon('note'), make('span', { textContent: 'Notes' }), make('kbd', { textContent: 'N' }));
+  const notesPane = make('div', { className: 'ch-notes' });
+  const boxHead = make('div', { className: 'ch-box-head' }, fold, notesFold);
+  const boxBody = make('div', { className: 'ch-box-body' }, preview, notesPane);
+  const previewBox = make('div', { className: 'ch-preview-box' }, grip, boxHead, boxBody);
+  let notesEditor = null, notesLoading = null;
+  async function showNotes() {
+    if (notesEditor || notesLoading) return notesLoading;
+    notesLoading = (async () => {
+      try {
+        const { loadEditor } = await import('./notes.js');
+        const TinyMDE = await loadEditor();
+        if (!root.isConnected || !prefs.notes) return;
+        const host = make('div', { className: 'ch-notes-editor' });
+        notesPane.replaceChildren(host);
+        notesEditor = new TinyMDE.Editor({ element: host, content: base.notes || '', placeholder: 'Notes on this figure: what each process does, why it blocks… Markdown: # heading, **bold**, - list.' });
+        notesEditor.addEventListener('change', (e) => {
+          if ((base.notes || '') === e.content) return;
+          if (e.content.trim()) base.notes = e.content; else delete base.notes;
+          if (mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
+          onChange?.(current());
+        });
+      } catch {
+        // Without the Markdown editor: a plain text box.
+        const area = make('textarea', { className: 'ch-notes-plain', spellcheck: true, placeholder: 'Notes on this figure (Markdown)' });
+        area.value = base.notes || '';
+        area.oninput = () => { if (area.value.trim()) base.notes = area.value; else delete base.notes; onChange?.(current()); };
+        notesPane.replaceChildren(area);
+        notesEditor = { getContent: () => area.value, setContent: (v) => { area.value = v; } };
+      } finally { notesLoading = null; }
+    })();
+    return notesLoading;
+  }
+  function toggleNotes(open = !prefs.notes) {
+    prefs.notes = open;
+    savePreview(prefs);
+    layoutPreview();
+    if (open) showNotes().then(() => notesPane.querySelector('.TinyMDE, textarea')?.focus());
+    else { notesEditor = null; notesPane.replaceChildren(); }
+    draw();
+  }
+  notesFold.onclick = () => toggleNotes();
   const panel = make('div', { className: 'ch-panel' });
   // What to look at while filling in: the exercise's page, kept snippets, a picture or PDF.
   const refs = [...references];
@@ -180,19 +222,22 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonArea, previewBox), panel), status);
   function layoutPreview() {
     // A plot has no canvas: its figure is the view, always shown.
-    const open = kind === 'plot' || prefs.open;
+    const open = kind === 'plot' || prefs.open, notes = !!prefs.notes && kind !== 'plot';
     previewBox.classList.toggle('open', open);
-    previewBox.style.height = open && kind !== 'plot' ? `${Math.max(90, prefs.height)}px` : '';
+    previewBox.classList.toggle('notes-open', notes);
+    previewBox.style.height = (open || notes) && kind !== 'plot' ? `${Math.max(90, prefs.height)}px` : '';
     fold.replaceChild(icon(open ? 'arrowDown' : 'arrowUp'), fold.firstChild);
     fold.setAttribute('aria-expanded', String(open));
-    fold.hidden = grip.hidden = kind === 'plot';
+    notesFold.setAttribute('aria-pressed', String(notes));
+    notesFold.setAttribute('aria-expanded', String(notes));
+    fold.hidden = grip.hidden = notesFold.hidden = kind === 'plot';
   }
   fold.onclick = () => { prefs.open = !prefs.open; savePreview(prefs); layoutPreview(); draw(); };
   grip.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const y0 = e.clientY, h0 = previewBox.getBoundingClientRect().height;
-    if (!prefs.open) { prefs.open = true; layoutPreview(); }
+    if (!prefs.open && !prefs.notes) { prefs.open = true; layoutPreview(); }
     try { grip.setPointerCapture(e.pointerId); } catch { /* A synthetic event. */ }
     const max = () => root.querySelector('.ch-center').getBoundingClientRect().height - 80;
     const move = (ev) => { prefs.height = Math.round(Math.max(90, Math.min(max(), h0 + (y0 - ev.clientY)))); layoutPreview(); };
@@ -278,7 +323,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (mode === 'json' && t === jsonArea) return;
     if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? redoBtn : undoBtn).click(); }
     else if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); redoBtn.click(); }
-    else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+    else if (!typing && !t.closest?.('.TinyMDE') && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'n' || e.key === 'N') && kind !== 'plot') { e.preventDefault(); toggleNotes(); }
+    else if (!typing && !t.closest?.('.TinyMDE') && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
       const b = palette.querySelectorAll('.ch-brush')[indexOfKey(e.key)];
       if (b) { e.preventDefault(); b.click(); }
     }
@@ -667,6 +713,11 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     canvas.hidden = kind === 'plot' || mode === 'json';
     jsonArea.hidden = mode !== 'json';
     layoutPreview();
+    // The notes follow the figure (undo, the JSON, another figure loaded).
+    if (prefs.notes && kind !== 'plot') {
+      if (!notesEditor) showNotes();
+      else if (notesEditor.getContent && notesEditor.getContent() !== (base.notes || '')) notesEditor.setContent(base.notes || '');
+    }
     if (!previewBox.classList.contains('open')) { preview.replaceChildren(); return; }
     const shown = displaySpec(current());
     const out = renderVisualSvg(shown, { forMcp: false });
