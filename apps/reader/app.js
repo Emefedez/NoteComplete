@@ -40,7 +40,7 @@ import { pageExporter, packPages } from "./page-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
-import { regionSweep } from "./selection-geometry.js";
+import { regionSweep, matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
 import { imageReady } from "./image-ready.js";
@@ -716,12 +716,19 @@ async function importImages(files) {
 // A blank page after page `after`, the size of that page (one undoable edit). Not on an
 // infinite canvas, which grows instead. Used by the button below the last page and by a
 // drawing tablet's dock (collab.js).
-async function addBlankPage(after) {
+async function addBlankPage(after, before = false) {
   if (!doc || busy() || doc.canvas) return;
   const size = panels[after]?.size;
   if (!size) return;
-  const at = after + 1;
+  const at = before ? after : after + 1;
   await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
+}
+// The right-click entries for a blank page before or after page `index`.
+function blankPageEntries(index) {
+  return [
+    { label: "Insert blank page before", icon: "plus", run: () => addBlankPage(index, true) },
+    { label: "Insert blank page after", icon: "plus", run: () => addBlankPage(index) },
+  ];
 }
 // Below the last page: scrolling past the end offers a new blank page of the same size.
 function addPageButton() {
@@ -764,6 +771,12 @@ function buildPages(sizes) {
     el.onpointerdown = (e) => {
       if (e.target.closest(".text-editor, .text-discard, .text-format, .page-resize-frame")) return;
       p.audioTap = tool === "pan" && e.button === 0 ? [e.clientX, e.clientY] : null;
+      // A second press close by, soon after the first: a double-click (the page is redrawn
+      // between the two when the first selects, so the browser's dblclick may never come).
+      const last = lastPress;
+      lastPress = e.button === 0 ? { p, t: e.timeStamp, x: e.clientX, y: e.clientY } : null;
+      p.doublePress = last && last.p === p && e.timeStamp - last.t < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 8 ? [e.clientX, e.clientY] : null;
+      if (p.doublePress) lastPress = null;
       longPress.down(e, p);
       pointerDown(e, p);
     };
@@ -773,17 +786,14 @@ function buildPages(sizes) {
       longPress.move(e);
       pointerMove(e);
     };
-    el.onpointerup = (e) => { longPress.end(); pointerUp(e); };
-    el.onpointercancel = () => { p.audioTap = null; longPress.end(); cancelGesture(); };
-    // Double-clicking a typed text box with Select types into it.
-    el.ondblclick = (event) => {
-      const item = selection.item;
-      if (tool !== "select" || item?.kind !== "text" || item.page !== p.index) return;
-      const existing = (p.view?.texts || []).find((t) => t.id === item.id);
-      if (!existing) return;
-      document.querySelector('#toolbar [data-tool="text"]').click();
-      textBox.open(p, point(event, p), existing);
+    el.onpointerup = (e) => {
+      longPress.end();
+      pointerUp(e);
+      const d = p.doublePress;
+      p.doublePress = null;
+      if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) < 8) editTextAt(p, e);
     };
+    el.onpointercancel = () => { p.audioTap = null; longPress.end(); cancelGesture(); };
     el.oncontextmenu = async (event) => {
       // Right-click: a menu for what is under the pointer (or the page). Shift + right-click
       // removes it at once, as right-click did before; Ctrl+Z brings it back.
@@ -949,6 +959,10 @@ function buildPageList() {
       meta.append(actions);
     }
     item.append(button, meta);
+    if (!doc?.canvas) item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openContextMenu(e.clientX, e.clientY, blankPageEntries(panel.index), { title: `Page ${panel.index + 1}` });
+    });
     panel.pageButton = item;
     fragment.append(item);
   }
@@ -1767,9 +1781,14 @@ function toolOptions() {
   // The text format bar, when docked here, shows while a text box is typed or selected.
   const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
-  const useInline = !optionsPopped && inlineToolOptionsSpace() >= 220;
+  // Inline beside the tools when they leave room; otherwise inline too, as a row of its own
+  // under them (on any screen, not only wide ones), unless the bar is docked at a side.
+  const space = inlineToolOptionsSpace(), side = ["left", "right"].includes(document.body.dataset.landscapeDock);
+  const ownRow = space < 220 && !chromeState.compact && !side;
+  const useInline = !optionsPopped && (space >= 220 || ownRow);
   const opts = $("toolOptions");
   opts.classList.toggle("inline", useInline);
+  opts.classList.toggle("inline-row", useInline && ownRow);
   if (useInline) {
     opts.style.left = "";
     opts.hidden = chromeState.compact || !canOpen;
@@ -6200,11 +6219,28 @@ function compoundLabel(c) {
   if (c.kind === "prefab") { try { return prefabName(JSON.parse(c.spec || "{}")); } catch { return "Prefab"; } }
   return c.kind === "graph" ? "Graph" : "Table";
 }
-function editTextItem(item) {
+// Double-clicking a typed text box (with Select or Pan) types into it, where it is now;
+// finishing it goes back to the tool it came from.
+let lastPress = null;
+async function editTextAt(p, event) {
+  if (!["select", "pan"].includes(tool) || !doc || editing || !p.view) return;
+  const at = point(event, p);
+  const item = await pickWhole({ page: p.index, x: at[0], y: at[1], tolerance: 6 * p.size[0] / p.el.getBoundingClientRect().width }).catch(() => null);
+  if (item?.kind === "text") editTextItem(item, at);
+}
+function editTextItem(item, at = null) {
   const p = panels[item.page], existing = (p?.view?.texts || []).find((t) => t.id === item.id);
   if (!existing) return status("This text box cannot be edited here.", true);
+  const back = tool;
   document.querySelector('#toolbar [data-tool="text"]').click();
-  textBox.open(p, [item.bounds[0] + 2, item.bounds[1] + 2], existing);
+  // The box where the item is drawn now: its bounds are where it was typed, and a move
+  // since is an adjustment on top.
+  let box = existing.bounds;
+  try { if (item.adjustment) box = mapPoint(itemMatrix(item), [item.bounds[0], item.bounds[1]]); } catch { /* As typed. */ }
+  const here = { ...existing, bounds: [box[0], box[1], existing.bounds[2], existing.bounds[3]] };
+  textBox.open(p, at || [box[0] + 2, box[1] + 2], here, {
+    after: () => { if (back !== "text" && tool === "text") document.querySelector(`#toolbar [data-tool="${back}"]`)?.click(); },
+  });
 }
 async function removeItem(item) {
   if (selection.item?.page === item.page && selection.item?.id === item.id) selection.clear();
@@ -6280,16 +6316,15 @@ async function pasteClip(p = panels[page], at = null) {
 // let go, in one undo step.
 async function moveToPage(item, target, start, client) {
   const from = panels[item.page], to = panels[target];
-  if (!doc || !from || !to || editing) return;
+  if (!doc || !from || !to || editing) return from && renderPage(from);
   try {
     const copied = await copiedItems(item);
     const r = to.el.getBoundingClientRect();
     const there = [((client[0] - r.left) / r.width) * to.size[0], ((client[1] - r.top) / r.height) * to.size[1]];
     const moved = shifted(copied, [there[0] - start[0], there[1] - start[1]], false);
     await action("drawMany", { page: target, cut: { page: item.page, ids: itemIds(item) }, lines: moved.lines, images: moved.images });
-    await renderPage(from);
     status(`Moved to page ${target + 1}. One undo moves it back.`);
-  } catch (e) { status(e.message, true); }
+  } catch (e) { status(e.message, true); } finally { await renderPage(from); }
 }
 // Ctrl C / X with an item selected, Ctrl V with a copy kept. The keys do it (Safari sends no
 // copy or paste event when nothing on the page is selected or editable); the clipboard
@@ -6560,6 +6595,7 @@ async function pageMenu(p, at, x, y) {
     clip && "-",
     ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
     "-",
+    ...(doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
     { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
   ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
 }

@@ -5,6 +5,7 @@
 // Select: font, size, bold, italic and colour apply at once. The last style
 // used is the one new boxes start with.
 import { mathSize, previewMath } from "./math-boxes.js";
+import { matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js";
 import { mathKeypad } from "./math-keypad.js";
 import { mathField, styleField, mounted, focusField } from "./math-field.js";
 
@@ -13,6 +14,7 @@ export const FONT_STACKS = {
   "Times New Roman": "'Times New Roman', Times, serif",
   "Courier New": "'Courier New', monospace",
   Noteworthy: "Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive",
+  "Comic Sans MS": "'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive",
 };
 export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 export const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
@@ -288,7 +290,8 @@ export function textBoxController({
   }
   if (typeof window !== "undefined") window.visualViewport?.addEventListener("resize", keepTextVisible);
 
-  async function open(p, [x, y], known = null) {
+  // `after`: called once the box is finished or thrown away (a double-click's way back).
+  async function open(p, [x, y], known = null, { after = null } = {}) {
     if (textEditor) return commit();
     const currentDoc = getDoc(), activeLayer = getActiveLayer();
     if (!currentDoc || isEditing() || isBusy() || !p.view) return;
@@ -300,6 +303,11 @@ export function textBoxController({
       if (item?.kind === "text") {
         existing = (p.view.texts || []).find((t) => t.id === item.id);
         if (!existing) return status("Text from Noteful cannot be edited here yet; move it with Select.", true);
+        // Where it is now: moved since it was typed, its bounds are where it was typed.
+        if (item.adjustment && item.bounds) try {
+          const [mx, my] = mapPoint(itemMatrix(item), [item.bounds[0], item.bounds[1]]);
+          existing = { ...existing, bounds: [mx, my, existing.bounds[2], existing.bounds[3]] };
+        } catch { /* As typed. */ }
       }
     } catch { /* Nothing under the pointer. */ }
     if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
@@ -395,7 +403,7 @@ export function textBoxController({
     hideText(p, existing?.id);
     p.el.append(area, discard, mathPreview);
     selection.clear();
-    textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: refit };
+    textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: refit, after };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); });
     area.addEventListener("keydown", (e) => {
       // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
@@ -423,6 +431,7 @@ export function textBoxController({
     mathKeys.detach();
     $("pages").style.marginBottom = "";
     hideTextFormat();
+    if (t?.after) setTimeout(t.after, 0);
     return t;
   }
 

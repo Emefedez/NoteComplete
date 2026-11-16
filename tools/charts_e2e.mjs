@@ -83,6 +83,16 @@ try {
   await p.mouse.up();
   const after = await p.locator('.chart-dialog .ch-preview svg line').count();
   assert.ok(after > before, `blocked hatching drawn in the figure (${before} → ${after} lines)`);
+  // The Shift brush: dragged right from a painted cell, the rest of the row slides along.
+  await p.click('.chart-dialog .ch-brush[data-value="@shift"]');
+  const fig0 = await p.innerHTML('.chart-dialog .ch-preview svg');
+  await p.mouse.move(grid.x + lane.x + cw * 22.5, yB);
+  await p.mouse.down();
+  await p.mouse.move(grid.x + lane.x + cw * 24.5, yB, { steps: 4 });
+  await p.mouse.up();
+  const lanesData = await p.evaluate(() => document.querySelector('.chart-dialog .ch-grid').innerHTML.length);
+  assert.notEqual(await p.innerHTML('.chart-dialog .ch-preview svg'), fig0, 'Shift slid the row');
+  assert.ok(lanesData > 0);
   if (DIR) await p.screenshot({ path: DIR + 'states-editor.png' });
   await p.click('.chart-dialog button.primary');
   await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 1, ADDED);
@@ -157,7 +167,7 @@ try {
   await p.mouse.up();
   await p.click('.chart-dialog button:has-text("Check")');
   const said = await p.textContent('.chart-dialog .ch-status');
-  assert.match(said, /^\d+ of 40 right/, said);
+  assert.match(said, /^\d+ of 60 right/, said);
   assert.ok(await p.locator('.chart-dialog .ch-wrong').count() > 0, 'wrong cells marked');
   await p.click('.chart-dialog button[aria-label="Solution"]');
   if (DIR) await p.screenshot({ path: DIR + 'exercise-checked.png' });
@@ -211,7 +221,7 @@ try {
   await q.waitForSelector('.ch-grid');
   const pressed = () => q.getAttribute('.ch-brush[aria-pressed="true"]', 'data-value');
   const keysShown = () => q.locator('.ch-brush kbd').allTextContents();
-  assert.deepEqual(await keysShown(), ['1', '2', '3', '4', '5']);
+  assert.deepEqual(await keysShown(), ['1', '2', '3', '4', '5', '6']);
   await q.click('.ch-canvas');
   await q.keyboard.press('2');
   assert.equal(await pressed(), 'ready', '2 picks the second brush');
@@ -235,7 +245,7 @@ try {
   await q.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + 80);
   await q.keyboard.press('Shift+S');
   await q.waitForSelector('.quick-menu .qm-inner');
-  assert.equal(await q.locator('.quick-menu .qm-inner').count(), 5, 'the brushes in a ring');
+  assert.equal(await q.locator('.quick-menu .qm-inner').count(), 6, 'the brushes in a ring');
   const ringBg = await q.$eval('.quick-menu .qm-disc', (d) => getComputedStyle(d).position);
   assert.equal(ringBg, 'absolute', 'quick-menu.css is loaded on the own page');
   await q.click('.quick-menu .qm-inner[aria-label="Erase"]');

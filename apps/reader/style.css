@@ -545,6 +545,8 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   box-shadow: 0 1px 5px #0002;
   scroll-margin-top: 24px;
 }
+.sheet.moving-items { z-index: 5; }
+.sheet.moving-items .render > svg { overflow: visible; pointer-events: none; }
 .sheet > .render {
   position: relative;
   /* Ink blends (highlighter) with a PDF canvas beneath it, and nothing outside the page. */
@@ -3994,6 +3996,13 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 #toolbar > .toolbar-actions { order: 3; }
 #toolOptions.inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
 #toolOptions.inline[hidden] { display: none; }
+/* No room beside the tools: the strip is a row of its own under them, over the page's top
+   edge, so the page does not jump when it comes and goes. */
+#toolOptions.inline.inline-row { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; padding: 4px 14px; border: 0; border-bottom: 1px solid var(--line); background: var(--chrome); box-shadow: 0 2px 6px #0001; }
+/* A phone's bottom toolbar is a column: the strip is its top row, next to the page. */
+@media (max-width: 700px) {
+  #toolOptions.inline.inline-row { position: static; order: 0; flex: none; width: 100%; padding: 0 0 4px; margin: 0; border-bottom: 1px solid var(--line); background: none; box-shadow: none; }
+}
 #toolOptions.inline::-webkit-scrollbar { display: none; }
 #toolOptions.inline #drawingOptions { display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
 #toolOptions.inline #drawingOptions .opt-section { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }

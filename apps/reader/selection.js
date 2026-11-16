@@ -205,6 +205,8 @@ export class SelectionController {
   }return true;
  }
  begin(g){
+  // A move may carry it over another page: it stays drawn above the pages until let go.
+  if(g.mode==='move')g.p.el.classList.add('moving-items');
   g.start=this.coords({clientX:g.startClient[0],clientY:g.startClient[1]},g.p);
   g.current=this.coords({clientX:g.currentClient[0],clientY:g.currentClient[1]},g.p);
   g.original=matrix(g.item);
@@ -259,25 +261,30 @@ export class SelectionController {
    }else{
     g.element?.removeAttribute('transform');this.previewElement=null;
    }
-   this.render(g.p);return;
+   g.p.el.classList.remove('moving-items');this.render(g.p);return;
   }
   // Let go over another page: the items move there (the host takes them across).
   if(g.mode==='move'&&this.dropTo){
+   // Looked up under the page it came from (raised while moving), with its overlay.
+   g.p.el.classList.remove('moving-items');g.p.el.style.pointerEvents='none';
    const sheet=document.elementFromPoint(g.currentClient[0],g.currentClient[1])?.closest?.('.sheet');
+   g.p.el.style.pointerEvents='';
    const target=sheet?Number(sheet.dataset.page):NaN;
    if(Number.isInteger(target)&&target!==g.p.index){
+    g.p.el.classList.add('moving-items');
+    // Kept where it was let go, over both pages, until the target page has it.
     const item=g.item;
-    if(item.kind==='group')for(const m of item.members)m.element?.removeAttribute('transform');else g.element?.removeAttribute('transform');
     this.previewElement=null;this.clear();
-    this.dropTo(item,target,g.start,g.currentClient);
+    Promise.resolve(this.dropTo(item,target,g.start,g.currentClient)).finally(()=>g.p.el.classList.remove('moving-items'));
     return;
    }
   }
+  g.p.el.classList.remove('moving-items');
   this.commit(this.adjustment(g));
  }
  lostCapture(p){if(this.active?.p===p&&!this.active.ended)this.cancel();}
  cancel(){
-  const g=this.active;this.active=null;cancelAnimationFrame(this.frame);this.frame=0;
+  const g=this.active;g?.p.el.classList.remove('moving-items');this.active=null;cancelAnimationFrame(this.frame);this.frame=0;
   if(g?.item?.kind==='group'){
    for(const m of g.item.members)m.element?.removeAttribute('transform');
   }else{
