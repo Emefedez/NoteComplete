@@ -24,6 +24,7 @@ mod corpus;
 mod editor;
 mod export;
 mod filled_shapes;
+mod history_bench;
 mod imports;
 mod ink_text;
 mod manipulation;

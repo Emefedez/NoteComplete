@@ -32,6 +32,13 @@ fn pages(e: &Editor) -> Vec<String> {
                 let tail = &rest[at + 12..];
                 rest = &tail[tail.find('"').unwrap() + 1..];
             }
+            let svg = out + rest;
+            let (mut out, mut rest) = (String::new(), svg.as_str());
+            while let Some(at) = rest.find(" data-tape=\"") {
+                out.push_str(&rest[..at]);
+                let tail = &rest[at + 12..];
+                rest = &tail[tail.find('"').unwrap() + 1..];
+            }
             out + rest
         })
         .collect()
@@ -249,4 +256,39 @@ fn the_lines_of_one_gesture_are_one_undo_step() {
     );
     back.redo();
     assert_eq!(pages(&back), three);
+}
+
+#[test]
+fn compacting_keeps_pictures_text_boxes_tape_and_prefabs() {
+    use noteful_core::Image;
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    let mut e = busy();
+    let image = |bounds, part: Option<noteful_core::Part>| Image {
+        base64: png.into(),
+        mime: "image/png".into(),
+        bounds,
+        layer: 0,
+        text: None,
+        joined: false,
+        part,
+    };
+    e.add_image(0, image([100., 100., 50., 50.], None)).unwrap();
+    let part = noteful_core::Part {
+        id: "pf1".into(),
+        kind: "prefab".into(),
+        spec: Some("{\"type\":\"bars\"}".into()),
+    };
+    e.add_image(0, image([200., 100., 80., 40.], Some(part)))
+        .unwrap();
+    let mut tape = stroke(70);
+    tape.tool = 2;
+    tape.width = 20.;
+    e.add_line(0, tape).unwrap();
+    e.add_line(0, stroke(71)).unwrap();
+    let before = pages(&e);
+    let at = e.view(0).unwrap()["can_undo"].clone();
+    assert_eq!(at, true);
+    let cursor = e.history_mark().unwrap().0;
+    e.compact_history(cursor).unwrap();
+    assert_eq!(pages(&e), before);
 }

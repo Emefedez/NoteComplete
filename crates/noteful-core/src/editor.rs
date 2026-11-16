@@ -329,6 +329,9 @@ pub struct Editor {
     /// The SVG of added lines, by the place of their `Add` edit in the history, so a view
     /// does not format every line again (view.rs). Emptied from the cursor on by `commit`.
     pub(crate) added_svg: std::cell::RefCell<Vec<Option<Box<str>>>>,
+    /// The layers at a cursor (`layers`), so adding many lines does not go through the
+    /// whole history for each one. Emptied by any edit that can change them.
+    pub(crate) layers_at: std::cell::RefCell<Option<(usize, Vec<crate::Layer>)>>,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -402,6 +405,7 @@ impl Editor {
             added_audio: Vec::new(),
             exam: ProjectExam::default(),
             added_svg: Default::default(),
+            layers_at: Default::default(),
         })
     }
     /// A page by slot (see pages.rs); hosts map display positions with `slot`.
@@ -501,6 +505,17 @@ impl Editor {
         ) || self.history[self.cursor..]
             .iter()
             .any(|e| matches!(e, Edit::InsertPages { .. } | Edit::SetPageBackground { .. }));
+        let layers_changed = matches!(edit, Edit::Layer { .. })
+            || self.history[self.cursor..]
+                .iter()
+                .any(|e| matches!(e, Edit::Layer { .. }));
+        {
+            let kept = self.layers_at.get_mut();
+            match kept {
+                Some((at, _)) if !layers_changed && *at == self.cursor => *at += 1,
+                _ => *kept = None,
+            }
+        }
         self.history.truncate(self.cursor);
         // The edits from here on are replaced, and so is what was kept for them.
         self.added_svg.get_mut().truncate(self.cursor);
@@ -512,6 +527,16 @@ impl Editor {
         Ok(())
     }
     pub fn layers(&self) -> Vec<crate::Layer> {
+        if let Some((at, layers)) = &*self.layers_at.borrow() {
+            if *at == self.cursor {
+                return layers.clone();
+            }
+        }
+        let layers = self.layers_uncached();
+        *self.layers_at.borrow_mut() = Some((self.cursor, layers.clone()));
+        layers
+    }
+    fn layers_uncached(&self) -> Vec<crate::Layer> {
         let mut layers = self.scene.layers.clone();
         for edit in &self.history[..self.cursor] {
             if let Edit::Layer { layer, order } = edit {
@@ -1191,7 +1216,13 @@ impl Editor {
             .decode(project.source_base64)
             .map_err(|e| Error::new(0, e.to_string()))?;
         let mut editor = Self::open(&source)?;
+        // What replaying needs to check each edit without going through the history again:
+        // per page, the added items still shown (by id, with the edit holding their current
+        // line or picture) and the imported ones erased.
+        let mut live: HashMap<usize, HashMap<String, usize>> = HashMap::new();
+        let mut erased: HashMap<usize, HashSet<String>> = HashMap::new();
         for edit in project.history {
+            let from = editor.history.len();
             match edit {
                 Edit::Image { page, image } => editor.add_image(page, image)?,
                 Edit::Retext { page, id, image } => {
@@ -1210,10 +1241,13 @@ impl Editor {
                     editor.adjust_item(page, &id, adjustment)?
                 }
                 Edit::Replace { page, id, line } => {
-                    let previous = editor
-                        .additions(page)
-                        .find(|(key, _)| *key == id)
-                        .map(|(_, l)| l)
+                    let previous = live
+                        .get(&page)
+                        .and_then(|ids| ids.get(&id))
+                        .and_then(|&i| match &editor.history[i] {
+                            Edit::Add { line, .. } | Edit::Replace { line, .. } => Some(line),
+                            _ => None,
+                        })
                         .ok_or_else(|| Error::new(0, "Invalid replaced shape"))?;
                     if line.width != previous.width
                         || line.rgba != previous.rgba
@@ -1240,6 +1274,7 @@ impl Editor {
                         }
                         if let Some(Edit::Layer { order: slot, .. }) = editor.history.last_mut() {
                             *slot = Some(order);
+                            *editor.layers_at.get_mut() = None;
                         }
                     }
                 }
@@ -1268,24 +1303,40 @@ impl Editor {
                 Edit::Add { page, line } => editor.add_line(page, line)?,
                 Edit::Erase { page, ids, joined } => {
                     let p = editor.page(page)?;
-                    let deleted = editor.deleted(page);
-                    let valid: HashSet<String> = p
-                        .items
-                        .iter()
-                        .map(|i| i.id.clone())
-                        .chain(editor.additions(page).map(|(id, _)| id))
-                        .chain(editor.images(page).map(|(id, _)| id))
-                        .collect();
                     let unique: HashSet<_> = ids.iter().collect();
-                    if ids.is_empty()
-                        || unique.len() != ids.len()
-                        || ids
-                            .iter()
-                            .any(|id| !valid.contains(id) || deleted.contains(id.as_str()))
-                    {
+                    let gone = erased.entry(page).or_default();
+                    let shown = live.entry(page).or_default();
+                    let valid = |id: &String| {
+                        shown.contains_key(id)
+                            || (!gone.contains(id) && p.items.iter().any(|i| &i.id == id))
+                    };
+                    if ids.is_empty() || unique.len() != ids.len() || !ids.iter().all(valid) {
                         return Err(Error::new(0, "Invalid erased item IDs"));
                     }
+                    for id in &ids {
+                        if shown.remove(id).is_none() {
+                            gone.insert(id.clone());
+                        }
+                    }
                     editor.commit(Edit::Erase { page, ids, joined })?;
+                }
+            }
+            for i in from..editor.history.len() {
+                match &editor.history[i] {
+                    Edit::Add { page, .. } => {
+                        live.entry(*page).or_default().insert(format!("new:{i}"), i);
+                    }
+                    Edit::Image { page, .. } => {
+                        live.entry(*page)
+                            .or_default()
+                            .insert(format!("image:{i}"), i);
+                    }
+                    Edit::Replace { page, id, .. } => {
+                        if let Some(at) = live.entry(*page).or_default().get_mut(id) {
+                            *at = i;
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

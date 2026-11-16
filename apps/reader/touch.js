@@ -91,6 +91,9 @@ export class TouchGesture {
 // (about 21, 31 or 42 px, larger when pressed flat), so only a radius well past that is a
 // palm. A radius that is missing or 0 (not reported) counts as a finger.
 export const PALM_RADIUS = 55;
+export const isPalm = (t) => Math.max(Number(t.radiusX) || 0, Number(t.radiusY) || 0) > PALM_RADIUS;
+// The same for a pointer event, whose width and height are the contact's diameter.
+export const palmPointer = (e) => e.pointerType === 'touch' && Math.max(Number(e.width) || 0, Number(e.height) || 0) > PALM_RADIUS * 2;
 export function deliberate(touches, gapMs) {
   if (gapMs > 250) return false;
   const radius = (t) => Math.max(Number(t.radiusX) || 0, Number(t.radiusY) || 0);
@@ -121,6 +124,9 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
     const touches = fingers(e.touches);
     if (!enabled()) { g.reset(); return; }
     if (!touches.length) return;
+    // A resting palm moves nothing: the browser's own scroll is stopped for it, and no
+    // gesture starts (an iPad reports a palm's contact as a radius well past a fingertip's).
+    if ([...fingers(e.changedTouches)].some(isPalm)) { e.preventDefault(); return; }
     if (touches.length > 1) e.preventDefault();
     // Every finger down is new: a new gesture. Fingers that land together come in one event
     // (often on iPad), and the last gesture may never have heard its fingers lift (its
