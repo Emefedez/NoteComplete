@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.19
+
+- **Tool settings stay in the tool bar.** Clicking the selected tool again opens the full settings panel, and the strip in the tool bar now stays visible under it. Both work.
+- **Zoom the time axis.** In the process states and CPU timeline editors, Ctrl + scroll (or a trackpad pinch) zooms the timeline in and out around the pointer. Scrolling still changes the painted length.
+
 ## 1.2.18
 
 - **Painting follows you both ways.** In the process states and CPU timeline editors, dragging back (before letting go) shortens the stretch you're painting, and the cells you pass over go back to how they were.

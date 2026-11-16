@@ -42,10 +42,12 @@
 .chart-editor [hidden] { display: none !important; }
 .ch-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--c-line); }
 .ch-spacer { flex: 1; }
-.ch-mode { display: inline-flex; }
-.ch-mode button { border-radius: 0; margin-left: -1px; }
-.ch-mode button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-.ch-mode button:last-child { border-radius: 0 6px 6px 0; }
+/* One segmented control: a frame around the modes, the chosen one filled, a hairline between
+   (hidden modes leave no gap or doubled edge). */
+.ch-mode { display: inline-flex; border: 1px solid var(--c-line); border-radius: 7px; overflow: hidden; }
+.chart-editor .ch-mode button { border: 0; border-radius: 0; margin: 0; }
+.chart-editor .ch-mode button:not([hidden]) ~ button:not([hidden]) { border-left: 1px solid var(--c-line); }
+.chart-editor .ch-mode button[aria-pressed="true"] { border-color: var(--c-line); box-shadow: inset 0 -2px 0 var(--c-accent); }
 .ch-main { display: grid; grid-template-columns: 150px minmax(0, 1fr) 300px; min-height: 0; }
 .ch-palette { overflow: auto; padding: 8px; border-right: 1px solid var(--c-line); display: flex; flex-direction: column; gap: 3px; }
 .ch-palette h4, .ch-panel h4, .ch-preview-box h4 { margin: 10px 4px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-muted); }
