@@ -7461,14 +7461,31 @@ $("hubReceive").onclick = () => $("receiveNoteQr").click();
 {
   const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
   const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];
+  const subTabs = [...document.querySelectorAll("#exportDialog [data-export-subtab]")];
+  const subPanels = [...document.querySelectorAll("#exportDialog [data-export-subpanel]")];
+  const setExportSubTab = (name) => {
+    const active = name === "resources" ? "resources" : "notes";
+    for (const t of subTabs) t.setAttribute("aria-selected", String(t.dataset.exportSubtab === active));
+    for (const p of subPanels) p.hidden = p.dataset.exportSubpanel !== active;
+    try { localStorage.setItem("notecomplete-export-subtab", active); } catch { /* Optional. */ }
+  };
   const setExportTab = (name) => {
-    const active = ["open", "notes", "resources"].includes(name) ? name : "open";
+    const mapped = (name === "notes" || name === "resources") ? "export" : name;
+    const active = mapped === "export" ? "export" : "open";
     for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.exportTab === active));
     for (const p of panels) p.hidden = p.dataset.exportPanel !== active;
+    if (name === "notes" || name === "resources") setExportSubTab(name);
     try { localStorage.setItem("notecomplete-export-tab", active); } catch { /* Optional. */ }
   };
   for (const t of tabs) t.onclick = () => setExportTab(t.dataset.exportTab);
-  try { setExportTab(localStorage.getItem("notecomplete-export-tab") || "open"); } catch { setExportTab("open"); }
+  for (const t of subTabs) t.onclick = () => setExportSubTab(t.dataset.exportSubtab);
+  try {
+    setExportSubTab(localStorage.getItem("notecomplete-export-subtab") || "notes");
+    setExportTab(localStorage.getItem("notecomplete-export-tab") || "open");
+  } catch {
+    setExportSubTab("notes");
+    setExportTab("open");
+  }
 }
 $("studyShare").onclick = async () => {
   closeMenus();

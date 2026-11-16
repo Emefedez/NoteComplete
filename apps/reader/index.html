@@ -198,13 +198,10 @@
           <h2 id="exportTitle">Import, export and share</h2>
           <div class="export-tabs" role="tablist" aria-label="Import, export and share sections">
             <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="open" aria-selected="true" aria-controls="exportPanelOpen">
-              <span class="export-tab-text"><b>Open &amp; import</b><small>Folders, links, Drive, files &amp; study packs</small></span>
+              <span class="export-tab-text"><b>Open &amp; Import</b><small>Folders, links, Drive, files &amp; study packs</small></span>
             </button>
-            <button id="exportTabNotes" type="button" class="export-tab" role="tab" data-export-tab="notes" data-icon="note" aria-selected="false" aria-controls="exportPanelNotes">
-              <span class="export-tab-text"><b>Notes</b><small>Pages, files, QR &amp; live sharing</small></span>
-            </button>
-            <button id="exportTabResources" type="button" class="export-tab" role="tab" data-export-tab="resources" data-icon="storage" aria-selected="false" aria-controls="exportPanelResources">
-              <span class="export-tab-text"><b>Resources</b><small>Quizzes, flashcards, Anki &amp; study packs</small></span>
+            <button id="exportTabExport" type="button" class="export-tab" role="tab" data-export-tab="export" data-icon="export" aria-selected="false" aria-controls="exportPanelExport">
+              <span class="export-tab-text"><b>Export</b><small>Notes, pages, study resources, QR &amp; sharing</small></span>
             </button>
           </div>
         </div>
@@ -230,7 +227,15 @@
             </div>
           </div>
         </div>
-        <div id="exportPanelNotes" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabNotes" data-export-panel="notes" hidden>
+        <div id="exportPanelExport" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabExport" data-export-panel="export" hidden>
+          <div class="export-subbar">
+            <span>Export:</span>
+            <div class="expand-mode-pills" role="tablist" aria-label="Export category">
+              <button id="exportSubTabNotes" type="button" role="tab" data-export-subtab="notes" aria-selected="true" aria-controls="exportSubPanelNotes">Notes</button>
+              <button id="exportSubTabResources" type="button" role="tab" data-export-subtab="resources" aria-selected="false" aria-controls="exportSubPanelResources">Resources</button>
+            </div>
+          </div>
+          <div id="exportSubPanelNotes" class="export-subpanel" role="tabpanel" aria-labelledby="exportSubTabNotes" data-export-subpanel="notes">
           <div class="export-columns">
             <div class="export-column">
               <section aria-labelledby="exportPages">
@@ -261,8 +266,8 @@
               </section>
             </div>
           </div>
-        </div>
-        <div id="exportPanelResources" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabResources" data-export-panel="resources" hidden>
+          </div>
+          <div id="exportSubPanelResources" class="export-subpanel" role="tabpanel" aria-labelledby="exportSubTabResources" data-export-subpanel="resources" hidden>
           <div class="export-columns">
             <div class="export-column">
               <section aria-labelledby="exportResOutHead">
@@ -279,6 +284,7 @@
                 <button id="receiveStudyQr" class="export-item" data-icon="qr" title="Scan any NoteComplete QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes &amp; study packs"><b>Receive via QR, code or file…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
               </section>
             </div>
+          </div>
           </div>
         </div>
         <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
