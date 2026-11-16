@@ -96,3 +96,18 @@ test('native hover bridge emits pointerover, pointermove, and pointerout with pe
   cleanup();
   assert.equal(globalObj.__notecompleteNativeHover, undefined);
 });
+
+test('leaving hover range is reported even when the browser\'s own hover events were used', () => {
+  const dom = fakeDom();
+  const globalObj = { PointerEvent: dom.PointerEvent };
+  let clock = 1000;
+  installNativeHoverBridge({ globalObj, win: dom.win, doc: dom.doc, now: () => clock });
+  // Trusted hover moves only: the bridge dedupes its own, so it never picks a hover target.
+  dom.win.triggerTrusted({ type: 'pointermove', isTrusted: true, pointerType: 'pen', buttons: 0 });
+  clock += 40;
+  assert.equal(globalObj.__notecompleteNativeHover('move', 10, 10, 'pen'), false);
+  assert.equal(globalObj.__notecompleteNativeHover('exit', 10, 10, 'pen'), true);
+  assert.deepEqual(dom.dispatched.map((d) => [d.target, d.type, d.relatedTarget]), [
+    ['sheet', 'pointerout', null],
+  ]);
+});
