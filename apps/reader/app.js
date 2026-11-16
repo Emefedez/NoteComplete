@@ -1420,9 +1420,10 @@ function resize() {
   const colGap = parseFloat(styles.columnGap) || parseFloat(styles.gap) || 24;
   const fitWidth = spreadFitWidth(space, colGap, spread, panels.length);
   const reraster = [];
+  // Every width first, then every read: a read right after each write laid out the whole
+  // document once per page (a long note took 100 ms and more for each zoom step).
+  for (const p of panels) p.el.style.width = (fit ? fitWidth : p.size[0] * zoom) + "px";
   for (const p of panels) {
-    p.el.style.width =
-      (fit ? fitWidth : p.size[0] * zoom) + "px";
     const width = rasterWidthFor(p.el.clientWidth);
     if (
       p.view?.pdf_background &&
