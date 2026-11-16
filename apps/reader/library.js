@@ -2,16 +2,18 @@
 // key-value store (IndexedDB in the app); note bytes live in a folder:
 //   folder     the desktop app's chosen directory (Electron bridge)
 //   directory  a directory this browser was granted (File System Access)
-//   browser    the origin-private file system, when no folder was chosen
+//   browser    the origin-private file system, when no folder was chosen, or this
+//              store's own `files` when the browser cannot write to it (Safari, older
+//              Android WebViews: no createWritable), so notes are still kept there
 // Drive copies are reused while Drive reports the same modifiedTime and size, or the
 // same content (md5Checksum): Noteful backups re-upload unchanged notes as new files.
 
 export function idbStore(name = 'notecomplete-library') {
   let db;
   const open = () => db ||= new Promise((resolve, reject) => {
-    const request = indexedDB.open(name, 2);
+    const request = indexedDB.open(name, 3);
     request.onupgradeneeded = () => {
-      for (const store of ['entries', 'covers', 'settings', 'search'])
+      for (const store of ['entries', 'covers', 'settings', 'search', 'files'])
         if (!request.result.objectStoreNames.contains(store)) request.result.createObjectStore(store);
     };
     request.onsuccess = () => resolve(request.result);
@@ -34,7 +36,7 @@ export function idbStore(name = 'notecomplete-library') {
 }
 
 export function memoryStore() {
-  const stores = { entries: new Map(), covers: new Map(), settings: new Map(), search: new Map() };
+  const stores = { entries: new Map(), covers: new Map(), settings: new Map(), search: new Map(), files: new Map() };
   return {
     get: async (store, key) => stores[store].get(key),
     set: async (store, key, value) => { stores[store].set(key, value); },
@@ -96,6 +98,25 @@ function directoryFolder(handle, kind, label) {
   };
 }
 
+// Note bytes in the library's own store, for browsers whose origin-private file system
+// cannot be written to from the page.
+function storeFolder(store) {
+  return {
+    kind: 'browser', label: 'Browser storage',
+    async read(name) {
+      const kept = await store.get('files', name).catch(() => null);
+      return kept ? new Blob([kept.bytes], { type: kept.type || '' }) : null;
+    },
+    async write(name, blob) { await store.set('files', name, { bytes: await blob.arrayBuffer(), type: blob.type || '' }); },
+    remove: name => store.delete('files', name).catch(() => { /* Optional. */ }),
+  };
+}
+// Whether files in the origin-private file system can be written from the page (where
+// file handles exist at all; elsewhere storage.getDirectory is a stand-in, as in tests).
+export function canWriteFiles(scope = globalThis) {
+  return !scope.FileSystemFileHandle || typeof scope.FileSystemFileHandle.prototype?.createWritable === 'function';
+}
+
 function bridgeFolder(bridge, label) {
   return {
     kind: 'folder', label,
@@ -135,8 +156,8 @@ export function entrySourceLabel(entry) {
   return entry.folder || entry.origin || 'This device';
 }
 export class Library {
-  constructor({ store = idbStore(), bridge = globalThis.notecompleteFiles, storage = globalThis.navigator?.storage, picker = globalThis.showDirectoryPicker, md5 = null } = {}) {
-    Object.assign(this, { store, bridge, storage, picker, md5 });
+  constructor({ store = idbStore(), bridge = globalThis.notecompleteFiles, storage = globalThis.navigator?.storage, picker = globalThis.showDirectoryPicker, md5 = null, writable = canWriteFiles() } = {}) {
+    Object.assign(this, { store, bridge, storage, picker, md5, writable });
     this.folder = null;
     this.last = 0;
   }
@@ -151,11 +172,12 @@ export class Library {
     }
     const handle = await this.store.get('settings', 'directory').catch(() => null);
     if (handle) return (this.folder = directoryFolder(handle, 'directory', handle.name));
-    if (this.storage?.getDirectory) {
-      this.storage.persist?.().catch(() => { /* Optional. */ });
-      return (this.folder = directoryFolder(await this.storage.getDirectory(), 'browser', 'Browser storage'));
+    this.storage?.persist?.().catch(() => { /* Optional. */ });
+    if (this.storage?.getDirectory && this.writable) {
+      const root = await this.storage.getDirectory().catch(() => null);
+      if (root) return (this.folder = directoryFolder(root, 'browser', 'Browser storage'));
     }
-    return (this.folder = { kind: 'none', label: 'Not available', read: async () => null, write: async () => { throw Error('This browser cannot keep downloaded notes.'); } });
+    return (this.folder = storeFolder(this.store));
   }
   get canChoose() { return !!(this.bridge || this.picker); }
   async choose() {
@@ -251,8 +273,10 @@ export class Library {
       } catch { /* Fall back below. */ }
     }
     if (!digest) digest = `${safeName(file.name)}:${file.size}`;
-    const key = 'imported:' + digest;
-    const previous = await this.store.get('entries', key);
+    let key = 'imported:' + digest;
+    let previous = await this.store.get('entries', key);
+    // That copy was edited and saved since: the file opened now is kept beside it, not over it.
+    for (let n = 2; previous?.edited && n < 100; n++) previous = await this.store.get('entries', (key = `imported:${digest}:${n}`));
     const loc = await this.location();
     const entries = await this.store.values('entries');
     const filename = previous?.filename || await freeName(safeName(file.name),
@@ -271,6 +295,37 @@ export class Library {
       ...(previous?.title ? { title: previous.title } : {}),
     };
     await this.store.set('entries', key, entry);
+    return entry;
+  }
+  // A note saved in NoteComplete itself (web and phone, where there is no file of its own
+  // to write to): kept in the library folder like an imported file, so Recent lists it and
+  // the next save overwrites the same copy. With `key`, that entry is updated; a new name
+  // (another extension, say .noteful saved as .nfedit) gets its own file and the old one goes.
+  async keepSaved(name, blob, { key = '', origin = 'This device' } = {}) {
+    const previous = key ? await this.store.get('entries', key) : null;
+    const entryKey = previous?.key || key || `imported:saved-${this.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const loc = await this.location();
+    const entries = await this.store.values('entries');
+    const ext = (n) => (/\.[^.]+$/.exec(String(n || ''))?.[0] || '').toLowerCase();
+    const sameName = previous?.filename && ext(previous.filename) === ext(name);
+    const filename = sameName ? previous.filename : await freeName(safeName(name),
+      async n => entries.some(e => e.filename === n && e.key !== entryKey) || !!(await loc.read(n).catch(() => null)));
+    await loc.write(filename, blob);
+    if (previous?.filename && previous.filename !== filename && !entries.some(e => e.key !== entryKey && e.filename === previous.filename))
+      await loc.remove?.(previous.filename);
+    const entry = {
+      ...(previous || {}),
+      key: entryKey,
+      source: 'imported',
+      origin: previous?.origin || origin,
+      name,
+      mimeType: blob.type || '',
+      size: String(blob.size),
+      filename,
+      edited: true,
+      openedAt: this.now(),
+    };
+    await this.store.set('entries', entryKey, entry);
     return entry;
   }
   // Locally opened files the desktop bridge can reopen by path.

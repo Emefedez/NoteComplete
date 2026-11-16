@@ -5,7 +5,7 @@ import path from 'node:path';
 import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
-import { libraryFiles } from './library-files.js';
+import { libraryFiles, withExtension } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
 import { integrateLinux } from './linux-integration.js';
 import { aiRunner } from './ai-runner.js';
@@ -468,7 +468,7 @@ app.whenReady().then(async () => {
       ...(Array.isArray(filters) && filters.length ? { filters } : {}),
     });
     if (chosen.canceled || !chosen.filePath) return null;
-    return files.saveChosen(chosen.filePath, bytes);
+    return files.saveChosen(withExtension(chosen.filePath, filters), bytes);
   }));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));

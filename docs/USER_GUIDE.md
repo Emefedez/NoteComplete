@@ -252,7 +252,12 @@ completion or cancellation; page thumbnails retain small bitmaps only.
 - **Export .noteful** flattens applied edits into a new native archive; see [writer limitations](../spec/nfedit-v1.md#native-export).
 - **Export page SVG** includes the rendered PDF background and current layers/audio appearance. Wait for the PDF page to finish rendering.
 
-Files download as new files; originals are not overwritten. Replacing a dirty document prompts before discarding edits. Native export does not mark the richer project as saved. Fonts resolve from the device; Apple fonts are not bundled. Exact native ink smoothing, advanced text layout and some object variants remain incomplete.
+**Where Save (Ctrl S, the floppy disk) puts a note.** The same note always goes back to the same place, and Recent on Home always opens what you last saved:
+
+- **Desktop app:** a note opened from a file is saved over that file (only in the same format: a `.noteful` saved as a project asks where to put the `.nfedit`). A new note asks once where to save it; the chosen file joins Recent and later saves go over it. A name typed without an extension gets the right one.
+- **Website and phone app:** a new note, or one opened from Drive, is kept in NoteComplete on this device (the folder chosen on Home, or this browser's storage) and appears in Recent; later saves update that copy. A file you opened or that was shared with you is kept the same way, and saving updates its copy in Recent (saved as a project, the copy becomes the `.nfedit`). Opening the original file again afterwards adds it beside your edited copy instead of replacing it. To get a file to keep or send elsewhere, use **File → Export**.
+
+Exports download as new files; originals are not overwritten. Replacing a dirty document prompts before discarding edits. Native export does not mark the richer project as saved. Fonts resolve from the device; Apple fonts are not bundled. Exact native ink smoothing, advanced text layout and some object variants remain incomplete.
 
 
 ### Auto-save
@@ -273,7 +278,7 @@ Use an Expo Go client compatible with the SDK 57 dependencies pinned in this rep
 
 Installed Android builds include the reader and serve it on the device's loopback address, so no hosted website or computer is needed. To use a hosted reader instead, set `EXPO_PUBLIC_READER_URL` before starting or building the wrapper. The browser reader can also be installed to the home screen over HTTPS. Its application cache supports offline use after assets have been cached; opened notes are never stored in that cache.
 
-Exports in the wrapper open the OS share sheet. Select Save to Files or another destination. Dismissing a share sheet does not prove a file was saved, so unsaved-change protection remains active. Large exports temporarily require base64 copies in memory; there is no fixed MB ceiling.
+Saving a note keeps it in the app and in Recent (see [Save and export](#save-and-export)). Exports in the wrapper open the OS share sheet. Select Save to Files or another destination. Dismissing a share sheet does not prove a file was saved, so unsaved-change protection remains active. Large exports temporarily require base64 copies in memory; there is no fixed MB ceiling.
 
 Android default-file handling requires an installed NoteComplete build. Expo Go cannot register this project's own file associations. See the Android build instructions below; default selection remains an Android/user decision. Physical-device URI permissions, file-manager behavior, codecs and sharing require device validation.
 
