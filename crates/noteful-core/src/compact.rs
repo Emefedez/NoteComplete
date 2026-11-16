@@ -51,18 +51,23 @@ fn renamed(id: &str, map: &HashMap<usize, usize>) -> Result<String> {
 }
 /// A page's drawing without item names (they are renumbered), for comparing pages.
 fn unnamed(svg: &str) -> String {
-    let mut out = String::with_capacity(svg.len());
-    let mut rest = svg;
-    while let Some(at) = rest.find(" data-item=\"") {
-        out.push_str(&rest[..at]);
-        let tail = &rest[at + 12..];
-        rest = tail.find('"').map_or("", |end| &tail[end + 1..]);
+    // The names of added items (`data-item`, and `data-tape` on a strip of tape) change
+    // with compacting; nothing else may.
+    let mut svg = svg.to_owned();
+    for attr in [" data-item=\"", " data-tape=\""] {
+        let mut out = String::with_capacity(svg.len());
+        let mut rest = svg.as_str();
+        while let Some(at) = rest.find(attr) {
+            out.push_str(&rest[..at]);
+            let tail = &rest[at + attr.len()..];
+            rest = tail.find('"').map_or("", |end| &tail[end + 1..]);
+        }
+        out.push_str(rest);
+        svg = out;
     }
-    out.push_str(rest);
-    out
+    svg
 }
 
-/// A list of items without their ids (renumbered), for comparing.
 fn without_ids(list: &serde_json::Value) -> serde_json::Value {
     let mut list = list.clone();
     if let Some(items) = list.as_array_mut() {

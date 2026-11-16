@@ -24,7 +24,9 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
     const item = down.target.closest(items);
     if (!item || down.button !== 0 || !container.contains(item) || (ignore && down.target.closest(ignore))) return;
     const startX = down.clientX, startY = down.clientY, pointer = down.pointerId;
-    const touch = down.pointerType === 'touch' || down.pointerType === 'pen';
+    // A finger must hold before it drags (a swipe scrolls the row). A pen does not scroll the
+    // row: it drags as a mouse does, and a tap with it, however long, is a click.
+    const touch = down.pointerType === 'touch';
     let dragging = false, grab = 0, out = false, held = !touch, holdTimer = 0;
     // Along the row (x) or down a column (y): the start, size and pointer on that axis.
     const vertical = getComputedStyle(container).flexDirection.startsWith('column');
@@ -51,7 +53,7 @@ export function sortable(container, { items, key, onReorder, onDetach = null, ig
         return;
       }
       if (!dragging) {
-        if (!touch && Math.abs(at(event) - (vertical ? startY : startX)) < THRESHOLD) return;
+        if (!touch && Math.abs(at(event) - (vertical ? startY : startX)) < (down.pointerType === 'pen' ? THRESHOLD * 2 : THRESHOLD)) return;
         dragging = true;
         grab = (vertical ? startY : startX) - start(item.getBoundingClientRect());
         item.classList.add('dragging');

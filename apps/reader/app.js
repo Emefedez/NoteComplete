@@ -1,4 +1,4 @@
-import { touchGestures } from "./touch.js";
+import { touchGestures, palmPointer } from "./touch.js";
 import { followPoint, smoothStroke, pressureRadii, extentOf } from "./stroke-smoothing.js";
 import { textLines } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
@@ -2294,8 +2294,9 @@ function point(e, p) {
     ),
   ];
 }
-// A stylus counts as in use for half a minute after it last touched or hovered the page.
-const PEN_ACTIVE_MS = 30000;
+// A stylus counts as in use for ten minutes after it last touched or hovered the page, so
+// putting it down for a moment (to read, or to think) does not turn fingers into pens.
+const PEN_ACTIVE_MS = 10 * 60_000;
 installNativeHoverBridge();
 let lastPen = -Infinity, lastPenWrote = -Infinity;
 const notePen = (e) => {
@@ -2318,7 +2319,11 @@ for (const type of ["pointerdown", "pointermove", "pointerover", "pointerup"]) w
 // Pen smoothing on or off (View menu), per device: off, the line follows the pen exactly.
 let smoothingOn = true;
 try { smoothingOn = localStorage.getItem("notecomplete-pen-smoothing") !== "0"; } catch { /* Optional. */ }
-const smoothingSwitch = () => $("penSmoothToggle").setAttribute("aria-checked", String(smoothingOn));
+const smoothingSwitch = () => {
+  $("penSmoothToggle").setAttribute("aria-checked", String(smoothingOn));
+  $("smoothToolToggle").setAttribute("aria-pressed", String(smoothingOn));
+};
+$("smoothToolToggle").onclick = () => $("penSmoothToggle").click();
 smoothingSwitch();
 $("penSmoothToggle").onclick = () => {
   smoothingOn = !smoothingOn;
@@ -2357,30 +2362,53 @@ function savePenHoverTools() {
 const penHoverRing = document.createElement("div");
 penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
 document.body.append(penHoverRing);
-let penHoverTimer = 0;
-const hidePenHover = () => { clearTimeout(penHoverTimer); penHoverRing.hidden = true; };
+let penHoverTimer = 0, penHoverLast = 0, penHoverFrame = 0, penHoverEvent = null;
+const penHoverShown = { size: 0, tool: "", color: "" };
+const hidePenHover = () => {
+  penHoverEvent = null;
+  if (penHoverFrame) { cancelAnimationFrame(penHoverFrame); penHoverFrame = 0; }
+  if (penHoverTimer) { clearTimeout(penHoverTimer); penHoverTimer = 0; }
+  if (!penHoverRing.hidden) penHoverRing.hidden = true;
+};
 // Leaving hover range is not always reported (the pen-out event can be lost, or name another
-// element): a ring with no pen move for a while is taken away.
+// element): a ring with no pen move for a while is taken away. One timer checks the time
+// of the last move, rather than a timer started again on every move.
 const PEN_HOVER_IDLE_MS = 1200;
+const penHoverIdle = () => {
+  const left = PEN_HOVER_IDLE_MS - (performance.now() - penHoverLast);
+  penHoverTimer = left > 0 ? setTimeout(penHoverIdle, left) : 0;
+  if (left <= 0) hidePenHover();
+};
+// A pen reports moves far more often than the screen draws (up to 240 a second on an
+// iPad): the ring is placed once a frame, from the latest move, and only what changed is
+// written, so hovering costs next to nothing.
 function showPenHover(e) {
-  if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return hidePenHover();
+  if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return penHoverRing.hidden && !penHoverFrame ? undefined : hidePenHover();
+  penHoverEvent = e;
+  penHoverLast = performance.now();
+  if (!penHoverFrame) penHoverFrame = requestAnimationFrame(placePenHover);
+}
+function placePenHover() {
+  penHoverFrame = 0;
+  const e = penHoverEvent;
+  if (!e) return;
   const sheet = e.target.closest?.(".sheet"), p = sheet && panels[Number(sheet.dataset.page)];
   if (!p || !penHoverTools.has(tool)) return hidePenHover();
   const scale = p.el.getBoundingClientRect().width / p.size[0];
   const strokeTool = ["draw", "highlight", "erase", "tape"].includes(tool);
-  const size = strokeTool
+  const size = Math.round(strokeTool
     ? Math.max(6, (tool === "erase" ? eraserRadius() * 2 : Number($("width").value) || 2) * scale)
     : tool === "shape"
       ? Math.max(8, (Number($("width").value) || 2) * scale)
-      : 12;
+      : 12);
   const style = penHoverRing.style;
-  style.width = style.height = `${size}px`;
+  if (size !== penHoverShown.size) { style.width = style.height = `${size}px`; penHoverShown.size = size; }
   style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
-  penHoverRing.dataset.tool = tool;
-  style.setProperty("--hover-color", tool === "erase" ? "#ed6b55" : strokeTool || tool === "shape" ? $("color").value : "var(--accent)");
-  penHoverRing.hidden = false;
-  clearTimeout(penHoverTimer);
-  penHoverTimer = setTimeout(hidePenHover, PEN_HOVER_IDLE_MS);
+  if (tool !== penHoverShown.tool) { penHoverRing.dataset.tool = tool; penHoverShown.tool = tool; }
+  const color = tool === "erase" ? "#ed6b55" : strokeTool || tool === "shape" ? $("color").value : "var(--accent)";
+  if (color !== penHoverShown.color) { style.setProperty("--hover-color", color); penHoverShown.color = color; }
+  if (penHoverRing.hidden) penHoverRing.hidden = false;
+  if (!penHoverTimer) penHoverTimer = setTimeout(penHoverIdle, PEN_HOVER_IDLE_MS);
 }
 window.addEventListener("pointermove", showPenHover, { capture: true, passive: true });
 window.addEventListener("pointerdown", hidePenHover, { capture: true, passive: true });
@@ -2414,7 +2442,8 @@ function showTip(el) {
 }
 document.addEventListener("pointerdown", (e) => {
   hideTip();
-  if (e.pointerType === "mouse") return;
+  // A pen shows the name by hovering; its press, however long, is a click.
+  if (e.pointerType !== "touch") return;
   const el = tipTarget(e.target);
   if (!el) return;
   const x = e.clientX, y = e.clientY;
@@ -2522,6 +2551,8 @@ function pointerDown(e, p) {
     }
   }
   if (!doc || editing || !p.view || e.button !== 0) return;
+  // A resting palm neither draws nor moves the page.
+  if (palmPointer(e)) return;
   // A link written in the handwriting opens on click (Pan and Select); no drag starts.
   if (e.target.closest?.(".ink-link") && (tool === "pan" || tool === "select")) return;
   setPage(p.index);

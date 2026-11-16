@@ -1,17 +1,11 @@
-## What's new in 1.2.0
+## What's new in 1.2.13
 
-1.2.0 gathers everything since 1.1.75 into one release.
-
-- **Chart editor for process states, CPU timelines and charts.** Exam prefabs that used to be JSON-only now open in an editor, over the note or in their own window (**Tools → Charts**). You paint the grid, drag the bars or fill in a plot form, with a live preview. Each prefab can also be imported or exported as SVG, PNG or JSON.
-- **Exercises to fill in.** Any timeline or chart can be turned into an exercise with **Fill in …**. The student paints the answer, then uses **Check** or **Show solution**. The **Editor** tab keeps the author's answer. There is also a new *Scheduling exercise* prefab.
-- **Number keys and a Shift S ring in the editors.** In the chart and diagram editors, 1–9 pick the palette's brushes and tools, and the numbers follow the order you give them by dragging. Shift S opens a ring at the pointer where you can point and let go.
-- **Dialogs no longer lock the app.** While a dialog or editor is open, the tabs stay clickable and the window isn't greyed out.
-- **Prefabs and UML diagrams.** You can now place prefabs from a picker, edit UML diagrams in a diagram editor, open VP 16 projects and arrange the page menu. A menu also opens at the pointer.
-- **Tools and layout.** The tool bar can sit at the bottom, and tool settings show as compact cards. Columns can be reordered, the menu bar can hide itself, and a shape's fill can be changed from its right-click menu.
-- **Speed.** PDF pages sharpen quickly when zoomed (on by default), and desktop zoom no longer lays out the note once per page.
-- **Recent and welcome note.** Saved notes stay in Recent on every device, and the welcome note can be turned off.
-- **Pen.** The hover ring goes away when the pen leaves, and fingers pan while the pen hovers. Android pen hover and floating-drag bugs are also fixed.
-- **AI and exams.** This release adds AI batch note-taking, a taped exam generator that draws on several sources, parallel exam creation and solving, and interactive exam HTML inside `.nfedit`. Expand with AI is now reliable, and there are exam visuals, solutions and state diagrams, KaTeX MathML, a live AI inspector, JSON repair and a duplicate finder.
-- **Sharing and files.** You can share notes peer to peer with WebRTC QR, and the QR stream no longer deadlocks. Google Drive stays signed in, formats are unified on `.nfedit` with selective resource export, and Ctrl+S overwrites the file in place. Other additions are a spread view, an HTML viewer and auto-covers.
+- **Long notes open fast again.** Opening a note with a long edit history replayed it in quadratic time. A note with 30,000 edits took 5 seconds to open and now takes a quarter of a second.
+- **Trimming history works with tape.** **Cut history** no longer fails with "Compacting would change a page" on notes that have strips of tape, such as taped exams.
+- **Lighter pen hover.** The hover ring moves once per screen frame instead of on every pen report (up to 240 a second on an iPad), and it only updates what changed.
+- **The pen clicks tool bar buttons.** A long press with the pen used to turn into a drag or a tooltip. Now a pen tap of any length is a click, and a pen drags tools only after it clearly moves.
+- **Palm rejection.** A resting palm, recognized by its large contact area, no longer scrolls or draws on the page. After you use the pen, fingers keep panning for 10 minutes (up from 30 seconds).
+- **Pen smoothing in the tool bar.** The pen's tool settings now include a smoothing toggle next to pressure.
+- **Open & Import and Export.** Import, export and share are now organised into these two tabs, with Notes and Resources subtabs (1.2.12).
 
 Earlier versions: [changelog](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; SHA256SUMS.txt has the checksums. Not signed or notarized; see docs/BUILDS.md.
