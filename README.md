@@ -8,7 +8,7 @@ NoteComplete is a notebook app for handwriting, PDFs and Markdown notes, with st
 
 It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves them back, so notes taken on an iPad come along.
 
-**Try it in the browser:** [emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/). It opens with a welcome notebook written by the app itself ([its Markdown](docs/site/welcome.md)).
+**Try it in the browser:** [emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/). It opens with a welcome notebook written by the app itself ([its Markdown](docs/site/welcome.md)); **Help → Open the welcome note at start** turns that off in your browser.
 
 > NoteComplete is not affiliated with or endorsed by Noteful. It reads the format through independent reverse engineering; see [How it reads Noteful files](#how-it-reads-noteful-files).
 

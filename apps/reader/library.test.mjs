@@ -204,3 +204,19 @@ test('rememberImported never overwrites an existing file already present in the 
   assert.deepEqual([...dir.files.get('Examen SO.nfedit')], [9, 9, 9]);
   assert.deepEqual([...dir.files.get(entry.filename)], [1, 2, 3, 4]);
 });
+
+test('browsers that cannot write files (Safari, older Android WebViews) keep notes in the store', async () => {
+  const { canWriteFiles } = await import('./library.js');
+  assert.equal(canWriteFiles({}), true);
+  assert.equal(canWriteFiles({ FileSystemFileHandle: class {} }), false);
+  class Writable { createWritable() {} }
+  assert.equal(canWriteFiles({ FileSystemFileHandle: Writable }), true);
+  const dir = fakeDirectory();
+  const library = new Library({ store: memoryStore(), storage: { getDirectory: async () => dir }, writable: false });
+  const entry = await library.rememberImported(new File([new Uint8Array([4, 5, 6])], 'Shared.noteful'), { origin: 'WhatsApp' });
+  assert.equal(dir.files.size, 0);
+  assert.equal((await library.location()).label, 'Browser storage');
+  assert.deepEqual([...new Uint8Array(await (await library.open(entry)).arrayBuffer())], [4, 5, 6]);
+  await library.forget(entry.key, { deleteFile: true });
+  assert.equal(await (await library.location()).read(entry.filename), null);
+});

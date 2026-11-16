@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hasMatchingExtension, saveDocumentInPlace } from './save-target.js';
+import { Library, memoryStore } from './library.js';
 
 test('hasMatchingExtension matches case-insensitively and rejects mismatched extensions', () => {
   assert.equal(hasMatchingExtension('/notes/Exam.NFEDIT', '.nfedit'), true);
@@ -84,23 +85,66 @@ test('Ctrl+S overwrites browser FileSystemFileHandle and imported library entrie
   assert.equal(downloaded, false);
 
   // Imported library copy with matching extension updates stored file in place.
-  const stored = new Map([['entries:imported:abc', { key: 'imported:abc', source: 'imported', name: 'HW.nfedit', filename: 'HW.nfedit', size: '1' }]]);
-  let wroteBlobSize = 0;
-  const library = {
-    now: () => 9999,
-    entry: async (k) => stored.get(`entries:${k}`) || null,
-    location: async () => ({ kind: 'browser', write: async (_f, blob) => { wroteBlobSize = blob.size; } }),
-    store: { set: async (s, k, v) => stored.set(`${s}:${k}`, v) },
-  };
+  const library = new Library({ store: memoryStore(), storage: null });
+  const imported = await library.rememberImported(new File([new Uint8Array([1])], 'HW.nfedit'), { origin: 'File picker' });
   const viaImported = await saveDocumentInPlace({
     bytes: new Uint8Array([10, 20, 30, 40, 50]),
     suggestedName: 'HW.nfedit',
     targetExt: '.nfedit',
-    docMember: { source: 'imported', key: 'imported:abc', name: 'HW.nfedit' },
+    docMember: { source: 'imported', key: imported.key, name: 'HW.nfedit' },
     library,
   });
   assert.equal(viaImported.kind, 'imported');
   assert.equal(viaImported.overwritten, true);
-  assert.equal(wroteBlobSize, 5);
-  assert.equal(stored.get('entries:imported:abc').size, '5');
+  assert.equal(viaImported.entry.key, imported.key);
+  assert.equal((await library.entry(imported.key)).size, '5');
+  assert.equal((await library.open(await library.entry(imported.key))).size, 5);
+});
+
+test('web and phone: a new note is kept in the library, listed in Recent, and saved over after', async () => {
+  const library = new Library({ store: memoryStore(), storage: null });
+  let picked = false, downloaded = false;
+  const options = {
+    targetExt: '.nfedit',
+    library,
+    showSaveFilePicker: async () => { picked = true; },
+    download: async () => { downloaded = true; return {}; },
+  };
+  const first = await saveDocumentInPlace({ ...options, bytes: new Uint8Array([1, 2]), suggestedName: 'Lecture 4.nfedit' });
+  assert.equal(first.kind, 'imported');
+  assert.equal(first.created, true);
+  assert.equal(picked || downloaded, false);
+  assert.deepEqual((await library.recent()).map(e => e.name), ['Lecture 4.nfedit']);
+  const again = await saveDocumentInPlace({ ...options, bytes: new Uint8Array([1, 2, 3]), suggestedName: 'Lecture 4.nfedit', docMember: { source: 'imported', key: first.entry.key, name: first.entry.name } });
+  assert.equal(again.overwritten, true);
+  assert.equal(again.entry.key, first.entry.key);
+  const recent = await library.recent();
+  assert.equal(recent.length, 1);
+  assert.deepEqual([...new Uint8Array(await (await library.open(recent[0])).arrayBuffer())], [1, 2, 3]);
+});
+
+test('an imported .noteful saved as a project moves its Recent entry to the .nfedit copy', async () => {
+  const library = new Library({ store: memoryStore(), storage: null });
+  const imported = await library.rememberImported(new File([new Uint8Array([7, 7])], 'Tema 3.noteful'), { origin: 'WhatsApp' });
+  const saved = await saveDocumentInPlace({
+    bytes: new Uint8Array([9]),
+    suggestedName: 'Tema 3.nfedit',
+    targetExt: '.nfedit',
+    docMember: { source: 'imported', key: imported.key, name: imported.name },
+    library,
+  });
+  assert.equal(saved.kind, 'imported');
+  assert.equal(saved.overwritten, false);
+  const [entry] = await library.recent();
+  assert.equal(entry.key, imported.key);
+  assert.equal(entry.filename, 'Tema 3.nfedit');
+  assert.equal(entry.origin, 'WhatsApp');
+  assert.equal(await (await library.location()).read('Tema 3.noteful'), null);
+  // Opening the original again keeps the edited copy and lists the original beside it.
+  const reopened = await library.rememberImported(new File([new Uint8Array([7, 7])], 'Tema 3.noteful'), { origin: 'WhatsApp' });
+  assert.notEqual(reopened.key, imported.key);
+  assert.equal((await library.entry(imported.key)).filename, 'Tema 3.nfedit');
+  const twice = await library.rememberImported(new File([new Uint8Array([7, 7])], 'Tema 3.noteful'), { origin: 'WhatsApp' });
+  assert.equal(twice.key, reopened.key);
+  assert.equal((await library.recent()).length, 2);
 });
