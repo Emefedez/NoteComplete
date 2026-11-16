@@ -3953,3 +3953,9 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
   body[data-landscape-dock="bottom"] #editor > .navigation { grid-area: 3 / 1; }
   body[data-landscape-dock="bottom"] #editor > .toolbar { grid-area: 3 / 2; border-top: 1px solid var(--line); }
 }
+/* View → Hide the menu bar: it slides up, leaving a thin edge, and peeks out while the
+   pointer is over that edge or the bar, or while one of its menus is open. */
+body.menubar-autohide header.chrome.command-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; transform: translateY(calc(-100% + 6px)); transition: transform .18s ease .3s, box-shadow .18s ease .3s; border-bottom: 1px solid var(--line); }
+body.menubar-autohide { box-sizing: border-box; padding-top: 6px; }
+body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible), :has(details[open]), :has([aria-expanded="true"])) { transform: none; transition-delay: 0s; box-shadow: var(--shadow-pop); }
+@media (prefers-reduced-motion: reduce) { body.menubar-autohide header.chrome.command-bar { transition: none; } }

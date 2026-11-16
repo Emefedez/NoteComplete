@@ -1350,6 +1350,24 @@ function fitTools() {
     bar.classList.toggle("tools-icons", !toolNamesOn() || overflowing);
   });
 }
+// View → Hide the menu bar: the bar with File, Edit, View… slides up out of sight and peeks
+// out again while the pointer is at the top edge (or a menu in it is open). Remembered here.
+function setMenuBarAutoHide(on) {
+  document.body.classList.toggle("menubar-autohide", on);
+  $("menuBarAutoHide").setAttribute("aria-checked", String(on));
+  try { localStorage.setItem("notecomplete-menubar-autohide", on ? "1" : "0"); } catch { /* Optional. */ }
+  if (doc) requestAnimationFrame(resize);
+}
+try { setMenuBarAutoHide(localStorage.getItem("notecomplete-menubar-autohide") === "1"); } catch { /* Optional. */ }
+// Escape out of one of its menus lets a hidden bar slide away again (focus would hold it out).
+addEventListener("keyup", (e) => {
+  if (e.key === "Escape" && document.body.classList.contains("menubar-autohide") && $("commandBar").contains(document.activeElement) && !$("commandBar").querySelector("details[open]")) document.activeElement.blur();
+});
+$("menuBarAutoHide").onclick = () => {
+  const on = $("menuBarAutoHide").getAttribute("aria-checked") !== "true";
+  setMenuBarAutoHide(on);
+  status(on ? "Menu bar hidden: move the pointer to the top edge to see it." : "Menu bar shown.");
+};
 // View → Tool names in the tool bar: off, the tools show only their icons (names in tooltips).
 const toolNamesOn = () => $("toolNames").getAttribute("aria-checked") !== "false";
 try { if (localStorage.getItem("notecomplete-tool-names") === "0") $("toolNames").setAttribute("aria-checked", "false"); } catch { /* Optional. */ }
