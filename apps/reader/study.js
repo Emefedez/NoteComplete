@@ -434,7 +434,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     const pack = buildPack({ title: noteTitle, fingerprint: fingerprint(), study: { decks: [cleanDeck] } });
     await shareStudyQr({
       title: `Share “${cleanTitle}” via QR`,
-      subtitle: 'On the other device: File → Export and share… → Send or receive study material → Receive → Scan QR stream.',
+      subtitle: 'On the other device: File → Import, export and share… → Send or receive study material → Receive → Scan QR stream.',
       pack,
       onDownloadFallback: onDownloadFallback || (() => exportDeck(cleanDeck)),
       fallbackLabel: 'Export Anki .txt instead',
@@ -448,7 +448,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     const pack = buildPack({ title: noteTitle, fingerprint: fingerprint(), study: { quizzes: [quiz] } });
     await shareStudyQr({
       title: `Share quiz “${cleanTitle}” via QR`,
-      subtitle: 'On the other device: File → Export and share… → Send or receive study material → Receive → Scan QR stream.',
+      subtitle: 'On the other device: File → Import, export and share… → Send or receive study material → Receive → Scan QR stream.',
       pack,
       onDownloadFallback: () => exportQuiz(quiz),
       fallbackLabel: 'Export Anki .txt instead',

@@ -164,7 +164,7 @@ const tabBar = tabStrip(window.notecompleteTabs || null, {
       here && { label: "Export", icon: "export", submenu: [
         { label: "PDF (every page)", icon: "pages", run: click("exportPdf") },
         { label: "NoteComplete project (.nfedit)…", icon: "save", run: click("exportProject") },
-        { label: "Export and share…", icon: "export", run: click("exportOpen") },
+        { label: "Import, export and share…", icon: "export", run: click("exportOpen") },
       ] },
       here && { label: "Share by QR or link…", icon: "qr", run: click("shareNoteQr") },
       "-",
@@ -5440,6 +5440,7 @@ function syncMenus() {
   }
 }
 for (const item of proxies) item.onclick = () => proxyTarget(item)?.click();
+$("exportOpen").addEventListener("click", () => syncMenus());
 for (const menu of document.querySelectorAll("details.bar-menu")) {
   menu.addEventListener("toggle", () => menu.open && syncMenus());
   // Like a native menubar: once one menu is open, hovering another switches to it.
@@ -6154,7 +6155,7 @@ async function sendPictureByQr(name, file, make) {
   const { showQrTransfer, base64UrlEncode } = await import("./qr-transfer.js");
   await showQrTransfer({
     title: `Send “${name}” by QR`,
-    subtitle: "On the other device: Export and share → Receive note via QR / P2P → Scan QR stream.",
+    subtitle: "On the other device: Import, export and share → Receive note via QR / P2P → Scan QR stream.",
     payload: { kind: "file", name: `${file}.${ext}`, mime: blob.type, base64: base64UrlEncode(new Uint8Array(await blob.arrayBuffer())) },
     onDownloadFallback: () => download(blob, `${file}.${ext}`, blob.type),
     fallbackLabel: "Save the picture instead",
@@ -7361,21 +7362,19 @@ if ($("exportSavedResources")) $("exportSavedResources").onclick = () => {
   closeMenus();
   quizIndex.open();
 };
-if ($("exportImportStudy")) $("exportImportStudy").onclick = () => {
-  closeMenus();
-  $("importAny")?.click();
-};
+$("hubOpen").onclick = () => $("open").click();
+$("hubReceive").onclick = () => $("receiveNoteQr").click();
 {
   const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
   const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];
   const setExportTab = (name) => {
-    const active = name === "resources" ? "resources" : "notes";
+    const active = ["open", "notes", "resources"].includes(name) ? name : "open";
     for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.exportTab === active));
     for (const p of panels) p.hidden = p.dataset.exportPanel !== active;
     try { localStorage.setItem("notecomplete-export-tab", active); } catch { /* Optional. */ }
   };
   for (const t of tabs) t.onclick = () => setExportTab(t.dataset.exportTab);
-  try { setExportTab(localStorage.getItem("notecomplete-export-tab") || "notes"); } catch { setExportTab("notes"); }
+  try { setExportTab(localStorage.getItem("notecomplete-export-tab") || "open"); } catch { setExportTab("open"); }
 }
 $("studyShare").onclick = async () => {
   closeMenus();

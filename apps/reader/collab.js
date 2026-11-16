@@ -825,7 +825,7 @@ function joinDialog(host, role) {
     buttons(el('button', { type: 'button', textContent: 'Cancel', onclick: closeDialog }), go));
   dialog(tablet ? 'Join as drawing tablet' : 'Join shared notes',
     el('p', { textContent: tablet
-      ? 'On the computer: File → Export and share… → Share live, or draw on a tablet. Scan its QR code with the camera, or enter the address and the 6-digit PIN it shows.'
+      ? 'On the computer: File → Import, export and share… → Share live, or draw on a tablet. Scan its QR code with the camera, or enter the address and the 6-digit PIN it shows.'
       : 'Paste the invite link the host gave you, or enter the address and the 6-digit PIN the computer shows (File → Share…).' }),
     form);
   (link.value ? code : link).focus();

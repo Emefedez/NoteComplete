@@ -30,11 +30,6 @@
         <div class="menu-content" role="menu">
           <button data-proxy="homeButton" data-icon="home">Home</button>
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
-          <button id="openFolder" data-icon="folder" data-palette="Open folder…" title="Open the notes in a folder as a group, listed beside the document" hidden>Open folder…</button>
-          <button id="openLink" data-icon="link" data-palette="Open link…" title="Open a web page, such as a Notion page, like a document">Open link…</button>
-          <button id="driveOpen" data-icon="cloud">Google Drive</button>
-          <button data-proxy="libraryChoose" data-icon="folder">Downloads folder…</button>
-          <button id="addDocuments" data-icon="plus" data-palette="Add documents to this group…" title="Add files to the open document's group; they are listed beside it to jump between them" hidden disabled>Add documents…</button>
           <hr />
           <button id="newTab" data-icon="plus" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newDocument" data-icon="note">New document…<kbd>Ctrl N</kbd></button>
@@ -47,8 +42,7 @@
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <hr />
-          <button id="importAny" data-icon="import" data-palette="Import…" title="Study material, quizzes (Markdown from Quiz Toolkit), flashcard decks, or any note or document">Import…</button>
-          <button id="exportOpen" data-icon="export" data-palette="Export and share…" title="Export and share notes or study resources (PDF, images, .nfedit, .noteful, Anki, QR, and live collab)">Export and share…</button>
+          <button id="exportOpen" data-icon="export" data-palette="Import, export and share…" title="Open from a folder, link or Google Drive, import files and study material, export and share notes and resources (PDF, images, .nfedit, .noteful, Anki, QR, live collab)">Import, export and share…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="editMenu">
@@ -201,9 +195,12 @@
           <input id="importAnyFile" type="file" hidden />
       <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle">
         <div class="export-head">
-          <h2 id="exportTitle">Export and share</h2>
-          <div class="export-tabs" role="tablist" aria-label="Export and share sections">
-            <button id="exportTabNotes" type="button" class="export-tab" role="tab" data-export-tab="notes" data-icon="note" aria-selected="true" aria-controls="exportPanelNotes">
+          <h2 id="exportTitle">Import, export and share</h2>
+          <div class="export-tabs" role="tablist" aria-label="Import, export and share sections">
+            <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="open" aria-selected="true" aria-controls="exportPanelOpen">
+              <span class="export-tab-text"><b>Open &amp; import</b><small>Folders, links, Drive, files &amp; study packs</small></span>
+            </button>
+            <button id="exportTabNotes" type="button" class="export-tab" role="tab" data-export-tab="notes" data-icon="note" aria-selected="false" aria-controls="exportPanelNotes">
               <span class="export-tab-text"><b>Notes</b><small>Pages, files, QR &amp; live sharing</small></span>
             </button>
             <button id="exportTabResources" type="button" class="export-tab" role="tab" data-export-tab="resources" data-icon="storage" aria-selected="false" aria-controls="exportPanelResources">
@@ -211,7 +208,29 @@
             </button>
           </div>
         </div>
-        <div id="exportPanelNotes" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabNotes" data-export-panel="notes">
+        <div id="exportPanelOpen" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabOpen" data-export-panel="open">
+          <div class="export-columns">
+            <div class="export-column">
+              <section aria-labelledby="exportOpenHead">
+                <h3 id="exportOpenHead">Open</h3>
+                <button id="hubOpen" type="button" class="export-item" data-icon="open"><b>Open…</b><small>A note, PDF, HTML page, text file or image (Ctrl O)</small></button>
+                <button id="openFolder" hidden class="export-item" data-icon="folder"><b>Open folder…</b><small>Notes in a folder, as a group beside the document</small></button>
+                <button id="openLink" class="export-item" data-icon="link"><b>Open link…</b><small>A web page, such as a Notion page, like a document</small></button>
+                <button id="driveOpen" class="export-item" data-icon="cloud"><b>Google Drive</b><small>Open a note from your Drive library</small></button>
+                <button id="addDocuments" hidden disabled class="export-item" data-icon="plus"><b>Add documents…</b><small>Add files to the open document’s group</small></button>
+                <button data-proxy="libraryChoose" class="export-item" data-icon="folder"><b>Downloads folder…</b><small>Where downloaded notes are kept</small></button>
+              </section>
+            </div>
+            <div class="export-column">
+              <section aria-labelledby="exportImportHead">
+                <h3 id="exportImportHead">Import</h3>
+                <button id="importAny" class="export-item" data-icon="import"><b>Import…</b><small>Study material, quizzes (Markdown), flashcard decks, notes or any document</small></button>
+                <button id="hubReceive" type="button" class="export-item" data-icon="qr"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div id="exportPanelNotes" class="export-tabpanel" role="tabpanel" aria-labelledby="exportTabNotes" data-export-panel="notes" hidden>
           <div class="export-columns">
             <div class="export-column">
               <section aria-labelledby="exportPages">
@@ -250,7 +269,6 @@
                 <h3 id="exportResOutHead">Export &amp; manage</h3>
                 <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Export all to Anki</b><small>All flashcards and quizzes of this note (.txt)</small></button>
                 <button id="exportSavedResources" class="export-item" data-icon="storage" title="Open all saved quizzes, flashcard decks, exams, and AI scratchpad conversations"><b>Browse saved resources…</b><small>Manage, export or share quizzes, decks, exams &amp; scratchpad</small></button>
-                <button id="exportImportStudy" class="export-item" data-icon="import" title="Import a .ncstudy pack, Anki/JSON flashcard deck, or Quiz Toolkit Markdown file"><b>Import quiz or study file…</b><small>.ncstudy pack, deck JSON, or Quiz Markdown</small></button>
               </section>
             </div>
             <div class="export-column">
@@ -1463,7 +1481,7 @@
       <tr><th>Noteful<br><span class="muted">.noteful</span></th><td>Pages, ink, PDFs, images and text, as Noteful stores them. No undo history; notes and study sets stay in NoteComplete.</td><td>Notes you also open in Noteful on the iPad.</td></tr>
     </tbody>
   </table>
-  <p><strong>File → Export and share…</strong> makes other files and never changes your note:</p>
+  <p><strong>File → Import, export and share…</strong> makes other files and never changes your note:</p>
   <ul>
     <li><b>NoteComplete project (.nfedit)</b> choose exactly what to bundle (edit history, embedded PDFs, note audio, added recordings, Markdown notes, handwriting/OCR text, quizzes, flashcards &amp; scratchpad) before saving.</li>
     <li><b>Noteful file</b> a .noteful copy. No undo history.</li>

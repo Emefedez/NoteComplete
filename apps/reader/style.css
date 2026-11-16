@@ -3984,3 +3984,5 @@ body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible),
 .screen-window.tucked > .window-head > :is(select, input, .muted, .quiz-bar) { display: none; }
 .screen-window.tucked > .window-head > :is(button, a) { min-height: 0; height: 18px; }
 @media (prefers-reduced-motion: reduce) { .window-head { transition: none; } }
+
+.export-dialog .export-item[hidden] { display: none; }
