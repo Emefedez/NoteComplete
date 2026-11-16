@@ -3902,3 +3902,29 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-menu kbd { font-size: 11px; color: var(--muted); }
 .context-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line); }
 @media (pointer: coarse) { .context-menu button { min-height: 42px; } }
+/* Tool settings as a compact card instead of one long row: the tool's own choices on top,
+   then the colours (a 3 × 3 grid with the custom colour last) beside the widths (two per
+   row), each under a small caption. */
+#drawingOptions { display: grid; grid-template-columns: auto auto; align-items: start; justify-content: start; gap: 8px 12px; }
+#drawingOptions > [hidden], #drawingOptions .opt-section[hidden] { display: none; }
+#drawingOptions .opt-section { display: grid; justify-items: start; align-content: start; gap: 3px; min-width: 0; }
+#drawingOptions .opt-section::before { content: attr(data-caption); grid-column: 1 / -1; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); line-height: 1.2; white-space: nowrap; }
+#drawingOptions > :is(#shapeOptions, #highlightOptions, #tapeOptions, #eraseOptions) { grid-column: 1 / -1; }
+#drawingOptions .choice-row, #drawingOptions .shape-picker { display: inline-grid; grid-auto-flow: row; }
+#drawingOptions .choice-row[data-for="color"] { grid-template-columns: repeat(3, auto); gap: 4px; padding: 4px; }
+#drawingOptions .opt-color { grid-template-columns: auto; position: relative; justify-self: start; }
+/* The custom colour sits in the swatch grid's ninth place. */
+#drawingOptions .opt-color .color-label { position: absolute; right: 5px; bottom: 5px; width: 24px; height: 24px; padding: 3px; border: 0; border-radius: 50%; overflow: hidden; background: conic-gradient(#e5484d, #ffb224, #f5d90a, #30a46c, #0091ff, #8e4ec6, #e5484d); }
+#drawingOptions .opt-color .color-label input { width: 18px; height: 18px; padding: 0; border: 2px solid var(--surface); border-radius: 50%; overflow: hidden; }
+#drawingOptions .opt-color .color-label input::-webkit-color-swatch-wrapper { padding: 0; }
+#drawingOptions .opt-color .color-label input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+#drawingOptions .opt-color .color-label input::-moz-color-swatch { border: 0; border-radius: 50%; }
+#drawingOptions .opt-color .choice-row[data-for="color"]::after { content: ""; width: 24px; height: 24px; }
+#drawingOptions .choice-row[data-for="width"], #drawingOptions .choice-row[data-for="eraserSize"] { grid-template-columns: repeat(2, auto); }
+#drawingOptions .choice-row[data-for="highlightMode"], #drawingOptions .choice-row[data-for="shapeSnap"], #drawingOptions .choice-row[data-for="tapeMode"] { grid-template-columns: repeat(4, auto); }
+#drawingOptions #shapeOptions { grid-template-columns: auto 1fr; align-items: center; gap: 4px 6px; }
+#drawingOptions #shapePicker { grid-template-columns: repeat(4, auto); grid-column: 1 / -1; }
+#drawingOptions #shapeFill { margin-left: 0; grid-template-columns: repeat(3, auto); }
+#drawingOptions #insertShape { justify-self: end; }
+/* On a phone the card is taller than the old row, so it may use more of the screen. */
+@media (max-width: 700px) { #toolOptions:has(> #drawingOptions:not([hidden])) { max-height: min(48dvh, 340px); } }
