@@ -253,23 +253,23 @@ try {
   // menu shows the same presets and edits them the same way.
   await p.evaluate(() => { document.querySelector('[data-tool=draw]').click(); });
   if (!(await p.isVisible('.choice-row[data-for="width"]'))) await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
-  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '2 px', '4 px', '8 px']);
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3 px', '4 px', '7 px', '11 px', '16 px']);
   await p.click('.choice-row[data-for="width"] button >> nth=1', { button: 'right' });
   await p.waitForSelector('#widthDialog[open]');
   await p.fill('#widthValue', '3.5');
   await p.click('#widthSave');
-  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['1 px', '3.5 px', '4 px', '8 px']);
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.choice-row[data-for="width"] button')].map((b) => b.getAttribute('aria-label'))), ['2 px', '3.5 px', '4 px', '7 px', '11 px', '16 px']);
   assert.equal(await p.inputValue('#width'), '3.5', 'the edited width is in use');
   await p.keyboard.press('Shift+S');
   await p.waitForSelector('.quick-menu');
   assert.ok(await p.locator('.quick-menu .qm-outer[aria-label^="3.5 px"]').count(), 'the quick menu shows it');
-  const w = await p.locator('.quick-menu .qm-outer[aria-label^="8 px"]').boundingBox();
+  const w = await p.locator('.quick-menu .qm-outer[aria-label^="7 px"]').boundingBox();
   await p.mouse.move(w.x + 18, w.y + 18); await p.mouse.down(); await sleep(450); await p.mouse.up();
   await p.click('.quick-menu .qm-item-menu button:has-text("Change")');
   await p.waitForSelector('#widthDialog[open]');
   await p.fill('#widthValue', '12');
   await p.click('#widthSave');
-  assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-widths'))).draw, [1, 3.5, 4, 12]);
+  assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('notecomplete-widths'))).draw, [2, 3.5, 4, 12, 11, 16]);
   await p.keyboard.press('Escape');
   console.log('· widths in px: held or right-clicked in the bar or the menu to change them');
   // View → Tool bar (Shift + T) hides the tools; the quick menu still has them.

@@ -1687,6 +1687,7 @@ function toolOptions() {
   $("drawingOptions").hidden = tool === "select" || tool === "text";
   // The eraser shows only its size; color and width do not apply to it.
   $("drawingOptions").classList.toggle("erasing", tool === "erase");
+  $("drawingOptions").dataset.forTool = tool;
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
   // The text format bar, when docked here, shows while a text box is typed or selected.
@@ -3098,19 +3099,23 @@ function restoreToolPrefs() {
 // Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
 // one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
 const WIDTH_DEFAULTS = {
-  // The pen: 4 px is the width that reads right next to Noteful's, so it is the second one, with
-  // a slightly thicker finest and a gentle ramp above it.
-  draw: [2, 4, 7, 11],
-  highlight: [8, 16, 24, 40],
+  // The pen: 4 px is the width that reads right next to Noteful's, with a slightly thicker
+  // finest and a gentle ramp around it.
+  draw: [2, 3, 4, 7, 11, 16],
+  // Six for the pen, the highlighter and shapes: a 2 × 3 grid beside the colours.
+  highlight: [8, 12, 16, 24, 32, 40],
   tape: [20, 40, 64],
-  shape: [1, 2, 4, 8],
+  shape: [1, 2, 3, 4, 6, 8],
 };
 const WIDTH_LADDER = [1, 2, 4, 8, 16, 24, 40, 64];
 let widthPresets = { ...WIDTH_DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem("notecomplete-widths") || "{}");
   // The pen's earlier untouched presets (1, 2, 4, 8) give way to the new ones; edited ones stay.
-  if (JSON.stringify(saved.draw) === "[1,2,4,8]") delete saved.draw;
+  if (["[1,2,4,8]", "[2,4,7,11]"].includes(JSON.stringify(saved.draw))) delete saved.draw;
+  // Untouched four-width pens, highlighters and shapes get the six widths.
+  if (JSON.stringify(saved.highlight) === "[8,16,24,40]") delete saved.highlight;
+  if (JSON.stringify(saved.shape) === "[1,2,4,8]") delete saved.shape;
   widthPresets = { ...WIDTH_DEFAULTS, ...saved };
 } catch { /* Optional. */ }
 const widthLabel = (v) => `${Number(v)} px`;
@@ -3124,7 +3129,9 @@ function lineIcon(value) {
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  svg.innerHTML = `<path d="M3 12h18" stroke-width="${Math.min(14, Math.max(0.8, Number(value) / 3))}"/>`;
+  // A gentle (log) scale, so the thin widths (1, 2, 3 px) still look different from each other.
+  const stroke = Math.min(12, 0.7 + 2.6 * Math.log1p(Number(value) / 2));
+  svg.innerHTML = `<path d="M3 12h18" stroke-width="${stroke.toFixed(2)}"/>`;
   return svg;
 }
 // The tool bar's width row: this tool's presets, each held (or right-clicked) to change it.
