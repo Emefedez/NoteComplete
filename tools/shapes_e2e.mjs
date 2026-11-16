@@ -93,7 +93,7 @@ try {
   await sleep(700);
   assert.equal(await added(), 5);
   assert.equal(await p.textContent('#selectionKind'), 'Shape');
-  assert.equal(await p.locator('.selection-overlay circle').count(), 5, 'four corners and the turn handle');
+  assert.equal(await p.locator('.selection-overlay circle[data-selection-handle]').count(), 5, 'four corners and the turn handle');
   if (DIR) await p.screenshot({ path: DIR + 'star.png' });
   assert.deepEqual(errors, []);
   console.log('shapes e2e: ok');

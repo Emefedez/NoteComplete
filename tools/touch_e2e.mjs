@@ -48,11 +48,11 @@ try {
   const w1 = (await p.locator('.sheet').first().boundingBox()).width;
   assert.ok(w1 > w0 * 1.8, `pinch zooms (${w0} → ${w1})`);
   const top0 = await p.evaluate(() => document.getElementById('viewport').scrollTop);
-  await p.evaluate(() => { const v = document.getElementById('viewport'); v.addEventListener('touchend', () => { window.lifted = v.scrollTop; }, { once: true, capture: true }); });
   await touch('touchStart', [[150, 450], [230, 450]]);
   for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 450 - i * 15], [230, 450 - i * 15]]); await sleep(16); }
-  await touch('touchEnd', []); await sleep(700);
-  const lifted = await p.evaluate(() => window.lifted);
+  await touch('touchEnd', []);
+  const lifted = await p.evaluate(() => document.getElementById('viewport').scrollTop);
+  await sleep(700);
   const rest = await p.evaluate(() => document.getElementById('viewport').scrollTop);
   assert.ok(lifted > top0 + 100, 'two fingers scroll');
   assert.ok(rest > lifted + 30, `the scroll glides on after the fingers lift (${lifted} → ${rest})`);

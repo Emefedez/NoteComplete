@@ -233,7 +233,8 @@ try {
   assert.equal(await guest.isVisible('#toolbar [data-tool="draw"]'), true, 'the guest has the tool bar');
   const hostInk = () => host.evaluate(() => document.querySelectorAll('.sheet[data-page="0"] [data-item]').length);
   const before = await hostInk();
-  await guest.evaluate(() => document.querySelector('#toolbar [data-tool="draw"]').click());
+  // The Pen, with its settings closed (they open over the top of the page).
+  await guest.evaluate(() => { document.querySelector('#toolbar [data-tool="draw"]').click(); const o = document.getElementById('toolOptions'); if (!o.hidden && !o.classList.contains('inline')) document.getElementById('toolbarToggle').click(); });
   const gs = await guest.locator('.sheet').first().boundingBox();
   await guest.mouse.move(gs.x + 60, gs.y + 90); await guest.mouse.down();
   for (let j = 1; j <= 12; j++) await guest.mouse.move(gs.x + 60 + j * 12, gs.y + 90 + j * 4);
@@ -318,14 +319,13 @@ try {
 
   // Ending: the guest keeps a copy; the host keeps the notes.
   const download = guest.waitForEvent('download');
-  // Share in the bar says Sharing while the session runs, and opens it.
-  assert.equal((await host.textContent('#shareButton')).trim(), 'Sharing');
-  await host.click('#shareButton');
+  // The sharing item (File's import and export hub) opens the running session.
+  await host.evaluate(() => document.getElementById('shareSession').click());
   await host.click('#collabDialog button.danger');
   assert.match((await download).suggestedFilename(), /shared notes\.md$/);
   await guest.waitForSelector('#collabDialog h2:text("Session ended")');
   assert.match(await guest.textContent('#collabDialog'), /Open the automatic save/, 'the guest keeps an automatic save of the note');
-  await host.waitForFunction(() => !document.getElementById('collabPeopleBar') && document.getElementById('shareButton').textContent.trim() === 'Share');
+  await host.waitForFunction(() => !document.getElementById('collabPeopleBar'));
   step('ending the session saves a copy of the notes and an automatic save of the note for the guest');
   console.log('Sharing end to end: passed.');
 } finally {

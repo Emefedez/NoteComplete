@@ -145,16 +145,33 @@ export function touchGestures({ viewport, pinchBy, cancelGesture, undo, redo, fl
       holdTimer = setTimeout(() => apply(g.hold(at + HOLD_MS + 10)), HOLD_MS + 10);
     }
   });
-  on('touchmove', (e) => {
+  const move = (e) => {
     if (!g.active) return;
     const touches = fingers(e.touches);
     // One finger: the browser scrolls (Pan) or the tool draws; two or more are ours.
     if (touches.length > 1) e.preventDefault();
     apply(g.move(touches, e.timeStamp));
-  });
+  };
   const end = (e) => { clearTimeout(holdTimer); if (g.active) apply(g.end(fingers(e.touches), e.timeStamp)); };
-  on('touchend', end);
-  on('touchcancel', () => { clearTimeout(holdTimer); g.reset(); });
+  const cancel = () => { clearTimeout(holdTimer); g.reset(); };
+  // A finger's moves and lift go to the element it landed on, even once that element is
+  // redrawn and taken out of the page (a page sharpened after a pinch, or brought in as the
+  // pages scroll); then they never reach the viewport, which left the gesture open, the
+  // scroll stuck and the pages without their glide. So they are heard on that element.
+  // The viewport listens too (for a target that has none of these), and an event that
+  // reaches both is handled once.
+  const heard = new WeakSet(), handled = new WeakSet();
+  const once = (fn) => (e) => { if (handled.has(e)) return; handled.add(e); fn(e); };
+  const onMove = once(move), onEnd = once(end), onCancel = once(cancel);
+  const follow = (target) => {
+    if (!target?.addEventListener || heard.has(target)) return;
+    heard.add(target);
+    target.addEventListener('touchmove', onMove, { passive: false });
+    target.addEventListener('touchend', onEnd, { passive: true });
+    target.addEventListener('touchcancel', onCancel, { passive: true });
+  };
+  follow(viewport);
+  viewport.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) follow(t.target); }, { capture: true, passive: true });
   // Safari's own pinch (its gesture events) would zoom the whole page and can cancel the
   // touches; two fingers are handled above.
   on('gesturestart', (e) => e.preventDefault());
