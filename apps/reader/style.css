@@ -3938,3 +3938,8 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 /* The pen's three auto-shape buttons (and their caption) reach one place left, so their
    right edge lines up with the widths below. */
 #drawingOptions #snapOptions .choice-row, #drawingOptions #snapOptions::before { margin-left: -32px; }
+
+/* Dialogs over the app (modal-dialogs.js): centred as the browser's modal ones, with no grey
+   backdrop, and under nothing; the tab strip stays usable. Their own rules win over these. */
+:where(dialog.nc-modal) { position: fixed; inset: 0; margin: auto; max-width: calc(100% - 6px - 2em); max-height: calc(100% - 6px - 2em); overflow: auto; }
+:where(dialog.nc-modal) { box-shadow: var(--shadow-dialog, 0 18px 50px #0004), 0 0 0 1px #0001; }

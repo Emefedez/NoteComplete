@@ -82,7 +82,7 @@ circle.uml-handle { cursor: grab; }
 .uml-status { min-height: 20px; padding: 3px 10px; font-size: 12px; color: var(--u-muted); border-top: 1px solid var(--u-line); }
 .uml-status.error { color: #b83228; }
 /* Over a note: the whole window. */
-.uml-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
+.uml-dialog { position: fixed; inset: var(--modal-top, 0px) 0 0 0; width: 100vw; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
 .uml-dialog::backdrop { background: #0006; }
 .uml-host { height: 100%; }
 /* Its own page. */

@@ -32,15 +32,15 @@ try {
     assert.ok(cards.includes(name), `the picker offers ${name}: ${cards}`);
   if (DIR) await p.screenshot({ path: DIR + 'picker.png' });
   await p.click('.prefab-card:has-text("Histogram")');
-  await p.waitForSelector('.prefab-dialog .prefab-data');
-  assert.ok(await p.locator('.prefab-dialog .compound-preview-box svg').count(), 'a live preview');
-  await p.fill('.prefab-dialog .prefab-title input', 'Notas del examen');
-  await p.click('.prefab-dialog button.primary');
+  await p.waitForSelector('.chart-dialog .ch-bars');
+  assert.ok(await p.locator('.chart-dialog .ch-preview svg').count(), 'a live preview');
+  await p.fill('.chart-dialog .ch-panel input[type="text"]', 'Notas del examen');
+  await p.click('.chart-dialog button.primary');
   await p.waitForFunction(() => document.querySelectorAll('.sheet[data-page="0"] .render :is([data-item^="new:"], [data-item^="image:"])').length === 2);
   if (DIR) await p.screenshot({ path: DIR + 'inserted.png' });
   console.log('· Insert prefab → Histogram: a picture and its frame on the page');
 
-  // 2. Right-click on it: its menu; Edit histogram… opens the editor with its data; Apply redraws.
+  // 2. Right-click on it: its menu; Edit histogram… opens the chart editor with its data; Apply redraws.
   const img = await p.locator('.sheet[data-page="0"] .render [data-item^="image:"]').first().boundingBox();
   const mid = [img.x + img.width / 2, img.y + img.height / 2];
   await p.mouse.click(...mid, { button: 'right' });
@@ -60,11 +60,11 @@ try {
   await p.waitForSelector('.context-menu');
   if (DIR) await p.screenshot({ path: DIR + 'menu.png' });
   await p.click('.context-menu button:has-text("Edit histogram")');
-  await p.waitForSelector('.prefab-dialog');
-  assert.equal(await p.inputValue('.prefab-dialog .prefab-title input'), 'Notas del examen', 'the editor has what it is');
-  await p.fill('.prefab-dialog .prefab-title input', 'Notas finales');
-  await p.click('.prefab-dialog button.primary');
-  await p.waitForFunction(() => !document.querySelector('.prefab-dialog'));
+  await p.waitForSelector('.chart-dialog .ch-bars');
+  assert.equal(await p.inputValue('.chart-dialog .ch-panel input[type="text"]'), 'Notas del examen', 'the editor has what it is');
+  await p.fill('.chart-dialog .ch-panel input[type="text"]', 'Notas finales');
+  await p.click('.chart-dialog button.primary');
+  await p.waitForFunction(() => !document.querySelector('.chart-dialog'));
   await sleep(500);
   assert.equal(await items(), 2, 'redrawn in place, not added');
   await p.keyboard.press('Control+z');

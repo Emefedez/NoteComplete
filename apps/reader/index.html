@@ -74,6 +74,7 @@
           <button id="insertTable" data-icon="table" disabled data-palette="Insert table" title="Rows and columns of typed cells; select it later to edit it, add rows or columns">Insert table<kbd>Shift Y</kbd></button>
           <button id="insertUml" data-icon="uml" disabled data-palette="Insert UML diagram (use case, class, state machine, activity, sequence)" title="A UML diagram drawn in the diagram editor, as in Visual Paradigm; it imports and exports Visual Paradigm XML and XMI. It stays editable: right-click it, hold it, or tap its ⋯">Insert UML diagram…</button>
           <button id="openUmlPage" data-icon="uml" data-palette="UML diagram editor (own page)" title="The UML diagram editor on a page of its own, outside any note">UML diagram editor…</button>
+          <button id="openChartsPage" data-icon="clock" data-palette="Chart and timeline editor (own page): process states, CPU timelines, bar charts" title="The chart editor on a page of its own: process states, CPU timelines, bar charts, histograms and exam plots, painted and dragged instead of typed">Chart and timeline editor…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="viewMenu">
@@ -1190,7 +1191,7 @@
   <div class="ocr-actions"><button id="carrySkip" type="button">Skip</button><button id="carryBring" type="button" class="primary">Bring them</button></div>
 </dialog>
 
-<dialog id="imageViewer" class="image-viewer" aria-label="Hint, large"><img id="imageViewerImage" alt="" /></dialog>
+<dialog id="imageViewer" class="image-viewer" data-modal="native" aria-label="Hint, large"><img id="imageViewerImage" alt="" /></dialog>
 
 <dialog id="quizPromptDialog" class="deck-dialog" aria-labelledby="quizPromptTitle">
   <h2 id="quizPromptTitle">Quiz instructions</h2>

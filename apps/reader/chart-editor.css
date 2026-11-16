@@ -1,0 +1,104 @@
+/* The chart editor (chart-editor.js): on its own page (charts.html) and over a note. It uses
+   the reader's colours where they are defined, and its own otherwise. The grid and the
+   figure are drawn on white paper in both themes, as they will look on the page. */
+.chart-editor {
+  --c-ink: var(--ink, #242830);
+  --c-muted: var(--muted, #626b76);
+  --c-accent: var(--accent, #245dc4);
+  --c-soft: var(--accent-soft, #eaf0fc);
+  --c-line: var(--line, #dce0e5);
+  --c-surface: var(--surface, #fff);
+  --c-chrome: var(--chrome, #f7f8fa);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  color: var(--c-ink);
+  background: var(--c-chrome);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  .chart-page .chart-editor { --c-ink: #e5e8ed; --c-muted: #a6aeb9; --c-accent: #91b4ff; --c-soft: #303e57; --c-line: #3b4048; --c-surface: #24272c; --c-chrome: #202328; }
+}
+.chart-editor button, .chart-editor select, .chart-editor input { font: inherit; color: inherit; }
+.chart-editor button, .chart-editor select {
+  min-height: 30px; padding: 3px 10px; border: 1px solid var(--c-line); border-radius: 6px; background: var(--c-surface); cursor: pointer;
+}
+.chart-editor button:hover:not(:disabled) { background: var(--c-soft); }
+.chart-editor button:disabled { opacity: 0.45; cursor: default; }
+.chart-editor button.primary { background: var(--c-accent); border-color: var(--c-accent); color: #fff; font-weight: 600; }
+.chart-editor button[aria-pressed="true"] { background: var(--c-soft); color: var(--c-accent); border-color: var(--c-accent); }
+.chart-editor [hidden] { display: none !important; }
+.ch-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--c-line); }
+.ch-spacer { flex: 1; }
+.ch-mode { display: inline-flex; }
+.ch-mode button:first-child { border-radius: 6px 0 0 6px; }
+.ch-mode button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.ch-main { display: grid; grid-template-columns: 150px minmax(0, 1fr) 300px; min-height: 0; }
+.ch-palette { overflow: auto; padding: 8px; border-right: 1px solid var(--c-line); display: flex; flex-direction: column; gap: 3px; }
+.ch-palette h4, .ch-panel h4, .ch-preview-box h4 { margin: 10px 4px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-muted); }
+.chart-editor .ch-brush { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px; text-align: left; border-color: transparent; background: transparent; }
+.ch-brush svg { flex: none; }
+.ch-new-label { margin-top: 6px; box-sizing: border-box; width: 100%; padding: 5px 8px; border: 1px solid var(--c-line); border-radius: 6px; background: var(--c-surface); }
+.ch-hint { margin: 2px 4px; font-size: 12px; color: var(--c-muted); }
+.ch-hint.error { color: #b83228; }
+.ch-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ch-canvas { flex: 0 1 auto; min-height: 120px; max-height: 62%; overflow: auto; padding: 8px; background: #fff; color: #0f172a; outline: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ch-canvas svg { display: block; cursor: crosshair; }
+.ch-canvas text { font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; fill: #334155; pointer-events: none; }
+.ch-canvas .ch-label { font-size: 14px; font-weight: 700; fill: #0f172a; font-family: Georgia, serif; }
+.ch-canvas .ch-label.small { font: 600 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.ch-canvas .ch-len { font-weight: 700; font-size: 11px; }
+.ch-canvas .ch-ivl { fill: #fff; font-weight: 700; }
+.ch-canvas .ch-ivv { font-weight: 700; fill: #0f172a; }
+.ch-gl { stroke: #cbd5e1; stroke-width: 1; }
+.ch-gl.minor { stroke: #e5e9ef; }
+.ch-lane { fill: #fff; }
+.ch-lane.odd { fill: #f8fafc; }
+.ch-iv { stroke: #1e293b; stroke-width: 1; }
+.ch-arrival { fill: #0f172a; }
+.ch-wrong { fill: #dc262622; stroke: #dc2626; stroke-width: 1.6; pointer-events: none; }
+.ch-axis { stroke: #0f172a; stroke-width: 1.6; }
+.ch-bar-hit { fill: transparent; cursor: ns-resize; }
+.ch-barrect { stroke: #1e293b; stroke-width: 1.2; fill-opacity: 0.8; pointer-events: none; }
+.ch-grip { fill: #fff; stroke: #0a84ff; stroke-width: 1.4; pointer-events: none; }
+.ch-empty-bar { fill: #f8fafc; stroke: #cbd5e1; stroke-dasharray: 4 3; pointer-events: none; }
+.ch-sol-line { stroke: #16a34a; stroke-width: 3; stroke-dasharray: 5 3; pointer-events: none; }
+.ch-preview-box { flex: 1 1 auto; min-height: 0; border-top: 1px solid var(--c-line); padding: 0 10px 8px; overflow: auto; }
+.ch-preview { background: #fff; border: 1px solid var(--c-line); border-radius: 6px; padding: 6px; }
+.ch-preview svg { display: block; width: 100%; height: auto; max-height: 360px; }
+.chart-editor[data-kind="plot"] .ch-preview-box { border-top: 0; }
+.chart-editor[data-kind="plot"] .ch-preview svg { max-height: none; }
+.chart-editor[data-kind="bars"] .ch-canvas { flex: 0 0 auto; }
+.ch-panel { overflow: auto; padding: 10px 12px 20px; border-left: 1px solid var(--c-line); display: flex; flex-direction: column; gap: 7px; }
+.ch-panel h3 { margin: 2px 0 2px; font-size: 15px; }
+.ch-field { display: grid; gap: 3px; min-width: 0; }
+.ch-field > span { font-size: 12px; color: var(--c-muted); }
+.ch-field > small { font-size: 11px; color: var(--c-muted); }
+.ch-panel input[type="text"], .ch-panel input[type="number"] { box-sizing: border-box; width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid var(--c-line); border-radius: 6px; background: var(--c-surface); }
+.ch-row3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 6px; }
+.ch-rowedit { display: flex; gap: 4px; align-items: center; }
+.ch-rowedit .ch-name { flex: 1 1 auto; }
+.ch-rowedit .ch-num { flex: 0 0 64px; width: 64px; }
+.ch-rowedit .ch-short { flex: 0 1 70px; width: 70px; }
+.chart-editor .ch-mini { min-height: 26px; min-width: 26px; padding: 0 6px; }
+.ch-check { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.ch-status { min-height: 20px; padding: 3px 10px; font-size: 12px; color: var(--c-muted); border-top: 1px solid var(--c-line); }
+.ch-status.error { color: #b83228; }
+/* Over a note: the whole window under the tab strip (modal-dialogs.js keeps the tabs usable). */
+.chart-dialog { position: fixed; inset: var(--modal-top, 0px) 0 0 0; width: 100vw; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
+.chart-host { height: 100%; }
+/* Its own page. */
+html.chart-page, .chart-page body { height: 100%; margin: 0; }
+.chart-page body { background: #f7f8fa; }
+@media (prefers-color-scheme: dark) { .chart-page body { background: #202328; } }
+.chart-page #chartRoot { height: 100%; }
+/* Narrow windows: brushes as a row above, properties below. */
+@media (max-width: 760px) {
+  .ch-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(260px, 1fr) minmax(0, 38%); }
+  .ch-palette { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--c-line); }
+  .ch-palette h4, .ch-palette .ch-hint { display: none; }
+  .chart-editor .ch-brush { width: auto; flex: none; }
+  .ch-new-label { width: 120px; margin: 0; flex: none; }
+  .ch-panel { border-left: 0; border-top: 1px solid var(--c-line); }
+}

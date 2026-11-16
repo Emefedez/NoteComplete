@@ -1,4 +1,4 @@
-// The reader's Content-Security-Policy, written once. apps/reader/index.html, tabs.html and uml.html
+// The reader's Content-Security-Policy, written once. apps/reader/index.html, tabs.html, uml.html and charts.html
 // hold a literal copy in a <meta http-equiv> tag (the reader has no build step that could
 // write it in); tools/reader-csp.test.mjs fails when a copy differs from `header` below.
 // The meta tag is what delivers the policy, so the website, the desktop app

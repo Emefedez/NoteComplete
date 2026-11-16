@@ -9,12 +9,12 @@ import { HTML_DOCUMENTS_INHERIT_POLICY, policy, header, strictPolicy, strictHead
 
 const reader = new URL('../apps/reader/', import.meta.url);
 const read = (name) => readFileSync(new URL(name, reader), 'utf8');
-const PAGES = ['index.html', 'tabs.html', 'uml.html'];
+const PAGES = ['index.html', 'tabs.html', 'uml.html', 'charts.html'];
 // The kinds of address the same files are served from.
 const ORIGINS = ['https://example.github.io', 'http://localhost:8767', 'notecomplete://reader', 'http://127.0.0.1:8768', 'http://192.168.1.20:41237', 'https://example.trycloudflare.com'];
 const tags = (html) => [...html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].map(([whole, name, attrs]) => ({ whole, name: name.toLowerCase(), attrs }));
 
-test('index.html, tabs.html and uml.html carry the policy of reader-csp.mjs, before anything loads', () => {
+test('index.html, tabs.html, uml.html and charts.html carry the policy of reader-csp.mjs, before anything loads', () => {
   for (const page of PAGES) {
     const html = read(page);
     const found = html.match(/<meta http-equiv="Content-Security-Policy"[^>]*>/g) || [];
