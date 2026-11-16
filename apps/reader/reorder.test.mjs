@@ -15,3 +15,9 @@ test('a tab counts as pulled out well below or above the strip, or outside the w
   assert.equal(pulledOut({ x: 1300, y: 20 }, row, view), true);
   assert.equal(pulledOut({ x: 400, y: -2 }, row, view), true);
 });
+
+test('in a column, an item counts as pulled out well to the side of it', () => {
+  const col = { top: 40, bottom: 700, left: 50, right: 90 }, view = { width: 1280, height: 860 };
+  assert.equal(pulledOut({ x: 70, y: 600 }, col, view, true), false);
+  assert.equal(pulledOut({ x: 200, y: 300 }, col, view, true), true);
+});
