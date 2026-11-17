@@ -3880,6 +3880,9 @@ const quick = quickMenu({
 });
 // Where the pointer last was over the pages: Shift + S opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
+// The last touch, pen or key input: auto-save waits for a pause after it (autosave.js).
+let lastInputAt = 0;
+for (const type of ["pointerdown", "keydown", "wheel"]) document.addEventListener(type, () => { lastInputAt = performance.now(); }, { passive: true, capture: true });
 // A pen's side button (pen-button.js, docs/S-PEN-BUTTON.md): on Android the S Pen button
 // only shows while the pen hovers (pointermove buttons 0 → nonzero) or as a contextmenu
 // with no pointer type when the user holds it and taps; desktop pens report button 2 or 5.
@@ -3908,6 +3911,7 @@ function penMenu(e, toggle = false) {
 let penClosing = false;
 document.addEventListener("pointermove", (e) => {
   lastPointer = [e.clientX, e.clientY];
+  if (e.buttons) lastInputAt = performance.now();
   if (e.pointerType !== "pen") return;
   if (!e.buttons && onPages(e)) {
     // A pen hovering over the pages: Shift opens the menu where it points, and the pages
@@ -4033,6 +4037,7 @@ const autosave = autosaveController({
     doc: () => doc,
     editing: () => editing,
     busy,
+    active: () => performance.now() - lastInputAt < 2500,
     revision: () => revision,
     epoch: () => epoch,
     collab: () => collab,
