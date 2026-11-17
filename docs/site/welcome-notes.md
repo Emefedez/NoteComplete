@@ -20,7 +20,7 @@ Builds are unsigned previews; Linux is the most tested.
 
 New notes are saved as a **project (`.nfedit`)**: the pages, every edit with its undo history, the Markdown notes and the text of your handwriting. **Save as** can also write a Noteful file (`.noteful`) for Noteful on the iPad. Everything else is an **Export**: `.notecomp` (the note, its notes and recordings, without the undo history), Noteful + Markdown, PDF, SVG, images, and Anki decks.
 
-NoteComplete also opens PDFs, images, HTML, Markdown and text, and Word, OpenDocument, Excel and CSV files as Markdown you can edit (Save writes a copy beside the original).
+NoteComplete also opens PDFs, images, HTML, Markdown and text, and Word, OpenDocument, Excel and CSV files as Markdown you can edit (Save writes a copy beside the original). **Goodnotes** (`.goodnotes`) and **Notability** (`.ntb`) notebooks open as notes you can keep editing: ink, typed text, pictures and shapes come over as items, PDF pages stay sharp behind them, and Save keeps the original notebook inside the project.
 
 - [User guide](https://github.com/Emefedez/NoteComplete/blob/main/docs/USER_GUIDE.md)
 - [The file formats](https://github.com/Emefedez/NoteComplete/blob/main/docs/FILE-FORMATS.md) and [the .nfedit specification](https://github.com/Emefedez/NoteComplete/blob/main/spec/nfedit-v1.md)
@@ -41,6 +41,7 @@ The Pen, Highlighter, Eraser, Tape, Shapes, Text, Select and Grab tools share on
 - **Math text boxes** use LaTeX: `\frac{a}{b}`, `x^2`, `\sqrt{x}`, `\int`, or `$...$` between words. The keypad writes them and moves the cursor to the next empty place; arrows step over whole commands.
 - **Graphs** plot `y = \sin x`, `\frac{1}{x}`, polynomials, roots, logarithms and absolute values, several at once. The graph editor sets the x range, fits or fixes y, and turns the grid and numbers on or off.
 - **Tables** keep a bold header row, and `$...$` in a cell is math.
+- **Prefabs** (Edit → Insert prefab…, Shift X) are ready-made exam figures: histograms, bar charts, process states, CPU timelines, scheduling exercises to fill in and check, trees, node graphs and UML diagrams. In the process and CPU editors a tap paints 1, 5 or 10 units; the buttons are beside the brushes, and the mouse wheel over the chart switches them.
 - **Fact check** looks for wrong calculations too.
 - [Shapes, tables and math](https://github.com/Emefedez/NoteComplete/blob/main/docs/SHAPES-TABLES-MATH.md)
 

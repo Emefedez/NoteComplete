@@ -57,7 +57,7 @@ _Save in one of two formats; export the rest_
 !end
 
 ## Also opens · exports
->> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files, Word, OpenDocument, Excel and CSV || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
+>> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files, Word, OpenDocument, Excel and CSV, and **Goodnotes** and **Notability** notebooks || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
 - A PDF or an image becomes a note to write on. Word, Excel and text files open as Markdown you can **Edit**; Save writes a copy and never changes the original.
 - **Export** is in File, and the **...** menu of any note in Home, Google Drive or Internet Archive exports it without opening it first. The **?** explains each format.
 - NoteComplete is in your system's **Open with** menus, and the default for its own files.
@@ -104,7 +104,7 @@ _Formulas, plots and tables, written on the page_
 
 - **Math in text boxes**: the ==Sum== button in the text format bar makes a box LaTeX, typeset on the page (fractions, powers, roots, Greek letters, calculus), or write `$...$` among words. A **math keypad** types it for you and replaces the keyboard on phones.
 - **Edit a formula in place**: tap a numerator or an exponent to change it.
-- **Graphs** (==Shift X==): plot any function of x, several at once in their own colours, with the range, grid and numbers you want. Select one and choose **Edit graph**.
+- **Prefabs** (==Shift X==): figures as exams draw them, still editable: function graphs, histograms, bar charts, **process states** and **CPU timelines** painted a tap at a time ((1, 5 or 10 units)), trees and **UML diagrams**. Right-click or hold one to edit it.
 - **Tables** (==Shift Y==): type in a grid, Tab adds rows, and `$...$` in a cell is math.
 - **Fact check** (==Shift F==) has your AI read a page for wrong numbers, dates and calculations.
 
@@ -188,7 +188,7 @@ _The same on a computer, a tablet and a phone_
 
 >> [sky] TOOLS: ==V== pan, ==S== select, ==P== pen, ==H== highlighter, ==E== eraser, ==T== tape, ==R== shapes, ==W== text, ==G== grab, ==O== lock || [amber] QUICK MENU: hold ==Shift S== and let go on a tool, ==Shift + right-click==, ==Shift + pen==, a pen's side button, or two fingers held still. ==Shift T== hides the tool bar
 >> [teal] THE NOTE: ==Ctrl Z== undo, ==Ctrl Shift Z== redo, ==Ctrl S== save, ==Ctrl F== find, ==N== notes, ==D== dark pages || [purple] MORE: ==Ctrl K== commands, ==Ctrl J== ask AI, ==A== audio, ==K== play, ==?== shows every key on its button
->> [coral] INSERT: ==Shift X== graph, ==Shift Y== table, ==Shift I== image, ==Shift B== blank page || [pink] STUDY: ==Shift C== flashcards, ==Shift Q== quiz, ==Shift F== fact check, ==Shift O== recognize text
+>> [coral] INSERT: ==Shift X== prefab, ==Shift Y== table, ==Shift I== image, ==Shift B== blank page || [pink] STUDY: ==Shift C== flashcards, ==Shift Q== quiz, ==Shift F== fact check, ==Shift O== recognize text
 
 ## Gestures
 - **Two fingers**: scroll or pinch to zoom; tap to undo, three fingers to redo; hold still for the quick menu.

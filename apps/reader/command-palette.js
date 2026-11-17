@@ -31,7 +31,13 @@ export function rank(commands, query, limit = 50) {
 
 export function commandPalette({ dialog, input, list, commands, dynamic = () => [] }) {
   let shown = [], selected = 0;
-  function render() {
+  // Whether the list is scrolled from its top, noted as it scrolls: reading scrollTop while
+  // rendering would measure the page.
+  let scrolled = false;
+  list.addEventListener('scroll', () => { scrolled = list.scrollTop > 0; }, { passive: true });
+  // `follow`: keep the chosen line in sight (the arrows). Otherwise the list starts at its
+  // top, which needs no layout: scrolling to a line on opening measured the whole window.
+  function render(follow = false) {
     const query = input.value;
     shown = [...dynamic(query), ...rank(commands(), query)];
     selected = Math.min(selected, Math.max(0, shown.length - 1));
@@ -69,7 +75,8 @@ export function commandPalette({ dialog, input, list, commands, dynamic = () => 
     }
     list.replaceChildren(fragment);
     input.setAttribute('aria-activedescendant', shown.length ? `palette-${selected}` : '');
-    list.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
+    if (follow) list.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
+    else if (scrolled) { scrolled = false; list.scrollTop = 0; }
   }
   function choose() {
     const command = shown[selected];
@@ -82,7 +89,7 @@ export function commandPalette({ dialog, input, list, commands, dynamic = () => 
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (shown.length) selected = (selected + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length;
-      render();
+      render(true);
     } else if (event.key === 'Enter') { event.preventDefault(); choose(); }
   };
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });

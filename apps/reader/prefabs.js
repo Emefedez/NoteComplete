@@ -174,12 +174,21 @@ export function choosePrefab() {
       if (!drawing) drawing = setTimeout(drawSome, 30);
       return slot;
     };
+    // The large picture of the one shown: drawn after the frame that shows the picker (or the
+    // newly pointed card), so a tap gets its answer first; its icon stands in until then.
+    let bigFor = null;
+    const showBig = (p) => {
+      bigFor = p;
+      if (!p || previews.has(p.id)) return big.replaceChildren(...(p ? [thumb(p)] : []));
+      big.replaceChildren(make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon)));
+      requestAnimationFrame(() => setTimeout(() => { if (bigFor === p && dialog.isConnected) big.replaceChildren(thumb(p)); }, 0));
+    };
     let active = null;
     const finish = (value) => { if (value) notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
     function show(p) {
       active = p;
       for (const c of grid.querySelectorAll('.prefab-card')) c.setAttribute('aria-selected', String(c.dataset.id === p?.id));
-      big.replaceChildren(...(p ? [thumb(p)] : []));
+      showBig(p);
       name.textContent = p?.label || 'Nothing found';
       hint.textContent = p ? p.hint : 'Try another word, or All.';
       apply.disabled = !p;

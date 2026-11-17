@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.30
+
+- **Length per tap on a phone held upright.** The 1, 5 and 10 buttons in the process states and CPU timeline editors (how much one tap paints) were pushed off the edge of the screen in portrait, and a phone has no wheel to switch them. They now sit on their own row under the brushes. With the phone on its side they come first in the brush column.
+- **Chart editors fit a phone better.** The toolbar is a single row of icons, and Insert keeps its name when there is room. The figure takes the height it needs, so the fields below it are no longer cut off under an empty band. The empty strip above plots and histograms is gone, and the name for a new process shares the lengths' row.
+
 ## 1.2.29
 
 - **Android updates install again.** Every APK so far carried the same internal build number, so some phones (Samsung among them) refused a newer one with "App not installed". Each release now has a higher build number (1.2.29 is 10229), so it installs over the one you have.

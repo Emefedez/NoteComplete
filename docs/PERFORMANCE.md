@@ -31,6 +31,10 @@ The default notes are:
 - `samples/Examen wuolah.noteful`: 3 PDF pages with several hundred strokes each.
 - `tests/fixtures/multi-audio-synthetic.noteful`.
 
+### How quickly the interface answers
+
+`node tools/ui_latency_bench.mjs` (after a web build) opens the same 193-page note at a slow tablet's speed (Chrome's CPU throttling, 4× by default), then taps menus, tool buttons, dialogs, the right-click menu and a colour, and times each from the moment the pointer goes down to the frame that shows the answer painted. Each tap is repeated (`--runs N`, default 3) and the median is reported, slowest first. `--only text` measures only the steps whose name contains it, and `--json file` saves the results.
+
 ## What keeps it light
 
 - **Pages away from the view are placeholders.** A page more than 600 px outside the view keeps only its size. Its drawing, PDF raster, selectable-text layer and search highlights go. Before 1.1.12 the text and search layers stayed referenced, about 520 elements per PDF page; a 193-page PDF held more than 100,000 nodes and about 1 GB after one scroll through.
@@ -79,7 +83,30 @@ A 1× screen, on a 4-core cloud container running Chromium headless with softwar
 
 Long notes gain the most: memory and work there grew with the pages visited, and now stay flat. A short note was already small. On a 2× screen, the PDF raster sizes are as before, so the memory saved on a long PDF comes from the other changes.
 
+### Menus, tools and dialogs (1.2.31)
+
+Opening a dialog makes the rest of the window inert, and Chrome restyles every element under an inert one. Most of the window's elements were the page list's cards (about 19 per page; 3,700 for this note), so every dialog paid for every card. The cards out of sight now skip their styling and layout (`content-visibility: auto`), which also helps anything else that restyles the whole window. The root's `--modal-top` is set only when it changes, since setting it restyled everything too. The prefab picker draws its large preview after the frame that shows it, and the command palette (Go to page too) no longer measures the window to scroll a list that is already at its top.
+
+`tools/ui_latency_bench.mjs`, 4× CPU throttling, medians of 5 runs, milliseconds from the tap to the painted answer:
+
+| | 1.2.30 | 1.2.31 | Change |
+|---|---:|---:|---:|
+| Command palette | 224 | 94 | -58 % |
+| Lag log | 219 | 91 | -58 % |
+| Go to page | 211 | 105 | -50 % |
+| Insert prefab | 208 | 124 | -40 % |
+| Import, export and share | 202 | 116 | -43 % |
+| Display quality | 165 | 90 | -45 % |
+| Ask AI panel | 157 | 61 | -61 % |
+| Find | 138 | 59 | -57 % |
+| Home | 110 | 72 | -35 % |
+| Tool buttons (9 tools, median of medians) | 78 | 58 | -26 % |
+| Menus (File to Help) | 27 to 40 | 33 to 45 | noise |
+
+At full CPU speed the times are about a quarter of these: dialogs go from 40 to 55 ms to 15 to 30 ms. Menus, a colour tap (25 ms) and the right-click menu (about 60 ms) were already within a few frames.
+
 ## Not measured here
 
 - Safari (iPad, iPhone): not available in this container. WebKit renders, composites and caches pictures differently; the changes keep to standard APIs and fall back where one is missing (`OffscreenCanvas`, `createImageBitmap`, `bitmaprenderer`).
 - GPU rendering: devices with a GPU composite and keep decoded pictures on the GPU, so absolute numbers differ.
+- Switching tabs in the desktop app: each tab is its own web view, shown and hidden by Electron, which this container cannot run with a display.

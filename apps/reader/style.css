@@ -636,7 +636,11 @@ h2 {
   gap: 6px;
   margin-top: 12px;
 }
+/* A long note has hundreds of cards here: those out of sight skip their styling and layout,
+   so whatever restyles the whole window (a dialog opening, the theme) does not redo them all. */
 .page-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
   display: flex;
   flex-direction: column;
   gap: 4px;
