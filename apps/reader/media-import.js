@@ -32,6 +32,8 @@ export function fileKind(name, bytes) {
     new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
   )
     return "image";
+  // Goodnotes and Notability notebooks (zip archives), imported as Noteful notes.
+  if (/\.(goodnotes|ntb)$/i.test(name)) return "notebook";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
   if (isOfficeName(name)) return "office";
@@ -55,8 +57,10 @@ export function fileKind(name, bytes) {
     return "project";
   // No extension (data files, README, Makefile…): text when the content is.
   if (!hasExtension(name) && looksLikeText(bytes)) return "text";
+  // A zip without a name that says what it is: maybe a notebook (the engine checks).
+  if (!hasExtension(name) && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4) return "notebook";
   throw Error(
-    "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
+    "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
   );
 }
 

@@ -1,0 +1,15 @@
+[package]
+name = "noteful-import-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+description = "The notebook importer for the browser, loaded only when a notebook is opened"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+noteful-import = { path = "../noteful-import" }
+serde_json.workspace = true
+wasm-bindgen = "0.2"

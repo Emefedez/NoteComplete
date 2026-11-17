@@ -629,6 +629,8 @@ async function load(file, preparedDocument = null) {
       ...prepared,
       project: prepared.kind === "project",
       notecomplete: prepared.kind === "notecomplete",
+      notebook: prepared.kind === "notebook",
+      name: file?.name || "",
       page: 0,
     });
     // Both worker and UI retain the previous document until the replacement validates.
@@ -650,7 +652,7 @@ async function load(file, preparedDocument = null) {
       result.layers.find((l) => l.visible && !l.locked)?.id ??
       result.layers[0]?.id ??
       0;
-    dirty = ["pdf", "image", "blank", "handwritten"].includes(prepared.kind);
+    dirty = ["pdf", "image", "blank", "handwritten", "notebook"].includes(prepared.kind);
     changed = false;
     saveAs = prepared.saveAs || null;
     saveLabel();
@@ -683,7 +685,11 @@ async function load(file, preparedDocument = null) {
     rememberDocument();
     await renderPage(panels[0], result);
     void ensureDocumentCover({ skipExisting: true });
-    status("Document opened.");
+    // A Goodnotes or Notability notebook is now a note: it is saved as a .nfedit that keeps it.
+    if (prepared.kind === "notebook") {
+      const left = result.import_warnings || [];
+      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, left.length > 0);
+    } else status("Document opened.");
     collab?.documentChanged();
     autosave.opened(recovering);
   } catch (e) {
@@ -4612,6 +4618,8 @@ $("newCreate").onclick = async () => {
   $("newDialog").close();
   // A unique stand-in file, so this document's notes and study material get their own key.
   const seed = crypto.getRandomValues(new Uint8Array(16));
+  // A new note is no file yet: its first save must not go to the note that was open before.
+  notePath = noteEntryKey = ""; setDocMember(null);
   await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: Array.from({ length: count }, () => size), bytes: new ArrayBuffer(0), saveAs: format, canvas });
 };
 // Markdown written as handwriting ink (the MCP ink engine): a new note, or pages in this one.
@@ -4629,6 +4637,7 @@ const converter = handwritingConverter({
     let format = "project";
     try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
     const seed = crypto.getRandomValues(new Uint8Array(16));
+    notePath = noteEntryKey = ""; setDocMember(null);
     await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "handwritten", title, markdown, options, bytes: new ArrayBuffer(0), saveAs: format });
   },
   onInsert: async ({ markdown, options, where }) => {
@@ -6221,7 +6230,7 @@ async function notePages(file, maxPages = 20) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const kind = fileKind(file.name, bytes);
   if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
-  if (!["note", "notecomplete", "project"].includes(kind)) throw Error("only notes, PDFs and pictures can be shown here");
+  if (!["note", "notecomplete", "project", "notebook"].includes(kind)) throw Error("only notes, notebooks, PDFs and pictures can be shown here");
   const worker = new Worker("./worker.js", { type: "module" });
   const waiting = new Map();
   let next = 0;
@@ -6243,7 +6252,7 @@ async function notePages(file, maxPages = 20) {
   const pdfs = new PdfBackgrounds((resource) => ask("pdf", { resource }));
   try {
     await ready;
-    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete" });
+    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete", notebook: kind === "notebook", name: file.name });
     const count = Math.min(Number(first.pages) || 1, maxPages);
     const source = { view: (i) => (i === 0 ? first : ask("view", {}, i)), backgrounds: pdfs };
     const pages = [];
@@ -6262,7 +6271,7 @@ async function notePages(file, maxPages = 20) {
 async function recentReferenceNotes() {
   const entries = await library.recent(30).catch(() => []);
   return entries
-    .filter((entry) => entry && entry.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart|pdf)$/i.test(entry.name || ""))
+    .filter((entry) => entry && entry.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb|pdf)$/i.test(entry.name || ""))
     .map((entry) => ({
       title: entryTitle(entry),
       open: async () => {
@@ -8059,7 +8068,7 @@ async function pickImportTarget(pack, { preferOpen = false } = {}) {
   for (const entry of await library.recent(60).catch(() => [])) {
     if (!entry?.key || seenKeys.has(entry.key)) continue;
     seenKeys.add(entry.key);
-    const cleanTitle = String(entry.name || "Note").replace(/\.(noteful|nfedit|notecomp(lete)?|notepart)$/i, "");
+    const cleanTitle = String(entry.name || "Note").replace(/\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i, "");
     options.push({
       id: `entry:${entry.key}`,
       entry,

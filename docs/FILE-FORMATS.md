@@ -6,7 +6,7 @@ NoteComplete saves a note in two formats of its own. This page records why both 
 
 | | `.nfedit` (project) | `.notecomp` (package) |
 | --- | --- | --- |
-| Layout | One JSON file ([spec](../spec/nfedit-v1.md)) | A tar archive ([layout](../spec/nfedit-v1.md#notecomp-archives)) |
+| Layout | A tar archive since version 13 (one JSON file before; [spec](../spec/nfedit-v1.md)) | A tar archive ([layout](../spec/nfedit-v1.md#notecomp-archives)) |
 | The note | The **original file, untouched** (Base64), plus every edit as a list | The note **flattened** into one Noteful file by the native writer |
 | Undo and redo | Kept, including redo after reopening | Not kept: the note reopens as it was saved |
 | Drawn shapes | Keep their corners, so they resize as shapes later | Become outlines (filled ones become highlighter bands) |
@@ -52,3 +52,5 @@ The converted files behave like an opened `.md` file (Find, study tools, MD on o
 ## Pictures in Markdown and text documents
 
 `![alt](Tema_files/image1.png)` in a `.md` file shows the picture. In the desktop app it is read from beside the file (the document's folder and subfolders, or any subfolder of an opened folder; PNG, JPEG, GIF, WebP, BMP and SVG up to 25 MB; a link that leaves that folder, or follows a symbolic link out of it, is refused). `https://` and `data:image/` pictures show anywhere; a picture that cannot be found shows its description in a dashed box. In the browser, pictures beside a file cannot be read, so open a converted `.docx`/`.odt` (their pictures come with them) or use the desktop app.
+
+**Update (1.2.28):** `.nfedit` version 13 is a tar archive like `.notecomp` (`manifest.json` first, then `note.noteful`, the recordings and, for an imported notebook, the original Goodnotes or Notability file as `origin`). It stores the note as bytes instead of Base64 (a quarter smaller), and older JSON projects keep opening. See [the version 13 archive](../spec/nfedit-v1.md#version-13-archive).

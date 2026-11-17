@@ -118,13 +118,7 @@ fn ext(path: &Path) -> String {
 /// A note opened for writing, with its bytes (for recordings kept in a .notecomp).
 fn open_for_edit(path: &Path) -> Res<(Editor, Vec<u8>)> {
     let data = std::fs::read(path)?;
-    let editor = if is_nfedit(path) {
-        Editor::open_project_bytes(&data)?
-    } else if is_notecomplete(&data) {
-        Editor::open_notecomplete(&data)?
-    } else {
-        Editor::open(&data)?
-    };
+    let editor = super::open_note(path, &data)?;
     Ok((editor, data))
 }
 fn writable_ext(e: &str) -> Res<&'static str> {
@@ -174,7 +168,17 @@ pub(super) fn destination(
         }
         return Ok((out, None));
     }
-    let e = writable_ext(&source.map(ext).unwrap_or_else(|| "noteful".into()))?;
+    // A Goodnotes or Notability notebook is written as a .nfedit that keeps it.
+    let e = writable_ext(&source.map(ext).map_or_else(
+        || "noteful".into(),
+        |e| {
+            if matches!(e.as_str(), "goodnotes" | "ntb") {
+                "nfedit".into()
+            } else {
+                e
+            }
+        },
+    ))?;
     let dir = library().join("ink");
     let stem = safe(title.trim())
         .trim()

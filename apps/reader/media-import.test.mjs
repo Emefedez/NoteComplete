@@ -10,6 +10,13 @@ test('imports identify content even when a provider hides the filename',()=>{
  assert.throws(()=>fileKind('looks-like-a.pdf',bytes('<html>not a PDF')));
  assert.throws(()=>fileKind('image.svg',bytes('<svg onload="bad()"/>')));
 });
+test('Goodnotes and Notability notebooks are imported, by name or as an unnamed zip',()=>{
+ const zip=new Uint8Array([0x50,0x4b,3,4,0,0]);
+ assert.equal(fileKind('Lecture.goodnotes',zip),'notebook');
+ assert.equal(fileKind('Biology.NTB',zip),'notebook');
+ assert.equal(fileKind('shared-file',zip),'notebook');
+ assert.throws(()=>fileKind('archive.zip',zip));
+});
 test('imported images preserve aspect ratio, fit the page and never upscale',()=>{
  assert.deepEqual(imageBounds([1200,600],[600,800]),[60,280,480,240]);
  assert.deepEqual(imageBounds([100,50],[600,800]),[250,375,100,50]);

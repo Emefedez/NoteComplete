@@ -94,6 +94,29 @@ impl EditorSession {
             inner: noteful_core::Editor::open_project_bytes(data)?,
         })
     }
+    /// A note the importer (pkg/import) made from a Goodnotes or Notability notebook, with the
+    /// notebook kept as the project's origin.
+    pub fn open_imported(
+        noteful: &[u8],
+        format: &str,
+        name: &str,
+        origin: &[u8],
+    ) -> Result<EditorSession, Failure> {
+        let mut inner = noteful_core::Editor::open(noteful)?;
+        inner.set_origin(Some(noteful_core::Origin {
+            format: format.into(),
+            name: name.into(),
+            bytes: origin.to_vec(),
+        }));
+        Ok(Self { inner })
+    }
+    /// The project's origin, when it was imported: `{format, name}` JSON, or `null`.
+    pub fn origin_json(&self) -> String {
+        self.inner.origin().map_or("null".into(), |o| {
+            serde_json::json!({"format": o.format, "name": o.name, "bytes": o.bytes.len()})
+                .to_string()
+        })
+    }
     /// What a `.nfedit` file holds: the project as a v13 archive.
     pub fn save_project_archive(&self) -> Result<Vec<u8>, Failure> {
         Ok(self.inner.save_project_archive()?)

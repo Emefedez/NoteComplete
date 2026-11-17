@@ -231,7 +231,10 @@ fn nfedit_v11_bundles_added_audio_and_filtered_export_strips_selected_resources(
     assert_eq!(restored.added_audio()[0].1, vec![1, 2, 3, 4, 5, 6]);
 
     let breakdown = e.project_breakdown().unwrap();
-    assert_eq!(breakdown.total_bytes, e.save_project_archive().unwrap().len());
+    assert_eq!(
+        breakdown.total_bytes,
+        e.save_project_archive().unwrap().len()
+    );
     assert!(breakdown.pdf_bytes > 0 && breakdown.pdf_count > 0);
     assert!(breakdown.native_audio_bytes > 0 && breakdown.native_audio_count == 1);
     assert!(breakdown.added_audio_bytes > 0 && breakdown.added_audio_count == 1);

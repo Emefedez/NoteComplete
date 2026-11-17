@@ -433,13 +433,7 @@ impl Server {
             Some(_) => {
                 let source = note_path(args)?;
                 let data = std::fs::read(&source)?;
-                let mut editor = if is_nfedit(&source) {
-                    Editor::open_project_bytes(&data)?
-                } else if is_notecomplete(&data) {
-                    Editor::open_notecomplete(&data)?
-                } else {
-                    Editor::open(&data)?
-                };
+                let mut editor = super::open_note(&source, &data)?;
                 let count = editor.page_order().len();
                 let at = args["after_page"].as_u64().map_or(count, |n| n as usize);
                 if at > count {

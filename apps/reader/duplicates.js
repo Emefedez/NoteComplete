@@ -7,7 +7,7 @@ const ALL_STUDY_KINDS = [...STUDY.map(([k]) => k), 'scratch'];
 const MAX_FULL_HASH_BYTES = 64 * 1024 * 1024;
 const MAX_NFEDIT_PARSE_BYTES = 48 * 1024 * 1024;
 
-const STRIP_EXT_RE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|pdf|markdown|md|html?|txt|docx|odt|xlsx|ods|png|jpe?g|webp)$/i;
+const STRIP_EXT_RE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|pdf|markdown|md|html?|txt|docx|odt|xlsx|ods|png|jpe?g|webp)$/i;
 // Copy markers: "(2)", "(copy)", and the id/hash tags older versions added: "(a1b2c3)", "(12oD0v)".
 const COPY_SUFFIX_RE = /(?:\s*(?:\((?:\d+|[a-f0-9]{5,8}(?:-\d+)?|copy|copia)\)|[-_ ]+(?:copy|copia)(?:\s*\d+)?))+$/gi;
 
@@ -75,6 +75,12 @@ export async function extractExclusiveIds(entry, file) {
     for (const id of await notefulIdsFromBlob(file)) ids.add(id);
   } else if (/\.nfedit$/i.test(name) && file.size > 0 && file.size <= MAX_NFEDIT_PARSE_BYTES) {
     try {
+      // A v13 .nfedit is a tar: its note is the `note.noteful` member.
+      const member = await tarMember(file, 'note.noteful');
+      if (member) {
+        for (const id of await notefulIdsFromBlob(member)) ids.add(id);
+        return [...ids];
+      }
       const text = await file.text();
       const m = /"source_base64"\s*:\s*"([A-Za-z0-9+/=]+)"/.exec(text);
       if (m?.[1]) {
@@ -85,6 +91,22 @@ export async function extractExclusiveIds(entry, file) {
     } catch { /* Ignore unreadable or malformed project text. */ }
   }
   return [...ids];
+}
+
+// One member of a ustar archive, as a Blob slice (no copy), or null.
+async function tarMember(file, wanted) {
+  let at = 0;
+  while (at + 512 <= file.size) {
+    const head = new Uint8Array(await file.slice(at, at + 512).arrayBuffer());
+    if (head.every((b) => b === 0)) return null;
+    if (new TextDecoder().decode(head.subarray(257, 262)) !== 'ustar') return null;
+    const name = new TextDecoder().decode(head.subarray(0, 100)).replace(/\0.*$/s, '');
+    const size = parseInt(new TextDecoder().decode(head.subarray(124, 136)).replace(/\0.*$/s, '').trim() || '0', 8);
+    if (!Number.isFinite(size) || size < 0) return null;
+    if (name === wanted) return file.slice(at + 512, at + 512 + size);
+    at += 512 + Math.ceil(size / 512) * 512;
+  }
+  return null;
 }
 
 export async function countEntryStudy(store, fingerprint) {

@@ -5,8 +5,8 @@
 mod compact;
 mod editor;
 mod project_archive;
-pub use project_archive::is_project_archive;
 pub use compact::Compacted;
+pub use project_archive::is_project_archive;
 pub mod ink;
 mod markdown;
 mod page_pdf;

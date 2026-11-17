@@ -33,7 +33,12 @@ fn manifest(data: &[u8]) -> Option<serde_json::Value> {
     None
 }
 
-fn pack(mut project: Project, source: &[u8], origin: Option<&[u8]>, audio: &[&[u8]]) -> Result<Vec<u8>> {
+fn pack(
+    mut project: Project,
+    source: &[u8],
+    origin: Option<&[u8]>,
+    audio: &[&[u8]],
+) -> Result<Vec<u8>> {
     project.format = FORMAT.to_owned();
     project.version = VERSION;
     let manifest = serde_json::to_vec(&project).map_err(|e| Error::new(0, e.to_string()))?;
@@ -46,24 +51,39 @@ fn pack(mut project: Project, source: &[u8], origin: Option<&[u8]>, audio: &[&[u
     for (i, bytes) in audio.iter().enumerate() {
         crate::markdown::add(&mut builder, &format!("audio/{i}"), bytes)?;
     }
-    builder.into_inner().map_err(|e| Error::new(0, e.to_string()))
+    builder
+        .into_inner()
+        .map_err(|e| Error::new(0, e.to_string()))
 }
 
 impl Editor {
     /// The project as a v13 archive: what a `.nfedit` file holds.
     pub fn save_project_archive(&self) -> Result<Vec<u8>> {
         let audio: Vec<&[u8]> = self.added_audio.iter().map(|(_, b)| b.as_slice()).collect();
-        pack(self.project(false), &self.source, self.origin.as_ref().map(|o| o.bytes.as_slice()), &audio)
+        pack(
+            self.project(false),
+            &self.source,
+            self.origin.as_ref().map(|o| o.bytes.as_slice()),
+            &audio,
+        )
     }
     /// `export_filtered_project` as a v13 archive.
-    pub fn export_filtered_project_archive(&self, options: ProjectExportOptions) -> Result<Vec<u8>> {
+    pub fn export_filtered_project_archive(
+        &self,
+        options: ProjectExportOptions,
+    ) -> Result<Vec<u8>> {
         let (project, source) = self.filtered_project(options, false)?;
         let audio: Vec<&[u8]> = if options.include_added_audio {
             self.added_audio.iter().map(|(_, b)| b.as_slice()).collect()
         } else {
             Vec::new()
         };
-        pack(project, &source, self.origin.as_ref().map(|o| o.bytes.as_slice()), &audio)
+        pack(
+            project,
+            &source,
+            self.origin.as_ref().map(|o| o.bytes.as_slice()),
+            &audio,
+        )
     }
     /// Opens a v13 archive.
     pub fn open_project_archive(data: &[u8]) -> Result<Self> {
@@ -74,15 +94,26 @@ impl Editor {
         let mut archive = tar::Archive::new(data);
         for entry in archive.entries().map_err(invalid)? {
             let mut entry = entry.map_err(invalid)?;
-            let name = entry.path().map_err(invalid)?.to_string_lossy().into_owned();
+            let name = entry
+                .path()
+                .map_err(invalid)?
+                .to_string_lossy()
+                .into_owned();
             let mut bytes = Vec::with_capacity(entry.header().size().map_err(invalid)? as usize);
             entry.read_to_end(&mut bytes).map_err(invalid)?;
             match name.as_str() {
-                MANIFEST => project = Some(serde_json::from_slice(&bytes).map_err(|e| Error::new(0, e.to_string()))?),
+                MANIFEST => {
+                    project = Some(
+                        serde_json::from_slice(&bytes).map_err(|e| Error::new(0, e.to_string()))?,
+                    )
+                }
                 NOTE => source = Some(bytes),
                 ORIGIN => origin = Some(bytes),
                 _ => {
-                    if let Some(i) = name.strip_prefix("audio/").and_then(|n| n.parse::<usize>().ok()) {
+                    if let Some(i) = name
+                        .strip_prefix("audio/")
+                        .and_then(|n| n.parse::<usize>().ok())
+                    {
                         audio.insert(i, bytes);
                     }
                 }
@@ -93,12 +124,20 @@ impl Editor {
             .ok_or_else(|| Error::new(0, "Unsupported or invalid project"))?;
         let source = source.ok_or_else(|| Error::new(0, "The project has no note"))?;
         let origin = match (&project.origin, origin) {
-            (Some(o), Some(bytes)) => Some(crate::editor::Origin { format: o.format.clone(), name: o.name.clone(), bytes }),
+            (Some(o), Some(bytes)) => Some(crate::editor::Origin {
+                format: o.format.clone(),
+                name: o.name.clone(),
+                bytes,
+            }),
             (None, None) => None,
             _ => return Err(Error::new(0, "The project's original file is missing")),
         };
         let audio = (0..project.added_audio.len())
-            .map(|i| audio.remove(&i).ok_or_else(|| Error::new(0, "A recording of the project is missing")))
+            .map(|i| {
+                audio
+                    .remove(&i)
+                    .ok_or_else(|| Error::new(0, "A recording of the project is missing"))
+            })
             .collect::<Result<Vec<_>>>()?;
         let mut project = project;
         project.origin = None;

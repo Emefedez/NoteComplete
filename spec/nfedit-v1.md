@@ -1,6 +1,6 @@
-# Noteful RE Project (.nfedit), versions 1–12
+# Noteful RE Project (.nfedit), versions 1–13
 
-Our non-destructive UTF-8 JSON project format, not an official Noteful format. Required fields; unknown keys are rejected:
+Our non-destructive project format, not an official Noteful format. Since version 13 a `.nfedit` file is a tar archive (see [the version 13 archive](#version-13-archive)) whose `manifest.json` is the project JSON described here; versions 1–12 are the JSON alone, and every version keeps opening. The JSON form is also what automatic saves and shared sessions keep. Required fields; unknown keys are rejected:
 
 ```json
 {
@@ -132,6 +132,28 @@ A project may include `"added_audio": [ { "id": "…", "name": "…", "mime": "�
 ## Embedded exam HTML (project version 12)
 
 A project may include `"exam": { "html": "…", "source": { … } }` keeping an AI-generated or solved exam's self-contained interactive HTML source (and optional structured exam JSON used when expanding or editing the exam) directly inside `.nfedit` (`EXAM_LIMIT` 16 MiB; omitted when empty so earlier versions remain valid). Opening the `.nfedit` shows its paginated PDF and tape pages as usual, while **View → Interactive exam HTML** lets users view, manually edit, export, or expand the embedded HTML alongside the note.
+
+## Version 13 archive
+
+A version 13 `.nfedit` is a ustar archive, the same container as `.notecomp`, told apart by its first member:
+
+- `manifest.json` (first): the project JSON with `"format":"notecomplete-project"`, `"version":13`, and the bytes left out of it: no `source_base64`, `origin.base64` or `added_audio[].bytes_base64`.
+- `note.noteful`: the original note (what `source_base64` holds in the JSON form).
+- `origin`: the file the note was imported from, when there is one (below).
+- `audio/0`, `audio/1`, …: the added recordings, in `added_audio` order.
+
+Readers check members by name, not order, after the first. A project's JSON form with `"format":"notecomplete-project"` and `"version":13` keeps the bytes as Base64 in the fields above, as earlier versions did; a reader takes either. Writers write the archive to files and the JSON form for automatic saves and collaboration snapshots. Versions 1–12 are read by the same reader and saved again as version 13.
+
+### Imported notebooks (`origin`)
+
+Goodnotes (`.goodnotes`) and Notability (`.ntb`) notebooks open as Noteful notes (crate `noteful-import`, reading them with oblyx). The notebook is rebuilt as an ordinary Noteful note, which is the project's `note.noteful`, so every feature and every edit works on it as on any note:
+
+- ink as strokes; typed text as native text boxes; PNG and JPEG pictures as images; unrotated rectangles, ellipses and triangles as shapes (fills kept); other shapes and arrows as their outlines;
+- the notebook's own PDF pages as vector page backgrounds, at the place the notebook shows them;
+- paper templates, sticky notes, filled drawings and shape fills, which Noteful cannot hold as items, drawn into a vector PDF behind the page (`notebook-paper`) when the page has no PDF of its own; on a PDF page sticky notes become filled rectangles and other fills are left out;
+- anything else (connectors not attached to a path, pictures in other formats) left out, each kind counted in the warnings the importer returns.
+
+Notability coordinates are PDF points and are scaled by 11/6 to page units; Goodnotes pages are already in page units. Notability's pagination is inferred (oblyx slices by height). The notebook itself is kept unchanged as `"origin": {"format": "goodnotes"|"notability", "name": "<file name>"}` in the manifest and the `origin` member (`origin.base64` in the JSON form), so nothing of it is lost even where the conversion is incomplete. Saving never writes the notebook format; it is a `.nfedit` (or a Noteful note on export).
 
 ## Compound objects and their notes
 

@@ -81,7 +81,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
     json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required}})
 }
 fn tools() -> Value {
-    let path = json!({"type":"string","description":"Path to a .noteful or .nfedit file"});
+    let path = json!({"type":"string","description":"Path to a .noteful, .nfedit or .notecomp file, or a Goodnotes (.goodnotes) or Notability (.ntb) notebook (read as the Noteful note it imports to)"});
     let page = json!({"type":"integer","minimum":1,"description":"Page number, starting at 1"});
     let mut tools = json!([
         tool("list_notes", "List notes in a folder (default: the NoteComplete downloads folder) with title, page count and size.", json!({"folder":{"type":"string"}}), &[]),
@@ -115,7 +115,7 @@ impl Server {
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit). Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots or UML prefabs, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
+                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit) and reads Goodnotes (.goodnotes) and Notability (.ntb) notebooks as Noteful notes; writing to one makes a .nfedit that keeps the notebook. .nfedit files are written as version 13 (a tar archive); older JSON projects still open. Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots or UML prefabs, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
@@ -243,16 +243,7 @@ impl Server {
             self.notes.push(entry);
         } else {
             let data = std::fs::read(&path)?;
-            let editor = if path
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("nfedit"))
-            {
-                Editor::open_project_bytes(&data)?
-            } else if is_notecomplete(&data) {
-                Editor::open_notecomplete(&data)?
-            } else {
-                Editor::open(&data)?
-            };
+            let editor = open_note(&path, &data)?;
             self.notes.retain(|(p, ..)| *p != path);
             if self.notes.len() >= 2 {
                 self.notes.remove(0);
@@ -636,7 +627,7 @@ fn list_notes(folder: PathBuf) -> Res<Value> {
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase())
             .unwrap_or_default();
-        if ext != "noteful" && ext != "nfedit" {
+        if !matches!(ext.as_str(), "noteful" | "nfedit" | "goodnotes" | "ntb") {
             continue;
         }
         let meta = std::fs::metadata(&path)?;
@@ -796,14 +787,30 @@ fn write_deck(args: &Value) -> Res<Value> {
 /// The Markdown notes of a `.notecomp`/`.notepart` archive or an `.nfedit` project.
 fn notes_of(path: &Path, data: &[u8]) -> Res<String> {
     if is_nfedit(path) {
-        Ok(Editor::open_project_bytes(data)?
-            .markdown()
-            .to_owned())
+        Ok(Editor::open_project_bytes(data)?.markdown().to_owned())
     } else if is_notecomplete(data) {
         Ok(unpack_notecomplete(data)?.1)
     } else {
         Err("Notes are kept in .notecomp, .notepart or .nfedit files; a plain .noteful file has none. Save it from NoteComplete as one of those first.".into())
     }
+}
+/// Any note the tools read: a `.nfedit` project (v13 archive or JSON), a `.notecomp`, a
+/// Goodnotes or Notability notebook (imported as a Noteful note), or a `.noteful`.
+pub(crate) fn open_note(path: &Path, data: &[u8]) -> Res<Editor> {
+    Ok(
+        if is_nfedit(path) || noteful_core::is_project_archive(data) {
+            Editor::open_project_bytes(data)?
+        } else if is_notecomplete(data) {
+            Editor::open_notecomplete(data)?
+        } else if noteful_import::format_of(data).is_some() {
+            let name = path
+                .file_name()
+                .map_or_else(|| "Notebook".into(), |n| n.to_string_lossy().into_owned());
+            noteful_import::import(&name, data)?.editor
+        } else {
+            Editor::open(data)?
+        },
+    )
 }
 fn is_nfedit(path: &Path) -> bool {
     path.extension()
@@ -895,6 +902,25 @@ fn flashcards_prompt(args: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn notebooks_open_as_notes_and_write_as_nfedit() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/import/");
+        for (name, pages) in [("goodnotes-basic.goodnotes", 2), ("notability-pdf.ntb", 1)] {
+            let path = Path::new(dir).join(name);
+            let editor = open_note(&path, &std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(editor.page_order().len(), pages, "{name}");
+            assert_eq!(editor.origin().unwrap().name, name);
+            let out =
+                std::env::temp_dir().join(format!("nc-mcp-{}-{name}.nfedit", std::process::id()));
+            super::ink_tools::save(&editor, &out, None, None).unwrap();
+            let back = open_note(&out, &std::fs::read(&out).unwrap()).unwrap();
+            assert!(
+                back.origin().is_some(),
+                "{name}: the notebook stays with the project"
+            );
+            let _ = std::fs::remove_file(out);
+        }
+    }
     const EXAM: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../samples/Examen wuolah.noteful"

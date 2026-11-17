@@ -9,7 +9,9 @@ description = "Goodnotes and Notability notes made into Noteful notes NoteComple
 [dependencies]
 noteful-core = { path = "../noteful-core" }
 serde_json.workspace = true
-# The Goodnotes and Notability readers (MIT, Coobyk): pinned, see THIRD_PARTY.md.
+base64 = "0.22"
+pdf-writer = "0.15.0"
+# The Goodnotes and Notability readers (MIT, Coobyk): pinned, see crates/noteful-import/THIRD_PARTY.md.
 oblyx = { git = "https://github.com/Coobyk/oblyx", rev = "bf005d5d6d16ccf116b6766a5ea31a387b6305cf", default-features = false }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

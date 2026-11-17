@@ -834,7 +834,10 @@ impl Editor {
         };
         serde_json::to_string(&project).map_err(|e| Error::new(0, e.to_string()))
     }
-    fn encode_added_audio(audio: &[(crate::AddedAudio, Vec<u8>)], inline: bool) -> Vec<ProjectAddedAudio> {
+    fn encode_added_audio(
+        audio: &[(crate::AddedAudio, Vec<u8>)],
+        inline: bool,
+    ) -> Vec<ProjectAddedAudio> {
         audio
             .iter()
             .map(|(meta, bytes)| ProjectAddedAudio {
@@ -842,7 +845,11 @@ impl Editor {
                 name: meta.name.clone(),
                 mime: meta.mime.clone(),
                 created: meta.created,
-                bytes_base64: if inline { STANDARD.encode(bytes) } else { String::new() },
+                bytes_base64: if inline {
+                    STANDARD.encode(bytes)
+                } else {
+                    String::new()
+                },
             })
             .collect()
     }
@@ -855,7 +862,11 @@ impl Editor {
         Project {
             format: String::new(),
             version: 0,
-            source_base64: if inline { STANDARD.encode(&self.source) } else { String::new() },
+            source_base64: if inline {
+                STANDARD.encode(&self.source)
+            } else {
+                String::new()
+            },
             origin: self.project_origin(inline),
             history: self.history.clone(),
             cursor: self.cursor,
@@ -873,7 +884,11 @@ impl Editor {
         self.origin.as_ref().map(|o| ProjectOrigin {
             format: o.format.clone(),
             name: o.name.clone(),
-            base64: if inline { STANDARD.encode(&o.bytes) } else { String::new() },
+            base64: if inline {
+                STANDARD.encode(&o.bytes)
+            } else {
+                String::new()
+            },
         })
     }
     /// Serializes the project keeping only the resource categories chosen in `options`.
@@ -1264,7 +1279,9 @@ impl Editor {
             .map_err(|e| Error::new(0, e.to_string()))?;
         let origin = match project.origin.take() {
             Some(o) => Some(Origin {
-                bytes: STANDARD.decode(&o.base64).map_err(|e| Error::new(0, e.to_string()))?,
+                bytes: STANDARD
+                    .decode(&o.base64)
+                    .map_err(|e| Error::new(0, e.to_string()))?,
                 format: o.format,
                 name: o.name,
             }),
@@ -1273,7 +1290,11 @@ impl Editor {
         let audio = project
             .added_audio
             .iter()
-            .map(|a| STANDARD.decode(&a.bytes_base64).map_err(|e| Error::new(0, e.to_string())))
+            .map(|a| {
+                STANDARD
+                    .decode(&a.bytes_base64)
+                    .map_err(|e| Error::new(0, e.to_string()))
+            })
             .collect::<Result<Vec<_>>>()?;
         Self::from_project(project, &source, origin, audio)
     }

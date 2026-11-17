@@ -1,5 +1,15 @@
 import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect, compose_note_file, create_pdf_note_with_tapes, is_project_archive, project_archive_from_json, extract_note_summary, extract_note_pdf } from "./pkg/noteful_wasm.js";
 const ready = init();
+// The notebook importer (pkg/import), loaded the first time a notebook is opened.
+let importer = null;
+async function convertNotebook(name, bytes) {
+  importer ||= import("./pkg/import/noteful_import_wasm.js").then(async (m) => { await m.default(); return m; });
+  const m = await importer.catch((e) => { importer = null; throw e; });
+  const format = m.notebook_format(bytes);
+  if (!format) throw Error("This is not a Goodnotes or Notability notebook.");
+  const noteful = m.convert_notebook(name, bytes);
+  return { noteful, format, warnings: JSON.parse(m.notebook_warnings()) };
+}
 let session;
 ready
   .then(() => postMessage({ ready: true }))
@@ -36,8 +46,10 @@ const composedFile = (composed) => ({ ...composed, project: project_archive_from
 
 // Operations that need no open document.
 const standalone = {
-  open(args) {
+  async open(args) {
     const bytes = new Uint8Array(args.bytes);
+    // A Goodnotes or Notability notebook: the importer module makes it a Noteful note first.
+    if (args.notebook) args = { ...args, notebook: await convertNotebook(args.name || "Notebook", bytes) };
     let candidate;
     // A v13 .nfedit is a tar like .notecomp: opened, and listed, as the project it is.
     if (args.notecomplete && is_project_archive(bytes)) { args = { ...args, notecomplete: false, project: true }; }
@@ -52,12 +64,18 @@ const standalone = {
             JSON.stringify(args.sizes),
             bytes,
           )
+        : args.notebook
+          ? EditorSession.open_imported(args.notebook.noteful, args.notebook.format, args.name || "Notebook", bytes)
         : args.project
           ? EditorSession.load_project_bytes(bytes)
           : new EditorSession(bytes);
       if (args.canvas) candidate.set_canvas(true);
       if (args.image) candidate.add_image(0, JSON.stringify(args.image));
       const result = Object.assign(JSON.parse(candidate.view(0)), { engine_state: state });
+      // A Goodnotes or Notability notebook: what could not be brought over, and where it came from.
+      if (args.notebook) result.import_warnings = args.notebook.warnings;
+      const origin = JSON.parse(candidate.origin_json());
+      if (origin) result.origin = origin;
       // Recordings added in NoteComplete travel inside .notecomp files.
       if (args.notecomplete)
         result.added_audio = JSON.parse(notecomplete_audio(bytes)).map(({ offset, length, ...audio }) => ({ ...audio, bytes: bytes.slice(offset, offset + length) }));
@@ -225,7 +243,7 @@ self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
     if (needsDocument && !Object.hasOwn(onDocument, op)) throw Error(`Unknown engine operation: ${op}`);
     if (needsDocument && !session) throw Error("Open a document first.");
     if (!READS.has(op)) state++;
-    const result = (needsDocument ? onDocument : standalone)[op](args, page);
+    const result = await (needsDocument ? onDocument : standalone)[op](args, page);
     postMessage({ id, result }, TRANSFERRED.has(op) ? [result.buffer] : []);
   } catch (e) {
     postMessage({ id, error: String(e) });
