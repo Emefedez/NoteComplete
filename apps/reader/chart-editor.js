@@ -11,7 +11,7 @@ import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
-import { STATES, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
+import { STATES, triOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const make = (tag, props = {}, ...children) => {
@@ -69,7 +69,7 @@ function ensureStyles() {
 // `references`: [{ name, src, kind: 'image' | 'pdf' }] shown beside the canvas while filling
 // in (the exercise's page, snippets kept from the Grab tool); `onReference(ref)` hears of one
 // added here, so it can be offered again.
-export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null } = {}) {
+export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
   ensureStyles();
   let base, kind, grid, bars, ans, mode, brush, check = null, showSolution = false;
   const undo = [], redo = [];
@@ -192,22 +192,83 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   // What to look at while filling in: the exercise's page, kept snippets, a picture or PDF.
   const refs = [...references];
   const refList = make('div', { className: 'ch-refs' });
-  const refFile = make('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true });
-  const refAdd = button('image', 'Picture or PDF…', 'Open a picture or a PDF to look at while drawing or filling in (or paste a snippet: Ctrl V)');
+  const NOTE_EXT = /\.(noteful|nfedit|notecomp(lete)?|notepart)$/i;
+  const refFile = make('input', { type: 'file', accept: `image/*,application/pdf,.pdf${notePages ? ',.noteful,.nfedit,.notecomp,.notecomplete' : ''}`, multiple: true, hidden: true });
+  const refAdd = button('image', notePages ? 'Picture, PDF or note…' : 'Picture or PDF…', 'Open a picture, a PDF or a note to look at while drawing or filling in (or paste a snippet: Ctrl V)');
   refAdd.onclick = () => refFile.click();
   const addRef = (ref) => { refs.push(ref); onReference?.(ref); buildRefs(); };
+  // A note's pages come from the app (its engine draws them); shown as pages like a PDF.
+  const addNote = async (name, read) => {
+    const ref = { name, kind: 'pages', pages: null };
+    addRef(ref);
+    try { Object.assign(ref, await read()); } catch (e) { ref.error = e?.message || String(e); }
+    buildRefs();
+  };
   refFile.onchange = () => {
-    for (const file of refFile.files) addRef({ name: file.name, src: URL.createObjectURL(file), kind: file.type === 'application/pdf' ? 'pdf' : 'image' });
+    for (const file of refFile.files) {
+      if (notePages && NOTE_EXT.test(file.name)) addNote(file.name.replace(NOTE_EXT, ''), () => notePages(file));
+      else addRef({ name: file.name, src: URL.createObjectURL(file), kind: file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? 'pdf' : 'image' });
+    }
     refFile.value = '';
   };
+  // Recent notes, to look at one while drawing: a plain list (a native select works with a finger).
+  const refRecent = recentNotes ? make('select', { className: 'ch-ref-recent', title: 'Look at a recent note' }) : null;
+  if (refRecent) {
+    let listed = [];
+    const fill = async () => {
+      listed = await recentNotes().catch(() => []);
+      refRecent.replaceChildren(make('option', { value: '', textContent: listed.length ? 'A recent note…' : 'No recent notes' }), ...listed.map((n, i) => make('option', { value: String(i), textContent: n.title })));
+    };
+    fill();
+    refRecent.onchange = () => {
+      const n = listed[Number(refRecent.value)];
+      refRecent.value = '';
+      if (n) addNote(n.title, () => n.open());
+    };
+  }
+  // PDFs as page pictures (pdf.js): an iframe showed nothing on iPad and little elsewhere.
+  async function pdfPages(r) {
+    const { openPdf } = await import('./pdf-background.js');
+    const bytes = new Uint8Array(await (await fetch(r.src)).arrayBuffer());
+    const pdf = await openPdf(bytes);
+    const pages = [];
+    try {
+      for (let n = 1; n <= Math.min(pdf.numPages, 30); n++) {
+        const page = await pdf.getPage(n);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(2, 1400 / base.width) });
+        const c = document.createElement('canvas');
+        c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
+        const ctx = c.getContext('2d', { alpha: false });
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        page.cleanup();
+        pages.push(c.toDataURL('image/jpeg', 0.85));
+        c.width = c.height = 0;
+      }
+    } finally { pdf.destroy?.(); }
+    return pages;
+  }
+  function refView(r) {
+    if (r.kind === 'image') return make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
+    const box = make('div', { className: 'ch-ref-pages' });
+    if (r.error) box.append(make('p', { className: 'ch-hint', textContent: `Could not show it: ${r.error}` }));
+    else if (r.pages) box.append(...r.pages.map((src, n) => make('img', { src, alt: `${r.name}, page ${n + 1}`, className: 'ch-ref-img', loading: 'lazy' })));
+    else {
+      box.append(make('p', { className: 'ch-hint', textContent: 'Opening…' }));
+      if (r.kind === 'pdf' && !r.loading) {
+        r.loading = pdfPages(r).then((pages) => { r.pages = pages; }, (e) => { r.error = e?.message || String(e); }).finally(() => { if (root.isConnected) buildRefs(); });
+      }
+    }
+    return box;
+  }
   function buildRefs() {
     refList.replaceChildren(...refs.map((r, i) => {
-      const view = r.kind === 'pdf' ? make('iframe', { src: r.src, title: r.name, className: 'ch-ref-pdf' }) : make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
       const remove = button('close', 'Remove', `Take ${r.name} away`, { iconOnly: true, className: 'ch-mini' });
       remove.onclick = () => { refs.splice(i, 1); buildRefs(); };
-      return make('figure', { className: 'ch-ref' }, make('figcaption', {}, make('span', { textContent: r.name }), remove), view);
+      return make('figure', { className: 'ch-ref' }, make('figcaption', {}, make('span', { textContent: r.name }), remove), refView(r));
     }));
-    if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: 'Nothing to look at yet: open a picture or PDF, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).' }));
+    if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: `Nothing to look at yet: open a picture, PDF${notePages ? ' or note' : ''}, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).` }));
   }
   const onPaste = (e) => {
     if (mode === 'json' || !root.isConnected) return;
@@ -393,7 +454,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number after each letter is its TRI (running + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -471,7 +532,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const n = g.rows[0]?.cells.length || Math.round((g.tEnd - g.tStart) / g.cell);
     const width = Math.max(320, canvas.clientWidth - 16);
     const longest = g.rows.reduce((m, r) => Math.max(m, r.label.length), 2);
-    const left = Math.min(140, 22 + longest * 8), top = 30;
+    // Process states: room for each process's TRI after its letter.
+    const triW = kind === 'states' ? 12 + 7 * Math.max(2, ...g.rows.map((r) => String(fmt(triOf(r, g.cell))).length)) : 0;
+    const left = Math.min(140, 22 + longest * 8) + triW, top = 30;
     const cw = Math.max(4, Math.min(160, Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n))) * zoom));
     const rh = showSolution ? 50 : 42;
     geo = { left, top, cw, rh, n };
@@ -493,7 +556,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     g.rows.forEach((r, ri) => {
       const y0 = top + ri * rh, yc = y0 + (showSolution ? rh * 0.38 : rh / 2);
       s.append(svgEl('rect', { x: left, y: y0, width: cw * n, height: rh, class: ri % 2 ? 'ch-lane odd' : 'ch-lane' }));
-      s.append(Object.assign(svgEl('text', { x: left - 8, y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
+      s.append(Object.assign(svgEl('text', { x: left - (kind === 'states' ? triW : 8), y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
       // Runs of a value drawn as one stretch, as on the page.
       let k = 0;
       while (k < n) {
@@ -524,6 +587,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       }
       const arrival = (mode === 'answer' ? grid.rows[ri]?.arrival : r.arrival);
       if (kind === 'states' && arrival != null) s.append(svgEl('circle', { cx: left + ((arrival - g.tStart) / g.cell) * cw, cy: yc, r: 4.2, class: 'ch-arrival' }));
+      const end = (mode === 'answer' ? grid.rows[ri]?.end : r.end);
+      if (kind === 'states' && end != null) {
+        const xe = left + ((end - g.tStart) / g.cell) * cw;
+        s.append(svgEl('line', { x1: xe, y1: y0 + 6, x2: xe, y2: y0 + rh - 6, class: 'ch-end-line' }), svgEl('circle', { cx: xe, cy: yc, r: 4.2, class: 'ch-arrival ch-end' }));
+      }
+      // TRI beside the letter: time running plus time blocked.
+      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: left - 6, y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(triOf(r, g.cell)) }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
     // The lanes' backgrounds under the cell lines (they were drawn over them).
@@ -556,8 +626,25 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     snapshot();
     check = null;
     if (brush === '@arrival' && !erasing) {
+      // The first marker on a line is its arrival; a second one, later, is where it ends.
+      // A marker clicked again goes; with both there, the nearer one moves to the click.
       const t = g.tStart + Math.max(0, Math.min(geo.n, Math.round((at.x - geo.left) / geo.cw))) * g.cell;
-      g.rows[at.row].arrival = g.rows[at.row].arrival === t ? null : t;
+      const r = g.rows[at.row];
+      if (r.arrival === t) r.arrival = null;
+      else if (r.end === t) delete r.end;
+      else if (r.arrival == null && (r.end == null || t < r.end)) r.arrival = t;
+      else if (r.end == null && t > r.arrival) r.end = t;
+      else if (r.end == null) r.arrival = t;
+      else if (Math.abs(t - r.arrival) <= Math.abs(t - r.end) && t < r.end) r.arrival = t;
+      else if (t > (r.arrival ?? -Infinity)) r.end = t;
+      else r.arrival = t;
+      // Nothing painted past its end.
+      if (r.end != null) {
+        const k0 = Math.max(0, Math.round((r.end - g.tStart) / g.cell));
+        for (let k = k0; k < r.cells.length; k++) r.cells[k] = '';
+      }
+      // The answer has the solution's markers.
+      if (mode === 'author' && ans?.rows[at.row]) { ans.rows[at.row].arrival = r.arrival; if (r.end != null) ans.rows[at.row].end = r.end; else delete ans.rows[at.row].end; }
       changed();
       return;
     }
@@ -570,8 +657,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     // The run follows the pointer both ways: moving back (without letting go) gives the cells
     // passed over back as they were before the press.
     const before = [...row.cells];
+    // A process with an end marker paints no further than it (move or remove the marker first).
+    const endAt = (mode === 'answer' ? grid.rows[at.row]?.end : row.end);
+    const lastCell = endAt != null ? Math.min(geo.n, Math.round((endAt - g.tStart) / g.cell)) - 1 : geo.n - 1;
+    if (from > lastCell && value) { say('This process ends at its second marker: move or remove it to paint further.', true); return; }
     const paint = (to) => {
-      const a = Math.min(from, to), b = Math.min(geo.n - 1, Math.max(from, to) + span - 1);
+      const a = Math.min(from, to), b = Math.min(value ? lastCell : geo.n - 1, Math.max(from, to) + span - 1);
       for (let k = 0; k < before.length; k++) row.cells[k] = k >= a && k <= b ? value : before[k];
     };
     paint(from);
@@ -751,7 +842,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     out.push(field('Title', text(base.title, edit('title', (v) => { base.title = v; }, { panel: false }), { disabled: locked })));
     if (locked) {
       out.push(make('p', { className: 'ch-hint', textContent: mode === 'json' ? 'Editing the JSON: the fields come back in Editor.' : 'Filling in: the rows, times and names are the exercise\'s. Switch to Editor to change them.' }));
-      if (mode === 'answer') { buildRefs(); out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList); }
+      if (mode === 'answer') { buildRefs(); out.push(make('h4', { textContent: 'To look at' }), refAdd, ...(refRecent ? [refRecent] : []), refFile, refList); }
       panel.replaceChildren(...out);
       return;
     }
@@ -769,7 +860,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     else out.push(...plotPanel());
     // Something to copy from while drawing: a picture or PDF, or a snippet grabbed from a note.
     buildRefs();
-    out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList);
+    out.push(make('h4', { textContent: 'To look at' }), refAdd, ...(refRecent ? [refRecent] : []), refFile, refList);
     panel.replaceChildren(...out);
   }
   function retime(changes) {
@@ -901,7 +992,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 }
 
 // The editor over the whole window, for a figure on a note. Resolves with the spec, or null.
-export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null } = {}) {
+export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'chart-dialog' });
@@ -915,6 +1006,6 @@ export function openChartEditor(spec, { editing = false, mode = 'author', refere
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     dialog.showModal();
-    editor = mountChartEditor(host, spec, { mode, references, onReference, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
+    editor = mountChartEditor(host, spec, { mode, references, onReference, notePages, recentNotes, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
   });
 }

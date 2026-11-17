@@ -54,6 +54,22 @@ try {
   assert.equal(await p.locator('.sheet[data-page="1"] [data-item^="new:"]').count(), 0, 'gone from its page');
   assert.equal(await p.locator('.sheet.moving-items').count(), 0);
   console.log('· an item dragged onto the next page stays drawn until let go there');
+  // And back: dropped on the first page again (its selection box, moved along, no longer
+  // catches the drop, which left it off its own page and out of sight).
+  {
+    const el = await p.locator('.sheet[data-page="2"] [data-item^="new:"]').boundingBox();
+    const [bx, by] = [el.x + el.width / 2, el.y + el.height / 2];
+    await p.mouse.click(bx, by);
+    await p.waitForFunction(() => document.querySelector('.selection-overlay polygon'), null, { timeout: 10000 });
+    const s1b = await p.locator('.sheet[data-page="1"]').boundingBox();
+    await p.mouse.move(bx, by); await p.mouse.down();
+    await p.mouse.move(bx, s1b.y + s1b.height - 120, { steps: 10 });
+    await p.mouse.up();
+    await p.waitForFunction(() => document.querySelectorAll('.sheet[data-page="1"] [data-item^="new:"]').length === 1, null, { timeout: 10000 });
+    const back = await p.locator('.sheet[data-page="1"] [data-item^="new:"]').boundingBox();
+    assert.ok(back.y > s1b.y && back.y + back.height < s1b.y + s1b.height, 'back on its page, in sight');
+    console.log('· and dragged back onto the first page, where it shows');
+  }
   assert.deepEqual(errors, []);
   console.log('Blank pages and moving between pages: OK');
 } catch (e) { console.error(e); process.exitCode = 1; } finally { await b.close(); process.exit(process.exitCode || 0); }

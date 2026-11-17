@@ -166,6 +166,15 @@ try {
   // The exercise's page beside the canvas, to read its statement.
   await p.waitForSelector('.chart-dialog .ch-ref img');
   assert.match(await p.textContent('.chart-dialog .ch-ref figcaption'), /Page 1/);
+  // A PDF and another note to look at: drawn as page pictures (an iframe showed nothing on iPad).
+  await p.locator('.chart-dialog .ch-panel input[type=file]').setInputFiles([samplePath('Examen wuolah.pdf'), samplePath('nota_2lineas.noteful')]);
+  await p.waitForFunction(() => [...document.querySelectorAll('.chart-dialog .ch-ref')].filter((f) => f.querySelector('.ch-ref-pages img')).length === 2, null, { timeout: 30000 });
+  const pagesShown = await p.evaluate(() => [...document.querySelectorAll('.chart-dialog .ch-ref-pages')].map((b) => [...b.querySelectorAll('img')].map((i) => i.naturalWidth > 100)));
+  assert.equal(pagesShown.length, 2, JSON.stringify(pagesShown));
+  assert.ok(pagesShown.every((imgs) => imgs.length && imgs.every(Boolean)), JSON.stringify(pagesShown));
+  assert.equal(await p.locator('.chart-dialog iframe').count(), 0);
+  assert.ok(await p.locator('.chart-dialog select.ch-ref-recent').count(), 'recent notes list');
+  for (let n = 0; n < 2; n++) await p.locator('.chart-dialog .ch-ref').last().locator('figcaption button').click();
   // Nothing is painted yet: the answer starts empty.
   assert.equal(await p.locator('.chart-dialog .ch-grid line[stroke="#2563eb"]').count(), 0);
   const g2 = await p.locator('.chart-dialog .ch-grid').boundingBox();
@@ -282,6 +291,27 @@ try {
   await q.keyboard.press('Escape');
   assert.equal(await q.locator('.quick-menu').count(), 0);
   console.log('· palettes: number keys follow an order dragged by hand and kept; Shift S rings in both editors');
+
+  // 7. TRI after each letter (running + blocked), and a second Arrival dot as the end: nothing
+  // is painted past it.
+  {
+    await q.evaluate(() => localStorage.clear());
+    await q.goto(`${server.origin}/charts.html?kind=states`);
+    await q.waitForSelector('.ch-grid');
+    const tri = () => q.$$eval('.ch-grid .ch-tri', (t) => t.map((x) => x.textContent));
+    assert.deepEqual(await tri(), ['25', '10', '5'], 'TRI per process');
+    await q.keyboard.press('Escape');
+    await q.click('.ch-brush[data-value="@arrival"]');
+    const g = await q.evaluate(() => { const el = document.querySelector('.ch-grid'), r = el.getBoundingClientRect(), l = el.querySelectorAll('.ch-lane')[1]; return { x: r.x + +l.getAttribute('x'), y: r.y + +l.getAttribute('y') + +l.getAttribute('height') / 2, w: +l.getAttribute('width') }; });
+    const cw = g.w / 30;
+    await q.mouse.click(g.x + cw * 15, g.y);
+    assert.equal(await q.locator('.ch-grid .ch-end').count(), 1, 'a second dot is the end');
+    assert.deepEqual(await tri(), ['25', '5', '5'], 'cut at the end');
+    await q.click('.ch-brush[data-value="run"]');
+    await q.mouse.click(g.x + cw * 22.5, g.y);
+    assert.deepEqual(await tri(), ['25', '5', '5'], 'nothing painted past the end');
+    console.log('· process states: TRI per process; a second arrival dot ends it');
+  }
   assert.deepEqual(errors, []);
   console.log('charts e2e: ok');
 } finally {

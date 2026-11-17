@@ -16,7 +16,7 @@ import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
-import { Library, entrySourceLabel } from "./library.js";
+import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
@@ -2690,8 +2690,10 @@ function pointerDown(e, p) {
   const textTap = tool === "text" && e.pointerType !== "mouse" && !textBox.active;
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan || textTap) {
-    // On PDF or recognized words the mouse selects text instead of panning.
-    if (!touchPan && !textTap && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
+    // On PDF or recognized words the mouse selects text instead of panning. A stylus pans in
+    // script too: the page lets the browser scroll nothing with Pan (touch-action: none, so a
+    // second finger reaches the pinch), so leaving it to the browser left a pen stuck.
+    if (!touchPan && !textTap && e.pointerType === "mouse" && e.target.closest?.(".text-layer tspan")) return;
     window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
@@ -3878,6 +3880,9 @@ const quick = quickMenu({
 });
 // Where the pointer last was over the pages: Shift + S opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
+// The last touch, pen or key input: auto-save waits for a pause after it (autosave.js).
+let lastInputAt = 0;
+for (const type of ["pointerdown", "keydown", "wheel"]) document.addEventListener(type, () => { lastInputAt = performance.now(); }, { passive: true, capture: true });
 // A pen's side button (pen-button.js, docs/S-PEN-BUTTON.md): on Android the S Pen button
 // only shows while the pen hovers (pointermove buttons 0 → nonzero) or as a contextmenu
 // with no pointer type when the user holds it and taps; desktop pens report button 2 or 5.
@@ -3906,6 +3911,7 @@ function penMenu(e, toggle = false) {
 let penClosing = false;
 document.addEventListener("pointermove", (e) => {
   lastPointer = [e.clientX, e.clientY];
+  if (e.buttons) lastInputAt = performance.now();
   if (e.pointerType !== "pen") return;
   if (!e.buttons && onPages(e)) {
     // A pen hovering over the pages: Shift opens the menu where it points, and the pages
@@ -4031,6 +4037,7 @@ const autosave = autosaveController({
     doc: () => doc,
     editing: () => editing,
     busy,
+    active: () => performance.now() - lastInputAt < 2500,
     revision: () => revision,
     epoch: () => epoch,
     collab: () => collab,
@@ -6087,9 +6094,17 @@ $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
 // `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
 // `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
+// One picker or figure editor at a time: on a slow first load, more taps on Insert prefab (or
+// a card) opened one over another, and the ones under the last were left without a way out.
+let figureOpen = false;
+async function oneFigure(open) {
+  if (figureOpen) return null;
+  figureOpen = true;
+  try { return await open(); } finally { figureOpen = false; }
+}
 async function insertPrefab(p, box = null, choice = null) {
-  if (!doc || !p || editing) return false;
-  choice ||= await choosePrefab();
+  if (!doc || !p || editing || figureOpen) return false;
+  choice ||= await oneFigure(() => choosePrefab());
   if (!choice) return false;
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
@@ -6114,12 +6129,22 @@ function sameNote(note) {
   status("Another note was opened while the editor was open; nothing was changed.", true);
   return false;
 }
-async function figureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
-  if (spec?.type === "uml") return umlEditor(spec, editing);
+// A module loaded the first time an editor opens can take a while on a tablet: past a
+// moment, a toast says it is on its way (and goes once it is there).
+async function loading(promise, text = "Opening the editor…") {
+  let shown = false;
+  const timer = setTimeout(() => { shown = true; status(text); clearTimeout(statusTimer); }, 350);
+  try { return await promise; } finally { clearTimeout(timer); if (shown) status(""); }
+}
+function figureEditor(spec, options = {}) {
+  return oneFigure(() => openFigureEditor(spec, options));
+}
+async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
+  if (spec?.type === "uml") return openUmlEditor(spec, editing);
   if (editorKind(spec)) {
     try {
-      const { openChartEditor } = await import("./chart-editor.js");
-      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); } });
+      const { openChartEditor } = await loading(import("./chart-editor.js"));
+      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes });
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
@@ -6127,11 +6152,72 @@ async function figureEditor(spec, { editing = false, mode = "author", references
   }
   return editPrefab({ spec, editing });
 }
-// The UML diagram editor (uml-editor.js), loaded the first time it is needed.
-async function umlEditor(spec, editing = false) {
+// "To look at" in the chart editors: another note's pages as pictures. The note opens in an
+// engine worker of its own (the open note's stays as it is), its pages are drawn like the
+// page snapshots (pageCanvas), and the worker goes away again.
+async function notePages(file, maxPages = 20) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = fileKind(file.name, bytes);
+  if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
+  if (!["note", "notecomplete", "project"].includes(kind)) throw Error("only notes, PDFs and pictures can be shown here");
+  const worker = new Worker("./worker.js", { type: "module" });
+  const waiting = new Map();
+  let next = 0;
+  const ready = new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      if (data.ready) return resolve();
+      if (data.fatal) return reject(Error(data.fatal));
+      const w = waiting.get(data.id);
+      if (!w) return;
+      waiting.delete(data.id);
+      if (data.error) w.reject(Error(data.error)); else w.resolve(data.result);
+    };
+  });
+  const ask = (op, args = {}, page = 0) => new Promise((resolve, reject) => {
+    const id = ++next;
+    waiting.set(id, { resolve, reject });
+    worker.postMessage({ id, op, page, ...args });
+  });
+  const pdfs = new PdfBackgrounds((resource) => ask("pdf", { resource }));
   try {
-    const { openUmlEditor } = await import("./uml-editor.js");
-    return await openUmlEditor(spec, { editing });
+    await ready;
+    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete" });
+    const count = Math.min(Number(first.pages) || 1, maxPages);
+    const source = { view: (i) => (i === 0 ? first : ask("view", {}, i)), backgrounds: pdfs };
+    const pages = [];
+    for (let i = 0; i < count; i++) {
+      const { canvas } = await pageCanvas(i, 1200, {}, source);
+      pages.push(canvas.toDataURL("image/jpeg", 0.85));
+      canvas.width = canvas.height = 0;
+    }
+    return { pages };
+  } finally {
+    pdfs.close?.();
+    worker.terminate();
+  }
+}
+// Recent notes the editor can show: the ones this device can read without a download.
+async function recentReferenceNotes() {
+  const entries = await library.recent(30).catch(() => []);
+  return entries
+    .filter((entry) => entry && entry.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart|pdf)$/i.test(entry.name || ""))
+    .map((entry) => ({
+      title: entryTitle(entry),
+      open: async () => {
+        const file = await library.open(entry);
+        if (!file) throw Error("this note is not on this device");
+        return notePages(file);
+      },
+    }));
+}
+// The UML diagram editor (uml-editor.js), loaded the first time it is needed.
+function umlEditor(spec, editing = false) {
+  return oneFigure(() => openUmlEditor(spec, editing));
+}
+async function openUmlEditor(spec, editing = false) {
+  try {
+    const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
+    return await open(spec, { editing });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;
@@ -7010,8 +7096,8 @@ $("pageBgApply").onclick = async () => {
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
-async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}) {
-  const view = await call("view", { page: index });
+async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}, source = null) {
+  const view = source ? await source.view(index) : await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
   if (liftTape) for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", "0.18");
@@ -7035,7 +7121,7 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   if (view.pdf_background && !inkOnly) {
     const place = backgroundPlacement(view.pdf_background, view.size);
     // rasterTarget renders at twice the requested CSS width.
-    const href = await backgrounds.image(view.pdf_background, view.size, (width * place.share) / 2);
+    const href = await (source ? source.backgrounds : backgrounds).image(view.pdf_background, view.size, (width * place.share) / 2);
     svg.querySelector("[data-background]").append(pdfImage(href, place));
   }
   const height = Math.round(h * scale);

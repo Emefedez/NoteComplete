@@ -265,13 +265,12 @@ export class SelectionController {
   }
   // Let go over another page: the items move there (the host takes them across).
   if(g.mode==='move'&&this.dropTo){
-   // Looked up under the page it came from (raised while moving), with its overlay.
-   g.p.el.classList.remove('moving-items');g.p.el.style.pointerEvents='none';
-   const sheet=document.elementFromPoint(g.currentClient[0],g.currentClient[1])?.closest?.('.sheet');
-   g.p.el.style.pointerEvents='';
+   // Another page under the pointer: the page it came from (raised while moving) and the
+   // selection's own box, which moved along with it, are passed over (the box caught the
+   // drop, so a move back to the first page landed off its own page, out of sight).
+   const sheet=document.elementsFromPoint(g.currentClient[0],g.currentClient[1]).map(el=>el.closest?.('.sheet')).find(s=>s&&s!==g.p.el);
    const target=sheet?Number(sheet.dataset.page):NaN;
    if(Number.isInteger(target)&&target!==g.p.index){
-    g.p.el.classList.add('moving-items');
     // Kept where it was let go, over both pages, until the target page has it.
     const item=g.item;
     this.previewElement=null;this.clear();

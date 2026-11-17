@@ -224,7 +224,16 @@ export function autosaveController({
     } finally { autosaving = false; }
   }
 
-  const timer = intervalMs > 0 ? setInterval(() => { now(); }, intervalMs) : null;
+  // The copy waits while the pen or a finger is busy (`state.active`): copying a large note
+  // holds the engine and the page for a moment, which showed as a sudden lag mid-stroke on
+  // iPads. It runs at the first pause, or after 30 s of waiting.
+  let waited = 0;
+  const tick = () => {
+    if (state.active?.() && waited < 15) { waited++; setTimeout(tick, 2000); return; }
+    waited = 0;
+    now();
+  };
+  const timer = intervalMs > 0 ? setInterval(() => { if (!waited) tick(); }, intervalMs) : null;
   timer?.unref?.();
   if (win?.addEventListener) {
     win.addEventListener('visibilitychange', () => { if (docObj?.visibilityState === 'hidden') now(); });

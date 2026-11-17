@@ -63,6 +63,20 @@ try {
   await p.evaluate(() => document.querySelector('#pressureToggle').click());
   assert.equal(await p.evaluate(() => localStorage.getItem('notecomplete-pressure')), 'off');
   console.log('· pen pressure can be turned off');
+  // Pan with a stylus moves the page (in script: the browser scrolls nothing with Pan).
+  {
+    await p.evaluate(() => document.querySelector('[data-tool=pan]').click());
+    const pen = (type, x, y, buttons = 1) => cdp.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons, clickCount: 1, pointerType: 'pen', force: 0.5 });
+    const top = () => p.evaluate(() => document.getElementById('viewport').scrollTop);
+    const before = await top();
+    await pen('mousePressed', 200, 400);
+    for (let i = 1; i <= 8; i++) { await pen('mouseMoved', 200, 400 - i * 25); await sleep(16); }
+    await pen('mouseReleased', 200, 200, 0);
+    await sleep(300);
+    assert.ok(await top() > before + 100, `a stylus drag with Pan scrolls (${before} → ${await top()})`);
+    await p.evaluate(() => document.querySelector('[data-tool=draw]').click());
+    console.log('· Pan with a stylus moves the page');
+  }
   // The tools reorder with a finger: hold one until it lifts, then drag it along the row.
   const order0 = await p.evaluate(() => [...document.querySelectorAll('#toolbar .segmented [data-tool]')].map((b) => b.dataset.tool));
   const at0 = await p.evaluate(() => { const r = document.querySelector('#toolbar .segmented [data-tool]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, r.width]; });
