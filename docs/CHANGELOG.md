@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.28
+
+- **Open Goodnotes and Notability notebooks.** Open a .goodnotes or Notability .ntb file and it becomes a note you can edit like any other. Ink, typed text, pictures and shapes come over as editable items. The notebook's PDF pages stay sharp behind the page. Paper templates and fills are drawn into a PDF behind the page. Anything that can't come over is listed when the notebook opens. Save keeps it as a .nfedit with the original notebook inside, so nothing is lost. The MCP tools read notebooks too.
+- **A new .nfedit format (version 13).** A .nfedit is now an archive like .notecomp, holding the note as it is instead of as Base64 text, so projects are about a quarter smaller. Older .nfedit files still open, and are saved in the new format.
+- **Fixed: a new note's first save could overwrite the note opened before it.** After opening a note and then making a new one, the first save now creates the new note's own file.
+- **Duplicate notes are found among new .nfedit files too.**
+
 ## 1.2.27
 
 - **Figure notes can be read rendered.** The notes beside a chart now have Write and Read tabs. Read shows the Markdown as the notes panel does, with headings, lists, tables and maths. Double-click it to write again.
