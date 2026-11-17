@@ -93,7 +93,9 @@ function same(a, b, grid = 1) {
   });
   assert.deepEqual(key(b), key(a));
   if (grid > 1) for (const e of a.elements) {
-    const o = b.elements.find((q) => q.type === e.type && q.name === e.name);
+    // Unnamed ones of a kind (activation bars) are told apart by where they are.
+    const dist = (q) => q.bounds.reduce((sum, v, i) => sum + Math.abs(v - e.bounds[i]), 0);
+    const o = b.elements.filter((q) => q.type === e.type && q.name === e.name).sort((p, q) => dist(p) - dist(q))[0];
     assert.ok(o.bounds.every((v, i) => Math.abs(v - e.bounds[i]) <= grid / 2), `${e.name}: ${o.bounds} ≈ ${e.bounds}`);
   }
 }

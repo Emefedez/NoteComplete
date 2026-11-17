@@ -545,11 +545,7 @@ body.guest-readonly #toolbar [data-tool]:not([data-tool="pan"]), body.guest-read
   box-shadow: 0 1px 5px #0002;
   scroll-margin-top: 24px;
 }
-/* Pages out of view skip layout and paint (a long note has hundreds): their size comes from
-   their width and aspect ratio, so scrolling and zooming no longer lay out every page. A page
-   an item is being dragged out of shows outside its edges, so it stays fully drawn. */
-.sheet { content-visibility: auto; }
-.sheet.moving-items { z-index: 5; content-visibility: visible; }
+.sheet.moving-items { z-index: 5; }
 .sheet.moving-items .render > svg { overflow: visible; pointer-events: none; }
 .sheet > .render {
   position: relative;

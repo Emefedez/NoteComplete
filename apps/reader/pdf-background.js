@@ -231,7 +231,7 @@ export class PdfBackgrounds {
       return kept;
     }
     if (this.drawing.has(key)) return this.drawing.get(key);
-    const job = (async () => {
+    const job = this.oneAtATime(async () => {
       const { page, target, viewport, canvas } = await this.blankCanvas(background, displayWidth, settings);
       let shown;
       try {
@@ -252,13 +252,24 @@ export class PdfBackgrounds {
         this.release(old);
       }
       return shown;
-    })();
+    });
     this.drawing.set(key, job);
     try { return await job; } finally { this.drawing.delete(key); }
   }
+  // Page rasters are drawn one after another, with a turn of the event loop between them:
+  // several pages asked for at once (scrolling stopped, a zoom ended) drew interleaved, and
+  // their pieces landed in the same long task (250 ms and more at tablet speed).
+  oneAtATime(work) {
+    const run = (this.turn || Promise.resolve()).then(() => new Promise((resolve) => setTimeout(resolve, 0))).then(work);
+    this.turn = run.catch(() => { /* The next one still runs. */ });
+    return run;
+  }
   // A part of the PDF page (regionTarget) as a still canvas, or a PNG blob: URL with
   // kind "url"; never cached: the caller owns it and drops it when the view moves on.
-  async region(background, cssWidth, box, settings, kind = "canvas") {
+  region(background, cssWidth, box, settings, kind = "canvas") {
+    return this.oneAtATime(() => this.drawRegion(background, cssWidth, box, settings, kind));
+  }
+  async drawRegion(background, cssWidth, box, settings, kind) {
     const doc = await this.document(background.resource_id);
     const page = await doc.getPage(background.page_index + 1);
     const canvas = document.createElement("canvas");
