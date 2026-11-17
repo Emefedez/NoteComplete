@@ -129,7 +129,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   modeBox.append(authorBtn, answerBtn, jsonBtn);
   const checkBtn = button('check', 'Check', 'Mark what is wrong in the answer');
   const solBtn = button('eye', 'Solution', 'Draw the solution under the answer');
-  const clearBtn = button('trash', 'Clear', 'Start the answer again');
+  const clearBtn = button('trash', 'Clear all', 'Clear all: start the answer again');
   const spacer = make('span', { className: 'ch-spacer' });
   const cancelBtn = onCancel && button('close', 'Cancel', 'Close without changing the note (Esc)');
   const applyBtn = onApply && button('check', applyLabel, `${applyLabel} on the note`, { className: 'primary' });
@@ -325,7 +325,10 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     authorBtn.setAttribute('aria-pressed', String(mode === 'author'));
     answerBtn.setAttribute('aria-pressed', String(mode === 'answer'));
     jsonBtn.setAttribute('aria-pressed', String(mode === 'json'));
-    checkBtn.hidden = solBtn.hidden = clearBtn.hidden = mode !== 'answer';
+    checkBtn.hidden = solBtn.hidden = mode !== 'answer';
+    // Clear all: the answer while filling in, what is painted or measured while editing.
+    clearBtn.hidden = !(mode === 'answer' || (mode === 'author' && (grid || bars)));
+    clearBtn.title = mode === 'answer' ? 'Clear all: start the answer again' : grid ? 'Clear all: every painted cell and end marker (the rows stay)' : 'Clear all: every bar back to 0 (the labels stay)';
     solBtn.replaceChild(icon(showSolution ? 'eyeOff' : 'eye'), solBtn.firstChild);
     solBtn.title = showSolution ? 'Hide the solution under the answer' : 'Draw the solution under the answer';
     solBtn.setAttribute('aria-pressed', String(showSolution));
@@ -368,6 +371,14 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   solBtn.onclick = () => { showSolution = !showSolution; updateButtons(); draw(); };
   clearBtn.onclick = () => {
     snapshot();
+    if (mode === 'author') {
+      if (grid) { for (const r of grid.rows) { r.cells.fill(''); delete r.end; } for (const r of ans?.rows || []) delete r.end; }
+      else if (bars) for (const b of bars) b.value = 0;
+      check = null;
+      changed();
+      say('Cleared. One undo (Ctrl Z) brings it back.');
+      return;
+    }
     ans = grid ? answerGrid({ ...current(), answer: emptyAnswer(current()) }) : barsOf(emptyAnswer(current()));
     check = null;
     changed();
@@ -898,7 +909,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       up.disabled = !i;
       down.disabled = i === grid.rows.length - 1;
       parts.push(up, down);
-      parts.push(iconBtn('trash', 'Remove', () => { if (grid.rows.length < 2) return; snapshot(); for (const g of [grid, ans]) g?.rows.splice(i, 1); changed({ palette: true }); }));
+      parts.push(iconBtn('backspace', 'Remove', () => { if (grid.rows.length < 2) return; snapshot(); for (const g of [grid, ans]) g?.rows.splice(i, 1); changed({ palette: true }); }));
       out.push(make('div', { className: 'ch-rowedit' }, ...parts));
     });
     out.push(Object.assign(button('plus', kind === 'states' ? 'Add process' : 'Add row', kind === 'states' ? 'Add a process (a row)' : 'Add a row'), { onclick: () => {
@@ -929,7 +940,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       out.push(make('div', { className: 'ch-rowedit' },
         text(b.label, edit(`bl-${i}`, (v) => { b.label = v; if (ans?.[i]) ans[i].label = v; }, { panel: false }), { 'aria-label': 'Name', className: 'ch-name' }),
         number(b.value, edit(`bv-${i}`, (v) => { b.value = v; }, { panel: false }), { 'aria-label': 'Value', className: 'ch-num' }),
-        iconBtn('trash', 'Remove', () => { if (bars.length < 2) return; snapshot(); bars.splice(i, 1); ans?.splice(i, 1); changed(); })));
+        iconBtn('backspace', 'Remove', () => { if (bars.length < 2) return; snapshot(); bars.splice(i, 1); ans?.splice(i, 1); changed(); })));
     });
     out.push(Object.assign(button('plus', 'Add bar', 'Add a bar'), { onclick: () => {
       snapshot();
@@ -960,7 +971,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
           if (type === 'check') { const c = make('input', { type: 'checkbox', checked: Boolean(it[f]), title: label }); c.onchange = edit(`${key}-${i}-${f}`, () => { it[f] = c.checked; }, { panel: false }); return make('label', { className: 'ch-check', title: label }, c, label); }
           const set = edit(`${key}-${i}-${f}`, (v) => { it[f] = v; }, { panel: false });
           return type === 'number' ? number(it[f], set, { 'aria-label': label, placeholder: label, className: 'ch-num' }) : text(it[f], set, { 'aria-label': label, placeholder: label, className: f === 'expr' ? 'ch-name' : 'ch-short' });
-        }), iconBtn('trash', 'Remove', () => { snapshot(); items.splice(i, 1); changed(); })));
+        }), iconBtn('backspace', 'Remove', () => { snapshot(); items.splice(i, 1); changed(); })));
       });
       out.push(Object.assign(button('plus', addLabel, addLabel), { onclick: () => { snapshot(); items.push(blank()); changed(); } }));
     };

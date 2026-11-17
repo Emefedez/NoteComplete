@@ -13,6 +13,8 @@ import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+// Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
+const directed = (def) => !!def && (def.ends || def.message || def.start !== 'none' || def.end !== 'none' || !!def.keyword);
 const make = (tag, props = {}, ...children) => {
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children.filter((c) => c != null && c !== false));
@@ -75,7 +77,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.label })));
   const undoBtn = iconButton('undo', 'Undo (Ctrl Z)');
   const redoBtn = iconButton('redo', 'Redo (Ctrl Y)');
-  const delBtn = iconButton('trash', 'Delete the selection (Delete or Backspace)');
+  const delBtn = iconButton('backspace', 'Delete the selection (Delete or Backspace)');
+  const clearAllBtn = iconButton('trash', 'Clear all: empty the diagram (one undo brings it back)');
   const zoomOut = iconButton('minus', 'Zoom out (−)');
   const zoomIn = iconButton('plus', 'Zoom in (+)');
   const fitBtn = iconButton('fit', 'Show the whole diagram');
@@ -87,7 +90,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const spacer = make('span', { className: 'uml-spacer' });
   const cancelBtn = onCancel && make('button', { type: 'button', textContent: 'Cancel' });
   const applyBtn = onApply && make('button', { type: 'button', className: 'primary', textContent: applyLabel });
-  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), importBtn, importInput, exportBtn, panelBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), importBtn, importInput, exportBtn, panelBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'uml-palette', role: 'toolbar', ariaLabel: 'Elements and connectors' });
   const canvas = make('div', { className: 'uml-canvas', tabIndex: 0 });
   const panel = make('div', { className: 'uml-panel' });
@@ -201,7 +204,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
         const s = 10 * k;
         const handle = document.createElementNS(SVG, 'rect');
-        Object.entries({ x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
+        // A narrow bar (an activation, a fork) grows along its length: handles at both ends.
+        const tall = ELEMENTS[e.type]?.shape === 'activation';
+        Object.entries(tall
+          ? { x: x + w / 2 - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }
+          : { x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
+        const top = tall && document.createElementNS(SVG, 'rect');
+        if (top) Object.entries({ x: x + w / 2 - s / 2, y: y - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resizeTop' }).forEach(([a, v]) => top.setAttribute(a, v));
         // The arrow handle: drag it to another element to connect them, or to empty canvas
         // to add a new element there, connected (how trees and automata grow).
         const g = document.createElementNS(SVG, 'g');
@@ -216,7 +225,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const title = document.createElementNS(SVG, 'title');
         title.textContent = 'Drag to another element to connect, or to empty space to add a connected one';
         g.append(title);
-        svg.append(handle, g);
+        svg.append(handle, ...(top ? [top] : []), g);
       }
     } else if (selected?.kind === 'connector') {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -344,11 +353,19 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     undoBtn.disabled = !undo.length;
     redoBtn.disabled = !redo.length;
     delBtn.disabled = !selected;
+    clearAllBtn.disabled = !model.elements.length && !model.connectors.length;
   }
 
   // --- Pointer ------------------------------------------------------------------------
   let drag = null;
   svg.addEventListener('pointerdown', (ev) => {
+    // The middle button pans from anywhere, over elements too, as on the note's pages.
+    if (ev.button === 1) {
+      ev.preventDefault();
+      svg.setPointerCapture(ev.pointerId);
+      drag = { mode: 'pan', start: [ev.clientX, ev.clientY], view: [...view] };
+      return;
+    }
     if (ev.button > 0) return;
     canvas.focus({ preventScroll: true });
     // Connecting from the menu: this click ends it.
@@ -370,9 +387,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true };
       return;
     }
-    if (handle === 'resize') {
+    if (handle === 'resize' || handle === 'resizeTop') {
       const e = model.elements.find((q) => q.id === selected.id);
-      drag = { mode: 'resize', e, start: pt, bounds: [...e.bounds], snapped: false };
+      drag = { mode: 'resize', e, start: pt, bounds: [...e.bounds], snapped: false, top: handle === 'resizeTop', tall: ELEMENTS[e.type]?.shape === 'activation' };
       return;
     }
     if (handle?.startsWith('way:')) {
@@ -432,8 +449,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       draw();
     } else if (drag.mode === 'resize') {
       once();
-      drag.e.bounds[2] = Math.max(16, Math.round(drag.bounds[2] + dx));
-      drag.e.bounds[3] = Math.max(6, Math.round(drag.bounds[3] + dy));
+      if (drag.top) {
+        // The top end: the bar's bottom stays where it is.
+        const h = Math.max(10, Math.round(drag.bounds[3] - dy));
+        drag.e.bounds[1] = drag.bounds[1] + drag.bounds[3] - h;
+        drag.e.bounds[3] = h;
+      } else {
+        if (!drag.tall) drag.e.bounds[2] = Math.max(16, Math.round(drag.bounds[2] + dx));
+        drag.e.bounds[3] = Math.max(drag.tall ? 10 : 6, Math.round(drag.bounds[3] + dy));
+      }
       draw();
     } else if (drag.mode === 'way') {
       once();
@@ -474,6 +498,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (d.snapped) changed();
   };
   svg.addEventListener('pointerup', finish);
+  // No autoscroll circle or paste from the middle button over the canvas.
+  for (const type of ['mousedown', 'auxclick']) svg.addEventListener(type, (ev) => { if (ev.button === 1) ev.preventDefault(); });
   svg.addEventListener('pointercancel', () => { drag?.line?.remove(); drag = null; draw(); });
   // Double-clicks are told apart here, from the presses themselves: the first press redraws
   // the canvas, and the browser's own dblclick does not come after that.
@@ -686,7 +712,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       swap.onclick = () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); };
       const straight = make('button', { type: 'button', textContent: 'Straighten', disabled: !c.waypoints.length });
       straight.onclick = () => { snapshot(); c.waypoints = []; changed(); };
-      out.push(make('div', { className: 'uml-row' }, swap, straight));
+      // A plain line (no arrow, no ends) looks the same either way round: no Swap direction.
+      out.push(make('div', { className: 'uml-row' }, ...(directed(def) ? [swap] : []), straight));
     }
     panel.replaceChildren(...out);
   }
@@ -852,7 +879,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (e || c) { selected = { kind: e ? 'element' : 'connector', id: (e || c).id }; changed(); }
     else if (selected) { selected = null; changed(); }
     const props = { label: 'Properties…', icon: 'settings', run: () => showPanel(true) };
-    const del = { label: 'Delete', icon: 'trash', danger: true, key: 'Del', run: removeSelected };
+    const del = { label: 'Delete', icon: 'backspace', danger: true, key: 'Del', run: removeSelected };
     if (e) {
       const def = ELEMENTS[e.type];
       return menu(x, y, [
@@ -872,7 +899,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
         props,
         { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
-        { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
+        directed(def) && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
         '-', ...styleEntries(c),
@@ -918,6 +945,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   undoBtn.onclick = () => stepHistory(undo, redo);
   redoBtn.onclick = () => stepHistory(redo, undo);
   delBtn.onclick = removeSelected;
+  clearAllBtn.onclick = () => {
+    if (!model.elements.length && !model.connectors.length) return;
+    snapshot();
+    model.elements = [];
+    model.connectors = [];
+    selected = null;
+    changed();
+    say('Cleared. One undo (Ctrl Z) brings it back.');
+  };
   zoomIn.onclick = () => zoom(1 / 1.25);
   zoomOut.onclick = () => zoom(1.25);
   fitBtn.onclick = fit;

@@ -319,6 +319,10 @@ export function starterModel(diagram = 'class') {
     link('syncMessage', a, b, { props: { name: 'find', args: 'isbn', y: 160 } });
     link('replyMessage', b, a, { props: { name: 'book', y: 200 } });
     link('replyMessage', a, u, { props: { name: 'ok', y: 240 } });
+    // Activation bars: while each object is busy, from the call it gets to its reply.
+    el('activation', 53, 112, { bounds: [53, 112, 14, 138] });
+    el('activation', 213, 112, { bounds: [213, 112, 14, 134] });
+    el('activation', 393, 152, { bounds: [393, 152, 14, 54] });
   }
   return m;
 }
@@ -651,8 +655,14 @@ export function connectorPath(model, c, fitted = null) {
   if (!A || !B || !a || !b) return null;
   if (CONNECTORS[c.type]?.message) {
     const y = Number.isFinite(c.props?.y) ? c.props.y : a[1] + 80;
-    const ax = a[0] + a[2] / 2, bx = b[0] + b[2] / 2;
-    if (A.id === B.id) return [[ax, y], [ax + 40, y], [ax + 40, y + 20], [ax, y + 20]];
+    let ax = a[0] + a[2] / 2, bx = b[0] + b[2] / 2;
+    // An activation bar on the lifeline at that height: the message starts or ends at its edge.
+    const bar = (x, yy) => model.elements.find((e) => ELEMENTS[e.type]?.shape === 'activation' && e.bounds[0] <= x && x <= e.bounds[0] + e.bounds[2] && e.bounds[1] <= yy && yy <= e.bounds[1] + e.bounds[3]);
+    if (A.id === B.id) { const r = bar(ax, y); if (r) ax = r.bounds[0] + r.bounds[2]; return [[ax, y], [ax + 40, y], [ax + 40, y + 20], [ax, y + 20]]; }
+    const dir = Math.sign(bx - ax) || 1;
+    const ra = bar(ax, y), rb = bar(bx, y);
+    if (ra) ax = dir > 0 ? ra.bounds[0] + ra.bounds[2] : ra.bounds[0];
+    if (rb) bx = dir > 0 ? rb.bounds[0] : rb.bounds[0] + rb.bounds[2];
     return [[ax, y], [bx, y]];
   }
   const mid = (r) => [r[0] + r[2] / 2, r[1] + r[3] / 2];
