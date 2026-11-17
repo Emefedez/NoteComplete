@@ -533,7 +533,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         };
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
-      palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
+      palette.append(make('h4', { className: 'ch-length-label', textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
       palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number before each letter is its service time (CPU burst + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
