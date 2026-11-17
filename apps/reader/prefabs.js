@@ -8,7 +8,8 @@ import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
 import { icon } from './icons.js';
 import { jsonErrorAt, codeBox } from './json-code.js';
 import { displaySpec } from './chart-model.js';
-import { DIAGRAMS, renderUml, starterModel, umlName } from './uml.js';
+import { DIAGRAMS, renderUml, starterModel, umlName, CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
+import { toPlantUml } from './uml-plantuml.js';
 
 // What each prefab starts as. `kind`: "graph" and "table" open their own editors; "prefab"
 // is an exam figure, described by `spec` (the exam visual spec); "uml" a UML diagram (uml.js),
@@ -139,13 +140,18 @@ export function choosePrefab() {
     const big = make('div', { className: 'prefab-big' });
     const name = make('h3', { className: 'exam-sub' });
     const hint = make('p', { className: 'muted' });
+    // With the next step turned off: which editor a UML diagram opens in, and a way back to the choice.
+    const editorChip = make('button', { type: 'button', className: 'prefab-editor-chip', hidden: true });
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
+    const filter = make('div', { className: 'prefab-filter' }, search, pills);
+    const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, editorChip));
+    const actions = make('div', { className: 'ocr-actions' }, cancel, apply);
+    // The next step for a class or use case diagram: which editor, the two side by side.
+    const step = make('div', { className: 'prefab-step', hidden: true });
     dialog.append(
       make('div', { className: 'exam-dlg-head' }, make('h2', {}, icon('graph'), ' Insert prefab'), close),
-      make('div', { className: 'prefab-filter' }, search, pills),
-      make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint)),
-      make('div', { className: 'ocr-actions' }, cancel, apply));
+      filter, split, actions, step);
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     document.body.append(dialog);
     const previews = new Map();
@@ -185,8 +191,51 @@ export function choosePrefab() {
     };
     let active = null;
     const finish = (value) => { if (value) notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
+    const codeCapable = (p) => p?.kind === 'uml' && CODE_DIAGRAMS.has(p.spec?.diagram);
+    const EDITORS = {
+      visual: { icon: 'uml', label: 'Visual', does: 'Draw it: place elements from the palette and drag arrows between them, as in Visual Paradigm.' },
+      split: { icon: 'code', label: 'PlantUML', does: 'Write it as PlantUML text. The drawing follows beside it, and each edits the other.' },
+    };
+    const editorOf = () => (savedUmlView() === 'visual' ? 'visual' : 'split');
+    // Insert: a class or use case diagram asks for its editor first (unless that step is off).
+    const go = (p) => { if (!p) return; if (codeCapable(p) && askUmlView()) editorStep(p); else finish(p); };
+    function editorStep(p) {
+      let chosen = editorOf();
+      const never = make('input', { type: 'checkbox' });
+      const code = (() => { try { return toPlantUml(p.spec, { layout: false }).trim().split('\n').slice(0, 16).join('\n'); } catch { return ''; } })();
+      const cards = Object.entries(EDITORS).map(([v, e]) => {
+        const picture = v === 'visual' ? thumb(p) : make('pre', { className: 'prefab-code', textContent: code });
+        const card = make('button', { type: 'button', className: 'prefab-editor' }, make('div', { className: 'prefab-editor-picture' }, picture), make('strong', {}, icon(e.icon), ` ${e.label}`), make('span', { textContent: e.does }));
+        card.dataset.view = v;
+        card.onclick = () => pick(v);
+        card.onfocus = () => mark(v);
+        return card;
+      });
+      const mark = (v) => { chosen = v; for (const c of cards) c.setAttribute('aria-pressed', String(c.dataset.view === v)); };
+      const pick = (v) => { saveUmlView(v); if (never.checked) setAskUmlView(false); finish(p); };
+      const back = make('button', { type: 'button', textContent: 'Back' }, );
+      const insert = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
+      back.onclick = () => { step.hidden = true; step.replaceChildren(); filter.hidden = split.hidden = actions.hidden = false; search.focus(); };
+      insert.onclick = () => pick(chosen);
+      step.replaceChildren(
+        make('h3', { className: 'exam-sub' }, icon('uml'), ` ${p.label}: editor`),
+        make('div', { className: 'prefab-editors', role: 'group' }, ...cards),
+        make('div', { className: 'ocr-actions' }, make('label', { className: 'prefab-never' }, never, ' Don\'t ask again'), make('span', { className: 'prefab-step-spacer' }), back, insert));
+      step.onkeydown = (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const v = e.key === 'ArrowLeft' ? 'visual' : 'split'; mark(v); cards.find((c) => c.dataset.view === v).focus(); }
+        else if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); pick(chosen); }
+        else if (e.key === 'Backspace' && e.target.tagName !== 'INPUT') { e.preventDefault(); back.click(); }
+      };
+      filter.hidden = split.hidden = actions.hidden = true;
+      step.hidden = false;
+      mark(chosen);
+      cards.find((c) => c.dataset.view === chosen).focus();
+    }
+    editorChip.onclick = () => { if (active) { setAskUmlView(true); editorStep(active); } };
     function show(p) {
       active = p;
+      editorChip.hidden = !codeCapable(p) || askUmlView();
+      if (!editorChip.hidden) { const e = EDITORS[editorOf()]; editorChip.replaceChildren(icon(e.icon), ` ${e.label}`); editorChip.title = 'The editor it opens in: click to choose again'; }
       for (const c of grid.querySelectorAll('.prefab-card')) c.setAttribute('aria-selected', String(c.dataset.id === p?.id));
       showBig(p);
       name.textContent = p?.label || 'Nothing found';
@@ -198,7 +247,7 @@ export function choosePrefab() {
       const q = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const found = PREFABS.filter((p) => (!group || p.group === group) && q.every((w) => words(p).includes(w)));
       const card = (p) => {
-        const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => finish(p) }, lazyThumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
+        const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => go(p) }, lazyThumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
         c.dataset.id = p.id;
         c.setAttribute('role', 'option');
         // A mouse previews on hover. Not a finger or the Pencil: Safari on iPad treats a change
@@ -227,9 +276,9 @@ export function choosePrefab() {
     search.addEventListener('input', list);
     search.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); move(e.key === 'ArrowDown' ? 1 : -1); }
-      else if (e.key === 'Enter' && active) { e.preventDefault(); finish(active); }
+      else if (e.key === 'Enter' && active) { e.preventDefault(); go(active); }
     });
-    apply.onclick = () => active && finish(active);
+    apply.onclick = () => go(active);
     cancel.onclick = close.onclick = () => finish(null);
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     list();

@@ -3909,6 +3909,21 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-picker .prefab-card span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .prefab-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--chrome); }
 .prefab-side p { margin: 0; font-size: 12.5px; }
+/* Insert prefab, next step for a class or use case diagram: the two editors side by side. */
+.prefab-step { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1 1 auto; }
+.prefab-step h3 { display: flex; align-items: center; gap: 6px; margin: 0; }
+.prefab-editors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-height: 0; }
+.prefab-editor { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius-box, 8px); background: var(--chrome); color: var(--ink); cursor: pointer; }
+.prefab-editor[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.prefab-editor strong { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.prefab-editor > span { font-size: 12.5px; color: var(--muted); }
+.prefab-editor-picture { height: 240px; overflow: hidden; border-radius: 6px; background: #fff; display: grid; place-items: center; }
+.prefab-editor-picture .prefab-preview { width: 100%; height: 100%; }
+.prefab-code { margin: 0; width: 100%; height: 100%; padding: 10px 12px; overflow: hidden; font: 11.5px/1.45 ui-monospace, "JetBrains Mono", monospace; color: #e5e8ed; background: #24272c; white-space: pre; }
+.prefab-step-spacer { flex: 1; }
+.prefab-never { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.prefab-editor-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+@media (max-width: 640px) { .prefab-editors { grid-template-columns: minmax(0, 1fr); } .prefab-editor-picture { height: 160px; } }
 .prefab-big .prefab-preview { height: 240px; border: 1px solid var(--line); }
 .prefab-big .prefab-icon svg { width: 64px; height: 64px; }
 .prefab-picker > .ocr-actions { flex: none; padding-top: 10px; border-top: 1px solid var(--line); }

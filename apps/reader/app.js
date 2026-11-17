@@ -11,6 +11,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
+import { savedUmlView } from "./uml.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -6308,11 +6309,9 @@ function umlEditor(spec, editing = false) {
 }
 async function openUmlEditor(spec, editing = false) {
   try {
-    const { openUmlEditor: open, chooseView } = await loading(import("./uml-editor.js"));
-    // A new diagram: which editor (drawing, PlantUML or both), unless always the same one.
-    const view = editing ? null : await chooseView(spec?.diagram, { menu: openContextMenu });
-    if (!editing && !view) return null;
-    return await open(spec, { editing, view, markdown: (text) => call("markdownHtml", { text }) });
+    const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
+    // A new diagram opens in the view chosen in Insert prefab (drawing, PlantUML or both).
+    return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }) });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;

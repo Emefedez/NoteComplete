@@ -3,7 +3,7 @@
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
 import { imageReady } from './image-ready.js';
-import { HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
+import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { parsePlantUml, toPlantUml } from './uml-plantuml.js';
 import { download } from './download.js';
@@ -27,13 +27,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const iconButton = (name, title) => { const b = make('button', { type: 'button', className: 'uml-icon', title }); b.setAttribute('aria-label', title.replace(/ \(.*\)$/, '')); b.append(icon(name)); return b; };
 const PANEL_KEY = 'notecomplete.uml.panel';
 const NOTES_KEY = 'notecomplete.uml.notes';
-// Which way diagrams are edited: drawn (visual), as PlantUML text (code) or both side by side.
-export const VIEW_KEY = 'notecomplete.uml.view';
-export const ASK_KEY = 'notecomplete.uml.ask';
-export const VIEWS = { visual: { label: 'Visual', icon: 'uml' }, code: { label: 'Code', icon: 'code' }, split: { label: 'Both', icon: 'split' } };
-const CODE_KINDS = new Set(['class', 'useCase']);
-export const codeKinds = CODE_KINDS;
-export function savedView() { try { const v = localStorage.getItem(VIEW_KEY); return VIEWS[v] ? v : 'visual'; } catch { return 'visual'; } }
+// Which way diagrams are edited (uml.js): drawn, as PlantUML, or both.
+const VIEWS = UML_VIEWS, VIEW_KEY = UML_VIEW_KEY, CODE_KINDS = CODE_DIAGRAMS, savedView = savedUmlView;
 const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'diagram'}.${ext}`;
 
 // Loads uml.css once (the reader's own page does not carry it).
@@ -1344,25 +1339,6 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     setView,
     destroy: () => { help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
-}
-
-// Before a new diagram opens: which editor view, from a small menu of icons (Visual, Code,
-// Both), unless the person chose to always use the one they pick. Resolves with the view, or
-// null when the menu was closed without a choice.
-export function chooseView(diagram, { x = innerWidth / 2, y = innerHeight / 3, menu } = {}) {
-  let ask = true;
-  try { ask = localStorage.getItem(ASK_KEY) !== '0'; } catch { /* Optional. */ }
-  if (!CODE_KINDS.has(diagram) || !ask) return Promise.resolve(savedView());
-  return new Promise((resolve) => {
-    let chosen = false, again = false;
-    const pick = (v) => { chosen = true; try { localStorage.setItem(VIEW_KEY, v); } catch { /* Optional. */ } resolve(v); };
-    const show = () => menu(x, y, [
-      ...Object.entries(VIEWS).map(([v, d]) => ({ label: d.label, icon: d.icon, checked: v === savedView(), run: () => pick(v) })),
-      '-',
-      { label: 'Ask every time', icon: 'settings', checked: ask, run: () => { ask = !ask; again = true; try { localStorage.setItem(ASK_KEY, ask ? '1' : '0'); } catch { /* Optional. */ } show(); } },
-    ], { title: 'Editor', onClose: () => setTimeout(() => { if (again) { again = false; return; } if (!chosen) resolve(null); }, 0) });
-    show();
-  });
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
