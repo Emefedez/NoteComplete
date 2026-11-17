@@ -839,14 +839,9 @@ export const CONNECTOR_ICONS = {
 const FILLED_ICONS = new Set(['filled', 'filledDiamond']);
 
 const iconMark = (type) => { const def = CONNECTORS[type] || {}; return def.start && def.start !== 'none' ? def.start : def.end || 'none'; };
-// Nodes that share a shape but not a meaning get their own icon, as in Visual Paradigm:
-// a decision takes one flow and sends out several, a merge the other way round; so do fork and join.
+// The initial node a size that reads at a glance; every other node is its own shape alone, as in
+// Visual Paradigm (decision and merge a diamond, fork and join a bar): lines are brought to it.
 const TYPE_ICONS = {
-  decision: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM12 2.5v5M7.5 12H3m13.5 0H21',
-  merge: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM3 12h4.5M21 12h-4.5M12 16.5v5',
-  choice: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM12 2.5v5M7.5 12H3m13.5 0H21',
-  fork: 'M4 11h16v2.5H4ZM12 3v8M7 13.5V21m10-7.5V21',
-  join: 'M4 10.5h16V13H4ZM7 3v7.5M17 3v7.5M12 13v8',
   initial: 'M12 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11Z',
 };
 export function iconPath(kind, type) {
