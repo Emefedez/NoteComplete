@@ -76,6 +76,19 @@ try {
   await p.keyboard.press('Enter');
   await p.locator('.uml-dialog text:text-is("Volume")').waitFor();
   console.log('· editor: right-click menu, Delete and Backspace, the undo icon, double-click to rename');
+  // N: notes on the diagram, in Markdown, read rendered and kept with it.
+  await p.click('.uml-dialog .uml-canvas', { position: { x: 5, y: 5 } });
+  await p.keyboard.press('n');
+  await p.waitForSelector('.uml-dialog .uml-notes .TinyMDE', { timeout: 10000 });
+  await p.click('.uml-dialog .uml-notes .TinyMDE');
+  await p.keyboard.type('**Book** is lent');
+  await p.keyboard.press('Backspace');
+  await p.keyboard.type('t');
+  assert.equal(await p.locator('.uml-dialog [data-uml-kind="element"]').count(), before + 1, 'Backspace in the notes deletes text, not the diagram');
+  await p.click('.uml-dialog .fig-notes-read');
+  await p.waitForSelector('.uml-dialog .fig-notes-render strong:text-is("Book")', { timeout: 15000 });
+  await p.click('.uml-dialog .fig-notes-write');
+  console.log('· notes on the diagram: N, written in Markdown and read rendered');
   await p.click('.uml-dialog button.primary');
   await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 2, ADDED);
   assert.equal(await p.locator('.uml-dialog').count(), 0);
@@ -93,6 +106,8 @@ try {
   await p.waitForSelector('.uml-dialog [data-uml-id]');
   assert.equal(await p.locator('.uml-dialog [data-uml-kind="element"]').count(), before + 1, 'the editor has the diagram');
   assert.equal(await p.locator('.uml-dialog [data-uml-kind="connector"]').count(), 3);
+  await p.waitForSelector('.uml-dialog .uml-notes .TinyMDE');
+  assert.match(await p.textContent('.uml-dialog .uml-notes .TinyMDE'), /Book\*\* is lent/, 'the notes are kept with the diagram');
   // Nothing selected: the diagram's own settings, in the properties panel. A title, then Apply.
   await p.click('.uml-dialog .uml-tool[data-kind="select"]');
   if (await p.getAttribute('.uml-dialog .uml-icon[aria-label="Properties of the selection"]', 'aria-pressed') !== 'true') await p.click('.uml-dialog .uml-icon[aria-label="Properties of the selection"]');

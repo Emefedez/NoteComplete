@@ -11,6 +11,7 @@ import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
+import { figureNotes } from './figure-notes.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -23,6 +24,7 @@ const make = (tag, props = {}, ...children) => {
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const iconButton = (name, title) => { const b = make('button', { type: 'button', className: 'uml-icon', title }); b.setAttribute('aria-label', title.replace(/ \(.*\)$/, '')); b.append(icon(name)); return b; };
 const PANEL_KEY = 'notecomplete.uml.panel';
+const NOTES_KEY = 'notecomplete.uml.notes';
 const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'diagram'}.${ext}`;
 
 // Loads uml.css once (the reader's own page does not carry it).
@@ -45,7 +47,7 @@ export async function umlPng(model, scale = 2) {
 
 // Mounts the editor in `root`. `apply`/`cancel`: the buttons shown when it edits for a note.
 // Returns { model(), set(model), destroy() }.
-export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply' } = {}) {
+export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null } = {}) {
   ensureStyles();
   let model = normalizeModel(initial || starterModel('class'));
   let selected = null; // { kind: 'element' | 'connector', id }
@@ -86,18 +88,27 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const importBtn = iconButton('import', 'Open a Visual Paradigm XML, XMI or NoteComplete diagram file');
   const exportBtn = iconButton('export', 'Export: Visual Paradigm XML, XMI, a picture or a NoteComplete diagram');
   const panelBtn = iconButton('settings', 'Properties of the selection (or of the diagram)');
+  const notesBtn = iconButton('note', 'Notes on this diagram, in Markdown, kept with it (N)');
   const gap = () => make('span', { className: 'uml-gap' });
   const spacer = make('span', { className: 'uml-spacer' });
   const cancelBtn = onCancel && make('button', { type: 'button', textContent: 'Cancel' });
   const applyBtn = onApply && make('button', { type: 'button', className: 'primary', textContent: applyLabel });
-  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), importBtn, importInput, exportBtn, panelBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), importBtn, importInput, exportBtn, notesBtn, panelBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'uml-palette', role: 'toolbar', ariaLabel: 'Elements and connectors' });
   const canvas = make('div', { className: 'uml-canvas', tabIndex: 0 });
   const panel = make('div', { className: 'uml-panel' });
   const status = make('div', { className: 'uml-status', role: 'status' });
   // Menus go inside the editor's dialog over a note (the page under a modal one is inert).
   const menu = (x, y, entries, opts = {}) => openMenu(x, y, entries, { ...opts, host: root.closest('dialog') || document.body });
-  const main = make('div', { className: 'uml-main' }, palette, canvas, panel);
+  // Notes beside the diagram (N): Markdown kept with it (`notes`), written or read rendered.
+  const notes = figureNotes({
+    get: () => model.notes || '',
+    set: (text) => { snapshot('notes'); if (text.trim()) model.notes = text; else delete model.notes; updateButtons(); onChange?.(model); },
+    toHtml: markdown,
+    placeholder: 'Notes on this diagram: what it shows, why it is drawn this way… Markdown: # heading, **bold**, - list.',
+    className: 'uml-notes',
+  });
+  const main = make('div', { className: 'uml-main' }, palette, canvas, notes.pane, panel);
   root.append(bar, main, status);
   // The properties panel: closed unless asked for (names change in place, on the canvas).
   let panelOpen = false;
@@ -108,6 +119,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     panelBtn.setAttribute('aria-pressed', String(on));
     try { localStorage.setItem(PANEL_KEY, on ? '1' : '0'); } catch { /* Optional. */ }
     if (on) buildPanel();
+  }
+  let notesOpen = false;
+  try { notesOpen = localStorage.getItem(NOTES_KEY) === '1'; } catch { /* Optional. */ }
+  function showNotes(on, focus = false) {
+    notesOpen = on;
+    main.classList.toggle('with-notes', on);
+    notesBtn.setAttribute('aria-pressed', String(on));
+    try { localStorage.setItem(NOTES_KEY, on ? '1' : '0'); } catch { /* Optional. */ }
+    if (on) notes.show().then(() => { if (focus) notes.focus(); }); else notes.hide();
   }
   const svg = document.createElementNS(SVG, 'svg');
   svg.classList.add('uml-svg');
@@ -338,6 +358,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (!keepView) view = null;
     buildPalette();
     changed();
+    notes.sync();
     if (!keepView) requestAnimationFrame(fit);
   }
   function stepHistory(from, to) {
@@ -348,6 +369,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     lastSnap = { key: '', at: 0 };
     buildPalette();
     changed();
+    notes.sync();
   }
   function updateButtons() {
     undoBtn.disabled = !undo.length;
@@ -590,7 +612,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   document.addEventListener('keydown', stray);
   root.addEventListener('keydown', keys);
   function keys(ev) {
-    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName);
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || !!ev.target.isContentEditable;
     const mod = ev.ctrlKey || ev.metaKey;
     if (mod && ev.key.toLowerCase() === 'z' && !typing) { ev.preventDefault(); stepHistory(ev.shiftKey ? redo : undo, ev.shiftKey ? undo : redo); }
     else if (mod && ev.key.toLowerCase() === 'y' && !typing) { ev.preventDefault(); stepHistory(redo, undo); }
@@ -602,6 +624,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     else if (mod && ev.key.toLowerCase() === 'v' && !typing && clip) { ev.preventDefault(); ev.stopPropagation(); pasteClip(); }
     else if (ev.key === 'Escape' && !typing && pending) { ev.preventDefault(); ev.stopPropagation(); pending.line?.remove(); pending = null; say(''); }
     else if (ev.key === 'Escape' && !typing) { if (tool.kind !== 'select') { ev.preventDefault(); ev.stopPropagation(); setTool({ kind: 'select' }); } else if (selected) { ev.preventDefault(); ev.stopPropagation(); selected = null; changed(); } }
+    else if (!typing && !mod && !ev.altKey && (ev.key === 'n' || ev.key === 'N')) { ev.preventDefault(); showNotes(!notesOpen, !notesOpen); }
     else if (!typing && !mod && (ev.key === '+' || ev.key === '=')) zoom(1 / 1.25);
     else if (!typing && !mod && ev.key === '-') zoom(1.25);
     else if (!typing && !mod && !ev.altKey && indexOfKey(ev.key) >= 0) {
@@ -1000,6 +1023,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     ], { title: 'Export' });
   };
   panelBtn.onclick = () => showPanel(!panelOpen);
+  notesBtn.onclick = () => showNotes(!notesOpen, !notesOpen);
   if (applyBtn) applyBtn.onclick = () => onApply(normalizeModel(model));
   if (cancelBtn) cancelBtn.onclick = () => onCancel();
 
@@ -1009,6 +1033,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   resize.observe(canvas);
   buildPalette();
   showPanel(panelOpen);
+  showNotes(notesOpen);
   changed();
   requestAnimationFrame(fit);
   return {
@@ -1020,7 +1045,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false } = {}) {
+export function openUmlEditor(model, { editing = false, markdown = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
@@ -1032,6 +1057,6 @@ export function openUmlEditor(model, { editing = false } = {}) {
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
+    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown });
   });
 }

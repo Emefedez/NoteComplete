@@ -237,6 +237,8 @@ export function normalizeModel(input) {
   });
   const out = { type: 'uml', version: UML_VERSION, diagram, name: String(m.name ?? ''), title: String(m.title ?? ''), badge: m.badge === undefined ? !DIAGRAMS[diagram].notUml : m.badge !== false, elements, connectors, source: m.source && typeof m.source === 'object' ? m.source : null };
   if (!out.source) delete out.source;
+  // Notes on the diagram (Markdown, uml-editor.js), kept with it and never drawn.
+  if (typeof m.notes === 'string' && m.notes.trim()) out.notes = m.notes;
   autoLayout(out);
   return out;
 }
