@@ -11,7 +11,7 @@ import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
-import { STATES, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
+import { STATES, triOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const make = (tag, props = {}, ...children) => {
@@ -393,7 +393,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number after each letter is its TRI (running + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -471,7 +471,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const n = g.rows[0]?.cells.length || Math.round((g.tEnd - g.tStart) / g.cell);
     const width = Math.max(320, canvas.clientWidth - 16);
     const longest = g.rows.reduce((m, r) => Math.max(m, r.label.length), 2);
-    const left = Math.min(140, 22 + longest * 8), top = 30;
+    // Process states: room for each process's TRI after its letter.
+    const triW = kind === 'states' ? 12 + 7 * Math.max(2, ...g.rows.map((r) => String(fmt(triOf(r, g.cell))).length)) : 0;
+    const left = Math.min(140, 22 + longest * 8) + triW, top = 30;
     const cw = Math.max(4, Math.min(160, Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n))) * zoom));
     const rh = showSolution ? 50 : 42;
     geo = { left, top, cw, rh, n };
@@ -493,7 +495,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     g.rows.forEach((r, ri) => {
       const y0 = top + ri * rh, yc = y0 + (showSolution ? rh * 0.38 : rh / 2);
       s.append(svgEl('rect', { x: left, y: y0, width: cw * n, height: rh, class: ri % 2 ? 'ch-lane odd' : 'ch-lane' }));
-      s.append(Object.assign(svgEl('text', { x: left - 8, y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
+      s.append(Object.assign(svgEl('text', { x: left - (kind === 'states' ? triW : 8), y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
       // Runs of a value drawn as one stretch, as on the page.
       let k = 0;
       while (k < n) {
@@ -524,6 +526,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       }
       const arrival = (mode === 'answer' ? grid.rows[ri]?.arrival : r.arrival);
       if (kind === 'states' && arrival != null) s.append(svgEl('circle', { cx: left + ((arrival - g.tStart) / g.cell) * cw, cy: yc, r: 4.2, class: 'ch-arrival' }));
+      const end = (mode === 'answer' ? grid.rows[ri]?.end : r.end);
+      if (kind === 'states' && end != null) {
+        const xe = left + ((end - g.tStart) / g.cell) * cw;
+        s.append(svgEl('line', { x1: xe, y1: y0 + 6, x2: xe, y2: y0 + rh - 6, class: 'ch-end-line' }), svgEl('circle', { cx: xe, cy: yc, r: 4.2, class: 'ch-arrival ch-end' }));
+      }
+      // TRI beside the letter: time running plus time blocked.
+      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: left - 6, y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(triOf(r, g.cell)) }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
     // The lanes' backgrounds under the cell lines (they were drawn over them).
@@ -556,8 +565,25 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     snapshot();
     check = null;
     if (brush === '@arrival' && !erasing) {
+      // The first marker on a line is its arrival; a second one, later, is where it ends.
+      // A marker clicked again goes; with both there, the nearer one moves to the click.
       const t = g.tStart + Math.max(0, Math.min(geo.n, Math.round((at.x - geo.left) / geo.cw))) * g.cell;
-      g.rows[at.row].arrival = g.rows[at.row].arrival === t ? null : t;
+      const r = g.rows[at.row];
+      if (r.arrival === t) r.arrival = null;
+      else if (r.end === t) delete r.end;
+      else if (r.arrival == null && (r.end == null || t < r.end)) r.arrival = t;
+      else if (r.end == null && t > r.arrival) r.end = t;
+      else if (r.end == null) r.arrival = t;
+      else if (Math.abs(t - r.arrival) <= Math.abs(t - r.end) && t < r.end) r.arrival = t;
+      else if (t > (r.arrival ?? -Infinity)) r.end = t;
+      else r.arrival = t;
+      // Nothing painted past its end.
+      if (r.end != null) {
+        const k0 = Math.max(0, Math.round((r.end - g.tStart) / g.cell));
+        for (let k = k0; k < r.cells.length; k++) r.cells[k] = '';
+      }
+      // The answer has the solution's markers.
+      if (mode === 'author' && ans?.rows[at.row]) { ans.rows[at.row].arrival = r.arrival; if (r.end != null) ans.rows[at.row].end = r.end; else delete ans.rows[at.row].end; }
       changed();
       return;
     }
@@ -570,8 +596,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     // The run follows the pointer both ways: moving back (without letting go) gives the cells
     // passed over back as they were before the press.
     const before = [...row.cells];
+    // A process with an end marker paints no further than it (move or remove the marker first).
+    const endAt = (mode === 'answer' ? grid.rows[at.row]?.end : row.end);
+    const lastCell = endAt != null ? Math.min(geo.n, Math.round((endAt - g.tStart) / g.cell)) - 1 : geo.n - 1;
+    if (from > lastCell && value) { say('This process ends at its second marker: move or remove it to paint further.', true); return; }
     const paint = (to) => {
-      const a = Math.min(from, to), b = Math.min(geo.n - 1, Math.max(from, to) + span - 1);
+      const a = Math.min(from, to), b = Math.min(value ? lastCell : geo.n - 1, Math.max(from, to) + span - 1);
       for (let k = 0; k < before.length; k++) row.cells[k] = k >= a && k <= b ? value : before[k];
     };
     paint(from);

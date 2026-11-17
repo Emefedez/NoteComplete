@@ -71,6 +71,9 @@
 .ch-lane.odd { fill: var(--c-lane-odd); }
 .ch-iv { stroke: color-mix(in srgb, var(--c-ink) 70%, transparent); stroke-width: 1; }
 .ch-arrival { fill: var(--c-ink); }
+.ch-end { fill: var(--c-surface); stroke: var(--c-ink); stroke-width: 2; }
+.ch-end-line { stroke: var(--c-ink); stroke-width: 2; }
+.ch-tri { font-size: 11px; font-weight: 600; fill: var(--c-muted); font-variant-numeric: tabular-nums; }
 .ch-wrong { fill: #dc262622; stroke: #dc2626; stroke-width: 1.6; pointer-events: none; }
 .ch-axis { stroke: var(--c-ink); stroke-width: 1.6; }
 .ch-bar-hit { fill: transparent; cursor: ns-resize; }

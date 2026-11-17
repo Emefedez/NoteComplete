@@ -282,6 +282,27 @@ try {
   await q.keyboard.press('Escape');
   assert.equal(await q.locator('.quick-menu').count(), 0);
   console.log('· palettes: number keys follow an order dragged by hand and kept; Shift S rings in both editors');
+
+  // 7. TRI after each letter (running + blocked), and a second Arrival dot as the end: nothing
+  // is painted past it.
+  {
+    await q.evaluate(() => localStorage.clear());
+    await q.goto(`${server.origin}/charts.html?kind=states`);
+    await q.waitForSelector('.ch-grid');
+    const tri = () => q.$$eval('.ch-grid .ch-tri', (t) => t.map((x) => x.textContent));
+    assert.deepEqual(await tri(), ['25', '10', '5'], 'TRI per process');
+    await q.keyboard.press('Escape');
+    await q.click('.ch-brush[data-value="@arrival"]');
+    const g = await q.evaluate(() => { const el = document.querySelector('.ch-grid'), r = el.getBoundingClientRect(), l = el.querySelectorAll('.ch-lane')[1]; return { x: r.x + +l.getAttribute('x'), y: r.y + +l.getAttribute('y') + +l.getAttribute('height') / 2, w: +l.getAttribute('width') }; });
+    const cw = g.w / 30;
+    await q.mouse.click(g.x + cw * 15, g.y);
+    assert.equal(await q.locator('.ch-grid .ch-end').count(), 1, 'a second dot is the end');
+    assert.deepEqual(await tri(), ['25', '5', '5'], 'cut at the end');
+    await q.click('.ch-brush[data-value="run"]');
+    await q.mouse.click(g.x + cw * 22.5, g.y);
+    assert.deepEqual(await tri(), ['25', '5', '5'], 'nothing painted past the end');
+    console.log('· process states: TRI per process; a second arrival dot ends it');
+  }
   assert.deepEqual(errors, []);
   console.log('charts e2e: ok');
 } finally {

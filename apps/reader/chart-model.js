@@ -43,6 +43,8 @@ function rowsOf(kind, data) {
     return raw.filter((r) => r && typeof r === 'object').map((r, i) => ({
       label: String(r.label ?? r.name ?? `P${i + 1}`),
       arrival: num(r.arrival),
+      // Where it ends (a second marker on its line): nothing is painted from there on.
+      end: num(r.end),
       done: r.done !== false,
       spans: (Array.isArray(r.segments) ? r.segments : Array.isArray(r.intervals) ? r.intervals : [])
         .map((s) => ({ value: STATES.includes(s?.state) ? s.state : stateOf(s?.state ?? s?.label), start: num(s?.start ?? s?.from), end: num(s?.end ?? s?.to) }))
@@ -102,7 +104,9 @@ export function gridOf(spec, data = spec) {
         const a = Math.max(0, Math.round((s.start - tStart) / cell)), b = Math.min(n, Math.round((s.end - tStart) / cell));
         for (let k = a; k < b; k++) cells[k] = s.value;
       }
-      return { label: r.label, arrival: r.arrival ?? null, done: r.done !== false, cells };
+      const out = { label: r.label, arrival: r.arrival ?? null, done: r.done !== false, cells };
+      if (r.end != null) out.end = r.end;
+      return out;
     }),
   };
 }
@@ -127,6 +131,7 @@ export function rowsData(grid) {
       processes: grid.rows.map((r) => ({
         label: r.label,
         ...(r.arrival != null ? { arrival: r.arrival } : {}),
+        ...(r.end != null ? { end: r.end } : {}),
         ...(r.done === false ? { done: false } : {}),
         segments: spansOf(r.cells, grid.tStart, grid.cell).map((s) => ({ state: s.value, start: s.start, end: s.end })),
       })),
@@ -141,6 +146,13 @@ export function withGrid(spec, grid) {
   delete out.intervals; delete out.lanes;
   if (grid.kind === 'states') delete out.rows; else delete out.processes;
   return out;
+}
+
+// TRI of a process row: its time running plus its time blocked, in time units (a whole number
+// when the cells allow).
+export function triOf(row, cell) {
+  const n = row.cells.filter((v) => v === 'run' || v === 'blocked').length * cell;
+  return Math.round(n * 1e6) / 1e6;
 }
 
 // The labels used in a timeline, in order of appearance (the palette's brushes).

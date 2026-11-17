@@ -533,7 +533,8 @@ function normalizeStatesSpec(raw, { caption = '', blank = false } = {}) {
       .filter(Boolean)
       .sort((a, b) => a.start - b.start);
     const arrival = Number.isFinite(Number(r.arrival)) ? Number(r.arrival) : (segments[0]?.start ?? null);
-    return { label: String(r.label ?? r.name ?? r.process ?? `P${ri + 1}`).trim(), arrival, segments, done: r.done !== false };
+    const end = Number.isFinite(Number(r.end)) && r.end !== null && r.end !== '' ? Number(r.end) : null;
+    return { label: String(r.label ?? r.name ?? r.process ?? `P${ri + 1}`).trim(), arrival, end, segments, done: r.done !== false };
   }).filter((p) => p && p.label);
   const all = processes.flatMap((p) => p.segments);
   const tStart = Number.isFinite(Number(raw.tStart)) ? Number(raw.tStart) : 0;
@@ -1166,8 +1167,10 @@ function renderStatesSvg(spec, { forMcp = false } = {}) {
       els.push(`<circle cx="${mapT(p.arrival).toFixed(1)}" cy="${y}" r="3.6" fill="${first ? COLORS[first.state] : COLORS.ready}"/>`);
     }
     const last = p.segments[p.segments.length - 1];
-    if (last && p.done && last.end <= spec.tEnd) {
-      els.push(`<text x="${(mapT(last.end) + 4).toFixed(1)}" y="${y + 6}" font-size="${fs + 6}" font-weight="700" fill="${COLORS.run}">*</text>`);
+    // Where it ends: its end marker when it has one, else the end of its last stretch.
+    const endsAt = p.end ?? last?.end;
+    if (endsAt != null && p.done && endsAt <= spec.tEnd) {
+      els.push(`<text x="${(mapT(endsAt) + 4).toFixed(1)}" y="${y + 6}" font-size="${fs + 6}" font-weight="700" fill="${COLORS.run}">*</text>`);
     }
   });
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${escapeHtml(spec.title || 'Process states')}">${els.join('')}</svg>`, width: W, height: H };
