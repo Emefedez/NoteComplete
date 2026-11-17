@@ -84,9 +84,23 @@ export function prefabName(spec) {
   return NAMES[s?.type] || 'Prefab';
 }
 
+function svgSize(svg) {
+  const tag = String(svg || '').match(/<svg\b[^>]*>/i)?.[0] || '';
+  const vb = tag.match(/\bviewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/i);
+  if (vb) return [Number(vb[1]) || 600, Number(vb[2]) || 400];
+  const w = Number(tag.match(/\bwidth=["']([\d.]+)/i)?.[1]), h = Number(tag.match(/\bheight=["']([\d.]+)/i)?.[1]);
+  return [w || 600, h || 400];
+}
+
 // The figure as SVG text with its size, or null when the spec draws nothing.
 export function prefabSvg(spec) {
-  if (spec?.type === 'uml') return renderUml(spec);
+  if (spec?.type === 'uml') {
+    if (spec.style === 'plantuml' && typeof spec.plantumlSvg === 'string' && spec.plantumlSvg.includes('<svg')) {
+      const [width, height] = svgSize(spec.plantumlSvg);
+      return { svg: spec.plantumlSvg, width, height };
+    }
+    return renderUml(spec);
+  }
   // An exercise shows the student's answer, not its solution (chart-model.js).
   const out = renderVisualSvg(displaySpec(spec), { forMcp: false });
   return out?.svg ? out : null;
@@ -142,11 +156,13 @@ export function choosePrefab() {
     const hint = make('p', { className: 'muted' });
     // With the next step turned off: which editor a UML diagram opens in, and a way back to the choice.
     const editorChip = make('button', { type: 'button', className: 'prefab-editor-chip', hidden: true });
+    const importInput = make('input', { type: 'file', accept: '.puml,.plantuml,.pu,.iuml,.wsd,.xml,.xmi,.uml,.json,application/xml,text/xml,application/json', hidden: true });
+    const importBtn = make('button', { type: 'button', title: 'Open a PlantUML (.puml), Visual Paradigm XML, XMI or NoteComplete diagram file' }, icon('import'), ' Import .puml / diagram…');
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
     const filter = make('div', { className: 'prefab-filter' }, search, pills);
     const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, editorChip));
-    const actions = make('div', { className: 'ocr-actions' }, cancel, apply);
+    const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
     // The next step for a class or use case diagram: which editor, the two side by side.
     const step = make('div', { className: 'prefab-step', hidden: true });
     dialog.append(
@@ -190,7 +206,14 @@ export function choosePrefab() {
       requestAnimationFrame(() => setTimeout(() => { if (bigFor === p && dialog.isConnected) big.replaceChildren(thumb(p)); }, 0));
     };
     let active = null;
-    const finish = (value) => { if (value) notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
+    const finish = (value) => { if (value?.id && value.kind !== 'uml-import') notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
+    importBtn.onclick = () => importInput.click();
+    importInput.onchange = async () => {
+      const file = importInput.files?.[0];
+      importInput.value = '';
+      if (!file) return;
+      try { const text = await file.text(); finish({ id: 'uml-import', kind: 'uml-import', fileName: file.name, text }); } catch { /* Ignored. */ }
+    };
     const codeCapable = (p) => p?.kind === 'uml' && CODE_DIAGRAMS.has(p.spec?.diagram);
     const EDITORS = {
       visual: { icon: 'uml', label: 'Visual', does: 'Draw it: place elements from the palette and drag arrows between them, as in Visual Paradigm.' },

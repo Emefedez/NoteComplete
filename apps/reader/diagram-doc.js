@@ -17,15 +17,29 @@ export async function mountDiagramDoc(host, { text, draw = null, onText, onError
   const editor = mountUmlEditor(host, parsed.model, {
     markdown,
     preamble: parsed.preamble,
+    draw,
     ignoreKey,
     onChange: (model) => {
       if (!ready) return;
       try {
-        const next = toPlantUml(model, { preamble: parsed.preamble });
+        const next = toPlantUml(model, { preamble: editor.preamble() });
         if (next !== last) { last = next; onText(next); }
       } catch (error) { onError(error.message); }
     },
   });
   ready = true;
-  return { zoom: (dir) => editor.zoom(dir), focus: () => editor.focus(), destroy: () => editor.destroy() };
+  return {
+    zoom: (dir) => editor.zoom(dir),
+    focus: () => editor.focus(),
+    model: () => {
+      const m = editor.model();
+      const pre = editor.preamble();
+      if (pre.length) m.preamble = pre;
+      const svg = editor.renderedSvg();
+      if (svg) { m.style = 'plantuml'; m.plantumlSvg = svg; }
+      return m;
+    },
+    plantuml: () => toPlantUml(editor.model(), { preamble: editor.preamble() }),
+    destroy: () => editor.destroy(),
+  };
 }

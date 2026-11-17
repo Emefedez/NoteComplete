@@ -5,7 +5,9 @@
 import { imageReady } from './image-ready.js';
 import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
-import { parsePlantUml, toPlantUml } from './uml-plantuml.js';
+import { parsePlantUml, toPlantUml, layoutFromPlantuml } from './uml-plantuml.js';
+import { writeUmlClip, readUmlClipFromText, getSharedUmlClip, clipFitsDiagram } from './uml-clipboard.js';
+import { diagramMessage } from './text-view.js';
 import { download } from './download.js';
 import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
@@ -53,9 +55,10 @@ export async function umlPng(model, scale = 2) {
 // Returns { model(), set(model), destroy() }.
 // `ignoreKey(ev)`: keys the page around the editor keeps for itself (a text document's N
 // opens its Notes there); `importAccept` adds file types to Import.
-export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null, ignoreKey = null, view: startView = null, preamble = [] } = {}) {
+export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null, ignoreKey = null, view: startView = null, preamble = [], draw: drawPlantuml = null } = {}) {
   ensureStyles();
   let model = normalizeModel(initial || starterModel('class'));
+  let docPreamble = Array.isArray(preamble) && preamble.length ? [...preamble] : Array.isArray(model.preamble) ? [...model.preamble] : [];
   let selected = null; // { kind: 'element' | 'connector', id }
   let tool = { kind: 'select' }; // or { kind: 'element' | 'connector', type }
   const undo = [], redo = [];
@@ -75,6 +78,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function changed({ panel = true } = {}) {
     draw();
     syncCode();
+    syncRender();
     if (panel && panelOpen) buildPanel();
     updateButtons();
     onChange?.(model);
@@ -91,11 +95,16 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const zoomOut = iconButton('minus', 'Zoom out (−)');
   const zoomIn = iconButton('plus', 'Zoom in (+)');
   const fitBtn = iconButton('fit', 'Show the whole diagram');
-  const importInput = make('input', { type: 'file', accept: '.xml,.xmi,.uml,.json,.puml,.plantuml,.pu,.wsd,application/xml,text/xml,application/json', hidden: true });
+  const importInput = make('input', { type: 'file', accept: '.xml,.xmi,.uml,.json,.puml,.plantuml,.pu,.iuml,.wsd,application/xml,text/xml,application/json', hidden: true });
   const importBtn = iconButton('import', 'Open a Visual Paradigm XML, XMI, PlantUML or NoteComplete diagram file');
   const exportBtn = iconButton('export', 'Export: Visual Paradigm XML, XMI, PlantUML, a picture or a NoteComplete diagram');
   const panelBtn = iconButton('settings', 'Properties of the selection (or of the diagram)');
   const viewBtns = Object.entries(VIEWS).map(([v, d]) => { const b = iconButton(d.icon, `${d.label}: ${v === 'visual' ? 'the drawing' : v === 'code' ? 'the diagram as PlantUML text' : 'drawing and PlantUML side by side'}`); b.dataset.view = v; return b; });
+  if (drawPlantuml) {
+    const rb = iconButton('eye', 'PlantUML drawing: rendered by PlantUML itself (with !include and skinparam)');
+    rb.dataset.view = 'render';
+    viewBtns.push(rb);
+  }
   const viewGroup = make('div', { className: 'uml-views', role: 'group', ariaLabel: 'View' }, ...viewBtns);
   const notesBtn = iconButton('note', 'Notes on this diagram, in Markdown, kept with it (N)');
   const helpBtn = iconButton('help', 'Cheat sheet: what the mouse and the keys do (?)');
@@ -123,7 +132,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const code = make('textarea', { className: 'uml-code', spellcheck: false, ariaLabel: 'PlantUML' });
   const codeNote = make('p', { className: 'uml-code-note' });
   const codePane = make('div', { className: 'uml-code-pane' }, code, codeNote);
-  const work = make('div', { className: 'uml-work' }, canvas, codePane);
+  const renderPane = make('div', { className: 'uml-render-pane' });
+  const work = make('div', { className: 'uml-work' }, canvas, codePane, renderPane);
   const main = make('div', { className: 'uml-main' }, palette, work, notes.pane, panel);
   root.append(bar, main, status);
   // The properties panel: closed unless asked for (names change in place, on the canvas).
@@ -150,33 +160,95 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   canvas.append(svg);
   const say = (text, error = false) => { status.textContent = text; status.classList.toggle('error', error); };
 
-  // --- Views: drawing, PlantUML or both ---------------------------------------------------
+  // --- Views: drawing, PlantUML, both, or PlantUML's own rendering ----------------------
   let currentView = 'visual', codeTimer = 0, codeError = '';
+  let renderSeq = 0, renderUrl = '', renderZoom = 1, lastRender = { source: '', svg: '', naturalW: 0 };
+  const releaseRenderUrl = () => { if (renderUrl) URL.revokeObjectURL(renderUrl); renderUrl = ''; };
+  function applyRenderZoom() {
+    const img = renderPane.querySelector('img');
+    if (img && lastRender.naturalW) img.style.width = `${Math.round(lastRender.naturalW * renderZoom)}px`;
+  }
+  async function syncRender(force = false) {
+    if (currentView !== 'render' || !drawPlantuml || !CODE_KINDS.has(model.diagram)) return;
+    let source;
+    try { source = toPlantUml(model, { preamble: docPreamble, layout: false }); }
+    catch (e) { renderPane.replaceChildren(make('p', { className: 'uml-render-note error', textContent: e.message })); return; }
+    if (!force && source === lastRender.source && renderPane.children.length) return;
+    const seq = ++renderSeq;
+    lastRender = { source, svg: '', naturalW: 0 };
+    renderPane.replaceChildren(make('p', { className: 'uml-render-note', textContent: 'Drawing with PlantUML…' }));
+    let res;
+    try { res = await drawPlantuml(source); } catch (e) { res = { failed: e?.message || String(e) }; }
+    if (seq !== renderSeq || currentView !== 'render') return;
+    const nodes = [];
+    const note = diagramMessage(res);
+    if (note) nodes.push(make('p', { className: `uml-render-note${res?.failed || res?.error ? ' error' : ''}`, textContent: note }));
+    releaseRenderUrl();
+    if (res?.svg) {
+      lastRender = { source, svg: res.svg, naturalW: 0 };
+      renderUrl = URL.createObjectURL(new Blob([res.svg], { type: 'image/svg+xml' }));
+      const img = make('img', { alt: model.name || DIAGRAMS[model.diagram].label });
+      img.onload = () => { lastRender.naturalW = img.naturalWidth || 0; applyRenderZoom(); };
+      img.src = renderUrl;
+      nodes.push(img);
+    }
+    renderPane.replaceChildren(...nodes);
+  }
   function setView(v) {
-    currentView = CODE_KINDS.has(model.diagram) ? v : 'visual';
+    const allowed = CODE_KINDS.has(model.diagram) && (v !== 'render' || drawPlantuml);
+    currentView = allowed ? v : 'visual';
     main.dataset.view = currentView;
     for (const b of viewBtns) { b.setAttribute('aria-pressed', String(b.dataset.view === currentView)); b.disabled = b.dataset.view !== 'visual' && !CODE_KINDS.has(model.diagram); }
     syncCode(true);
-    if (currentView !== 'code') requestAnimationFrame(() => { if (!viewMoved) fit(); else applyView(); });
+    if (currentView === 'render') syncRender(true);
+    else requestAnimationFrame(() => { if (!viewMoved) fit(); else applyView(); });
   }
-  for (const b of viewBtns) b.onclick = () => { setView(b.dataset.view); try { localStorage.setItem(VIEW_KEY, b.dataset.view); } catch { /* Optional. */ } };
-  // The text follows the drawing, except while it is being typed in.
+  for (const b of viewBtns) b.onclick = () => {
+    setView(b.dataset.view);
+    if (VIEWS[b.dataset.view]) try { localStorage.setItem(VIEW_KEY, b.dataset.view); } catch { /* Optional. */ }
+  };
+  // The text follows the drawing, except while it is being typed in (keeps layout comment).
   function syncCode(force = false) {
-    if (currentView === 'visual' || (!force && document.activeElement === code)) return;
-    try { code.value = toPlantUml(model, { preamble, layout: false }); codeNote.textContent = ''; codeNote.classList.remove('error'); }
+    if (!['code', 'split'].includes(currentView) || (!force && document.activeElement === code)) return;
+    try { code.value = toPlantUml(model, { preamble: docPreamble }); codeNote.textContent = ''; codeNote.classList.remove('error'); }
     catch (e) { code.value = ''; codeNote.textContent = e.message; codeNote.classList.add('error'); }
   }
   // Typed PlantUML redraws the diagram after a pause; boxes that were there keep their place.
   code.addEventListener('input', () => {
     clearTimeout(codeTimer);
     codeTimer = setTimeout(() => {
-      let next;
-      try { next = parsePlantUml(code.value).model; } catch (e) { codeError = e.message; codeNote.textContent = e.message; codeNote.classList.add('error'); return; }
+      let parsed;
+      try { parsed = parsePlantUml(code.value); } catch (e) { codeError = e.message; codeNote.textContent = e.message; codeNote.classList.add('error'); return; }
+      const next = parsed.model;
+      docPreamble = parsed.preamble;
       codeError = ''; codeNote.textContent = ''; codeNote.classList.remove('error');
       const old = new Map(model.elements.map((e) => [e.id, e]));
-      for (const e of next.elements) { const was = old.get(e.id); if (was) { e.bounds = [...was.bounds]; e.props = { ...was.props, ...e.props, color: was.props?.color, textScale: was.props?.textScale }; } }
-      const ways = new Map(model.connectors.map((c) => [`${c.type}:${c.from}>${c.to}`, c]));
-      for (const c of next.connectors) { const was = ways.get(`${c.type}:${c.from}>${c.to}`); if (was) { c.waypoints = was.waypoints; if (was.props?.labelOffset) c.props.labelOffset = was.props.labelOffset; } }
+      for (const e of next.elements) {
+        const was = old.get(e.id);
+        if (was) {
+          if (!parsed.laidOut) e.bounds = [...was.bounds];
+          e.props = { ...was.props, ...e.props, color: was.props?.color, textScale: was.props?.textScale };
+        }
+      }
+      const seenOld = new Map(), ways = new Map();
+      for (const c of model.connectors) {
+        const base = `${c.type}:${c.from}>${c.to}`;
+        const k = seenOld.get(base) || 0;
+        seenOld.set(base, k + 1);
+        ways.set(k ? `${base}#${k}` : base, c);
+      }
+      const seenNew = new Map();
+      for (const c of next.connectors) {
+        const base = `${c.type}:${c.from}>${c.to}`;
+        const k = seenNew.get(base) || 0;
+        seenNew.set(base, k + 1);
+        const was = ways.get(k ? `${base}#${k}` : base);
+        if (was) {
+          if (!c.waypoints.length && was.waypoints.length) c.waypoints = was.waypoints;
+          if (!c.props?.labelOffset && was.props?.labelOffset) c.props.labelOffset = was.props.labelOffset;
+          if (was.props?.color && !c.props?.color) c.props.color = was.props.color;
+        }
+      }
       snapshot('code');
       model = normalizeModel({ ...next, name: model.name || next.name, title: next.title, notes: model.notes, badge: model.badge });
       if (selected && ![...model.elements, ...model.connectors].some((q) => q.id === selected.id)) selected = null;
@@ -239,6 +311,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     return out.box;
   }
   function fit() {
+    if (currentView === 'render') { renderZoom = 1; applyRenderZoom(); return; }
     const [x, y, w, h] = contentBox();
     const r = canvas.getBoundingClientRect();
     viewMoved = false;
@@ -254,6 +327,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     svg.setAttribute('viewBox', view.map((v) => Math.round(v * 10) / 10).join(' '));
   }
   function zoom(f, at = null) {
+    if (currentView === 'render') { renderZoom = Math.min(3, Math.max(0.35, renderZoom / f)); applyRenderZoom(); return; }
     if (!view) fit();
     viewMoved = true;
     const [x, y, w, h] = view, cx = at ? at[0] : x + w / 2, cy = at ? at[1] : y + h / 2;
@@ -799,9 +873,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     else if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing && selected) { ev.preventDefault(); removeSelected(); }
     else if (ev.key === 'F2' && !typing && selected) { ev.preventDefault(); rename(current()); }
     else if (mod && ev.key.toLowerCase() === 'd' && !typing && selected?.kind === 'element') { ev.preventDefault(); duplicate(); }
-    else if (mod && ev.key.toLowerCase() === 'c' && !typing && selected?.kind === 'element') { ev.preventDefault(); copySelected(); say('Copied. Ctrl V pastes it.'); }
-    else if (mod && ev.key.toLowerCase() === 'x' && !typing && selected?.kind === 'element') { ev.preventDefault(); if (copySelected()) removeSelected(); }
-    else if (mod && ev.key.toLowerCase() === 'v' && !typing && clip) { ev.preventDefault(); ev.stopPropagation(); pasteClip(); }
+    else if (mod && ev.key.toLowerCase() === 'c' && !typing) { ev.preventDefault(); copyKeyAt = ev.timeStamp; if (copySelected({ allowWhole: true })) say('Copied. Ctrl V pastes it into another diagram or note.'); }
+    else if (mod && ev.key.toLowerCase() === 'x' && !typing && selected?.kind === 'element') { ev.preventDefault(); copyKeyAt = ev.timeStamp; if (copySelected()) removeSelected(); }
+    else if (mod && ev.key.toLowerCase() === 'v' && !typing) {
+      const at = ev.timeStamp;
+      setTimeout(() => { if (pastedAt < at) pasteClip(); }, 40);
+    }
     else if (ev.key === 'Escape' && !typing && pending) { ev.preventDefault(); ev.stopPropagation(); pending.line?.remove(); pending = null; say(''); }
     else if (ev.key === 'Escape' && !typing) { if (tool.kind !== 'select') { ev.preventDefault(); ev.stopPropagation(); setTool({ kind: 'select' }); } else if (selected) { ev.preventDefault(); ev.stopPropagation(); selected = null; changed(); } }
     else if (!typing && !mod && !ev.altKey && (ev.key === 'n' || ev.key === 'N')) { ev.preventDefault(); showNotes(!notesOpen, !notesOpen); }
@@ -1094,35 +1171,89 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     { label: 'Text size', icon: 'text', submenu: SIZES.map((k) => ({ label: k === 1 ? 'Normal' : `${Math.round(k * 100)} %`, checked: textScale(item) === k, run: () => setProp(item, 'textScale', k === 1 ? null : k) })) },
     { label: 'Colour', icon: 'draw', submenu: COLORS.map(([label, c]) => ({ label, swatch: c || '#1f2328', checked: itemColor(item) === c, run: () => setProp(item, 'color', c) })) },
   ];
-  // Copy, cut and paste of elements (with what they hold and the connectors among them).
-  let clip = null;
-  function copySelected() {
-    const e = selected?.kind === 'element' && current();
-    if (!e) return false;
-    const group = [e, ...descendants(e.id)], ids = new Set(group.map((q) => q.id));
-    clip = { elements: group.map(clone), connectors: model.connectors.filter((l) => ids.has(l.from) && ids.has(l.to)).map(clone), diagram: model.diagram, pastes: 0 };
+  // Copy, cut and paste of elements (or the whole diagram), shared across UML editors and
+  // notes through the clipboard (keeping positions, containers and connector waypoints).
+  let clip = null, copyText = '', copyKeyAt = -Infinity, pastedAt = -Infinity;
+  for (const type of ['copy', 'cut']) root.addEventListener(type, (ev) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || !!ev.target.isContentEditable;
+    if (typing || !copyText || ev.timeStamp - copyKeyAt > 1000) return;
+    ev.preventDefault();
+    ev.clipboardData?.setData('text/plain', copyText);
+  });
+  root.addEventListener('paste', (ev) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || !!ev.target.isContentEditable;
+    if (typing) return;
+    pastedAt = ev.timeStamp;
+    const text = ev.clipboardData?.getData('text/plain');
+    const fromText = text ? readUmlClipFromText(text) : null;
+    if (!fromText && !getSharedUmlClip() && !clip) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    pasteClip(null, fromText);
+  });
+  function copySelected({ allowWhole = false, whole = false } = {}) {
+    const e = !whole && selected?.kind === 'element' ? current() : null;
+    if (!e && !allowWhole && !whole) return false;
+    const group = e ? [e, ...descendants(e.id)] : [...model.elements];
+    if (!group.length) return false;
+    const ids = new Set(group.map((q) => q.id));
+    const connectors = model.connectors.filter((l) => ids.has(l.from) && ids.has(l.to));
+    const res = writeUmlClip({ diagram: model.diagram, elements: group.map(clone), connectors: connectors.map(clone), preamble: docPreamble, whole: !e });
+    clip = { ...res.clip, pastes: 0 };
+    copyText = res.text;
+    try { navigator.clipboard?.writeText?.(res.text)?.catch?.(() => {}); } catch { /* Local clip still kept. */ }
     return true;
   }
-  function pasteClip(at = null) {
-    if (!clip) return say('Copy an element first (Ctrl C).');
-    const known = new Set(DIAGRAMS[model.diagram].elements);
-    if (!clip.elements.every((q) => known.has(q.type) || ELEMENTS[q.type])) return;
+  async function pasteClip(at = null, parsedClip = null) {
+    let source = parsedClip;
+    if (!source) {
+      const shared = getSharedUmlClip();
+      if (shared && (!clip || shared.at >= (clip.at || 0))) source = { ...shared, pastes: shared === clip?._source ? clip.pastes : 0 };
+      else source = clip;
+    }
+    if (!source?.elements?.length) {
+      try { const txt = await navigator.clipboard?.readText?.(); source = readUmlClipFromText(txt); } catch { /* Unavailable. */ }
+    }
+    if (!source?.elements?.length) return say('Copy an element or diagram first (Ctrl C).');
+    if (!clipFitsDiagram(source, model.diagram)) return say(`Cannot paste ${DIAGRAMS[source.diagram]?.label.toLowerCase() || 'those'} elements into a ${DIAGRAMS[model.diagram].label.toLowerCase()}.`, true);
+    if (source.laidOut === false && drawPlantuml && CODE_KINDS.has(source.diagram)) {
+      try {
+        const drawn = await drawPlantuml(toPlantUml(source, { preamble: source.preamble || [], layout: false }));
+        if (drawn?.svg) layoutFromPlantuml(source, drawn.svg);
+      } catch { /* Keep auto-laid-out coordinates. */ }
+    }
+    const clean = normalizeModel({ diagram: source.diagram, elements: source.elements, connectors: source.connectors });
     snapshot();
-    clip.pastes++;
-    const [x0, y0] = clip.elements[0].bounds;
-    const [dx, dy] = at ? [Math.round(at[0] - x0), Math.round(at[1] - y0)] : [20 * clip.pastes, 20 * clip.pastes];
+    const pastes = source === clip ? ++clip.pastes : (clip && clip._at === source.at ? ++clip.pastes : 1);
+    if (!clip || clip._at !== source.at) clip = { ...source, _at: source.at, pastes };
+    const minX = Math.min(...clean.elements.map((q) => q.bounds[0]));
+    const minY = Math.min(...clean.elements.map((q) => q.bounds[1]));
+    const empty = !model.elements.length;
+    const [dx, dy] = at ? [Math.round(at[0] - minX), Math.round(at[1] - minY)]
+      : empty ? [0, 0]
+      : [20 * pastes, 20 * pastes];
     const copies = new Map();
-    for (const q of clip.elements) {
+    for (const q of clean.elements) {
       const c = clone(q);
       c.id = makeElement(q.type, [0, 0], {}, model).id;
       c.bounds[0] += dx; c.bounds[1] += dy;
       copies.set(q.id, c);
-      model.elements.push(c);
     }
     for (const c of copies.values()) c.parent = copies.has(c.parent) ? copies.get(c.parent).id : containerFor(c);
-    for (const l of clip.connectors) model.connectors.push({ ...clone(l), id: makeConnector(l.type, l.from, l.to, {}, model).id, from: copies.get(l.from).id, to: copies.get(l.to).id, waypoints: l.waypoints.map(([x, y]) => [x + dx, y + dy]) });
-    selected = { kind: 'element', id: copies.get(clip.elements[0].id).id };
+    for (const c of copies.values()) model.elements.push(c);
+    const connCopies = new Map();
+    for (const l of clean.connectors.filter((q) => !CONNECTORS[q.type]?.toConnector)) {
+      const next = { ...clone(l), id: makeConnector(l.type, l.from, l.to, {}, model).id, from: copies.get(l.from).id, to: copies.get(l.to).id, waypoints: (l.waypoints || []).map(([x, y]) => [x + dx, y + dy]) };
+      connCopies.set(l.id, next.id);
+      model.connectors.push(next);
+    }
+    for (const l of clean.connectors.filter((q) => CONNECTORS[q.type]?.toConnector)) {
+      const toId = connCopies.get(l.to);
+      if (copies.has(l.from) && toId) model.connectors.push({ ...clone(l), id: makeConnector(l.type, l.from, toId, {}, model).id, from: copies.get(l.from).id, to: toId, waypoints: (l.waypoints || []).map(([x, y]) => [x + dx, y + dy]) });
+    }
+    selected = { kind: 'element', id: copies.get(clean.elements[0].id).id };
     changed();
+    if (empty) requestAnimationFrame(fit);
   }
   // Starts a connection from `from` that follows the pointer; the next click ends it.
   let pending = null;
@@ -1177,7 +1308,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     return menu(x, y, [
       ...DIAGRAMS[model.diagram].elements.map((t) => ({ label: `Add ${ELEMENTS[t].label.toLowerCase()}`, icon: 'plus', run: () => place(t, at) })),
       '-',
-      clip && { label: 'Paste here', icon: 'import', key: 'Ctrl V', run: () => pasteClip(at) },
+      (clip || getSharedUmlClip()) && { label: 'Paste here', icon: 'import', key: 'Ctrl V', run: () => pasteClip(at) },
+      model.elements.length > 0 && { label: 'Copy diagram', icon: 'copy', run: () => { if (copySelected({ whole: true })) say('Diagram copied. Ctrl V pastes it into another diagram or note.'); } },
       { label: 'Show the whole diagram', icon: 'fit', run: fit },
       model.diagram !== 'sequence' && { label: 'Arrange as tree', icon: 'layers', disabled: !model.connectors.length, run: () => { snapshot(); treeLayout(model); changed(); fit(); } },
       { label: 'Diagram properties…', icon: 'settings', run: () => showPanel(true) },
@@ -1275,9 +1407,20 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const file = importInput.files?.[0];
     importInput.value = '';
     if (!file) return;
-    const open = (text, options) => {
+    const open = async (text, options) => {
       try {
-        const next = /@startuml/i.test(text) ? parsePlantUml(text).model : importUml(text, options);
+        let next;
+        if (/@startuml/i.test(text)) {
+          const parsed = parsePlantUml(text);
+          docPreamble = parsed.preamble;
+          if (!parsed.laidOut && drawPlantuml) {
+            try { const drawn = await drawPlantuml(text); if (drawn?.svg) layoutFromPlantuml(parsed.model, drawn.svg); } catch { /* Auto-laid-out fallback. */ }
+          }
+          next = parsed.model;
+        } else {
+          next = importUml(text, options);
+          docPreamble = Array.isArray(next.preamble) ? [...next.preamble] : [];
+        }
         snapshot();
         setModel(next);
         say(`Opened ${file.name}${options ? ` (${next.name})` : ''}: ${model.elements.length} elements, ${model.connectors.length} connectors.`);
@@ -1298,7 +1441,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       else if (what === 'svg') await download(renderUml(model).svg, fileName(model, 'svg'), 'image/svg+xml');
       else if (what === 'png') await download(await umlPng(model), fileName(model, 'png'), 'image/png');
       else if (what === 'json') await download(JSON.stringify(model, null, 2), fileName(model, 'json'), 'application/json');
-      else if (what === 'puml') await download(toPlantUml(model, { preamble }), fileName(model, 'puml'), 'text/plain');
+      else if (what === 'puml') await download(toPlantUml(model, { preamble: docPreamble }), fileName(model, 'puml'), 'text/plain');
       say('Exported.');
     } catch (e) { say(e.message, true); }
   }
@@ -1316,7 +1459,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   };
   panelBtn.onclick = () => showPanel(!panelOpen);
   notesBtn.onclick = () => showNotes(!notesOpen, !notesOpen);
-  if (applyBtn) applyBtn.onclick = () => onApply(normalizeModel(model));
+  if (applyBtn) applyBtn.onclick = () => {
+    const out = normalizeModel(model);
+    if (docPreamble.length) out.preamble = [...docPreamble];
+    if (currentView === 'render' && lastRender.svg) { out.style = 'plantuml'; out.plantumlSvg = lastRender.svg; }
+    else { delete out.style; delete out.plantumlSvg; }
+    onApply(out);
+  };
   if (cancelBtn) cancelBtn.onclick = () => onCancel();
 
   // The canvas gets its size once laid out (and again when the window changes): fit again
@@ -1326,7 +1475,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   buildPalette();
   showPanel(panelOpen);
   showNotes(notesOpen);
-  setView(startView || savedView());
+  setView(startView || (model.style === 'plantuml' && drawPlantuml ? 'render' : savedView()));
   changed();
   requestAnimationFrame(fit);
   return {
@@ -1337,12 +1486,14 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     zoom: (dir) => (dir === 0 ? fit() : zoom(dir > 0 ? 1 / 1.25 : 1.25)),
     focus: () => canvas.focus({ preventScroll: true }),
     setView,
-    destroy: () => { help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    preamble: () => [...docPreamble],
+    renderedSvg: () => (currentView === 'render' && lastRender.svg ? lastRender.svg : null),
+    destroy: () => { releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false, markdown = null, view = null } = {}) {
+export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
@@ -1354,6 +1505,6 @@ export function openUmlEditor(model, { editing = false, markdown = null, view = 
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view });
+    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view, draw });
   });
 }

@@ -40,9 +40,14 @@
 .uml-work { display: flex; min-width: 0; min-height: 0; }
 .uml-work > .uml-canvas { flex: 1 1 0; }
 .uml-code-pane { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--u-line); background: var(--u-bg, inherit); }
-.uml-main:not([data-view="code"]):not([data-view="split"]) .uml-code-pane, .uml-main[data-view="code"] .uml-canvas { display: none; }
+.uml-render-pane { flex: 1 1 0; min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px; background: #fff; color: #1f2328; }
+.uml-render-pane img { display: block; max-width: none; height: auto; }
+.uml-render-note { margin: 0; padding: 8px 12px; border-radius: 8px; background: #f3f4f6; color: #374151; font-size: 13px; max-width: 560px; text-align: center; }
+.uml-render-note.error { background: #fef2f2; color: #b91c1c; }
+.uml-main:not([data-view="code"]):not([data-view="split"]) .uml-code-pane, .uml-main[data-view="code"] .uml-canvas, .uml-main[data-view="render"] .uml-canvas { display: none; }
+.uml-main:not([data-view="render"]) .uml-render-pane { display: none; }
 .uml-main[data-view="code"] .uml-code-pane { border-left: 0; }
-.uml-code { flex: 1; min-height: 0; resize: none; border: 0; outline: none; padding: 12px 14px; font: 13px/1.55 ui-monospace, "JetBrains Mono", monospace; background: transparent; color: inherit; tab-size: 2; white-space: pre; }
+.uml-editor textarea.uml-code { flex: 1; min-height: 0; resize: none; border: 0; outline: none; padding: 12px 14px; font: 13px/1.55 "JetBrains Mono", "DejaVu Sans Mono", "Liberation Mono", "Fira Code", ui-monospace, monospace; background: transparent; color: inherit; tab-size: 2; white-space: pre; }
 .uml-code-note { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--u-muted, #6b7280); border-top: 1px solid var(--u-line); }
 .uml-code-note:empty { display: none; }
 .uml-code-note.error { color: #d1453b; }

@@ -20,6 +20,7 @@ export const UML_VERSION = 1;
 export const DIAGRAMS = {
   useCase: { label: 'Use case diagram', elements: ['actor', 'useCase', 'system', 'note'], connectors: ['association', 'include', 'extend', 'generalization', 'anchor'], vp: 'UseCaseDiagram' },
   class: { label: 'Class diagram', elements: ['class', 'interface', 'enumeration', 'package', 'note'], connectors: ['association', 'aggregation', 'composition', 'generalization', 'realization', 'dependency', 'associationClass', 'anchor'], vp: 'ClassDiagram' },
+  package: { label: 'Package diagram', elements: ['package', 'class', 'interface', 'enumeration', 'note'], connectors: ['dependency', 'generalization', 'realization', 'anchor'], vp: 'PackageDiagram' },
   state: { label: 'State machine diagram', elements: ['state', 'compositeState', 'initial', 'final', 'choice', 'fork', 'join', 'history', 'note'], connectors: ['transition', 'anchor'], vp: 'StateDiagram' },
   activity: { label: 'Activity diagram', elements: ['action', 'initial', 'activityFinal', 'flowFinal', 'decision', 'merge', 'fork', 'join', 'objectNode', 'inputPin', 'outputPin', 'partition', 'region', 'note'], connectors: ['controlFlow', 'objectFlow', 'anchor'], vp: 'ActivityDiagram' },
   sequence: { label: 'Sequence diagram', elements: ['lifeline', 'actorLifeline', 'activation', 'fragment', 'note'], connectors: ['syncMessage', 'asyncMessage', 'replyMessage', 'createMessage', 'anchor'], vp: 'InteractionDiagram' },
@@ -96,10 +97,10 @@ export const ELEMENTS = {
 };
 
 // How a new diagram is edited: drawn (visual), as PlantUML text (code) or both side by side.
-// Chosen in Insert prefab beside the preview; class and use case diagrams have a PlantUML form.
+// Chosen in Insert prefab beside the preview; class, package and use case diagrams have a PlantUML form.
 export const UML_VIEWS = { visual: { label: 'Visual', icon: 'uml' }, code: { label: 'PlantUML', icon: 'code' }, split: { label: 'Both', icon: 'split' } };
 export const UML_VIEW_KEY = 'notecomplete.uml.view';
-export const CODE_DIAGRAMS = new Set(['class', 'useCase']);
+export const CODE_DIAGRAMS = new Set(['class', 'package', 'useCase']);
 export function savedUmlView() { try { const v = localStorage.getItem(UML_VIEW_KEY); return UML_VIEWS[v] ? v : 'visual'; } catch { return 'visual'; } }
 export function saveUmlView(v) { try { if (UML_VIEWS[v]) localStorage.setItem(UML_VIEW_KEY, v); } catch { /* Optional. */ } }
 // Whether Insert prefab asks for the editor as a next step (off: the last one chosen is used).
@@ -270,6 +271,9 @@ export function normalizeModel(input) {
   if (!out.source) delete out.source;
   // Notes on the diagram (Markdown, uml-editor.js), kept with it and never drawn.
   if (typeof m.notes === 'string' && m.notes.trim()) out.notes = m.notes;
+  // PlantUML preamble (!include, skinparam…) and optional PlantUML-rendered SVG when toggled.
+  if (Array.isArray(m.preamble) && m.preamble.length) out.preamble = m.preamble.map(String);
+  if (m.style === 'plantuml' && typeof m.plantumlSvg === 'string' && m.plantumlSvg.includes('<svg')) { out.style = 'plantuml'; out.plantumlSvg = m.plantumlSvg; }
   autoLayout(out);
   return out;
 }
@@ -319,6 +323,14 @@ export function starterModel(diagram = 'class') {
     a.bounds[2] = 200;
     link('association', a, b, { props: { name: 'borrows', fromEnd: { role: '', multiplicity: '0..*', navigable: false }, toEnd: { role: '', multiplicity: '0..1', navigable: true } } });
     link('generalization', c, a);
+  } else if (diagram === 'package') {
+    const dom = el('package', 20, 20, { name: 'Domain', bounds: [20, 20, 440, 240] });
+    const users = el('package', 45, 70, { name: 'Users', bounds: [45, 70, 170, 150], parent: dom.id });
+    const orders = el('package', 255, 70, { name: 'Orders', bounds: [255, 70, 180, 150], parent: dom.id });
+    const u = el('class', 70, 130, { name: 'Member', bounds: [70, 130, 120, 60], parent: users.id });
+    const o = el('class', 285, 130, { name: 'Loan', bounds: [285, 130, 120, 60], parent: orders.id });
+    link('dependency', orders, users, { props: { name: 'uses' } });
+    link('dependency', o, u);
   } else if (diagram === 'state') {
     const i = el('initial', 30, 48);
     const a = el('state', 100, 30, { name: 'Ready' });

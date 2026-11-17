@@ -4,7 +4,7 @@
 // What PlantUML cannot hold (where each box sits, the bends of a line) is kept in one comment
 // line, `' notecomplete-layout {…}`, which PlantUML ignores. Lines that only style the drawing
 // (skinparam, !include, hide…) are kept as they were, above the diagram.
-import { ELEMENTS, CONNECTORS, normalizeModel, parseLine, formatLine, UML_VERSION, headsOf } from './uml.js';
+import { ELEMENTS, CONNECTORS, DIAGRAMS, CODE_DIAGRAMS, normalizeModel, parseLine, formatLine, UML_VERSION, headsOf } from './uml.js';
 
 const LAYOUT = /^'\s*notecomplete-layout\s+(\{.*\})\s*$/;
 // Lines kept verbatim: they style or configure the drawing and mean nothing to the model.
@@ -157,7 +157,13 @@ export function parsePlantUml(text) {
     throw Error(`Cannot read this line: ${line}`);
   }
 
-  const model = { type: 'uml', version: UML_VERSION, diagram: kind === 'useCase' || elements.some((e) => e.type === 'actor' || e.type === 'useCase') ? 'useCase' : 'class', name, title, badge: false, elements, connectors: [] };
+  const useCase = kind === 'useCase' || elements.some((e) => e.type === 'actor' || e.type === 'useCase');
+  const pkgConnectors = new Set(['dependency', 'generalization', 'realization', 'anchor']);
+  const isPackage = !useCase && elements.some((e) => e.type === 'package')
+    && elements.every((e) => !e.props?.attributes?.length && !e.props?.operations?.length && !e.props?.literals?.length)
+    && connectors.every((c) => pkgConnectors.has(c.type));
+  const diagram = layout?.d && DIAGRAMS[layout.d] ? layout.d : useCase ? 'useCase' : isPackage ? 'package' : 'class';
+  const model = { type: 'uml', version: UML_VERSION, diagram, name, title, badge: false, elements, connectors: [] };
   // Connectors get ids now; an association class names its association by the two classes.
   let n = 0;
   const made = [];
@@ -252,10 +258,30 @@ function connectorKeys(model) {
 }
 
 // Where PlantUML drew each element (its SVG: <g id="elem_X"> and <g id="cluster_X">), as boxes.
+const decodeEntities = (s) => String(s || '').replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d))).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+function tracePath(d, grow) {
+  let cx = 0, cy = 0, sx = 0, sy = 0;
+  for (const [, cmd, raw] of String(d || '').matchAll(/([MLHVCSQTAZmlhvcsqtaz])([^MLHVCSQTAZmlhvcsqtaz]*)/g)) {
+    const nums = raw.match(/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g)?.map(Number) || [];
+    const rel = cmd === cmd.toLowerCase(), op = cmd.toUpperCase();
+    if (op === 'Z') { cx = sx; cy = sy; continue; }
+    const step = op === 'H' || op === 'V' ? 1 : op === 'C' ? 6 : op === 'S' || op === 'Q' ? 4 : op === 'A' ? 7 : 2;
+    for (let k = 0; k + step <= nums.length; k += step) {
+      if (op === 'H') { cx = (rel ? cx : 0) + nums[k]; grow(cx, cy); }
+      else if (op === 'V') { cy = (rel ? cy : 0) + nums[k]; grow(cx, cy); }
+      else if (op === 'A') { cx = (rel ? cx : 0) + nums[k + 5]; cy = (rel ? cy : 0) + nums[k + 6]; grow(cx, cy); }
+      else {
+        for (let j = 0; j + 1 < step; j += 2) grow((rel ? cx : 0) + nums[k + j], (rel ? cy : 0) + nums[k + j + 1]);
+        cx = (rel ? cx : 0) + nums[k + step - 2]; cy = (rel ? cy : 0) + nums[k + step - 1];
+        if (op === 'M' && k === 0) { sx = cx; sy = cy; }
+      }
+    }
+  }
+}
 export function plantumlBoxes(svg) {
   const out = new Map();
   for (const m of String(svg || '').matchAll(/<g id="(?:elem|cluster)_([^"]+)">([\s\S]*?)<\/g>/g)) {
-    const id = m[1].replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d))).replace(/&amp;/g, '&');
+    const id = decodeEntities(m[1]);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const grow = (x, y) => { if (Number.isFinite(x) && Number.isFinite(y)) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } };
     const num = (tag, a) => Number(tag.match(new RegExp(`\\s${a}="([-\\d.]+)"`))?.[1]);
@@ -264,12 +290,21 @@ export function plantumlBoxes(svg) {
       else if (tag.startsWith('<ellipse')) { const cx = num(tag, 'cx'), cy = num(tag, 'cy'), rx = num(tag, 'rx'), ry = num(tag, 'ry'); grow(cx - rx, cy - ry); grow(cx + rx, cy + ry); }
       else if (tag.startsWith('<line')) { grow(num(tag, 'x1'), num(tag, 'y1')); grow(num(tag, 'x2'), num(tag, 'y2')); }
       else if (tag.startsWith('<text')) { const x = num(tag, 'x'), y = num(tag, 'y'), w = num(tag, 'textLength') || 0; grow(x, y - 12); grow(x + w, y + 3); }
+      else if (tag.startsWith('<path')) { tracePath(tag.match(/\sd="([^"]*)"/)?.[1], grow); }
       else {
-        const nums = (tag.match(/\s(?:d|points)="([^"]*)"/)?.[1] || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+        const nums = (tag.match(/\spoints="([^"]*)"/)?.[1] || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
         for (let k = 0; k + 1 < nums.length; k += 2) grow(nums[k], nums[k + 1]);
       }
     }
-    if (Number.isFinite(x0)) out.set(id, [x0, y0, x1 - x0, y1 - y0]);
+    if (Number.isFinite(x0)) {
+      const box = [x0, y0, x1 - x0, y1 - y0];
+      out.set(id, box);
+      // PlantUML gives `note left/right/top/bottom of X` an auto id (`GMN…`); key it by its text too.
+      if (id.startsWith('GMN')) {
+        const text = [...m[2].matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)].map((t) => decodeEntities(t[1]).trim()).filter(Boolean).join('\n');
+        if (text) out.set(`note:${text.split('\n')[0]}`, box);
+      }
+    }
   }
   return out;
 }
@@ -277,10 +312,11 @@ export function plantumlBoxes(svg) {
 // Places a model's elements where PlantUML drew them (the first time a .puml opens here).
 export function layoutFromPlantuml(model, svg) {
   const boxes = plantumlBoxes(svg);
-  // A package is keyed by its alias, or by its name when it has none.
+  // A package is keyed by its alias, or by its name when it has none; notes may use GMN… ids.
   let placed = 0;
   for (const e of model.elements) {
-    const b = boxes.get(e.id) || boxes.get(e.name);
+    const firstLine = e.type === 'note' ? String(e.name || '').split('\n')[0].trim() : '';
+    const b = boxes.get(e.id) || boxes.get(e.name) || (firstLine ? boxes.get(`note:${firstLine}`) : null);
     if (!b) continue;
     const def = ELEMENTS[e.type];
     if (def?.container || ['class', 'interface', 'enumeration', 'note'].includes(e.type)) e.bounds = b.map((v) => Math.round(v));
@@ -311,7 +347,7 @@ function wrapped(name, at = 20) {
 
 export function toPlantUml(input, { preamble = [], layout: withLayout = true } = {}) {
   const model = normalizeModel(input);
-  if (!['class', 'useCase'].includes(model.diagram)) throw Error('Saving as PlantUML covers class, package and use case diagrams. Export this one as a picture or a NoteComplete diagram.');
+  if (!CODE_DIAGRAMS.has(model.diagram)) throw Error('Saving as PlantUML covers class, package and use case diagrams. Export this one as a picture or a NoteComplete diagram.');
   const ids = new Map(model.elements.map((e) => [e.id, plainId(e.id) ? e.id : slug(e.name || e.id)]));
   // Ids made from names stay unique.
   const used = new Set();
@@ -387,6 +423,7 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
   if (!withLayout) { out.push('@enduml', ''); return out.join('\n'); }
   const keys = connectorKeys(model);
   const layout = { e: Object.fromEntries(model.elements.map((e) => [ids.get(e.id), e.bounds.map(Math.round)])) };
+  if (model.diagram === 'package') layout.d = 'package';
   const ways = model.connectors.filter((c) => c.waypoints?.length);
   if (ways.length) layout.w = Object.fromEntries(ways.map((c) => [keyFor(keys.get(c), ids), c.waypoints]));
   const offsets = model.connectors.filter((c) => c.props?.labelOffset);

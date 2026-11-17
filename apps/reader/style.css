@@ -3920,10 +3920,12 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-editor > span { font-size: 12.5px; color: var(--muted); }
 .prefab-editor-picture { height: 240px; overflow: hidden; border-radius: 6px; background: #fff; display: grid; place-items: center; }
 .prefab-editor-picture .prefab-preview { width: 100%; height: 100%; }
-.prefab-code { margin: 0; width: 100%; height: 100%; padding: 10px 12px; overflow: hidden; font: 11.5px/1.45 ui-monospace, "JetBrains Mono", monospace; color: #e5e8ed; background: #24272c; white-space: pre; }
+.prefab-code { margin: 0; width: 100%; height: 100%; padding: 10px 12px; overflow: hidden; font: 11.5px/1.45 "JetBrains Mono", "DejaVu Sans Mono", "Liberation Mono", ui-monospace, monospace; color: #e5e8ed; background: #24272c; white-space: pre; }
 .prefab-step-spacer { flex: 1; }
 .prefab-never { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .prefab-editor-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.prefab-picker .ocr-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.prefab-picker .ocr-actions button svg, .prefab-editor-chip svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 640px) { .prefab-editors { grid-template-columns: minmax(0, 1fr); } .prefab-editor-picture { height: 160px; } }
 .prefab-big .prefab-preview { height: 240px; border: 1px solid var(--line); }
 .prefab-big .prefab-icon svg { width: 64px; height: 64px; }

@@ -150,3 +150,46 @@ test('heads chosen by hand: drawn, swapped with the line and written to PlantUML
   assert.match(svg, /stroke-dasharray="7 5"/);
   assert.match(toPlantUml(m), /^A \*\.\.> B$/m);
 });
+
+test('package diagrams parse as package kind, round-trip layout, and GMN notes get placed', () => {
+  const pkgPuml = `@startuml paquetes\nhide members\nhide circle\npackage "Dominio" {\n  package "Usuarios" as PU {\n    class Usuario\n  }\n  package "Tiradas" as PT {\n    class Tirada\n  }\n}\nPT ..> PU : Socio\n@enduml`;
+  const parsed = parsePlantUml(pkgPuml);
+  assert.equal(parsed.model.diagram, 'package');
+  parsed.model.elements[0].bounds = [10, 20, 400, 300];
+  parsed.model.elements[1].bounds = [30, 60, 150, 140];
+  const saved = toPlantUml(parsed.model, { preamble: parsed.preamble });
+  const back = parsePlantUml(saved);
+  assert.equal(back.model.diagram, 'package');
+  assert.deepEqual(back.model.elements[0].bounds, [10, 20, 400, 300]);
+  assert.deepEqual(back.model.elements[1].bounds, [30, 60, 150, 140]);
+
+  const noteSvg = '<svg><g id="elem_Inscripcion"><rect x="100" y="100" width="120" height="50"/></g><g id="elem_GMN45"><path d="M260,100 L380,100 L380,150 L260,150 Z"/><text x="266" y="120" textLength="90">Max 10 entries</text></g></svg>';
+  const noteParsed = parsePlantUml('@startuml\nclass Inscripcion\nnote right of Inscripcion : Max 10 entries\n@enduml');
+  assert.equal(layoutFromPlantuml(noteParsed.model, noteSvg), 2);
+  const n = noteParsed.model.elements.find((e) => e.type === 'note');
+  assert.deepEqual(n.bounds, [260, 100, 120, 50]);
+});
+
+test('UML clipboard preserves positioning across PlantUML text, note specs, and editors', async () => {
+  const { writeUmlClip, readUmlClipFromText, saveNoteUmlClip, getSharedUmlClip, clipFitsDiagram } = await import('./uml-clipboard.js');
+  const { starterModel } = await import('./uml.js');
+  const pkg = starterModel('package');
+  pkg.elements[0].bounds = [50, 60, 440, 240];
+  pkg.connectors[0].waypoints = [[220, 145]];
+  const { text } = writeUmlClip({ diagram: pkg.diagram, elements: pkg.elements, connectors: pkg.connectors });
+  assert.match(text, /notecomplete-layout/);
+  const back = readUmlClipFromText(text);
+  assert.equal(back.diagram, 'package');
+  assert.equal(back.laidOut, true);
+  assert.deepEqual(back.elements[0].bounds, [50, 60, 440, 240]);
+  assert.deepEqual(back.connectors[0].waypoints, [[220, 145]]);
+  assert.ok(clipFitsDiagram(back, 'class'));
+
+  saveNoteUmlClip(pkg);
+  assert.equal(getSharedUmlClip().elements.length, pkg.elements.length);
+  const seq = starterModel('sequence');
+  const seqClip = writeUmlClip({ diagram: seq.diagram, elements: seq.elements, connectors: seq.connectors });
+  const seqBack = readUmlClipFromText(seqClip.text);
+  assert.equal(seqBack.diagram, 'sequence');
+  assert.deepEqual(seqBack.elements.map((e) => e.bounds), seq.elements.map((e) => e.bounds));
+});

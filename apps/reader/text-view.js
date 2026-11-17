@@ -67,12 +67,12 @@ export function headingFor(headings, fragment) {
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
 export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null;
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '';
   // The UML editor showing a .puml file (diagram.mount), while it is open.
   const dropDiagramDoc = () => { diagramDoc?.destroy(); diagramDoc = null; body.classList.remove('text-diagram-editor'); };
   const formatLabel = { text: format.textContent, title: format.title };
   const isDiagram = () => Boolean(diagram?.is(key || name));
-  const releaseDiagram = () => { if (diagramUrl) URL.revokeObjectURL(diagramUrl); diagramUrl = ''; };
+  const releaseDiagram = () => { if (diagramUrl) URL.revokeObjectURL(diagramUrl); diagramUrl = ''; lastDiagramSvg = ''; };
   function labelFormat() {
     const uml = isDiagram();
     format.textContent = uml ? 'UML' : formatLabel.text;
@@ -100,6 +100,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     if (note) { const p = doc.createElement('p'); p.className = 'diagram-note'; p.textContent = note; nodes.push(p); }
     releaseDiagram();
     if (result?.svg) {
+      lastDiagramSvg = result.svg;
       diagramUrl = URL.createObjectURL(new Blob([result.svg], { type: 'image/svg+xml' }));
       const figure = doc.createElement('figure'), img = doc.createElement('img');
       figure.className = 'diagram-view';
@@ -238,6 +239,9 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     hide() { root.hidden = true; },
     close() { stopEditing(); renders++; dropDiagramDoc(); releaseDiagram(); root.hidden = true; body.replaceChildren(); text = ''; name = ''; },
     get diagram() { return isDiagram(); },
+    diagramModel: () => diagramDoc?.model?.() || null,
+    diagramPlantuml: () => diagramDoc?.plantuml?.() || text,
+    diagramSvg: () => lastDiagramSvg,
     zoom: (dir) => (diagramDoc ? diagramDoc.zoom(dir) : zoomer.step(dir)),
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(name); },

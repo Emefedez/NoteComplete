@@ -12,6 +12,7 @@ import {
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
 import { savedUmlView } from "./uml.js";
+import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -5349,6 +5350,68 @@ async function saveText() {
   } catch (error) { status(error.message, true); }
 }
 $("textSave").onclick = () => saveText();
+async function insertOpenDiagramIntoNote(openTargetNote) {
+  if (!textView.hasDocument || !textView.diagram) return;
+  const name = textView.name || "Diagram";
+  let payload = null;
+  const model = textView.diagramModel?.();
+  if (model && model.elements?.length) payload = { kind: "uml", spec: model };
+  else {
+    let svg = textView.diagramSvg?.();
+    if (!svg && textView.text) {
+      const res = await drawPlantuml(textView.text);
+      if (res?.svg) svg = res.svg;
+    }
+    if (svg) payload = { kind: "image", file: await svgToPngFile(svg, name) };
+    else {
+      // Fallback: try parsing PlantUML in case diagramDoc wasn't mounted (e.g. text mode off).
+      try { payload = { kind: "uml", spec: await importDiagramSpec(textView.text, name) }; }
+      catch (e) { status(e.message, true); return; }
+    }
+  }
+  await openTargetNote();
+  if (!doc || !panels[page] || !ensureEditableLayer()) return;
+  if (payload.kind === "uml") {
+    const done = await placePrefab(panels[page], payload.spec);
+    if (done) status(`${prefabName(payload.spec)} inserted into note. Right-click it, hold it, or tap its ⋯ to edit it; one undo removes it.`);
+  } else {
+    await importImages([payload.file]);
+  }
+}
+$("textIntoNote").onclick = async () => {
+  if (!textView.hasDocument || !textView.diagram) return;
+  const rect = $("textIntoNote").getBoundingClientRect();
+  const recent = (await library.recent(12).catch(() => [])).filter((e) => e && e.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart)$/i.test(e.name || ""));
+  const entries = [];
+  if (lastNoteMember) {
+    entries.push({ label: `Insert into ${lastNoteMember.name}`, icon: "note", run: () => insertOpenDiagramIntoNote(() => openMember(lastNoteMember)) });
+    entries.push("-");
+  }
+  for (const e of recent) {
+    if (lastNoteMember && (e.key === lastNoteMember.key || (e.path && e.path === lastNoteMember.path))) continue;
+    entries.push({ label: entryTitle(e), icon: "note", run: () => insertOpenDiagramIntoNote(async () => { const f = await library.open(e); if (f) await openFromLibrary(f, e); }) });
+  }
+  if (entries.length) entries.push("-");
+  entries.push({
+    label: "New blank note",
+    icon: "plus",
+    run: () => insertOpenDiagramIntoNote(async () => {
+      if (!canReplace()) return;
+      let format = "project";
+      try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
+      const title = (textView.name || "Diagram").replace(/\.[^.]+$/, "");
+      const seed = crypto.getRandomValues(new Uint8Array(16));
+      notePath = noteEntryKey = ""; setDocMember(null);
+      await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: [PRESETS.a4.mm.map(mmToUnits)], bytes: new ArrayBuffer(0), saveAs: format, canvas: false });
+    }),
+  });
+  entries.push({
+    label: "Choose a note file…",
+    icon: "open",
+    run: () => insertOpenDiagramIntoNote(() => openLocal()),
+  });
+  openContextMenu(rect.left, rect.bottom + 4, entries, { title: "Insert diagram into note" });
+};
 $("htmlSave").onclick = async () => {
   if (embeddedExam?.active && doc) {
     await save(false, saveAs === "noteful" ? "noteful" : "project", null, { inPlace: true });
@@ -5557,9 +5620,11 @@ $("htmlSide").onclick = $("textSide").onclick = $("webSide").onclick = () => {
   try { localStorage.setItem("notecomplete-group-list", sideListOpen ? "" : "hidden"); } catch { /* Optional. */ }
   syncSideButtons();
 };
-let docMember = null;
+let docMember = null, lastNoteMember = null;
+const isNoteMemberName = (name) => /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i.test(name || "");
 function setDocMember(member) {
   docMember = member;
+  if (doc && member && isNoteMemberName(member.name)) lastNoteMember = member;
   // A Markdown file's pictures sit beside it: show them now that its place is known.
   if (textView.hasDocument && !converted && /!\[[^\]]*\]\(/.test(textView.text)) textView.rerender();
   // A diagram's !include files sit beside it too.
@@ -5726,6 +5791,7 @@ $("driveOpen").onclick = () => {
 function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
+  if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
   for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "insertGraph", "insertTable", "insertUml", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
@@ -6195,10 +6261,59 @@ async function oneFigure(open) {
   figureOpen = true;
   try { return await open(); } finally { figureOpen = false; }
 }
+async function svgToPngFile(svgText, baseName = "diagram") {
+  const { imageReady } = await import("./image-ready.js");
+  const img = new Image();
+  await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`);
+  const scale = 2, w = Math.max(1, Math.round((img.naturalWidth || 600) * scale)), h = Math.max(1, Math.round((img.naturalHeight || 400) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  return new File([blob], `${baseName.replace(/\.[^.]+$/, "")}.png`, { type: "image/png" });
+}
+async function importDiagramSpec(text, fileName = "") {
+  if (/@startuml/i.test(text)) {
+    const { parsePlantUml, layoutFromPlantuml } = await import("./uml-plantuml.js");
+    const parsed = parsePlantUml(text);
+    if (!parsed.laidOut) {
+      try { const drawn = await drawPlantuml(text); if (drawn?.svg) layoutFromPlantuml(parsed.model, drawn.svg); } catch { /* Auto-laid-out fallback. */ }
+    }
+    if (parsed.preamble.length) parsed.model.preamble = parsed.preamble;
+    if (!parsed.model.name && fileName) parsed.model.name = fileName.replace(/\.[^.]+$/, "");
+    return parsed.model;
+  }
+  const { importUml, detectFormat, vpDiagrams } = await import("./uml-xml.js");
+  const list = detectFormat(text) === "vp-xml" ? vpDiagrams(text).filter((d) => d.shapes) : [];
+  return importUml(text, list.length > 1 ? { diagram: list[0].index } : undefined);
+}
 async function insertPrefab(p, box = null, choice = null) {
   if (!doc || !p || editing || figureOpen) return false;
   choice ||= await oneFigure(() => choosePrefab());
   if (!choice) return false;
+  if (choice.kind === "uml-import") {
+    if (!ensureEditableLayer()) return false;
+    try {
+      const imported = await importDiagramSpec(choice.text, choice.fileName);
+      const note = epoch;
+      const spec = await umlEditor(imported, false);
+      if (!spec || !sameNote(note)) return false;
+      const done = await placePrefab(p, spec, box);
+      if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+      return done;
+    } catch (e) {
+      // Non-editable PlantUML diagrams (activity, sequence, state…) insert as a rendered picture.
+      if (/picture/i.test(e.message) && /@startuml/i.test(choice.text)) {
+        const res = await drawPlantuml(choice.text);
+        if (res?.svg) { await importImages([await svgToPngFile(res.svg, choice.fileName)]); return true; }
+      }
+      status(e.message, true);
+      return false;
+    }
+  }
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
@@ -6311,7 +6426,7 @@ async function openUmlEditor(spec, editing = false) {
   try {
     const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
     // A new diagram opens in the view chosen in Insert prefab (drawing, PlantUML or both).
-    return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }) });
+    return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;
@@ -6526,11 +6641,27 @@ async function copyItem(item, { cut = false } = {}) {
   if (!doc || !item) return;
   try {
     const copied = await copiedItems(item);
-    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0 };
+    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now() };
+    const specRaw = copied.images.length === 1 && copied.images[0]?.prefab?.kind === "prefab" ? copied.images[0].prefab.spec : null;
+    if (specRaw) { try { const spec = JSON.parse(specRaw); if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
     try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
     if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
     else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
   } catch (e) { status(e.message, true); }
+}
+async function pasteUmlIntoPage(parsedClip, p = panels[page], at = null) {
+  if (!doc || !p || editing || !ensureEditableLayer() || !parsedClip?.elements?.length) return false;
+  let spec = { type: "uml", diagram: parsedClip.diagram || "class", elements: parsedClip.elements, connectors: parsedClip.connectors || [], ...(parsedClip.preamble?.length ? { preamble: parsedClip.preamble } : {}) };
+  if (parsedClip.laidOut === false) {
+    try {
+      const { toPlantUml, layoutFromPlantuml } = await import("./uml-plantuml.js");
+      const drawn = await drawPlantuml(toPlantUml(spec, { preamble: spec.preamble || [], layout: false }));
+      if (drawn?.svg) layoutFromPlantuml(spec, drawn.svg);
+    } catch { /* Auto-layout fallback. */ }
+  }
+  const done = await placePrefab(p, spec, at);
+  if (done) status(`${prefabName(spec)} pasted on page ${p.index + 1}. Right-click it to edit; one undo takes it away.`);
+  return done;
 }
 // The copy on page `p`: at page point `at` (its top left corner), else where it was (a little
 // lower and to the right on its own page, again with each paste), kept on the page.
@@ -6573,11 +6704,22 @@ document.addEventListener("keydown", (e) => {
     if (key === "x" && !selection.editable()) return;
     clipKeyAt = e.timeStamp;
     copyItem(selection.item, { cut: key === "x" });
-  } else if (key === "v" && clip) {
+  } else if (key === "v") {
     // The paste event says whether the copy is still the last thing copied; without one
-    // (Safari), the copy kept here is pasted.
+    // (Safari), fall back to the local page clip or shared UML clip.
     const at = e.timeStamp;
-    setTimeout(() => { if (pastedAt < at) pasteClip(); }, 60);
+    setTimeout(async () => {
+      if (pastedAt >= at) return;
+      const shared = getSharedUmlClip();
+      if (clip && (!shared || (clip.at || 0) >= (shared.at || 0))) return pasteClip();
+      if (shared) return pasteUmlIntoPage(shared);
+      try {
+        const txt = await navigator.clipboard?.readText?.();
+        const uml = readUmlClipFromText(txt);
+        if (uml) return pasteUmlIntoPage(uml);
+      } catch { /* Unavailable. */ }
+      if (clip) pasteClip();
+    }, 60);
   }
 });
 for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
@@ -6586,11 +6728,20 @@ for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
   event.clipboardData?.setData("text/plain", CLIP_MARK);
 });
 document.addEventListener("paste", (event) => {
-  if (!clip || !itemKeys(event)) return;
-  pastedAt = event.timeStamp;
-  if (event.clipboardData?.getData("text/plain") !== CLIP_MARK) return;
-  event.preventDefault();
-  pasteClip();
+  if (!itemKeys(event)) return;
+  const text = event.clipboardData?.getData("text/plain") || "";
+  if (clip && text === CLIP_MARK) {
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    pasteClip();
+    return;
+  }
+  const umlClip = readUmlClipFromText(text);
+  if (umlClip) {
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    pasteUmlIntoPage(umlClip);
+  }
 });
 // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
 // fields (one undo step). A closed shape's fill (rectangle, ellipse, triangle, star) changes too.
@@ -6822,11 +6973,14 @@ async function pageMenu(p, at, x, y) {
     }
   } catch (e) { return status(e.message, true); }
   const { pageMenuOrder } = await import("./menu-config.js");
+  const sharedUml = getSharedUmlClip();
+  const canPastePage = Boolean(clip || sharedUml);
+  const runPagePaste = () => (clip && (!sharedUml || (clip.at || 0) >= (sharedUml.at || 0)) ? pasteClip(p, at) : pasteUmlIntoPage(sharedUml, p, at));
   openContextMenu(x, y, [
     ...tapeEntries(p, tape),
     tape && "-",
-    clip && { label: "Paste here", icon: "copy", key: "Ctrl V", run: () => pasteClip(p, at) },
-    clip && "-",
+    canPastePage && { label: "Paste here", icon: "copy", key: "Ctrl V", run: runPagePaste },
+    canPastePage && "-",
     ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
     "-",
     ...(doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
