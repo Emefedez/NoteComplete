@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.29
+
+- **Android updates install again.** Every APK so far carried the same internal build number, so some phones (Samsung among them) refused a newer one with "App not installed". Each release now has a higher build number (1.2.29 is 10229), so it installs over the one you have.
+
 ## 1.2.28
 
 - **Open Goodnotes and Notability notebooks.** Open a .goodnotes or Notability .ntb file and it becomes a note you can edit like any other. Ink, typed text, pictures and shapes come over as editable items. The notebook's PDF pages stay sharp behind the page. Paper templates and fills are drawn into a PDF behind the page. Anything that can't come over is listed when the notebook opens. Save keeps it as a .nfedit with the original notebook inside, so nothing is lost. The MCP tools read notebooks too.
