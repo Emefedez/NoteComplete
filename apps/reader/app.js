@@ -3089,6 +3089,8 @@ function middlePan(el) {
   let drag = null;
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 1 || e.pointerType !== "mouse") return;
+    // Editors with their own canvas (UML: a .puml file, a prefab on the page) pan it themselves.
+    if (e.target.closest?.(".uml-editor")) return;
     e.preventDefault();
     e.stopPropagation();
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
