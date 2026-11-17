@@ -26,6 +26,7 @@ export const OTHER_TYPES = [
   { ext: ['ods'], name: 'OpenDocument spreadsheet', mimeType: 'application/vnd.oasis.opendocument.spreadsheet' },
   { ext: ['csv'], name: 'CSV table', mimeType: 'text/csv' },
   { ext: ['tsv'], name: 'TSV table', mimeType: 'text/tab-separated-values' },
+  { ext: ['puml', 'plantuml', 'pu', 'iuml', 'wsd'], name: 'PlantUML diagram', mimeType: 'text/vnd.plantuml' },
 ];
 export const SYSTEM_EXTENSIONS = [...OWN_TYPES, ...OTHER_TYPES].flatMap(t => t.ext);
 const SYSTEM_NAME = new RegExp(`\\.(${SYSTEM_EXTENSIONS.join('|')})$`, 'i');

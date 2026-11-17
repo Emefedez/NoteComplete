@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.33
+
+- **Activity nodes look as in Visual Paradigm again.** In the palette, decision and merge are a plain diamond and fork and join a plain bar, without lines attached to a corner. As on the canvas, they are nodes you bring the flows to. The initial node keeps its larger dot.
+- **Any arrow from a line.** Right-click a connector to change its type, the head at each end (none, open or filled arrow, triangle, hollow or filled diamond, each with its icon) and whether the line is solid or dashed. **Default heads** goes back to the type's own. Swap direction swaps the heads too, and PlantUML files keep the choice.
+
 ## 1.2.32
 
 - **PlantUML files open in the UML editor.** A class, package or use case diagram (`.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`) opens in the same editor as the UML prefabs, with its palette, menus and keys. Every change is written back as PlantUML (Ctrl S saves it), and where each box sits is kept in one comment line that PlantUML ignores. The desktop app places the boxes where PlantUML draws them the first time. Activity, sequence and other diagrams show as PlantUML's own drawing. **UML** in the bar switches to the source.

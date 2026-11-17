@@ -37,6 +37,11 @@
   !insertmacro noteCompleteOpenWith "ods"
   !insertmacro noteCompleteOpenWith "csv"
   !insertmacro noteCompleteOpenWith "tsv"
+  !insertmacro noteCompleteOpenWith "puml"
+  !insertmacro noteCompleteOpenWith "plantuml"
+  !insertmacro noteCompleteOpenWith "pu"
+  !insertmacro noteCompleteOpenWith "iuml"
+  !insertmacro noteCompleteOpenWith "wsd"
   System::Call 'shell32::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
 !macroend
 
@@ -58,6 +63,11 @@
   !insertmacro noteCompleteForget "ods"
   !insertmacro noteCompleteForget "csv"
   !insertmacro noteCompleteForget "tsv"
+  !insertmacro noteCompleteForget "puml"
+  !insertmacro noteCompleteForget "plantuml"
+  !insertmacro noteCompleteForget "pu"
+  !insertmacro noteCompleteForget "iuml"
+  !insertmacro noteCompleteForget "wsd"
   DeleteRegKey SHELL_CONTEXT "Software\Classes\${NOTECOMPLETE_PROGID}"
   DeleteRegKey SHELL_CONTEXT "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}"
 !macroend
