@@ -292,14 +292,14 @@ try {
   assert.equal(await q.locator('.quick-menu').count(), 0);
   console.log('· palettes: number keys follow an order dragged by hand and kept; Shift S rings in both editors');
 
-  // 7. TRI after each letter (running + blocked), and a second Arrival dot as the end: nothing
+  // 7. Service time after each letter (CPU burst + blocked), and a second Arrival dot as the end: nothing
   // is painted past it.
   {
     await q.evaluate(() => localStorage.clear());
     await q.goto(`${server.origin}/charts.html?kind=states`);
     await q.waitForSelector('.ch-grid');
     const tri = () => q.$$eval('.ch-grid .ch-tri', (t) => t.map((x) => x.textContent));
-    assert.deepEqual(await tri(), ['25', '10', '5'], 'TRI per process');
+    assert.deepEqual(await tri(), ['25', '10', '5'], 'service time per process');
     await q.keyboard.press('Escape');
     await q.click('.ch-brush[data-value="@arrival"]');
     const g = await q.evaluate(() => { const el = document.querySelector('.ch-grid'), r = el.getBoundingClientRect(), l = el.querySelectorAll('.ch-lane')[1]; return { x: r.x + +l.getAttribute('x'), y: r.y + +l.getAttribute('y') + +l.getAttribute('height') / 2, w: +l.getAttribute('width') }; });
@@ -310,7 +310,7 @@ try {
     await q.click('.ch-brush[data-value="run"]');
     await q.mouse.click(g.x + cw * 22.5, g.y);
     assert.deepEqual(await tri(), ['25', '5', '5'], 'nothing painted past the end');
-    console.log('· process states: TRI per process; a second arrival dot ends it');
+    console.log('· process states: service time per process; a second arrival dot ends it');
   }
   {
     // 8. Fingers: two fingers pinch the time axis and take back what the first one painted;
@@ -324,7 +324,7 @@ try {
     const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
     const lane = await t.evaluate(() => { const el = document.querySelector('.ch-grid'), r = el.getBoundingClientRect(), l = el.querySelectorAll('.ch-lane')[2]; return { x: r.x + +l.getAttribute('x'), y: r.y + +l.getAttribute('y') + +l.getAttribute('height') / 2, w: +l.getAttribute('width'), h: +l.getAttribute('height') }; });
     assert.ok(lane.h >= 50, `taller rows for fingers: ${lane.h}`);
-    const painted = () => t.$$eval('.ch-grid .ch-tri', (x) => x.map((n) => n.textContent));
+    const painted = () => t.$$eval('.ch-grid line[stroke="#2563eb"]', (x) => x.length);
     const before = await painted();
     const cw = lane.w / 30;
     // One finger paints (no pen yet).

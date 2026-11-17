@@ -12,7 +12,7 @@ import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { codeBox, jsonErrorAt } from './json-code.js';
-import { STATES, triOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
+import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
 const PEN_KEY = 'notecomplete-pen-seen';
@@ -491,7 +491,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number after each letter is its TRI (running + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number after each letter is its service time (CPU burst + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -625,8 +625,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const n = g.rows[0]?.cells.length || Math.round((g.tEnd - g.tStart) / g.cell);
     const width = Math.max(320, canvas.clientWidth - 16);
     const longest = g.rows.reduce((m, r) => Math.max(m, r.label.length), 2);
-    // Process states: room for each process's TRI after its letter.
-    const triW = kind === 'states' ? 12 + 7 * Math.max(2, ...g.rows.map((r) => String(fmt(triOf(r, g.cell))).length)) : 0;
+    // Process states: room for each process's service time after its letter.
+    const triW = kind === 'states' ? 12 + 7 * Math.max(2, ...g.rows.map((r) => String(fmt(serviceOf(r, g))).length)) : 0;
     const left = Math.min(140, 22 + longest * 8) + triW, top = 30;
     const cw = Math.max(4, Math.min(160, Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n))) * zoom));
     // Taller rows for a finger or a pen (a coarse pointer): a row is easy to hit and stay in.
@@ -686,8 +686,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         const xe = left + ((end - g.tStart) / g.cell) * cw;
         s.append(svgEl('line', { x1: xe, y1: y0 + 6, x2: xe, y2: y0 + rh - 6, class: 'ch-end-line' }), svgEl('circle', { cx: xe, cy: yc, r: 4.2, class: 'ch-arrival ch-end' }));
       }
-      // TRI beside the letter: time running plus time blocked.
-      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: left - 6, y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(triOf(r, g.cell)) }));
+      // Service time beside the letter: CPU burst time plus time blocked.
+      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: left - 6, y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(serviceOf(r, g)) }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
     // The lanes' backgrounds under the cell lines (they were drawn over them).
