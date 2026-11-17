@@ -95,6 +95,18 @@ export const ELEMENTS = {
   note: { label: 'Note', shape: 'note', size: [160, 70], fields: {}, longName: true, vp: { element: 'NOTE' }, xmi: { type: 'uml:Comment' } },
 };
 
+// How a new diagram is edited: drawn (visual), as PlantUML text (code) or both side by side.
+// Chosen in Insert prefab beside the preview; class and use case diagrams have a PlantUML form.
+export const UML_VIEWS = { visual: { label: 'Visual', icon: 'uml' }, code: { label: 'PlantUML', icon: 'code' }, split: { label: 'Both', icon: 'split' } };
+export const UML_VIEW_KEY = 'notecomplete.uml.view';
+export const CODE_DIAGRAMS = new Set(['class', 'useCase']);
+export function savedUmlView() { try { const v = localStorage.getItem(UML_VIEW_KEY); return UML_VIEWS[v] ? v : 'visual'; } catch { return 'visual'; } }
+export function saveUmlView(v) { try { if (UML_VIEWS[v]) localStorage.setItem(UML_VIEW_KEY, v); } catch { /* Optional. */ } }
+// Whether Insert prefab asks for the editor as a next step (off: the last one chosen is used).
+const UML_ASK_KEY = 'notecomplete.uml.ask';
+export function askUmlView() { try { return localStorage.getItem(UML_ASK_KEY) !== '0'; } catch { return true; } }
+export function setAskUmlView(on) { try { localStorage.setItem(UML_ASK_KEY, on ? '1' : '0'); } catch { /* Optional. */ } }
+
 // The heads a connector can show at either end (props.headFrom / props.headTo override its
 // type's), and its line (props.line: solid or dashed).
 export const HEADS = { none: 'None', open: 'Open arrow', filled: 'Filled arrow', hollowTriangle: 'Triangle', hollowDiamond: 'Hollow diamond', filledDiamond: 'Filled diamond' };
