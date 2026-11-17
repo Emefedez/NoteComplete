@@ -166,6 +166,15 @@ try {
   // The exercise's page beside the canvas, to read its statement.
   await p.waitForSelector('.chart-dialog .ch-ref img');
   assert.match(await p.textContent('.chart-dialog .ch-ref figcaption'), /Page 1/);
+  // A PDF and another note to look at: drawn as page pictures (an iframe showed nothing on iPad).
+  await p.locator('.chart-dialog .ch-panel input[type=file]').setInputFiles([samplePath('Examen wuolah.pdf'), samplePath('nota_2lineas.noteful')]);
+  await p.waitForFunction(() => [...document.querySelectorAll('.chart-dialog .ch-ref')].filter((f) => f.querySelector('.ch-ref-pages img')).length === 2, null, { timeout: 30000 });
+  const pagesShown = await p.evaluate(() => [...document.querySelectorAll('.chart-dialog .ch-ref-pages')].map((b) => [...b.querySelectorAll('img')].map((i) => i.naturalWidth > 100)));
+  assert.equal(pagesShown.length, 2, JSON.stringify(pagesShown));
+  assert.ok(pagesShown.every((imgs) => imgs.length && imgs.every(Boolean)), JSON.stringify(pagesShown));
+  assert.equal(await p.locator('.chart-dialog iframe').count(), 0);
+  assert.ok(await p.locator('.chart-dialog select.ch-ref-recent').count(), 'recent notes list');
+  for (let n = 0; n < 2; n++) await p.locator('.chart-dialog .ch-ref').last().locator('figcaption button').click();
   // Nothing is painted yet: the answer starts empty.
   assert.equal(await p.locator('.chart-dialog .ch-grid line[stroke="#2563eb"]').count(), 0);
   const g2 = await p.locator('.chart-dialog .ch-grid').boundingBox();

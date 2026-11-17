@@ -69,7 +69,7 @@ function ensureStyles() {
 // `references`: [{ name, src, kind: 'image' | 'pdf' }] shown beside the canvas while filling
 // in (the exercise's page, snippets kept from the Grab tool); `onReference(ref)` hears of one
 // added here, so it can be offered again.
-export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null } = {}) {
+export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
   ensureStyles();
   let base, kind, grid, bars, ans, mode, brush, check = null, showSolution = false;
   const undo = [], redo = [];
@@ -192,22 +192,83 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   // What to look at while filling in: the exercise's page, kept snippets, a picture or PDF.
   const refs = [...references];
   const refList = make('div', { className: 'ch-refs' });
-  const refFile = make('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true });
-  const refAdd = button('image', 'Picture or PDF…', 'Open a picture or a PDF to look at while drawing or filling in (or paste a snippet: Ctrl V)');
+  const NOTE_EXT = /\.(noteful|nfedit|notecomp(lete)?|notepart)$/i;
+  const refFile = make('input', { type: 'file', accept: `image/*,application/pdf,.pdf${notePages ? ',.noteful,.nfedit,.notecomp,.notecomplete' : ''}`, multiple: true, hidden: true });
+  const refAdd = button('image', notePages ? 'Picture, PDF or note…' : 'Picture or PDF…', 'Open a picture, a PDF or a note to look at while drawing or filling in (or paste a snippet: Ctrl V)');
   refAdd.onclick = () => refFile.click();
   const addRef = (ref) => { refs.push(ref); onReference?.(ref); buildRefs(); };
+  // A note's pages come from the app (its engine draws them); shown as pages like a PDF.
+  const addNote = async (name, read) => {
+    const ref = { name, kind: 'pages', pages: null };
+    addRef(ref);
+    try { Object.assign(ref, await read()); } catch (e) { ref.error = e?.message || String(e); }
+    buildRefs();
+  };
   refFile.onchange = () => {
-    for (const file of refFile.files) addRef({ name: file.name, src: URL.createObjectURL(file), kind: file.type === 'application/pdf' ? 'pdf' : 'image' });
+    for (const file of refFile.files) {
+      if (notePages && NOTE_EXT.test(file.name)) addNote(file.name.replace(NOTE_EXT, ''), () => notePages(file));
+      else addRef({ name: file.name, src: URL.createObjectURL(file), kind: file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? 'pdf' : 'image' });
+    }
     refFile.value = '';
   };
+  // Recent notes, to look at one while drawing: a plain list (a native select works with a finger).
+  const refRecent = recentNotes ? make('select', { className: 'ch-ref-recent', title: 'Look at a recent note' }) : null;
+  if (refRecent) {
+    let listed = [];
+    const fill = async () => {
+      listed = await recentNotes().catch(() => []);
+      refRecent.replaceChildren(make('option', { value: '', textContent: listed.length ? 'A recent note…' : 'No recent notes' }), ...listed.map((n, i) => make('option', { value: String(i), textContent: n.title })));
+    };
+    fill();
+    refRecent.onchange = () => {
+      const n = listed[Number(refRecent.value)];
+      refRecent.value = '';
+      if (n) addNote(n.title, () => n.open());
+    };
+  }
+  // PDFs as page pictures (pdf.js): an iframe showed nothing on iPad and little elsewhere.
+  async function pdfPages(r) {
+    const { openPdf } = await import('./pdf-background.js');
+    const bytes = new Uint8Array(await (await fetch(r.src)).arrayBuffer());
+    const pdf = await openPdf(bytes);
+    const pages = [];
+    try {
+      for (let n = 1; n <= Math.min(pdf.numPages, 30); n++) {
+        const page = await pdf.getPage(n);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(2, 1400 / base.width) });
+        const c = document.createElement('canvas');
+        c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
+        const ctx = c.getContext('2d', { alpha: false });
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        page.cleanup();
+        pages.push(c.toDataURL('image/jpeg', 0.85));
+        c.width = c.height = 0;
+      }
+    } finally { pdf.destroy?.(); }
+    return pages;
+  }
+  function refView(r) {
+    if (r.kind === 'image') return make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
+    const box = make('div', { className: 'ch-ref-pages' });
+    if (r.error) box.append(make('p', { className: 'ch-hint', textContent: `Could not show it: ${r.error}` }));
+    else if (r.pages) box.append(...r.pages.map((src, n) => make('img', { src, alt: `${r.name}, page ${n + 1}`, className: 'ch-ref-img', loading: 'lazy' })));
+    else {
+      box.append(make('p', { className: 'ch-hint', textContent: 'Opening…' }));
+      if (r.kind === 'pdf' && !r.loading) {
+        r.loading = pdfPages(r).then((pages) => { r.pages = pages; }, (e) => { r.error = e?.message || String(e); }).finally(() => { if (root.isConnected) buildRefs(); });
+      }
+    }
+    return box;
+  }
   function buildRefs() {
     refList.replaceChildren(...refs.map((r, i) => {
-      const view = r.kind === 'pdf' ? make('iframe', { src: r.src, title: r.name, className: 'ch-ref-pdf' }) : make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
       const remove = button('close', 'Remove', `Take ${r.name} away`, { iconOnly: true, className: 'ch-mini' });
       remove.onclick = () => { refs.splice(i, 1); buildRefs(); };
-      return make('figure', { className: 'ch-ref' }, make('figcaption', {}, make('span', { textContent: r.name }), remove), view);
+      return make('figure', { className: 'ch-ref' }, make('figcaption', {}, make('span', { textContent: r.name }), remove), refView(r));
     }));
-    if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: 'Nothing to look at yet: open a picture or PDF, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).' }));
+    if (!refs.length) refList.append(make('p', { className: 'ch-hint', textContent: `Nothing to look at yet: open a picture, PDF${notePages ? ' or note' : ''}, or paste a snippet grabbed from a note (Grab tool → Keep for exercises, then Ctrl V here or it shows up on its own).` }));
   }
   const onPaste = (e) => {
     if (mode === 'json' || !root.isConnected) return;
@@ -781,7 +842,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     out.push(field('Title', text(base.title, edit('title', (v) => { base.title = v; }, { panel: false }), { disabled: locked })));
     if (locked) {
       out.push(make('p', { className: 'ch-hint', textContent: mode === 'json' ? 'Editing the JSON: the fields come back in Editor.' : 'Filling in: the rows, times and names are the exercise\'s. Switch to Editor to change them.' }));
-      if (mode === 'answer') { buildRefs(); out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList); }
+      if (mode === 'answer') { buildRefs(); out.push(make('h4', { textContent: 'To look at' }), refAdd, ...(refRecent ? [refRecent] : []), refFile, refList); }
       panel.replaceChildren(...out);
       return;
     }
@@ -799,7 +860,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     else out.push(...plotPanel());
     // Something to copy from while drawing: a picture or PDF, or a snippet grabbed from a note.
     buildRefs();
-    out.push(make('h4', { textContent: 'To look at' }), refAdd, refFile, refList);
+    out.push(make('h4', { textContent: 'To look at' }), refAdd, ...(refRecent ? [refRecent] : []), refFile, refList);
     panel.replaceChildren(...out);
   }
   function retime(changes) {
@@ -931,7 +992,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 }
 
 // The editor over the whole window, for a figure on a note. Resolves with the spec, or null.
-export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null } = {}) {
+export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'chart-dialog' });
@@ -945,6 +1006,6 @@ export function openChartEditor(spec, { editing = false, mode = 'author', refere
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     dialog.showModal();
-    editor = mountChartEditor(host, spec, { mode, references, onReference, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
+    editor = mountChartEditor(host, spec, { mode, references, onReference, notePages, recentNotes, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
   });
 }

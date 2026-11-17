@@ -16,7 +16,7 @@ import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
-import { Library, entrySourceLabel } from "./library.js";
+import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { createDownloadQueue } from "./download-queue.js";
@@ -6139,13 +6139,71 @@ async function openFigureEditor(spec, { editing = false, mode = "author", refere
   if (editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); } });
+      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes });
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
     }
   }
   return editPrefab({ spec, editing });
+}
+// "To look at" in the chart editors: another note's pages as pictures. The note opens in an
+// engine worker of its own (the open note's stays as it is), its pages are drawn like the
+// page snapshots (pageCanvas), and the worker goes away again.
+async function notePages(file, maxPages = 20) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = fileKind(file.name, bytes);
+  if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
+  if (!["note", "notecomplete", "project"].includes(kind)) throw Error("only notes, PDFs and pictures can be shown here");
+  const worker = new Worker("./worker.js", { type: "module" });
+  const waiting = new Map();
+  let next = 0;
+  const ready = new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      if (data.ready) return resolve();
+      if (data.fatal) return reject(Error(data.fatal));
+      const w = waiting.get(data.id);
+      if (!w) return;
+      waiting.delete(data.id);
+      if (data.error) w.reject(Error(data.error)); else w.resolve(data.result);
+    };
+  });
+  const ask = (op, args = {}, page = 0) => new Promise((resolve, reject) => {
+    const id = ++next;
+    waiting.set(id, { resolve, reject });
+    worker.postMessage({ id, op, page, ...args });
+  });
+  const pdfs = new PdfBackgrounds((resource) => ask("pdf", { resource }));
+  try {
+    await ready;
+    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete" });
+    const count = Math.min(Number(first.pages) || 1, maxPages);
+    const source = { view: (i) => (i === 0 ? first : ask("view", {}, i)), backgrounds: pdfs };
+    const pages = [];
+    for (let i = 0; i < count; i++) {
+      const { canvas } = await pageCanvas(i, 1200, {}, source);
+      pages.push(canvas.toDataURL("image/jpeg", 0.85));
+      canvas.width = canvas.height = 0;
+    }
+    return { pages };
+  } finally {
+    pdfs.close?.();
+    worker.terminate();
+  }
+}
+// Recent notes the editor can show: the ones this device can read without a download.
+async function recentReferenceNotes() {
+  const entries = await library.recent(30).catch(() => []);
+  return entries
+    .filter((entry) => entry && entry.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart|pdf)$/i.test(entry.name || ""))
+    .map((entry) => ({
+      title: entryTitle(entry),
+      open: async () => {
+        const file = await library.open(entry);
+        if (!file) throw Error("this note is not on this device");
+        return notePages(file);
+      },
+    }));
 }
 // The UML diagram editor (uml-editor.js), loaded the first time it is needed.
 function umlEditor(spec, editing = false) {
@@ -7033,8 +7091,8 @@ $("pageBgApply").onclick = async () => {
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
-async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}) {
-  const view = await call("view", { page: index });
+async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}, source = null) {
+  const view = source ? await source.view(index) : await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
   if (liftTape) for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", "0.18");
@@ -7058,7 +7116,7 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   if (view.pdf_background && !inkOnly) {
     const place = backgroundPlacement(view.pdf_background, view.size);
     // rasterTarget renders at twice the requested CSS width.
-    const href = await backgrounds.image(view.pdf_background, view.size, (width * place.share) / 2);
+    const href = await (source ? source.backgrounds : backgrounds).image(view.pdf_background, view.size, (width * place.share) / 2);
     svg.querySelector("[data-background]").append(pdfImage(href, place));
   }
   const height = Math.round(h * scale);
