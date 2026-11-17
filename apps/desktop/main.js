@@ -19,6 +19,7 @@ export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 import { appLog } from './app-log.js';
+import { diagramRenderer } from './diagrams.js';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
@@ -474,6 +475,9 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
+  // PlantUML diagrams drawn by the PlantUML installed here (diagrams.js).
+  const diagrams = diagramRenderer({ folderOf: file => files.documentFolder(file) });
+  ipcMain.handle('diagrams:plantuml', guarded((_event, text, file) => diagrams.plantuml(text, typeof file === 'string' ? file : '')));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
   // by the reader's cancel message or when its tab goes away (archive-download.js).
   const downloads = downloadRegistry();

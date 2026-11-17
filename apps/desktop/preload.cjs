@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
     return result;
   },
 });
+// PlantUML diagrams (.puml…) drawn by the PlantUML installed on this computer (diagrams.js).
+contextBridge.exposeInMainWorld('notecompleteDiagrams', {
+  plantuml: (text, file) => ipcRenderer.invoke('diagrams:plantuml', text, file),
+});
 // Connecting the user's AI tools to the bundled note server (agent-setup.js).
 contextBridge.exposeInMainWorld('notecompleteAgents', {
   status: () => ipcRenderer.invoke('agents:status'),

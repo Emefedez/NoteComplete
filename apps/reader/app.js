@@ -10,7 +10,7 @@ import {
   fileKind,
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
-import { textViewer, isMarkdownName, zoomControl } from "./text-view.js";
+import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -606,7 +606,7 @@ async function load(file, preparedDocument = null) {
       tabBar.update({ title: sideTitle, dirty: false });
       if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
       else {
-        await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? isMarkdownName(file.name), key: file.name });
+        await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? (isMarkdownName(file.name) || isDiagramName(file.name)), key: file.name });
         textSource.forget();
         // Its notes (a guest keeps the shared ones, bound by the session).
         if (collab?.role !== "guest") notes?.load(sideFp, { core: false });
@@ -5238,11 +5238,30 @@ function htmlDarkApply() {
 }
 $("htmlDark").onclick = $("textDark").onclick = $("webDark").onclick = () => setDarkPages(!document.body.classList.contains("pages-dark"));
 var htmlViewReady = true;
+// PlantUML's own drawing of a diagram (desktop: the PlantUML installed there; elsewhere none).
+function drawPlantuml(text) {
+  return window.notecompleteDiagrams?.plantuml
+    ? window.notecompleteDiagrams.plantuml(text, !converted && docMember?.source === "local" ? docMember.path : "")
+    : Promise.resolve({ unavailable: true });
+}
 const textView = textViewer({
   root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
   zoom: { out: $("textZoomOut"), into: $("textZoomIn"), value: $("textZoomValue") },
   toHtml: (value) => call("markdownHtml", { text: value }),
   imageUrl: textImageUrl,
+  // PlantUML files are drawn by the desktop app's PlantUML; includes come from the file's folder.
+  diagram: {
+    is: isDiagramName,
+    draw: drawPlantuml,
+    // Class, package and use case diagrams open in the UML editor of the prefabs; N stays the
+    // document's Notes (the editor's own notes have their button).
+    mount: (host, text, { onText }) => import("./diagram-doc.js").then(({ mountDiagramDoc }) => mountDiagramDoc(host, {
+      text, onText, draw: drawPlantuml,
+      ignoreKey: (ev) => !ev.ctrlKey && !ev.metaKey && !ev.altKey && ["n", "N", "?"].includes(ev.key),
+      markdown: (value) => call("markdownHtml", { text: value }),
+      onError: (message) => status(message, true),
+    })),
+  },
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   // A relative link to another file opens it here, from this file's folder.
@@ -5542,6 +5561,8 @@ function setDocMember(member) {
   docMember = member;
   // A Markdown file's pictures sit beside it: show them now that its place is known.
   if (textView.hasDocument && !converted && /!\[[^\]]*\]\(/.test(textView.text)) textView.rerender();
+  // A diagram's !include files sit beside it too.
+  else if (textView.hasDocument && textView.diagram && textView.markdown && /^\s*!include/m.test(textView.text)) textView.rerender();
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
   // Opening a document of a folder brings that folder to the front of Home's Folders.
@@ -6287,8 +6308,11 @@ function umlEditor(spec, editing = false) {
 }
 async function openUmlEditor(spec, editing = false) {
   try {
-    const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
-    return await open(spec, { editing, markdown: (text) => call("markdownHtml", { text }) });
+    const { openUmlEditor: open, chooseView } = await loading(import("./uml-editor.js"));
+    // A new diagram: which editor (drawing, PlantUML or both), unless always the same one.
+    const view = editing ? null : await chooseView(spec?.diagram, { menu: openContextMenu });
+    if (!editing && !view) return null;
+    return await open(spec, { editing, view, markdown: (text) => call("markdownHtml", { text }) });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;

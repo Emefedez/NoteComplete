@@ -4,7 +4,16 @@
 // saves the result (onChange reports every edit).
 import { renderMarkdown } from './rich-text.js';
 
-export { isTextName, isMarkdownName } from './text-types.js';
+export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
+
+// What the Diagram view says when it cannot draw (draw() results from diagrams.js, or no bridge).
+export function diagramMessage(result) {
+  if (result?.unavailable) return 'PlantUML diagrams are drawn by the NoteComplete desktop app, with PlantUML installed on the computer. Here you see the source.';
+  if (result?.missing) return 'PlantUML is not installed on this computer, so this is the source. Install PlantUML (it needs Java): for example sudo pacman -S plantuml, sudo apt install plantuml or brew install plantuml. Then press UML twice to draw it.';
+  if (result?.failed) return `PlantUML could not draw this diagram: ${result.failed}`;
+  if (result?.error) return `PlantUML found a problem: ${result.error}`;
+  return '';
+}
 
 const ZOOMS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5];
 const ZOOM_KEY = 'notecomplete-text-zoom';
@@ -55,9 +64,64 @@ export function headingFor(headings, fragment) {
 // Links in a Markdown document: #anchors scroll to their heading or footnote, web
 // links open in the browser (target=_blank, rich-text.js), other links go to openLink
 // (a file next to this one).
-export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0;
+// diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
+// button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
+export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null;
+  // The UML editor showing a .puml file (diagram.mount), while it is open.
+  const dropDiagramDoc = () => { diagramDoc?.destroy(); diagramDoc = null; body.classList.remove('text-diagram-editor'); };
+  const formatLabel = { text: format.textContent, title: format.title };
+  const isDiagram = () => Boolean(diagram?.is(key || name));
+  const releaseDiagram = () => { if (diagramUrl) URL.revokeObjectURL(diagramUrl); diagramUrl = ''; };
+  function labelFormat() {
+    const uml = isDiagram();
+    format.textContent = uml ? 'UML' : formatLabel.text;
+    format.title = uml ? 'UML: the diagram drawn with PlantUML. Off: the source as written' : formatLabel.title;
+  }
+  // The drawing as a picture (an <img> runs no script from the SVG), sized by the text zoom.
+  async function renderDiagram(token) {
+    // Class, package and use case diagrams: the UML editor, writing back PlantUML as it changes.
+    if (diagram.mount) {
+      const host = body.ownerDocument.createElement('div');
+      host.className = 'diagram-editor-host';
+      body.classList.add('text-diagram-editor');
+      body.replaceChildren(host);
+      let ctl = null;
+      try { ctl = await diagram.mount(host, text, { onText: (next) => changed(next) }); } catch (error) { console.warn('Diagram editor:', error); }
+      if (token !== renders) { ctl?.destroy(); return; }
+      if (ctl) { diagramDoc = ctl; return; }
+      body.classList.remove('text-diagram-editor');
+    }
+    let result;
+    try { result = await diagram.draw(text); } catch (error) { result = { failed: error?.message || String(error) }; }
+    if (token !== renders) return;
+    const doc = body.ownerDocument, nodes = [];
+    const note = diagramMessage(result);
+    if (note) { const p = doc.createElement('p'); p.className = 'diagram-note'; p.textContent = note; nodes.push(p); }
+    releaseDiagram();
+    if (result?.svg) {
+      diagramUrl = URL.createObjectURL(new Blob([result.svg], { type: 'image/svg+xml' }));
+      const figure = doc.createElement('figure'), img = doc.createElement('img');
+      figure.className = 'diagram-view';
+      img.alt = `Diagram ${name}`;
+      img.onload = () => img.style.setProperty('--diagram-width', `${img.naturalWidth}px`);
+      img.src = diagramUrl;
+      figure.append(img);
+      nodes.push(figure);
+    } else {
+      const pre = doc.createElement('pre');
+      pre.className = 'diagram-source';
+      pre.textContent = text;
+      nodes.push(pre);
+    }
+    body.replaceChildren(...nodes);
+  }
   const zoomer = zoomControl({ ...zoom, apply: (z) => root.style.setProperty('--text-zoom', String(z)) });
+  // Over the UML editor, the bar's − / + / 100% zoom its canvas (100%: the whole diagram).
+  for (const [button, dir] of [[zoom.out, -1], [zoom.into, 1], [zoom.value, 0]]) {
+    const own = button.onclick;
+    button.onclick = (event) => (diagramDoc ? diagramDoc.zoom(dir) : own?.(event));
+  }
   body.addEventListener('click', (event) => {
     const a = event.target.closest?.('a[href]');
     if (!a || !body.contains(a) || a.target === '_blank') return;
@@ -73,15 +137,18 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
   body.addEventListener('wheel', (event) => {
-    if (!event.ctrlKey) return;
+    if (!event.ctrlKey || diagramDoc) return;
     event.preventDefault();
     zoomer.step(event.deltaY < 0 ? 1 : -1);
   }, { passive: false });
   async function render() {
     const token = ++renders;
+    dropDiagramDoc();
     format.setAttribute('aria-pressed', String(markdown));
     body.classList.toggle('text-plain', !markdown);
-    if (!markdown) { body.textContent = text; return; }
+    body.classList.toggle('text-diagram', markdown && isDiagram());
+    if (!markdown) { releaseDiagram(); body.textContent = text; return; }
+    if (isDiagram()) return renderDiagram(token);
     const scratch = body.ownerDocument.createElement('div');
     await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
     if (token === renders) body.replaceChildren(...scratch.childNodes);
@@ -96,13 +163,14 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     editorHost.replaceChildren();
   }
   async function startEditing() {
+    dropDiagramDoc();
     editing = true;
     edit.setAttribute('aria-pressed', 'true');
     body.hidden = true;
     editorHost.hidden = false;
     unmount();
     const mine = mount;
-    if (markdown && loadEditor) {
+    if (markdown && loadEditor && !isDiagram()) {
       const TinyMDE = await loadEditor();
       if (!editing || mine !== mount) return;
       const commands = document.createElement('div'), area = document.createElement('div');
@@ -147,6 +215,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     open({ text: content, name: shown, markdown: formatted, key: id = shown }) {
       stopEditing();
       text = content; name = shown; key = id; markdown = remembered(id, formatted);
+      labelFormat();
       if (title) title.textContent = shown;
       root.hidden = false;
       body.scrollTop = 0;
@@ -162,13 +231,14 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     },
     get markdown() { return markdown; },
     // The file was renamed on disk: new title and the key MD on/off is remembered under.
-    rename(shown, id = shown) { name = shown; key = id; if (title) title.textContent = shown; },
+    rename(shown, id = shown) { name = shown; key = id; labelFormat(); if (title) title.textContent = shown; },
     // Draw again (pictures beside the file can be read once its place is known).
     rerender() { return editing ? undefined : render(); },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
-    close() { stopEditing(); renders++; root.hidden = true; body.replaceChildren(); text = ''; name = ''; },
-    zoom: (dir) => zoomer.step(dir),
+    close() { stopEditing(); renders++; dropDiagramDoc(); releaseDiagram(); root.hidden = true; body.replaceChildren(); text = ''; name = ''; },
+    get diagram() { return isDiagram(); },
+    zoom: (dir) => (diagramDoc ? diagramDoc.zoom(dir) : zoomer.step(dir)),
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(name); },
     get editing() { return editing; },

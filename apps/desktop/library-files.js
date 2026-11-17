@@ -6,7 +6,7 @@ import path from 'node:path';
 
 // Notes, PDFs, HTML, images, Word/OpenDocument/Excel files, text formats (as in the
 // reader's text-types.js), and names without an extension, which open as text when their content is.
-const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch';
+const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch|puml|plantuml|pu|iuml|wsd';
 const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf|png|jpe?g|webp|docx|odt|xlsx|ods|${TEXT})$)|^[^.]+$`, 'i');
 // A file without an extension is listed only when its start has no NUL bytes (text).
 async function textStart(file) {
@@ -191,6 +191,13 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       };
       await walk(folder, 0);
       return files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    },
+    // The folder a document's diagram may include files from: the opened folder holding it,
+    // or its own folder (diagrams.js).
+    async documentFolder(file) {
+      await opened(file);
+      const s = await load();
+      return s.folders.filter(f => inside(f, file)).sort((a, b) => b.length - a.length)[0] || path.dirname(file);
     },
     // A picture a document shows from beside it ("Tema_files/image1.png"): inside the document's
     // folder (or the opened folder holding it), never through a link that leads elsewhere.

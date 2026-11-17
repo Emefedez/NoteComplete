@@ -344,6 +344,16 @@ main {
 .notes-render.text-doc { flex: 1; min-height: 0; overflow: auto; padding: 28px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); line-height: 1.65; background: var(--surface); }
 .text-doc:focus { outline: none; }
 .notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
+/* A .puml file in the UML editor (diagram-doc.js): the editor fills the document view. */
+.notes-render.text-doc.text-diagram-editor { padding: 0; display: flex; overflow: hidden; }
+.text-diagram-editor .diagram-editor-host { flex: 1; min-width: 0; min-height: 0; height: auto; font-size: 14px; line-height: 1.4; }
+/* PlantUML diagrams (text-view.js): the drawing at its own size times the text zoom, on white paper. */
+.notes-render.text-doc.text-diagram { padding-left: 24px; padding-right: 24px; }
+.text-diagram .diagram-view { margin: 0 auto; width: max-content; max-width: 100%; overflow: auto; }
+.text-diagram .diagram-view img { display: block; width: calc(var(--diagram-width, 600px) * var(--text-zoom, 1)); max-width: none; height: auto; background: #fff; border-radius: var(--radius-box, 8px); box-shadow: 0 0 0 1px var(--line); }
+body.pages-dark .text-diagram .diagram-view img { filter: invert(0.88) hue-rotate(180deg); }
+.text-diagram .diagram-note { max-width: 760px; margin: 0 auto 16px; padding: 10px 14px; border-radius: var(--radius-box, 8px); background: var(--fill); color: var(--ink); font-size: calc(14px * var(--text-zoom, 1)); }
+.text-diagram .diagram-source { max-width: 760px; margin: 0 auto; white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
 .side-body > .doc-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
 .doc-editor[hidden] { display: none; }
 .doc-editor .notes-commands .TMCommandBar { padding-inline: max(16px, calc((100% - 760px) / 2)); }

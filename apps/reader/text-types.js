@@ -1,8 +1,12 @@
+// PlantUML diagrams: text documents the desktop app can also draw (text-view.js, diagrams.js).
+export const DIAGRAM_EXTENSIONS = ['puml', 'plantuml', 'pu', 'iuml', 'wsd'];
+export const isDiagramName = (name) => new RegExp(`\\.(${DIAGRAM_EXTENSIONS.join('|')})$`, 'i').test(name || '');
+
 // Files opened as text documents: Markdown, plain text, common source/data/config formats,
 // and names without an extension whose content is text (data files, README, Makefile…).
 export const TEXT_EXTENSIONS = ['txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'env',
   'sh', 'bash', 'zsh', 'fish', 'py', 'c', 'h', 'cc', 'cpp', 'hpp', 'java', 'js', 'mjs', 'ts', 'rs', 'go', 'rb', 'php', 'sql', 'tex', 'bib',
-  'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'sv', 'mk', 'awk', 'sed', 'diff', 'patch'];
+  'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'sv', 'mk', 'awk', 'sed', 'diff', 'patch', ...DIAGRAM_EXTENSIONS];
 const EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join('|')})$`, 'i');
 
 // Word, OpenDocument and Excel files, opened as Markdown (office.js); so are .csv and .tsv.
