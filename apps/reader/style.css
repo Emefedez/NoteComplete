@@ -348,7 +348,22 @@ main {
 .notes-render.text-doc.text-diagram-editor { padding: 0; display: flex; overflow: hidden; }
 .text-diagram-editor .diagram-editor-host { flex: 1; min-width: 0; min-height: 0; height: auto; font-size: 14px; line-height: 1.4; }
 /* PlantUML diagrams (text-view.js): the drawing at its own size times the text zoom, on white paper. */
-.notes-render.text-doc.text-diagram { padding-left: 24px; padding-right: 24px; }
+.notes-render.text-doc.text-diagram:not(.text-diagram-editor) { padding-left: 24px; padding-right: 24px; }
+/* The UML editor's toolbar sits in the document bar (text-view.js dockBar): one row, scrolling sideways when narrow. */
+#textView .html-bar > .uml-bar-dock { display: contents; }
+#textView .html-bar .uml-bar { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0; border: 0; background: transparent; gap: 2px; }
+#textView .html-bar .uml-bar .uml-spacer { display: none; }
+#textView .html-bar .uml-bar select { min-height: 28px; flex: 0 1 auto; min-width: 96px; max-width: 170px; }
+#textView .html-bar .uml-bar .uml-gap { margin: 0 1px; }
+#textView .html-bar .uml-bar .uml-icon { width: 30px; min-width: 30px; height: 28px; }
+#textView .html-bar .uml-bar .uml-icon svg { width: 17px; height: 17px; }
+#textView.diagram-editing .html-bar > .zoom-controls { display: none; }
+#textView.diagram-editing #textTitle { flex: none; max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The editor's messages float over the drawing instead of keeping an empty row under it. */
+.text-diagram-editor .uml-editor { position: relative; }
+#textView.diagram-editing .text-diagram-editor .uml-editor { grid-template-rows: minmax(0, 1fr) auto; }
+.text-diagram-editor .uml-status { position: absolute; left: 180px; bottom: 10px; max-width: calc(100% - 200px); border: 1px solid var(--u-line); border-radius: 6px; background: var(--u-chrome); pointer-events: none; z-index: 2; }
+.text-diagram-editor .uml-status:empty { display: none; }
 .text-diagram .diagram-view { margin: 0 auto; width: max-content; max-width: 100%; overflow: auto; }
 .text-diagram .diagram-view img { display: block; width: calc(var(--diagram-width, 600px) * var(--text-zoom, 1)); max-width: none; height: auto; background: #fff; border-radius: var(--radius-box, 8px); box-shadow: 0 0 0 1px var(--line); }
 body.pages-dark .text-diagram .diagram-view img { filter: invert(0.88) hue-rotate(180deg); }
