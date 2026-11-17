@@ -32,11 +32,13 @@ def main():
     version=next(p['version'] for p in lock['package'] if p['name']=='wasm-bindgen')
     installed=subprocess.check_output([str(bindgen),'--version'],text=True).split()[-1]
     if installed!=version:raise SystemExit(f'wasm-bindgen-cli {version} required, found {installed}')
-    subprocess.run([cargo,'build','--locked','--release','-p','noteful-wasm','--target','wasm32-unknown-unknown'],cwd=ROOT,env=env,check=True)
+    subprocess.run([cargo,'build','--locked','--release','-p','noteful-wasm','-p','noteful-import-wasm','--target','wasm32-unknown-unknown'],cwd=ROOT,env=env,check=True)
     pkg=ROOT/'apps/reader/pkg'
     if pkg.exists(): shutil.rmtree(pkg)
     pkg.mkdir(parents=True,exist_ok=True)
     subprocess.run([str(bindgen),'--target','web','--out-dir',str(pkg),str(ROOT/'target/wasm32-unknown-unknown/release/noteful_wasm.wasm')],check=True)
+    # The Goodnotes/Notability importer: its own module, loaded only when a notebook is opened.
+    subprocess.run([str(bindgen),'--target','web','--out-dir',str(pkg/'import'),str(ROOT/'target/wasm32-unknown-unknown/release/noteful_import_wasm.wasm')],check=True)
     npm='npm.cmd' if os.name=='nt' else 'npm'
     subprocess.run([npm,'ci','--ignore-scripts'],cwd=ROOT/'apps/reader',check=True)
     pdfjs=ROOT/'apps/reader/node_modules/pdfjs-dist'

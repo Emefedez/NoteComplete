@@ -88,6 +88,47 @@ impl EditorSession {
             inner: noteful_core::Editor::open_project(data)?,
         })
     }
+    /// A `.nfedit` of any version: the v13 archive or the JSON of versions 1–13.
+    pub fn load_project_bytes(data: &[u8]) -> Result<EditorSession, Failure> {
+        Ok(Self {
+            inner: noteful_core::Editor::open_project_bytes(data)?,
+        })
+    }
+    /// A note the importer (pkg/import) made from a Goodnotes or Notability notebook, with the
+    /// notebook kept as the project's origin.
+    pub fn open_imported(
+        noteful: &[u8],
+        format: &str,
+        name: &str,
+        origin: &[u8],
+    ) -> Result<EditorSession, Failure> {
+        let mut inner = noteful_core::Editor::open(noteful)?;
+        inner.set_origin(Some(noteful_core::Origin {
+            format: format.into(),
+            name: name.into(),
+            bytes: origin.to_vec(),
+        }));
+        Ok(Self { inner })
+    }
+    /// The project's origin, when it was imported: `{format, name}` JSON, or `null`.
+    pub fn origin_json(&self) -> String {
+        self.inner.origin().map_or("null".into(), |o| {
+            serde_json::json!({"format": o.format, "name": o.name, "bytes": o.bytes.len()})
+                .to_string()
+        })
+    }
+    /// What a `.nfedit` file holds: the project as a v13 archive.
+    pub fn save_project_archive(&self) -> Result<Vec<u8>, Failure> {
+        Ok(self.inner.save_project_archive()?)
+    }
+    pub fn export_filtered_project_archive(&self, options: &str) -> Result<Vec<u8>, Failure> {
+        let parsed: noteful_core::ProjectExportOptions = if options.trim().is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_str(options)?
+        };
+        Ok(self.inner.export_filtered_project_archive(parsed)?)
+    }
     pub fn create_document(title: &str, sizes: &str, pdf: &[u8]) -> Result<EditorSession, Failure> {
         let sizes: Vec<[f64; 2]> = serde_json::from_str(sizes)?;
         Ok(Self {
@@ -689,6 +730,19 @@ fn parse_rgba(value: Option<&serde_json::Value>, default: [f64; 4]) -> [f64; 4] 
         *dst = n;
     }
     out
+}
+
+/// Whether bytes are a v13 `.nfedit` archive (a tar like `.notecomp`, told apart by its manifest).
+#[wasm_bindgen]
+pub fn is_project_archive(data: &[u8]) -> bool {
+    noteful_core::is_project_archive(data)
+}
+
+/// A project's JSON form (auto-save copies, what the create flows build) as the v13 archive a
+/// `.nfedit` file holds.
+#[wasm_bindgen]
+pub fn project_archive_from_json(project: &str) -> Result<Vec<u8>, Failure> {
+    Ok(noteful_core::Editor::open_project(project)?.save_project_archive()?)
 }
 
 fn open_any_editor(data: &[u8]) -> Result<noteful_core::Editor, Failure> {

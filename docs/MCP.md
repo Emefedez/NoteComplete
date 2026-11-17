@@ -67,6 +67,7 @@ Shared options for the Markdown tools: `paper` (`dot`, `grid`, `ruled`, `blank`,
 - `out` names the file (`.noteful`, `.notecomp` or `.nfedit`); an existing file is replaced only with `overwrite: true`, and `out` cannot be the source note.
 - `in_place: true` changes the source note itself and keeps the previous file as `<name>.bak`.
 - A `.notecomp` keeps its Markdown notes and recordings; an `.nfedit` keeps its edit history.
+- Goodnotes (`.goodnotes`) and Notability (`.ntb`) notebooks are read as the Noteful notes they import to (every reading tool takes them). Written to without `out`, they become a `.nfedit` in the ink folder that keeps the notebook inside; `in_place` is refused, so the notebook file is never changed. `.nfedit` files are written as version 13 archives; older JSON projects still open.
 - Every write returns what was written (path, new pages, warnings such as unknown colours or skipped SVG features, and a note when the content spilled onto more pages) and a picture of the first written page, so the agent can check its work.
 
 ### Handwriting Markdown

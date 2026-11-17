@@ -29,7 +29,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut input: Box<dyn Read> = if source == "-" {
         Box::new(io::stdin())
     } else {
-        Box::new(std::fs::File::open(source)?)
+        Box::new(std::fs::File::open(&source)?)
     };
     let mut data = Vec::new();
     let mut chunk = vec![0; 1024 * 1024];
@@ -42,7 +42,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data.extend_from_slice(&chunk[..n]);
     }
     if cmd == "export" {
-        let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
+        // A .nfedit project, or a Goodnotes or Notability notebook, as a .noteful note.
+        let editor = if noteful_import::format_of(&data).is_some() {
+            noteful_import::import(&source.to_string_lossy(), &data)?.editor
+        } else {
+            noteful_core::Editor::open_project_bytes(&data)?
+        };
         io::stdout().lock().write_all(&editor.export_noteful()?)?;
         return Ok(());
     }
@@ -50,7 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let repaired = if data.starts_with(&noteful_core::MAGIC) {
             noteful_core::repair_noteful(&data)?
         } else {
-            let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
+            let editor = noteful_core::Editor::open_project_bytes(&data)?;
             noteful_core::repair_noteful(&editor.export_noteful()?)?
         };
         io::stdout().lock().write_all(&repaired)?;

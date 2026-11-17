@@ -125,7 +125,7 @@ const NOTES: &str = "notes.md";
 const INK_TEXT: &str = "ink-text.json";
 const OCR_TEXT: &str = "ocr-text.json";
 
-fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<()> {
+pub(crate) fn add(builder: &mut tar::Builder<Vec<u8>>, name: &str, data: &[u8]) -> Result<()> {
     let mut header = tar::Header::new_ustar();
     header.set_size(data.len() as u64);
     header.set_mode(0o644);
@@ -265,6 +265,10 @@ pub fn pack_notecomplete_text(
 /// The recordings added in NoteComplete inside a `.notecomp` file, as byte ranges of `data`
 /// (tar keeps each file's bytes in one piece). Files without them give an empty list.
 pub fn notecomplete_audio(data: &[u8]) -> Result<Vec<AddedAudioEntry>> {
+    // A v13 project keeps its recordings in the project itself (project_archive.rs).
+    if crate::is_project_archive(data) {
+        return Ok(Vec::new());
+    }
     let invalid = |e: std::io::Error| Error::new(0, format!("Not a NoteComplete file: {e}"));
     let mut archive = tar::Archive::new(data);
     let mut manifest = None;
@@ -426,6 +430,10 @@ impl Editor {
         Ok(())
     }
     pub fn open_notecomplete(data: &[u8]) -> Result<Self> {
+        // A v13 .nfedit is a tar too: hosts that tell files apart by the ustar magic send it here.
+        if crate::is_project_archive(data) {
+            return Self::open_project_archive(data);
+        }
         let (note, notes) = unpack_notecomplete(data)?;
         let mut editor = Self::open(&note)?;
         editor.markdown = notes;

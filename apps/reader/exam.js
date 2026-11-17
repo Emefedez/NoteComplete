@@ -735,7 +735,7 @@ export function examController({
             options: composeOpts,
             exam: { html: interactiveHtml, source: { mode: 'solve', exam: solvedExam, prefs } },
           });
-          outFile = new File([composed.project], fileName, { type: 'application/json' });
+          outFile = new File([composed.project], fileName, { type: 'application/octet-stream' });
           pageCount = composed.pages || solvedExam.exercises.length * 2;
         } else {
           await ensureExamMathRenderer();
@@ -758,7 +758,7 @@ export function examController({
             tapes: prefs.tapeSolutions ? rendered.tapes : [],
             exam: { html: interactiveHtml, source: { mode: 'solve', exam: solvedExam, prefs } },
           }, [pdfTransfer]);
-          outFile = new File([projectJson], fileName, { type: 'application/json' });
+          outFile = new File([projectJson], fileName, { type: 'application/octet-stream' });
           pdfBytes = rendered.pdf;
           pageCount = rendered.pageCount;
           tapeCount = prefs.tapeSolutions ? rendered.tapes.length : 0;
@@ -1057,7 +1057,7 @@ export function examController({
       }, [pdfTransfer]);
 
       const fileName = `${safeFileBase(exam.title)}.nfedit`;
-      const outFile = new File([projectJson], fileName, { type: 'application/json' });
+      const outFile = new File([projectJson], fileName, { type: 'application/octet-stream' });
       const entry = await saveFinalExamArchive({
         title: exam.title,
         fileName,

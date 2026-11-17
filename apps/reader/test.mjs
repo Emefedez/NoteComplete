@@ -30,6 +30,16 @@ assert.deepEqual(JSON.parse(loaded.view(0)),view(0));loaded.redo();assert.equal(
 session.undo();assert.equal(view(0).svg,original);
 assert.throws(()=>session.draw(0,JSON.stringify({points:[],width:2,rgba:[0,0,1,1]})));
 loaded.free();session.free();
+{const m=await import('./pkg/noteful_wasm.js');const {fileKind}=await import('./media-import.js');
+ const session=new EditorSession(readFileSync(new URL('../../samples/Examen%20wuolah.noteful',import.meta.url)));session.draw(0,JSON.stringify({points:[[10,10],[90,40]],width:2,rgba:[0,0,1,1]}));
+ // .nfedit v13: the archive a file holds; the JSON form still opens; tar routing reaches the project.
+ const archive=session.save_project_archive();assert.ok(m.is_project_archive(archive));assert.equal(fileKind('x.nfedit',archive),'project');assert.equal(fileKind('no-name',archive),'project');
+ const v13=EditorSession.load_project_bytes(archive);assert.deepEqual(JSON.parse(v13.view(0)),JSON.parse(session.view(0)));assert.equal(v13.save_project(),session.save_project());v13.free();
+ const viaTar=EditorSession.open_notecomplete(archive);assert.equal(viaTar.save_project(),session.save_project());viaTar.free();
+ const json=EditorSession.load_project_bytes(new TextEncoder().encode(session.save_project()));assert.equal(json.save_project(),session.save_project());json.free();
+ assert.ok(m.project_archive_from_json(session.save_project()).length<session.save_project().length);
+ const notecomp=session.export_notecomplete(new Uint8Array(),'');assert.ok(!m.is_project_archive(notecomp));assert.equal(fileKind('x.notecomp',notecomp),'notecomplete');session.free();}
+console.log('WASM .nfedit v13: archive round trip, JSON form, tar routing and file kind passed.');
 console.log('WASM editor: 2082 imported elements, draw, swept erase, undo/redo, project reload, invalid edit rejection passed.');
 // A drawn line answers with the new item alone. Put into the view from before it by the
 // reader's own code (draw-patch.js), it gives the view the engine gives afterwards.

@@ -2,6 +2,13 @@ import { openPdf } from "./pdf-background.js";
 import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName } from "./text-types.js";
 const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
+// A v13 .nfedit: a tar whose first member, manifest.json, names the project format. A file may
+// be checked from its first bytes only; the manifest begins at byte 512.
+export function isProjectArchive(bytes) {
+  const text = (from, to) => new TextDecoder().decode(bytes.subarray(from, to));
+  return text(257, 262) === "ustar" && text(0, 13) === "manifest.json" && /^\{"format":"notecomplete-project"/.test(text(512, 560));
+}
+
 export function fileKind(name, bytes) {
   if (
     bytes[0] === 0xaa &&
@@ -25,6 +32,8 @@ export function fileKind(name, bytes) {
     new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
   )
     return "image";
+  // Goodnotes and Notability notebooks (zip archives), imported as Noteful notes.
+  if (/\.(goodnotes|ntb)$/i.test(name)) return "notebook";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
   if (isOfficeName(name)) return "office";
@@ -37,6 +46,8 @@ export function fileKind(name, bytes) {
   if (!/\.nfedit$/i.test(name) && /^\{\s*"format"\s*:\s*"notecomplete-study"/.test(headText))
     return "study-pack";
   if (/\.json$/i.test(name)) return "json";
+  // A v13 .nfedit is a tar too (manifest first, format "notecomplete-project").
+  if (/\.nfedit$/i.test(name) || isProjectArchive(bytes)) return "project";
   if (/\.(notecomp(lete)?|notepart|tar)$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
     return "notecomplete";
   if (
@@ -46,8 +57,10 @@ export function fileKind(name, bytes) {
     return "project";
   // No extension (data files, README, Makefile…): text when the content is.
   if (!hasExtension(name) && looksLikeText(bytes)) return "text";
+  // A zip without a name that says what it is: maybe a notebook (the engine checks).
+  if (!hasExtension(name) && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4) return "notebook";
   throw Error(
-    "Choose a Noteful note, NoteComplete project, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
+    "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
   );
 }
 
