@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.26
+
+- **Audio speed arrows together.** The faster (up) and slower (down) arrows now sit side by side at the right of the speed box, up first.
+
 ## 1.2.25
 
 - **Process states: service time before the letter.** The CPU + blocked number now sits to the left of each process letter.

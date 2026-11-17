@@ -114,6 +114,11 @@ try {
   await p.click('.chart-dialog .ch-notes .TinyMDE');
   await p.keyboard.type('A blocks at 22');
   await sleep(200);
+  // Read: the notes rendered as Markdown, as in the notes panel; Write goes back to the editor.
+  await p.click('.chart-dialog .fig-notes-read');
+  await p.waitForFunction(() => document.querySelector('.chart-dialog .fig-notes-render')?.textContent.includes('A blocks at 22'), null, { timeout: 15000 });
+  await p.click('.chart-dialog .fig-notes-write');
+  await p.waitForSelector('.chart-dialog .ch-notes .TinyMDE');
   if (DIR) await p.screenshot({ path: DIR + 'states-editor.png' });
   await p.click('.chart-dialog button.primary');
   await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 1, ADDED);
@@ -180,6 +185,18 @@ try {
   assert.ok(pagesShown.every((imgs) => imgs.length && imgs.every(Boolean)), JSON.stringify(pagesShown));
   assert.equal(await p.locator('.chart-dialog iframe').count(), 0);
   assert.ok(await p.locator('.chart-dialog select.ch-ref-recent').count(), 'recent notes list');
+  // Ctrl + wheel zooms a thing to look at around the pointer, and dragging moves it.
+  const view = p.locator('.chart-dialog .ch-ref-view').last();
+  await view.scrollIntoViewIfNeeded();
+  const vb = await view.boundingBox();
+  const rw0 = await view.evaluate((v) => v.firstElementChild.getBoundingClientRect().width);
+  await p.mouse.move(vb.x + vb.width / 2, vb.y + Math.min(vb.height, 200) / 2);
+  await p.keyboard.down('Control'); await p.mouse.wheel(0, -300); await p.keyboard.up('Control');
+  const zoomed = await view.evaluate((v) => ({ w: v.firstElementChild.getBoundingClientRect().width, left: v.scrollLeft }));
+  assert.ok(zoomed.w > rw0 * 1.5 && zoomed.left > 0, `zoomed ${JSON.stringify(zoomed)} from ${rw0}`);
+  await p.mouse.down(); await p.mouse.move(vb.x + vb.width / 2 + 40, vb.y + Math.min(vb.height, 200) / 2 + 30, { steps: 4 }); await p.mouse.up();
+  const moved = await view.evaluate((v) => v.scrollLeft);
+  assert.ok(Math.abs(moved - (zoomed.left - 40)) <= 2, `dragged ${moved} from ${zoomed.left}`);
   for (let n = 0; n < 2; n++) await p.locator('.chart-dialog .ch-ref').last().locator('figcaption button').click();
   // Nothing is painted yet: the answer starts empty.
   assert.equal(await p.locator('.chart-dialog .ch-grid line[stroke="#2563eb"]').count(), 0);

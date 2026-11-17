@@ -6206,7 +6206,7 @@ async function openFigureEditor(spec, { editing = false, mode = "author", refere
   if (editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes });
+      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) });
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
@@ -6279,7 +6279,7 @@ function umlEditor(spec, editing = false) {
 async function openUmlEditor(spec, editing = false) {
   try {
     const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
-    return await open(spec, { editing });
+    return await open(spec, { editing, markdown: (text) => call("markdownHtml", { text }) });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;

@@ -133,6 +133,12 @@ A project may include `"added_audio": [ { "id": "…", "name": "…", "mime": "�
 
 A project may include `"exam": { "html": "…", "source": { … } }` keeping an AI-generated or solved exam's self-contained interactive HTML source (and optional structured exam JSON used when expanding or editing the exam) directly inside `.nfedit` (`EXAM_LIMIT` 16 MiB; omitted when empty so earlier versions remain valid). Opening the `.nfedit` shows its paginated PDF and tape pages as usual, while **View → Interactive exam HTML** lets users view, manually edit, export, or expand the embedded HTML alongside the note.
 
+## Compound objects and their notes
+
+A line or picture added through `Add` may carry `part: {"id", "kind", "spec"?}` (omitted when unset): `id` is 1–64 characters of `A–Z a–z 0–9 - _ :`, the same on every item of one object; `kind` is `graph`, `table` or `prefab`; `spec` (at most 256 KiB) is JSON written by the reader, on one item of the object (its frame). Readers that ignore parts see ordinary items, and Noteful export writes the items as they look.
+
+A `prefab` spec is an exam figure (`"type"`: `histogram`, `bar`, `states`, `timeline`, `plot`, …) or a diagram (`"type":"uml"`). Either may have `"notes"`: Markdown written in the figure's editor (headings, lists, tables, `$…$` maths), kept with the figure and never drawn; omitted when empty. The notes travel wherever the spec does (the project, a copy of the figure, its JSON, a diagram exported as NoteComplete JSON) and are not part of the note's own `markdown` notes.
+
 ## Filled shapes
 
 A shape (`line.shape`) may have `fill`: an RGBA (0–1) inside colour, for rectangles, ellipses and triangles only. Resizing a shape keeps its fill. The app draws the inside under the outline. Native export writes the inside as highlighter bands under the outline (Noteful files have no filled shape for drawn ink); native filled-shape objects are not written yet.

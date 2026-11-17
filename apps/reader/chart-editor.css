@@ -172,7 +172,10 @@ html.chart-page, .chart-page body { height: 100%; margin: 0; }
 .ch-ref figcaption { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; font-size: 12px; color: var(--c-muted); border-bottom: 1px solid var(--c-line); }
 .ch-ref figcaption span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-ref-img { display: block; width: 100%; height: auto; background: #fff; }
-.ch-ref-pages { display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow: auto; background: var(--c-line); }
+.ch-ref-pages { display: flex; flex-direction: column; gap: 4px; background: var(--c-line); }
+.ch-ref-view { max-height: 70vh; overflow: auto; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; overscroll-behavior: contain; }
+.ch-ref-view.dragging { cursor: grabbing; }
+.ch-ref-zoom { min-width: 0; }
 .ch-ref-pages .ch-hint { margin: 6px 8px; }
 .ch-ref-recent { width: 100%; margin: 4px 0 6px; font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--c-line); border-radius: 6px; background: var(--c-surface); color: inherit; }
 @media (max-width: 760px) { .chart-editor[data-mode="answer"] .ch-main { grid-template-columns: minmax(0, 1fr); } }

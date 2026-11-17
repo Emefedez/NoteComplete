@@ -12,6 +12,7 @@ import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { codeBox, jsonErrorAt } from './json-code.js';
+import { figureNotes } from './figure-notes.js';
 import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
@@ -80,7 +81,7 @@ function ensureStyles() {
 // `references`: [{ name, src, kind: 'image' | 'pdf' }] shown beside the canvas while filling
 // in (the exercise's page, snippets kept from the Grab tool); `onReference(ref)` hears of one
 // added here, so it can be offered again.
-export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
+export function mountChartEditor(root, initial, { mode: startMode = 'author', onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', extraBar = [], references = [], onReference = null, notePages = null, recentNotes = null, markdown = null } = {}) {
   ensureStyles();
   let base, kind, grid, bars, ans, mode, brush, check = null, showSolution = false;
   const undo = [], redo = [];
@@ -163,44 +164,27 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const grip = make('div', { className: 'ch-grip-bar', title: 'Drag to make it taller or shorter' });
   // Notes beside it (N): Markdown kept with the figure (`notes`), not drawn on the page.
   const notesFold = make('button', { type: 'button', className: 'ch-fold ch-notes-fold', title: 'Notes on this figure, in Markdown, kept with it (N)' }, icon('note'), make('span', { textContent: 'Notes' }), make('kbd', { textContent: 'N' }));
-  const notesPane = make('div', { className: 'ch-notes' });
+  const notes = figureNotes({
+    get: () => base.notes || '',
+    set: (text) => {
+      if (text.trim()) base.notes = text; else delete base.notes;
+      if (mode === 'json') setJson(JSON.stringify(current(), null, 2));
+      onChange?.(current());
+    },
+    toHtml: markdown,
+    placeholder: 'Notes on this figure: what each process does, why it blocks… Markdown: # heading, **bold**, - list.',
+    className: 'ch-notes',
+  });
+  const notesPane = notes.pane;
   const boxHead = make('div', { className: 'ch-box-head' }, fold, notesFold);
   const boxBody = make('div', { className: 'ch-box-body' }, preview, notesPane);
   const previewBox = make('div', { className: 'ch-preview-box' }, grip, boxHead, boxBody);
-  let notesEditor = null, notesLoading = null;
-  async function showNotes() {
-    if (notesEditor || notesLoading) return notesLoading;
-    notesLoading = (async () => {
-      try {
-        const { loadEditor } = await import('./notes.js');
-        const TinyMDE = await loadEditor();
-        if (!root.isConnected || !prefs.notes) return;
-        const host = make('div', { className: 'ch-notes-editor' });
-        notesPane.replaceChildren(host);
-        notesEditor = new TinyMDE.Editor({ element: host, content: base.notes || '', placeholder: 'Notes on this figure: what each process does, why it blocks… Markdown: # heading, **bold**, - list.' });
-        notesEditor.addEventListener('change', (e) => {
-          if ((base.notes || '') === e.content) return;
-          if (e.content.trim()) base.notes = e.content; else delete base.notes;
-          if (mode === 'json') setJson(JSON.stringify(current(), null, 2));
-          onChange?.(current());
-        });
-      } catch {
-        // Without the Markdown editor: a plain text box.
-        const area = make('textarea', { className: 'ch-notes-plain', spellcheck: true, placeholder: 'Notes on this figure (Markdown)' });
-        area.value = base.notes || '';
-        area.oninput = () => { if (area.value.trim()) base.notes = area.value; else delete base.notes; onChange?.(current()); };
-        notesPane.replaceChildren(area);
-        notesEditor = { getContent: () => area.value, setContent: (v) => { area.value = v; } };
-      } finally { notesLoading = null; }
-    })();
-    return notesLoading;
-  }
   function toggleNotes(open = !prefs.notes) {
     prefs.notes = open;
     savePreview(prefs);
     layoutPreview();
-    if (open) showNotes().then(() => notesPane.querySelector('.TinyMDE, textarea')?.focus());
-    else { notesEditor = null; notesPane.replaceChildren(); }
+    if (open) notes.show().then(() => notes.focus());
+    else notes.hide();
     draw();
   }
   notesFold.onclick = () => toggleNotes();
@@ -265,18 +249,77 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     } finally { pdf.destroy?.(); }
     return pages;
   }
+  // A thing to look at, in a box that zooms with Ctrl/⌘ + wheel or a pinch (around the pointer)
+  // and moves by dragging (mouse, middle button, pen or one finger), like a note in the reader.
+  // Double-click puts it back to fit the width.
+  function zoomable(r, content) {
+    const inner = make('div', { className: 'ch-ref-zoom' }, content);
+    const view = make('div', { className: 'ch-ref-view', title: 'Ctrl + wheel or pinch to zoom, drag to move, double-click to fit' }, inner);
+    r.zoom ||= 1;
+    const apply = () => { inner.style.width = `${r.zoom * 100}%`; };
+    apply();
+    const zoomAt = (z, cx, cy) => {
+      z = Math.max(0.5, Math.min(8, z));
+      if (z === r.zoom) return;
+      const rect = view.getBoundingClientRect();
+      const px = cx - rect.left, py = cy - rect.top;
+      const x = (view.scrollLeft + px) / r.zoom, y = (view.scrollTop + py) / r.zoom;
+      r.zoom = z; apply();
+      view.scrollLeft = x * z - px; view.scrollTop = y * z - py;
+    };
+    view.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomAt(r.zoom * Math.exp(-e.deltaY * 0.002), e.clientX, e.clientY);
+    }, { passive: false });
+    view.addEventListener('dblclick', (e) => { e.preventDefault(); zoomAt(1, e.clientX, e.clientY); view.scrollLeft = 0; });
+    const pts = new Map();
+    let pinch = null;
+    view.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+      e.preventDefault();
+      view.setPointerCapture?.(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      view.classList.add('dragging');
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: r.zoom };
+      }
+    });
+    view.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      if (pts.size >= 2 && pinch) {
+        p.x = e.clientX; p.y = e.clientY;
+        const [a, b] = [...pts.values()];
+        zoomAt(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        return;
+      }
+      view.scrollLeft -= e.clientX - p.x; view.scrollTop -= e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = (e) => {
+      pts.delete(e.pointerId);
+      if (pts.size < 2) pinch = null;
+      if (!pts.size) view.classList.remove('dragging');
+    };
+    view.addEventListener('pointerup', up);
+    view.addEventListener('pointercancel', up);
+    view.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
+    return view;
+  }
   function refView(r) {
-    if (r.kind === 'image') return make('img', { src: r.src, alt: r.name, className: 'ch-ref-img' });
+    if (r.kind === 'image') return zoomable(r, make('img', { src: r.src, alt: r.name, className: 'ch-ref-img', draggable: false }));
     const box = make('div', { className: 'ch-ref-pages' });
     if (r.error) box.append(make('p', { className: 'ch-hint', textContent: `Could not show it: ${r.error}` }));
-    else if (r.pages) box.append(...r.pages.map((src, n) => make('img', { src, alt: `${r.name}, page ${n + 1}`, className: 'ch-ref-img', loading: 'lazy' })));
+    else if (r.pages) box.append(...r.pages.map((src, n) => make('img', { src, alt: `${r.name}, page ${n + 1}`, className: 'ch-ref-img', loading: 'lazy', draggable: false })));
     else {
       box.append(make('p', { className: 'ch-hint', textContent: 'Opening…' }));
       if (r.kind === 'pdf' && !r.loading) {
         r.loading = pdfPages(r).then((pages) => { r.pages = pages; }, (e) => { r.error = e?.message || String(e); }).finally(() => { if (root.isConnected) buildRefs(); });
       }
     }
-    return box;
+    return r.pages ? zoomable(r, box) : box;
   }
   function buildRefs() {
     refList.replaceChildren(...refs.map((r, i) => {
@@ -920,8 +963,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     layoutPreview();
     // The notes follow the figure (undo, the JSON, another figure loaded).
     if (prefs.notes && kind !== 'plot') {
-      if (!notesEditor) showNotes();
-      else if (notesEditor.getContent && notesEditor.getContent() !== (base.notes || '')) notesEditor.setContent(base.notes || '');
+      notes.sync();
     }
     if (!previewBox.classList.contains('open')) { preview.replaceChildren(); return; }
     const shown = displaySpec(current());
@@ -1106,7 +1148,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 }
 
 // The editor over the whole window, for a figure on a note. Resolves with the spec, or null.
-export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null, notePages = null, recentNotes = null } = {}) {
+export function openChartEditor(spec, { editing = false, mode = 'author', references = [], onReference = null, notePages = null, recentNotes = null, markdown = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'chart-dialog' });
@@ -1120,6 +1162,6 @@ export function openChartEditor(spec, { editing = false, mode = 'author', refere
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     dialog.showModal();
-    editor = mountChartEditor(host, spec, { mode, references, onReference, notePages, recentNotes, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
+    editor = mountChartEditor(host, spec, { mode, references, onReference, notePages, recentNotes, markdown, onApply: (s) => finish(s), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert' });
   });
 }
