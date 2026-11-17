@@ -1,0 +1,17 @@
+[package]
+name = "noteful-import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+description = "Goodnotes and Notability notes made into Noteful notes NoteComplete edits"
+
+[dependencies]
+noteful-core = { path = "../noteful-core" }
+serde_json.workspace = true
+# The Goodnotes and Notability readers (MIT, Coobyk): pinned, see THIRD_PARTY.md.
+oblyx = { git = "https://github.com/Coobyk/oblyx", rev = "bf005d5d6d16ccf116b6766a5ea31a387b6305cf", default-features = false }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", default-features = false, features = ["wasm_js"] }

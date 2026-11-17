@@ -195,36 +195,62 @@ pub struct ProjectBreakdown {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Project {
-    format: String,
-    version: u32,
-    source_base64: String,
+pub(crate) struct Project {
+    pub(crate) format: String,
+    pub(crate) version: u32,
+    /// The Noteful archive the history applies to. Empty in a v13 archive, which keeps it as
+    /// its own member (project_archive.rs).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) source_base64: String,
+    /// The file the note was imported from, when it was not a Noteful note (project version 13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) origin: Option<ProjectOrigin>,
     pub(crate) history: Vec<Edit>,
     pub(crate) cursor: usize,
     /// Markdown notes kept with the note (project version 5).
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    markdown: String,
+    pub(crate) markdown: String,
     /// Words of handwriting written from Markdown on original pages (project version 6).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    ink_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
+    pub(crate) ink_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
     /// An infinite canvas (project version 7).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    canvas: bool,
+    pub(crate) canvas: bool,
     /// Text recognized in the handwriting (OCR in the reader), by page slot (project version 8).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    recognized_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
+    pub(crate) recognized_text: std::collections::BTreeMap<usize, Vec<crate::InkWord>>,
     /// Edits before this one were compacted and cannot be undone (project version 9).
     #[serde(default, skip_serializing_if = "is_zero")]
-    floor: usize,
+    pub(crate) floor: usize,
     /// Flashcard decks, quizzes, and scratchpad notes kept with the note (project version 10).
     #[serde(default, skip_serializing_if = "ProjectStudy::is_empty")]
-    study: ProjectStudy,
+    pub(crate) study: ProjectStudy,
     /// Recordings added in NoteComplete bundled with the project (project version 11).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    added_audio: Vec<ProjectAddedAudio>,
+    pub(crate) added_audio: Vec<ProjectAddedAudio>,
     /// Embedded interactive exam HTML and structured metadata kept with the project (project version 12).
     #[serde(default, skip_serializing_if = "ProjectExam::is_empty")]
-    exam: ProjectExam,
+    pub(crate) exam: ProjectExam,
+}
+
+/// The file a note was imported from when it was not a Noteful note (Goodnotes, Notability…),
+/// kept unchanged beside the Noteful archive the importer made from it (project version 13).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProjectOrigin {
+    pub format: String,
+    pub name: String,
+    /// The file itself; empty in a v13 archive, which keeps it as a member.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub base64: String,
+}
+
+/// The original of an imported note: its format (`goodnotes`, `notability`…), file name and bytes.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Origin {
+    pub format: String,
+    pub name: String,
+    pub bytes: Vec<u8>,
 }
 
 /// Upper bound for the study data serialized inside a project (bytes).
@@ -332,6 +358,8 @@ pub struct Editor {
     /// The layers at a cursor (`layers`), so adding many lines does not go through the
     /// whole history for each one. Emptied by any edit that can change them.
     pub(crate) layers_at: std::cell::RefCell<Option<(usize, Vec<crate::Layer>)>>,
+    /// The file an imported note came from (Goodnotes, Notability…), kept unchanged.
+    pub(crate) origin: Option<Origin>,
 }
 
 fn points_valid(points: &[[f64; 2]]) -> bool {
@@ -406,6 +434,7 @@ impl Editor {
             exam: ProjectExam::default(),
             added_svg: Default::default(),
             layers_at: Default::default(),
+            origin: None,
         })
     }
     /// A page by slot (see pages.rs); hosts map display positions with `slot`.
@@ -756,7 +785,9 @@ impl Editor {
     }
     fn serialize_project(mut project: Project) -> Result<String> {
         project.format = "noteful-re-project".to_owned();
-        project.version = if !project.exam.is_empty() {
+        project.version = if project.origin.is_some() {
+            13
+        } else if !project.exam.is_empty() {
             12
         } else if !project.added_audio.is_empty() {
             11
@@ -803,7 +834,7 @@ impl Editor {
         };
         serde_json::to_string(&project).map_err(|e| Error::new(0, e.to_string()))
     }
-    fn encode_added_audio(audio: &[(crate::AddedAudio, Vec<u8>)]) -> Vec<ProjectAddedAudio> {
+    fn encode_added_audio(audio: &[(crate::AddedAudio, Vec<u8>)], inline: bool) -> Vec<ProjectAddedAudio> {
         audio
             .iter()
             .map(|(meta, bytes)| ProjectAddedAudio {
@@ -811,15 +842,21 @@ impl Editor {
                 name: meta.name.clone(),
                 mime: meta.mime.clone(),
                 created: meta.created,
-                bytes_base64: STANDARD.encode(bytes),
+                bytes_base64: if inline { STANDARD.encode(bytes) } else { String::new() },
             })
             .collect()
     }
     pub fn save_project(&self) -> Result<String> {
-        Self::serialize_project(Project {
+        Self::serialize_project(self.project(true))
+    }
+    /// This note as a project; `inline` puts the source and other files in it as Base64
+    /// (the JSON form) instead of leaving them to the archive (project_archive.rs).
+    pub(crate) fn project(&self, inline: bool) -> Project {
+        Project {
             format: String::new(),
             version: 0,
-            source_base64: STANDARD.encode(&self.source),
+            source_base64: if inline { STANDARD.encode(&self.source) } else { String::new() },
+            origin: self.project_origin(inline),
             history: self.history.clone(),
             cursor: self.cursor,
             markdown: self.markdown.clone(),
@@ -828,13 +865,30 @@ impl Editor {
             recognized_text: self.recognized.clone(),
             floor: self.floor,
             study: self.study.clone(),
-            added_audio: Self::encode_added_audio(&self.added_audio),
+            added_audio: Self::encode_added_audio(&self.added_audio, inline),
             exam: self.exam.clone(),
+        }
+    }
+    pub(crate) fn project_origin(&self, inline: bool) -> Option<ProjectOrigin> {
+        self.origin.as_ref().map(|o| ProjectOrigin {
+            format: o.format.clone(),
+            name: o.name.clone(),
+            base64: if inline { STANDARD.encode(&o.bytes) } else { String::new() },
         })
     }
     /// Serializes the project keeping only the resource categories chosen in `options`.
     /// Stripping PDFs or native audio flattens edit history onto a compacted `.noteful` base.
     pub fn export_filtered_project(&self, options: ProjectExportOptions) -> Result<String> {
+        let (mut project, source) = self.filtered_project(options, true)?;
+        project.source_base64 = STANDARD.encode(&source);
+        Self::serialize_project(project)
+    }
+    /// The project an export keeps with `options`, and the Noteful archive it applies to.
+    pub(crate) fn filtered_project(
+        &self,
+        options: ProjectExportOptions,
+        inline: bool,
+    ) -> Result<(Project, Vec<u8>)> {
         let flatten =
             !options.include_history || !options.include_pdfs || !options.include_native_audio;
         let (source_bytes, history, cursor, floor, ink_text, recognized_text) = if flatten {
@@ -913,7 +967,7 @@ impl Editor {
             ProjectStudy::default()
         };
         let added_audio = if options.include_added_audio {
-            Self::encode_added_audio(&self.added_audio)
+            Self::encode_added_audio(&self.added_audio, inline)
         } else {
             Vec::new()
         };
@@ -922,10 +976,11 @@ impl Editor {
         } else {
             ProjectExam::default()
         };
-        Self::serialize_project(Project {
+        let project = Project {
             format: String::new(),
             version: 0,
-            source_base64: STANDARD.encode(&source_bytes),
+            source_base64: String::new(),
+            origin: self.project_origin(inline),
             history,
             cursor,
             markdown,
@@ -936,12 +991,14 @@ impl Editor {
             study,
             added_audio,
             exam,
-        })
+        };
+        Ok((project, source_bytes))
     }
     /// Size breakdown of each optional resource category inside a full `.nfedit` export.
     pub fn project_breakdown(&self) -> Result<ProjectBreakdown> {
-        let b64_len = |raw: usize| raw.div_ceil(3) * 4;
-        let full_bytes = self.save_project()?.len();
+        // What a .nfedit file holds (a v13 archive): the source and recordings as raw members,
+        // PDFs added later still Base64 inside the history.
+        let full_bytes = self.save_project_archive()?.len();
         let orig_pdf_raw: usize = self.scene.pdf_assets.iter().map(|a| a.bytes).sum();
         let mut added_pdf_ids: HashSet<String> = HashSet::new();
         let mut added_pdf_b64 = 0usize;
@@ -972,7 +1029,7 @@ impl Editor {
                 .iter()
                 .filter(|id| !self.scene.pdf_assets.iter().any(|a| &a.id == *id))
                 .count();
-        let pdf_bytes = b64_len(orig_pdf_raw) + added_pdf_b64;
+        let pdf_bytes = orig_pdf_raw + added_pdf_b64;
         let deleted_audio = self.deleted_audio();
         let stripped_audio = self.stripped_audio_media();
         let active_audio: Vec<_> = self
@@ -984,17 +1041,9 @@ impl Editor {
             })
             .collect();
         let native_audio_count = active_audio.len();
-        let native_audio_bytes = b64_len(active_audio.iter().map(|a| a.bytes).sum());
-        let added_audio_encoded = Self::encode_added_audio(&self.added_audio);
-        let added_audio_count = added_audio_encoded.len();
-        let added_audio_bytes = if added_audio_encoded.is_empty() {
-            0
-        } else {
-            serde_json::to_string(&added_audio_encoded)
-                .map_err(|e| Error::new(0, e.to_string()))?
-                .len()
-                + 14
-        };
+        let native_audio_bytes: usize = active_audio.iter().map(|a| a.bytes).sum();
+        let added_audio_count = self.added_audio.len();
+        let added_audio_bytes: usize = self.added_audio.iter().map(|(_, b)| b.len()).sum();
         let history_count = self.history.len();
         let history_bytes = if self.history.is_empty() {
             0
@@ -1146,6 +1195,14 @@ impl Editor {
         Ok(())
     }
     /// Interactive exam HTML and optional structured exam data kept inside the project.
+    /// The file this note was imported from, when it was not a Noteful note.
+    pub fn origin(&self) -> Option<&Origin> {
+        self.origin.as_ref()
+    }
+    /// Keeps `origin` with the project (an importer sets it on the note it made from it).
+    pub fn set_origin(&mut self, origin: Option<Origin>) {
+        self.origin = origin;
+    }
     pub fn exam(&self) -> &ProjectExam {
         &self.exam
     }
@@ -1197,10 +1254,47 @@ impl Editor {
         Ok(&self.source[asset.offset..asset.offset + asset.bytes])
     }
     pub fn open_project(data: &str) -> Result<Self> {
-        let project: Project =
+        let mut project: Project =
             serde_json::from_str(data).map_err(|e| Error::new(0, e.to_string()))?;
-        if project.format != "noteful-re-project"
-            || !matches!(project.version, 1..=12)
+        if project.format != "noteful-re-project" {
+            return Err(Error::new(0, "Unsupported or invalid project"));
+        }
+        let source = STANDARD
+            .decode(std::mem::take(&mut project.source_base64))
+            .map_err(|e| Error::new(0, e.to_string()))?;
+        let origin = match project.origin.take() {
+            Some(o) => Some(Origin {
+                bytes: STANDARD.decode(&o.base64).map_err(|e| Error::new(0, e.to_string()))?,
+                format: o.format,
+                name: o.name,
+            }),
+            None => None,
+        };
+        let audio = project
+            .added_audio
+            .iter()
+            .map(|a| STANDARD.decode(&a.bytes_base64).map_err(|e| Error::new(0, e.to_string())))
+            .collect::<Result<Vec<_>>>()?;
+        Self::from_project(project, &source, origin, audio)
+    }
+    /// Either form of a project: a v13 archive, or the JSON of versions 1–13.
+    pub fn open_project_bytes(data: &[u8]) -> Result<Self> {
+        if crate::project_archive::is_project_archive(data) {
+            return Self::open_project_archive(data);
+        }
+        let text = std::str::from_utf8(data).map_err(|e| Error::new(0, e.to_string()))?;
+        Self::open_project(text)
+    }
+    /// A project whose files are already decoded: the Noteful `source`, the imported
+    /// `origin`, and the bytes of each added recording in the order the project lists them.
+    pub(crate) fn from_project(
+        project: Project,
+        source: &[u8],
+        origin: Option<Origin>,
+        audio: Vec<Vec<u8>>,
+    ) -> Result<Self> {
+        if !matches!(project.version, 1..=13)
+            || audio.len() != project.added_audio.len()
             || project
                 .ink_text
                 .values()
@@ -1212,10 +1306,8 @@ impl Editor {
         {
             return Err(Error::new(0, "Unsupported or invalid project"));
         }
-        let source = STANDARD
-            .decode(project.source_base64)
-            .map_err(|e| Error::new(0, e.to_string()))?;
-        let mut editor = Self::open(&source)?;
+        let mut editor = Self::open(source)?;
+        editor.origin = origin;
         // What replaying needs to check each edit without going through the history again:
         // per page, the added items still shown (by id, with the edit holding their current
         // line or picture) and the imported ones erased.
@@ -1352,10 +1444,7 @@ impl Editor {
         }
         editor.set_study(project.study)?;
         let mut decoded_audio = Vec::with_capacity(project.added_audio.len());
-        for item in project.added_audio {
-            let bytes = STANDARD
-                .decode(&item.bytes_base64)
-                .map_err(|e| Error::new(0, e.to_string()))?;
+        for (item, bytes) in project.added_audio.into_iter().zip(audio) {
             decoded_audio.push((
                 crate::AddedAudio {
                     id: item.id,

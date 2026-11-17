@@ -2,6 +2,13 @@ import { openPdf } from "./pdf-background.js";
 import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName } from "./text-types.js";
 const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
+// A v13 .nfedit: a tar whose first member, manifest.json, names the project format. A file may
+// be checked from its first bytes only; the manifest begins at byte 512.
+export function isProjectArchive(bytes) {
+  const text = (from, to) => new TextDecoder().decode(bytes.subarray(from, to));
+  return text(257, 262) === "ustar" && text(0, 13) === "manifest.json" && /^\{"format":"notecomplete-project"/.test(text(512, 560));
+}
+
 export function fileKind(name, bytes) {
   if (
     bytes[0] === 0xaa &&
@@ -37,6 +44,8 @@ export function fileKind(name, bytes) {
   if (!/\.nfedit$/i.test(name) && /^\{\s*"format"\s*:\s*"notecomplete-study"/.test(headText))
     return "study-pack";
   if (/\.json$/i.test(name)) return "json";
+  // A v13 .nfedit is a tar too (manifest first, format "notecomplete-project").
+  if (/\.nfedit$/i.test(name) || isProjectArchive(bytes)) return "project";
   if (/\.(notecomp(lete)?|notepart|tar)$/i.test(name) || new TextDecoder().decode(bytes.subarray(257, 262)) === "ustar")
     return "notecomplete";
   if (

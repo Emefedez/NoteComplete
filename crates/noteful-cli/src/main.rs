@@ -42,7 +42,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data.extend_from_slice(&chunk[..n]);
     }
     if cmd == "export" {
-        let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
+        let editor = noteful_core::Editor::open_project_bytes(&data)?;
         io::stdout().lock().write_all(&editor.export_noteful()?)?;
         return Ok(());
     }
@@ -50,7 +50,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let repaired = if data.starts_with(&noteful_core::MAGIC) {
             noteful_core::repair_noteful(&data)?
         } else {
-            let editor = noteful_core::Editor::open_project(std::str::from_utf8(&data)?)?;
+            let editor = noteful_core::Editor::open_project_bytes(&data)?;
             noteful_core::repair_noteful(&editor.export_noteful()?)?
         };
         io::stdout().lock().write_all(&repaired)?;

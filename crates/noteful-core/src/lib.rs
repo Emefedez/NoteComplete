@@ -4,6 +4,8 @@
 
 mod compact;
 mod editor;
+mod project_archive;
+pub use project_archive::is_project_archive;
 pub use compact::Compacted;
 pub mod ink;
 mod markdown;
@@ -66,7 +68,7 @@ mod wire;
 pub use text::{decode_rich_text, text_svg, RichText, TextRun};
 
 pub use editor::{
-    Editor, Line, ProjectAddedAudio, ProjectBreakdown, ProjectExam, ProjectExportOptions,
+    Editor, Line, Origin, ProjectAddedAudio, ProjectBreakdown, ProjectExam, ProjectExportOptions,
     ProjectStudy,
 };
 pub use scene::{Page, Scene, TAPE_OPEN};

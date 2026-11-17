@@ -306,7 +306,7 @@ export function batchNotesController({
         const noteTitle = titleOf(md) || task.title;
 
         const composed = await call('composeNoteFile', { title: noteTitle, markdown: md, options: composeOpts });
-        const outFile = new File([composed.project], `${safeFileBase(noteTitle)}.nfedit`, { type: 'application/json' });
+        const outFile = new File([composed.project], `${safeFileBase(noteTitle)}.nfedit`, { type: 'application/octet-stream' });
         let entry = null;
         if (library?.rememberImported) {
           entry = await library.rememberImported(outFile, {

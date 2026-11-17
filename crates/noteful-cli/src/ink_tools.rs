@@ -119,7 +119,7 @@ fn ext(path: &Path) -> String {
 fn open_for_edit(path: &Path) -> Res<(Editor, Vec<u8>)> {
     let data = std::fs::read(path)?;
     let editor = if is_nfedit(path) {
-        Editor::open_project(std::str::from_utf8(&data)?)?
+        Editor::open_project_bytes(&data)?
     } else if is_notecomplete(&data) {
         Editor::open_notecomplete(&data)?
     } else {
@@ -209,7 +209,7 @@ pub(super) fn save(
     backup: Option<&Path>,
 ) -> Res<()> {
     let bytes = match writable_ext(&ext(path))? {
-        "nfedit" => editor.save_project()?.into_bytes(),
+        "nfedit" => editor.save_project_archive()?,
         "notecomp" => {
             let entries = source
                 .filter(|d| is_notecomplete(d))

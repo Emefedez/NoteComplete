@@ -1,4 +1,4 @@
-import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect, compose_note_file, create_pdf_note_with_tapes, extract_note_summary, extract_note_pdf } from "./pkg/noteful_wasm.js";
+import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md5_hex, notecomplete_audio, compose_preview, handwriting_dialect, compose_note_file, create_pdf_note_with_tapes, is_project_archive, project_archive_from_json, extract_note_summary, extract_note_pdf } from "./pkg/noteful_wasm.js";
 const ready = init();
 let session;
 ready
@@ -16,7 +16,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam"]);
+const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -31,11 +31,16 @@ const lastPageLeft = (step) => (args, page) => {
   }
 };
 
+// A composed note as the file it is saved as: the v13 archive in place of the project JSON.
+const composedFile = (composed) => ({ ...composed, project: project_archive_from_json(composed.project) });
+
 // Operations that need no open document.
 const standalone = {
   open(args) {
     const bytes = new Uint8Array(args.bytes);
     let candidate;
+    // A v13 .nfedit is a tar like .notecomp: opened, and listed, as the project it is.
+    if (args.notecomplete && is_project_archive(bytes)) { args = { ...args, notecomplete: false, project: true }; }
     try {
       candidate = args.notecomplete
         ? EditorSession.open_notecomplete(bytes)
@@ -48,9 +53,7 @@ const standalone = {
             bytes,
           )
         : args.project
-          ? EditorSession.load_project(
-              new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-            )
+          ? EditorSession.load_project_bytes(bytes)
           : new EditorSession(bytes);
       if (args.canvas) candidate.set_canvas(true);
       if (args.image) candidate.add_image(0, JSON.stringify(args.image));
@@ -87,8 +90,8 @@ const standalone = {
   },
   // Handwriting preview of Markdown; needs no open document.
   composePreview: (args) => JSON.parse(compose_preview(args.markdown, JSON.stringify(args.options || {}), args.max || 3)),
-  composeNoteFile: (args) => JSON.parse(compose_note_file(args.title || "Untitled note", args.markdown || "", JSON.stringify(args.options || {}), args.exam ? JSON.stringify(args.exam) : undefined)),
-  createPdfNoteWithTapes: (args) => create_pdf_note_with_tapes(args.title || "Exam", JSON.stringify(args.sizes || []), new Uint8Array(args.pdf || []), JSON.stringify(args.tapes || []), args.exam ? JSON.stringify(args.exam) : undefined),
+  composeNoteFile: (args) => composedFile(JSON.parse(compose_note_file(args.title || "Untitled note", args.markdown || "", JSON.stringify(args.options || {}), args.exam ? JSON.stringify(args.exam) : undefined))),
+  createPdfNoteWithTapes: (args) => project_archive_from_json(create_pdf_note_with_tapes(args.title || "Exam", JSON.stringify(args.sizes || []), new Uint8Array(args.pdf || []), JSON.stringify(args.tapes || []), args.exam ? JSON.stringify(args.exam) : undefined)),
   extractNoteSummary: (args) => JSON.parse(extract_note_summary(new Uint8Array(args.bytes || []), args.maxPages || 0)),
   extractNotePdf: (args) => extract_note_pdf(new Uint8Array(args.bytes || []), args.pdfId || ""),
   md5: (args) => md5_hex(new Uint8Array(args.bytes)),
@@ -104,6 +107,13 @@ const onDocument = {
     }
     return session.save_project();
   },
+  // What a .nfedit file holds (a v13 archive); `save` stays the JSON form for auto-save copies.
+  saveFile(args) {
+    if (args.audioData !== undefined || args.audioLayout !== undefined) {
+      session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
+    }
+    return session.save_project_archive();
+  },
   projectBreakdown(args) {
     if (args.audioData !== undefined || args.audioLayout !== undefined) {
       session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
@@ -114,7 +124,7 @@ const onDocument = {
     if (args.audioData !== undefined || args.audioLayout !== undefined) {
       session.set_added_audio(new Uint8Array(args.audioData || []), args.audioLayout || "");
     }
-    return session.export_filtered_project(JSON.stringify(args.options || {}));
+    return session.export_filtered_project_archive(JSON.stringify(args.options || {}));
   },
   pick: (args, page) => JSON.parse(session.pick_item(page, args.x, args.y, args.tolerance)),
   pickLock: (args, page) => JSON.parse(session.pick_lockable(page, args.x, args.y, args.tolerance)),

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/noteful-core", "crates/noteful-cli", "crates/noteful-wasm"]
+members = ["crates/noteful-core", "crates/noteful-cli", "crates/noteful-wasm", "crates/noteful-import"]
 resolver = "2"
 
 [workspace.package]

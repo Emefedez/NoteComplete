@@ -4426,11 +4426,11 @@ async function exportNoteBytes(as = "project", projectOptions = null) {
     const packed = await addedStore.packed();
     const raw = projectOptions
       ? await call("exportFilteredProject", { ...packed, options: projectOptions })
-      : await call("save", packed);
+      : await call("saveFile", packed);
     return {
       name: filename() + SAVE_EXT.project,
-      mime: "application/json",
-      bytes: new TextEncoder().encode(raw),
+      mime: "application/octet-stream",
+      bytes: raw instanceof Uint8Array ? raw : new Uint8Array(raw),
       ext: SAVE_EXT.project,
     };
   }
@@ -4468,12 +4468,12 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     } else {
       await notes?.flush();
     }
-    const op = as === "project" ? (chosenOptions ? "exportFilteredProject" : "save") : "export";
+    const op = as === "project" ? (chosenOptions ? "exportFilteredProject" : "saveFile") : "export";
     const opArgs = as === "project" ? { ...(packedAudio || {}), ...(chosenOptions ? { options: chosenOptions } : {}) } : {};
     const data = await call(op, opArgs);
     if (token !== epoch) return;
     const suggestedName = filename() + SAVE_EXT[as];
-    const mime = as === "project" ? "application/json" : "application/octet-stream";
+    const mime = "application/octet-stream";
     let delivery;
     if (inPlace && !chosenOptions && (as === "project" || as === "noteful")) {
       delivery = await saveDocumentInPlace({
@@ -7252,7 +7252,7 @@ async function reloadNoteFromDisk(targetPath) {
   const diskFile = new File([opened.bytes], opened.name);
   if (dirty || busy()) {
     try {
-      const current = await call(opened.name.endsWith(".nfedit") ? "saveProject" : "export", { note: await notesPayload() });
+      const current = await call(opened.name.endsWith(".nfedit") ? "saveFile" : "export", { note: await notesPayload() });
       const localBytes = current?.bytes || (typeof current === "string" ? new TextEncoder().encode(current) : current);
       if (localBytes) {
         const localFile = new File([localBytes], opened.name);

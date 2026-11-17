@@ -434,7 +434,7 @@ impl Server {
                 let source = note_path(args)?;
                 let data = std::fs::read(&source)?;
                 let mut editor = if is_nfedit(&source) {
-                    Editor::open_project(std::str::from_utf8(&data)?)?
+                    Editor::open_project_bytes(&data)?
                 } else if is_notecomplete(&data) {
                     Editor::open_notecomplete(&data)?
                 } else {

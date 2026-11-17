@@ -247,7 +247,7 @@ impl Server {
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("nfedit"))
             {
-                Editor::open_project(std::str::from_utf8(&data)?)?
+                Editor::open_project_bytes(&data)?
             } else if is_notecomplete(&data) {
                 Editor::open_notecomplete(&data)?
             } else {
@@ -796,7 +796,7 @@ fn write_deck(args: &Value) -> Res<Value> {
 /// The Markdown notes of a `.notecomp`/`.notepart` archive or an `.nfedit` project.
 fn notes_of(path: &Path, data: &[u8]) -> Res<String> {
     if is_nfedit(path) {
-        Ok(Editor::open_project(std::str::from_utf8(data)?)?
+        Ok(Editor::open_project_bytes(data)?
             .markdown()
             .to_owned())
     } else if is_notecomplete(data) {
@@ -852,9 +852,9 @@ fn write_notes(args: &Value) -> Res<Value> {
         page,
     )?;
     let out = if is_nfedit(&path) {
-        let mut editor = Editor::open_project(std::str::from_utf8(&data)?)?;
+        let mut editor = Editor::open_project_bytes(&data)?;
         editor.set_markdown(&merged)?;
-        editor.save_project()?.into_bytes()
+        editor.save_project_archive()?
     } else {
         // Repack the same note and recordings with the new notes.
         let (note, _) = unpack_notecomplete(&data)?;

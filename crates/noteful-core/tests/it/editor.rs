@@ -299,7 +299,7 @@ fn project_round_trips_exam_html_and_respects_compaction_and_export_filter() {
 
     let breakdown = reopened.project_breakdown().unwrap();
     assert!(breakdown.exam_bytes > embedded.html.len());
-    assert_eq!(breakdown.total_bytes, saved.len());
+    assert_eq!(breakdown.total_bytes, reopened.save_project_archive().unwrap().len());
 
     // Compacting history preserves version 12 and the embedded exam HTML/source.
     reopened.compact_history(1).unwrap();
