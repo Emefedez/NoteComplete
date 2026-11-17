@@ -6,7 +6,7 @@
 
 NoteComplete is a notebook app for handwriting, PDFs and Markdown notes, with study tools and your own AI. It runs on Linux (the main target today), Windows, macOS, Android and in any browser, iPhone and iPad included, as a web app. Write with a pen or a finger, keep Markdown notes beside the pages, search everything (handwriting included), study with flashcards and quizzes, and share a note live with people or with a phone as a drawing tablet. Everything runs on your device.
 
-It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves them back, so notes taken on an iPad come along.
+It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves them back, so notes taken on an iPad come along, and imports Goodnotes (`.goodnotes`) and Notability (`.ntb`) notebooks as notes you can keep editing.
 
 **Try it in the browser:** [emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/). It opens with a welcome notebook written by the app itself ([its Markdown](docs/site/welcome.md)); **Help → Open the welcome note at start** turns that off in your browser.
 
@@ -24,6 +24,7 @@ It also opens [Noteful](https://noteful.app) notebooks (`.noteful`) and saves th
 - **Touch and stylus**: two fingers scroll (with momentum) or pinch-zoom, a two-finger tap undoes and three redo; while a stylus is in use a finger scrolls, without one a finger draws. Strokes are smoothed, and quick strokes never wait for the page to redraw. Hold a tool in the bar to rearrange it.
 - **New documents** (<kbd>Ctrl</kbd>+<kbd>N</kbd>): blank pages of any size or an infinite canvas, saved as a NoteComplete project (`.nfedit`) or a Noteful file (`.noteful`); a **?** beside the choice explains the difference.
 - **Pages**: add blank pages or pages from another PDF; resize a page from a menu or by dragging its borders.
+- **Prefabs** (<kbd>Shift</kbd>+<kbd>X</kbd>): figures as exams draw them, still editable on the page: function graphs, histograms and bar charts, process states and CPU timelines (painted a tap at a time, 1, 5 or 10 units, with exercises to fill in and check), trees, node graphs and UML diagrams (Visual Paradigm XML and XMI in and out). On a phone the editors fit upright and on their side.
 - **Select and copy text** from PDFs and recognized handwriting.
 - **Night view** (<kbd>D</kbd>) inverts the page colours. A **light/dark theme** switch is in View.
 - **Export**: the note (Noteful, Noteful + Markdown, NoteComplete), pages as SVG, PDF or images, study material as Anki.
@@ -45,7 +46,7 @@ A **Notes** panel (<kbd>N</kbd>) beside the pages, with a formatted preview. **+
 ### Your library
 - **Google Drive on Home**: connect read-only and open a folder of notes (a Noteful backup folder works too); notes appear as cards with their real covers, or as a quick list.
 - **Filters and sorting** by type, date, size, recordings and Noteful tags.
-- **Opens** `.noteful`, `.notepart`, `.notecomp`, `.nfedit` projects, PDFs and images, from Drive or your computer.
+- **Opens** `.noteful`, `.notepart`, `.notecomp`, `.nfedit` projects, Goodnotes and Notability notebooks, PDFs and images, from Drive or your computer.
 - **Kept on this device** in a folder you choose; a note is never downloaded twice.
 - **Newer versions**: if the iPad saved a newer copy, choose it, keep yours, keep both or **compare** page by page. Flashcards, quizzes, notes and recordings can come along; **Migrate content to file…** moves them by hand.
 
@@ -109,7 +110,7 @@ Screenshots use the sample notes in [`samples/`](samples/).
 2. In NoteComplete choose **Connect Google Drive** on Home, allow read-only access, and open that folder. Or use **File → Open…** for a local note, project, PDF or image.
 3. Save your work as a NoteComplete project (`.nfedit`: the untouched original and every edit with its undo history), or as `.noteful` to take it back to the iPad. **File → Export** makes a `.notecomp` (the note, its notes and added recordings in one file, to send) or Noteful + Markdown; see [file formats](#file-formats).
 
-AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md). How long notes stay light, and the benchmark (`tools/perf_bench.mjs`): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+AI agents (MCP): [docs/MCP.md](docs/MCP.md). Drive setup for self-hosted builds (OAuth client, API key for public folder links) is in [Google Drive](docs/GOOGLE_DRIVE.md). Controls, audio and quality settings are in the [user guide](docs/USER_GUIDE.md). How long notes stay light, how quickly menus, tools and dialogs answer, and the benchmarks (`tools/perf_bench.mjs`, `tools/ui_latency_bench.mjs`): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## File formats
 
@@ -124,7 +125,7 @@ A note is **saved** in one of two formats; the others are **exports**.
 
 `.notecomp` and `.notepart` files keep opening. Why the project and the package both exist: [docs/FILE-FORMATS.md](docs/FILE-FORMATS.md).
 
-NoteComplete also **opens to read**: PDFs and PNG, JPEG and WebP images (as notes you can write on), HTML pages, text and Markdown files, and Word (`.docx`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`), CSV and TSV files. Word, OpenDocument, Excel and CSV files are shown as Markdown that you can edit: headings, lists, tables, links, bold, italic and pictures come through, layout does not; a spreadsheet becomes one table per sheet, up to 1000 rows and 50 columns. Save writes a `.md` copy (with its pictures in a `<name>_files` folder) and never changes the original.
+NoteComplete also **imports** Goodnotes (`.goodnotes`) and Notability (`.ntb`) notebooks: ink, typed text, pictures and shapes become editable items over the notebook's PDF pages, and saving keeps the original notebook inside the `.nfedit` ([details](docs/FILE-FORMATS.md)). It **opens to read**: PDFs and PNG, JPEG and WebP images (as notes you can write on), HTML pages, text and Markdown files, and Word (`.docx`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`), CSV and TSV files. Word, OpenDocument, Excel and CSV files are shown as Markdown that you can edit: headings, lists, tables, links, bold, italic and pictures come through, layout does not; a spreadsheet becomes one table per sheet, up to 1000 rows and 50 columns. Save writes a `.md` copy (with its pictures in a `<name>_files` folder) and never changes the original.
 
 ## TODO
 

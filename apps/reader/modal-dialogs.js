@@ -27,7 +27,10 @@ export function installModalDialogs({ doc = globalThis.document } = {}) {
     const full = stack[stack.length - 1]?.matches?.(FULL);
     const bar = (full || doc.body.classList.contains('has-tabs')) && doc.getElementById(BAR);
     const top = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 0;
-    doc.documentElement.style.setProperty('--modal-top', `${top}px`);
+    // Only when it changes: setting a property on the root restyles the whole window, even 0px
+    // where nothing was set (what the stylesheets fall back to).
+    const root = doc.documentElement.style, was = root.getPropertyValue('--modal-top') || '0px';
+    if (was !== `${top}px`) root.setProperty('--modal-top', `${top}px`);
   }
   function release() {
     for (const el of made) el.inert = false;
