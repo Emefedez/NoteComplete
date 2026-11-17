@@ -99,6 +99,12 @@ try {
   await p.keyboard.down('Control'); await p.mouse.wheel(0, -200); await p.keyboard.up('Control');
   await sleep(100);
   assert.ok(await gw() > w0 * 1.2, `Ctrl + wheel zooms in (${w0} → ${await gw()})`);
+  // Also with the pointer below the grid, on the empty canvas.
+  const cvs = await p.locator('.chart-dialog .ch-canvas').boundingBox(), w1 = await gw();
+  await p.mouse.move(cvs.x + cvs.width / 2, cvs.y + cvs.height - 12);
+  await p.keyboard.down('Control'); await p.mouse.wheel(0, 200); await p.keyboard.up('Control');
+  await sleep(100);
+  assert.ok(await gw() < w1 * 0.9, `Ctrl + wheel below the grid zooms out (${w1} → ${await gw()})`);
   assert.ok(lanesData > 0);
   // N: notes beside the figure, kept with it; the note's own notes panel stays shut.
   await p.click('.chart-dialog .ch-canvas', { position: { x: 4, y: 4 } });
@@ -348,6 +354,15 @@ try {
     for (let k = 1; k <= 6; k++) await touch('touchMove', [[lane.x + 300 - k * 25, lane.y]]);
     await touch('touchEnd', []);
     assert.ok(await t.evaluate(() => document.querySelector('.ch-canvas').scrollLeft) > left0 + 50, 'one finger scrolled');
+    assert.deepEqual(await painted(), one, 'and painted nothing');
+    // The middle button drags the canvas sideways (a mouse on the same page).
+    const ml = await t.evaluate(() => document.querySelector('.ch-canvas').scrollLeft);
+    const cb = await t.locator('.ch-canvas').boundingBox();
+    await t.mouse.move(cb.x + cb.width / 2, cb.y + 60);
+    await t.mouse.down({ button: 'middle' });
+    await t.mouse.move(cb.x + cb.width / 2 + 120, cb.y + 60, { steps: 5 });
+    await t.mouse.up({ button: 'middle' });
+    assert.ok(await t.evaluate(() => document.querySelector('.ch-canvas').scrollLeft) < ml - 50, 'the middle button scrolled back');
     assert.deepEqual(await painted(), one, 'and painted nothing');
     // JSON: an error names its line and column, its line is marked, and a tap goes there.
     await t.click('.ch-mode button:has-text("JSON")');
