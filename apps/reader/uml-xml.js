@@ -125,6 +125,8 @@ export function exportXmi(input) {
   const top = [], regionEdges = [];
   for (const c of model.connectors) {
     const def = CONNECTORS[c.type] || {};
+    // An association class's link is kept only in NoteComplete's layout section (nc:connector).
+    if (def.toConnector) continue;
     const A = byId.get(c.from), B = byId.get(c.to);
     const cid = xid(c.id), p = c.props || {};
     if (c.type === 'generalization') add(A.id, el('generalization', { 'xmi:type': 'uml:Generalization', 'xmi:id': cid, general: xid(B.id) }));
@@ -619,13 +621,15 @@ export function exportVp(input) {
   const k = model.source?.format === 'vp-xml' && model.source.scale ? model.source.scale : VP_SCALE;
   const r = (v) => Math.round(v / k);
   const shapes = model.elements.map((e) => el(model.diagram === 'activity' && ELEMENTS[e.type]?.vp.activity ? ELEMENTS[e.type].vp.activity : ELEMENTS[e.type]?.vp.element || 'Shape', { [VP.id]: `S_${vid(e.id)}`, [VP.element]: vid(e.id), [VP.x]: r(e.bounds[0]), [VP.y]: r(e.bounds[1]), [VP.w]: r(e.bounds[2]), [VP.h]: r(e.bounds[3]) }));
-  const lines = model.connectors.map((c) => {
+  // Visual Paradigm draws an association class from its own model, which this export does not write.
+  const vpLinks = model.connectors.filter((c) => !CONNECTORS[c.type]?.toConnector);
+  const lines = vpLinks.map((c) => {
     const [a, b] = VP_REVERSED.has(c.type) ? [c.to, c.from] : [c.from, c.to];
     const way = VP_REVERSED.has(c.type) ? [...(c.waypoints || [])].reverse() : c.waypoints || [];
     return el(CONNECTORS[c.type]?.vp.element || 'Connector', { [VP.id]: `C_${vid(c.id)}`, [VP.element]: vid(c.id), [VP.from]: `S_${vid(a)}`, [VP.to]: `S_${vid(b)}`, [VP.y]: CONNECTORS[c.type]?.message && Number.isFinite(c.props?.y) ? r(c.props.y) : undefined }, way.length ? [el('Points', {}, way.map(([x, y]) => el('Point', { X: r(x), Y: r(y) })))] : []);
   });
   const doc = el(VP.project, { Xml_structure: 'simple', UmlVersion: '2.x', Name: model.name || DIAGRAMS[model.diagram].label, Author: 'NoteComplete' }, [
-    el(VP.models, {}, [...kidsOf(null).map(elementNode), el(VP.relationships, { [VP.id]: 'NC_relationships' }, [el(VP.children, {}, model.connectors.map(rel))])]),
+    el(VP.models, {}, [...kidsOf(null).map(elementNode), el(VP.relationships, { [VP.id]: 'NC_relationships' }, [el(VP.children, {}, vpLinks.map(rel))])]),
     el(VP.diagrams, {}, [el(DIAGRAMS[model.diagram].vp, { [VP.id]: 'NC_diagram', [VP.name]: model.name || DIAGRAMS[model.diagram].label }, [el(VP.shapes, {}, shapes), el(VP.connectors, {}, lines)])]),
   ]);
   return `<?xml version="1.0" encoding="UTF-8"?>\n${writeXml(doc)}\n`;

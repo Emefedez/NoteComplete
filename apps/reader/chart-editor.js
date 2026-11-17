@@ -13,6 +13,7 @@ import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { codeBox, jsonErrorAt } from './json-code.js';
 import { figureNotes } from './figure-notes.js';
+import { cheatSheet } from './cheat-sheet.js';
 import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
@@ -142,10 +143,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const checkBtn = button('check', 'Check', 'Mark what is wrong in the answer');
   const solBtn = button('eye', 'Solution', 'Draw the solution under the answer');
   const clearBtn = button('trash', 'Clear all', 'Clear all: start the answer again');
+  const helpBtn = button('help', 'Cheat sheet', 'Cheat sheet: what the mouse and the keys do (?)', { iconOnly: true });
+  helpBtn.classList.add('ch-help');
   const spacer = make('span', { className: 'ch-spacer' });
   const cancelBtn = onCancel && button('close', 'Cancel', 'Close without changing the note (Esc)');
   const applyBtn = onApply && button('check', applyLabel, `${applyLabel} on the note`, { className: 'primary' });
-  const bar = make('div', { className: 'ch-bar' }, ...extraBar, undoBtn, redoBtn, modeBox, checkBtn, solBtn, clearBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'ch-bar' }, ...extraBar, undoBtn, redoBtn, modeBox, checkBtn, solBtn, clearBtn, helpBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'ch-palette', role: 'toolbar' });
   palette.setAttribute('aria-label', 'Brushes');
   const canvas = make('div', { className: 'ch-canvas', tabIndex: 0 });
@@ -464,6 +467,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (mode === 'json' && t === jsonArea) return;
     if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'z') { e.preventDefault(); (e.shiftKey ? redoBtn : undoBtn).click(); }
     else if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); redoBtn.click(); }
+    else if (!typing && !t.closest?.('.TinyMDE') && !e.ctrlKey && !e.metaKey && e.key === '?') { e.preventDefault(); toggleHelp(); }
     else if (!typing && !t.closest?.('.TinyMDE') && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'n' || e.key === 'N') && kind !== 'plot') { e.preventDefault(); toggleNotes(); }
     else if (!typing && !t.closest?.('.TinyMDE') && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
       const b = palette.querySelectorAll('.ch-brush')[indexOfKey(e.key)];
@@ -471,6 +475,39 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     }
   }
   document.addEventListener('keydown', keys, true);
+  // The cheat sheet (?): what the mouse and the keys do here.
+  let help = null;
+  function toggleHelp() {
+    help ||= cheatSheet(root, {
+      key: 'chart', title: 'Chart editor',
+      sections: [
+        { title: 'Mouse', icon: 'select', rows: [
+          { icon: 'draw', does: 'Pick a brush, then click or drag over the cells to paint them' },
+          { icon: 'erase', does: 'Right-click or right-drag: erase' },
+          { keys: 'Shift', does: 'Drag from a cell sideways: slide the rest of its row (held: every row)' },
+          { icon: 'pan', does: 'Scroll over the grid: its length · Ctrl scroll: zoom the time axis' },
+          { icon: 'select', does: 'Bars and histograms: drag a bar to its value' },
+          { icon: 'pan', does: 'With a pen: fingers scroll and zoom' },
+        ] },
+        { title: 'Keys', icon: 'keyboard', rows: [
+          { keys: '1 … 9 / 0', does: 'Pick a brush' },
+          { keys: 'Shift S', does: 'The brushes in a ring at the pointer' },
+          { keys: 'Ctrl Z / Ctrl Shift Z / Ctrl Y', does: 'Undo · redo' },
+          { keys: 'N', does: 'Notes on the figure' },
+          { keys: 'Esc', does: 'Close without changing the note' },
+          { keys: '?', does: 'This sheet' },
+        ] },
+        { title: 'Modes', icon: 'layers', rows: [
+          { icon: 'draw', does: 'Editor: the figure itself (an exercise\'s solution)' },
+          { icon: 'select', does: 'Fill in: answer it as a student' },
+          { icon: 'hash', does: 'JSON: the figure\'s data' },
+          { icon: 'check', does: 'Check marks what is wrong · Solution draws it under the answer' },
+        ] },
+      ],
+    });
+    helpBtn.setAttribute('aria-pressed', String(help.toggle()));
+  }
+  helpBtn.onclick = toggleHelp;
 
   // --- Palette -------------------------------------------------------------------------
   // The working rows: the solution's, or the answer's when filling in.
@@ -1143,7 +1180,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     spec: current,
     mode: () => mode,
     set(spec, m = 'author') { snapshot(); load(spec, m); buildPalette(); changed(); },
-    destroy() { document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
+    destroy() { help?.destroy(); document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
   };
 }
 

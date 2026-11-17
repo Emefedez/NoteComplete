@@ -36,6 +36,17 @@
 .uml-main.with-notes { grid-template-columns: 168px minmax(0, 1fr) 300px; }
 .uml-main.with-notes.with-panel { grid-template-columns: 168px minmax(0, 1fr) 300px 280px; }
 .uml-main:not(.with-notes) > .uml-notes { display: none; }
+/* The drawing and its PlantUML text (uml-editor.js views): one, the other, or side by side. */
+.uml-work { display: flex; min-width: 0; min-height: 0; }
+.uml-work > .uml-canvas { flex: 1 1 0; }
+.uml-code-pane { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--u-line); background: var(--u-bg, inherit); }
+.uml-main:not([data-view="code"]):not([data-view="split"]) .uml-code-pane, .uml-main[data-view="code"] .uml-canvas { display: none; }
+.uml-main[data-view="code"] .uml-code-pane { border-left: 0; }
+.uml-code { flex: 1; min-height: 0; resize: none; border: 0; outline: none; padding: 12px 14px; font: 13px/1.55 ui-monospace, "JetBrains Mono", monospace; background: transparent; color: inherit; tab-size: 2; white-space: pre; }
+.uml-code-note { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--u-muted, #6b7280); border-top: 1px solid var(--u-line); }
+.uml-code-note:empty { display: none; }
+.uml-code-note.error { color: #d1453b; }
+.uml-views { display: inline-flex; gap: 2px; }
 .uml-notes { min-width: 0; min-height: 0; border-left: 1px solid var(--u-line); background: var(--u-bg, inherit); overflow: hidden; }
 .uml-editor .uml-icon { display: inline-grid; place-items: center; width: 34px; min-width: 34px; height: 32px; padding: 0; border-color: transparent; background: transparent; }
 .uml-editor .uml-icon svg { width: 19px; height: 19px; }
@@ -69,6 +80,8 @@
 .uml-svg [data-uml-kind="label"] { cursor: grab; }
 .uml-handle { fill: #fff; stroke: #0a84ff; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
 circle.uml-handle { cursor: grab; }
+circle.uml-handle.uml-mid { fill: #0a84ff; fill-opacity: 0.18; stroke-dasharray: 2 2; cursor: move; }
+circle.uml-handle.uml-end { fill: #0a84ff; stroke: #fff; cursor: crosshair; }
 .uml-connect { cursor: crosshair; }
 .uml-connect circle { fill: #0a84ff; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .uml-connect path { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }

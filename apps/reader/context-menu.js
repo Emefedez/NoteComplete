@@ -12,11 +12,12 @@ let open = null;
 
 export function closeContextMenu() {
   if (!open) return;
-  const { el, cleanup } = open;
+  const { el, cleanup, onClose } = open;
   open = null;
   cleanup();
   for (const sub of el.__subs || []) sub.remove();
   el.remove();
+  onClose?.();
 }
 
 export function contextMenuOpen() {
@@ -116,7 +117,8 @@ function openSub(root, parent, button, items, title, depth) {
   (root.__subs ||= []).push(el);
 }
 
-export function openContextMenu(x, y, entries, { title = '', host = null } = {}) {
+// `onClose`: called when it goes, chosen from or not (before the chosen entry runs).
+export function openContextMenu(x, y, entries, { title = '', host = null, onClose = null } = {}) {
   closeContextMenu();
   const list = entries.filter(Boolean);
   if (!list.some((e) => e !== '-')) return null;
@@ -154,6 +156,7 @@ export function openContextMenu(x, y, entries, { title = '', host = null } = {})
   addEventListener('blur', gone);
   open = {
     el,
+    onClose,
     cleanup: () => {
       clearTimeout(timer);
       document.removeEventListener('pointerdown', away, true);

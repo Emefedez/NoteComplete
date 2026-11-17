@@ -5,6 +5,7 @@
 import { imageReady } from './image-ready.js';
 import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
+import { parsePlantUml, toPlantUml } from './uml-plantuml.js';
 import { download } from './download.js';
 import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
@@ -12,6 +13,7 @@ import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
 import { figureNotes } from './figure-notes.js';
+import { cheatSheet } from './cheat-sheet.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -25,6 +27,13 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const iconButton = (name, title) => { const b = make('button', { type: 'button', className: 'uml-icon', title }); b.setAttribute('aria-label', title.replace(/ \(.*\)$/, '')); b.append(icon(name)); return b; };
 const PANEL_KEY = 'notecomplete.uml.panel';
 const NOTES_KEY = 'notecomplete.uml.notes';
+// Which way diagrams are edited: drawn (visual), as PlantUML text (code) or both side by side.
+export const VIEW_KEY = 'notecomplete.uml.view';
+export const ASK_KEY = 'notecomplete.uml.ask';
+export const VIEWS = { visual: { label: 'Visual', icon: 'uml' }, code: { label: 'Code', icon: 'code' }, split: { label: 'Both', icon: 'split' } };
+const CODE_KINDS = new Set(['class', 'useCase']);
+export const codeKinds = CODE_KINDS;
+export function savedView() { try { const v = localStorage.getItem(VIEW_KEY); return VIEWS[v] ? v : 'visual'; } catch { return 'visual'; } }
 const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'diagram'}.${ext}`;
 
 // Loads uml.css once (the reader's own page does not carry it).
@@ -47,7 +56,9 @@ export async function umlPng(model, scale = 2) {
 
 // Mounts the editor in `root`. `apply`/`cancel`: the buttons shown when it edits for a note.
 // Returns { model(), set(model), destroy() }.
-export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null } = {}) {
+// `ignoreKey(ev)`: keys the page around the editor keeps for itself (a text document's N
+// opens its Notes there); `importAccept` adds file types to Import.
+export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null, ignoreKey = null, view: startView = null, preamble = [] } = {}) {
   ensureStyles();
   let model = normalizeModel(initial || starterModel('class'));
   let selected = null; // { kind: 'element' | 'connector', id }
@@ -68,6 +79,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   }
   function changed({ panel = true } = {}) {
     draw();
+    syncCode();
     if (panel && panelOpen) buildPanel();
     updateButtons();
     onChange?.(model);
@@ -84,16 +96,20 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const zoomOut = iconButton('minus', 'Zoom out (−)');
   const zoomIn = iconButton('plus', 'Zoom in (+)');
   const fitBtn = iconButton('fit', 'Show the whole diagram');
-  const importInput = make('input', { type: 'file', accept: '.xml,.xmi,.uml,.json,application/xml,text/xml,application/json', hidden: true });
-  const importBtn = iconButton('import', 'Open a Visual Paradigm XML, XMI or NoteComplete diagram file');
-  const exportBtn = iconButton('export', 'Export: Visual Paradigm XML, XMI, a picture or a NoteComplete diagram');
+  const importInput = make('input', { type: 'file', accept: '.xml,.xmi,.uml,.json,.puml,.plantuml,.pu,.wsd,application/xml,text/xml,application/json', hidden: true });
+  const importBtn = iconButton('import', 'Open a Visual Paradigm XML, XMI, PlantUML or NoteComplete diagram file');
+  const exportBtn = iconButton('export', 'Export: Visual Paradigm XML, XMI, PlantUML, a picture or a NoteComplete diagram');
   const panelBtn = iconButton('settings', 'Properties of the selection (or of the diagram)');
+  const viewBtns = Object.entries(VIEWS).map(([v, d]) => { const b = iconButton(d.icon, `${d.label}: ${v === 'visual' ? 'the drawing' : v === 'code' ? 'the diagram as PlantUML text' : 'drawing and PlantUML side by side'}`); b.dataset.view = v; return b; });
+  const viewGroup = make('div', { className: 'uml-views', role: 'group', ariaLabel: 'View' }, ...viewBtns);
   const notesBtn = iconButton('note', 'Notes on this diagram, in Markdown, kept with it (N)');
+  const helpBtn = iconButton('help', 'Cheat sheet: what the mouse and the keys do (?)');
+  helpBtn.classList.add('uml-help');
   const gap = () => make('span', { className: 'uml-gap' });
   const spacer = make('span', { className: 'uml-spacer' });
   const cancelBtn = onCancel && make('button', { type: 'button', textContent: 'Cancel' });
   const applyBtn = onApply && make('button', { type: 'button', className: 'primary', textContent: applyLabel });
-  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), importBtn, importInput, exportBtn, notesBtn, panelBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), viewGroup, gap(), importBtn, importInput, exportBtn, notesBtn, panelBtn, helpBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'uml-palette', role: 'toolbar', ariaLabel: 'Elements and connectors' });
   const canvas = make('div', { className: 'uml-canvas', tabIndex: 0 });
   const panel = make('div', { className: 'uml-panel' });
@@ -108,7 +124,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     placeholder: 'Notes on this diagram: what it shows, why it is drawn this way… Markdown: # heading, **bold**, - list.',
     className: 'uml-notes',
   });
-  const main = make('div', { className: 'uml-main' }, palette, canvas, notes.pane, panel);
+  // The PlantUML pane: the diagram as text, both ways (typing redraws it; drawing rewrites it).
+  const code = make('textarea', { className: 'uml-code', spellcheck: false, ariaLabel: 'PlantUML' });
+  const codeNote = make('p', { className: 'uml-code-note' });
+  const codePane = make('div', { className: 'uml-code-pane' }, code, codeNote);
+  const work = make('div', { className: 'uml-work' }, canvas, codePane);
+  const main = make('div', { className: 'uml-main' }, palette, work, notes.pane, panel);
   root.append(bar, main, status);
   // The properties panel: closed unless asked for (names change in place, on the canvas).
   let panelOpen = false;
@@ -133,6 +154,44 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   svg.classList.add('uml-svg');
   canvas.append(svg);
   const say = (text, error = false) => { status.textContent = text; status.classList.toggle('error', error); };
+
+  // --- Views: drawing, PlantUML or both ---------------------------------------------------
+  let currentView = 'visual', codeTimer = 0, codeError = '';
+  function setView(v) {
+    currentView = CODE_KINDS.has(model.diagram) ? v : 'visual';
+    main.dataset.view = currentView;
+    for (const b of viewBtns) { b.setAttribute('aria-pressed', String(b.dataset.view === currentView)); b.disabled = b.dataset.view !== 'visual' && !CODE_KINDS.has(model.diagram); }
+    syncCode(true);
+    if (currentView !== 'code') requestAnimationFrame(() => { if (!viewMoved) fit(); else applyView(); });
+  }
+  for (const b of viewBtns) b.onclick = () => { setView(b.dataset.view); try { localStorage.setItem(VIEW_KEY, b.dataset.view); } catch { /* Optional. */ } };
+  // The text follows the drawing, except while it is being typed in.
+  function syncCode(force = false) {
+    if (currentView === 'visual' || (!force && document.activeElement === code)) return;
+    try { code.value = toPlantUml(model, { preamble, layout: false }); codeNote.textContent = ''; codeNote.classList.remove('error'); }
+    catch (e) { code.value = ''; codeNote.textContent = e.message; codeNote.classList.add('error'); }
+  }
+  // Typed PlantUML redraws the diagram after a pause; boxes that were there keep their place.
+  code.addEventListener('input', () => {
+    clearTimeout(codeTimer);
+    codeTimer = setTimeout(() => {
+      let next;
+      try { next = parsePlantUml(code.value).model; } catch (e) { codeError = e.message; codeNote.textContent = e.message; codeNote.classList.add('error'); return; }
+      codeError = ''; codeNote.textContent = ''; codeNote.classList.remove('error');
+      const old = new Map(model.elements.map((e) => [e.id, e]));
+      for (const e of next.elements) { const was = old.get(e.id); if (was) { e.bounds = [...was.bounds]; e.props = { ...was.props, ...e.props, color: was.props?.color, textScale: was.props?.textScale }; } }
+      const ways = new Map(model.connectors.map((c) => [`${c.type}:${c.from}>${c.to}`, c]));
+      for (const c of next.connectors) { const was = ways.get(`${c.type}:${c.from}>${c.to}`); if (was) { c.waypoints = was.waypoints; if (was.props?.labelOffset) c.props.labelOffset = was.props.labelOffset; } }
+      snapshot('code');
+      model = normalizeModel({ ...next, name: model.name || next.name, title: next.title, notes: model.notes, badge: model.badge });
+      if (selected && ![...model.elements, ...model.connectors].some((q) => q.id === selected.id)) selected = null;
+      draw();
+      if (panelOpen) buildPanel();
+      updateButtons();
+      onChange?.(model);
+    }, 450);
+  });
+  code.addEventListener('keydown', (ev) => { if (ev.key === 'Tab' && !ev.shiftKey) { ev.preventDefault(); code.setRangeText('  ', code.selectionStart, code.selectionEnd, 'end'); code.dispatchEvent(new Event('input')); } });
 
   // --- Palette ------------------------------------------------------------------------
   // Elements and connectors in the order the person left them (palette-order.js), 1–9 and 0
@@ -208,6 +267,25 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     applyView();
   }
   const center = () => (view ? [view[0] + view[2] / 2, view[1] + view[3] / 2] : [200, 150]);
+  // The arrow handle beside an element: drag it to another element to connect them, or to empty
+  // canvas to add a new element there, connected (how trees and automata grow).
+  function connectHandle(e, k) {
+    const [x, y, w, h] = fitBounds(e);
+    const g = document.createElementNS(SVG, 'g');
+    g.setAttribute('class', 'uml-connect');
+    g.dataset.handle = 'connect';
+    g.dataset.for = e.id;
+    const cx = x + w + 16 * k, cy = y + h / 2, r = 9 * k;
+    const dot = document.createElementNS(SVG, 'circle');
+    Object.entries({ cx, cy, r }).forEach(([a, v]) => dot.setAttribute(a, v));
+    const arrow = document.createElementNS(SVG, 'path');
+    arrow.setAttribute('d', `M${cx - 4 * k} ${cy}H${cx + 4 * k}M${cx + 1 * k} ${cy - 3 * k}L${cx + 4 * k} ${cy}L${cx + 1 * k} ${cy + 3 * k}`);
+    const title = document.createElementNS(SVG, 'title');
+    title.textContent = 'Drag to another element to connect (Shift when letting go: choose the kind), or to empty space to add a connected one';
+    g.append(dot, arrow, title);
+    return g;
+  }
+  let hoverId = null;
   function draw() {
     const ids = selected ? [selected.id] : [];
     const out = renderUml(model, { ids: true, selected: ids, badge: false, margin: 40 });
@@ -217,6 +295,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     drawn.querySelector(':scope > rect')?.remove(); // the white page: the canvas has its own
     svg.replaceChildren(...drawn.childNodes);
     // Handles of the selection: a corner to resize an element, points to bend a connector.
+    const kk = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
+    // Pointing at an element (Visual Paradigm's hover): its arrow handle, to connect it at once.
+    const hovered = hoverId && hoverId !== selected?.id && model.elements.find((q) => q.id === hoverId);
+    if (hovered && !ELEMENTS[hovered.type]?.container) svg.append(connectHandle(hovered, kk));
     if (selected?.kind === 'element') {
       const e = model.elements.find((q) => q.id === selected.id);
       if (e) {
@@ -231,30 +313,26 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
           : { x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
         const top = tall && document.createElementNS(SVG, 'rect');
         if (top) Object.entries({ x: x + w / 2 - s / 2, y: y - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resizeTop' }).forEach(([a, v]) => top.setAttribute(a, v));
-        // The arrow handle: drag it to another element to connect them, or to empty canvas
-        // to add a new element there, connected (how trees and automata grow).
-        const g = document.createElementNS(SVG, 'g');
-        g.setAttribute('class', 'uml-connect');
-        g.dataset.handle = 'connect';
-        const cx = x + w + 16 * k, cy = y + h / 2, r = 9 * k;
-        const dot = document.createElementNS(SVG, 'circle');
-        Object.entries({ cx, cy, r }).forEach(([a, v]) => dot.setAttribute(a, v));
-        const arrow = document.createElementNS(SVG, 'path');
-        arrow.setAttribute('d', `M${cx - 4 * k} ${cy}H${cx + 4 * k}M${cx + 1 * k} ${cy - 3 * k}L${cx + 4 * k} ${cy}L${cx + 1 * k} ${cy + 3 * k}`);
-        g.append(dot, arrow);
-        const title = document.createElementNS(SVG, 'title');
-        title.textContent = 'Drag to another element to connect, or to empty space to add a connected one';
-        g.append(title);
-        svg.append(handle, ...(top ? [top] : []), g);
+        svg.append(handle, ...(top ? [top] : []), connectHandle(e, k));
       }
     } else if (selected?.kind === 'connector') {
       const c = model.connectors.find((q) => q.id === selected.id);
       const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
-      (c?.waypoints || []).forEach((p, i) => {
-        const dot = document.createElementNS(SVG, 'circle');
-        Object.entries({ cx: p[0], cy: p[1], r: 6 * k, class: 'uml-handle', 'data-handle': `way:${i}` }).forEach(([a, v]) => dot.setAttribute(a, v));
-        svg.append(dot);
-      });
+      const pts = c && !CONNECTORS[c.type]?.message ? connectorPath(model, c) : null;
+      const dot = (cx, cy, r, cls, h, tip) => {
+        const d = document.createElementNS(SVG, 'circle');
+        Object.entries({ cx, cy, r, class: cls, 'data-handle': h }).forEach(([a, v]) => d.setAttribute(a, v));
+        if (tip) { const title = document.createElementNS(SVG, 'title'); title.textContent = tip; d.append(title); }
+        svg.append(d);
+      };
+      if (pts) {
+        // A hollow point in the middle of each stretch: drag it to bend the line there.
+        for (let i = 1; i < pts.length; i++) dot((pts[i - 1][0] + pts[i][0]) / 2, (pts[i - 1][1] + pts[i][1]) / 2, 4.5 * k, 'uml-handle uml-mid', `mid:${i - 1}`, 'Drag to bend the line here');
+        // Its two ends: drag one onto another element to connect it there instead.
+        dot(pts[0][0], pts[0][1], 5.5 * k, 'uml-handle uml-end', 'end:from', 'Drag onto another element to reconnect this end');
+        if (!CONNECTORS[c.type]?.toConnector) dot(pts.at(-1)[0], pts.at(-1)[1], 5.5 * k, 'uml-handle uml-end', 'end:to', 'Drag onto another element to reconnect this end');
+      }
+      (c?.waypoints || []).forEach((p, i) => dot(p[0], p[1], 6 * k, 'uml-handle', `way:${i}`, 'Drag to move the bend; double-click to remove it'));
     }
     if (!view) fit();
   }
@@ -302,10 +380,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function connectorFor(from) {
     const list = DIAGRAMS[model.diagram].connectors;
     if (from?.type === 'note') return 'anchor';
-    if (lastConnector && list.includes(lastConnector) && lastConnector !== 'anchor') return lastConnector;
+    if (lastConnector && list.includes(lastConnector) && lastConnector !== 'anchor' && !CONNECTORS[lastConnector].toConnector) return lastConnector;
     // Otherwise what it is already connected with (a tree goes on with lines), or the first.
     const own = [...model.connectors].reverse().find((c) => (c.from === from?.id || c.to === from?.id) && c.type !== 'anchor' && list.includes(c.type));
-    return own?.type || list.find((t) => t !== 'anchor') || list[0];
+    return own?.type || list.find((t) => t !== 'anchor' && !CONNECTORS[t].toConnector) || list[0];
   }
   function grow(from, type, at, start) {
     const kind = ELEMENTS[from.type]?.container || from.type === 'note' ? DIAGRAMS[model.diagram].elements[0] : from.type;
@@ -349,11 +427,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       model.elements = model.elements.filter((e) => !gone.has(e.id));
       model.connectors = model.connectors.filter((c) => !gone.has(c.from) && !gone.has(c.to));
     } else model.connectors = model.connectors.filter((c) => c.id !== selected.id);
+    // An association class's link goes with its association.
+    const lines = new Set(model.connectors.map((c) => c.id));
+    model.connectors = model.connectors.filter((c) => !CONNECTORS[c.type]?.toConnector || lines.has(c.to));
     selected = null;
     changed();
   }
   function setModel(next, { keepView = false } = {}) {
     model = normalizeModel(next);
+    if (!CODE_KINDS.has(model.diagram) && currentView !== 'visual') setView('visual');
     selected = null;
     if (!keepView) view = null;
     buildPalette();
@@ -400,12 +482,14 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (tool.kind === 'element') { place(tool.type, pt); return; }
     if (tool.kind === 'connector') {
       const from = elementAt(pt);
+      if (from && CONNECTORS[tool.type]?.toConnector && ELEMENTS[from.type]?.shape !== 'compartments') return say('An association class starts on a class: drag from the class to its association.');
       if (!from) return say('Start on an element, and let go on another.');
       drag = { mode: 'connect', type: tool.type, from, start: pt, line: null };
       return;
     }
     if (handle === 'connect') {
-      const from = model.elements.find((q) => q.id === selected.id);
+      const from = model.elements.find((q) => q.id === (ev.target.closest('[data-for]')?.dataset.for || selected?.id));
+      if (!from) return;
       drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true };
       return;
     }
@@ -417,6 +501,16 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (handle?.startsWith('way:')) {
       const c = model.connectors.find((q) => q.id === selected.id);
       drag = { mode: 'way', c, index: Number(handle.slice(4)), start: pt, snapped: false };
+      return;
+    }
+    if (handle?.startsWith('mid:')) {
+      const c = model.connectors.find((q) => q.id === selected.id);
+      drag = { mode: 'bend', c, index: Number(handle.slice(4)), start: pt, snapped: false };
+      return;
+    }
+    if (handle?.startsWith('end:')) {
+      const c = model.connectors.find((q) => q.id === selected.id);
+      drag = { mode: 'reconnect', c, side: handle.slice(4), start: pt, line: null };
       return;
     }
     if (kind === 'element' || (!id && elementAt(pt))) {
@@ -438,7 +532,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (kind === 'connector') {
       selected = { kind: 'connector', id };
       const c = model.connectors.find((q) => q.id === id);
-      drag = CONNECTORS[c.type]?.message ? { mode: 'message', c, start: pt, y: c.props.y, snapped: false } : null;
+      // Dragging the line itself bends it where it was taken (a message moves up or down).
+      drag = CONNECTORS[c.type]?.message ? { mode: 'message', c, start: pt, y: c.props.y, snapped: false } : { mode: 'bend', c, index: segmentAt(c, pt), start: pt, snapped: false };
       changed();
       return;
     }
@@ -453,7 +548,16 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     svg.append(d.line);
   }
   svg.addEventListener('pointermove', (ev) => {
-    if (!drag) { if (pending) rubber(pending, toModel(ev)); return; }
+    if (!drag) {
+      if (pending) return rubber(pending, toModel(ev));
+      if (ev.pointerType === 'touch' || tool.kind !== 'select') return;
+      // The element under the pointer (or near it, on the way to its arrow handle).
+      const pt = toModel(ev), k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
+      const onHandle = ev.target.closest?.('[data-for]')?.dataset.for;
+      const near = onHandle || elementAt(pt)?.id || (hoverId && (() => { const e = model.elements.find((q) => q.id === hoverId); if (!e) return null; const [x, y, w, h] = fitBounds(e); return pt[0] > x - 10 * k && pt[0] < x + w + 34 * k && pt[1] > y - 10 * k && pt[1] < y + h + 10 * k ? hoverId : null; })());
+      if ((near || null) !== hoverId) { hoverId = near || null; draw(); }
+      return;
+    }
     const pt = toModel(ev);
     const dx = pt[0] - (drag.start?.[0] ?? 0), dy = pt[1] - (drag.start?.[1] ?? 0);
     const once = () => { if (!drag.snapped) { snapshot(); drag.snapped = true; } };
@@ -483,8 +587,23 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       draw();
     } else if (drag.mode === 'way') {
       once();
-      drag.c.waypoints[drag.index] = [Math.round(pt[0]), Math.round(pt[1])];
+      drag.c.waypoints[drag.index] = snapBend(drag.c, drag.index, pt);
       draw();
+    } else if (drag.mode === 'bend') {
+      if (!drag.snapped && Math.hypot(dx, dy) < 3) return;
+      once();
+      // A new bend where the line was taken; from now on it moves like any other.
+      drag.c.waypoints.splice(drag.index, 0, [Math.round(pt[0]), Math.round(pt[1])]);
+      Object.assign(drag, { mode: 'way' });
+      drag.c.waypoints[drag.index] = snapBend(drag.c, drag.index, pt);
+      draw();
+    } else if (drag.mode === 'reconnect') {
+      const pts = connectorPath(model, drag.c) || [];
+      const fixed = drag.side === 'from' ? pts.at(-1) : pts[0];
+      if (!fixed) return;
+      if (!drag.line) { drag.line = document.createElementNS(SVG, 'line'); drag.line.setAttribute('class', 'uml-rubber'); }
+      Object.entries({ x1: fixed[0], y1: fixed[1], x2: pt[0], y2: pt[1] }).forEach(([a, v]) => drag.line.setAttribute(a, v));
+      svg.append(drag.line);
     } else if (drag.mode === 'message') {
       if (!drag.snapped && Math.abs(dy) < 2) return;
       once();
@@ -497,10 +616,67 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       draw();
     } else if (drag.mode === 'connect') rubber(drag, pt);
   });
+  // Which stretch of a connector's line is nearest `pt` (where a new bend goes in the waypoints).
+  function segmentAt(c, pt) {
+    const pts = connectorPath(model, c) || [];
+    let best = 0, bestD = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+      const t = Math.max(0, Math.min(1, ((pt[0] - ax) * (bx - ax) + (pt[1] - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2 || 1)));
+      const dd = Math.hypot(ax + t * (bx - ax) - pt[0], ay + t * (by - ay) - pt[1]);
+      if (dd < bestD) { bestD = dd; best = i - 1; }
+    }
+    return Math.min(best, c.waypoints.length);
+  }
+  // A bend lines up with its neighbours when it is nearly level or upright with them.
+  function snapBend(c, i, pt) {
+    const pts = connectorPath(model, c) || [];
+    // Next to an end, the element's middle (the end itself moves as the bend does).
+    const middle = (id) => { const e = model.elements.find((q) => q.id === id); if (!e) return null; const [x, y, w, h] = fitBounds(e); return [x + w / 2, y + h / 2]; };
+    const prev = i === 0 ? middle(c.from) || pts[0] : pts[i];
+    const next = i === c.waypoints.length - 1 ? (CONNECTORS[c.type]?.toConnector ? pts.at(-1) : middle(c.to) || pts.at(-1)) : pts[i + 2];
+    const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1, near = 7 * k;
+    let [x, y] = pt;
+    for (const q of [prev, next]) {
+      if (!q) continue;
+      if (Math.abs(x - q[0]) < near) x = q[0];
+      if (Math.abs(y - q[1]) < near) y = q[1];
+    }
+    return [Math.round(x), Math.round(y)];
+  }
+  // The connector line under the pointer (not an association class's own link).
+  function connectorUnder(ev, except = null) {
+    const hit = document.elementsFromPoint(ev.clientX, ev.clientY).map((n) => n.closest?.('[data-uml-kind="connector"],[data-uml-kind="label"]')).find(Boolean);
+    const c = hit && model.connectors.find((q) => q.id === hit.dataset.umlId);
+    return c && c.id !== except && !CONNECTORS[c.type]?.toConnector ? c : null;
+  }
   const finish = (ev) => {
     if (!drag) return;
     const d = drag;
     drag = null;
+    if (d.mode === 'reconnect') {
+      d.line?.remove();
+      const pt = toModel(ev), c = d.c;
+      const target = d.side === 'to' && CONNECTORS[c.type]?.toConnector ? connectorUnder(ev, c.id) : elementAt(pt);
+      if (!target || target.id === (d.side === 'from' ? c.from : c.to)) return draw();
+      if (d.side === 'from' && CONNECTORS[c.type]?.toConnector && !target.bounds) return draw();
+      snapshot();
+      c[d.side] = target.id;
+      c.waypoints = [];
+      return changed();
+    }
+    if (d.mode === 'connect' && CONNECTORS[d.type]?.toConnector) {
+      d.line?.remove();
+      const line = connectorUnder(ev);
+      if (!line) return say('Let go on the association this class belongs to.');
+      lastConnector = d.type;
+      snapshot();
+      const c = makeConnector(d.type, d.from.id, line.id, {}, model);
+      model.connectors.push(c);
+      selected = { kind: 'connector', id: c.id };
+      setTool({ kind: 'select' });
+      return changed();
+    }
     if (d.mode === 'connect') {
       d.line?.remove();
       const pt = toModel(ev);
@@ -520,6 +696,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (d.snapped) changed();
   };
   svg.addEventListener('pointerup', finish);
+  svg.addEventListener('pointerleave', () => { if (hoverId && !drag) { hoverId = null; draw(); } });
   // No autoscroll circle or paste from the middle button over the canvas.
   for (const type of ['mousedown', 'auxclick']) svg.addEventListener(type, (ev) => { if (ev.button === 1) ev.preventDefault(); });
   svg.addEventListener('pointercancel', () => { drag?.line?.remove(); drag = null; draw(); });
@@ -612,8 +789,16 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   document.addEventListener('keydown', stray);
   root.addEventListener('keydown', keys);
   function keys(ev) {
+    if (ignoreKey?.(ev)) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || !!ev.target.isContentEditable;
     const mod = ev.ctrlKey || ev.metaKey;
+    // Arrow keys move the selected element (Shift: ten times as far), as in drawing programs.
+    const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+    if (step && !typing && !mod && !ev.altKey && selected?.kind === 'element') { ev.preventDefault(); return nudge(step[0] * (ev.shiftKey ? 10 : 1), step[1] * (ev.shiftKey ? 10 : 1)); }
+    // The menu key or Shift F10: the selection's menu (what right-click opens).
+    if (!typing && (ev.key === 'ContextMenu' || (ev.key === 'F10' && ev.shiftKey))) { ev.preventDefault(); return menuForSelection(); }
+    if (mod && !ev.altKey && ['+', '=', '-', '_', '0'].includes(ev.key) && !typing) { ev.preventDefault(); ev.stopPropagation(); return ev.key === '0' ? fit() : zoom(ev.key === '-' || ev.key === '_' ? 1.25 : 1 / 1.25); }
+    if (ev.key === 'Enter' && !typing && !mod && selected && !(selected.kind === 'element' && ELEMENTS[current()?.type]?.noName)) { ev.preventDefault(); return rename(current()); }
     if (mod && ev.key.toLowerCase() === 'z' && !typing) { ev.preventDefault(); stepHistory(ev.shiftKey ? redo : undo, ev.shiftKey ? undo : redo); }
     else if (mod && ev.key.toLowerCase() === 'y' && !typing) { ev.preventDefault(); stepHistory(redo, undo); }
     else if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing && selected) { ev.preventDefault(); removeSelected(); }
@@ -625,12 +810,33 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     else if (ev.key === 'Escape' && !typing && pending) { ev.preventDefault(); ev.stopPropagation(); pending.line?.remove(); pending = null; say(''); }
     else if (ev.key === 'Escape' && !typing) { if (tool.kind !== 'select') { ev.preventDefault(); ev.stopPropagation(); setTool({ kind: 'select' }); } else if (selected) { ev.preventDefault(); ev.stopPropagation(); selected = null; changed(); } }
     else if (!typing && !mod && !ev.altKey && (ev.key === 'n' || ev.key === 'N')) { ev.preventDefault(); showNotes(!notesOpen, !notesOpen); }
+    else if (!typing && !mod && ev.key === '?') { ev.preventDefault(); ev.stopPropagation(); toggleHelp(); }
     else if (!typing && !mod && (ev.key === '+' || ev.key === '=')) zoom(1 / 1.25);
     else if (!typing && !mod && ev.key === '-') zoom(1.25);
     else if (!typing && !mod && !ev.altKey && indexOfKey(ev.key) >= 0) {
       const t = paletteTools()[indexOfKey(ev.key)];
       if (t) { ev.preventDefault(); chooseTool(t.kind, t.type); }
     }
+  }
+
+  // Moves the selected element (and what it holds) by dx, dy; a run of presses is one undo step.
+  function nudge(dx, dy) {
+    const e = current();
+    if (!e) return;
+    snapshot(`nudge:${e.id}`);
+    const moving = [e, ...descendants(e.id)], ids = new Set(moving.map((q) => q.id));
+    for (const q of moving) { q.bounds[0] += dx; q.bounds[1] += dy; }
+    for (const c of model.connectors) if (ids.has(c.from) && ids.has(c.to)) c.waypoints = c.waypoints.map(([x, y]) => [x + dx, y + dy]);
+    e.parent = containerFor(e);
+    changed({ panel: false });
+  }
+  // The selection's right-click menu, opened from the keyboard beside it on screen.
+  function menuForSelection() {
+    const r = canvas.getBoundingClientRect();
+    const node = selected && svg.querySelector(`[data-uml-id="${CSS.escape(selected.id)}"]`);
+    const b = node?.getBoundingClientRect();
+    const x = b ? Math.min(r.right - 8, b.left + b.width / 2) : r.left + r.width / 2, y = b ? Math.min(r.bottom - 8, b.top + b.height / 2) : r.top + r.height / 2;
+    menuAt(x, y, toModel({ clientX: x, clientY: y }));
   }
 
   // --- Property panel -----------------------------------------------------------------
@@ -829,10 +1035,23 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         ],
       };
     };
-    const types = DIAGRAMS[model.diagram].connectors;
+    const types = DIAGRAMS[model.diagram].connectors.filter((t) => !CONNECTORS[t].toConnector);
     // After the click that ends this press, which would close a menu opened now.
     const [x, y] = [ev.clientX, ev.clientY];
     setTimeout(() => menu(x, y, [entry(d.type), '-', ...types.filter((t) => t !== d.type).map(entry)], { title: 'Connect as' }), 0);
+  }
+  // Right-angled bends between a connector's two ends (one elbow, or two for a step).
+  function rectilinear(c) {
+    const box = (id) => { const e = model.elements.find((q) => q.id === id); return e && fitBounds(e); };
+    const a = box(c.from), b = CONNECTORS[c.type]?.toConnector ? null : box(c.to);
+    const end = b ? [b[0] + b[2] / 2, b[1] + b[3] / 2] : (connectorPath(model, c) || []).at(-1);
+    if (!a || !end) return [];
+    const [ax, ay] = [a[0] + a[2] / 2, a[1] + a[3] / 2], [bx, by] = end;
+    // Side by side: across, down, across; one above the other: down, across, down.
+    const apart = (p, q) => Math.abs(p - q);
+    if (b && b[0] > a[0] + a[2] || b && a[0] > b[0] + b[2]) { const mx = Math.round((ax + bx) / 2); return apart(ay, by) < 4 ? [] : [[mx, Math.round(ay)], [mx, Math.round(by)]]; }
+    const my = Math.round((ay + by) / 2);
+    return apart(ax, bx) < 4 ? [] : [[Math.round(ax), my], [Math.round(bx), my]];
   }
   // A connector made another type, keeping its name, label place, colour and text size.
   function retype(c, t) {
@@ -921,9 +1140,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       return menu(x, y, [
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
         props,
-        { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
-        directed(def) && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
+        !def.toConnector && { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.filter((t) => !CONNECTORS[t].toConnector).map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
+        directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
+        !def.message && { label: 'Make rectilinear', icon: 'layers', run: () => { snapshot(); c.waypoints = rectilinear(c); changed(); } },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
         '-', ...styleEntries(c),
         '-', del,
@@ -957,6 +1177,50 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   svg.addEventListener('pointerup', unpress, true);
   svg.addEventListener('pointercancel', unpress, true);
 
+  // --- Cheat sheet (?) ---------------------------------------------------------------------
+  let help = null;
+  function toggleHelp() {
+    help ||= cheatSheet(root, {
+      key: 'uml', title: 'UML editor',
+      sections: [
+        { title: 'Mouse', icon: 'select', rows: [
+          { icon: 'select', does: 'Click: select · drag: move · corner: resize' },
+          { icon: 'arrowRight', does: 'Point at an element, drag its arrow to another: connect' },
+          { keys: 'Shift', does: 'Held when letting go: choose the kind and direction' },
+          { icon: 'plus', does: 'Arrow dropped on empty space: a new element, connected' },
+          { icon: 'draw', does: 'Drag a line: bend it · hollow dot: another bend · double-click a bend: remove it' },
+          { icon: 'link', does: 'Drag a selected line\'s end onto another element: reconnect it' },
+          { icon: 'text', does: 'Double-click: rename · on empty canvas: a new element' },
+          { icon: 'settings', does: 'Right-click or hold: the menu (type, straighten, rectilinear, colour…)' },
+          { icon: 'pan', does: 'Drag empty canvas or the middle button: pan · Ctrl wheel: zoom' },
+        ] },
+        { title: 'Keys', icon: 'keyboard', rows: [
+          { keys: '1 … 9 / 0', does: 'Pick a tool from the palette' },
+          { keys: 'Shift S', does: 'The tools in a ring at the pointer' },
+          { keys: 'Esc', does: 'Back to Select · clear the selection' },
+          { keys: 'Enter / F2', does: 'Rename the selection' },
+          { keys: 'Del / Backspace', does: 'Delete the selection' },
+          { keys: '← ↑ → ↓', does: 'Move the selected element (Shift: ten times as far)' },
+          { keys: 'Ctrl Z / Ctrl Shift Z / Ctrl Y', does: 'Undo · redo' },
+          { keys: 'Ctrl C / Ctrl X / Ctrl V / Ctrl D', does: 'Copy · cut · paste · duplicate' },
+          { keys: 'Ctrl + / Ctrl − / Ctrl 0', does: 'Zoom in · out · the whole diagram' },
+          { keys: 'Shift F10 / Menu', does: 'The selection\'s menu' },
+          { keys: 'N', does: 'Notes on the diagram' },
+          { keys: '?', does: 'This sheet' },
+        ] },
+        { title: 'Views', icon: 'split', rows: [
+          { icon: 'uml', does: 'Visual: the drawing' },
+          { icon: 'code', does: 'Code: the diagram as PlantUML; typing redraws it' },
+          { icon: 'split', does: 'Both, side by side' },
+          { icon: 'import', does: 'Open Visual Paradigm XML, XMI, PlantUML or NoteComplete files' },
+          { icon: 'export', does: 'Save as Visual Paradigm XML, XMI, PlantUML, SVG, PNG or JSON' },
+        ] },
+      ],
+    });
+    helpBtn.setAttribute('aria-pressed', String(help.toggle()));
+  }
+  helpBtn.onclick = toggleHelp;
+
   // --- Bar ----------------------------------------------------------------------------
   kindSelect.onchange = () => {
     if (kindSelect.value === model.diagram) return;
@@ -964,6 +1228,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     // An empty diagram starts from the example of the new kind; one with work keeps it.
     if (!model.elements.length) setModel({ ...starterModel(kindSelect.value), name: model.name });
     else { model.diagram = kindSelect.value; buildPalette(); changed(); }
+    setView(currentView);
   };
   undoBtn.onclick = () => stepHistory(undo, redo);
   redoBtn.onclick = () => stepHistory(redo, undo);
@@ -987,7 +1252,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (!file) return;
     const open = (text, options) => {
       try {
-        const next = importUml(text, options);
+        const next = /@startuml/i.test(text) ? parsePlantUml(text).model : importUml(text, options);
         snapshot();
         setModel(next);
         say(`Opened ${file.name}${options ? ` (${next.name})` : ''}: ${model.elements.length} elements, ${model.connectors.length} connectors.`);
@@ -1008,6 +1273,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       else if (what === 'svg') await download(renderUml(model).svg, fileName(model, 'svg'), 'image/svg+xml');
       else if (what === 'png') await download(await umlPng(model), fileName(model, 'png'), 'image/png');
       else if (what === 'json') await download(JSON.stringify(model, null, 2), fileName(model, 'json'), 'application/json');
+      else if (what === 'puml') await download(toPlantUml(model, { preamble }), fileName(model, 'puml'), 'text/plain');
       say('Exported.');
     } catch (e) { say(e.message, true); }
   }
@@ -1017,6 +1283,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     menu(...below(exportBtn), [
       { label: 'Visual Paradigm XML (.xml)', icon: 'uml', disabled: !uml, run: () => exportAs('vp') },
       { label: 'XMI 2.1 (.xmi)', icon: 'uml', disabled: !uml, run: () => exportAs('xmi') },
+      { label: 'PlantUML (.puml)', icon: 'code', disabled: !CODE_KINDS.has(model.diagram), run: () => exportAs('puml') },
       { label: 'Picture (.svg)', icon: 'image', run: () => exportAs('svg') },
       { label: 'Picture (.png)', icon: 'image', run: () => exportAs('png') },
       { label: 'NoteComplete diagram (.json)', icon: 'save', run: () => exportAs('json') },
@@ -1034,18 +1301,42 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   buildPalette();
   showPanel(panelOpen);
   showNotes(notesOpen);
+  setView(startView || savedView());
   changed();
   requestAnimationFrame(fit);
   return {
     model: () => normalizeModel(model),
     set: (m) => setModel(m),
     select: (id) => { const e = model.elements.find((q) => q.id === id); selected = e ? { kind: 'element', id } : null; changed(); },
-    destroy: () => { ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    // Zoom from the page around it: dir 1 in, −1 out, 0 the whole diagram.
+    zoom: (dir) => (dir === 0 ? fit() : zoom(dir > 0 ? 1 / 1.25 : 1.25)),
+    focus: () => canvas.focus({ preventScroll: true }),
+    setView,
+    destroy: () => { help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 
+// Before a new diagram opens: which editor view, from a small menu of icons (Visual, Code,
+// Both), unless the person chose to always use the one they pick. Resolves with the view, or
+// null when the menu was closed without a choice.
+export function chooseView(diagram, { x = innerWidth / 2, y = innerHeight / 3, menu } = {}) {
+  let ask = true;
+  try { ask = localStorage.getItem(ASK_KEY) !== '0'; } catch { /* Optional. */ }
+  if (!CODE_KINDS.has(diagram) || !ask) return Promise.resolve(savedView());
+  return new Promise((resolve) => {
+    let chosen = false, again = false;
+    const pick = (v) => { chosen = true; try { localStorage.setItem(VIEW_KEY, v); } catch { /* Optional. */ } resolve(v); };
+    const show = () => menu(x, y, [
+      ...Object.entries(VIEWS).map(([v, d]) => ({ label: d.label, icon: d.icon, checked: v === savedView(), run: () => pick(v) })),
+      '-',
+      { label: 'Ask every time', icon: 'settings', checked: ask, run: () => { ask = !ask; again = true; try { localStorage.setItem(ASK_KEY, ask ? '1' : '0'); } catch { /* Optional. */ } show(); } },
+    ], { title: 'Editor', onClose: () => setTimeout(() => { if (again) { again = false; return; } if (!chosen) resolve(null); }, 0) });
+    show();
+  });
+}
+
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false, markdown = null } = {}) {
+export function openUmlEditor(model, { editing = false, markdown = null, view = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
@@ -1057,6 +1348,6 @@ export function openUmlEditor(model, { editing = false, markdown = null } = {}) 
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown });
+    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view });
   });
 }

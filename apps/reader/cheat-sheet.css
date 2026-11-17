@@ -1,0 +1,32 @@
+/* The editors' cheat sheet (cheat-sheet.js): a floating window like Ask AI or the quiz. */
+.cheat-window {
+  position: fixed; inset: 72px 24px auto auto; z-index: 60; margin: 0; padding: 0;
+  width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 96px);
+  display: none; flex-direction: column; overflow: hidden;
+  color: var(--ink, var(--u-ink, #242830)); background: var(--surface, var(--u-surface, #fff));
+  border: 1px solid var(--line, var(--u-line, #dce0e5)); border-radius: var(--radius-box, 8px);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgba(0, 0, 0, 0.28));
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.cheat-window[open] { display: flex; }
+.cheat-window.screen-window { position: fixed !important; }
+.cheat-window.minimized { height: auto !important; }
+.cheat-window.minimized .cheat-body { display: none; }
+.cheat-window .cheat-head { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--line, var(--u-line, #dce0e5)); cursor: move; user-select: none; }
+.cheat-window .cheat-head h2 { flex: 1; display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.cheat-window .cheat-head h2 svg, .cheat-window h3 svg { width: 16px; height: 16px; }
+.cheat-window .cheat-head button { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.cheat-window .cheat-head button:hover { background: var(--fill, var(--u-fill, #eef0f3)); }
+.cheat-window .cheat-head button svg { width: 16px; height: 16px; }
+.cheat-body { flex: 1; min-height: 0; overflow: auto; padding: 6px 14px 14px; }
+.cheat-body h3 { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, var(--u-muted, #626b76)); }
+.cheat-rows { display: grid; grid-template-columns: minmax(84px, 40%) 1fr; gap: 6px 12px; align-items: baseline; }
+.cheat-row { display: contents; }
+.cheat-keys { min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; color: var(--muted, var(--u-muted, #626b76)); }
+.cheat-keys svg { width: 17px; height: 17px; flex: none; color: var(--accent, var(--u-accent, #245dc4)); }
+.cheat-keys kbd { padding: 0 5px; min-width: 18px; text-align: center; border: 1px solid var(--line, var(--u-line, #dce0e5)); border-bottom-width: 2px; border-radius: 4px; font: 600 11px/1.6 ui-monospace, Menlo, monospace; color: var(--ink, var(--u-ink, #242830)); background: var(--fill, var(--u-fill, #eef0f3)); }
+.cheat-or { margin: 0 1px; }
+.cheat-does { color: var(--ink, var(--u-ink, #242830)); }
+.cheat-window .panel-grip { position: absolute; z-index: 2; touch-action: none; }
+/* The round ? button in an editor's bar. */
+.uml-editor .uml-icon.uml-help, .ch-help { border-radius: 50% !important; width: 30px !important; min-width: 30px !important; height: 30px !important; }

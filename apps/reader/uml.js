@@ -19,7 +19,7 @@ export const UML_VERSION = 1;
 // Diagram kinds: what the palette offers for each, in order.
 export const DIAGRAMS = {
   useCase: { label: 'Use case diagram', elements: ['actor', 'useCase', 'system', 'note'], connectors: ['association', 'include', 'extend', 'generalization', 'anchor'], vp: 'UseCaseDiagram' },
-  class: { label: 'Class diagram', elements: ['class', 'interface', 'enumeration', 'package', 'note'], connectors: ['association', 'aggregation', 'composition', 'generalization', 'realization', 'dependency', 'anchor'], vp: 'ClassDiagram' },
+  class: { label: 'Class diagram', elements: ['class', 'interface', 'enumeration', 'package', 'note'], connectors: ['association', 'aggregation', 'composition', 'generalization', 'realization', 'dependency', 'associationClass', 'anchor'], vp: 'ClassDiagram' },
   state: { label: 'State machine diagram', elements: ['state', 'compositeState', 'initial', 'final', 'choice', 'fork', 'join', 'history', 'note'], connectors: ['transition', 'anchor'], vp: 'StateDiagram' },
   activity: { label: 'Activity diagram', elements: ['action', 'initial', 'activityFinal', 'flowFinal', 'decision', 'merge', 'fork', 'join', 'objectNode', 'inputPin', 'outputPin', 'partition', 'region', 'note'], connectors: ['controlFlow', 'objectFlow', 'anchor'], vp: 'ActivityDiagram' },
   sequence: { label: 'Sequence diagram', elements: ['lifeline', 'actorLifeline', 'activation', 'fragment', 'note'], connectors: ['syncMessage', 'asyncMessage', 'replyMessage', 'createMessage', 'anchor'], vp: 'InteractionDiagram' },
@@ -36,6 +36,8 @@ export const ENUMS = {
   operator: ['alt', 'opt', 'loop', 'par', 'break', 'critical', 'neg', 'ref', 'seq', 'strict'],
   orientation: ['horizontal', 'vertical'],
   historyKind: ['shallow', 'deep'],
+  // Which way an association's name reads: ▸ toward its target end, ◂ toward its source.
+  reading: ['forward', 'backward'],
 };
 
 // Records of variables: their fields and their one-line form. `line` names fields in braces;
@@ -96,9 +98,9 @@ export const ELEMENTS = {
 // Connector types: the line, what each end shows (END_MARKS), a keyword shown at the middle,
 // and which ends have properties (role, multiplicity, navigability).
 export const CONNECTORS = {
-  association: { label: 'Association', line: 'solid', start: 'none', end: 'none', ends: true, fields: { name: 'text' }, vp: { element: 'Association' }, xmi: { type: 'uml:Association' } },
-  aggregation: { label: 'Aggregation', line: 'solid', start: 'hollowDiamond', end: 'none', ends: true, fields: { name: 'text' }, vp: { element: 'Association', aggregation: 'shared' }, xmi: { type: 'uml:Association', aggregation: 'shared' } },
-  composition: { label: 'Composition', line: 'solid', start: 'filledDiamond', end: 'none', ends: true, fields: { name: 'text' }, vp: { element: 'Association', aggregation: 'composite' }, xmi: { type: 'uml:Association', aggregation: 'composite' } },
+  association: { label: 'Association', line: 'solid', start: 'none', end: 'none', ends: true, fields: { name: 'text', reading: 'reading' }, vp: { element: 'Association' }, xmi: { type: 'uml:Association' } },
+  aggregation: { label: 'Aggregation', line: 'solid', start: 'hollowDiamond', end: 'none', ends: true, fields: { name: 'text', reading: 'reading' }, vp: { element: 'Association', aggregation: 'shared' }, xmi: { type: 'uml:Association', aggregation: 'shared' } },
+  composition: { label: 'Composition', line: 'solid', start: 'filledDiamond', end: 'none', ends: true, fields: { name: 'text', reading: 'reading' }, vp: { element: 'Association', aggregation: 'composite' }, xmi: { type: 'uml:Association', aggregation: 'composite' } },
   generalization: { label: 'Generalization', line: 'solid', start: 'none', end: 'hollowTriangle', fields: {}, vp: { element: 'Generalization' }, xmi: { type: 'uml:Generalization' } },
   realization: { label: 'Realization', line: 'dashed', start: 'none', end: 'hollowTriangle', fields: {}, vp: { element: 'Realization' }, xmi: { type: 'uml:InterfaceRealization' } },
   dependency: { label: 'Dependency', line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', stereotypes: 'tags' }, vp: { element: 'Dependency' }, xmi: { type: 'uml:Dependency' } },
@@ -114,6 +116,9 @@ export const CONNECTORS = {
   edge: { label: 'Arrow', line: 'solid', start: 'none', end: 'filled', fields: { name: 'text' }, vp: { element: 'NCEdge' }, xmi: { type: 'nc:Edge' } },
   line: { label: 'Line', line: 'solid', start: 'none', end: 'none', fields: { name: 'text' }, vp: { element: 'NCLine' }, xmi: { type: 'nc:Line' } },
   anchor: { label: 'Note link', line: 'dashed', start: 'none', end: 'none', fields: {}, vp: { element: 'Anchor' }, xmi: { type: 'nc:Anchor' } },
+  // A class that is an association's own (Evaluation between Article and Reviewer): a dashed line
+  // from the class to the middle of that association. `to` is the association (a connector).
+  associationClass: { label: 'Association class', line: 'dashed', start: 'none', end: 'none', toConnector: true, fields: {}, vp: { element: 'AssociationClass' }, xmi: { type: 'nc:AssociationClass' } },
 };
 
 // ---------------------------------------------------------------------------------------
@@ -230,7 +235,10 @@ export function normalizeModel(input) {
     return { id: String(e.id || `e${i + 1}`), type: String(e.type || 'note'), name: String(e.name ?? ''), props: { ...defaultProps(def), ...(e.props && typeof e.props === 'object' ? e.props : {}) }, bounds: b || [NaN, NaN, size[0], size[1]], parent: e.parent ? String(e.parent) : null };
   });
   const ids = new Set(elements.map((e) => e.id));
-  const connectors = (Array.isArray(m.connectors) ? m.connectors : []).filter((c) => c && ids.has(String(c.from)) && ids.has(String(c.to))).map((c, i) => {
+  // An association class's line ends on another connector (one that is itself kept).
+  const all = (Array.isArray(m.connectors) ? m.connectors : []).filter((c) => c && typeof c === 'object');
+  const plain = new Set(all.filter((c) => !CONNECTORS[c.type]?.toConnector && ids.has(String(c.from)) && ids.has(String(c.to))).map((c) => String(c.id)));
+  const connectors = all.filter((c) => (CONNECTORS[c.type]?.toConnector ? ids.has(String(c.from)) && plain.has(String(c.to)) : ids.has(String(c.from)) && ids.has(String(c.to)))).map((c, i) => {
     const def = CONNECTORS[c.type];
     const base = def?.ends ? { fromEnd: { role: '', multiplicity: '', navigable: false }, toEnd: { role: '', multiplicity: '', navigable: false } } : {};
     return { id: String(c.id || `c${i + 1}`), type: String(c.type || 'association'), from: String(c.from), to: String(c.to), props: { ...defaultProps(def), ...base, ...(c.props && typeof c.props === 'object' ? c.props : {}) }, waypoints: Array.isArray(c.waypoints) ? c.waypoints.filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) : [] };
@@ -629,7 +637,7 @@ export function connectorLabel(c) {
   } else if (def.message) {
     if (p.name) parts.push(`${p.name}${'args' in (def.fields || {}) ? `(${p.args || ''})` : ''}`);
   } else {
-    if (p.name) parts.push(p.name);
+    if (p.name) parts.push(p.reading === 'forward' ? `${p.name} ▸` : p.reading === 'backward' ? `◂ ${p.name}` : p.name);
     if (c.type === 'extend' && p.condition) parts.push(`[${p.condition}]`);
   }
   return parts.join(' ');
@@ -649,9 +657,28 @@ export function labelBox(pts, label, offset = null) {
   return { x, y, w };
 }
 
+// The point halfway along a polyline (where an association class's dashed line meets it).
+export function pathMiddle(pts) {
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = lens.reduce((s, l) => s + l, 0) / 2;
+  for (let i = 0; i < lens.length; i++) {
+    if (left <= lens[i] || i === lens.length - 1) { const t = lens[i] ? Math.min(1, left / lens[i]) : 0; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t]; }
+    left -= lens[i];
+  }
+  return pts[0];
+}
+
 // The points of a connector's line on the page of the diagram (after clipping to its ends).
 export function connectorPath(model, c, fitted = null) {
   const byId = fitted || new Map(model.elements.map((e) => [e.id, fitBounds(e)]));
+  if (CONNECTORS[c.type]?.toConnector) {
+    const target = model.connectors.find((q) => q.id === c.to && !CONNECTORS[q.type]?.toConnector);
+    const A = model.elements.find((e) => e.id === c.from), a = byId.get(c.from);
+    const line = target && connectorPath(model, target, byId);
+    if (!A || !a || !line) return null;
+    const mid = pathMiddle(line), way = c.waypoints || [];
+    return [clip(A, a, way[0] || mid), ...way, mid];
+  }
   const A = model.elements.find((e) => e.id === c.from), B = model.elements.find((e) => e.id === c.to);
   const a = byId.get(c.from), b = byId.get(c.to);
   if (!A || !B || !a || !b) return null;
@@ -812,8 +839,18 @@ export const CONNECTOR_ICONS = {
 const FILLED_ICONS = new Set(['filled', 'filledDiamond']);
 
 const iconMark = (type) => { const def = CONNECTORS[type] || {}; return def.start && def.start !== 'none' ? def.start : def.end || 'none'; };
+// Nodes that share a shape but not a meaning get their own icon, as in Visual Paradigm:
+// a decision takes one flow and sends out several, a merge the other way round; so do fork and join.
+const TYPE_ICONS = {
+  decision: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM12 2.5v5M7.5 12H3m13.5 0H21',
+  merge: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM3 12h4.5M21 12h-4.5M12 16.5v5',
+  choice: 'M12 7.5 16.5 12 12 16.5 7.5 12ZM12 2.5v5M7.5 12H3m13.5 0H21',
+  fork: 'M4 11h16v2.5H4ZM12 3v8M7 13.5V21m10-7.5V21',
+  join: 'M4 10.5h16V13H4ZM7 3v7.5M17 3v7.5M12 13v8',
+  initial: 'M12 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11Z',
+};
 export function iconPath(kind, type) {
-  if (kind === 'element') return SHAPE_ICONS[ELEMENTS[type]?.shape] || SHAPE_ICONS.box;
+  if (kind === 'element') return TYPE_ICONS[type] || SHAPE_ICONS[ELEMENTS[type]?.shape] || SHAPE_ICONS.box;
   return CONNECTOR_ICONS[iconMark(type)] || CONNECTOR_ICONS.none;
 }
 // The icon as an <svg> element (with a dashed line for dashed connectors).
