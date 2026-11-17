@@ -1111,12 +1111,18 @@ const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raste
 const DETAIL_PAUSE_MS = 90, DETAIL_PAN_MS = 350, DETAIL_MARGIN = 0.15;
 let detailTimer = 0, detailDue = 0, detailBusy = false, detailAgain = false;
 const rasterWidthFor = (width) => (zoomDetail ? Math.min(width, Math.max(1, $("viewport").clientWidth)) : width);
-function scheduleDetail() {
+// After a zoom step the sharp part waits longer, also when a scroll asks for it meanwhile.
+const ZOOM_DETAIL_PAUSE_MS = 220;
+let zoomHoldUntil = 0;
+// When the pages last scrolled or zoomed (scrollPause: PDF rasters wait for a pause).
+let lastScrollAt = 0;
+function scheduleDetail(pause = DETAIL_PAUSE_MS) {
   if (!zoomDetail || !doc) return;
   const now = performance.now();
+  if (pause > DETAIL_PAUSE_MS) zoomHoldUntil = now + pause;
   detailDue ||= now + DETAIL_PAN_MS;
   clearTimeout(detailTimer);
-  detailTimer = setTimeout(drawDetail, Math.max(0, Math.min(DETAIL_PAUSE_MS, detailDue - now)));
+  detailTimer = setTimeout(drawDetail, Math.max(0, Math.min(pause, detailDue - now), zoomHoldUntil - now));
 }
 async function drawDetail() {
   detailDue = 0;
@@ -1506,8 +1512,12 @@ function resize() {
   }
   updateZoom();
   selection.render(panels[selection.item?.page]);
+  // A zoom step counts as motion: rasters for it wait for the zooming to pause
+  // (scrollPause), and so does the sharp part on screen, so steps passed through are
+  // never drawn.
+  lastScrollAt = performance.now();
   for (const p of reraster) renderPage(p, p.view);
-  scheduleDetail();
+  scheduleDetail(ZOOM_DETAIL_PAUSE_MS);
 }
 async function renderPage(p, provided) {
   clearTimeout(p.renderTimer);
@@ -1597,6 +1607,12 @@ async function renderPage(p, provided) {
     updatePagePreview(p);
     if (result.pdf_background && !kept) {
       const place = backgroundPlacement(result.pdf_background, p.size);
+      // Drawing a PDF page holds the main thread for a moment (pdf.js paints on it), so
+      // while the pages scroll the ones flying past wait: those in view for a pause or
+      // 400 ms at most, those just outside it for the scrolling to stop. One that leaves
+      // meanwhile is never drawn.
+      await scrollPause(p);
+      if (note !== epoch || token !== p.token || version !== revision) return;
       let raster = await backgrounds.raster(
         result.pdf_background,
         p.size,
@@ -1707,7 +1723,22 @@ function scrollViewport(key, fast = false) {
   return true;
 }
 const barState = new ChromeState();
+// A wait for the pages to stop scrolling or zooming (renderPage's PDF rasters).
+const SCROLL_SETTLE_MS = 150, SCROLL_WAIT_MAX_MS = 400;
+async function scrollPause(p) {
+  const start = performance.now();
+  for (;;) {
+    const now = performance.now(), since = now - lastScrollAt;
+    if (since >= SCROLL_SETTLE_MS) return;
+    if (now - start >= SCROLL_WAIT_MAX_MS) {
+      const box = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect();
+      if (box.bottom > view.top && box.top < view.bottom) return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(16, SCROLL_SETTLE_MS - since)));
+  }
+}
 $("viewport").onscroll = () => {
+  lastScrollAt = performance.now();
   document.body.classList.toggle("bar-compact", barState.observe($("viewport").scrollTop));
   scheduleDetail();
   cancelAnimationFrame(scrollFrame);
