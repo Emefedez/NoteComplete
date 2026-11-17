@@ -1,5 +1,6 @@
 // Rasterize only the visible embedded PDF page. Ink stays editable SVG above it.
 import { normalizeQuality } from "./quality.js";
+import { lagLog } from "./lag-log.js";
 let pdfjs;
 export async function openPdf(data) {
   pdfjs ||= await import("./vendor/pdfjs/build/pdf.mjs");
@@ -217,12 +218,15 @@ export class PdfBackgrounds {
     this.images = new Map();
     this.rasters = new Map();
     this.drawing = new Map();
+    this.wants = new Map();
     this.closed = false;
   }
   // The PDF page for the page view, as a canvas or a blob: URL (`kind`, see above; a canvas
   // too large for some screens comes as a URL). The last RASTERS_KEPT stay, for scrolling
   // back; release() lets go of one no longer shown.
-  async raster(background, size, displayWidth = size[0], settings, kind = "canvas") {
+  // `wanted()`: false once the page has moved on (scrolled away, redrawn): a raster still
+  // waiting its turn is then not drawn at all.
+  async raster(background, size, displayWidth = size[0], settings, kind = "canvas", wanted = null) {
     const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings, globalThis.devicePixelRatio || 1, kind]);
     const kept = this.rasters.get(key);
     if (kept) {
@@ -230,8 +234,13 @@ export class PdfBackgrounds {
       this.rasters.set(key, kept);
       return kept;
     }
+    // Every page waiting for this raster says whether it still wants it.
+    const wants = this.wants.get(key) || [];
+    wants.push(wanted || (() => true));
+    this.wants.set(key, wants);
     if (this.drawing.has(key)) return this.drawing.get(key);
     const job = this.oneAtATime(async () => {
+      if (!wants.some((w) => w())) throw Error("No longer shown");
       const { page, target, viewport, canvas } = await this.blankCanvas(background, displayWidth, settings);
       let shown;
       try {
@@ -254,20 +263,26 @@ export class PdfBackgrounds {
       return shown;
     });
     this.drawing.set(key, job);
-    try { return await job; } finally { this.drawing.delete(key); }
+    try { return await job; } finally { this.drawing.delete(key); this.wants.delete(key); }
   }
   // Page rasters are drawn one after another, with a turn of the event loop between them:
   // several pages asked for at once (scrolling stopped, a zoom ended) drew interleaved, and
   // their pieces landed in the same long task (250 ms and more at tablet speed).
   oneAtATime(work) {
-    const run = (this.turn || Promise.resolve()).then(() => new Promise((resolve) => setTimeout(resolve, 0))).then(work);
+    const run = (this.turn || Promise.resolve()).then(() => new Promise((resolve) => setTimeout(resolve, 0))).then(async () => {
+      const done = lagLog.begin("drawing a PDF page");
+      try { return await work(); } finally { done(); }
+    });
     this.turn = run.catch(() => { /* The next one still runs. */ });
     return run;
   }
   // A part of the PDF page (regionTarget) as a still canvas, or a PNG blob: URL with
   // kind "url"; never cached: the caller owns it and drops it when the view moves on.
-  region(background, cssWidth, box, settings, kind = "canvas") {
-    return this.oneAtATime(() => this.drawRegion(background, cssWidth, box, settings, kind));
+  region(background, cssWidth, box, settings, kind = "canvas", wanted = null) {
+    return this.oneAtATime(() => {
+      if (wanted && !wanted()) throw Error("No longer shown");
+      return this.drawRegion(background, cssWidth, box, settings, kind);
+    });
   }
   async drawRegion(background, cssWidth, box, settings, kind) {
     const doc = await this.document(background.resource_id);

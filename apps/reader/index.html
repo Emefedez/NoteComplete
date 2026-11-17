@@ -126,6 +126,7 @@
           <hr />
           <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
+          <button id="lagLogOpen" data-icon="clock">Lag log…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="pagesMenu">
@@ -1013,6 +1014,15 @@
     <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
+</dialog>
+
+<dialog id="lagLogDialog" class="ocr-dialog lag-log-dialog" aria-labelledby="lagLogTitle">
+  <h2 id="lagLogTitle">Lag log</h2>
+  <p class="muted">While on, every moment the app freezes for more than 0.1 s is written down here with what was going on: a stroke, the engine, auto-save, a PDF page being drawn, the network. Write as usual until it lags, then copy or save this and send it. It stays on this device only.</p>
+  <label class="quality-check"><input id="lagLogOn" type="checkbox"> <span><strong>Record freezes</strong></span></label>
+  <p id="lagLogSummary" class="muted"></p>
+  <pre id="lagLogText" class="lag-log-text"></pre>
+  <div class="ocr-actions"><button id="lagLogClear" type="button">Clear</button><button id="lagLogCopy" type="button">Copy</button><button id="lagLogSave" type="button">Save…</button><button id="lagLogClose" type="button" class="primary">Close</button></div>
 </dialog>
 
 <dialog id="linkDialog" class="ocr-dialog" aria-labelledby="linkDialogTitle">

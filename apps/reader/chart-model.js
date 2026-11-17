@@ -148,10 +148,10 @@ export function withGrid(spec, grid) {
   return out;
 }
 
-// TRI of a process row: its time running plus its time blocked, in time units (a whole number
-// when the cells allow).
-export function triOf(row, cell) {
-  const n = row.cells.filter((v) => v === 'run' || v === 'blocked').length * cell;
+// Service time of a process row: its CPU burst time plus its time blocked, in time units (a whole
+// number when the cells allow).
+export function serviceOf(row, grid) {
+  const n = row.cells.filter((v) => v === 'run' || v === 'blocked').length * grid.cell;
   return Math.round(n * 1e6) / 1e6;
 }
 

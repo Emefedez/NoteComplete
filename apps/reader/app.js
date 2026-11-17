@@ -43,6 +43,7 @@ import { SelectionController } from "./selection.js";
 import { regionSweep, matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js";
 import { ChromeState, highlightPoints } from "./chrome-state.js";
 import { download } from "./download.js";
+import { lagLog } from "./lag-log.js";
 import { imageReady } from "./image-ready.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
 import { saveDocumentInPlace } from "./save-target.js";
@@ -191,6 +192,23 @@ let panels = [],
   scrollFrame = 0,
   zoom = "fit";
 let displayQuality, zoomDetail = true;
+// View → Lag log…: freezes written down with what was going on (lag-log.js).
+lagLog.start();
+{
+  const dialog = $("lagLogDialog");
+  const show = () => {
+    const text = lagLog.report();
+    $("lagLogText").textContent = text.split("\n").slice(2).join("\n") || "Nothing yet.";
+    $("lagLogSummary").textContent = text.split("\n")[2] || (lagLog.on ? "Recording. Nothing slow yet." : "Off.");
+    $("lagLogOn").checked = lagLog.on;
+  };
+  $("lagLogOpen").onclick = () => { closeMenus?.(); show(); dialog.showModal(); };
+  $("lagLogOn").onchange = (e) => { lagLog.set(e.target.checked); show(); status(e.target.checked ? "Lag log on: freezes are written down (View → Lag log…)." : "Lag log off."); };
+  $("lagLogClear").onclick = () => { lagLog.clear(); show(); };
+  $("lagLogCopy").onclick = async () => { try { await navigator.clipboard.writeText(lagLog.report()); status("Lag log copied."); } catch { status("Could not copy: use Save instead.", true); } };
+  $("lagLogSave").onclick = () => download(new Blob([lagLog.report()], { type: "text/plain" }), `NoteComplete lag log ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}.txt`, "text/plain");
+  $("lagLogClose").onclick = () => dialog.close();
+}
 qualitySettings((value, rasterChanged, detail) => {
   displayQuality = value;
   zoomDetail = detail;
@@ -402,7 +420,10 @@ function call(op, args = {}, transfer = null) {
     ? transfer
     : (args.bytes instanceof ArrayBuffer || ArrayBuffer.isView(args.bytes) ? [args.bytes] : []);
   const list = [...new Set(raw.map((x) => (ArrayBuffer.isView(x) ? x.buffer : x)).filter((x) => x instanceof ArrayBuffer))];
-  return engine.call({ op, page, ...args }, list);
+  const answered = lagLog.call(op);
+  const reply = engine.call({ op, page, ...args }, list);
+  reply.then(answered, answered);
+  return reply;
 }
 // A sharing session (collab.js, loaded only when one starts). While it holds the open
 // note, edits go into the session's shared order and come back to be applied here
@@ -1179,7 +1200,7 @@ async function drawPageDetail(p) {
   if (have?.key === key && have.box[0] <= seen[0] + 1e-3 && have.box[1] <= seen[1] + 1e-3 && have.box[2] >= seen[2] - 1e-3 && have.box[3] >= seen[3] - 1e-3) return;
   // Under an SVG with its own paper (a picture-backed page, much ink) only a picture shows.
   const kind = render.dataset.paper && !(p.inkItems > INK_HEAVY) ? "canvas" : "url";
-  const tile = await backgrounds.region(background, pdf.width, detailBox(pdf, view, DETAIL_MARGIN), displayQuality, kind);
+  const tile = await backgrounds.region(background, pdf.width, detailBox(pdf, view, DETAIL_MARGIN), displayQuality, kind, () => p.render === render && render.isConnected && p.near);
   if (p.render !== render || !render.isConnected || p.el.clientWidth !== width || !zoomDetail) {
     if (typeof tile.raster === "string") URL.revokeObjectURL(tile.raster);
     return;
@@ -1619,6 +1640,7 @@ async function renderPage(p, provided) {
         displayWidth * place.share,
         displayQuality,
         kind,
+        () => note === epoch && token === p.token && version === revision && p.near,
       );
       if (note !== epoch || token !== p.token || version !== revision) return;
       // A URL also for a canvas too large for some screens (pdf-background.js rasterKind).
@@ -1639,7 +1661,8 @@ async function renderPage(p, provided) {
       updatePagePreview(p);
     }
   } catch (e) {
-    if (note === epoch && token === p.token) {
+    // A raster skipped because the page left the screen while it waited is no error.
+    if (note === epoch && token === p.token && e?.message !== "No longer shown") {
       const error = document.createElement("p");
       error.className = "page-error";
       error.textContent = "Could not display this page: " + e.message;

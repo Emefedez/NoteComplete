@@ -98,3 +98,9 @@ test('a timeline exercise ignores the case of labels', () => {
   const ex = { ...TIMELINE, exercise: true, answer: { rows: [{ label: 'CPU', intervals: [{ label: 'p1', start: 0, end: 2 }, { label: 'P2', start: 2, end: 4 }, { label: 'P1', start: 4, end: 6 }] }] } };
   assert.equal(checkAnswer(ex).done, true);
 });
+
+test('service time: CPU burst time plus blocked time', async () => {
+  const { serviceOf } = await import('./chart-model.js');
+  assert.equal(serviceOf({ cells: ['', 'ready', 'run', 'run', 'blocked', 'ready', 'run'] }, { tStart: 0, cell: 1 }), 4);
+  assert.equal(serviceOf({ cells: ['run', 'blocked', ''] }, { tStart: 0, cell: 2.5 }), 5);
+});
