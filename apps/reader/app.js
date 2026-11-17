@@ -2690,8 +2690,10 @@ function pointerDown(e, p) {
   const textTap = tool === "text" && e.pointerType !== "mouse" && !textBox.active;
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan || textTap) {
-    // On PDF or recognized words the mouse selects text instead of panning.
-    if (!touchPan && !textTap && (e.pointerType !== "mouse" || e.target.closest?.(".text-layer tspan"))) return;
+    // On PDF or recognized words the mouse selects text instead of panning. A stylus pans in
+    // script too: the page lets the browser scroll nothing with Pan (touch-action: none, so a
+    // second finger reaches the pinch), so leaving it to the browser left a pen stuck.
+    if (!touchPan && !textTap && e.pointerType === "mouse" && e.target.closest?.(".text-layer tspan")) return;
     window.getSelection()?.removeAllRanges();
     e.preventDefault();
     gesture = {
