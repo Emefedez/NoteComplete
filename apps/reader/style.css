@@ -3175,7 +3175,7 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 .hw-page svg { width: 100%; height: auto; display: block; }
 .hw-where { margin-right: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; }
 @media (max-width: 720px) { .hw-layout { grid-template-columns: 1fr; } .hw-pages { max-height: 40vh; } }
-.hw-fields .ocr-languages, .hw-source > .ocr-languages { display: flex; flex-direction: column; align-items: stretch; gap: 3px; margin: 0; font-size: 12px; }
+.hw-fields .ocr-languages, .hw-source > .ocr-languages, .hw-markdown-block > .ocr-languages { display: flex; flex-direction: column; align-items: stretch; gap: 3px; margin: 0; font-size: 12px; }
 .hw-fields .ocr-languages :is(select, input) { width: 100%; min-width: 0; box-sizing: border-box; }
 
 /* Help > Connect AI tools (agents.js) */
@@ -3232,6 +3232,39 @@ body.tablet-waiting #drop::after { content: "Waiting for the computerâ€™s noteâ€
 /* No preview yet: a short placeholder with a line of text instead of an empty strip. */
 .hw-pages:empty { display: grid; place-items: center; height: 160px; padding: 0; background: var(--fill); border: 1px dashed var(--line); }
 .hw-pages:empty::before { content: "The preview appears here"; color: var(--muted); font-size: 13px; }
+/* New note with AI: the request, documents, options and instructions, as in Create exam with AI. */
+.hw-prompt { display: flex; flex-direction: column; gap: 10px; }
+.hw-field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 12px; min-width: 0; }
+.hw-label { display: inline-flex; align-items: center; gap: 5px; }
+.hw-label svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.hw-source .hw-prompt textarea { min-height: 0; font: 13px/1.45 system-ui, sans-serif; resize: vertical; }
+.hw-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px 12px; }
+.hw-opts select { width: 100%; min-width: 0; box-sizing: border-box; }
+.hw-docs, .hw-look { border: 1px solid var(--line); border-radius: var(--radius-box, 8px); background: var(--surface); }
+.hw-docs > summary, .hw-look > summary { list-style: none; display: flex; justify-content: space-between; width: 100%; box-sizing: border-box; padding: 4px 10px; border: 0; border-radius: var(--radius-box, 8px); font-size: 13px; font-weight: 600; }
+.hw-docs > summary::-webkit-details-marker, .hw-look > summary::-webkit-details-marker { display: none; }
+.hw-docs > summary:hover, .hw-look > summary:hover { background: var(--fill); }
+.hw-docs-title { display: inline-flex; align-items: center; gap: 7px; margin-right: auto; }
+.hw-docs-title svg { width: 16px; height: 16px; color: var(--accent); }
+.hw-docs-count { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.hw-docs.has-docs .hw-docs-count { padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.hw-docs-body { padding: 4px 10px 8px; }
+.hw-strict { margin: 0 10px 10px; font-size: 12.5px; }
+.hw-strict:has(input:disabled) { opacity: .55; cursor: default; }
+.hw-diagrams { font-size: 12.5px; align-self: flex-start; }
+.hw-look .hw-fields { padding: 4px 10px 10px; }
+.hw-markdown-block { display: flex; flex-direction: column; gap: 8px; }
+.hw-modes button { display: inline-flex; align-items: center; gap: 6px; }
+.hw-modes button svg { width: 15px; height: 15px; }
+.hw-tools #hwWrite { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.hw-tools #hwWrite svg, .hw-draft button svg { width: 16px; height: 16px; }
+.hw-draft button { display: inline-flex; align-items: center; gap: 6px; }
+.handwriting-dialog .ocr-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.handwriting-dialog .hw-save { margin-right: 0; }
+.handwriting-dialog .hw-where + .hw-save:not([hidden]) { margin-right: auto; }
+.handwriting-dialog .hw-where:has(+ .hw-save:not([hidden])) { margin-right: 0; }
+.handwriting-dialog > .exam-dlg-head, .handwriting-dialog > #hwLead { flex: none; }
+.handwriting-dialog > #hwLead { margin: 4px 0 12px; }
 
 /* Drawing tablet, held upright: the dock is a row at the top (or bottom, after "Move this
    bar"); held sideways it is a column at the left (or right). */

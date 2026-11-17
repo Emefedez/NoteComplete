@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.36
+
+- **Package diagrams and PlantUML rendering toggle.** Package diagrams are now a diagram kind of their own in **Insert prefab**, the UML editor and `.puml` files (alongside class and use case diagrams). Inside the UML editor and opened `.puml` files, a new **PlantUML drawing** toggle switches between NoteComplete's editable visual diagram and PlantUML's own styled rendering (`!include` / `skinparam`).
+- **PlantUML positioning kept everywhere.** The PlantUML code pane now keeps the `' notecomplete-layout` positioning comment, SVG arc paths on PlantUML packages and `GMN` notes are laid out at their real coordinates, and importing `.puml` inside the UML editor uses PlantUML's layout automatically.
+- **Insert `.puml` into notes and cross-editor UML copy-paste.** Opened `.puml` files have **Insert into note…** to place them into your open, recent, or new notes (editable for class, package and use case diagrams; rendered picture for activity/sequence/state), **Insert prefab** has **Import .puml / diagram…**, and `Ctrl C` / `Ctrl V` shares UML selections and whole diagrams (with positioning) across `.puml` files, UML editors and note pages.
+
 ## 1.2.35
 
 - **The editor choice in Insert prefab is readable.** The step after Insert on a class or use case diagram showed its icons at full size, which pushed the two editors out of view. Each editor now shows its icon small, with the drawing or the PlantUML code and its description underneath, as 1.2.34 intended.
