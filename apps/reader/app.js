@@ -4647,6 +4647,21 @@ const converter = handwritingConverter({
     const at = insertAt(where, page, doc.pages);
     await action("insertHandwritten", { at, markdown, options, focus: at });
   },
+  // Documents to base a new note on and saving to a folder, as in Create exam with AI.
+  context: () => ({
+    openPdf,
+    library,
+    groups,
+    hasOpenDoc: () => !!doc || studyText(),
+    openDocTitle: () => (studyText() ? (textView.name || "Document") : (doc?.title || "Note")),
+    openDocPages: () => (studyText() ? textSource.count : (doc?.pages || 0)),
+    openDocResource: currentDocResource,
+    pageText: studyDeps.pageText,
+    pageCanvas: studyDeps.pageCanvas,
+    notesText: studyDeps.notesText,
+    openGeneratedFile,
+    refreshHome: () => home?.renderRecent?.(),
+  }),
 });
 $("newHandwritten").onclick = () => { closeMenus(); converter.open(); };
 $("newWithAi").hidden = !sharedAI();

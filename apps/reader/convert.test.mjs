@@ -43,3 +43,20 @@ test("interactive Markdown cheatsheet groups headings, emphasis and layout/SVG s
   assert.ok(codes.some((c) => c.includes("=={pink}")));
   assert.ok(codes.some((c) => c.includes("\\pagebreak")));
 });
+
+test("New note with AI: documents, length, focus, level, language and instructions reach the prompt", () => {
+  const prompt = aiPrompt({ request: "", dialect: "D", documents: "=== SOURCE: tema 1 ===\nla sístole", length: "detailed", focus: "formulas", level: "intro", language: "Spanish", diagrams: false, strict: true, instructions: " mnemonics " });
+  assert.match(prompt, /three to five pages/);
+  assert.match(prompt, /formulas, rules and methods/);
+  assert.match(prompt, /beginner/);
+  assert.match(prompt, /Write every word in Spanish/);
+  assert.match(prompt, /do not add !draw diagrams/);
+  assert.match(prompt, /Use only what the documents below say/);
+  assert.match(prompt, /instructions \(follow them\):\nmnemonics/);
+  assert.match(prompt, /The documents:\n=== SOURCE: tema 1 ===\nla sístole\n\nThe request:\nA study note that covers the documents above\.$/);
+  // Without the options it asks what it always asked (Take notes with AI relies on it).
+  const plain = aiPrompt({ request: "x", dialect: "D" });
+  assert.doesNotMatch(plain, /documents|instructions/);
+  assert.match(plain, /one or two pages/);
+  assert.match(plain, /Write in the language of the request/);
+});
