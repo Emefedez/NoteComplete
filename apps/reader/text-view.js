@@ -67,9 +67,22 @@ export function headingFor(headings, fragment) {
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
 export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '';
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
   // The UML editor showing a .puml file (diagram.mount), while it is open.
-  const dropDiagramDoc = () => { diagramDoc?.destroy(); diagramDoc = null; body.classList.remove('text-diagram-editor'); };
+  const dropDiagramDoc = () => { diagramDoc?.destroy(); diagramDoc = null; body.classList.remove('text-diagram-editor'); dockBar(null); };
+  // One bar: the editor's toolbar goes into the document bar, after the title, while it is open
+  // (its own zoom replaces the document's). The wrapper keeps the editor's colours and buttons.
+  function dockBar(host) {
+    diagramBar?.remove(); diagramBar = null;
+    root?.classList.remove('diagram-editing');
+    const bar = host?.querySelector('.uml-bar'), slot = root?.querySelector('.html-bar');
+    if (!bar || !slot) return;
+    diagramBar = body.ownerDocument.createElement('div');
+    diagramBar.className = 'uml-editor uml-bar-dock';
+    diagramBar.append(bar);
+    (title?.parentElement === slot ? title : slot.querySelector('.spacer')?.previousElementSibling)?.after(diagramBar);
+    root.classList.add('diagram-editing');
+  }
   const formatLabel = { text: format.textContent, title: format.title };
   const isDiagram = () => Boolean(diagram?.is(key || name));
   const releaseDiagram = () => { if (diagramUrl) URL.revokeObjectURL(diagramUrl); diagramUrl = ''; lastDiagramSvg = ''; };
@@ -89,7 +102,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       let ctl = null;
       try { ctl = await diagram.mount(host, text, { onText: (next) => changed(next) }); } catch (error) { console.warn('Diagram editor:', error); }
       if (token !== renders) { ctl?.destroy(); return; }
-      if (ctl) { diagramDoc = ctl; return; }
+      if (ctl) { diagramDoc = ctl; dockBar(host); return; }
       body.classList.remove('text-diagram-editor');
     }
     let result;
