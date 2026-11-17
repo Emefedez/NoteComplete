@@ -99,6 +99,12 @@ try {
   await p.keyboard.down('Control'); await p.mouse.wheel(0, -200); await p.keyboard.up('Control');
   await sleep(100);
   assert.ok(await gw() > w0 * 1.2, `Ctrl + wheel zooms in (${w0} → ${await gw()})`);
+  // Also with the pointer below the grid, on the empty canvas.
+  const cvs = await p.locator('.chart-dialog .ch-canvas').boundingBox(), w1 = await gw();
+  await p.mouse.move(cvs.x + cvs.width / 2, cvs.y + cvs.height - 12);
+  await p.keyboard.down('Control'); await p.mouse.wheel(0, 200); await p.keyboard.up('Control');
+  await sleep(100);
+  assert.ok(await gw() < w1 * 0.9, `Ctrl + wheel below the grid zooms out (${w1} → ${await gw()})`);
   assert.ok(lanesData > 0);
   // N: notes beside the figure, kept with it; the note's own notes panel stays shut.
   await p.click('.chart-dialog .ch-canvas', { position: { x: 4, y: 4 } });

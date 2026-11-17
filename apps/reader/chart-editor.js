@@ -552,9 +552,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   // the time axis in or out, keeping the time under the pointer where it is.
   let zoom = 1;
   canvas.addEventListener('wheel', (e) => {
-    if (!(kind === 'states' || kind === 'timeline') || mode === 'json' || e.shiftKey || !e.deltaY || !canvas.querySelector('.ch-grid')?.contains(e.target)) return;
+    // Ctrl + wheel zooms anywhere over the canvas (around and under the grid too); the plain
+    // wheel changes the length only over the grid itself and scrolls elsewhere.
+    if (!(kind === 'states' || kind === 'timeline') || mode === 'json' || e.shiftKey || !e.deltaY) return;
+    const zooming = e.ctrlKey || e.metaKey;
+    if (!zooming && !canvas.querySelector('.ch-grid')?.contains(e.target)) return;
     e.preventDefault();
-    if (!(e.ctrlKey || e.metaKey)) return setLength(lengthAt + (e.deltaY > 0 ? 1 : -1));
+    if (!zooming) return setLength(lengthAt + (e.deltaY > 0 ? 1 : -1));
     if (!geo) return;
     const r = canvas.firstChild.getBoundingClientRect(), cell = (e.clientX - r.left - geo.left) / geo.cw;
     const before = geo.cw;
