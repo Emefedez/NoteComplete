@@ -11,8 +11,19 @@ import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
+import { codeBox, jsonErrorAt } from './json-code.js';
 import { STATES, triOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
+// Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
+const PEN_KEY = 'notecomplete-pen-seen';
+const coarse = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches;
+let penUsed = false;
+try { penUsed = localStorage.getItem(PEN_KEY) === '1'; } catch { /* Not kept. */ }
+globalThis.addEventListener?.('pointerdown', (e) => {
+  if (e.pointerType !== 'pen' || penUsed) return;
+  penUsed = true;
+  try { localStorage.setItem(PEN_KEY, '1'); } catch { /* Not kept. */ }
+}, { capture: true, passive: true });
 const SVG = 'http://www.w3.org/2000/svg';
 const make = (tag, props = {}, ...children) => {
   const node = Object.assign(document.createElement(tag), props);
@@ -137,8 +148,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const palette = make('div', { className: 'ch-palette', role: 'toolbar' });
   palette.setAttribute('aria-label', 'Brushes');
   const canvas = make('div', { className: 'ch-canvas', tabIndex: 0 });
-  const jsonArea = make('textarea', { className: 'ch-json', spellcheck: false, hidden: true });
+  const jsonArea = make('textarea', { className: 'ch-json', spellcheck: false });
   jsonArea.setAttribute('aria-label', 'The figure as JSON');
+  jsonArea.wrap = 'off';
+  // Line numbers beside it, and the line of an error marked (json-code.js).
+  const jsonCode = codeBox(jsonArea);
+  jsonCode.box.classList.add('ch-json-box');
+  const setJson = (text) => { jsonArea.value = text; jsonCode.mark(null); };
   const preview = make('div', { className: 'ch-preview' });
   // The figure as on the page: a panel under the canvas, folded with its arrow and as tall
   // as its top edge is dragged.
@@ -165,7 +181,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         notesEditor.addEventListener('change', (e) => {
           if ((base.notes || '') === e.content) return;
           if (e.content.trim()) base.notes = e.content; else delete base.notes;
-          if (mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
+          if (mode === 'json') setJson(JSON.stringify(current(), null, 2));
           onChange?.(current());
         });
       } catch {
@@ -280,7 +296,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   };
   document.addEventListener('paste', onPaste, true);
   const status = make('div', { className: 'ch-status', role: 'status' });
-  root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonArea, previewBox), panel), status);
+  root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonCode.box, previewBox), panel), status);
   function layoutPreview() {
     // A plot has no canvas: its figure is the view, always shown.
     const open = kind === 'plot' || prefs.open, notes = !!prefs.notes && kind !== 'plot';
@@ -311,7 +327,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 
   function changed({ panel: rebuild = true, palette: repaint = false, json = true } = {}) {
     if (repaint) buildPalette();
-    if (json && mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
+    if (json && mode === 'json') setJson(JSON.stringify(current(), null, 2));
     draw();
     if (rebuild) buildPanel();
     updateButtons();
@@ -341,7 +357,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     check = null;
     showSolution = false;
     say(m === 'answer' ? 'Fill in: paint the answer on the rows; Check marks what is wrong.' : m === 'json' ? 'JSON: the figure\'s data. Changes show as soon as they are valid.' : 'Editor: what you draw here is the figure, and the answer is checked against it.');
-    if (m === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
+    if (m === 'json') setJson(JSON.stringify(current(), null, 2));
     changed({ palette: true });
     if (m === 'json') jsonArea.focus();
   }
@@ -352,10 +368,20 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   let jsonError = '';
   jsonArea.addEventListener('input', () => {
     let spec = null;
-    try { spec = JSON.parse(jsonArea.value); } catch (e) { jsonError = e.message; }
+    let at = null;
+    try { spec = JSON.parse(jsonArea.value); } catch (e) { at = jsonErrorAt(jsonArea.value, e); jsonError = at.message; }
     if (spec) jsonError = editorKind(spec) ? '' : 'This JSON is not a process-state diagram, CPU timeline, chart or plot.';
     jsonArea.classList.toggle('invalid', Boolean(jsonError));
-    if (jsonError) { say(jsonError, true); updateButtons(); return; }
+    jsonCode.mark(at?.line || null);
+    if (jsonError) {
+      // Where the error is: its line marked, and a tap on "Line 4, column 12" goes there.
+      if (at?.line) {
+        status.replaceChildren(make('button', { type: 'button', className: 'json-goto', title: 'Go to the error', textContent: `Line ${at.line}, column ${at.column}`, onclick: () => jsonCode.go(at.index) }), ` ${at.message}.`);
+        status.classList.add('error');
+      } else say(jsonError, true);
+      updateButtons();
+      return;
+    }
     snapshot('json');
     const keepBrush = brush;
     load(spec, 'json');
@@ -538,6 +564,62 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     canvas.scrollLeft += cell * (geo.cw - before);
   }, { passive: false });
   canvas.addEventListener('contextmenu', (e) => { if (canvas.querySelector('.ch-grid')?.contains(e.target)) e.preventDefault(); });
+  // Fingers on the canvas. Two fingers scroll and pinch (the pinch zooms the time axis, as
+  // Ctrl + wheel does); a paint the first finger began is taken back. Once a pen has been
+  // used, one finger scrolls too and only the pen (or a mouse) paints, as on the note's pages.
+  const touches = new Map();
+  let nav = null, touchUndo = -1;
+  const mid = () => { const [a, b] = [...touches.values()]; return b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : a; };
+  const spread = () => { const [a, b] = [...touches.values()]; return b ? Math.hypot(a[0] - b[0], a[1] - b[1]) : 0; };
+  const startNav = () => {
+    const [x, y] = mid();
+    const r = canvas.firstChild?.getBoundingClientRect?.();
+    nav = { x, y, left: canvas.scrollLeft, top: canvas.scrollTop, dist: spread(), zoom, cell: geo && r ? (x - r.left - geo.left) / geo.cw : 0 };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (touches.size === 1) touchUndo = undo.length;
+    if (touches.size === 2) {
+      // The first finger's paint, if any, ends and is taken back.
+      for (const id of touches.keys()) if (id !== e.pointerId) canvas.dispatchEvent(new PointerEvent('pointercancel', { pointerId: id, pointerType: 'touch', bubbles: true }));
+      if (touchUndo >= 0 && undo.length > touchUndo) { restore(undo.pop()); draw(); }
+    }
+    if (touches.size >= 2 || penUsed) {
+      e.stopPropagation();
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* A synthetic event. */ }
+      startNav();
+    }
+  }, true);
+  canvas.addEventListener('pointermove', (e) => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (!nav) return;
+    e.stopPropagation();
+    const [x, y] = mid();
+    if (touches.size >= 2 && nav.dist > 20 && geo && (kind === 'states' || kind === 'timeline')) {
+      const before = geo.cw;
+      const next = Math.max(0.25, Math.min(8, nav.zoom * spread() / nav.dist));
+      if (Math.abs(next - zoom) > 0.01) {
+        zoom = next;
+        draw();
+        // The time between the fingers stays between them.
+        if (geo && geo.cw !== before) { const r = canvas.firstChild.getBoundingClientRect(); canvas.scrollLeft += (r.left + geo.left + nav.cell * geo.cw) - x; }
+        return;
+      }
+    }
+    canvas.scrollLeft = nav.left - (x - nav.x);
+    canvas.scrollTop = nav.top - (y - nav.y);
+  }, true);
+  const lift = (e) => {
+    if (!touches.delete(e.pointerId)) return;
+    if (nav) e.stopPropagation();
+    // One finger left of a pinch: it goes on scrolling from where it is.
+    if (touches.size && nav) startNav(); else if (!touches.size) { nav = null; touchUndo = -1; }
+  };
+  canvas.addEventListener('pointerup', lift, true);
+  canvas.addEventListener('pointercancel', (e) => { if (e.isTrusted) lift(e); }, true);
   function drawGrid() {
     const g = work();
     const n = g.rows[0]?.cells.length || Math.round((g.tEnd - g.tStart) / g.cell);
@@ -547,7 +629,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const triW = kind === 'states' ? 12 + 7 * Math.max(2, ...g.rows.map((r) => String(fmt(triOf(r, g.cell))).length)) : 0;
     const left = Math.min(140, 22 + longest * 8) + triW, top = 30;
     const cw = Math.max(4, Math.min(160, Math.max(14, Math.min(48, (width - left - 10) / Math.max(1, n))) * zoom));
-    const rh = showSolution ? 50 : 42;
+    // Taller rows for a finger or a pen (a coarse pointer): a row is easy to hit and stay in.
+    const rh = (showSolution ? 50 : 42) + (coarse() ? 18 : 0);
     geo = { left, top, cw, rh, n };
     const W = left + cw * n + 10, H = top + rh * g.rows.length + 10;
     const s = svgEl('svg', { class: 'ch-grid', width: W, height: H, viewBox: `0 0 ${W} ${H}` });
@@ -813,7 +896,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     else if (bars) drawBars();
     else canvas.replaceChildren(make('p', { className: 'ch-hint', textContent: 'An exam plot is drawn from its curves, points and areas: change them on the right.' }));
     canvas.hidden = kind === 'plot' || mode === 'json';
-    jsonArea.hidden = mode !== 'json';
+    jsonCode.box.hidden = mode !== 'json';
     layoutPreview();
     // The notes follow the figure (undo, the JSON, another figure loaded).
     if (prefs.notes && kind !== 'plot') {
@@ -983,7 +1066,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
 
   // --- Start -------------------------------------------------------------------------------
   load(initial);
-  if (mode === 'json') jsonArea.value = JSON.stringify(current(), null, 2);
+  if (mode === 'json') setJson(JSON.stringify(current(), null, 2));
   buildPalette();
   buildPanel();
   updateButtons();

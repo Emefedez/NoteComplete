@@ -312,6 +312,53 @@ try {
     assert.deepEqual(await tri(), ['25', '5', '5'], 'nothing painted past the end');
     console.log('· process states: TRI per process; a second arrival dot ends it');
   }
+  {
+    // 8. Fingers: two fingers pinch the time axis and take back what the first one painted;
+    // once a pen has been used, one finger scrolls instead of painting.
+    const ctx = await b.newContext({ viewport: { width: 900, height: 700 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    const t = await ctx.newPage();
+    t.on('pageerror', (e) => errors.push(`touch: ${e.message}`));
+    await t.goto(`${server.origin}/charts.html?kind=states`);
+    await t.waitForSelector('.ch-grid');
+    const cdp = await ctx.newCDPSession(t);
+    const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
+    const lane = await t.evaluate(() => { const el = document.querySelector('.ch-grid'), r = el.getBoundingClientRect(), l = el.querySelectorAll('.ch-lane')[2]; return { x: r.x + +l.getAttribute('x'), y: r.y + +l.getAttribute('y') + +l.getAttribute('height') / 2, w: +l.getAttribute('width'), h: +l.getAttribute('height') }; });
+    assert.ok(lane.h >= 50, `taller rows for fingers: ${lane.h}`);
+    const painted = () => t.$$eval('.ch-grid .ch-tri', (x) => x.map((n) => n.textContent));
+    const before = await painted();
+    const cw = lane.w / 30;
+    // One finger paints (no pen yet).
+    await touch('touchStart', [[lane.x + cw * 2.5, lane.y]]);
+    await touch('touchEnd', []);
+    const one = await painted();
+    assert.notDeepEqual(one, before, 'a finger paints while no pen has been used');
+    // Two fingers: a pinch widens the cells and the first finger's paint is taken back.
+    const cells = () => t.evaluate(() => +document.querySelectorAll('.ch-grid .ch-lane')[0].getAttribute('width'));
+    const w0 = await cells();
+    await touch('touchStart', [[lane.x + cw * 4.5, lane.y]]);
+    await touch('touchStart', [[lane.x + cw * 4.5, lane.y], [lane.x + cw * 8.5, lane.y]]);
+    for (let k = 1; k <= 6; k++) await touch('touchMove', [[lane.x + cw * 4.5 - k * 15, lane.y], [lane.x + cw * 8.5 + k * 15, lane.y]]);
+    await touch('touchEnd', []);
+    assert.ok(await cells() > w0 * 1.3, `pinched wider: ${w0} → ${await cells()}`);
+    assert.deepEqual(await painted(), one, 'the pinch painted nothing');
+    // A pen used: one finger scrolls the canvas, nothing is painted.
+    await t.evaluate(() => document.querySelector('.ch-canvas').dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'pen', bubbles: true })));
+    const left0 = await t.evaluate(() => document.querySelector('.ch-canvas').scrollLeft);
+    await touch('touchStart', [[lane.x + 300, lane.y]]);
+    for (let k = 1; k <= 6; k++) await touch('touchMove', [[lane.x + 300 - k * 25, lane.y]]);
+    await touch('touchEnd', []);
+    assert.ok(await t.evaluate(() => document.querySelector('.ch-canvas').scrollLeft) > left0 + 50, 'one finger scrolled');
+    assert.deepEqual(await painted(), one, 'and painted nothing');
+    // JSON: an error names its line and column, its line is marked, and a tap goes there.
+    await t.click('.ch-mode button:has-text("JSON")');
+    await t.fill('.ch-json', '{\n  "type": "states",\n  "rows": [1, 2,]\n}');
+    await t.waitForSelector('.ch-status .json-goto');
+    assert.match(await t.textContent('.ch-status .json-goto'), /^Line 3, column \d+$/);
+    assert.equal(await t.locator('.ch-json-box .json-bad').count(), 1, 'the line is marked');
+    assert.match(await t.locator('.ch-json-box .json-gutter').textContent(), /^1\n2\n3\n4$/);
+    await ctx.close();
+    console.log('· process states by touch: taller rows, pinch zoom, one-finger scroll once a pen is used');
+  }
   assert.deepEqual(errors, []);
   console.log('charts e2e: ok');
 } finally {

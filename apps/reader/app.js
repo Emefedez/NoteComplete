@@ -3912,8 +3912,16 @@ const quick = quickMenu({
 // Where the pointer last was over the pages: Shift + S opens the menu there.
 let lastPointer = null, lastPointerType = "mouse";
 // The last touch, pen or key input: auto-save waits for a pause after it (autosave.js).
-let lastInputAt = 0;
+let lastInputAt = 0, penSeen = false;
+try { penSeen = localStorage.getItem("notecomplete-pen-seen") === "1"; } catch { /* Optional. */ }
 for (const type of ["pointerdown", "keydown", "wheel"]) document.addEventListener(type, () => { lastInputAt = performance.now(); }, { passive: true, capture: true });
+// A pen used on this device, kept: the chart editors then leave scrolling and zooming to
+// fingers (chart-editor.js reads the same key).
+document.addEventListener("pointerdown", (e) => {
+  if (e.pointerType !== "pen" || penSeen) return;
+  penSeen = true;
+  try { localStorage.setItem("notecomplete-pen-seen", "1"); } catch { /* Optional. */ }
+}, { passive: true, capture: true });
 // A pen's side button (pen-button.js, docs/S-PEN-BUTTON.md): on Android the S Pen button
 // only shows while the pen hovers (pointermove buttons 0 → nonzero) or as a contextmenu
 // with no pointer type when the user holds it and taps; desktop pens report button 2 or 5.
