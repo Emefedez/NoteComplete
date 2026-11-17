@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.25
+
+- **Process states: service time before the letter.** The CPU + blocked number now sits to the left of each process letter.
+- **Middle-click drag in the chart editors.** Hold the middle button and drag to scroll the process states, CPU timeline and chart canvas sideways or up and down, as on the note's pages. It works anywhere on the canvas, also around and under the grid.
+- **Ctrl + wheel zooms anywhere on the canvas**, not only with the pointer over the timeline. The menus and the side and bottom bars are left alone.
+
 ## 1.2.24
 
 - **Lag log (View → Lag log…).** Turn it on and write as usual. Every moment the app freezes for more than 0.1 s is written down with what was going on: a stroke in progress, engine calls and how long they took, auto-save, PDF pages being drawn, network requests, the number of elements on screen. It also notes when the browser reloaded the page without it being closed, which on iPad usually means it ran out of memory. Copy or save the report to send it. It is off by default and stays on the device.

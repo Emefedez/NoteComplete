@@ -3707,7 +3707,7 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .audio-speed-stepper .speed-step { flex: none; width: 20px; min-width: 20px; min-height: calc(var(--control) - 2px); padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; }
 .audio-speed-stepper .speed-step:hover:not(:disabled) { background: var(--accent-hover); }
 .audio-speed-stepper .speed-step svg { width: 12px; height: 12px; }
-.audio-transport #audioSpeed { appearance: textfield; -moz-appearance: textfield; flex: none; width: 3.1em; min-width: 0; min-height: calc(var(--control) - 2px); padding: 0 1px; border: 0; border-radius: 0; background: transparent; color: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; cursor: text; }
+.audio-transport #audioSpeed { appearance: textfield; -moz-appearance: textfield; flex: none; width: 3.1em; min-width: 0; min-height: calc(var(--control) - 2px); padding: 0 1px 0 8px; border: 0; border-radius: 0; background: transparent; color: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; cursor: text; }
 .audio-transport #audioSpeed::-webkit-inner-spin-button, .audio-transport #audioSpeed::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .audio-transport #audioSpeed:focus { outline: none; background: var(--surface); color: var(--ink); }
 .audio-speed-stepper .speed-unit { flex: none; padding-right: 4px; font-size: 11px; font-weight: 600; color: inherit; pointer-events: none; }
