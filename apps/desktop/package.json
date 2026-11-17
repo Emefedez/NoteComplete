@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.2.33",
+  "version": "1.2.34",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -216,6 +216,18 @@
           "name": "TSV table",
           "role": "Viewer",
           "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "puml",
+            "plantuml",
+            "pu",
+            "iuml",
+            "wsd"
+          ],
+          "name": "PlantUML diagram",
+          "role": "Viewer",
+          "rank": "Alternate"
         }
       ],
       "extendInfo": {
@@ -316,7 +328,8 @@
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.oasis.opendocument.spreadsheet",
         "text/csv",
-        "text/tab-separated-values"
+        "text/tab-separated-values",
+        "text/vnd.plantuml"
       ]
     },
     "icon": "build/icon.png",
