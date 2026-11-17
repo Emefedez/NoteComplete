@@ -3912,7 +3912,7 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-title input { flex: 1; }
 .prefab-help p { margin: 4px 0; font-size: 12px; color: var(--muted); }
 .prefab-data { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
-/* A JSON box (prefabs.js codeBox): line numbers, and an error's line marked behind the text. */
+/* A JSON box (json-code.js codeBox): line numbers, and an error's line marked behind the text. */
 .json-code { display: grid; grid-template-columns: auto minmax(0, 1fr); height: 260px; min-height: 120px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .json-code.has-error { border-color: #d1453b; }
 .json-gutter, .json-back, .json-code .prefab-data { margin: 0; padding: 6px 8px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }

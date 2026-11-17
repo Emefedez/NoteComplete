@@ -6,6 +6,7 @@
 import { imageReady } from './image-ready.js';
 import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
 import { icon } from './icons.js';
+import { jsonErrorAt, codeBox } from './json-code.js';
 import { displaySpec } from './chart-model.js';
 import { DIAGRAMS, renderUml, starterModel, umlName } from './uml.js';
 
@@ -228,60 +229,7 @@ export function choosePrefab() {
   });
 }
 
-// Where JSON.parse stopped: { line, column, index, message } (1-based line and column), from
-// the error's own words ("at position 42", or "line 3 column 5"), or the end of the text.
-export function jsonErrorAt(text, error) {
-  const msg = String(error?.message || error || '');
-  let index = null;
-  const lc = msg.match(/line (\d+) column (\d+)/i);
-  if (lc) {
-    const lines = text.split('\n');
-    index = lines.slice(0, Number(lc[1]) - 1).reduce((n, l) => n + l.length + 1, 0) + Number(lc[2]) - 1;
-  } else {
-    const pos = msg.match(/position (\d+)/i);
-    index = pos ? Number(pos[1]) : /end of (JSON|data)|unterminated|unexpected end/i.test(msg) ? text.length : null;
-  }
-  if (index === null) return { line: null, column: null, index: null, message: msg };
-  index = Math.max(0, Math.min(text.length, index));
-  const before = text.slice(0, index);
-  const line = before.split('\n').length;
-  const column = index - before.lastIndexOf('\n');
-  // The reason without where (that is said separately), and without the text quoted back.
-  const reason = msg.replace(/\s*\(line \d+ column \d+\)/i, '').replace(/\s*(in JSON )?at position \d+.*$/i, '').replace(/,\s*".*$/s, '').replace(/^JSON\.parse:\s*/i, '');
-  return { line, column, index, message: reason || 'Not valid JSON' };
-}
-
-// A JSON text box with line numbers, and the line of an error marked behind its text.
-function codeBox(textarea) {
-  const gutter = make('pre', { className: 'json-gutter' });
-  gutter.setAttribute('aria-hidden', 'true');
-  const back = make('pre', { className: 'json-back' });
-  back.setAttribute('aria-hidden', 'true');
-  const box = make('div', { className: 'json-code' }, gutter, make('div', { className: 'json-edit' }, back, textarea));
-  let bad = null;
-  const paint = () => {
-    const lines = textarea.value.split('\n');
-    gutter.textContent = lines.map((_, i) => i + 1).join('\n');
-    back.replaceChildren(...lines.map((l, i) => make('span', { className: i + 1 === bad ? 'json-bad' : '', textContent: `${l}\n` })));
-    gutter.scrollTop = back.scrollTop = textarea.scrollTop;
-    back.scrollLeft = textarea.scrollLeft;
-  };
-  textarea.addEventListener('input', paint);
-  textarea.addEventListener('scroll', () => { gutter.scrollTop = back.scrollTop = textarea.scrollTop; back.scrollLeft = textarea.scrollLeft; });
-  paint();
-  return {
-    box,
-    mark(line) { bad = line; paint(); box.classList.toggle('has-error', !!line); },
-    // Puts the caret where the error is, with its line in view.
-    go(index) {
-      textarea.focus();
-      textarea.setSelectionRange(index, Math.min(textarea.value.length, index + 1));
-      const line = textarea.value.slice(0, index).split('\n').length;
-      const h = parseFloat(getComputedStyle(textarea).lineHeight) || 17;
-      textarea.scrollTop = Math.max(0, (line - 3) * h);
-    },
-  };
-}
+export { jsonErrorAt } from './json-code.js';
 
 // The editor of an exam figure: its title, empty (for students to fill in) or not, and its
 // data as JSON, with a live preview. Resolves with the new spec, or null.

@@ -157,6 +157,56 @@ try {
   if (DIR) await q.screenshot({ path: `${DIR}graph.png` });
   console.log('· node graph: arrows dragged out of a node connect or grow it');
 
+  // 5. A plain line has no Swap direction; the middle button pans over a node; Clear all
+  // empties the diagram and one undo brings it back.
+  const lineBox = await q.locator('.uml-canvas [data-uml-kind="connector"]').first().boundingBox();
+  await q.mouse.click(lineBox.x + lineBox.width / 2, lineBox.y + lineBox.height / 2, { button: 'right' });
+  await q.waitForSelector('.context-menu');
+  const lineMenu = await q.locator('.context-menu button span').allTextContents();
+  assert.ok(!lineMenu.includes('Swap direction'), `no Swap direction on a plain line: ${lineMenu}`);
+  await q.keyboard.press('Escape');
+  const viewBefore = await q.getAttribute('.uml-canvas svg', 'viewBox');
+  const ten = await q.locator('.uml-canvas [data-uml-kind="element"]:has(text:text-is("10"))').boundingBox();
+  await q.mouse.move(ten.x + ten.width / 2, ten.y + ten.height / 2);
+  await q.mouse.down({ button: 'middle' });
+  await q.mouse.move(ten.x + ten.width / 2 + 80, ten.y + ten.height / 2 + 40, { steps: 6 });
+  await q.mouse.up({ button: 'middle' });
+  const viewAfter = await q.getAttribute('.uml-canvas svg', 'viewBox');
+  assert.notEqual(viewAfter, viewBefore, 'the middle button pans');
+  assert.ok(await q.locator('.uml-canvas text:text-is("10")').count(), 'the node is still there');
+  const n1 = await nodes();
+  await q.click('.uml-bar button[title^="Clear all"]');
+  assert.equal(await nodes(), 0, 'cleared');
+  await q.keyboard.press('Control+z');
+  assert.equal(await nodes(), n1, 'one undo brings it back');
+  console.log('· plain lines have no direction; middle button pans; Clear all and undo');
+
+  // 6. Sequence: activation bars from the start, resized from either end.
+  await q.goto(`${server.origin}/uml.html?diagram=sequence`);
+  await q.waitForSelector('.uml-canvas svg [data-uml-id]');
+  const bars = q.locator('.uml-canvas [data-uml-kind="element"] rect[width="14"]');
+  assert.equal(await bars.count(), 3, 'three activation bars in the starter');
+  const attrs = async () => bars.nth(1).evaluate((r) => ({ y: +r.getAttribute('y'), h: +r.getAttribute('height'), w: +r.getAttribute('width') }));
+  const bar = await bars.nth(1).boundingBox(), a0 = await attrs();
+  await q.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
+  const bottom = await q.locator('.uml-canvas [data-handle="resize"]').boundingBox();
+  await q.mouse.move(bottom.x + bottom.width / 2, bottom.y + bottom.height / 2);
+  await q.mouse.down();
+  await q.mouse.move(bottom.x + bottom.width / 2 + 30, bottom.y + bottom.height / 2 + 50, { steps: 5 });
+  await q.mouse.up();
+  const a1 = await attrs();
+  assert.ok(a1.h > a0.h + 20 && a1.y === a0.y, `taller: ${JSON.stringify([a0, a1])}`);
+  assert.equal(await bars.count(), 3, 'the width stays');
+  const top = await q.locator('.uml-canvas [data-handle="resizeTop"]').boundingBox();
+  await q.mouse.move(top.x + top.width / 2, top.y + top.height / 2);
+  await q.mouse.down();
+  await q.mouse.move(top.x + top.width / 2, top.y + top.height / 2 + 30, { steps: 5 });
+  await q.mouse.up();
+  const a2 = await attrs();
+  assert.ok(a2.y > a1.y + 10 && Math.abs(a2.y + a2.h - (a1.y + a1.h)) < 1, `the top moves, the bottom stays: ${JSON.stringify([a1, a2])}`);
+  if (DIR) await q.screenshot({ path: `${DIR}sequence.png` });
+  console.log('· sequence: activation bars in the starter, resized from either end');
+
   assert.deepEqual(errors, []);
   console.log('UML diagrams: OK');
 } catch (error) {
