@@ -3912,6 +3912,7 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 /* Insert prefab, next step for a class or use case diagram: the two editors side by side. */
 .prefab-step { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1 1 auto; }
 .prefab-step h3 { display: flex; align-items: center; gap: 6px; margin: 0; }
+.prefab-step h3 svg, .prefab-editor strong svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .prefab-editors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-height: 0; }
 .prefab-editor { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius-box, 8px); background: var(--chrome); color: var(--ink); cursor: pointer; }
 .prefab-editor[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
