@@ -4,7 +4,7 @@
 // What PlantUML cannot hold (where each box sits, the bends of a line) is kept in one comment
 // line, `' notecomplete-layout {…}`, which PlantUML ignores. Lines that only style the drawing
 // (skinparam, !include, hide…) are kept as they were, above the diagram.
-import { ELEMENTS, CONNECTORS, normalizeModel, parseLine, formatLine, UML_VERSION } from './uml.js';
+import { ELEMENTS, CONNECTORS, normalizeModel, parseLine, formatLine, UML_VERSION, headsOf } from './uml.js';
 
 const LAYOUT = /^'\s*notecomplete-layout\s+(\{.*\})\s*$/;
 // Lines kept verbatim: they style or configure the drawing and mean nothing to the model.
@@ -365,10 +365,17 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
       continue;
     }
     if (!a || !b) continue;
-    const arrow = {
+    let arrow = {
       association: p.toEnd?.navigable ? '-->' : '--', aggregation: 'o--', composition: '*--', generalization: '--|>', realization: '..|>',
       dependency: '..>', include: '..>', extend: '..>', anchor: '..',
     }[c.type] || '--';
+    // Heads or a line chosen by hand (right-click): written as PlantUML draws them.
+    if (p.headFrom || p.headTo || p.line) {
+      const h = headsOf(c);
+      const left = { none: '', open: '<', filled: '<', hollowTriangle: '<|', hollowDiamond: 'o', filledDiamond: '*' }[h.start];
+      const right = { none: '', open: '>', filled: '>', hollowTriangle: '|>', hollowDiamond: 'o', filledDiamond: '*' }[h.end];
+      arrow = `${left}${h.line === 'dashed' ? '..' : '--'}${right}`;
+    }
     let label = name;
     if (c.type === 'include') label = ' : <<include>>';
     if (c.type === 'extend') label = ` : <<extend>>${p.condition ? `\\n(${p.condition})` : ''}`;
