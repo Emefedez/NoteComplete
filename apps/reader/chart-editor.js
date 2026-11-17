@@ -491,7 +491,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number after each letter is its service time (CPU burst + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number before each letter is its service time (CPU burst + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -567,6 +567,21 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   // Fingers on the canvas. Two fingers scroll and pinch (the pinch zooms the time axis, as
   // Ctrl + wheel does); a paint the first finger began is taken back. Once a pen has been
   // used, one finger scrolls too and only the pen (or a mouse) paints, as on the note's pages.
+  // The middle button drags the canvas, as on the note's pages.
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const start = { x: e.clientX, y: e.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* A synthetic event. */ }
+    canvas.classList.add('ch-panning');
+    const move = (ev) => { canvas.scrollLeft = start.left - (ev.clientX - start.x); canvas.scrollTop = start.top - (ev.clientY - start.y); };
+    const up = () => { canvas.classList.remove('ch-panning'); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up); };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+  }, true);
+  for (const type of ['mousedown', 'auxclick']) canvas.addEventListener(type, (e) => { if (e.button === 1) e.preventDefault(); });
   const touches = new Map();
   let nav = null, touchUndo = -1;
   const mid = () => { const [a, b] = [...touches.values()]; return b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : a; };
@@ -650,7 +665,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     g.rows.forEach((r, ri) => {
       const y0 = top + ri * rh, yc = y0 + (showSolution ? rh * 0.38 : rh / 2);
       s.append(svgEl('rect', { x: left, y: y0, width: cw * n, height: rh, class: ri % 2 ? 'ch-lane odd' : 'ch-lane' }));
-      s.append(Object.assign(svgEl('text', { x: left - (kind === 'states' ? triW : 8), y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
+      s.append(Object.assign(svgEl('text', { x: left - 8, y: y0 + rh / 2 + 4, class: 'ch-label', 'text-anchor': 'end' }), { textContent: r.label }));
       // Runs of a value drawn as one stretch, as on the page.
       let k = 0;
       while (k < n) {
@@ -687,7 +702,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         s.append(svgEl('line', { x1: xe, y1: y0 + 6, x2: xe, y2: y0 + rh - 6, class: 'ch-end-line' }), svgEl('circle', { cx: xe, cy: yc, r: 4.2, class: 'ch-arrival ch-end' }));
       }
       // Service time beside the letter: CPU burst time plus time blocked.
-      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: left - 6, y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(serviceOf(r, g)) }));
+      // Just left of the letter (about 10 px per character of the longest one).
+      if (kind === 'states') s.append(Object.assign(svgEl('text', { x: Math.max(triW - 6, left - 16 - 10 * longest), y: y0 + rh / 2 + 4, class: 'ch-tri', 'text-anchor': 'end' }), { textContent: fmt(serviceOf(r, g)) }));
       if (check) for (let c = 0; c < n; c++) if (check.wrong.has(`${ri}:${c}`)) s.append(svgEl('rect', { x: left + c * cw + 1, y: y0 + 2, width: cw - 2, height: rh - 4, class: 'ch-wrong' }));
     });
     // The lanes' backgrounds under the cell lines (they were drawn over them).
