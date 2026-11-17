@@ -153,6 +153,26 @@ export function choosePrefab() {
       const svg = previews.get(p.id);
       return svg ? previewOf(svg) : make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon));
     };
+    // The cards' pictures are drawn a few at a time after the picker shows: drawing all of
+    // them first (UML diagrams, charts) kept a tablet's first open waiting for seconds.
+    const waiting = [];
+    let drawing = 0;
+    const drawSome = () => {
+      drawing = 0;
+      const until = performance.now() + 12;
+      while (waiting.length && performance.now() < until) {
+        const [p, slot] = waiting.shift();
+        if (slot.isConnected) slot.replaceWith(thumb(p));
+      }
+      if (waiting.length && dialog.open) drawing = setTimeout(drawSome, 16);
+    };
+    const lazyThumb = (p) => {
+      if (previews.has(p.id)) return thumb(p);
+      const slot = make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon));
+      waiting.push([p, slot]);
+      if (!drawing) drawing = setTimeout(drawSome, 30);
+      return slot;
+    };
     let active = null;
     const finish = (value) => { if (value) notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
     function show(p) {
@@ -168,7 +188,7 @@ export function choosePrefab() {
       const q = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const found = PREFABS.filter((p) => (!group || p.group === group) && q.every((w) => words(p).includes(w)));
       const card = (p) => {
-        const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => finish(p) }, thumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
+        const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => finish(p) }, lazyThumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
         c.dataset.id = p.id;
         c.setAttribute('role', 'option');
         // A mouse previews on hover. Not a finger or the Pencil: Safari on iPad treats a change

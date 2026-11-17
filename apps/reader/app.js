@@ -6089,9 +6089,17 @@ $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
 // `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
 // `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
+// One picker or figure editor at a time: on a slow first load, more taps on Insert prefab (or
+// a card) opened one over another, and the ones under the last were left without a way out.
+let figureOpen = false;
+async function oneFigure(open) {
+  if (figureOpen) return null;
+  figureOpen = true;
+  try { return await open(); } finally { figureOpen = false; }
+}
 async function insertPrefab(p, box = null, choice = null) {
-  if (!doc || !p || editing) return false;
-  choice ||= await choosePrefab();
+  if (!doc || !p || editing || figureOpen) return false;
+  choice ||= await oneFigure(() => choosePrefab());
   if (!choice) return false;
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
@@ -6116,11 +6124,21 @@ function sameNote(note) {
   status("Another note was opened while the editor was open; nothing was changed.", true);
   return false;
 }
-async function figureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
-  if (spec?.type === "uml") return umlEditor(spec, editing);
+// A module loaded the first time an editor opens can take a while on a tablet: past a
+// moment, a toast says it is on its way (and goes once it is there).
+async function loading(promise, text = "Opening the editor…") {
+  let shown = false;
+  const timer = setTimeout(() => { shown = true; status(text); clearTimeout(statusTimer); }, 350);
+  try { return await promise; } finally { clearTimeout(timer); if (shown) status(""); }
+}
+function figureEditor(spec, options = {}) {
+  return oneFigure(() => openFigureEditor(spec, options));
+}
+async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
+  if (spec?.type === "uml") return openUmlEditor(spec, editing);
   if (editorKind(spec)) {
     try {
-      const { openChartEditor } = await import("./chart-editor.js");
+      const { openChartEditor } = await loading(import("./chart-editor.js"));
       return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); } });
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
@@ -6130,10 +6148,13 @@ async function figureEditor(spec, { editing = false, mode = "author", references
   return editPrefab({ spec, editing });
 }
 // The UML diagram editor (uml-editor.js), loaded the first time it is needed.
-async function umlEditor(spec, editing = false) {
+function umlEditor(spec, editing = false) {
+  return oneFigure(() => openUmlEditor(spec, editing));
+}
+async function openUmlEditor(spec, editing = false) {
   try {
-    const { openUmlEditor } = await import("./uml-editor.js");
-    return await openUmlEditor(spec, { editing });
+    const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
+    return await open(spec, { editing });
   } catch (e) {
     status(`The diagram editor could not open: ${e.message}`, true);
     return null;
