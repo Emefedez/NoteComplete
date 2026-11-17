@@ -136,3 +136,17 @@ test('an association class is a dashed line to the middle of its association', (
   // Without its association, the link goes too.
   assert.equal(normalizeModel({ ...m, connectors: [link] }).connectors.length, 0);
 });
+
+test('heads chosen by hand: drawn, swapped with the line and written to PlantUML', async () => {
+  const { headsOf } = await import('./uml.js');
+  const { model } = parsePlantUml('@startuml\nclass A\nclass B\nA -- B\n@enduml');
+  const c = model.connectors[0];
+  assert.deepEqual(headsOf(c), { start: 'none', end: 'none', line: 'solid' });
+  Object.assign(c.props, { headFrom: 'filledDiamond', headTo: 'open', line: 'dashed' });
+  assert.deepEqual(headsOf(c), { start: 'filledDiamond', end: 'open', line: 'dashed' });
+  const m = normalizeModel(model);
+  m.elements[0].bounds = [0, 0, 100, 60]; m.elements[1].bounds = [300, 0, 100, 60];
+  const svg = renderUml(m).svg;
+  assert.match(svg, /stroke-dasharray="7 5"/);
+  assert.match(toPlantUml(m), /^A \*\.\.> B$/m);
+});

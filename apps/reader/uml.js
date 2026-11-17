@@ -95,6 +95,17 @@ export const ELEMENTS = {
   note: { label: 'Note', shape: 'note', size: [160, 70], fields: {}, longName: true, vp: { element: 'NOTE' }, xmi: { type: 'uml:Comment' } },
 };
 
+// The heads a connector can show at either end (props.headFrom / props.headTo override its
+// type's), and its line (props.line: solid or dashed).
+export const HEADS = { none: 'None', open: 'Open arrow', filled: 'Filled arrow', hollowTriangle: 'Triangle', hollowDiamond: 'Hollow diamond', filledDiamond: 'Filled diamond' };
+export const headsOf = (c) => {
+  const def = CONNECTORS[c.type] || {};
+  const p = c.props || {};
+  const end = p.headTo in HEADS ? p.headTo : c.type === 'association' && p.toEnd?.navigable ? 'open' : def.end || 'none';
+  const start = p.headFrom in HEADS ? p.headFrom : c.type === 'association' && p.fromEnd?.navigable ? 'open' : def.start || 'none';
+  return { start, end, line: p.line === 'dashed' || p.line === 'solid' ? p.line : def.line || 'solid' };
+};
+
 // Connector types: the line, what each end shows (END_MARKS), a keyword shown at the middle,
 // and which ends have properties (role, multiplicity, navigability).
 export const CONNECTORS = {
@@ -745,8 +756,7 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     if (!pts || pts.length < 2) continue;
     const draw = pts.map((p) => [...p]);
     const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
-    const startMark = def.start, endMark = c.type === 'association' && c.props?.toEnd?.navigable ? 'open' : def.end;
-    const fromMark = c.type === 'association' && c.props?.fromEnd?.navigable ? 'open' : startMark;
+    const heads = headsOf(c), endMark = heads.end, fromMark = heads.start;
     const [eu, ev] = unit(draw[draw.length - 2], draw[draw.length - 1]);
     const [su, sv] = unit(draw[1], draw[0]);
     const tip = [...draw[draw.length - 1]], tail = [...draw[0]];
@@ -755,7 +765,7 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     const attr = ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="connector"` : '';
     const d = draw.map((p, i) => `${i ? 'L' : 'M'}${n(p[0])} ${n(p[1])}`).join('');
     const tone = itemColor(c), k = textScale(c);
-    let g = `<path d="${d}" fill="none" stroke="${sel.has(c.id) ? '#0a84ff' : tone || INK}" stroke-width="${sel.has(c.id) ? 2.4 : 1.3}"${def.line === 'dashed' ? ' stroke-dasharray="7 5"' : ''}/>`;
+    let g = `<path d="${d}" fill="none" stroke="${sel.has(c.id) ? '#0a84ff' : tone || INK}" stroke-width="${sel.has(c.id) ? 2.4 : 1.3}"${heads.line === 'dashed' ? ' stroke-dasharray="7 5"' : ''}/>`;
     if (ids) g += `<path d="${d}" fill="none" stroke="transparent" stroke-width="14"/>`;
     g += recolor(mark(endMark, tip, eu, ev) + mark(fromMark, tail, su, sv), tone, { fill: false });
     // The label beside the middle of the longest segment (above a level line, right of an

@@ -3,7 +3,7 @@
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
 import { imageReady } from './image-ready.js';
-import { DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
+import { HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { parsePlantUml, toPlantUml } from './uml-plantuml.js';
 import { download } from './download.js';
@@ -938,7 +938,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         }
       }
       const swap = make('button', { type: 'button', textContent: 'Swap direction' });
-      swap.onclick = () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); };
+      swap.onclick = () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; if (c.props.headFrom || c.props.headTo) { const h = headsOf(c); c.props.headFrom = h.end; c.props.headTo = h.start; } c.waypoints.reverse(); changed(); };
       const straight = make('button', { type: 'button', textContent: 'Straighten', disabled: !c.waypoints.length });
       straight.onclick = () => { snapshot(); c.waypoints = []; changed(); };
       // A plain line (no arrow, no ends) looks the same either way round: no Swap direction.
@@ -1053,6 +1053,29 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const my = Math.round((ay + by) / 2);
     return apart(ax, bx) < 4 ? [] : [[Math.round(ax), my], [Math.round(bx), my]];
   }
+  // A head as a small line with it at the right end (`start`: at the left, pointing back).
+  function headIcon(kind, start = false) {
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(SVGNS, 'svg');
+    for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) svg.setAttribute(k, v);
+    const shape = { none: ['M3 12h18', ''], open: ['M3 12h17', 'M15 7l6 5-6 5'], filled: ['M3 12h12', 'M15 7l6 5-6 5Z'], hollowTriangle: ['M3 12h10', 'M13 6l8 6-8 6Z'], hollowDiamond: ['M3 12h8', 'M11 12l5-4 5 4-5 4Z'], filledDiamond: ['M3 12h8', 'M11 12l5-4 5 4-5 4Z'] }[kind] || ['M3 12h18', ''];
+    const g = document.createElementNS(SVGNS, 'g');
+    if (start) g.setAttribute('transform', 'rotate(180 12 12)');
+    for (const [i, d] of shape.entries()) {
+      if (!d) continue;
+      const path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', d);
+      if (i === 1 && (kind === 'filled' || kind === 'filledDiamond')) path.setAttribute('fill', 'currentColor');
+      g.append(path);
+    }
+    svg.append(g);
+    return svg;
+  }
+  function lineIcon(line) {
+    const svg = headIcon('none');
+    if (line === 'dashed') svg.querySelector('path').setAttribute('stroke-dasharray', '3 2.5');
+    return svg;
+  }
   // A connector made another type, keeping its name, label place, colour and text size.
   function retype(c, t) {
     if (c.type === t) return;
@@ -1141,7 +1164,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
         props,
         !def.toConnector && { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.filter((t) => !CONNECTORS[t].toConnector).map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
-        directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; c.waypoints.reverse(); changed(); } },
+        directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; if (c.props.headFrom || c.props.headTo) { const h = headsOf(c); c.props.headFrom = h.end; c.props.headTo = h.start; } c.waypoints.reverse(); changed(); } },
+        // Any head at either end, and the line: an arrow of any kind from this connector.
+        !def.message && { label: 'Start head', iconEl: headIcon(headsOf(c).start, true), submenu: () => Object.entries(HEADS).map(([h, label]) => ({ label, iconEl: headIcon(h, true), checked: headsOf(c).start === h, run: () => setProp(c, 'headFrom', h) })) },
+        !def.message && { label: 'End head', iconEl: headIcon(headsOf(c).end), submenu: () => Object.entries(HEADS).map(([h, label]) => ({ label, iconEl: headIcon(h), checked: headsOf(c).end === h, run: () => setProp(c, 'headTo', h) })) },
+        !def.message && { label: 'Line', iconEl: lineIcon(headsOf(c).line), submenu: () => ['solid', 'dashed'].map((l) => ({ label: l === 'solid' ? 'Solid' : 'Dashed', iconEl: lineIcon(l), checked: headsOf(c).line === l, run: () => setProp(c, 'line', l) })) },
+        (c.props.headFrom || c.props.headTo || c.props.line) && { label: 'Default heads', icon: 'restart', run: () => { snapshot(); delete c.props.headFrom; delete c.props.headTo; delete c.props.line; changed(); } },
+        '-',
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
         !def.message && { label: 'Make rectilinear', icon: 'layers', run: () => { snapshot(); c.waypoints = rectilinear(c); changed(); } },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
@@ -1192,6 +1221,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
           { icon: 'link', does: 'Drag a selected line\'s end onto another element: reconnect it' },
           { icon: 'text', does: 'Double-click: rename · on empty canvas: a new element' },
           { icon: 'settings', does: 'Right-click or hold: the menu (type, straighten, rectilinear, colour…)' },
+          { icon: 'arrowRight', does: 'Right-click a line: any type, the head at each end, solid or dashed' },
           { icon: 'pan', does: 'Drag empty canvas or the middle button: pan · Ctrl wheel: zoom' },
         ] },
         { title: 'Keys', icon: 'keyboard', rows: [
