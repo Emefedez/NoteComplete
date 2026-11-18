@@ -1033,6 +1033,10 @@ input[type="checkbox"] {
   width: 16px;
   height: 16px;
 }
+/* Crop and Done as icons in the accent colour, beside the red Delete. */
+#selectionFields .sel-accent { width: 28px; padding: 0; color: var(--accent); }
+#selectionFields .sel-accent svg { width: 16px; height: 16px; }
+#selectionFields .sel-accent:hover:not(:disabled) { background: var(--accent-soft); }
 #selectionKind {
   padding: 2px 8px;
   border-radius: 99px;
@@ -2279,7 +2283,14 @@ body.bar-compact .tab { height: 22px; }
 .text-format button { color: var(--ink); }
 .text-format button:hover:not([aria-pressed="true"]) { background: var(--fill); }
 #textFont { width: 112px; }
-#textSize { width: 58px; }
+/* The size: typed, or stepped with the arrows inside the field on its right (text-box.js). */
+.size-field { position: relative; display: inline-flex; align-items: center; }
+#textSize { width: 64px; min-height: 28px; box-sizing: border-box; padding: 0 20px 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+.size-steps { position: absolute; right: 2px; top: 2px; bottom: 2px; display: flex; flex-direction: column; width: 16px; }
+.text-format .size-steps button { flex: 1; display: grid; place-items: center; min-height: 0; width: 16px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--muted); }
+.text-format .size-steps button:hover { background: var(--fill); color: var(--accent); }
+.size-steps svg { width: 10px; height: 10px; }
+#textSizeDown svg { transform: rotate(180deg); }
 .text-format .fmt-bold, .text-format .fmt-italic { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 14px; }
 .text-format .fmt-bold { font-weight: 700; }
 .text-format .fmt-math { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 15px; }

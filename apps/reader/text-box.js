@@ -19,6 +19,9 @@ export const FONT_STACKS = {
   "Comic Sans MS": "'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive",
 };
 export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
+// Text sizes the core takes (imports.rs TextBox::valid), and how the size field shows one.
+export const clampSize = (n) => Math.min(4000, Math.max(0.5, n));
+export const sizeText = (n) => String(Math.round(n * 100) / 100);
 export const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
 // From one baseline to the next: the box's own line height (text from a PDF), else the usual.
 export const lineAdvance = (style) => (style.lineHeight > 0 ? style.lineHeight : textAdvance(style.size));
@@ -139,7 +142,6 @@ export function textBoxController({
   // The size a box needs: typeset math is measured, other text from its lines.
   const boxSize = (value, style) => (style.math ? mathSize(value, style).catch(() => textBoxSize(value, style)) : Promise.resolve(textBoxSize(value, style)));
 
-  for (const size of TEXT_SIZES) $("textSize")?.add?.(new Option(String(size), String(size)));
   for (const color of swatches) {
     const b = doc.createElement("button");
     b.type = "button";
@@ -160,8 +162,7 @@ export function textBoxController({
   function syncTextFormatControls(style) {
     fontOption(style.font);
     $("textFont").value = style.font || "Helvetica";
-    if (![...$("textSize").options].some((o) => Number(o.value) === style.size)) $("textSize").add(new Option(String(style.size), String(style.size)));
-    $("textSize").value = String(style.size);
+    $("textSize").value = sizeText(style.size);
     $("textBold").setAttribute("aria-pressed", String(!!style.bold));
     $("textItalic").setAttribute("aria-pressed", String(!!style.italic));
     $("textMath").setAttribute("aria-pressed", String(!!style.math));
@@ -309,7 +310,26 @@ export function textBoxController({
     };
     input.click();
   };
-  $("textSize").onchange = () => changeTextStyle({ size: Number($("textSize").value) });
+  // The size: typed (any number above 0; Enter or leaving the field applies it), or a step
+  // with the arrows inside the field or ↑ ↓ in it: 1 at a time, half a unit under 2.
+  const typedSize = () => {
+    const n = Number(String($("textSize").value).replace(",", ".").trim());
+    if (Number.isFinite(n) && n > 0) changeTextStyle({ size: clampSize(n) });
+    else if (textFormatTarget) $("textSize").value = sizeText(textFormatTarget.style.size);
+  };
+  const stepSize = (dir) => {
+    const now = textFormatTarget?.style.size;
+    if (!now) return;
+    const step = now < 2 || (now === 2 && dir < 0) ? 0.5 : 1;
+    changeTextStyle({ size: clampSize(Math.round((now + dir * step) * 2) / 2) });
+  };
+  $("textSize").onchange = typedSize;
+  $("textSize").onkeydown = (e) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); stepSize(e.key === "ArrowUp" ? 1 : -1); }
+    else if (e.key === "Enter") { e.preventDefault(); typedSize(); textEditor?.area.focus(); }
+  };
+  if ($("textSizeUp")) $("textSizeUp").onclick = () => stepSize(1);
+  if ($("textSizeDown")) $("textSizeDown").onclick = () => stepSize(-1);
   $("textColor").oninput = () => changeTextStyle({ rgba: rgbaOf($("textColor").value) });
   $("textSwatches").onclick = (e) => { const c = e.target.closest("[data-color]")?.dataset.color; if (c) changeTextStyle({ rgba: rgbaOf(c) }); };
   textFormatBar.addEventListener("keydown", (e) => {
@@ -598,6 +618,22 @@ export function textBoxController({
     status("Answer added as a text box: drag it into place, double-click to edit.");
   }
 
+  // Text pasted onto a page (from another app): a text box at `at` in the last style used,
+  // wrapped to a readable width, kept inside the page and selected so it can be dragged.
+  async function placeText(p, at, text) {
+    const currentDoc = getDoc(), activeLayer = getActiveLayer();
+    const layer = currentDoc?.layers.find((l) => l.id === activeLayer);
+    if (!currentDoc || !p?.view || !text.trim() || isEditing() || isBusy()) return;
+    if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true);
+    const style = { ...textDefaults }, wrapped = wrapText(text.slice(0, 20000), style, p.size[0] * 0.6 - 12);
+    const [w, h] = textBoxSize(wrapped, style);
+    const x = Math.min(Math.max(0, at[0] - 5), Math.max(0, p.size[0] - w)), y = Math.min(Math.max(0, at[1] - 8 - style.size * 0.8), Math.max(0, p.size[1] - h));
+    await action("image", { page: p.index, image: { base64: "", mime: "", bounds: [x, y, w, h], layer: activeLayer, text: textPayload(wrapped, style) } });
+    doc.querySelector('#toolbar [data-tool="select"]')?.click();
+    await selection.selectId(p.index, `image:${getDoc().edit_count - 1}`);
+    status("Pasted as a text box: drag it into place, double-click to edit.");
+  }
+
   function isTypingOn(p) {
     return textEditor?.p === p && (doc.activeElement === textEditor.area || (textEditor.field && doc.activeElement === textEditor.field));
   }
@@ -625,6 +661,7 @@ export function textBoxController({
     isTypingOn,
     restoreOnRender,
     answerToTextBox,
+    placeText,
     mathKeys,
   };
 }

@@ -7,6 +7,7 @@ import {
   prepareDocument,
   readImage,
   imageBounds,
+  centredAt,
   fileKind,
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
@@ -724,9 +725,11 @@ async function load(file, preparedDocument = null) {
     editing = false;
   }
 }
-async function importImages(files) {
+// `at`: { page, point } where a pasted picture goes (its centre); `any`: any image the browser
+// reads (the clipboard's).
+async function importImages(files, { at = null, any = false } = {}) {
   if (!doc || busy()) return;
-  const targetPage = page,
+  const targetPage = at?.page ?? page,
     layer = activeLayer,
     note = epoch;
   const targetLayer = doc.layers.find((l) => l.id === layer);
@@ -738,12 +741,13 @@ async function importImages(files) {
   status("Importing image…");
   try {
     for (const file of files) {
-      const decoded = await readImage(file);
+      const decoded = await readImage(file, { any });
       if (note !== epoch) return;
+      const fitted = imageBounds(decoded.size, panels[targetPage].size);
       const image = {
         base64: decoded.base64,
         mime: decoded.mime,
-        bounds: imageBounds(decoded.size, panels[targetPage].size),
+        bounds: at?.point ? centredAt(fitted, at.point, panels[targetPage].size) : fitted,
         layer,
       };
       const result = await mutate("image", { page: targetPage, image });
@@ -836,6 +840,7 @@ function buildPages(sizes) {
       if (p.audioTap && Math.hypot(e.clientX - p.audioTap[0], e.clientY - p.audioTap[1]) > 6)
         p.audioTap = null;
       if (tool === "pdfedit" && !e.buttons) pdfEdit.hover(e, p);
+      pagePointer = { p, clientX: e.clientX, clientY: e.clientY };
       longPress.move(e);
       pointerMove(e);
     };
@@ -4137,7 +4142,7 @@ document.addEventListener("keydown", (e) => {
   penMenu({ clientX: at.x, clientY: at.y });
 }, true);
 let quickKeyAt = 0;
-const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
+const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !typingIn(e.target) && !document.querySelector("dialog[open]");
 document.addEventListener("keydown", (e) => {
   if (quick.isOpen && quick.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
   // Shift pressed while a pen hovers over the pages: the menu at the pen.
@@ -4321,7 +4326,7 @@ function shortcut(e) {
 document.addEventListener("keydown", (e) => {
   // Ctrl B: the right side panel (notes); Ctrl Alt B: the left one (pages). In a text field
   // Ctrl B stays bold.
-  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyB" && !e.target.matches?.("input,select,textarea") && !e.target.isContentEditable) {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyB" && !typingIn(e.target)) {
     e.preventDefault();
     toggleSide(e.altKey ? "left" : "right");
     return;
@@ -4332,7 +4337,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
-  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
     e.preventDefault();
     toggleKeyHints();
     return;
@@ -4349,7 +4354,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     // Escape lets go of what is selected first.
-    if (selection.item && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+    if (selection.item && !typingIn(e.target)) {
       e.preventDefault();
       selection.clear();
       return;
@@ -4422,7 +4427,7 @@ document.addEventListener("keydown", (e) => {
     else save(false, "project", null, { inPlace: true });
     return;
   }
-  if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
+  if (typingIn(e.target))
     return;
   const navDir = keyNavDirection(e);
   if (navDir) {
@@ -6753,7 +6758,14 @@ async function removeItem(item) {
 // system clipboard gets a marker, so a paste knows the copy is still the last thing copied.
 const CLIP_MARK = "NoteComplete items (paste them in NoteComplete)";
 let clip = null; // { page, lines, images, box, pastes }
-const typingIn = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
+// Whether keys pressed in `t` are typing: text fields, lists and editable text. A colour
+// picker, slider, check box or button keeps the focus after it is used (the pen's colour),
+// and the shortcuts and Ctrl Z must still work there.
+const NOT_TYPED = new Set(["color", "range", "checkbox", "radio", "button", "submit", "reset", "file", "image"]);
+function typingIn(t) {
+  if (t instanceof HTMLInputElement) return !NOT_TYPED.has(t.type);
+  return t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
+}
 const itemIds = (item) => (item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
 const blobBase64 = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(r.error); r.readAsDataURL(blob); });
 // The items of `item` as lines and pictures that can go on any page.
@@ -6844,6 +6856,21 @@ async function moveToPage(item, target, start, client) {
 // copy or paste event when nothing on the page is selected or editable); the clipboard
 // events, where they come, only carry the marker.
 let clipKeyAt = -Infinity, pastedAt = -Infinity;
+// Where pasted pictures and text go: the pointer's place on a page, when it was last over one
+// still on screen, else the middle of what is shown of the current page.
+let pagePointer = null;
+function pasteSpot() {
+  const q = pagePointer?.p;
+  if (q?.el?.isConnected && q.view) {
+    const r = q.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect();
+    if (r.bottom > vp.top && r.top < vp.bottom) return { page: q.index, point: point(pagePointer, q) };
+  }
+  const p = panels[page];
+  if (!p) return null;
+  const r = p.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect(), k = p.size[0] / r.width;
+  const top = Math.max(r.top, vp.top), bottom = Math.min(r.bottom, vp.bottom);
+  return { page: p.index, point: [p.size[0] / 2, Math.min(p.size[1], Math.max(0, ((top + bottom) / 2 - r.top) * k))] };
+}
 const itemKeys = (e) => !e.defaultPrevented && !typingIn(e.target) && !window.getSelection()?.toString() && doc && !editing;
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !itemKeys(e)) return;
@@ -6890,6 +6917,23 @@ document.addEventListener("paste", (event) => {
     pastedAt = event.timeStamp;
     event.preventDefault();
     pasteUmlIntoPage(umlClip);
+    return;
+  }
+  // From other apps: a picture goes on the page where the pointer is (selected, to move it);
+  // plain text becomes a text box there.
+  const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+  if (images.length) {
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    importImages(images, { at: pasteSpot(), any: true });
+    return;
+  }
+  if (text.trim() && text !== CLIP_MARK) {
+    const spot = pasteSpot();
+    if (!spot) return;
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    textBox.placeText(panels[spot.page], spot.point, text.replace(/\r\n?/g, "\n").trimEnd());
   }
 });
 // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
