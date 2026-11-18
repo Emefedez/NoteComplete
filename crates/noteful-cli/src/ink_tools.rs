@@ -1414,8 +1414,9 @@ mod tests {
         // The compiled-in notes are every shipped module's ai.md, in order; the template
         // (prefabs/_template) and the kit are not modules.
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/reader/prefabs");
-        let notes = module_ai_notes(&dir);
-        assert_eq!(notes, SHIPPED_PREFAB_NOTES);
+        // Line endings aside (a Windows checkout may write ai.md with CRLF).
+        let notes = module_ai_notes(&dir).replace("\r\n", "\n");
+        assert_eq!(notes, SHIPPED_PREFAB_NOTES.replace("\r\n", "\n"));
         assert!(notes.contains("\"type\":\"truthtable\""));
         assert!(!notes.contains("\"type\":\"example\""));
     }
