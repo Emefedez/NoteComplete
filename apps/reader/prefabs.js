@@ -57,7 +57,7 @@ export const PREFABS = [
     id: 'plot', kind: 'prefab', group: 'exam', label: 'Exam plot', hint: 'A plot as exams draw it: curves, points and shaded areas', icon: 'graph',
     spec: { type: 'plot', title: 'f(x)', xMin: -4, xMax: 4, yMin: -2, yMax: 6, functions: [{ expr: 'x^2 - 1', label: 'f(x)' }], points: [{ x: 0, y: -1, label: '(0,-1)' }] },
   },
-  ...Object.entries(DIAGRAMS).filter(([, d]) => !d.notUml).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', group: 'diagram', label: `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
+  ...Object.entries(DIAGRAMS).filter(([, d]) => !d.notUml).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', group: 'diagram', label: d.notRecommended ? 'UML full editor' : `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: d.notRecommended ? 'Every element and connector of every UML diagram. Not recommended: it follows no single kind, and exports only as a picture or a NoteComplete diagram' : `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
 ];
 
 // The picker's groups, in order.

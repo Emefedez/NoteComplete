@@ -4319,6 +4319,13 @@ function shortcut(e) {
   return false;
 }
 document.addEventListener("keydown", (e) => {
+  // Ctrl B: the right side panel (notes); Ctrl Alt B: the left one (pages). In a text field
+  // Ctrl B stays bold.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyB" && !e.target.matches?.("input,select,textarea") && !e.target.isContentEditable) {
+    e.preventDefault();
+    toggleSide(e.altKey ? "left" : "right");
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
     if (!$("qualityDialog").open) openPalette();
@@ -4788,6 +4795,29 @@ for (const id of ["htmlNotes", "textNotes"]) $(id).onclick = async () => {
   for (const button of ["htmlNotes", "textNotes", "notesToggle"]) $(button).setAttribute("aria-expanded", String(api.visible));
 };
 $("closeNotes").onclick = () => notesButton().click();
+// The side panels hidden and shown directly: Ctrl Alt B and Ctrl B, and a tab on the window's
+// edge while one is hidden (the page list on the left, the notes on the right).
+function toggleSide(side) {
+  if (side === "left") { if (doc) $("pagesToggle").click(); }
+  else if (doc || htmlView.visible || textView.visible) notesButton().click();
+}
+const sideTabs = Object.fromEntries(["left", "right"].map((side) => {
+  const tab = Object.assign(document.createElement("button"), { type: "button", className: `side-edge ${side}`, hidden: true });
+  tab.setAttribute("aria-label", side === "left" ? "Show the pages" : "Show the notes");
+  tab.title = side === "left" ? "Show the pages (Ctrl Alt B)" : "Show the notes (Ctrl B)";
+  tab.append(icon(side === "left" ? "chevronRight" : "chevronLeft"));
+  tab.onclick = () => toggleSide(side);
+  document.querySelector(".workspace")?.append(tab);
+  return [side, tab];
+}));
+function syncSideTabs() {
+  const pagesShown = phoneLayout.matches ? $("pagesPanel").classList.contains("open") : !$("pagesPanel").hidden;
+  sideTabs.left.hidden = !doc || pagesShown || $("editor").hidden;
+  sideTabs.right.hidden = !(doc || htmlView.visible || textView.visible) || !$("notesPanel").hidden || document.body.classList.contains("guest-mode");
+}
+const sideWatch = new MutationObserver(syncSideTabs);
+for (const id of ["pagesPanel", "notesPanel", "editor"]) sideWatch.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] });
+for (const id of ["closePages", "closeNotes"]) $(id).title = id === "closePages" ? "Hide the pages (Ctrl Alt B)" : "Hide the notes (Ctrl B)";
 // The panel's left edge resizes it; the width is remembered.
 try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
 $("notesResize").onpointerdown = (down) => {

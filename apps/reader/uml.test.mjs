@@ -7,7 +7,7 @@ import { exportXmi, importXmi, exportVp, importVp, importUml, parseXml, writeXml
 
 test('every type in a diagram is in the registry, with a shape, an icon, and file names', () => {
   for (const [kind, d] of Object.entries(DIAGRAMS)) {
-    assert.ok(d.label && (d.vp || d.notUml), kind);
+    assert.ok(d.label && (d.vp || d.notUml || d.notRecommended), kind);
     for (const t of d.elements) {
       const def = ELEMENTS[t];
       assert.ok(def, `${kind}: element ${t}`);
@@ -155,7 +155,7 @@ function everything() {
 }
 
 test('every diagram kind survives XMI and Visual Paradigm XML, there and back', () => {
-  for (const m of everything().filter((q) => !DIAGRAMS[q.diagram].notUml)) {
+  for (const m of everything().filter((q) => !DIAGRAMS[q.diagram].notUml && !DIAGRAMS[q.diagram].notRecommended)) {
     same(m, importXmi(exportXmi(m)));
     same(m, importVp(exportVp(m)), 4);
     same(m, importUml(JSON.stringify(m)));
@@ -283,4 +283,15 @@ test('connector labels go beside the line, move by their offset, and are drawn o
   const label = svg.indexOf('data-uml-kind="label"'), lastLine = svg.lastIndexOf('data-uml-kind="connector"');
   assert.ok(label > lastLine, 'labels after every connector');
   assert.match(svg, /«include»/);
+});
+
+test('the full editor: every element and connector, no UML files, and other kinds paste into it', async () => {
+  const { clipFitsDiagram } = await import('./uml-clipboard.js');
+  const all = new Set(Object.entries(DIAGRAMS).filter(([k]) => k !== 'full').flatMap(([, d]) => d.elements));
+  assert.deepEqual(new Set(DIAGRAMS.full.elements), all);
+  assert.ok(DIAGRAMS.full.connectors.includes('transition') && DIAGRAMS.full.connectors.includes('syncMessage'));
+  const m = normalizeModel(starterModel('full'));
+  assert.throws(() => exportXmi(m), /full editor/);
+  assert.throws(() => exportVp(m), /full editor/);
+  assert.ok(clipFitsDiagram(normalizeModel(starterModel('state')), 'full'));
 });

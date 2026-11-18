@@ -93,6 +93,7 @@ function multiplicity(text) {
 // A node graph is not UML: it has no place in these files.
 function umlOnly(model) {
   if (DIAGRAMS[model.diagram]?.notUml) throw Error(`A ${DIAGRAMS[model.diagram].label.toLowerCase()} is not a UML diagram: export it as a picture or a NoteComplete diagram instead.`);
+  if (DIAGRAMS[model.diagram]?.notRecommended) throw Error('A diagram from the full editor mixes kinds of UML diagram, which these files cannot hold: export it as a picture or a NoteComplete diagram instead.');
   return model;
 }
 

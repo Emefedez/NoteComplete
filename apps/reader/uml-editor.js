@@ -88,7 +88,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Layout -------------------------------------------------------------------------
   root.classList.add('uml-editor');
   root.replaceChildren();
-  const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.label })));
+  const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.notRecommended ? `${d.label} — not recommended` : d.label })));
   const undoBtn = iconButton('undo', 'Undo (Ctrl Z)');
   const redoBtn = iconButton('redo', 'Redo (Ctrl Y)');
   const delBtn = iconButton('backspace', 'Delete the selection (Delete or Backspace)');
@@ -293,7 +293,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     sel.onclick = () => setTool({ kind: 'select' });
     const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
     sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-    palette.replaceChildren(sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list,
+    // The full editor says what it gives up, above its long list.
+    const warn = DIAGRAMS[model.diagram].notRecommended && make('p', { className: 'uml-hint uml-warn', textContent: 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.' });
+    palette.replaceChildren(...[sel, warn, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }

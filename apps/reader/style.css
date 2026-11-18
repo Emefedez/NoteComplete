@@ -4214,3 +4214,12 @@ body.nc-full-editor header.chrome.command-bar { z-index: 3000; }
 /* Lag log (lag-log.js). */
 .lag-log-dialog { width: min(720px, calc(100vw - 32px)); }
 .lag-log-text { max-height: 46vh; overflow: auto; margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+
+/* A hidden side panel's tab on the window's edge (app.js syncSideTabs): a click, or Ctrl Alt B
+   (left, pages) and Ctrl B (right, notes), shows the panel again. */
+.side-edge { position: absolute; top: 50%; z-index: 6; display: grid; place-items: center; width: 14px; height: 52px; margin-top: -26px; padding: 0; border: 1px solid var(--line); background: var(--chrome); color: var(--muted); cursor: pointer; opacity: .7; transition: opacity .15s, width .15s; }
+.side-edge.left { left: 0; border-left: 0; border-radius: 0 8px 8px 0; }
+.side-edge.right { right: 0; border-right: 0; border-radius: 8px 0 0 8px; }
+.side-edge:hover, .side-edge:focus-visible { opacity: 1; width: 18px; color: var(--accent); }
+.side-edge svg { width: 12px; height: 12px; }
+.side-edge[hidden] { display: none; }
