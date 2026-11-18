@@ -890,7 +890,26 @@ impl PdfEdit {
                             text.push_str(&r.text);
                             last_x1 = Some(r.x1);
                         }
-                        json!({ "x0": l.x0, "x1": l.x1, "base": l.base, "top": l.top, "bottom": l.bottom, "text": text.trim() })
+                        // Each run's own style, for text boxes with bold or italic words.
+                        let parts: Vec<Value> = rs
+                            .iter()
+                            .map(|r| {
+                                let f = fonts.get(&r.font);
+                                json!({
+                                    "x0": r.x0,
+                                    "x1": r.x1,
+                                    "text": r.text,
+                                    "font": f.map(|f| f.base.clone()).unwrap_or_default(),
+                                    "bold": f.is_some_and(|f| f.bold),
+                                    "italic": f.is_some_and(|f| f.italic),
+                                    "serif": f.is_some_and(|f| f.serif),
+                                    "mono": f.is_some_and(|f| f.mono),
+                                    "program": f.and_then(|f| f.program.clone()),
+                                    "rgba": r.rgba,
+                                })
+                            })
+                            .collect();
+                        json!({ "x0": l.x0, "x1": l.x1, "base": l.base, "top": l.top, "bottom": l.bottom, "text": text.trim(), "parts": parts })
                     })
                     .collect();
                 let mut ops: Vec<usize> = all.iter().map(|r| r.op).collect();
@@ -1613,6 +1632,9 @@ mod tests {
         let blocks = v["blocks"].as_array().unwrap();
         assert_eq!(blocks.len(), 2, "{v}");
         assert_eq!(v["skipped"]["invisible"], 1);
+        let parts = &blocks[1]["lines"][0]["parts"];
+        assert_eq!(parts[0]["text"], "First line of text");
+        assert_eq!(parts[0]["bold"], true);
         let heading = &blocks[0];
         assert_eq!(heading["lines"][0]["text"], "Heading");
         assert_eq!(heading["font"], "Helvetica-Bold");

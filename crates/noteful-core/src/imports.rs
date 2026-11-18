@@ -57,6 +57,44 @@ pub struct TextBox {
     /// pool 10). Text taken from a PDF keeps its own spacing; the usual one when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line_height: Option<f64>,
+    /// Parts of the text in their own style (a bold word in a paragraph), in order, covering
+    /// the whole text by characters. Each says only what differs from the box. Written as
+    /// one native run each; empty, the box is one run as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<Span>,
+}
+/// A part of a text box's text with its own style: `len` characters (Unicode scalar values),
+/// and what differs from the box.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Span {
+    pub len: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bold: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub italic: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rgba: Option<[f64; 4]>,
+}
+fn font_ok(font: &str) -> bool {
+    !font.is_empty()
+        && font.len() <= 64
+        && font
+            .chars()
+            .all(|c| c.is_alphanumeric() || " -_.".contains(c))
+}
+fn rgba_ok(rgba: &[f64; 4]) -> bool {
+    rgba.iter().all(|n| n.is_finite() && (0.0..=1.).contains(n))
+}
+/// One run of a text box as written: its text, font, bold, italic and colour.
+struct Part<'a> {
+    text: String,
+    font: &'a str,
+    bold: bool,
+    italic: bool,
+    rgba: [f64; 4],
 }
 fn default_font() -> String {
     "Helvetica".into()
@@ -67,23 +105,47 @@ fn is_zero(n: &u64) -> bool {
 impl TextBox {
     fn valid(&self) -> bool {
         !self.text.trim().is_empty()
-            && !self.font.is_empty()
-            && self.font.len() <= 64
-            && self
-                .font
-                .chars()
-                .all(|c| c.is_alphanumeric() || " -_.".contains(c))
+            && font_ok(&self.font)
             && self.text.len() <= 20_000
+            && (self.spans.is_empty()
+                || self.spans.len() <= 4_000
+                    && self.spans.iter().all(|s| {
+                        s.len > 0
+                            && s.font.as_deref().is_none_or(font_ok)
+                            && s.rgba.as_ref().is_none_or(rgba_ok)
+                    })
+                    && self.spans.iter().map(|s| s.len).sum::<usize>() == self.text.chars().count())
             && self.align <= 2
             && self.font_size.is_finite()
             && (2.0..=400.).contains(&self.font_size)
             && self.line_height.is_none_or(|h| {
                 h.is_finite() && h >= self.font_size * 0.5 && h <= self.font_size * 6.
             })
-            && self
-                .rgba
-                .iter()
-                .all(|n| n.is_finite() && (0.0..=1.).contains(n))
+            && rgba_ok(&self.rgba)
+    }
+    /// The runs to write: the whole text in the box's style, or one per span.
+    fn parts(&self) -> Vec<Part<'_>> {
+        let base = |text: String| Part {
+            text,
+            font: &self.font,
+            bold: self.bold,
+            italic: self.italic,
+            rgba: self.rgba,
+        };
+        if self.spans.is_empty() {
+            return vec![base(self.text.clone())];
+        }
+        let mut chars = self.text.chars();
+        self.spans
+            .iter()
+            .map(|s| Part {
+                text: chars.by_ref().take(s.len).collect(),
+                font: s.font.as_deref().unwrap_or(&self.font),
+                bold: s.bold.unwrap_or(self.bold),
+                italic: s.italic.unwrap_or(self.italic),
+                rgba: s.rgba.unwrap_or(self.rgba),
+            })
+            .collect()
     }
     /// Noteful's attributed text (object payload tag 4) for one styled run.
     /// Layout follows texto.noteful: the run, then a zero-width space that
@@ -93,60 +155,61 @@ impl TextBox {
     /// only when set, so plain boxes keep the confirmed layout.
     fn rich_text(&self, clock: u64) -> Vec<crate::Field> {
         let floats = |v: &[f64]| V::Array(v.iter().map(|n| V::Float(*n)).collect());
-        let mut keys = vec![13, 10, 6, 2, 3];
-        let mut decorations = vec![];
+        // Each run's keys; with spans, every run repeats them, so its values come next in
+        // each pool. One run gives the confirmed layout exactly.
+        let mut run_keys = vec![13, 10, 6, 2, 3];
+        let mut decoration = vec![];
         for (key, value) in [
             (4, u64::from(self.underline)),
             (5, u64::from(self.strikethrough)),
             (8, self.align),
         ] {
             if value != 0 {
-                keys.push(key);
-                decorations.push(V::UInt(value));
+                run_keys.push(key);
+                decoration.push(V::UInt(value));
             }
         }
         if self.line_height.is_some() {
-            keys.push(11);
+            run_keys.push(11);
         }
-        keys.extend([9, 10]);
-        let first_run = keys.len() as u64 - 1;
+        run_keys.push(9);
+        let parts = self.parts();
+        let (mut strings, mut counts, mut keys) = (vec![], vec![], vec![]);
+        let (mut fonts, mut flags, mut colors, mut decorations, mut paragraphs, mut numbers) =
+            (vec![], vec![], vec![], vec![], vec![], vec![]);
+        for part in &parts {
+            strings.push(V::Text(part.text.clone()));
+            counts.push(V::UInt(run_keys.len() as u64));
+            keys.extend(run_keys.iter().map(|k| V::UInt(*k)));
+            fonts.push(V::Text(part.font.to_owned()));
+            flags.extend([
+                V::UInt(u64::from(part.bold)),
+                V::UInt(u64::from(part.italic)),
+            ]);
+            colors.push(V::Fields(vec![f(0, 0x420, floats(&part.rgba))]));
+            decorations.extend(decoration.iter().cloned());
+            paragraphs.push(V::Fields(vec![f(1, 0x407, V::Array(vec![]))]));
+            numbers.push(self.font_size);
+            if let Some(h) = self.line_height {
+                numbers.push(h);
+            }
+        }
+        // The zero-width space after the text, with the typing size (key 10).
+        strings.push(V::Text("\u{200b}".into()));
+        counts.push(V::UInt(1));
+        keys.push(V::UInt(10));
+        numbers.push(self.font_size);
         vec![
             f(1, 2, V::UInt(clock)),
-            f(
-                2,
-                0x405,
-                V::Array(vec![V::Text(self.text.clone()), V::Text("\u{200b}".into())]),
-            ),
-            f(3, 0x402, V::Array(vec![V::UInt(first_run), V::UInt(1)])),
-            f(4, 0x414, V::Array(keys.into_iter().map(V::UInt).collect())),
-            f(5, 0x405, V::Array(vec![V::Text(self.font.clone())])),
-            f(
-                6,
-                0x401,
-                V::Array(vec![
-                    V::UInt(u64::from(self.bold)),
-                    V::UInt(u64::from(self.italic)),
-                ]),
-            ),
-            f(
-                7,
-                0x407,
-                V::Array(vec![V::Fields(vec![f(0, 0x420, floats(&self.rgba))])]),
-            ),
+            f(2, 0x405, V::Array(strings)),
+            f(3, 0x402, V::Array(counts)),
+            f(4, 0x414, V::Array(keys)),
+            f(5, 0x405, V::Array(fonts)),
+            f(6, 0x401, V::Array(flags)),
+            f(7, 0x407, V::Array(colors)),
             f(8, 0x402, V::Array(decorations)),
-            f(
-                9,
-                0x407,
-                V::Array(vec![V::Fields(vec![f(1, 0x407, V::Array(vec![]))])]),
-            ),
-            f(
-                10,
-                0x420,
-                floats(&match self.line_height {
-                    Some(h) => vec![self.font_size, h, self.font_size],
-                    None => vec![self.font_size, self.font_size],
-                }),
-            ),
+            f(9, 0x407, V::Array(paragraphs)),
+            f(10, 0x420, floats(&numbers)),
         ]
     }
 }
