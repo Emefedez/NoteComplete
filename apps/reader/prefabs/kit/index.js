@@ -14,3 +14,4 @@ export { codeBox, jsonErrorAt } from '../../json-code.js';
 export { editorTouch, fingerTaps } from '../../editor-touch.js';
 // The api version of this kit and of the host contract (module.json "api").
 export const API = 1;
+export { movableWindow, keepInside, windowArea } from './window.js';

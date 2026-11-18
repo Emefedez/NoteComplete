@@ -63,3 +63,24 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 .prefab-module-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 6px; border-radius: 6px; }
 .prefab-module-row:nth-child(odd) { background: color-mix(in srgb, currentColor 5%, transparent); }
 .prefab-module-row.error small { color: #d0453a; }
+/* A movable window over the page (window.js): not modal, dragged by its title bar, resized
+   from its right and bottom edges, kept inside the window. */
+.pk-window { display: flex; flex-direction: column; min-width: 0; overflow: hidden; color: var(--ink, #242830); background: var(--surface, #fff); border: 1px solid var(--line, #dce0e5); border-radius: var(--radius-box, 10px); box-shadow: var(--shadow-dialog, 0 18px 60px #0004); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.pk-window-head { flex: none; display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 2px 4px 2px 12px; border-bottom: 1px solid var(--line, #dce0e5); background: var(--chrome, #f7f8fa); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pk-window.moving .pk-window-head { cursor: grabbing; }
+.pk-window-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.pk-window-close { display: inline-grid; place-items: center; width: 30px; height: 28px; padding: 0; border: 0; border-radius: var(--radius, 6px); background: transparent; color: inherit; cursor: pointer; }
+.pk-window-close:hover { background: var(--accent-soft, #eaf0fc); }
+.pk-window-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.pk-window-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.pk-window-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 8px 14px 10px; border-top: 1px solid var(--line, #dce0e5); }
+.pk-window-foot:empty { display: none; }
+.pk-window.moving, .pk-window.sizing { user-select: none; -webkit-user-select: none; }
+.pk-window-grip { position: absolute; touch-action: none; z-index: 1; }
+.pk-grip-r { top: 34px; right: 0; bottom: 14px; width: 8px; cursor: ew-resize; }
+.pk-grip-b { left: 0; right: 14px; bottom: 0; height: 8px; cursor: ns-resize; }
+.pk-grip-rb { right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 55%, var(--line, #c8ccd2) 55% 62%, transparent 62% 72%, var(--line, #c8ccd2) 72% 79%, transparent 79%); }
+@media (pointer: coarse) { .pk-grip-r { width: 16px; } .pk-grip-b { height: 16px; } .pk-grip-rb { width: 28px; height: 28px; } }
+/* A "window" module's own editor (prefab-host.js) fills its movable window. */
+.pk-module-window .pk-window-body { padding: 0; }
+.pk-module-window .pk-host { flex: 1; min-height: 0; }

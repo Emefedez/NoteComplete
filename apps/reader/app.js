@@ -79,7 +79,7 @@ import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
-import { moduleOf } from "./prefab-registry.js";
+import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
@@ -6408,13 +6408,20 @@ async function insertCompound(p, kind, box = null, spec = {}) {
   if (!doc || !p) return false;
   if (!ensureEditableLayer()) return false;
   const note = epoch;
-  const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec });
+  const chosen = await oneFigure(() => compoundEditor(kind, spec));
   if (!chosen || !sameNote(note)) return false;
   let items;
   try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
   await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
   status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
   return true;
+}
+// The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
+// over the page, compound-dialogs.js), or the editor.js of a module put in their place.
+async function compoundEditor(kind, spec = {}, editing = false) {
+  const { editor, module } = editorOf({ module: kind });
+  if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
+  return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
 }
 $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
@@ -6485,7 +6492,10 @@ async function insertPrefab(p, box = null, choice = null) {
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
   const note = epoch;
-  const spec = await figureEditor(choice.spec);
+  // A card of a type module draws a type another module owns: its spec names its own module,
+  // so that it edits in that module's base editor (and keeps its name) from the start.
+  const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
+  const spec = await figureEditor(start);
   if (!spec || !sameNote(note)) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
@@ -6515,28 +6525,34 @@ function figureEditor(spec, options = {}) {
   return oneFigure(() => openFigureEditor(spec, options));
 }
 async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
-  // A prefab module with an editor of its own (its editor.js, docs/PREFAB-MODULES.md).
-  const owner = moduleOf(spec);
-  if (owner && /\.js$/.test(owner.manifest.editor || "")) {
+  // The editor its module's manifest names (prefab-registry.js editorOf): its own editor.js,
+  // the chart or diagram editor, a window, or the JSON one; a type module edits in its base.
+  // A manifest that names none: chosen by the spec's type, as before modules.
+  const { editor, module: owner } = editorOf(spec);
+  const keepModule = (result) => (result && spec?.module && result.module !== spec.module ? { ...result, module: spec.module } : result);
+  if (editor === "module") {
     try {
       const { openModuleEditor } = await loading(import("./prefab-host.js"));
-      return await openModuleEditor(owner, spec, { editing });
+      return keepModule(await openModuleEditor(owner, spec, { editing }));
     } catch (e) {
       status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
       return null;
     }
   }
-  if (spec?.type === "uml") return openUmlEditor(spec, editing);
-  if (editorKind(spec)) {
+  if (editor === "graph" || editor === "table") return keepModule(await compoundEditor(editor, spec, editing));
+  if (editor === "data") return keepModule(await editPrefab({ spec, editing }));
+  if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing));
+  if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) });
+      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
     }
   }
-  return editPrefab({ spec, editing });
+  // The chart module's figures the chart editor does not paint (custom SVG), and the rest.
+  return keepModule(await editPrefab({ spec, editing }));
 }
 // "To look at" in the chart editors: another note's pages as pictures. The note opens in an
 // engine worker of its own (the open note's stays as it is), its pages are drawn like the
@@ -6681,9 +6697,10 @@ async function editCompound(item, mode = "author") {
     return;
   }
   const note = epoch;
-  const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec, editing: true });
+  const chosen = await oneFigure(() => compoundEditor(c.kind, spec, true));
   if (!chosen || !sameNote(note)) return;
   let items;
+  // The page stayed usable behind the window: it may have been moved, or deleted meanwhile.
   try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
   selection.clear();
   await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
