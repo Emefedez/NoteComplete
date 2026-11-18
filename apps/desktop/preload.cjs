@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   pickFiles: () => ipcRenderer.invoke('files:pick'),
   writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke('files:save', defaultName, bytes, filters),
+  saveEntry: (name, bytes) => ipcRenderer.invoke('files:save-entry', name, bytes),
   readSibling: (file, relative) => ipcRenderer.invoke('files:read-sibling', file, relative),
   saveCopy: (file, options) => ipcRenderer.invoke('files:save-copy', file, options),
   renderHtmlPdf: html => ipcRenderer.invoke('files:render-html-pdf', html),

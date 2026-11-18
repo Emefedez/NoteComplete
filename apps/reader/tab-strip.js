@@ -31,13 +31,13 @@ export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = 
     strip.hidden = false;
     const items = tabs.length > 0 ? tabs.map(tab => {
       const el = document.createElement('div');
-      el.className = 'tab' + (tab.current ? ' current' : '') + (tab.dirty ? ' dirty' : '');
+      el.className = 'tab marquee-host' + (tab.current ? ' current' : '') + (tab.dirty ? ' dirty' : '');
       el.setAttribute('role', 'tab');
       el.setAttribute('aria-selected', String(tab.current));
       el.dataset.id = String(tab.id);
       el.title = tab.dirty ? `${tab.title} (unsaved changes)` : tab.title;
       const label = document.createElement('span');
-      label.className = 'tab-label';
+      label.className = 'tab-label marquee';
       label.textContent = tab.title;
       const close = document.createElement('button');
       close.type = 'button';

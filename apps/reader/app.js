@@ -22,6 +22,10 @@ import { driveBrowser } from "./drive-browser.js";
 import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
+import { archiveView } from "./archive-view.js";
+import { resizablePanels } from "./panel-resize.js";
+import { installMarquee } from "./marquee.js";
+import { archiveFormat, unsupportedMessage, readArchive, looksLikeGoodnotes, notebookTitle, notebooksIn, extractEntry, packFolder } from "./archive.js";
 import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
@@ -431,12 +435,15 @@ async function openLaunched() {
     const desktop = await window.notecompleteFiles?.launched?.();
     if (desktop) {
       const file = new File([desktop.bytes], desktop.name);
+      if (await openArchiveFile(file, { path: desktop.path })) return;
       await load(file);
       return await openedLocal(desktop.path, desktop.name, file);
     }
     if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
     const [file, ...rest] = launchedFiles.splice(0);
-    if (!file || busy() || !canReplace()) return;
+    if (!file || busy()) return;
+    if (await openArchiveFile(file, { origin: "Opened file" })) return;
+    if (!canReplace()) return;
     await load(file);
     if (rest.length) status(`Opened ${file.name}. Open ${rest.map((f) => f.name).join(", ")} on its own; one document per window.`);
   } catch (e) { status(e.message, true); }
@@ -4486,7 +4493,8 @@ for (const event of ["dragover", "drop"])
     const files = [...e.dataTransfer.files];
     try {
       const bytes = new Uint8Array(await files[0].slice(0, 64).arrayBuffer());
-      if (doc && fileKind(files[0].name, bytes) === "image")
+      if (archiveFormat(files[0].name, bytes)) await openImportedFile(files[0], { origin: "Dropped file" });
+      else if (doc && fileKind(files[0].name, bytes) === "image")
         await importImages(files);
       else await openImportedFile(files[0], { origin: "Dropped file" });
     } catch (error) {
@@ -4834,6 +4842,15 @@ function syncSideTabs() {
 const sideWatch = new MutationObserver(syncSideTabs);
 for (const id of ["pagesPanel", "notesPanel", "editor"]) sideWatch.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] });
 for (const id of ["closePages", "closeNotes"]) $(id).title = id === "closePages" ? "Hide the pages (Ctrl Alt B)" : "Hide the notes (Ctrl B)";
+// The pages panel and the documents list beside HTML, text and web documents: their inner edge
+// resizes them (panel-resize.js); the width is remembered.
+resizablePanels(document.querySelector("#editor .workspace"), [{ panel: $("pagesPanel"), variable: "--pages-width", side: "left", key: "pages", min: 132, max: 560 }]);
+for (const slot of ["htmlGroupSlot", "textGroupSlot", "webGroupSlot"]) {
+  const body = $(slot)?.closest(".side-body");
+  if (body) resizablePanels(body, [{ panel: $("groupPanel"), variable: "--group-width", side: "left", key: "group", min: 150, max: 560 }]);
+}
+// Names cut short slide to show their end while hovered (marquee.js).
+installMarquee();
 // The panel's left edge resizes it; the width is remembered.
 try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
 $("notesResize").onpointerdown = (down) => {
@@ -5058,6 +5075,7 @@ $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
 async function openChosen(file) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
+  if (await openArchiveFile(file)) return false;
   if (!canReplace()) return false;
   await load(file);
   return true;
@@ -5298,6 +5316,7 @@ async function restoreAfterUpdate() {
   return true;
 }
 async function openFromLibrary(file, entry) {
+  if (await openArchiveFile(file, { key: entry?.key || "", entry })) return false;
   const opened = await openChosen(file);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
@@ -5689,6 +5708,7 @@ var home = homeScreen({
   versions,
   open: openFromLibrary,
   openLink: (entry) => openWeb(webMember(entry.url, entry.name)),
+  openArchive: (member) => openArchiveMember(member).catch((error) => status(error.message, true)),
   groups,
   status,
   exportStudy: exportStudyOf,
@@ -5710,7 +5730,9 @@ async function openLocal() {
     const chosen = await bridge.openFile();
     if (!chosen) return;
     const file = new File([chosen.bytes], chosen.name);
-    if (busy() || !canReplace()) return;
+    if (busy()) return;
+    if (await openArchiveFile(file, { path: chosen.path })) return;
+    if (!canReplace()) return;
     await load(file);
     await openedLocal(chosen.path, chosen.name, file);
   } catch (error) {
@@ -5726,6 +5748,130 @@ async function openedLocal(path, name, file) {
   home.rememberFacts(entry.key, file);
   setDocMember(localMember(path, name));
   void Promise.resolve(home.rememberCover(entry.key, file)).then(() => ensureDocumentCover({ skipExisting: true }));
+}
+// Archives (.zip, .tar, .tar.gz/.tgz, .gz; archive.js): opened, they show what they hold in
+// the archive window (archive-view.js), checked entry by entry, and each entry NoteComplete
+// reads opens from there as a document. Nothing is extracted to disk. A zipped Goodnotes
+// notebook opens as the notebook; a zip of several notebooks (a Goodnotes folder export) as a
+// group of documents beside the open one, each unpacked and converted when it is opened.
+// The last archive read stays in memory for its notebooks (one at a time: they can be large).
+let archiveCache = { key: "", name: "", bytes: null };
+const zipWin = archiveView({ open: (file, title) => openFromArchive(file, title), save: saveFromArchive, status });
+function showArchiveTitle(title) {
+  $("title").textContent = title;
+  document.title = `${title} — NoteComplete`;
+  tabBar.update({ title });
+}
+async function openFromArchive(file, title, member = null) {
+  if (!ready || busy()) { status("Wait for the current operation to finish.", true); return false; }
+  if (!canReplace()) return false;
+  notePath = noteEntryKey = "";
+  await load(file);
+  await setDocMember(member);
+  showArchiveTitle(title);
+  return true;
+}
+async function saveFromArchive(bytes, name) {
+  const bridge = window.notecompleteFiles;
+  if (bridge?.saveEntry) {
+    const chosen = await bridge.saveEntry(name, bytes);
+    if (chosen) status(`Saved ${chosen.name}.`);
+    return;
+  }
+  await download(bytes, name, "application/octet-stream");
+  status(`${name} downloaded.`);
+}
+// Returns true when `file` is an archive (shown, or reported when it cannot be read here).
+// `path`: its place on this computer (desktop); `origin`: kept in the library as imported;
+// `key`: its Recent entry when it already has one.
+async function openArchiveFile(file, { path = "", origin = "", key = "" } = {}) {
+  if (!file) return false;
+  const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  const format = archiveFormat(file.name, head);
+  if (!format) return false;
+  if (format === "7z" || format === "rar") { status(unsupportedMessage(format), true); return true; }
+  status(`Reading ${file.name}…`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  // Recent keeps the archive: reopened from there, it shows again.
+  if (!key && path) key = (await library.rememberLocal(path, file.name, file.size).catch(() => null))?.key || "";
+  else if (!key && origin) key = (await library.rememberImported(file, { origin }).catch(() => null))?.key || "";
+  else if (key) await library.touch(key).catch(() => {});
+  if (home?.visible) home.renderRecent();
+  if (format === "zip") {
+    const listing = await readArchive(bytes, { name: file.name, verify: false }).catch(() => null);
+    if (listing && looksLikeGoodnotes(listing.entries)) {
+      const notebook = new File([bytes], `${notebookTitle(file.name)}.goodnotes`);
+      if (busy() || !canReplace()) return true;
+      notePath = noteEntryKey = "";
+      await load(notebook);
+      if (path) await openedLocal(path, file.name, notebook);
+      else if (key) { noteEntryKey = key; activeCoverKeyOverride = key; rememberDocument(key); await setDocMember({ key, name: file.name, source: "imported" }); }
+      return true;
+    }
+    if (listing && await openNotebookPack(listing, key || `temp:${file.name}`, file.name)) return true;
+  }
+  archiveCache = { key, name: file.name, bytes };
+  await zipWin.show(bytes, file.name);
+  const checked = zipWin.current?.summary;
+  if (checked) status(`${file.name}: ${checked.text}.`, checked.broken);
+  return true;
+}
+// The notebooks in an archive and in the zips inside it (three levels at most), with their
+// folders. Two or more: a group of documents, the first one opened.
+async function openNotebookPack(archive, key, name) {
+  const found = [];
+  const walk = async (arch, trail, depth) => {
+    for (const nb of notebooksIn(arch)) {
+      if (nb.kind !== "archive") { found.push({ trail: [...trail, nb.path], kind: nb.kind }); continue; }
+      if (depth >= 3 || nb.entry.size > 512 * 1048576) continue;
+      const inner = await extractEntry(arch, nb.entry).catch(() => null);
+      const sub = inner && await readArchive(inner, { name: nb.name, verify: false }).catch(() => null);
+      if (!sub) continue;
+      if (looksLikeGoodnotes(sub.entries)) found.push({ trail: [...trail, nb.path], kind: "file" });
+      else await walk(sub, [...trail, nb.path], depth + 1);
+    }
+  };
+  await walk(archive, [], 0);
+  if (found.length < 2) return false;
+  archiveCache = { key, name, bytes: archive.bytes };
+  const members = found.map((f) => ({ key: `archive:${key}#${f.trail.join("#")}`, name: f.trail.join(" › "), source: "archive", archive: key, archiveName: name, trail: f.trail, kind: f.kind }));
+  const id = `archive:${key}`, before = await library.store.get("settings", `group:${id}`).catch(() => null);
+  await groups.save({ id, name: notebookTitle(name), kind: "folder", archive: key, members, starred: before?.starred || [], openedAt: Date.now() });
+  await openArchiveMember(members[0]);
+  status(`${name}: ${members.length} notebooks, listed beside the document. Each one is converted when you open it.`);
+  return true;
+}
+// A notebook of a pack: unpacked from its archive (read again from Recent when it is not the
+// one in memory), through the zips it is inside, and opened.
+async function openArchiveMember(member) {
+  if (!ready || busy()) return;
+  if (!canReplace()) return;
+  let bytes = archiveCache.key === member.archive ? archiveCache.bytes : null;
+  if (!bytes) {
+    const entry = await library.store.get("entries", member.archive).catch(() => null);
+    const file = entry && await library.open(entry).catch(() => null);
+    if (!file) throw Error(`${member.archiveName || "Its archive"} is no longer where it was: open it again.`);
+    bytes = new Uint8Array(await file.arrayBuffer());
+    archiveCache = { key: member.archive, name: entry.name, bytes };
+  }
+  const leafPath = member.trail[member.trail.length - 1];
+  const progress = (done, total) => status(`Unpacking ${leafPath}… ${Math.round((done / Math.max(1, total)) * 100)}%`);
+  status(`Unpacking ${leafPath}…`);
+  let arch = await readArchive(bytes, { name: member.archiveName, verify: false });
+  for (let i = 0; i < member.trail.length; i++) {
+    const path = member.trail[i], last = i === member.trail.length - 1;
+    if (last && member.kind === "folder") { bytes = await packFolder(arch, path, { zipFiles, onProgress: progress }); break; }
+    const entry = arch.entries.find((e) => e.path === path && e.kind === "file");
+    if (!entry) throw Error(`${path} is no longer in ${member.archiveName}.`);
+    bytes = await extractEntry(arch, entry);
+    if (!last) arch = await readArchive(bytes, { name: path, verify: false });
+  }
+  const leaf = leafPath.split("/").pop().replace(/\.zip$/i, "");
+  const file = new File([bytes], /\.(goodnotes|ntb)$/i.test(leaf) ? leaf : `${leaf}.goodnotes`);
+  notePath = noteEntryKey = "";
+  await load(file);
+  await setDocMember(member);
+  showArchiveTitle(`${member.archiveName} › ${member.trail.join(" › ")}`);
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
@@ -5805,11 +5951,14 @@ async function openMember(member) {
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
     navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
   if (member.source === "web") return openWeb(member);
-  if (busy() || !canReplace()) return;
+  if (member.source === "archive") return openArchiveMember(member);
+  if (busy()) return;
   if (member.source === "local") {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
     if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
     const file = new File([bytes], member.name);
+    if (await openArchiveFile(file, { path: member.path })) return;
+    if (!canReplace()) return;
     await load(file);
     return openedLocal(member.path, member.name, file);
   }
@@ -7892,7 +8041,7 @@ if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expan
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
 // Scratchpad, saved resources, shortcuts and pen hover settings stay open beside the note.
-for (const [id, x, key, label, w, h] of [["scratchDialog", "scratchX", "scratch", "Scratchpad", 380, 240], ["allQuizzesDialog", "allQuizzesX", "saved", "Saved resources", 520, 320], ["shortcutsDialog", "shortcutsX", "shortcuts", "Shortcuts", 320, 220], ["hoverToolsDialog", "hoverToolsX", "hover-tools", "Pen hover", 340, 220]]) {
+for (const [id, x, key, label, w, h] of [["scratchDialog", "scratchX", "scratch", "Scratchpad", 380, 240], ["allQuizzesDialog", "allQuizzesX", "saved", "Saved resources", 520, 320], ["shortcutsDialog", "shortcutsX", "shortcuts", "Shortcuts", 320, 220], ["hoverToolsDialog", "hoverToolsX", "hover-tools", "Pen hover", 340, 220], ["zipWindow", "zipX", "zip", "Archive", 420, 260]]) {
   const dlg = $(id);
   $(x).onclick = () => dlg.close();
   floatingWindow(dlg, { screen: screenArea, key: `notecomplete-${key}-window`, head: dlg.querySelector(".float-head"), close: $(x), label, compact: { cls: "minimized" }, minWidth: w, minHeight: h, scroll: true });
@@ -8623,6 +8772,9 @@ async function openImportedFile(file, meta = {}) {
       return importStudyFile(file, kind);
     }
   } catch { /* Fall through to opening as a document. */ }
+  try {
+    if (await openArchiveFile(file, { origin: meta?.origin || "Imported" })) return;
+  } catch (error) { return status(error.message, true); }
   if (!canReplace()) return;
   notePath = noteEntryKey = "";
   try {

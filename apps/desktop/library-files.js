@@ -29,6 +29,53 @@ async function writeAtomic(file, bytes) {
   await rename(partial, file);
 }
 
+// A Goodnotes notebook kept unzipped (a folder holding index.notes.pb, schema.pb, notes/…, as
+// an unpacked .goodnotes or a synced package): listed and opened as one notebook, zipped
+// again here (stored, nothing compressed) since the reader reads .goodnotes files as zips.
+export async function isGoodnotesFolder(dir) {
+  try {
+    const names = new Set(await readdir(dir));
+    return names.has('index.notes.pb') && (names.has('schema.pb') || names.has('notes'));
+  } catch { return false; }
+}
+const CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+const crc32 = (b) => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+export async function zipFolder(dir, { max = 2048 * 1048576 } = {}) {
+  const files = [];
+  let total = 0;
+  const walk = async (at, rel) => {
+    for (const d of (await readdir(at, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(at, d.name), name = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) await walk(full, name);
+      else if (d.isFile()) {
+        const bytes = await readFile(full);
+        if ((total += bytes.length) > max) throw Error('That notebook folder is too large to open.');
+        files.push({ name: Buffer.from(name), bytes });
+      }
+    }
+  };
+  await walk(dir, '');
+  const parts = [], central = [];
+  let offset = 0;
+  for (const { name, bytes } of files) {
+    const crc = crc32(bytes), local = Buffer.alloc(30), entry = Buffer.alloc(46);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6);
+    local.writeUInt32LE(crc, 14); local.writeUInt32LE(bytes.length, 18); local.writeUInt32LE(bytes.length, 22); local.writeUInt16LE(name.length, 26);
+    entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt16LE(0x0800, 8);
+    entry.writeUInt32LE(crc, 16); entry.writeUInt32LE(bytes.length, 20); entry.writeUInt32LE(bytes.length, 24); entry.writeUInt16LE(name.length, 28); entry.writeUInt32LE(offset, 42);
+    parts.push(local, name, bytes); central.push(entry, name);
+    offset += 30 + name.length + bytes.length;
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+  return new Uint8Array(Buffer.concat([...parts, cd, end]));
+}
+const notebookName = (dir) => (/\.goodnotes$/i.test(path.basename(dir)) ? path.basename(dir) : `${path.basename(dir)}.goodnotes`);
+
 // The Save dialog's file name with the chosen type's extension: GTK and some Windows
 // dialogs return the name as typed, and a note saved without one would ask again next time.
 export function withExtension(file, filters) {
@@ -66,7 +113,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     if (typeof file === 'string' && s.recent.includes(file)) return;
     let inFolder = false;
     const base = typeof file === 'string' ? path.basename(file) : '';
-    if (typeof file === 'string' && path.resolve(file) === file && base && !base.startsWith('.') && NOTE.test(base)) {
+    if (typeof file === 'string' && path.resolve(file) === file && base && !base.startsWith('.') && (NOTE.test(base) || await isGoodnotesFolder(file))) {
       const parent = s.folders.find(f => inside(f, file));
       if (parent) {
         try {
@@ -167,6 +214,11 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       if (typeof folder !== 'string' || !s.folders.includes(folder)) throw Error('That folder was not opened from this device.');
       const realRoot = await realpath(folder).catch(() => folder);
       const files = [];
+      const notebook = async (full) => {
+        const info = await stat(full);
+        files.push({ path: full, name: path.relative(folder, full).split(path.sep).join('/').replace(/[^/]*$/, () => notebookName(full)), size: info.size, modified: info.mtimeMs, notebook: true });
+      };
+      if (await isGoodnotesFolder(folder)) { await notebook(folder); return files; }
       const walk = async (dir, depth) => {
         if (depth > 6 || files.length >= 500) return;
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -175,6 +227,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
           const full = path.join(dir, d.name);
           if (d.isDirectory()) {
             if (d.name.endsWith('_files')) continue;
+            if (await isGoodnotesFolder(full)) { if (inside(realRoot, await realpath(full).catch(() => ''))) await notebook(full); continue; }
             await walk(full, depth + 1);
             continue;
           }
@@ -260,6 +313,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     },
     async readRecent(file) {
       await opened(file);
+      if (await isGoodnotesFolder(file)) return zipFolder(file);
       try { return new Uint8Array(await readFile(file)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
     },
     async statLocalNote(file) {

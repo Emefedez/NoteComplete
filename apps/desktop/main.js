@@ -139,7 +139,7 @@ const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
-const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tar', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
+const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 // Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
 // in their own session so sign-ins stay apart from the reader's storage.
@@ -459,7 +459,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
   ipcMain.handle('files:remove', guarded((_event, name) => files.remove(name)));
   ipcMain.handle('files:open', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files, images and archives', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return null;
     const file = chosen.filePaths[0];
     await files.remember(file);
@@ -500,6 +500,15 @@ app.whenReady().then(async () => {
     if (chosen.canceled || !chosen.filePath) return null;
     return files.saveChosen(withExtension(chosen.filePath, filters), bytes);
   }));
+  // Archive window → Save file…: one entry, anywhere, under any plain name (not remembered).
+  ipcMain.handle('files:save-entry', guarded(async (event, name, bytes) => {
+    const base = typeof name === 'string' ? path.basename(name.replace(/\\/g, '/')) : '';
+    if (!base || base.startsWith('.') || /[\x00-\x1f]/.test(base) || !(bytes instanceof Uint8Array)) throw Error('Invalid file.');
+    const chosen = await dialog.showSaveDialog(windowOf(event.sender), { title: 'Save file from the archive', defaultPath: base });
+    if (chosen.canceled || !chosen.filePath) return null;
+    await writeFile(chosen.filePath, bytes);
+    return { path: chosen.filePath, name: path.basename(chosen.filePath), size: bytes.byteLength };
+  }));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   // PlantUML diagrams drawn by the PlantUML installed here (diagrams.js).
@@ -520,7 +529,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.on('files:download-cancel', (event, streamId) => { if (trusted(event) && typeof streamId === 'string') downloads.cancel(event.sender.id, streamId); });
   ipcMain.handle('files:pick', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files, images and archives', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];
     for (const file of [...chosen.filePaths].reverse()) await files.remember(file);
     return chosen.filePaths.map(file => ({ path: file, name: path.basename(file) }));
