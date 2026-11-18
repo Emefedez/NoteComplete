@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.38
+
+- **PlantUML files use the whole window.** A `.puml` file open in the UML editor had a dark margin on both sides and at the bottom, and two toolbars stacked: the document's bar and the editor's. The editor's tools now sit in the document bar after the file name, in one row (on a narrow window it scrolls sideways). The editor's own zoom replaces the document's, and its messages float over the drawing instead of keeping an empty strip under it.
+- **Middle-button drag moves the diagram.** Holding the mouse wheel and dragging pans a use case, class or package diagram in a `.puml` file, also over its elements. The document view caught the middle button first and tried to scroll itself, so nothing moved.
+
 ## 1.2.37
 
 - **New note with AI, rebuilt like Create exam with AI.** **File → New note with AI…** now has **Documents to base it on**: the same picker as the exam (Recents, folders, Drive, local files, or the open note with a page range), so the note is written from your notes, PDFs or Office files instead of only a typed topic. Leave the request empty to write about the documents, and tick **Only facts from these documents** to keep the AI to them.
