@@ -627,6 +627,7 @@ impl Composer {
                 strikethrough: false,
                 math: true,
                 line_height: None,
+                spans: vec![],
             }),
         });
         self.y = y + h + if display { 10. } else { 6. };

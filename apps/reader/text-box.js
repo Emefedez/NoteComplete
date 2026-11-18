@@ -9,6 +9,7 @@ import { matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js
 import { mathKeypad } from "./math-keypad.js";
 import { mathField, styleField, mounted, focusField } from "./math-field.js";
 import { fontStack, importFont, loadImportedFonts, pdfFontHash } from "./fonts.js";
+import { fromRuns, remapSpans, withoutKeys, spansFor } from "./rich-spans.js";
 
 export const FONT_STACKS = {
   Helvetica: "Helvetica, Arial, sans-serif",
@@ -62,7 +63,13 @@ export const rgbaOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2)
 
 // `math`: the text is LaTeX, typeset by KaTeX (math-boxes.js); sent only when set.
 // `line_height`: the box's own spacing (text from a PDF), sent only when it has one.
-export const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font, ...(style.math ? { math: true } : {}), ...(style.lineHeight > 0 ? { line_height: style.lineHeight } : {}) });
+// `spans`: parts in their own style (rich-spans.js), sent only when they cover the text.
+export const textPayload = (value, style, spans = []) => {
+  const parts = spansFor(value, spans);
+  return { text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font, ...(style.math ? { math: true } : {}), ...(style.lineHeight > 0 ? { line_height: style.lineHeight } : {}), ...(parts.length ? { spans: parts } : {}) };
+};
+// The fields a span can override that changed for the whole box (the format bar).
+export const changedKeys = (before, after) => ["bold", "italic", "font", "rgba"].filter((k) => JSON.stringify(before?.[k]) !== JSON.stringify(after?.[k]));
 export const boxText = (existing) => existing.runs.map((r) => r.text).join("").replaceAll("​", "");
 
 // A typed text box's drawn copy, hidden while the box over it shows its text instead.
@@ -126,7 +133,9 @@ export function textBoxController({
   try { textDefaults = { ...textDefaults, ...JSON.parse(localStorage.getItem("notecomplete-text-style") || "{}") }; } catch { /* Optional. */ }
   const styleOf = (run) => run ? { font: run.font_family || "Helvetica", size: run.font_size, bold: run.bold, italic: run.italic, rgba: run.rgba, ...(run.line_height > 0 ? { lineHeight: run.line_height } : {}) } : { ...textDefaults };
   // A typed box's style, with its math flag (kept by the box, not by its runs).
-  const boxStyleOf = (existing) => ({ ...styleOf(existing?.runs?.[0]), ...(existing?.math ? { math: true } : {}) });
+  // A typed box's style (the one most of its characters have) and the parts in another.
+  const boxStyleOf = (existing) => ({ ...(existing ? fromRuns(existing.runs, styleOf).base : styleOf(null)), ...(existing?.math ? { math: true } : {}) });
+  const boxSpansOf = (existing) => (existing ? fromRuns(existing.runs, styleOf).spans : []);
   // The size a box needs: typeset math is measured, other text from its lines.
   const boxSize = (value, style) => (style.math ? mathSize(value, style).catch(() => textBoxSize(value, style)) : Promise.resolve(textBoxSize(value, style)));
 
@@ -291,7 +300,9 @@ export function textBoxController({
     const style = boxStyleOf(existing);
     showTextFormat(p, existing.bounds, style, async (next) => {
       const value = boxText(existing), [w, h] = await boxSize(value, next);
-      action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next), width: w, height: h });
+      // A change from the bar is for the whole box: parts give up what changed.
+      const spans = withoutKeys(boxSpansOf(existing), changedKeys(style, next));
+      action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next, spans), width: w, height: h });
     });
   }
 
@@ -451,7 +462,7 @@ export function textBoxController({
     hideText(p, existing?.id);
     p.el.append(area, discard, mathPreview);
     selection.clear();
-    textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, bx, by, layer: activeLayer, fit: refit, after };
+    textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, layer: activeLayer, fit: refit, after };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); });
     area.addEventListener("keydown", (e) => {
       // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
@@ -520,7 +531,9 @@ export function textBoxController({
     const t = textEditor;
     if (!t) return;
     const value = t.area.value.replace(/\s+$/, "");
-    const text = textPayload(value, t.style);
+    // Parts keep their style through the typing; a style changed from the bar is the box's.
+    const spans = remapSpans(t.initialText, value, withoutKeys(t.spans, changedKeys(t.initial, t.style)));
+    const text = textPayload(value, t.style, spans);
     const same = t.existing && value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
     if (same || (!t.existing && !value.trim())) return close();
     const hold = holdText();

@@ -58,6 +58,10 @@ try {
   await sleep(800);
   const typed = await p.$$eval(`${sel} .render [data-item^="image:"] tspan`, (ts) => ts.map((t) => t.textContent).join('\n'));
   assert.match(typed, /Editado\.$/, `typed text kept: ${typed}`);
+  // The bold words of the paragraph stay bold, in the PDF's bold font, after the typing too.
+  const bold = await p.$$eval(`${sel} .render [data-item^="image:"] tspan[font-weight="700"]`, (ts) => ts.map((t) => [t.textContent, t.getAttribute('font-family')]));
+  assert.deepEqual(bold.map((b) => b[0]), ['Arquitectura de Computadores II'], `bold parts: ${JSON.stringify(bold)}`);
+  assert.match(bold[0][1], /Bold pdf[0-9a-f]{8}/, 'in the PDF\'s bold font');
   assert.equal(await outlined(160), blocks - 1, 'the PDF behind no longer has that text');
   if (DIR) await p.screenshot({ path: DIR + 'converted.png' });
   console.log('· a double-click makes the block a text box in the PDF\'s font; the PDF behind loses that text');

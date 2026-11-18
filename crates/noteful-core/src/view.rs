@@ -759,6 +759,7 @@ mod tests {
             strikethrough: false,
             math,
             line_height: None,
+            spans: vec![],
         }
     }
 

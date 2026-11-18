@@ -22,6 +22,7 @@ fn math_box(text: &str, math: bool) -> Image {
             strikethrough: false,
             math,
             line_height: None,
+            spans: vec![],
         }),
     }
 }

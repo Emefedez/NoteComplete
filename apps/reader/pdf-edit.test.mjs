@@ -69,3 +69,22 @@ test("a font file's family comes from its name table", () => {
   assert.equal(familyInFont(bytes), family);
   assert.equal(familyInFont(new Uint8Array([1, 2, 3])), null);
 });
+
+test("a line keeps its parts' styles: a bold word becomes a span in its own font", () => {
+  const plain = { font: "Barlow", bold: false, italic: false, program: "aaaaaaaa", rgba: [0, 0, 0, 1] };
+  const strong = { font: "Barlow-Bold", bold: true, italic: false, program: "bbbbbbbb", rgba: [0, 0, 0, 1] };
+  const block = {
+    size: 11, leading: 0, bold: false, italic: false, rgba: [0, 0, 0, 1], align: 0,
+    lines: [{ x0: 72, x1: 300, base: 700, text: "", parts: [{ ...plain, x0: 72, x1: 120, text: "Libro de" }, { ...strong, x0: 123, x1: 200, text: "Arquitectura" }, { ...plain, x0: 200, x1: 240, text: ", del" }] }],
+  };
+  const items = [
+    { str: "Libro de ", transform: [11, 0, 0, 11, 72, 700], width: 48 },
+    { str: "Arquitectura", transform: [11, 0, 0, 11, 123, 700], width: 77 },
+    { str: ", del", transform: [11, 0, 0, 11, 200, 700], width: 40 },
+  ];
+  assignText([block], items);
+  assert.equal(block.lines[0].text, "Libro de Arquitectura, del");
+  const fontOf = (part) => (part.bold ? "Barlow-Bold pdfbbbbbbbb" : "Barlow pdfaaaaaaaa");
+  const box = textBoxFor(block, { origin: [0, 100], scale: 1, font: "Barlow pdfaaaaaaaa", fontOf });
+  assert.deepEqual(box.spans, [{ len: 9 }, { len: 12, bold: true, font: "Barlow-Bold pdfbbbbbbbb" }, { len: 5 }]);
+});

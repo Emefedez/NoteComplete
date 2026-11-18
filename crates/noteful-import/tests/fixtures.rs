@@ -155,6 +155,7 @@ fn imported_notes_edit_save_and_reopen_like_any_note() {
                         strikethrough: false,
                         math: false,
                         line_height: None,
+                        spans: vec![],
                     }),
                     joined: false,
                     part: None,

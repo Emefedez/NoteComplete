@@ -43,7 +43,7 @@ pub use markdown::{
     AddedAudioEntry,
 };
 mod imports;
-pub use imports::{Image, TextBox};
+pub use imports::{Image, Span, TextBox};
 mod manipulation;
 pub use manipulation::Adjustment;
 pub mod canvas;
