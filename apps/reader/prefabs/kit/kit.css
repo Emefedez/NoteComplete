@@ -56,3 +56,10 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 /* … and where a hovering pen points (editor-touch.js). */
 .pen-hover-ring { position: fixed; left: 0; top: 0; z-index: 2147483000; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1.5px solid #0a84ff; border-radius: 50%; background: #0a84ff22; pointer-events: none; }
 .pen-hover-ring[hidden] { display: none; }
+
+/* Prefab modules… (prefab-modules-ui.js), a reader dialog. */
+.prefab-modules-dialog { width: min(560px, calc(100vw - 32px)); }
+.prefab-modules-list { display: grid; gap: 2px; max-height: 50vh; overflow: auto; margin: 6px 0 10px; }
+.prefab-module-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 6px; border-radius: 6px; }
+.prefab-module-row:nth-child(odd) { background: color-mix(in srgb, currentColor 5%, transparent); }
+.prefab-module-row.error small { color: #d0453a; }

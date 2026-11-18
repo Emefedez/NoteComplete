@@ -95,6 +95,14 @@ contextBridge.exposeInMainWorld('notecompleteLog', {
   open: () => ipcRenderer.invoke('log:open'),
 });
 // After a restart for an update: what this tab showed before it (desktop session.js).
+// Settings → Prefab modules: the folder of modules in use (desktop prefab-folder.js).
+contextBridge.exposeInMainWorld('notecompletePrefabs', {
+  list: () => ipcRenderer.invoke('prefabs:list'),
+  copyTo: () => ipcRenderer.invoke('prefabs:copy-to'),
+  use: () => ipcRenderer.invoke('prefabs:use'),
+  reset: () => ipcRenderer.invoke('prefabs:reset'),
+  open: () => ipcRenderer.invoke('prefabs:open'),
+});
 contextBridge.exposeInMainWorld('notecompleteRestore', {
   take: () => ipcRenderer.invoke('session:take'),
 });

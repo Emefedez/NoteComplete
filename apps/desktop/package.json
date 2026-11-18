@@ -40,6 +40,7 @@
       "tabs.js",
       "updater.js",
       "session.js",
+      "prefab-folder.js",
       "app-menu.js",
       "app-log.js",
       "agent-setup.js",

@@ -96,9 +96,12 @@ export function choosePrefab() {
     const importBtn = make('button', { type: 'button', title: 'Open a PlantUML (.puml), Visual Paradigm XML, XMI or NoteComplete diagram file' }, icon('import'), ' Import .puml / diagram…');
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
+    // The modules in use, and the folder of modules (prefab-modules-ui.js).
+    const modulesBtn = make('button', { type: 'button', className: 'prefab-modules-open', title: 'Prefab modules: which are in use, and a folder of your own' }, icon('settings'), ' Modules…');
+    modulesBtn.onclick = () => import('./prefab-modules-ui.js').then((m) => m.openModulesDialog({ status: (text) => { hint.textContent = text; } }));
     const filter = make('div', { className: 'prefab-filter' }, search, pills);
     const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, editorChip));
-    const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
+    const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, modulesBtn, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
     // The next step for a class or use case diagram: which editor, the two side by side.
     const step = make('div', { className: 'prefab-step', hidden: true });
     dialog.append(

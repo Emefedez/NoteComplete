@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
 import { saveSession, takeSession } from './session.js';
+import { prefabFolder, userPrefabPath } from './prefab-folder.js';
 import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
 export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
@@ -29,6 +30,8 @@ const home = 'notecomplete://reader/';
 const log = appLog(path.join(app.getPath('userData'), 'logs'));
 log.write(`[NC] start ${app.getVersion()} pid ${process.pid}`);
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
+// The prefab modules folder in use (Settings → Prefab modules).
+const prefabs = prefabFolder({ settingsFile: path.join(app.getPath('userData'), 'prefab-modules.json'), shipped: path.join(root, 'prefabs') });
 protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true,
 } }]);
@@ -411,7 +414,11 @@ app.whenReady().then(async () => {
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
     try {
-      const response = await net.fetch(pathToFileURL(assetPath(root, request.url)).href);
+      // The prefab modules folder in use, at prefabs-user/ (prefab-folder.js).
+      const relative = decodeURIComponent(new URL(request.url).pathname).replace(/^\//, '');
+      const user = relative.startsWith('prefabs-user/') ? userPrefabPath(relative, { folder: await prefabs.folder(), shipped: path.join(root, 'prefabs') }) : null;
+      if (relative.startsWith('prefabs-user/') && !user) return new Response('Not found', { status: 404 });
+      const response = await net.fetch(pathToFileURL(user || assetPath(root, request.url)).href);
       // Cross-origin isolation lets the speech engine use multiple WASM threads.
       const headers = new Headers(response.headers);
       headers.set('Cross-Origin-Opener-Policy', 'same-origin');
@@ -431,6 +438,19 @@ app.whenReady().then(async () => {
     return handler(event, ...args);
   };
   ipcMain.handle('files:folder', guarded(() => files.folder()));
+  // Settings → Prefab modules (prefab-folder.js): the folder in use and its modules; copy the
+  // app's modules to a folder, use a folder, go back to the app's own, open it.
+  ipcMain.handle('prefabs:list', guarded(() => prefabs.list()));
+  ipcMain.handle('prefabs:copy-to', guarded(async (event) => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Copy the prefab modules to…', properties: ['openDirectory', 'createDirectory'] });
+    return chosen.canceled ? null : prefabs.copyTo(chosen.filePaths[0]);
+  }));
+  ipcMain.handle('prefabs:use', guarded(async (event) => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Use this folder of prefab modules', properties: ['openDirectory'] });
+    return chosen.canceled ? null : prefabs.use(chosen.filePaths[0]);
+  }));
+  ipcMain.handle('prefabs:reset', guarded(() => prefabs.use(null)));
+  ipcMain.handle('prefabs:open', guarded(async () => { const dir = await prefabs.folder(); if (dir) await shell.openPath(dir); return !!dir; }));
   ipcMain.handle('files:choose', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Keep downloaded notes in…', defaultPath: await files.folder(), properties: ['openDirectory', 'createDirectory'] });
     return chosen.canceled ? null : files.setFolder(chosen.filePaths[0]);

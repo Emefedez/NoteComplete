@@ -5277,6 +5277,8 @@ window.notecompleteSession = async () => {
 // After it: the entry opened as from Recent, then its automatic save over it (the same file
 // to save to, unsaved), then the page it was on. True when there was something to restore.
 async function restoreAfterUpdate() {
+  // Prefab modules from the folder in use (desktop), before anything asks for a prefab.
+  if (window.notecompletePrefabs) await import("./prefab-modules-ui.js").then((m) => m.loadFolderModules()).catch((e) => console.warn(e));
   const state = await window.notecompleteRestore?.take?.().catch(() => null);
   if (!state) return false;
   try {
