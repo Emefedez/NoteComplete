@@ -29,6 +29,8 @@
   --fill: #eef0f3;
   --accent-hover: #dbe5f8;
   --danger: #b83228;
+  --ok: #1d7a4a;
+  --warn: #9a6200;
   --danger-soft: #fdeceb;
   --shadow-pop: 0 8px 24px #0002;
   --shadow-dialog: 0 18px 60px #0004;
@@ -1328,6 +1330,8 @@ main.drag {
     --fill: #30343b;
     --accent-hover: #3a4b69;
     --danger: #ffaaa3;
+    --ok: #7fd6a3;
+    --warn: #f0c060;
     --danger-soft: #432220;
   }
   #status.error {
@@ -4235,3 +4239,73 @@ body.nc-full-editor header.chrome.command-bar { z-index: 3000; }
 .side-edge:hover, .side-edge:focus-visible { opacity: 1; width: 18px; color: var(--accent); }
 .side-edge svg { width: 12px; height: 12px; }
 .side-edge[hidden] { display: none; }
+
+/* The archive window (archive-view.js): a tree of what a .zip/.tar/.gz holds, each entry marked. */
+#zipWindow.float-dialog.floating { width: min(760px, calc(100vw - 24px)); height: min(620px, calc(100dvh - 24px)); }
+.zip-body { gap: 8px; }
+.zip-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-size: 12px; }
+.zip-crumbs:empty, .zip-crumbs:has(> :only-child) { display: none; }
+.zip-crumb { padding: 2px 6px; border-radius: var(--radius); color: var(--accent); }
+.zip-crumb:hover:not(:disabled) { background: var(--accent-soft); }
+.zip-crumb:disabled { color: var(--ink); font-weight: 600; opacity: 1; }
+.zip-sep { color: var(--muted); }
+.zip-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 7px 10px; border-radius: var(--radius); background: var(--fill); font-size: 13px; font-weight: 600; }
+.zip-summary svg { width: 16px; height: 16px; flex: none; }
+.zip-summary small { flex-basis: 100%; font-weight: 400; color: var(--muted); }
+.zip-summary.ok { color: var(--ok, #1d7a4a); background: color-mix(in srgb, var(--ok, #1d7a4a) 12%, transparent); }
+.zip-summary.bad { color: var(--danger); background: var(--danger-soft); }
+.zip-summary.warn { color: var(--warn, #9a6200); background: color-mix(in srgb, var(--warn, #c98a00) 13%, transparent); }
+.zip-summary.busy { color: var(--muted); font-weight: 400; }
+.zip-filter { flex: none; max-width: 260px; }
+.zip-tree, .zip-tree ul { list-style: none; margin: 0; padding: 0; }
+.zip-tree { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--line); padding-top: 4px; }
+.zip-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 6px 0 calc(4px + var(--depth, 0) * 16px); border-radius: var(--radius); font-size: 13px; }
+.zip-row:hover { background: var(--fill); }
+.zip-row > svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.zip-row.opens > svg { color: var(--accent); }
+.zip-row.off { color: var(--muted); }
+.zip-caret { width: 18px; height: 18px; flex: none; display: inline-grid; place-items: center; padding: 0; border-radius: 4px; color: var(--muted); }
+.zip-caret svg { width: 14px; height: 14px; }
+button.zip-caret:hover { background: var(--accent-soft); color: var(--ink); }
+.zip-name { flex: 1 1 auto; min-width: 0; }
+.zip-type, .zip-size, .zip-date { flex: none; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.zip-type { width: 128px; overflow: hidden; text-overflow: ellipsis; }
+.zip-size { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.zip-date { width: 128px; }
+.zip-mark { width: 18px; flex: none; display: inline-grid; place-items: center; }
+.zip-mark svg { width: 15px; height: 15px; }
+.zip-mark.ok { color: var(--ok, #1d7a4a); }
+.zip-mark.bad { color: var(--danger); }
+.zip-mark.warn { color: var(--warn, #b07700); }
+.zip-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; width: 86px; justify-content: flex-end; }
+.zip-open { min-height: 24px; padding: 0 9px; border-radius: var(--radius); background: var(--fill); font-size: 12px; }
+.zip-open:hover { background: var(--accent-soft); color: var(--accent); }
+.zip-save { width: 26px; height: 26px; padding: 0; }
+.zip-save svg { width: 15px; height: 15px; }
+@media (max-width: 640px) { .zip-date, .zip-type { display: none; } }
+
+/* A name that does not fit slides to show its end while hovered (and back after). */
+.marquee { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.marquee.sliding { text-overflow: clip; }
+.marquee > .marquee-text { display: inline-block; transition: transform var(--slide, 1s) linear; }
+@media (prefers-reduced-motion: reduce) { .marquee > .marquee-text { transition: none; } }
+
+/* The pages panel (Ctrl Alt B) and the documents list beside HTML and text documents: wider or
+   narrower from their inner edge (panel-resize.js), the width remembered. */
+@media not ((max-width: 700px) or ((orientation: landscape) and (max-height: 500px))) { #pagesPanel { width: var(--pages-width, 176px); padding: 10px 8px; } }
+.side-body .group-panel { width: var(--group-width, 220px); padding: 10px 8px; }
+:is(.workspace, .side-body) > .panel-grip { top: 0; bottom: 0; width: 7px; z-index: 5; cursor: col-resize; }
+:is(.workspace, .side-body) > .panel-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .12s; }
+:is(.workspace, .side-body) > .panel-grip:hover::after, :is(.workspace, .side-body) > .panel-grip.dragging::after { left: 2px; width: 3px; background: var(--accent); }
+body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+/* Rows of the documents list: the name takes the room left by the star and the format chip;
+   rename and delete show on hover. */
+.group-list { gap: 1px; margin-top: 6px; }
+.group-list li { gap: 0; }
+.group-item { min-height: 24px; gap: 4px; padding: 1px 4px; }
+.group-kind { min-width: 0; max-width: 6.5em; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 16px; }
+.group-name { flex: 1 1 auto; min-width: 0; text-align: left; }
+.group-list .star-toggle { width: 20px; }
+.group-list li:not(:hover, :focus-within) :is(.group-rename, .group-remove) { display: none; }
+.group-rename { width: 22px; }
+.group-remove { padding: 0 4px; }

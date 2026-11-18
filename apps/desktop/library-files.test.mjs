@@ -214,3 +214,26 @@ test('a note saved from the Save dialog without an extension gets the chosen typ
   assert.equal(withExtension('/home/me/Tema.v2', [{ extensions: ['noteful'] }]), '/home/me/Tema.v2.noteful');
   assert.equal(withExtension('/home/me/x', null), '/home/me/x');
 });
+
+test('a Goodnotes notebook kept as a folder is listed and read as one zipped notebook', async () => {
+  const { mkdir } = await import('node:fs/promises');
+  const { readArchive, looksLikeGoodnotes } = await import('../reader/archive.js');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-gn-'));
+  const files = libraryFiles({ settingsFile: path.join(root, 'config/library.json'), defaultFolder: path.join(root, 'NoteComplete') });
+  const pack = path.join(root, 'Pack'), book = path.join(pack, 'Sem 1', 'AMtest');
+  await mkdir(path.join(book, 'notes'), { recursive: true });
+  await writeFile(path.join(book, 'index.notes.pb'), 'n');
+  await writeFile(path.join(book, 'schema.pb'), 's');
+  await writeFile(path.join(book, 'notes', 'ABC'), 'page');
+  await writeFile(path.join(pack, 'b.pdf'), '%PDF');
+  await files.rememberFolder(pack);
+  const listed = await files.listFolder(pack);
+  assert.deepEqual(listed.map(f => f.name), ['b.pdf', 'Sem 1/AMtest.goodnotes'], 'its parts are not listed one by one');
+  const bytes = await files.readRecent(listed[1].path);
+  const zip = await readArchive(bytes, { name: 'AMtest.goodnotes.zip' });
+  assert.ok(looksLikeGoodnotes(zip.entries));
+  assert.ok(zip.summary.ok, zip.summary.text);
+  // The notebook folder opened by itself is that one notebook.
+  await files.rememberFolder(book);
+  assert.deepEqual((await files.listFolder(book)).map(f => f.name), ['AMtest.goodnotes']);
+});

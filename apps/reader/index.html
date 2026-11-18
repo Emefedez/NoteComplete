@@ -307,7 +307,7 @@
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -1335,6 +1335,17 @@
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
 
+<dialog id="zipWindow" class="ocr-dialog float-dialog floating zip-window" data-window aria-labelledby="zipTitle">
+  <div class="float-head"><h2 id="zipTitle">Archive</h2><button id="zipX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
+  <div class="panel-body zip-body">
+    <nav id="zipCrumbs" class="zip-crumbs" aria-label="Archives opened inside each other"></nav>
+    <p id="zipSummary" class="zip-summary" role="status" aria-live="polite"></p>
+    <label class="drive-filter zip-filter"><span class="sr-only">Filter this archive</span><input id="zipFilter" type="search" placeholder="Filter…" /></label>
+    <ul id="zipTree" class="zip-tree" role="tree" aria-label="Archive contents"></ul>
+    <p id="zipEmpty" class="muted" hidden>This archive is empty.</p>
+  </div>
+</dialog>
+
 <dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog float-dialog floating" data-window aria-labelledby="scratchTitle">
   <div class="float-head"><h2 id="scratchTitle">Scratchpad</h2><button id="scratchX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
@@ -1521,6 +1532,7 @@
     <li><b>Study material (.ncstudy)</b> export or share flashcards, quizzes and scratchpad on their own, or bundle them inside <b>.nfedit</b>.</li>
     <li>Pages as SVG, PDF or images · study decks for Anki. <b>File → Import…</b> brings any of these back, plus quizzes from Quiz Toolkit.</li>
   </ul>
+  <p><strong>Archives</strong> (.zip, .tar, .tar.gz/.tgz, .gz) open to show what they hold, each file checked (CRC-32 for zip and gzip, header checksums for tar) and marked intact or damaged; notes, PDFs, pictures, text and Office files open from inside, and any file can be saved. Nothing is extracted to disk. A zipped Goodnotes notebook opens as the notebook; a zip of several notebooks opens as a group of documents. 7-Zip and RAR archives cannot be opened.</p>
   <p class="muted">Legacy .notecomp and .notepart files also open cleanly here.</p>
   <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
 </dialog>

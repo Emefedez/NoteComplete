@@ -3,6 +3,7 @@
 import { noteCover, archiveCover, blobReader } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { openPdf } from './pdf-background.js';
+import { isNotePackageTar } from './archive.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
@@ -62,7 +63,7 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null }) {
+export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -83,7 +84,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   let shownFolder = null, lastFolder = null;
   async function folderEntries(group) {
     const members = await groups.members(group);
-    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { key: m.key, source: m.source, path: m.path, url: m.url, name: m.name, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred })));
+    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { ...m, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred })));
   }
   async function renderFolders() {
     if (!groups) return;
@@ -281,6 +282,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
             if (((now.entryKey && now.entryKey === entry.key) || (now.webUrl && now.webUrl === entry.url)) && now.show) return now.show();
             return openLink?.(entry);
           }
+          // A notebook inside an archive (a Goodnotes pack): unpacked from the archive.
+          if (entry.source === 'archive') return openArchive?.(entry);
           if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive') {
             await library.touch(entry.key);
             return now.show();
@@ -679,6 +682,14 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="40" y="30" width="240" height="180" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/><text x="160" y="115" font-family="system-ui, sans-serif" font-size="32" font-weight="bold" fill="#0284c7" text-anchor="middle">&lt;HTML/&gt;</text><text x="160" y="150" font-family="system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Interactive Exercise</text></svg>`;
         const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
         await library.saveCover(key, url);
+        return;
+      }
+      // Archives: a box with the format (what they hold shows when they are opened).
+      if (/\.(zip|tar|tgz|gz|7z|rar)$/i.test(name) && !/\.(goodnotes|ntb)\.zip$/i.test(name)
+        && !(/\.tar$/i.test(name) && isNotePackageTar(new Uint8Array(await file.slice(0, 1024).arrayBuffer())))) {
+        const label = (/\.(tgz|tar\.gz)$/i.test(name) ? 'TAR.GZ' : name.split('.').pop()).toUpperCase();
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="100" y="52" width="120" height="30" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><rect x="108" y="82" width="104" height="96" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/><rect x="144" y="100" width="32" height="8" rx="3" fill="#94a3b8"/><text x="160" y="160" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="#475569" text-anchor="middle">${label}</text></svg>`;
+        await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
         return;
       }
       // Text and Markdown: the first lines, drawn like a page.

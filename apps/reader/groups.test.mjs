@@ -85,3 +85,18 @@ test('opened disk folders are a capped history; folders holding your changes sta
   await groups.openFolder({ folder: '/d/f5', name: 'f5' });
   assert.equal((await groups.folders())[0].name, 'f5', 'reopening moves it to the top');
 });
+
+test('a document\'s chip says its real format, short', async () => {
+  const { formatChip } = await import('./groups.js');
+  const chip = (name, extra = {}) => formatChip({ name, ...extra });
+  assert.equal(chip('a.pdf'), 'PDF');
+  assert.equal(chip('Sem 1/Cálculo.goodnotes'), 'Goodnotes');
+  assert.equal(chip('AM.goodnotes.zip'), 'Goodnotes');
+  assert.equal(chip('b.ntb'), 'Notability');
+  assert.equal(chip('x.JPEG'), 'JPG');
+  assert.equal(chip('notes.md'), 'Markdown');
+  assert.equal(chip('pack.zip'), 'ZIP');
+  assert.equal(chip('README'), 'Text');
+  assert.equal(chip('data.parquet'), 'PARQU');
+  assert.equal(formatChip({ source: 'web', name: 'x' }), 'Web');
+});
