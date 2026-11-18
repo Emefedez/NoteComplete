@@ -1,0 +1,22 @@
+{
+  "id": "uml",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 40,
+  "label": "Diagrams (UML and node graphs)",
+  "kind": "custom",
+  "output": "picture",
+  "legacyKind": "uml",
+  "types": [
+    "uml"
+  ],
+  "editor": "uml-editor",
+  "capabilities": [
+    "notes",
+    "json",
+    "export",
+    "import",
+    "clipboard"
+  ],
+  "prefabs": "code"
+}

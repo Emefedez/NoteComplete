@@ -1,0 +1,21 @@
+{
+  "id": "graph",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 10,
+  "label": "Function graph",
+  "kind": "window",
+  "output": "items",
+  "legacyKind": "graph",
+  "types": [],
+  "editor": "graph",
+  "prefabs": [
+    {
+      "id": "graph",
+      "group": "basic",
+      "label": "Function graph",
+      "hint": "Axes and a grid, with functions of x",
+      "icon": "graph"
+    }
+  ]
+}
