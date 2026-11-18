@@ -284,6 +284,27 @@ function status(text, error = false) {
   clearTimeout(statusTimer);
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
 }
+// A click on the message copies its text (an error to report, a path, a link), and it stays a
+// moment longer to say so; the pointer over it keeps it shown.
+$("status").addEventListener("click", () => {
+  const box = $("status"), text = box.textContent.trim();
+  if (!text || !box.classList.contains("show")) return;
+  const done = () => {
+    box.classList.add("copied");
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => box.classList.remove("show", "copied"), 1600);
+  };
+  (navigator.clipboard?.writeText(text) ?? Promise.reject()).then(done, () => {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(area);
+    area.select();
+    try { if (document.execCommand("copy")) done(); } finally { area.remove(); }
+  });
+});
+$("status").addEventListener("pointerenter", () => clearTimeout(statusTimer));
+$("status").addEventListener("pointerleave", () => {
+  if ($("status").classList.contains("show")) statusTimer = setTimeout(() => $("status").classList.remove("show", "copied"), 1500);
+});
 // The app's own links (notecomplete:install), e.g. in the website's welcome notebook.
 document.addEventListener("click", (event) => {
   const link = event.target.closest?.("a.ink-link, a[href^='notecomplete:']");

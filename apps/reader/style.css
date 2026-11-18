@@ -1412,8 +1412,10 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 }
 
 /* Status: a transient toast that never takes layout space. */
-#status { position: fixed; left: 50%; bottom: calc(var(--above-bars, 0px) + 12px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: 99px; background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
-#status.show { opacity: 1; transform: translate(-50%, 0); }
+#status { position: fixed; left: 50%; bottom: calc(var(--above-bars, 0px) + 12px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+/* Shown, it can be clicked: its text goes to the clipboard (app.js status). */
+#status.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: copy; }
+#status.copied::after { content: " · Copied"; color: var(--accent); font-weight: 600; }
 @media (max-width: 700px) { #status { padding: 5px 12px; font-size: 11px; max-width: calc(100vw - 48px); } }
 
 /* Home: recent notes and the Google Drive library. */
