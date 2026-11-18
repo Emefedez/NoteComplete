@@ -39,6 +39,7 @@
       "terminate-process.js",
       "tabs.js",
       "updater.js",
+      "session.js",
       "app-menu.js",
       "app-log.js",
       "agent-setup.js",

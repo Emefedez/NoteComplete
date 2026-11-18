@@ -152,3 +152,26 @@ test('autosaveController saves changed notes, offers recovery only when differen
   assert.match(compacted.msg, /1 edit fewer, 10 KB smaller/);
   assert.equal(bytesText(1572864), '1.5 MB');
 });
+
+test('a restart for an update keeps unsaved changes even with auto-save off, and opens them by id', async () => {
+  const store = autosaveStore(memoryBackend());
+  const opened = [];
+  const ctrl = autosaveController({
+    store,
+    state: { doc: () => ({}), editing: () => true, busy: () => false, revision: () => 3, epoch: () => 1, collab: () => null, fingerprint: () => 'fp-notes' },
+    call: async (op) => (op === 'save' ? '{"project":1}' : null),
+    status: () => {},
+    $: () => null,
+    win: null,
+    storage: { getItem: (k) => (k === 'notecomplete-autosave' ? '0' : null), setItem: () => {} },
+    confirmFn: () => true,
+    intervalMs: 0,
+    openSlotFile: async (slot, bytes, how) => opened.push({ id: slot.id, bytes, sameKey: how.sameKey }),
+  });
+  assert.equal(await ctrl.now({ force: true }), null, 'off, and a text being typed: no copy');
+  const slot = await ctrl.now({ force: true, always: true });
+  assert.equal(slot.key, 'fp-notes');
+  assert.equal(await ctrl.restore(slot.id), true);
+  assert.deepEqual(opened, [{ id: slot.id, bytes: '{"project":1}', sameKey: true }]);
+  assert.equal(await ctrl.restore('gone'), false);
+});

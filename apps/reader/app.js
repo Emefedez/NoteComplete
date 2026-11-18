@@ -491,7 +491,8 @@ const engine = new Engine({
     $("open").disabled = $("emptyOpen").disabled = false;
     status("Ready. Everything is processed on your device.");
     openFromAddress();
-    openLaunched();
+    // Back from a restart for an update: this tab's document again; otherwise files handed over.
+    restoreAfterUpdate().then((restored) => { if (!restored) openLaunched(); });
     window.ReactNativeWebView?.postMessage(
       JSON.stringify({ type: "noteful-ready" }),
     );
@@ -5213,6 +5214,39 @@ async function ensureDocumentCover({ skipExisting = true } = {}) {
     await library.saveCover(key, dataUrl);
     if (home?.visible) home.renderRecent?.();
   } catch { /* Optional cover fallback. */ }
+}
+// A restart for an update (desktop session.js): before it, what this tab shows, for it to
+// open again after: its Recent entry and page, and an automatic save of unsaved changes (or
+// of a note never saved), made now even with auto-save off. Null on Home.
+window.notecompleteSession = async () => {
+  if (!doc && !sideView()) return null;
+  const state = { entryKey: noteEntryKey || "", page: doc ? page : 0, title: $("title").textContent || "" };
+  if (doc && ((dirty && changed) || !noteEntryKey)) {
+    const slot = await autosave.now({ force: true, always: true }).catch(() => null);
+    if (slot?.id) state.slot = slot.id;
+  }
+  return state;
+};
+// After it: the entry opened as from Recent, then its automatic save over it (the same file
+// to save to, unsaved), then the page it was on. True when there was something to restore.
+async function restoreAfterUpdate() {
+  const state = await window.notecompleteRestore?.take?.().catch(() => null);
+  if (!state) return false;
+  try {
+    const entry = state.entryKey ? await library.store.get("entries", state.entryKey).catch(() => null) : null;
+    if (entry?.source === "web") await openWeb(webMember(entry.url, entry.name));
+    else if (entry) {
+      const file = await library.open(entry);
+      if (file) await openFromLibrary(file, entry);
+    }
+    if (state.slot && !(await autosave.restore(state.slot)) && !doc) throw Error(`The unsaved changes of “${state.title || "a note"}” were not kept.`);
+    if (doc && state.page > 0) jump(Math.min(state.page, (doc.pages || 1) - 1));
+    if (doc || sideView()) status(state.slot ? "Updated. Your note is open again, with its unsaved changes." : "Updated. Your note is open again.");
+    else status(`${state.title || "The note"} could not be opened again; it is in Recent.`, true);
+  } catch (e) {
+    status(e.message, true);
+  }
+  return true;
 }
 async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);

@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld('notecompleteLog', {
   set: on => ipcRenderer.invoke('log:set', on === true),
   open: () => ipcRenderer.invoke('log:open'),
 });
+// After a restart for an update: what this tab showed before it (desktop session.js).
+contextBridge.exposeInMainWorld('notecompleteRestore', {
+  take: () => ipcRenderer.invoke('session:take'),
+});
 contextBridge.exposeInMainWorld('notecompleteUpdates', {
   check: (manual = false) => ipcRenderer.invoke('update:check', manual === true),
   install: onProgress => {

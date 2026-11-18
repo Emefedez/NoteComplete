@@ -14,6 +14,7 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
+import { saveSession, takeSession } from './session.js';
 import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
 export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
@@ -127,6 +128,10 @@ let tabGone = () => {};
 // its own, whose reader collects it once ready (files:launched). Launch arguments and macOS
 // open-file events that come before the app is ready wait in launchQueue.
 const launchPending = new Map();
+// After a restart for an update, what each new tab opens again (session.js), taken by the
+// tab's reader once ready (session:take).
+const restorePending = new Map();
+const sessionFile = () => path.join(app.getPath('userData'), 'session.json');
 const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
@@ -175,13 +180,14 @@ function activate(win, id) {
   views.get(id)?.webContents.focus();
   broadcast(win);
 }
-function openTab(win, file = null) {
+function openTab(win, file = null, restore = null) {
   const view = new WebContentsView({ webPreferences });
   view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
   log.attach(contents, id);
   if (file) launchPending.set(id, file);
+  if (restore) restorePending.set(id, restore);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(({ url }) => {
     if (ownPage(url, home)) { openPage(url.slice(home.length)); return { action: 'deny' }; }
@@ -218,6 +224,7 @@ function openTab(win, file = null) {
   contents.on('destroyed', () => {
     views.delete(id);
     launchPending.delete(id);
+    restorePending.delete(id);
     tabGone(id);
     if (sharing?.owner === id) { sharing.server.stop(); sharing = null; }
   });
@@ -566,7 +573,30 @@ app.whenReady().then(async () => {
   ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));
   // Only this project's release pages open (releases here are pre-releases, which /latest skips).
   ipcMain.handle('update:page', guarded((_event, url) => shell.openExternal(/^https:\/\/github\.com\/Emefedez\/NoteComplete\/releases\/[\w./-]+$/.test(String(url)) ? String(url) : 'https://github.com/Emefedez/NoteComplete/releases')));
-  ipcMain.handle('update:restart', guarded(() => updates.restart()));
+  // Before restarting for an update, every tab says what it shows (the reader's
+  // notecompleteSession: its Recent entry and page, and an automatic save of unsaved
+  // changes), so the same windows and tabs open again after it. A tab that does not answer
+  // in time is left out; the restart goes on.
+  ipcMain.handle('update:restart', guarded(async () => {
+    const ask = (contents) => Promise.race([
+      contents.executeJavaScript('window.notecompleteSession ? window.notecompleteSession() : null', true),
+      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]).catch(() => null);
+    const open = await Promise.all([...windows.values()].map(async (win) => ({
+      tabs: await Promise.all(tabs.list(win.id).map(async (tab) => {
+        const contents = views.get(tab.id)?.webContents;
+        return { active: tab.active, state: contents && !contents.isDestroyed() ? await ask(contents) : null };
+      })),
+    })));
+    await saveSession(sessionFile(), open).catch((error) => log.write?.(`session: ${error.message}`));
+    updates.restart();
+  }));
+  // What this tab opens again after a restart for an update, once.
+  ipcMain.handle('session:take', guarded(event => {
+    const state = restorePending.get(event.sender.id) ?? null;
+    restorePending.delete(event.sender.id);
+    return state;
+  }));
   ipcMain.handle('windows:list', guarded(event => tabs.all().map(t => ({ id: t.id, title: t.title, current: t.id === event.sender.id }))));
   ipcMain.handle('windows:focus', guarded((_event, id) => {
     const win = windows.get(tabs.windowOf(id));
@@ -713,7 +743,18 @@ app.whenReady().then(async () => {
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   started = true;
-  createWindow({ files: launchQueue.splice(0) });
+  // Back from a restart for an update: the windows and tabs that were open, each opening its
+  // document again; files the system handed over join the first window.
+  const restored = await takeSession(sessionFile()).catch(() => null);
+  if (restored) {
+    restored.windows.forEach((w, i) => {
+      const win = createWindow({ tab: false });
+      const ids = w.tabs.map((state) => { openTab(win, null, state); return tabs.list(win.id).at(-1)?.id; });
+      if (!ids.length) openTab(win);
+      if (i === 0) for (const file of launchQueue.splice(0)) openTab(win, file);
+      if (ids[w.active] != null) activate(win, ids[w.active]);
+    });
+  } else createWindow({ files: launchQueue.splice(0) });
   app.on('activate', () => { if (!windows.size) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
