@@ -6891,8 +6891,10 @@ async function copyItem(item, { cut = false } = {}) {
   try {
     const copied = await copiedItems(item);
     clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now(), id: Math.random().toString(36).slice(2, 12) };
-    const specRaw = copied.images.length === 1 && copied.images[0]?.prefab?.kind === "prefab" ? copied.images[0].prefab.spec : null;
-    if (specRaw) { try { const spec = JSON.parse(specRaw); if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
+    // A prefab's spec is on its frame line's part (the core), or on its picture in older copies.
+    const parts = [...copied.lines.map((l) => l.part), ...copied.images.map((i) => i.part || i.prefab)].filter((q) => q?.spec);
+    const specRaw = new Set(parts.map((q) => q.id)).size === 1 ? parts[0].spec : null;
+    if (specRaw) { try { const spec = typeof specRaw === "string" ? JSON.parse(specRaw) : specRaw; if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
     await clipToSystem(item, clip);
     if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
     else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
