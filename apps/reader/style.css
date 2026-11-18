@@ -2172,6 +2172,8 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
    pointer filled. The layer takes no pointer events: pdf-edit.js finds the block itself. */
 .pdf-edit-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
 .pdf-edit-layer rect { fill: transparent; stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pdf-edit-layer rect.object { stroke: color-mix(in srgb, #16a34a 50%, transparent); }
+.pdf-edit-layer rect.object.hover { fill: color-mix(in srgb, #16a34a 12%, transparent); stroke: #16a34a; }
 .pdf-edit-layer rect.hover { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
 .sheet[data-tool="pdfedit"] { cursor: text; }
 .text-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; user-select: text; -webkit-user-select: text; }

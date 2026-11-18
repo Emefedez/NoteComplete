@@ -9,11 +9,13 @@
 // The block keeps its size, colour, line spacing and, when the PDF embeds a font the browser
 // can use with every character of the block, that font (fonts.js); else the nearest of the
 // built-in families.
-import { backgroundPlacement } from "./pdf-background.js";
+import { backgroundPlacement, openPdf } from "./pdf-background.js";
 import { pdfFontName, pdfFontHash, isRegistered, registerFont } from "./fonts.js";
 import { textBoxSize } from "./text-box.js";
 
 const ns = "http://www.w3.org/2000/svg";
+// What the messages call each kind of object.
+const OBJECT_NAMES = { image: "image", drawing: "drawing", form: "graphic", field: "form field", annotation: "annotation" };
 
 // A point of PDF user space through pdf.js's viewport (scale 1) onto the Noteful page.
 export function toPage([x, y], transform, viewport, place) {
@@ -74,7 +76,7 @@ export function textBoxFor(block, { origin, scale, font, layer = 0 }) {
   return { text, style, align, at: [x - 5, base - 8 - size] };
 }
 
-export function pdfEditController({ call, action, status, getPanels, getDoc, getActiveLayer, backgrounds, point, openText, isBusy = () => false }) {
+export function pdfEditController({ call, action, status, getPanels, getDoc, getActiveLayer, backgrounds, point, openText, selectNew, isBusy = () => false }) {
   let active = false;
   // Blocks per PDF page (resource + page index), as the engine gave them, with pdf.js's text.
   const cache = new Map();
@@ -95,14 +97,15 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
         try {
           const viewport = page.getViewport({ scale: 1 });
           const content = await page.getTextContent().catch(() => ({ items: [] }));
-          return { raw: assignText(raw.blocks, content.items), skipped: raw.skipped, viewport: { width: viewport.width, height: viewport.height, transform: viewport.transform, rotation: viewport.rotation } };
+          return { raw: assignText(raw.blocks, content.items), rawObjects: raw.objects || [], skipped: raw.skipped, viewport: { width: viewport.width, height: viewport.height, transform: viewport.transform, rotation: viewport.rotation } };
         } finally { page.cleanup(); }
       })().catch((e) => { cache.delete(k); throw e; }));
     }
     const info = await cache.get(k);
     const place = backgroundPlacement(bg, p.view.size);
-    const blocks = info.raw.map((b) => ({ ...b, rect: rectOnPage(b.bbox, info.viewport.transform, info.viewport, place) }));
-    return { ...info, bg, place, blocks };
+    const onPage = (b) => ({ ...b, rect: rectOnPage(b.bbox, info.viewport.transform, info.viewport, place) });
+    const blocks = info.raw.map(onPage), objects = info.rawObjects.map(onPage);
+    return { ...info, bg, place, blocks, objects };
   }
 
   // The outlines over a page: one rectangle per block, shown faintly, the one under the
@@ -120,8 +123,10 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     layer.setAttribute("viewBox", `0 0 ${p.view.size[0]} ${p.view.size[1]}`);
     layer.setAttribute("preserveAspectRatio", "none");
     layer.dataset.stamp = stamp;
-    for (const b of info.blocks) {
+    // Objects first, so text blocks over a drawing are outlined above it.
+    for (const b of [...info.objects, ...info.blocks]) {
       const r = document.createElementNS(ns, "rect");
+      if (b.kind) { r.setAttribute("class", "object"); r.dataset.kind = b.kind; }
       const pad = 3;
       r.setAttribute("x", b.rect[0] - pad);
       r.setAttribute("y", b.rect[1] - pad);
@@ -137,8 +142,9 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
 
   const blockAt = (info, [x, y]) => {
     const pad = 4;
-    // The smallest block holding the point (a heading inside a wide block's span wins).
-    return info.blocks
+    // The smallest block or object holding the point (a heading inside a wide block's span,
+    // a word inside a table's lines).
+    return [...info.blocks, ...info.objects]
       .filter((b) => x >= b.rect[0] - pad && x <= b.rect[0] + b.rect[2] + pad && y >= b.rect[1] - pad && y <= b.rect[1] + b.rect[3] + pad)
       .sort((a, b) => a.rect[2] * a.rect[3] - b.rect[2] * b.rect[3])[0];
   };
@@ -171,7 +177,8 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     const b = blockAt(info, point(e, p));
     if (!b) {
       lastDown = null;
-      if (!info.blocks.length) status(info.skipped?.invisible ? "This page's text is a scan with a hidden OCR layer: there is no printed text to edit." : "This page has no text to edit (a scan, or text drawn as shapes).");
+      if (!info.blocks.length && !info.objects.length) status(info.skipped?.invisible ? "This page is a scan with a hidden OCR layer: nothing on it to edit." : "This page has no text or objects to edit.");
+      else if (!info.blocks.length) status("This page has no text to edit (a scan, or text drawn as shapes); its objects can be moved.");
       return true;
     }
     mark(p, b.id);
@@ -179,8 +186,8 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     lastDown = { page: p.index, block: b.id, at: now };
     if (again) {
       lastDown = null;
-      await convert(p, info, b);
-    } else status("Double-click the block to edit its text.");
+      await (b.kind ? convertObject(p, info, b) : convert(p, info, b));
+    } else status(b.kind ? `Double-click the ${OBJECT_NAMES[b.kind] || "object"} to move it.` : "Double-click the block to edit its text.");
     return true;
   }
 
@@ -229,6 +236,62 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     openText?.(p, [bounds[0] + 6, bounds[1] + 8 + box.style.size * 0.6]);
   }
 
+  // An object (image, drawing, form XObject, field or annotation) becomes a picture in its
+  // place: the engine makes the page with nothing but it, pdf.js draws that on a transparent
+  // canvas just over the object's box, and the page's PDF loses it. The picture is then
+  // selected, to drag it.
+  async function convertObject(p, info, o) {
+    const doc = getDoc(), layerId = getActiveLayer(), layer = doc?.layers?.find((l) => l.id === layerId);
+    if (!doc || isBusy()) return;
+    if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true);
+    const { bg } = info;
+    status(`Taking the ${OBJECT_NAMES[o.kind] || "object"} out of the PDF…`);
+    const alone = await call("pdfIsolate", { resource: bg.resource_id, pageIndex: bg.page_index, ops: o.ops, annots: o.annots });
+    const png = await drawAlone(alone, o.bbox);
+    if (!png) return status("That object draws nothing that can be shown on its own.", true);
+    const bytes = await call("pdfWithout", { resource: bg.resource_id, pageIndex: bg.page_index, ops: o.ops, annots: o.annots });
+    const id = `pdfedit-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const [x, y, w, h] = o.rect;
+    await action("replacePdfText", {
+      page: p.index,
+      pages: [{ page: p.index, size: [...p.view.size], pdf: { resource: id, page_index: 0, ...(bg.rect ? { rect: bg.rect } : {}) } }],
+      pdf: { id, base64: base64Of(bytes) },
+      images: [{ base64: png.base64, mime: "image/png", bounds: [x, y, Math.max(w, 1), Math.max(h, 1)], layer: layerId }],
+    });
+    status("It is a picture on the page now: drag it to move it. Undo puts it back in the PDF.");
+    selectNew?.(p);
+  }
+
+  // The one-page PDF with a single object drawn over its box `bbox` (user space), as a PNG
+  // with a transparent background: { base64 } or null when nothing shows. Only the box is
+  // drawn (pdf.js's transform), at up to 6 pixels per point and 2400 on the longer side.
+  async function drawAlone(bytes, bbox) {
+    const pdf = await openPdf(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    try {
+      const page = await pdf.getPage(1);
+      const longer = Math.max(bbox[2] - bbox[0], bbox[3] - bbox[1], 1);
+      const scale = Math.min(6, Math.max(2, 2400 / longer));
+      const viewport = page.getViewport({ scale });
+      const [cx, cy, cw, ch] = rectOnPage(bbox, viewport.transform, viewport, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.ceil(cw));
+      canvas.height = Math.max(1, Math.ceil(ch));
+      const context = canvas.getContext("2d");
+      await page.render({ canvasContext: context, viewport, transform: [1, 0, 0, 1, -cx, -cy], background: "rgba(0,0,0,0)" }).promise;
+      page.cleanup();
+      // Anything drawn at all?
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let seen = false;
+      for (let i = 3; i < pixels.length; i += 4 * 7) if (pixels[i]) { seen = true; break; }
+      if (!seen) return null;
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      canvas.width = canvas.height = 0;
+      return { base64: base64Of(new Uint8Array(await blob.arrayBuffer())) };
+    } finally {
+      await pdf.loadingTask.destroy().catch(() => { /* Optional. */ });
+    }
+  }
+
   function base64Of(bytes) {
     let s = "";
     const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -240,7 +303,7 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     active = true;
     hovered = null;
     lastDown = null;
-    status("Edit PDF: double-click a block of the PDF's text to edit it as a text box.");
+    status("Edit PDF: double-click text to edit it, or an image or drawing to move it.");
     for (const p of getPanels()) if (p.view?.pdf_background && (p.near || p.el.getBoundingClientRect().bottom > 0)) outline(p);
   }
   function leave() {

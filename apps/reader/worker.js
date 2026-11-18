@@ -40,7 +40,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile", "pdfBlocks", "pdfWithout", "pdfFont", "pdfFontMissing", "pdfEditClose"]);
+const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile", "pdfBlocks", "pdfWithout", "pdfIsolate", "pdfFont", "pdfFontMissing", "pdfEditClose"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -188,7 +188,11 @@ const onDocument = {
   },
   async pdfWithout(args) {
     const m = await pdfEditing(args.resource);
-    return m.pdf_edit_without(args.resource, args.pageIndex, JSON.stringify(args.ops));
+    return m.pdf_edit_without(args.resource, args.pageIndex, JSON.stringify(args.ops || []), JSON.stringify(args.annots || []));
+  },
+  async pdfIsolate(args) {
+    const m = await pdfEditing(args.resource);
+    return m.pdf_edit_isolate(args.resource, args.pageIndex, JSON.stringify(args.ops || []), JSON.stringify(args.annots || []));
   },
   async pdfFont(args) {
     const m = await pdfEditing(args.resource);
@@ -278,7 +282,7 @@ const onDocument = {
 };
 
 // Replies that are bytes made for this message: their buffer is handed over, not copied.
-const TRANSFERRED = new Set(["jpegPagesPdf", "exportNotecomplete", "export", "audio", "pdf", "pdfWithout", "pdfFont"]);
+const TRANSFERRED = new Set(["jpegPagesPdf", "exportNotecomplete", "export", "audio", "pdf", "pdfWithout", "pdfIsolate", "pdfFont"]);
 
 self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
   try {

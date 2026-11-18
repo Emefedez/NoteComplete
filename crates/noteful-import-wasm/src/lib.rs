@@ -62,11 +62,30 @@ pub fn pdf_edit_blocks(key: &str, page: u32) -> Result<String, String> {
     with_pdf(key, |pdf| pdf.blocks(page).map(|v| v.to_string()))
 }
 
-/// The page alone as a new PDF, without the operators listed (JSON array of indices).
+/// The page alone as a new PDF, without the marks of the operators listed and the
+/// annotations listed (JSON arrays of indices; `annots` may be empty).
 #[wasm_bindgen]
-pub fn pdf_edit_without(key: &str, page: u32, ops: &str) -> Result<Vec<u8>, String> {
+pub fn pdf_edit_without(key: &str, page: u32, ops: &str, annots: &str) -> Result<Vec<u8>, String> {
     let ops: Vec<usize> = serde_json::from_str(ops).map_err(|e| e.to_string())?;
-    with_pdf(key, |pdf| pdf.without_runs(page, &ops))
+    let annots: Vec<usize> = if annots.is_empty() {
+        vec![]
+    } else {
+        serde_json::from_str(annots).map_err(|e| e.to_string())?
+    };
+    with_pdf(key, |pdf| pdf.without(page, &ops, &annots))
+}
+
+/// The page alone with only the marks of the operators and the annotations listed: one object,
+/// for the reader to draw as a picture.
+#[wasm_bindgen]
+pub fn pdf_edit_isolate(key: &str, page: u32, ops: &str, annots: &str) -> Result<Vec<u8>, String> {
+    let ops: Vec<usize> = serde_json::from_str(ops).map_err(|e| e.to_string())?;
+    let annots: Vec<usize> = if annots.is_empty() {
+        vec![]
+    } else {
+        serde_json::from_str(annots).map_err(|e| e.to_string())?
+    };
+    with_pdf(key, |pdf| pdf.isolate(page, &ops, &annots))
 }
 
 /// An embedded font program (TrueType or OpenType) of page `page` (0-based), by hash.

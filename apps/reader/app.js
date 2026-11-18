@@ -1117,6 +1117,11 @@ const pdfEdit = pdfEditController({
   backgrounds: () => backgrounds,
   point: (e, p) => point(e, p),
   openText: (p, at) => textBox.open(p, at),
+  // An object taken out of the PDF: selected with Select, to drag it.
+  selectNew: (p) => {
+    document.querySelector('#toolbar [data-tool="select"]')?.click();
+    selection.selectId(p.index, `image:${doc.edit_count - 1}`);
+  },
   isBusy: () => busy(),
 });
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
@@ -3393,7 +3398,7 @@ function selectTool(name, { fromMenu = false } = {}) {
         : tool === "erase"
           ? "Drag to erase whole strokes."
         : tool === "pdfedit"
-          ? "Edit PDF: double-click a block of the PDF's text to edit it as a text box."
+          ? "Edit PDF: double-click text to edit it, or an image or drawing to move it."
           : tool === "pan"
             ? "Scroll through the pages."
             : "Draw on the selected layer.",

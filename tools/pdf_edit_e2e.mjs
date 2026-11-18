@@ -42,7 +42,7 @@ try {
   console.log(`· Edit PDF outlines ${blocks} blocks of the page's text`);
 
   // 2. A double-click: the block as a text box in the PDF's font, open for typing.
-  const boxes = await p.$$eval(`${sel} .pdf-edit-layer rect`, (rs) => rs.map((r) => { const q = r.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; }).filter((q) => q.y > 100 && q.y + q.h < 880));
+  const boxes = await p.$$eval(`${sel} .pdf-edit-layer rect:not(.object)`, (rs) => rs.map((r) => { const q = r.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; }).filter((q) => q.y > 100 && q.y + q.h < 880));
   const target = boxes.sort((m, n) => n.w * n.h - m.w * m.h)[0];
   await p.mouse.dblclick(target.x + 20, target.y + target.h / 2);
   await p.waitForSelector('.text-editor');
@@ -88,6 +88,35 @@ try {
   assert.equal(await textItems(), 0);
   assert.equal(await outlined(170), blocks, 'the original PDF page, all its blocks again');
   console.log('· undo puts the PDF\'s text back');
+
+  // 3b. Objects: the logo (an image) taken out of the PDF as a picture, selected, dragged;
+  // one undo puts it back in the PDF.
+  const kinds = await p.$$eval(`${sel} .pdf-edit-layer rect.object`, (rs) => rs.map((r) => r.dataset.kind));
+  assert.ok(kinds.includes('image') && kinds.includes('drawing'), `objects outlined: ${kinds}`);
+  const logo = await p.$eval(`${sel} .pdf-edit-layer rect.object[data-kind="image"]`, (r) => { const q = r.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; });
+  await p.mouse.dblclick(logo.x, logo.y);
+  await p.waitForFunction(() => document.querySelector('#toolbar [data-tool="select"]').getAttribute('aria-pressed') === 'true');
+  await p.waitForSelector(`${sel} .render [data-item^="image:"] image`);
+  const picture = p.locator(`${sel} .render [data-item^="image:"]`).first();
+  const at = await picture.boundingBox();
+  assert.ok(Math.abs(at.x + at.width / 2 - logo.x) < 4 && Math.abs(at.y + at.height / 2 - logo.y) < 4, 'the picture where the image was');
+  await p.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(at.x + at.width / 2 + 120, at.y + at.height / 2 + 30, { steps: 8 });
+  await p.mouse.up();
+  await sleep(1000);
+  const to = await picture.boundingBox();
+  assert.ok(Math.abs(to.x - at.x - 120) < 3 && Math.abs(to.y - at.y - 30) < 3, `dragged: ${JSON.stringify([to.x - at.x, to.y - at.y])}`);
+  if (DIR) await p.screenshot({ path: DIR + 'object-moved.png' });
+  await p.click('#toolbar [data-tool="pdfedit"]');
+  assert.equal(await outlined(170), blocks - 1, 'the PDF behind no longer has the image');
+  await p.keyboard.press('Control+z');
+  await sleep(600);
+  await p.keyboard.press('Control+z');
+  await p.waitForFunction(() => !document.querySelector('.sheet[data-page="1"] .render [data-item^="image:"]'));
+  await sleep(800);
+  assert.equal(await outlined(180), blocks, 'undo: the image is in the PDF again');
+  console.log('· an image of the PDF becomes a picture to drag; undo puts it back');
 
   // 4. Text drawn as shapes: nothing to edit, and it says so.
   const q = await b.newPage({ viewport: { width: 1280, height: 900 } });

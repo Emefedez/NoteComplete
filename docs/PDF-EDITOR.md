@@ -12,7 +12,8 @@ Owner's idea (2026-11-18): an **Edit PDF** mode like Master PDF Editor 4's *Edit
 - **Line spacing.** `TextBox.line_height` (native key 11, pool 10) carries the PDF's leading, and the core draws a line with its own line height at its true size and spacing. Lines without one keep Noteful's 15-unit minimum and 8-unit gap, so native notes draw as before.
 - **Grouping.** Lines join a block when they have the same size and left edge (or centre, or right edge) and a steady leading. A gap of up to 2.3× the size is accepted only below a line that fills its column (book layouts); a line that ends short closes its paragraph.
 - **Measured** (native build; the reader adds WASM overhead): ISI statement, 2 ms to read, 2 ms per page of blocks, 2 ms for the copy. STM32 book (9 732 objects), 21 ms to read. In the reader on the practice book: outlines in 92 ms, conversion in 84 ms.
-- **Limits now.** A text box has one style, so bold or italic words inside a paragraph become the paragraph's style. Lines keep the PDF's line breaks (no reflow while typing). Rotated pages, rotated text, text in form XObjects and invisible OCR text are not offered. Encrypted PDFs that need a password are refused. Cover and retype (Phase 5) is not built.
+- **Objects (built 2026-11-18, the owner's follow-up).** Besides text, the interpreter records every painted path (with its stroke's half width), image XObject, inline image and form XObject, and the page's annotations and form fields that have an appearance. Paths that touch or overlap (within 1.5 pt) are one **drawing**; fills over half the page are left out as backgrounds. A double-click on an object makes the page with **only that object** (`PdfEdit::isolate`: every state operator kept, so transformations, clips and colours hold; other marks removed), pdf.js draws just the object's box of it on a transparent canvas, and the PNG becomes an image item in its place, selected with Select to drag. The page's background loses the object (`PdfEdit::without`: a removed path keeps its construction and ends in `n`, so a clip it sets still applies). Annotations now stay in every page copy, cut loose from the document (no `/P`, `/Parent`, `/Popup`, `/IRT`; a widget keeps its inherited `FT`, `V`, `DA`); before, a text conversion dropped them all but web links. Vectors become pictures (up to 6 px per point, 2400 px on the longer side), not editable vectors.
+- **Limits now.** A text box has one style, so bold or italic words inside a paragraph become the paragraph's style. Lines keep the PDF's line breaks (no reflow while typing). Rotated pages, rotated text, text in form XObjects and invisible OCR text are not offered. Encrypted PDFs that need a password are refused. Cover and retype is not built; objects are pictures once moved.
 
 `[D]` done · `[!]` done, not yet verified against the real app · `[ ]` to do
 
@@ -164,7 +165,7 @@ With the mode off, the only cost is code size. The new module is in the core, ab
 
 ### Phase 5: beyond text `[ ]`
 - [ ] Cover and retype for PDFs without text (OCR blocks).
-- [ ] Images (`Do` on image XObjects): select, move, delete, replace, as Master PDF's object mode.
+- [!] Images, drawings, form XObjects, fields and annotations: moved out as pictures (select, move, resize, delete with Select).
 - [ ] Text inside Form XObjects (clone the form per page).
 - [ ] Embedded-font display when the subset has every glyph.
 - [ ] Redact: the same removal, without a replacement text box, for blacking out text for real.

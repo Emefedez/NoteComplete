@@ -100,6 +100,8 @@ struct State {
     font: Option<Vec<u8>>,
     size: f64,
     mode: i64,
+    /// Line width, in the user space of the moment it was set.
+    lw: f64,
 }
 impl Default for State {
     fn default() -> Self {
@@ -114,12 +116,98 @@ impl Default for State {
             font: None,
             size: 0.,
             mode: 0,
+            lw: 1.,
         }
     }
 }
 
-/// A page's runs, what was left out, and its fonts by resource name.
-type PageRuns = (Vec<Run>, Skipped, BTreeMap<Vec<u8>, Font>);
+/// What the interpreter found on a page: text runs, what was left out, the fonts by resource
+/// name, and the things drawn that are not text (paths, images, form XObjects).
+struct PageContent {
+    runs: Vec<Run>,
+    skipped: Skipped,
+    fonts: BTreeMap<Vec<u8>, Font>,
+    graphics: Vec<Graphic>,
+}
+
+/// Something drawn that is not text: its kind ("path", "image", "form"), the operator that
+/// paints it, and its box in user space [x0, y0, x1, y1].
+#[derive(Clone, Debug)]
+struct Graphic {
+    kind: &'static str,
+    op: usize,
+    bbox: [f64; 4],
+}
+
+/// Path-painting operators. Removing a path keeps its construction and ends it with `n`
+/// (paints nothing), so a clip it also sets (`W`/`W*` before the painter) still applies.
+const PATH_PAINT: [&str; 9] = ["S", "s", "f", "F", "f*", "B", "B*", "b", "b*"];
+const STROKES: [&str; 6] = ["S", "s", "B", "B*", "b", "b*"];
+/// Operators that put marks on the page: text, paths, XObjects, inline images, shadings.
+fn paints(op: &str) -> bool {
+    PATH_PAINT.contains(&op) || matches!(op, "Tj" | "TJ" | "'" | "\"" | "Do" | "BI" | "sh")
+}
+fn bbox_of(points: &[[f64; 2]]) -> Option<[f64; 4]> {
+    let first = points.first()?;
+    Some(
+        points
+            .iter()
+            .fold([first[0], first[1], first[0], first[1]], |b, p| {
+                [
+                    b[0].min(p[0]),
+                    b[1].min(p[1]),
+                    b[2].max(p[0]),
+                    b[3].max(p[1]),
+                ]
+            }),
+    )
+}
+fn union(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [
+        a[0].min(b[0]),
+        a[1].min(b[1]),
+        a[2].max(b[2]),
+        a[3].max(b[3]),
+    ]
+}
+fn area(b: &[f64; 4]) -> f64 {
+    (b[2] - b[0]).max(0.) * (b[3] - b[1]).max(0.)
+}
+/// Boxes that touch or overlap (within `margin`) gathered into groups, by indices: a sweep
+/// along x, so a page of thousands of paths stays quick.
+fn cluster(boxes: &[[f64; 4]], margin: f64) -> Vec<Vec<usize>> {
+    let mut parent: Vec<usize> = (0..boxes.len()).collect();
+    fn root(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let mut order: Vec<usize> = (0..boxes.len()).collect();
+    order.sort_by(|a, b| boxes[*a][0].total_cmp(&boxes[*b][0]));
+    let mut active: Vec<usize> = vec![];
+    for &i in &order {
+        let b = boxes[i];
+        active.retain(|&j| boxes[j][2] + margin >= b[0]);
+        for &j in &active {
+            let o = boxes[j];
+            if o[1] - margin <= b[3] && b[1] - margin <= o[3] {
+                let (ri, rj) = (root(&mut parent, i), root(&mut parent, j));
+                if ri != rj {
+                    parent[ri] = rj;
+                }
+            }
+        }
+        active.push(i);
+    }
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for i in 0..boxes.len() {
+        let r = root(&mut parent, i);
+        groups.entry(r).or_default().push(i);
+    }
+    groups.into_values().collect()
+}
 
 /// One text-showing operator: where its glyphs are, horizontally laid out in user space.
 #[derive(Clone, Debug)]
@@ -424,12 +512,15 @@ impl PdfEdit {
     }
 
     /// The page's text runs, in content order, and what was left out.
-    fn runs(&mut self, page: ObjectId) -> Result<PageRuns, String> {
+    fn runs(&mut self, page: ObjectId) -> Result<PageContent, String> {
         let ops = self.operations(page)?;
         let mut fonts: BTreeMap<Vec<u8>, Font> = BTreeMap::new();
         let mut encodings: HashMap<Vec<u8>, Option<lopdf::Encoding>> = HashMap::new();
         let mut skipped = Skipped::default();
         let mut runs = vec![];
+        let mut graphics: Vec<Graphic> = vec![];
+        // The path being built, in user space (the CTM cannot change while it is built).
+        let mut path: Vec<[f64; 2]> = vec![];
         let mut gs = State::default();
         let mut stack: Vec<State> = vec![];
         let (mut tm, mut tlm) = (IDENTITY, IDENTITY);
@@ -520,14 +611,110 @@ impl PdfEdit {
                         _ => {}
                     }
                 }
+                "w" => gs.lw = o.first().and_then(num).unwrap_or(1.),
+                "m" | "l" | "c" | "v" | "y" => {
+                    let n = nums(o);
+                    for [x, y] in n.as_chunks::<2>().0 {
+                        path.push(apply(&gs.ctm, *x, *y));
+                    }
+                }
+                "re" => {
+                    let n = nums(o);
+                    if n.len() == 4 {
+                        for (x, y) in [
+                            (n[0], n[1]),
+                            (n[0] + n[2], n[1]),
+                            (n[0], n[1] + n[3]),
+                            (n[0] + n[2], n[1] + n[3]),
+                        ] {
+                            path.push(apply(&gs.ctm, x, y));
+                        }
+                    }
+                }
+                "n" => path.clear(),
+                p if PATH_PAINT.contains(&p) => {
+                    if let Some(mut b) = bbox_of(&path) {
+                        if STROKES.contains(&p) {
+                            // Half the line width out from the path, in user space.
+                            let half = gs.lw.max(0.)
+                                * (gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2]).abs().sqrt()
+                                / 2.;
+                            b = [b[0] - half, b[1] - half, b[2] + half, b[3] + half];
+                        }
+                        graphics.push(Graphic {
+                            kind: "path",
+                            op: index,
+                            bbox: b,
+                        });
+                    }
+                    path.clear();
+                }
+                "BI" => {
+                    let corners = [
+                        apply(&gs.ctm, 0., 0.),
+                        apply(&gs.ctm, 1., 0.),
+                        apply(&gs.ctm, 0., 1.),
+                        apply(&gs.ctm, 1., 1.),
+                    ];
+                    if let Some(b) = bbox_of(&corners) {
+                        graphics.push(Graphic {
+                            kind: "image",
+                            op: index,
+                            bbox: b,
+                        });
+                    }
+                }
                 "Do" => {
                     if let Some(Object::Name(n)) = o.first() {
                         if let Some(Object::Stream(s)) = self.resource(page, b"XObject", n) {
-                            if s.dict
+                            let subtype = s
+                                .dict
                                 .get(b"Subtype")
                                 .and_then(Object::as_name)
-                                .is_ok_and(|t| t == b"Form")
-                            {
+                                .unwrap_or(b"");
+                            // An image fills the unit square; a form its BBox through its Matrix.
+                            let (kind, rect, matrix) = if subtype == b"Image" {
+                                ("image", [0., 0., 1., 1.], IDENTITY)
+                            } else {
+                                let r = s
+                                    .dict
+                                    .get(b"BBox")
+                                    .and_then(Object::as_array)
+                                    .map(|a| nums(a))
+                                    .unwrap_or_default();
+                                let m = s
+                                    .dict
+                                    .get(b"Matrix")
+                                    .and_then(Object::as_array)
+                                    .map(|a| nums(a))
+                                    .unwrap_or_default();
+                                let rect = if r.len() == 4 {
+                                    [r[0], r[1], r[2], r[3]]
+                                } else {
+                                    [0., 0., 0., 0.]
+                                };
+                                let matrix = if m.len() == 6 {
+                                    [m[0], m[1], m[2], m[3], m[4], m[5]]
+                                } else {
+                                    IDENTITY
+                                };
+                                ("form", rect, matrix)
+                            };
+                            let to = mul(&matrix, &gs.ctm);
+                            let corners = [
+                                apply(&to, rect[0], rect[1]),
+                                apply(&to, rect[2], rect[1]),
+                                apply(&to, rect[0], rect[3]),
+                                apply(&to, rect[2], rect[3]),
+                            ];
+                            if let Some(b) = bbox_of(&corners).filter(|b| area(b) > 0.) {
+                                graphics.push(Graphic {
+                                    kind,
+                                    op: index,
+                                    bbox: b,
+                                });
+                            }
+                            if kind == "form" {
                                 let content =
                                     s.get_plain_content_with_limit(LIMIT).unwrap_or_default();
                                 if content.windows(2).any(|w| w == b"BT") {
@@ -645,7 +832,12 @@ impl PdfEdit {
                 _ => {}
             }
         }
-        Ok((runs, skipped, fonts))
+        Ok(PageContent {
+            runs,
+            skipped,
+            fonts,
+            graphics,
+        })
     }
 
     /// The printed text of page `index` (0-based) as blocks, in JSON:
@@ -654,7 +846,12 @@ impl PdfEdit {
     /// embedded, rgba, align, leading }], skipped: { rotated, invisible, forms } }`.
     pub fn blocks(&mut self, index: u32) -> Result<Value, String> {
         let page = self.page_id(index)?;
-        let (runs, skipped, fonts) = self.runs(page)?;
+        let PageContent {
+            runs,
+            skipped,
+            fonts,
+            graphics,
+        } = self.runs(page)?;
         let blocks = group(&runs);
         let out: Vec<Value> = blocks
             .iter()
@@ -719,9 +916,126 @@ impl PdfEdit {
                 })
             })
             .collect();
+        let objects = self.objects(page, &graphics);
         Ok(
-            json!({ "blocks": out, "skipped": { "rotated": skipped.rotated, "invisible": skipped.invisible, "forms": skipped.forms } }),
+            json!({ "blocks": out, "objects": objects, "skipped": { "rotated": skipped.rotated, "invisible": skipped.invisible, "forms": skipped.forms } }),
         )
+    }
+
+    /// The page's objects other than text, in JSON: images and form XObjects one by one, paths
+    /// gathered into drawings (paths that touch or overlap), and annotations and form fields
+    /// that have an appearance. Each: `{ id, kind ("image", "form", "drawing", "field",
+    /// "annotation"), ops, annots, bbox, count }`. Fills over half the page (backgrounds)
+    /// are left out.
+    fn objects(&self, page: ObjectId, graphics: &[Graphic]) -> Vec<Value> {
+        let media = self.page_box(page);
+        let page_area = area(&media).max(1.);
+        let mut out = vec![];
+        let mut add = |kind: &str,
+                       ops: Vec<usize>,
+                       annots: Vec<usize>,
+                       bbox: [f64; 4],
+                       count: usize| {
+            let id = format!("o{}", out.len());
+            out.push(json!({ "id": id, "kind": kind, "ops": ops, "annots": annots, "bbox": bbox, "count": count }));
+        };
+        let paths: Vec<&Graphic> = graphics
+            .iter()
+            .filter(|g| g.kind == "path" && area(&g.bbox) < page_area * 0.5)
+            .collect();
+        for group in cluster(&paths.iter().map(|g| g.bbox).collect::<Vec<_>>(), 1.5) {
+            let bbox = group
+                .iter()
+                .map(|i| paths[*i].bbox)
+                .reduce(union)
+                .unwrap_or_default();
+            let mut ops: Vec<usize> = group.iter().map(|i| paths[*i].op).collect();
+            ops.sort_unstable();
+            add("drawing", ops, vec![], bbox, group.len());
+        }
+        for g in graphics
+            .iter()
+            .filter(|g| g.kind != "path" && area(&g.bbox) < page_area * 0.95)
+        {
+            add(g.kind, vec![g.op], vec![], g.bbox, 1);
+        }
+        for (i, a) in self.page_annots(page).iter().enumerate() {
+            let subtype = a.get(b"Subtype").and_then(Object::as_name).unwrap_or(b"");
+            if matches!(subtype, b"Popup" | b"Link") || a.get(b"AP").is_err() {
+                continue;
+            }
+            let r = a
+                .get_deref(b"Rect", &self.doc)
+                .and_then(Object::as_array)
+                .map(|r| nums(r))
+                .unwrap_or_default();
+            if r.len() != 4 {
+                continue;
+            }
+            let bbox = [
+                r[0].min(r[2]),
+                r[1].min(r[3]),
+                r[0].max(r[2]),
+                r[1].max(r[3]),
+            ];
+            if area(&bbox) <= 0. {
+                continue;
+            }
+            add(
+                if subtype == b"Widget" {
+                    "field"
+                } else {
+                    "annotation"
+                },
+                vec![],
+                vec![i],
+                bbox,
+                1,
+            );
+        }
+        out
+    }
+
+    /// The page's MediaBox (inherited from its tree when not on the page), [x0, y0, x1, y1].
+    fn page_box(&self, page: ObjectId) -> [f64; 4] {
+        let mut node = Some(page);
+        let mut seen = HashSet::new();
+        while let Some(id) = node.filter(|id| seen.insert(*id)) {
+            let Ok(d) = self.doc.get_dictionary(id) else {
+                break;
+            };
+            if let Ok(r) = d
+                .get_deref(b"MediaBox", &self.doc)
+                .and_then(Object::as_array)
+            {
+                let n = nums(r);
+                if n.len() == 4 {
+                    return [
+                        n[0].min(n[2]),
+                        n[1].min(n[3]),
+                        n[0].max(n[2]),
+                        n[1].max(n[3]),
+                    ];
+                }
+            }
+            node = d.get(b"Parent").and_then(Object::as_reference).ok();
+        }
+        [0., 0., 612., 792.]
+    }
+
+    /// The page's annotations, in the order of its /Annots.
+    fn page_annots(&self, page: ObjectId) -> Vec<&Dictionary> {
+        let doc = &self.doc;
+        let Ok(list) = doc
+            .get_dictionary(page)
+            .and_then(|d| d.get_deref(b"Annots", doc))
+            .and_then(Object::as_array)
+        else {
+            return vec![];
+        };
+        list.iter()
+            .filter_map(|o| doc.dereference(o).ok()?.1.as_dict().ok())
+            .collect()
     }
 
     /// A font program by hash among all the fonts of page `index`, used or not: the text boxes
@@ -762,14 +1076,46 @@ impl PdfEdit {
 
     /// Page `index` alone, as a new PDF, with the operators at `ops` taken out (a `'` or `"`
     /// keeps its move to the next line). The page keeps its boxes, rotation and resources, so
-    /// it looks the same everywhere else; links to web pages stay, other annotations go.
+    /// it looks the same everywhere else.
     pub fn without_runs(&self, index: u32, ops: &[usize]) -> Result<Vec<u8>, String> {
+        self.without(index, ops, &[])
+    }
+
+    /// Page `index` alone without the marks of `ops` and the annotations `annots` (indices in
+    /// its /Annots). Its other annotations stay, cut loose from the rest of the document.
+    pub fn without(&self, index: u32, ops: &[usize], annots: &[usize]) -> Result<Vec<u8>, String> {
+        let drop: HashSet<usize> = ops.iter().copied().collect();
+        let gone: HashSet<usize> = annots.iter().copied().collect();
+        self.copy_page(index, |i, _| drop.contains(&i), |i| !gone.contains(&i))
+    }
+
+    /// Page `index` alone with nothing on it but the marks of `ops` and the annotations
+    /// `annots`: what the reader draws to make one object a picture. Everything that sets the
+    /// state (transformations, clips, colours, fonts) is kept, so the object is drawn exactly
+    /// as on the page.
+    pub fn isolate(&self, index: u32, ops: &[usize], annots: &[usize]) -> Result<Vec<u8>, String> {
+        let keep: HashSet<usize> = ops.iter().copied().collect();
+        let shown: HashSet<usize> = annots.iter().copied().collect();
+        self.copy_page(
+            index,
+            |i, op| paints(&op.operator) && !keep.contains(&i),
+            |i| shown.contains(&i),
+        )
+    }
+
+    /// The one-page copy behind `without` and `isolate`: operators for which `drop` holds lose
+    /// their marks, and the annotations for which `annot` holds are kept.
+    fn copy_page(
+        &self,
+        index: u32,
+        drop: impl Fn(usize, &Operation) -> bool,
+        annot: impl Fn(usize) -> bool,
+    ) -> Result<Vec<u8>, String> {
         let page_id = self.page_id(index)?;
         let operations = self.operations(page_id)?;
-        let drop: HashSet<usize> = ops.iter().copied().collect();
         let mut kept = Vec::with_capacity(operations.len());
         for (i, op) in operations.into_iter().enumerate() {
-            if !drop.contains(&i) {
+            if !drop(i, &op) {
                 kept.push(op);
                 continue;
             }
@@ -783,6 +1129,7 @@ impl PdfEdit {
                     }
                     kept.push(Operation::new("T*", vec![]));
                 }
+                p if PATH_PAINT.contains(&p) => kept.push(Operation::new("n", vec![])),
                 _ => {}
             }
         }
@@ -818,7 +1165,7 @@ impl PdfEdit {
         let _ = stream.compress();
         let content_id = doc.add_object(stream);
         let pages_id = doc.new_object_id();
-        let annots = self.web_links(page_id);
+        let annots = self.kept_annots(page_id, &annot);
         {
             let page = doc.get_dictionary_mut(page_id).map_err(|e| e.to_string())?;
             for (k, v) in inherited {
@@ -860,40 +1207,61 @@ impl PdfEdit {
         Ok(out)
     }
 
-    /// The page's links to web pages, without their back references to the page.
-    fn web_links(&self, page: ObjectId) -> Vec<Object> {
+    /// The annotations of the page that `keep` takes, cut loose from the rest of the document:
+    /// no reference to the page, a parent field, a popup or a reply; a link stays only when it
+    /// goes to a web page. Widgets keep the field values they inherited.
+    fn kept_annots(&self, page: ObjectId, keep: &impl Fn(usize) -> bool) -> Vec<Object> {
         let doc = &self.doc;
-        let Ok(list) = doc
-            .get_dictionary(page)
-            .and_then(|d| d.get_deref(b"Annots", doc))
-            .and_then(Object::as_array)
-        else {
-            return vec![];
-        };
-        list.iter()
-            .filter_map(|o| doc.dereference(o).ok()?.1.as_dict().ok())
-            .filter(|a| {
-                a.get(b"Subtype")
-                    .and_then(Object::as_name)
-                    .is_ok_and(|s| s == b"Link")
-            })
-            .filter_map(|a| {
-                let action = a.get_deref(b"A", doc).and_then(Object::as_dict).ok()?;
-                if !action
-                    .get(b"S")
-                    .and_then(Object::as_name)
-                    .is_ok_and(|s| s == b"URI")
-                {
+        self.page_annots(page)
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| keep(*i))
+            .filter_map(|(_, a)| {
+                let subtype = a.get(b"Subtype").and_then(Object::as_name).unwrap_or(b"");
+                if subtype == b"Popup" {
                     return None;
                 }
-                let mut link = Dictionary::new();
-                for k in [&b"Type"[..], b"Subtype", b"Rect", b"Border", b"QuadPoints"] {
-                    if let Ok(v) = a.get(k) {
-                        link.set(k, v.clone());
+                let mut copy = a.clone();
+                if subtype == b"Link" {
+                    let action = a.get_deref(b"A", doc).and_then(Object::as_dict).ok()?;
+                    if !action
+                        .get(b"S")
+                        .and_then(Object::as_name)
+                        .is_ok_and(|s| s == b"URI")
+                    {
+                        return None;
+                    }
+                    copy.set("A", Object::Dictionary(action.clone()));
+                }
+                // A widget's field attributes may live on its parent field.
+                if let Ok(parent) = a.get_deref(b"Parent", doc).and_then(Object::as_dict) {
+                    for k in [&b"FT"[..], b"Ff", b"V", b"DA", b"T"] {
+                        if !copy.has(k) {
+                            if let Ok(v) = parent.get(k) {
+                                copy.set(k, v.clone());
+                            }
+                        }
                     }
                 }
-                link.set("A", Object::Dictionary(action.clone()));
-                Some(Object::Dictionary(link))
+                for k in [
+                    &b"P"[..],
+                    b"Parent",
+                    b"Popup",
+                    b"IRT",
+                    b"Dest",
+                    b"StructParent",
+                    b"AA",
+                ] {
+                    copy.remove(k);
+                }
+                if copy.get(b"A").and_then(Object::as_dict).is_ok_and(|a| {
+                    !a.get(b"S")
+                        .and_then(Object::as_name)
+                        .is_ok_and(|s| s == b"URI")
+                }) {
+                    copy.remove(b"A");
+                }
+                Some(Object::Dictionary(copy))
             })
             .collect()
     }
@@ -1328,6 +1696,202 @@ mod tests {
             vec![vec![0, 1], vec![2], vec![3], vec![4, 5]],
             "{texts:?}"
         );
+    }
+
+    /// A page with a box and a line touching it (one drawing), a separate rule, an image and a
+    /// word of text.
+    fn objects_sample() -> Vec<u8> {
+        let mut pdf = Pdf::new();
+        let (catalog, tree, page, font, content, image) = (
+            Ref::new(1),
+            Ref::new(2),
+            Ref::new(3),
+            Ref::new(4),
+            Ref::new(5),
+            Ref::new(6),
+        );
+        pdf.catalog(catalog).pages(tree);
+        pdf.pages(tree).kids([page]).count(1);
+        let mut p = pdf.page(page);
+        p.parent(tree)
+            .media_box(Rect::new(0., 0., 595., 842.))
+            .contents(content);
+        let mut res = p.resources();
+        res.fonts().pair(Name(b"F1"), font);
+        res.x_objects().pair(Name(b"Im1"), image);
+        res.finish();
+        p.finish();
+        pdf.type1_font(font).base_font(Name(b"Helvetica"));
+        let mut im = pdf.image_xobject(image, &[255, 0, 0, 0, 0, 255]);
+        im.width(2).height(1).bits_per_component(8);
+        im.color_space().device_rgb();
+        im.finish();
+        let mut c = C::new();
+        c.set_fill_rgb(0.9, 0.9, 0.2)
+            .rect(100., 600., 80., 40.)
+            .fill_nonzero();
+        c.set_line_width(2.)
+            .move_to(180., 620.)
+            .line_to(260., 620.)
+            .stroke();
+        c.move_to(100., 300.).line_to(400., 300.).stroke();
+        c.save_state()
+            .transform([50., 0., 0., 25., 300., 600.])
+            .x_object(Name(b"Im1"))
+            .restore_state();
+        c.begin_text()
+            .set_font(Name(b"F1"), 12.)
+            .next_line(72., 760.)
+            .show(Str(b"Hola"))
+            .end_text();
+        pdf.stream(content, &c.finish());
+        pdf.finish()
+    }
+
+    #[test]
+    fn objects_are_found_moved_out_and_drawn_alone() {
+        let mut e = PdfEdit::load(&objects_sample()).unwrap();
+        let v = e.blocks(0).unwrap();
+        let objects = v["objects"].as_array().unwrap();
+        let kinds: Vec<&str> = objects
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["drawing", "drawing", "image"], "{v}");
+        let boxed = objects
+            .iter()
+            .find(|o| o["count"] == 2)
+            .expect("the box and its line, one drawing");
+        let bbox: Vec<f64> = boxed["bbox"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_f64().unwrap())
+            .collect();
+        assert_eq!(
+            bbox,
+            [100., 600., 261., 640.],
+            "the line reaches past the box by its half width: x to 261"
+        );
+        let image = &objects[2];
+        assert_eq!(image["bbox"], json!([300., 600., 350., 625.]));
+        let ops = |o: &Value| -> Vec<usize> {
+            o["ops"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|n| n.as_u64().unwrap() as usize)
+                .collect()
+        };
+        // Without the drawing: the rule, the image and the text remain.
+        let rest = e.without(0, &ops(boxed), &[]).unwrap();
+        let mut again = PdfEdit::load(&rest).unwrap();
+        let v2 = again.blocks(0).unwrap();
+        assert_eq!(v2["objects"].as_array().unwrap().len(), 2, "{v2}");
+        assert_eq!(v2["blocks"].as_array().unwrap().len(), 1);
+        // The image alone: nothing else paints.
+        let alone = e.isolate(0, &ops(image), &[]).unwrap();
+        let mut only = PdfEdit::load(&alone).unwrap();
+        let v3 = only.blocks(0).unwrap();
+        let kinds: Vec<&str> = v3["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["image"], "{v3}");
+        assert_eq!(v3["blocks"].as_array().unwrap().len(), 0);
+    }
+
+    /// A page with a filled text field (its appearance drawn) and a square annotation; the
+    /// field's parent-free widget points back at the page.
+    fn form_sample() -> Vec<u8> {
+        let stream = |d: &str, data: &str| {
+            format!(
+                "<< {d} /Length {} >>\nstream\n{data}\nendstream",
+                data.len()
+            )
+        };
+        let objs = [
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] >> >>".to_owned(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 9 0 R >> >> /Annots [5 0 R 6 0 R] >>".to_owned(),
+            stream("", "BT /F1 14 Tf 72 704 Td (Nombre:) Tj ET"),
+            "<< /Type /Annot /Subtype /Widget /FT /Tx /T (nombre) /V (Ana) /Rect [150 698 350 722] /P 3 0 R /AP << /N 7 0 R >> >>".to_owned(),
+            "<< /Type /Annot /Subtype /Square /Rect [100 500 220 580] /P 3 0 R /AP << /N 8 0 R >> >>".to_owned(),
+            stream("/Type /XObject /Subtype /Form /BBox [0 0 200 24]", "0 0 1 RG 0.5 0.5 199 23 re S"),
+            stream("/Type /XObject /Subtype /Form /BBox [0 0 120 80]", "1 0 0 RG 3 w 1.5 1.5 117 77 re S"),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
+        ];
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = vec![];
+        for (i, o) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+        }
+        let xref = out.len();
+        out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+        for o in offsets {
+            out.extend(format!("{o:010} 00000 n \n").bytes());
+        }
+        out.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objs.len() + 1
+            )
+            .bytes(),
+        );
+        out
+    }
+
+    #[test]
+    fn fields_and_annotations_are_objects_cut_loose_from_the_document() {
+        let mut e = PdfEdit::load(&form_sample()).unwrap();
+        let v = e.blocks(0).unwrap();
+        let objects = v["objects"].as_array().unwrap();
+        let kinds: Vec<&str> = objects
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["field", "annotation"], "{v}");
+        assert_eq!(objects[0]["annots"], json!([0]));
+        assert_eq!(objects[0]["bbox"], json!([150., 698., 350., 722.]));
+        // Without the field: the square stays, without its reference to the old page.
+        let rest = e.without(0, &[], &[0]).unwrap();
+        let again = PdfEdit::load(&rest).unwrap();
+        let page = again.page_id(0).unwrap();
+        let annots = again.page_annots(page);
+        assert_eq!(annots.len(), 1);
+        assert_eq!(
+            annots[0].get(b"Subtype").unwrap().as_name().unwrap(),
+            b"Square"
+        );
+        assert!(!annots[0].has(b"P"));
+        // The field alone: no text, no square, the widget with its value.
+        let alone = e.isolate(0, &[], &[0]).unwrap();
+        let mut only = PdfEdit::load(&alone).unwrap();
+        let v = only.blocks(0).unwrap();
+        assert_eq!(v["blocks"].as_array().unwrap().len(), 0, "{v}");
+        let kinds: Vec<&str> = v["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["field"]);
+    }
+
+    #[test]
+    fn clusters_join_touching_boxes_only() {
+        let boxes = [
+            [0., 0., 10., 10.],
+            [11., 0., 20., 10.],
+            [50., 50., 60., 60.],
+            [19., 9., 30., 30.],
+        ];
+        let mut groups = cluster(&boxes, 1.5);
+        groups.sort();
+        assert_eq!(groups, vec![vec![0, 1, 3], vec![2]]);
     }
 
     #[test]
