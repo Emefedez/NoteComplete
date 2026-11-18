@@ -122,8 +122,12 @@ const multiply = (m, n) => [
 export function textWords(items, viewport, place, measure = textMeasure(), styles = {}) {
   const out = [];
   const sx = place.width / viewport.width, sy = place.height / viewport.height;
+  // Whether a space came before each word (`space`): the PDF's own spaces, also those it
+  // writes as items of their own, which tell a spaced-out title's letters from its words.
+  let spaceBefore = false;
   for (const item of items) {
-    if (!item.str?.trim() || !item.transform) continue;
+    if (typeof item.str === 'string' && !item.str.trim()) { if (item.str || item.hasEOL) spaceBefore = true; continue; }
+    if (!item.str || !item.transform) continue;
     const t = multiply(viewport.transform, item.transform);
     const length = Math.hypot(t[0], t[1]) || 1, width = (item.width || 0) * viewport.scale;
     const dir = [t[0] / length, t[1] / length], up = [t[2], t[3]];
@@ -138,8 +142,10 @@ export function textWords(items, viewport, place, measure = textMeasure(), style
       });
       const xs = corners.map(c => c[0]), ys = corners.map(c => c[1]);
       const x0 = Math.min(...xs), y0 = Math.min(...ys);
-      out.push({ text: match[0], box: [place.x + x0 * sx, place.y + y0 * sy, (Math.max(...xs) - x0) * sx, (Math.max(...ys) - y0) * sy] });
+      out.push({ text: match[0], box: [place.x + x0 * sx, place.y + y0 * sy, (Math.max(...xs) - x0) * sx, (Math.max(...ys) - y0) * sy], space: match.index > 0 || spaceBefore });
+      spaceBefore = false;
     }
+    spaceBefore = /\s$/.test(item.str) || !!item.hasEOL;
   }
   return out;
 }

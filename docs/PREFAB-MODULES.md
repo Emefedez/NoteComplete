@@ -172,3 +172,12 @@ Phases 1–5 keep the app working as it is at every step and can ship on their o
 3. **Graph and table:** they stay items (ink and text boxes) for interoperability. Their editors become movable windows, and a **window** kind of module covers them and future prefabs of that sort.
 4. **Kinds:** modules are **types** (a base editor) or **custom** (their own), plus the **window** kind above.
 5. **Scope of the first release:** not decided yet.
+
+## Pending (2026-11-18, for the next sprint)
+Done on branch prefab-modules-impl: the registry and four shipped modules; the kit (shell.js, kit.css, index.js); the host for a module's own editor.js; the number line module (built only from the kit); MCP add_prefab text from each module's ai.md; the modules folder (desktop serving, Copy to / Use / Reload, loading at start); PDF copy in reading order without duplicates. Not tested by hand yet.
+Not done:
+- Phase 6b: the graph and table editors as movable windows over the page ("window" kind).
+- openFigureEditor still picks the chart or UML editor by type; only modules with their own editor.js go through the manifest. A "type" kind with a base editor (grid-paint/bars/plot/diagram/data) is not wired yet.
+- Phase 7: docs/PREFAB-MODULES-GUIDE.md and prefabs/_template/ (the number line serves as the example for now).
+- Check the PDF copy fix (text-layer.js, PDF_WORDS 3) with spaced-out titles; lavadora.pdf was not compared again after the `space` flag.
+- Copying items out of NoteComplete as a PNG: the picture of the selection, with the clip's JSON (lines, images, prefab specs) in an iTXt chunk that other apps ignore; pasting or importing that PNG in NoteComplete would bring back editable items. Chromium re-encodes PNGs written with navigator.clipboard (the chunk would be lost), so the desktop app should write the raw bytes through Electron's clipboard (writeBuffer 'image/png'; test with wl-paste). Also read the chunk in importImages (paste, drop, Insert image).

@@ -21,8 +21,9 @@ export async function noteFingerprint(file) {
 }
 
 // How the PDF words kept with a note were measured. 2 (2026-11-18): word boxes from the
-// font's widths, not by character count; older kept words are read again.
-const PDF_WORDS = 2;
+// font's widths, not by character count; older kept words are read again. 3: each word
+// knows whether the PDF put a space before it (spaced-out titles copy as words).
+const PDF_WORDS = 3;
 // What a page's PDF words were read from: the PDF page and where it sits. A page whose PDF
 // background was replaced (Edit PDF, a new background) reads its words again.
 const pdfSource = (view) => {
