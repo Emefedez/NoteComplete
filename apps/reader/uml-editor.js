@@ -872,27 +872,68 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     view[1] += (ev.shiftKey ? 0 : ev.deltaY) * k;
     applyView();
   }, { passive: false });
-  // Two fingers: zoom and pan the canvas.
+  // Two fingers: zoom and pan the view, as on the note's pages, whatever is selected. The second
+  // finger takes the gesture over from the first: what the first one had begun (a move, a
+  // resize, a new element, a pan, the selection it changed) is put back as it was, and from then
+  // on both fingers only move the view. One finger left of a pinch goes on panning.
   const touches = new Map();
-  let pinch = null;
+  let pinch = null, touchBefore = null;
+  const pinchFrom = () => {
+    if (!view) fit();
+    const pts = [...touches.values()], n = pts.length || 1;
+    const mid = [pts.reduce((a, q) => a + q[0], 0) / n, pts.reduce((a, q) => a + q[1], 0) / n];
+    const d = pts.length > 1 ? Math.hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1]) : 0;
+    pinch = { d, view: [...view], mid };
+  };
   canvas.addEventListener('pointerdown', (ev) => {
     if (ev.pointerType !== 'touch') return;
+    // A first finger starts a new gesture (a finger lifted where it was not seen is forgotten).
+    if (ev.isPrimary || !touches.size) { touches.clear(); pinch = null; touchBefore = { model: JSON.stringify(model), undo: [...undo], redo: [...redo], selected }; }
     touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    if (touches.size === 2) { drag?.line?.remove(); drag = null; const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), view: [...view], mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; }
+    if (touches.size < 2) return;
+    // Not a press on the diagram: neither the element nor a handle under this finger sees it.
+    ev.stopPropagation();
+    ev.preventDefault();
+    if (!pinch) {
+      drag?.line?.remove();
+      drag = null;
+      unpress();
+      const b = touchBefore;
+      if (b && (b.model !== JSON.stringify(model) || b.undo.length !== undo.length || b.selected !== selected)) {
+        model = JSON.parse(b.model);
+        undo.splice(0, undo.length, ...b.undo);
+        redo.splice(0, redo.length, ...b.redo);
+        selected = b.selected && [...model.elements, ...model.connectors].some((q) => q.id === b.selected.id) ? b.selected : null;
+        lastSnap = { key: '', at: 0 };
+        changed();
+      } else draw();
+    }
+    // Every finger of the pinch is followed here, not by what the first one pressed on.
+    for (const id of touches.keys()) { try { svg.releasePointerCapture(id); } catch { /* not held */ } try { canvas.setPointerCapture(id); } catch { /* a synthetic event */ } }
+    pinchFrom();
   }, true);
   canvas.addEventListener('pointermove', (ev) => {
     if (!touches.has(ev.pointerId)) return;
     touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    if (!pinch || touches.size !== 2) return;
-    const [a, b] = [...touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), r = canvas.getBoundingClientRect();
-    const f = pinch.d / Math.max(10, d), W = Math.min(8000, Math.max(120, pinch.view[2] * f)), k0 = pinch.view[2] / r.width, k = W / r.width;
-    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (!pinch) return;
+    ev.stopPropagation();
+    const pts = [...touches.values()], r = canvas.getBoundingClientRect();
+    const mid = pts.length > 1 ? [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2] : pts[0];
+    const d = pts.length > 1 ? Math.hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1]) : 0;
+    const f = pinch.d > 0 && d > 0 ? pinch.d / Math.max(10, d) : 1;
+    const W = Math.min(8000, Math.max(120, pinch.view[2] * f)), k0 = pinch.view[2] / r.width, k = W / r.width;
+    // The point of the diagram that was between the fingers stays between them.
     const ax = pinch.view[0] + (pinch.mid[0] - r.left) * k0, ay = pinch.view[1] + (pinch.mid[1] - r.top) * k0;
     view = [ax - (mid[0] - r.left) * k, ay - (mid[1] - r.top) * k, W, W];
     viewMoved = true;
     applyView();
   }, true);
-  const lift = (ev) => { touches.delete(ev.pointerId); if (touches.size < 2) pinch = null; };
+  const lift = (ev) => {
+    if (!touches.delete(ev.pointerId)) return;
+    if (!pinch) return;
+    ev.stopPropagation();
+    if (touches.size) pinchFrom(); else pinch = null;
+  };
   canvas.addEventListener('pointerup', lift, true);
   canvas.addEventListener('pointercancel', lift, true);
 

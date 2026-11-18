@@ -45,6 +45,39 @@ for (let i = 0; i <= 10; i++) {
 await touch('touchEnd', []); await sleep(300);
 out.pinch = { from: Math.round(w0), steps: widths };
 await p.click('.uml-bar button[title="Show the whole diagram"]'); await sleep(300);
+// A pinch as fingers really land: one first (on the selected element's corner, or on the
+// element itself), moving a little, then the second. The view zooms; the element stays as it was.
+const fitBtn = '.uml-bar button[title="Show the whole diagram"]';
+const elBox = () => p.evaluate(() => { const b = document.querySelector('.uml-canvas [data-uml-kind="element"]').getBBox(); return [b.x, b.y, b.width, b.height].map(Math.round); });
+const hit = await p.locator('.uml-canvas [data-uml-kind="element"]').first().boundingBox();
+const pinchFrom = async (first) => {
+  const w = await viewW();
+  await touch('touchStart', [first]); await sleep(40);
+  for (let i = 1; i <= 3; i++) { await touch('touchMove', [[first[0] + i * 6, first[1] + i * 5]]); await sleep(20); }
+  // The second finger lands towards the middle of the canvas; then they spread apart.
+  const f = [first[0] + 18, first[1] + 15], ux = Math.sign(box.x + box.width / 2 - f[0]) || 1, uy = Math.sign(box.y + box.height / 2 - f[1]) || 1;
+  const s = [f[0] + ux * 90, f[1] + uy * 40];
+  await touch('touchStart', [f, s]); await sleep(40);
+  for (let i = 1; i <= 8; i++) { await touch('touchMove', [[f[0] - ux * i * 8, f[1] - uy * i * 4], [s[0] + ux * i * 8, s[1] + uy * i * 4]]); await sleep(25); }
+  await touch('touchEnd', []); await sleep(300);
+  return { from: Math.round(w), to: Math.round(await viewW()) };
+};
+await p.mouse.click(hit.x + hit.width / 2, hit.y + hit.height / 2); await sleep(200);
+const box0 = await elBox();
+const se = await p.locator('.uml-canvas [data-handle="resize:se"]').boundingBox();
+out.pinchOnHandle = await pinchFrom([se.x + se.width / 2, se.y + se.height / 2]);
+out.boxAfterHandle = await elBox();
+out.stillSelected = await p.locator('.uml-canvas [data-handle="resize:se"]').count();
+await p.click(fitBtn); await sleep(300);
+const hit2 = await p.locator('.uml-canvas [data-uml-kind="element"]').first().boundingBox();
+out.pinchOnElement = await pinchFrom([hit2.x + hit2.width / 2, hit2.y + hit2.height / 2]);
+out.boxAfterElement = await elBox();
+await p.click(fitBtn); await sleep(300);
+await p.keyboard.press('Escape'); await p.mouse.click(box.x + 8, box.y + box.height - 8); await sleep(200);
+out.selectedBefore = await p.locator('.uml-canvas [data-handle^="resize:"]').count();
+out.pinchUnselected = await pinchFrom([box.x + box.width * 0.4, box.y + box.height * 0.4]);
+out.box0 = box0;
+await p.click(fitBtn); await sleep(300);
 // Two fingers held still → the quick menu.
 await touch('touchStart', [c, [c[0] + 80, c[1]]]); await sleep(700);
 out.holdMenu = await p.locator('.quick-menu, .qm-ring, [class*="quick"]').count();
@@ -84,6 +117,12 @@ console.log('· two- and three-finger taps undo and redo');
 const steps = out.pinch.steps;
 assert.ok(steps.every((w, i) => !i || w <= steps[i - 1]) && steps.at(-1) < out.pinch.from * 0.4, `pinch zooms in steadily: ${steps}`);
 console.log('· a pinch zooms in steadily');
+for (const k of ['pinchOnHandle', 'pinchOnElement', 'pinchUnselected']) assert.ok(out[k].to < out[k].from * 0.8, `${k}: the view zooms in ${JSON.stringify(out[k])}`);
+assert.deepEqual(out.boxAfterHandle, out.box0, 'a pinch begun on a resize handle leaves the element as it was');
+assert.deepEqual(out.boxAfterElement, out.box0, 'a pinch begun on the element leaves it where it was');
+assert.ok(out.stillSelected > 0, 'the selection stays through a pinch');
+assert.equal(out.selectedBefore, 0);
+console.log('· a pinch zooms the view, with or without a selection, and never moves or resizes the element');
 assert.ok(out.holdMenu > 0, 'two fingers held: the quick menu');
 assert.ok(out.penRing, 'a hovering pen shows its ring');
 console.log('· two fingers held open the quick menu; a hovering pen shows a ring');
