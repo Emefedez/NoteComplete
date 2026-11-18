@@ -119,5 +119,5 @@ export function icon(name) {
 }
 export function decorateIcons(){
  for(const el of document.querySelectorAll('[data-icon]'))el.prepend(icon(el.dataset.icon));
- for(const el of document.querySelectorAll('button[data-tool]')){el.setAttribute('aria-label',el.textContent.trim());el.title=el.textContent.trim();el.prepend(icon(el.dataset.tool));}
+ for(const el of document.querySelectorAll('button[data-tool]')){el.setAttribute('aria-label',el.textContent.trim());el.title=el.dataset.title||el.textContent.trim();el.prepend(icon(el.dataset.tool));}
 }

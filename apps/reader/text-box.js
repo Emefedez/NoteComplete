@@ -170,36 +170,63 @@ export function textBoxController({
     for (const b of $("textSwatches").children) b.setAttribute("aria-checked", String(b.dataset.color.toLowerCase() === hex));
   }
 
-  function showTextFormat(p, bounds, style, apply) {
-    const bar = textFormatBar;
+  // `box`: the element being typed in (its size follows the text), else the selected box's
+  // bounds in page units. The bar never covers it: above it, else below it, else (no room
+  // either way in the window) in the tool bar's settings row for as long as it would.
+  let placing = null;
+  function showTextFormat(p, bounds, style, apply, box = null) {
     textFormatTarget = { p, style, apply };
     syncTextFormatControls(style);
-    // Docked (View → Text format bar in the tool bar): in the tool bar's settings row, never a
-    // bar of its own over the page.
-    if (textFormatDocked()) {
+    placing = { p, bounds, box };
+    placeTextFormat();
+  }
+  function placeTextFormat() {
+    const bar = textFormatBar, at = placing;
+    if (!at || !textFormatTarget) return;
+    const dock = () => {
       if (bar.parentElement !== $("toolOptions")) $("toolOptions").append(bar);
-      bar.classList.remove("below");
+      bar.classList.remove("below", "placed");
       bar.style.left = bar.style.top = "";
       bar.hidden = false;
       toolOptions();
-      return;
-    }
-    bar.style.left = `${(bounds[0] / p.size[0]) * 100}%`;
-    bar.style.top = `${(bounds[1] / p.size[1]) * 100}%`;
-    // Above the box, or below it when the box is at the top of the page.
-    bar.classList.toggle("below", bounds[1] / p.size[1] < 0.06);
-    if (bar.classList.contains("below")) bar.style.top = `${((bounds[1] + bounds[3]) / p.size[1]) * 100}%`;
+    };
+    // Docked (View → Text format bar in the tool bar): in the tool bar's settings row, never a
+    // bar of its own over the page.
+    if (textFormatDocked()) return dock();
+    const { p, bounds, box } = at;
+    const page = p.el.getBoundingClientRect();
+    const scale = page.width / p.size[0];
+    const r = box?.isConnected ? box.getBoundingClientRect() : {
+      left: page.left + bounds[0] * scale, top: page.top + bounds[1] * scale,
+      right: page.left + (bounds[0] + bounds[2]) * scale, bottom: page.top + (bounds[1] + bounds[3]) * scale,
+    };
+    const wasDocked = bar.parentElement === $("toolOptions");
     if (bar.parentElement !== p.el) p.el.append(bar);
+    bar.classList.add("placed");
+    bar.classList.remove("below");
     bar.hidden = false;
-    // Kept inside the window: a box near its right edge, or a phone, moves the bar left (it
-    // wraps onto a second row when even that is not enough: style.css).
-    const r = bar.getBoundingClientRect(), view = $("viewport").getBoundingClientRect();
-    const shift = Math.min(r.right - (view.right - 8), r.left - (view.left + 8));
-    if (shift > 0) bar.style.left = `calc(${bar.style.left} - ${shift}px)`;
+    if (wasDocked) toolOptions();
+    const view = $("viewport").getBoundingClientRect(), gap = 8;
+    // Across first: kept inside the window (a box near its right edge, or a phone, moves the
+    // bar left; it wraps onto a second row when even that is not enough, style.css). Its
+    // height is measured where it will be, since wrapping changes it.
+    bar.style.top = `${r.top - page.top}px`;
+    bar.style.left = `${r.left - page.left}px`;
+    const width = bar.getBoundingClientRect().width;
+    const left = Math.max(view.left + 8, Math.min(r.left, view.right - 8 - width));
+    bar.style.left = `${left - page.left}px`;
+    const height = bar.getBoundingClientRect().height;
+    const above = r.top - gap - height, below = r.bottom + gap;
+    let top;
+    if (above >= view.top + 4) top = above;
+    else if (below + height <= view.bottom - 4) { top = below; bar.classList.add("below"); }
+    else return dock();
+    bar.style.top = `${top - page.top}px`;
   }
 
   function hideTextFormat() {
     textFormatTarget = null;
+    placing = null;
     const docked = textFormatBar.parentElement === $("toolOptions");
     textFormatBar.hidden = true;
     doc.body.append(textFormatBar);
@@ -214,7 +241,7 @@ export function textBoxController({
     const t = textFormatTarget;
     if (t) {
       hideTextFormat();
-      if (textEditor) showTextFormat(t.p, [textEditor.bx, textEditor.by, 0, 0], t.style, t.apply);
+      if (textEditor) showTextFormat(t.p, [textEditor.bx, textEditor.by, 0, 0], t.style, t.apply, textEditor.area);
       else syncFormat();
     }
   }
@@ -456,14 +483,14 @@ export function textBoxController({
       Object.assign(mathPreview.style, { left: area.style.left, top: `calc(${area.style.top} + ${area.style.height} + 6px)` });
       previewMath(mathPreview, area.value, { ...style, size: style.size * s }).catch(() => { mathPreview.textContent = "Math needs KaTeX, which could not load."; });
     };
-    const refit = () => { fit(); placeDiscard(); showMath(); };
+    const refit = () => { fit(); placeDiscard(); showMath(); placeTextFormat(); };
     refit();
     area.oninput = refit;
     hideText(p, existing?.id);
     p.el.append(area, discard, mathPreview);
     selection.clear();
     textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, layer: activeLayer, fit: refit, after };
-    showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); });
+    showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); }, area);
     area.addEventListener("keydown", (e) => {
       // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
       if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) close(); else commit(); }

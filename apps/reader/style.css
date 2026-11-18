@@ -2266,6 +2266,8 @@ body.bar-compact .tab { height: 22px; }
 /* Text format bar: sits on the box being typed or the selected text box. */
 .text-format { position: absolute; z-index: 8; display: flex; align-items: center; gap: 4px; padding: 4px; transform: translateY(calc(-100% - 8px)); border: 1px solid var(--line); border-radius: 9px; background: var(--menu); box-shadow: 0 4px 16px #0002; white-space: nowrap; }
 .text-format.below { transform: translateY(8px); }
+/* Placed by text-box.js placeTextFormat in pixels, clear of the box being typed or selected. */
+.text-format.placed, .text-format.placed.below { transform: none; }
 .text-format:not(.docked) { flex-wrap: wrap; max-width: calc(100vw - 16px); }
 .text-format[hidden] { display: none; }
 /* Docked (View → Text format bar in the tool bar): one more group in the settings row. */

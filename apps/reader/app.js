@@ -4251,10 +4251,11 @@ $("resetToolOrder").onclick = () => {
   try { localStorage.removeItem("notecomplete-tool-order"); } catch { /* Optional. */ }
   if (!$("toolOptions").hidden) toolOptions();
 };
-const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
+// B (borrar) erases; E edits a PDF's text and objects (Edit PDF).
+const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", b: "erase", e: "pdfedit", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
-  ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
+  ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`button[data-tool="${tool}"]`, key.toUpperCase()])),
   "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesToggle": "⇧P", "#findToggle": "/", "#importImage": "⇧I", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
@@ -4280,7 +4281,7 @@ function shortcut(e) {
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   if (k === "f" && tool === "shape" && !$("editor").hidden) return setShapeFill({ none: "tint", tint: "solid", solid: "none" }[shapeFill]), status(`Shape fill: ${shapeFill === "none" ? "outline only" : shapeFill}.`), true;
   const keyTool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
-  if (keyTool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${keyTool}"]`)?.click(), true;
+  if (keyTool && !$("editor").hidden) return document.querySelector(`button[data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
   if (k === "P") return $("pagesToggle").click(), true;
@@ -5942,7 +5943,7 @@ const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #comman
 function proxyTarget(item) {
   return item.dataset.proxy
     ? $(item.dataset.proxy)
-    : document.querySelector(`#toolbar button[data-tool="${item.dataset.proxyTool}"]`);
+    : document.querySelector(`button[data-tool="${item.dataset.proxyTool}"]`);
 }
 function syncMenus() {
   syncPageMoveMenus();

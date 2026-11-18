@@ -58,10 +58,11 @@
           <button data-proxy-tool="select" data-icon="select" role="menuitemradio">Select<kbd>S</kbd></button>
           <button data-proxy-tool="draw" data-icon="draw" role="menuitemradio">Pen<kbd>P</kbd></button>
           <button data-proxy-tool="highlight" data-icon="highlight" role="menuitemradio">Highlight<kbd>H</kbd></button>
-          <button data-proxy-tool="erase" data-icon="erase" role="menuitemradio">Erase<kbd>E</kbd></button>
+          <button data-proxy-tool="erase" data-icon="erase" role="menuitemradio">Erase<kbd>B</kbd></button>
           <button data-proxy-tool="tape" data-icon="tape" role="menuitemradio">Tape<kbd>T</kbd></button>
           <button data-proxy-tool="shape" data-icon="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
           <button data-proxy-tool="grab" data-icon="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
+          <button data-proxy-tool="pdfedit" data-icon="pdfedit" role="menuitemradio">Edit PDF: its text and objects<kbd>E</kbd></button>
           <hr />
           <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
           <button id="insertGraph" data-icon="graph" disabled data-palette="Insert prefab (graph, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
@@ -511,8 +512,6 @@
             <span class="tool-name">Grab</span></button
           ><button data-tool="text" aria-pressed="false">
             <span class="tool-name">Text</span></button
-          ><button data-tool="pdfedit" aria-pressed="false" title="Edit PDF: double-click a block of a PDF's text to edit it">
-            <span class="tool-name">Edit PDF</span></button
           ><button data-tool="lock" aria-pressed="false" title="Lock in place: click an item to lock or unlock it">
             <span class="tool-name">Lock</span></button
           ><button data-tool="shape" aria-pressed="false">
@@ -781,6 +780,12 @@
           aria-pressed="false"
           data-icon="moon"
         ></button
+        ><button
+          data-tool="pdfedit"
+          class="pages-dark-toggle pdf-edit-toggle"
+          aria-pressed="false"
+          data-title="Edit PDF: double-click its text to edit it, or an image or drawing to move it (E)"
+        ><span class="sr-only">Edit PDF</span></button
         ><label
           >Page
           <input
