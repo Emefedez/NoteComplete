@@ -12,6 +12,7 @@
 import { backgroundPlacement, openPdf } from "./pdf-background.js";
 import { pdfFontName, pdfFontHash, isRegistered, registerFont } from "./fonts.js";
 import { textBoxSize } from "./text-box.js";
+import { overrides, spansOf, spansFor } from "./rich-spans.js";
 
 const ns = "http://www.w3.org/2000/svg";
 // What the messages call each kind of object.
@@ -33,23 +34,53 @@ export function rectOnPage([x0, y0, x1, y1], transform, viewport, place) {
 // pdf.js's text in the engine's lines: an item belongs to the line whose baseline it sits on
 // and whose span holds its start. Items are joined left to right, with a space where pdf.js
 // left a gap and none was written. A line pdf.js has nothing for keeps the engine's text.
+// Each line also gets `pieces`: its text cut where the style changes, each with the engine's
+// part (font, bold, italic, colour) it was printed in.
 export function assignText(blocks, items) {
   const usable = (items || []).filter((i) => i?.str && Array.isArray(i.transform));
   for (const block of blocks) {
     for (const line of block.lines) {
       const tol = Math.max(1, block.size * 0.35);
-      const mine = usable
+      const parts = line.parts || [];
+      let mine = usable
         .filter((i) => Math.abs(i.transform[5] - line.base) < tol && i.transform[4] >= line.x0 - tol && i.transform[4] <= line.x1 + tol * 0.5)
         .sort((a, b) => a.transform[4] - b.transform[4]);
-      if (!mine.length) continue;
-      let text = "", end = null;
+      // No pdf.js text here: the engine's own, part by part.
+      if (!mine.length) mine = parts.map((p) => ({ str: p.text || "", transform: [1, 0, 0, 1, p.x0, line.base], width: p.x1 - p.x0 }));
+      if (!mine.length) { line.pieces = [{ text: line.text, part: null }]; continue; }
+      // The part an item starts in (else the nearest).
+      const partAt = (x) => parts.find((p) => x >= p.x0 - tol * 0.3 && x < p.x1 - tol * 0.1) || parts.slice().sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - x) - Math.abs((b.x0 + b.x1) / 2 - x))[0] || null;
+      const raw = [];
+      let end = null;
       for (const item of mine) {
         const gap = end == null ? 0 : item.transform[4] - end;
-        if (end != null && gap > block.size * 0.15 && !/\s$/.test(text) && !/^\s/.test(item.str)) text += " ";
-        text += item.str;
+        const space = end != null && gap > block.size * 0.15 && !/\s$/.test(raw.at(-1)?.text || "") && !/^\s/.test(item.str);
+        if (space) raw.at(-1).text += " ";
+        raw.push({ text: item.str, part: partAt(item.transform[4]) });
         end = item.transform[4] + (item.width || 0);
       }
-      line.text = text.replace(/\s+/g, " ").trim();
+      // Spaces collapsed and the line trimmed, keeping the pieces in step with the text.
+      const pieces = [];
+      let lastSpace = true;
+      for (const piece of raw) {
+        let text = "";
+        for (const c of piece.text) {
+          const sp = /\s/.test(c);
+          if (sp && lastSpace) continue;
+          text += sp ? " " : c;
+          lastSpace = sp;
+        }
+        if (!text) continue;
+        const prev = pieces.at(-1);
+        if (prev && prev.part === piece.part) prev.text += text;
+        else pieces.push({ text, part: piece.part });
+      }
+      while (pieces.length && /\s$/.test(pieces.at(-1).text)) {
+        pieces.at(-1).text = pieces.at(-1).text.replace(/\s+$/, "");
+        if (!pieces.at(-1).text) pieces.pop();
+      }
+      line.pieces = pieces;
+      line.text = pieces.map((p) => p.text).join("");
     }
   }
   return blocks;
@@ -64,7 +95,7 @@ export function nearestFamily(block) {
 
 // The text box for a block on a page: its text (the PDF's lines), style and bounds, sized
 // with `measure` once the font is known. `scale`: page units per PDF unit.
-export function textBoxFor(block, { origin, scale, font, layer = 0 }) {
+export function textBoxFor(block, { origin, scale, font, fontOf = null, layer = 0 }) {
   const text = block.lines.map((l) => l.text).join("\n");
   const size = Math.round(block.size * scale * 100) / 100;
   const lineHeight = block.lines.length > 1 && block.leading > 0 ? Math.round(block.leading * scale * 100) / 100 : 0;
@@ -73,7 +104,15 @@ export function textBoxFor(block, { origin, scale, font, layer = 0 }) {
   const align = block.align === 1 || block.align === 2 ? block.align : 0;
   // The core draws the first baseline 8 + size under the box's top, 5 units in.
   const [x, base] = origin;
-  return { text, style, align, at: [x - 5, base - 8 - size] };
+  // Words printed in another style keep it: one span each (rich-spans.js); the line breaks
+  // go with the part before them.
+  const pieces = block.lines.flatMap((l, i) => [
+    ...(l.pieces || [{ text: l.text, part: null }]).map((p) => ({ text: p.text, style: p.part ? overrides({ bold: p.part.bold, italic: p.part.italic, rgba: p.part.rgba, font: fontOf ? fontOf(p.part) : font }, style) : {} })),
+    ...(i < block.lines.length - 1 ? [{ text: "\n", style: null }] : []),
+  ]);
+  for (let i = 0; i < pieces.length; i++) if (pieces[i].style === null) pieces[i].style = pieces[i - 1]?.style || {};
+  const spans = spansFor(text, spansOf(pieces));
+  return { text, style, align, spans, at: [x - 5, base - 8 - size] };
 }
 
 export function pdfEditController({ call, action, status, getPanels, getDoc, getActiveLayer, backgrounds, point, openText, selectNew, isBusy = () => false }) {
@@ -200,21 +239,33 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
     const scale = place.width / viewport.width;
     const text = b.lines.map((l) => l.text).join("\n");
     if (!text.trim()) return;
-    // The PDF's own font when the browser takes it and it has every character of the block.
-    let font = nearestFamily(b);
-    if (b.program) {
+    // Each font of the block (one per style of its parts): the PDF's own when the browser
+    // takes it and it has every character printed in it, else the nearest built-in family.
+    const partKey = (st) => (st ? [st.font, st.program, !!st.bold, !!st.italic, !!st.serif, !!st.mono].join("|") : "");
+    const resolveFont = async (st, chars) => {
+      if (!st?.program) return nearestFamily(st || {});
       try {
-        const missing = await call("pdfFontMissing", { resource: bg.resource_id, hash: b.program, text });
-        const name = pdfFontName(b.font, b.program);
-        if (!missing) {
-          const bytes = await call("pdfFont", { resource: bg.resource_id, pageIndex: bg.page_index, hash: b.program });
-          if (await registerFont(name, bytes, { weight: b.bold ? "700" : "400", style: b.italic ? "italic" : "normal" })) font = name;
-        }
-      } catch { /* The nearest family. */ }
+        const missing = await call("pdfFontMissing", { resource: bg.resource_id, hash: st.program, text: chars });
+        if (missing) return nearestFamily(st);
+        const name = pdfFontName(st.font, st.program);
+        const bytes = await call("pdfFont", { resource: bg.resource_id, pageIndex: bg.page_index, hash: st.program });
+        return (await registerFont(name, bytes, { weight: st.bold ? "700" : "400", style: st.italic ? "italic" : "normal" })) ? name : nearestFamily(st);
+      } catch { return nearestFamily(st); }
+    };
+    const groups = new Map();
+    for (const line of b.lines) for (const piece of line.pieces || []) {
+      if (!piece.part) continue;
+      const g = groups.get(partKey(piece.part)) || { part: piece.part, text: "" };
+      g.text += piece.text;
+      groups.set(partKey(piece.part), g);
     }
+    const resolved = new Map();
+    for (const [k, g] of groups) resolved.set(k, await resolveFont(g.part, g.text));
+    const font = resolved.get(partKey(b)) ?? await resolveFont(b, text);
+    const fontOf = (part) => resolved.get(partKey(part)) || font;
     const first = b.lines[0];
     const origin = toPage([first.x0, first.base], viewport.transform, viewport, place);
-    const box = textBoxFor(b, { origin, scale, font, layer: layerId });
+    const box = textBoxFor(b, { origin, scale, font, fontOf, layer: layerId });
     const [w, h] = textBoxSize(box.text, box.style);
     const bounds = [box.at[0], box.at[1], Math.max(w, b.rect[2] + 12), h];
     status("Making the page without that text…");
@@ -224,6 +275,7 @@ export function pdfEditController({ call, action, status, getPanels, getDoc, get
       text: box.text, font_size: box.style.size, rgba: box.style.rgba, bold: box.style.bold, italic: box.style.italic, font: box.style.font,
       ...(box.align ? { align: box.align } : {}),
       ...(box.style.lineHeight ? { line_height: box.style.lineHeight } : {}),
+      ...(box.spans.length ? { spans: box.spans } : {}),
     };
     await action("replacePdfText", {
       page: p.index,

@@ -586,6 +586,7 @@ fn convert_page(
                         strikethrough: false,
                         math: false,
                         line_height: None,
+                        spans: vec![],
                     }),
                     joined: false,
                     part: None,

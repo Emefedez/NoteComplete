@@ -109,6 +109,7 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         strikethrough: false,
         math: false,
         line_height: None,
+        spans: vec![],
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
@@ -206,6 +207,7 @@ fn text_box_line_height_spaces_lines_and_survives_native_export() {
         strikethrough: false,
         math: false,
         line_height: h,
+        spans: vec![],
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
@@ -245,4 +247,88 @@ fn text_box_line_height_spaces_lines_and_survives_native_export() {
     );
     let again = ys(v["svg"].as_str().unwrap());
     assert!((again[1] - again[0] - 24.).abs() < 1e-9);
+}
+
+#[test]
+fn text_box_spans_keep_bold_words_and_their_fonts_through_native_export() {
+    use noteful_core::{Span, TextBox};
+    let mut editor = Editor::create_document("Text", &[[600., 800.]], &[]).unwrap();
+    let span = |len: usize, bold: Option<bool>, font: Option<&str>| Span {
+        len,
+        bold,
+        italic: None,
+        font: font.map(Into::into),
+        rgba: None,
+    };
+    let text = |spans: Vec<Span>| TextBox {
+        text: "Libro de Arquitectura II, del\nGrado".into(),
+        font_size: 20.,
+        rgba: [0., 0., 0., 1.],
+        bold: false,
+        italic: false,
+        font: "Barlow pdfec4f25a2".into(),
+        align: 0,
+        underline: false,
+        strikethrough: false,
+        math: false,
+        line_height: Some(30.),
+        spans,
+    };
+    let image = |t: TextBox| Image {
+        base64: String::new(),
+        mime: String::new(),
+        bounds: [50., 50., 400., 80.],
+        layer: 0,
+        text: Some(t),
+        joined: false,
+        part: None,
+    };
+    // The lengths must cover the text exactly.
+    assert!(editor
+        .add_image(0, image(text(vec![span(3, None, None)])))
+        .is_err());
+    assert!(editor
+        .add_image(
+            0,
+            image(text(vec![span(0, None, None), span(35, None, None)]))
+        )
+        .is_err());
+    // "Libro de " / "Arquitectura II" (bold, its own font) / ", del\nGrado".
+    let spans = vec![
+        span(9, None, None),
+        span(15, Some(true), Some("Barlow-Bold pdfab1d44ee")),
+        span(11, None, None),
+    ];
+    editor.add_image(0, image(text(spans))).unwrap();
+    let check = |v: &serde_json::Value| {
+        let runs = v["texts"][0]["runs"].as_array().unwrap();
+        let shown: Vec<(&str, bool, &str)> = runs
+            .iter()
+            .filter(|r| r["text"] != "\u{200b}")
+            .map(|r| {
+                (
+                    r["text"].as_str().unwrap(),
+                    r["bold"].as_bool().unwrap(),
+                    r["font_family"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("Libro de ", false, "Barlow pdfec4f25a2"),
+                ("Arquitectura II", true, "Barlow-Bold pdfab1d44ee"),
+                (", del\nGrado", false, "Barlow pdfec4f25a2")
+            ]
+        );
+        let svg = v["svg"].as_str().unwrap();
+        assert!(svg.contains("font-weight=\"700\""), "{svg}");
+        assert_eq!(svg.matches("<text ").count(), 2, "two lines: {svg}");
+    };
+    check(&editor.view(0).unwrap());
+    let bytes = editor.export_noteful().unwrap();
+    assert_eq!(Package::parse(&bytes).unwrap().rebuild().unwrap(), bytes);
+    check(&Editor::open(&bytes).unwrap().view(0).unwrap());
+    let restored = Editor::open_project(&editor.save_project().unwrap()).unwrap();
+    assert_eq!(restored.view(0).unwrap(), editor.view(0).unwrap());
 }

@@ -212,6 +212,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                         strikethrough: it.strikethrough,
                         math: is_math,
                         line_height: None,
+                        spans: vec![],
                     }),
                 });
             }
