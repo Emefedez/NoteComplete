@@ -54,3 +54,17 @@ test('pieces of one word that touch take no space between them', async () => {
   assert.equal(spaced(at('A', 10, 8), at('R', 20.5, 8)), false, 'a spaced-out title');
   assert.equal(spaced(at('word', 10, 30), at('next', 43.5, 30)), true, 'a word space');
 });
+
+test('a spaced-out title read by glyph copies as its words', async () => {
+  const { spaced } = await import('./text-layer.js');
+  // pdf-background.js textWords joins the letters ("ARQUITECTURA", "DE"); the PDF's space before
+  // "DE" keeps the space even where the gap is narrow, and none comes inside a joined word.
+  const lines = textLines({ pdf: [
+    { text: 'AC', box: [46, 32, 8, 5], space: false },
+    { text: 'ARQUITECTURA', box: [64, 30, 76, 8], space: true },
+    { text: 'DE', box: [144, 30, 12, 8], space: true },
+    { text: 'II', box: [246, 30, 6, 8], space: true },
+  ] });
+  const [line] = lines;
+  assert.equal(line.words.map((w, i) => w.text + (line.words[i + 1] && spaced(w, line.words[i + 1]) ? ' ' : '')).join(''), 'AC ARQUITECTURA DE II');
+});
