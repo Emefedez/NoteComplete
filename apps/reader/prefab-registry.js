@@ -94,10 +94,39 @@ export function renderSpec(spec) {
   const out = m.code.render(spec);
   return out?.svg ? out : null;
 }
-// Its name in menus.
+// Its name in menus (a type module without names of its own: the type owner's).
 export function nameOf(spec) {
   const m = moduleOf(spec);
-  return (m?.code.name && m.code.name(spec)) || m?.manifest.names?.[spec?.type] || 'Prefab';
+  const own = (m?.code.name && m.code.name(spec)) || m?.manifest.names?.[spec?.type];
+  if (own || !m) return own || 'Prefab';
+  const owner = modules.find((q) => q !== m && (q.manifest.types || []).includes(spec?.type));
+  return (owner?.code.name && owner.code.name(spec)) || owner?.manifest.names?.[spec?.type] || 'Prefab';
+}
+
+// The editors the host has (the manifest's "editor", or a type module's "base"): the chart
+// editor, the diagram editor, the graph and table windows, and the JSON one with a live
+// preview. The base editors of docs/PREFAB-MODULES.md map onto them.
+export const EDITORS = ['chart-editor', 'uml-editor', 'graph', 'table', 'data'];
+const BASES = { 'grid-paint': 'chart-editor', bars: 'chart-editor', plot: 'chart-editor', diagram: 'uml-editor', json: 'data' };
+// Which editor a figure opens in, from its module's manifest: { editor, module }, where
+// `editor` is "module" (the module's own editor.js, in `module`), one of EDITORS, or "" when
+// the manifest says nothing (the host then chooses by the spec's type, as before modules).
+// A "type" module edits in its `base`: one of the editors above, or another module's id (that
+// module's editor).
+export function editorOf(spec) {
+  let m = moduleOf(spec);
+  const seen = new Set();
+  while (m && !seen.has(m)) {
+    seen.add(m);
+    const { kind, base, editor } = m.manifest;
+    const name = String((kind === 'type' && base) || editor || '');
+    if (!name) break;
+    if (/\.js$/.test(name)) return { editor: 'module', module: m };
+    if (EDITORS.includes(name)) return { editor: name, module: m };
+    if (BASES[name]) return { editor: BASES[name], module: m };
+    m = moduleById(name);
+  }
+  return { editor: '', module: m || moduleOf(spec) };
 }
 // The text a module gives AI tools about its spec (ai.md), shipped modules' in order.
 export const aiNotes = () => modules.map((m) => m.code.ai || '').filter(Boolean);

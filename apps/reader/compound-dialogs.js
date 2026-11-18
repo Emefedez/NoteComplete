@@ -1,10 +1,13 @@
-// The editors of graphs and tables (graph.js, table.js): what a graph or table is, changed in
-// a dialog with a live preview, then drawn (again) on the page as one undo step. The math keypad
-// (math-keypad.js) types into a graph's function fields, inside the dialog.
+// The editors of graphs and tables (graph.js, table.js), the shipped "window" prefab modules
+// (prefabs/graph, prefabs/table): what a graph or table is, changed in a movable window over
+// the page (the kit's movableWindow, not modal: the page stays in sight and scrolls behind it)
+// with a live preview, then drawn (again) on the page as one undo step. The math keypad
+// (math-keypad.js) types into a graph's function fields, inside the window.
 import { graphSpec, graphItems } from './graph.js';
 import { tableSpec, resized } from './table.js';
 import { icon } from './icons.js';
 import { loadKatex } from './rich-text.js';
+import { movableWindow } from './prefabs/kit/window.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const make = (tag, props = {}, ...children) => {
@@ -54,18 +57,19 @@ export function previewSvg({ lines, images }, box, size = [360, 240]) {
   return svg;
 }
 
-function dialogShell(title) {
-  const dialog = make('dialog', { className: 'ocr-dialog compound-dialog' });
-  const heading = make('h2', { textContent: title });
-  const body = make('div', { className: 'compound-body' });
+// The window both editors are built in: its body, an error line and Cancel / Insert at its foot.
+// `finish(null)` is what Esc and × do.
+function windowShell(key, title, { width, height = null, minWidth, minHeight }) {
+  let finish = () => {};
+  const win = movableWindow({ key, title, width, height, minWidth, minHeight, className: 'compound-window', onClose: () => finish(null), onApply: () => apply.click() });
+  const body = win.body;
+  body.classList.add('compound-body');
   const error = make('p', { className: 'compound-error', role: 'status' });
   const cancel = make('button', { type: 'button', textContent: 'Cancel' });
   const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
-  dialog.append(heading, body, error, make('div', { className: 'ocr-actions' }, cancel, apply));
-  // Keys typed here stay here (no tool shortcuts behind the dialog).
-  dialog.addEventListener('keydown', (e) => e.stopPropagation());
-  document.body.append(dialog);
-  return { dialog, body, error, cancel, apply };
+  win.foot.classList.add('ocr-actions');
+  win.foot.append(error, cancel, apply);
+  return { win, body, error, cancel, apply, onFinish: (fn) => { finish = fn; } };
 }
 
 // Opens the graph editor. `spec`: the graph's (or {} for a new one); `editing`: Apply instead of
@@ -74,7 +78,7 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
   return new Promise((resolve) => {
     let value = graphSpec(spec);
     if (!value.functions.length) value.functions = [''];
-    const { dialog, body, error, cancel, apply } = dialogShell(editing ? 'Edit graph' : 'Insert graph');
+    const { win, body, error, cancel, apply, onFinish } = windowShell('graph', editing ? 'Edit graph' : 'Insert graph', { width: 560, minWidth: 320, minHeight: 260 });
     apply.textContent = editing ? 'Apply' : 'Insert';
     const list = make('div', { className: 'graph-functions' });
     const preview = make('div', { className: 'compound-preview-box' });
@@ -94,7 +98,7 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
       make('label', { className: 'graph-y' }, 'y from ', y0, ' to ', y1),
       make('label', {}, grid, ' Grid'),
       make('label', {}, numbers, ' Numbers'));
-    const add = make('button', { type: 'button', className: 'graph-add', onclick: () => { addRow(''); refresh(); list.querySelector('.graph-row:last-child input')?.focus(); } });
+    const add = make('button', { type: 'button', className: 'graph-add', onclick: () => { addRow(''); refresh(); list.querySelector('.graph-row:last-child input')?.focus({ preventScroll: true }); } });
     add.append(icon('plus'), ' Function');
     body.append(list, add, ranges, preview);
     const COLOURS = [rgba || [0.14, 0.42, 0.81, 1], [0.82, 0.29, 0.36, 1], [0.16, 0.62, 0.39, 1], [0.56, 0.31, 0.78, 1], [0.94, 0.55, 0, 1]];
@@ -144,15 +148,15 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
     }
     for (const el of [x0, x1, yAuto, y0, y1, grid, numbers]) el.addEventListener('input', refresh);
     refresh();
-    const finish = (result) => { keypad?.detach(); keypad?.mount(document.body); dialog.close(); dialog.remove(); resolve(result); };
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; keypad?.detach(); keypad?.mount(document.body); win.destroy(); resolve(result); };
+    onFinish(finish);
     cancel.onclick = () => finish(null);
-    dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     apply.onclick = () => { if (!apply.disabled) finish(read()); };
-    // The keypad shows inside the dialog, under the functions (a modal is above everything
-    // else on the page), in its flow so it never covers the buttons.
+    // The keypad shows inside the window, under the functions, in its flow so it never covers
+    // the buttons (and moves with the window).
     keypad?.mount(body);
-    dialog.showModal();
-    list.querySelector('input')?.focus();
+    list.querySelector('input')?.focus({ preventScroll: true });
   });
 }
 
@@ -161,7 +165,7 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
 export function editTable({ spec = {}, editing = false } = {}) {
   return new Promise((resolve) => {
     let value = tableSpec(spec);
-    const { dialog, body, error, cancel, apply } = dialogShell(editing ? 'Edit table' : 'Insert table');
+    const { win, body, error, cancel, apply, onFinish } = windowShell('table', editing ? 'Edit table' : 'Insert table', { width: 520, minWidth: 320, minHeight: 220 });
     apply.textContent = editing ? 'Apply' : 'Insert';
     const grid = make('div', { className: 'table-grid' });
     const header = make('input', { type: 'checkbox', checked: value.header });
@@ -206,27 +210,27 @@ export function editTable({ spec = {}, editing = false } = {}) {
             e.preventDefault();
             const i = r * cols + c + (e.shiftKey ? -1 : 1);
             if (i >= rows * cols) return change((cs) => cs.push(cs[0].map(() => '')), [rows, 0]);
-            if (i >= 0) cell(Math.floor(i / cols), i % cols)?.focus();
+            if (i >= 0) cell(Math.floor(i / cols), i % cols)?.focus({ preventScroll: true });
             return;
           }
           if (!move) return;
           const next = cell(r + move[0], c + move[1]);
-          if (next) { e.preventDefault(); next.focus(); next.select(); }
+          if (next) { e.preventDefault(); next.focus({ preventScroll: true }); next.select(); }
           else if (e.key === 'Enter') { e.preventDefault(); change((cs) => cs.push(cs[0].map(() => '')), [rows, c]); }
         });
         return input;
       })));
       const target = cell(Math.min(focus[0], rows - 1), Math.min(focus[1], cols - 1));
-      target?.focus();
+      target?.focus({ preventScroll: true });
     }
     header.addEventListener('input', () => { value.header = header.checked; draw(); });
     draw([0, 0]);
-    const finish = (result) => { dialog.close(); dialog.remove(); resolve(result); };
+    let done = false;
+    const finish = (result) => { if (done) return; done = true; win.destroy(); resolve(result); };
+    onFinish(finish);
     cancel.onclick = () => finish(null);
-    dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
     apply.onclick = () => finish(tableSpec({ ...value, header: header.checked }));
-    dialog.showModal();
-    cell(0, 0)?.focus();
+    cell(0, 0)?.focus({ preventScroll: true });
   });
 }
 
