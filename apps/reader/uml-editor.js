@@ -17,6 +17,7 @@ import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
+import { editorTouch } from './editor-touch.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -88,6 +89,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Layout -------------------------------------------------------------------------
   root.classList.add('uml-editor');
   root.replaceChildren();
+  // A finger or a pen is the main pointer (or one is in use now): bigger handles.
+  let lastPointerType = 'mouse';
+  const coarse = () => lastPointerType !== 'mouse' || matchMedia('(pointer: coarse)').matches;
   const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.notRecommended ? `${d.label} — not recommended` : d.label })));
   const undoBtn = iconButton('undo', 'Undo (Ctrl Z)');
   const redoBtn = iconButton('redo', 'Redo (Ctrl Y)');
@@ -382,16 +386,21 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       if (e) {
         const [x, y, w, h] = fitBounds(e);
         const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
-        const s = 10 * k;
-        const handle = document.createElementNS(SVG, 'rect');
+        // Larger for a finger or a pen.
+        const s = (coarse() ? 16 : 10) * k;
+        const square = (cx, cy, name, cursor) => {
+          const r = document.createElementNS(SVG, 'rect');
+          Object.entries({ x: cx - s / 2, y: cy - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': name }).forEach(([a, v]) => r.setAttribute(a, v));
+          r.style.cursor = cursor;
+          return r;
+        };
         // A narrow bar (an activation, a fork) grows along its length: handles at both ends.
+        // Anything else: a handle on every corner.
         const tall = ELEMENTS[e.type]?.shape === 'activation';
-        Object.entries(tall
-          ? { x: x + w / 2 - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }
-          : { x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
-        const top = tall && document.createElementNS(SVG, 'rect');
-        if (top) Object.entries({ x: x + w / 2 - s / 2, y: y - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resizeTop' }).forEach(([a, v]) => top.setAttribute(a, v));
-        svg.append(handle, ...(top ? [top] : []), connectHandle(e, k));
+        const handles = tall
+          ? [square(x + w / 2, y + h, 'resize', 'ns-resize'), square(x + w / 2, y, 'resizeTop', 'ns-resize')]
+          : [square(x, y, 'resize:nw', 'nwse-resize'), square(x + w, y, 'resize:ne', 'nesw-resize'), square(x, y + h, 'resize:sw', 'nesw-resize'), square(x + w, y + h, 'resize:se', 'nwse-resize')];
+        svg.append(...handles, connectHandle(e, k));
       }
     } else if (selected?.kind === 'connector') {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -541,6 +550,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Pointer ------------------------------------------------------------------------
   let drag = null;
   svg.addEventListener('pointerdown', (ev) => {
+    // A second finger is a pinch (below), not a press: it started a pan of its own here, which
+    // undid the zoom at every move.
+    if (ev.pointerType === 'touch' && touches.size > 1) return;
     // The middle button pans from anywhere, over elements too, as on the note's pages.
     if (ev.button === 1) {
       ev.preventDefault();
@@ -571,10 +583,23 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true };
       return;
     }
-    if (handle === 'resize' || handle === 'resizeTop') {
+    if (handle === 'resize' || handle === 'resizeTop' || handle?.startsWith('resize:')) {
       const e = model.elements.find((q) => q.id === selected.id);
-      drag = { mode: 'resize', e, start: pt, bounds: [...e.bounds], snapped: false, top: handle === 'resizeTop', tall: ELEMENTS[e.type]?.shape === 'activation' };
+      const corner = handle.startsWith('resize:') ? handle.slice(7) : 'se';
+      // From the box as drawn (it may be wider than its stored bounds, to fit its text), so the
+      // opposite corner stays exactly where it is seen.
+      const tall = ELEMENTS[e.type]?.shape === 'activation';
+      drag = { mode: 'resize', e, start: pt, bounds: tall ? [...e.bounds] : [...fitBounds(e)], snapped: false, top: handle === 'resizeTop', tall, west: corner.includes('w'), north: corner.includes('n') };
       return;
+    }
+    // Shift and a press anywhere on an element: a connection from it, of the kind it takes,
+    // made where it is let go (no menu of kinds).
+    if (ev.shiftKey && tool.kind === 'select' && (kind === 'element' || (!id && elementAt(pt)))) {
+      const from = model.elements.find((q) => q.id === id) || elementAt(pt);
+      if (from && !ELEMENTS[from.type]?.container) {
+        drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true, direct: true };
+        return;
+      }
     }
     if (handle?.startsWith('way:')) {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -658,9 +683,17 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const h = Math.max(10, Math.round(drag.bounds[3] - dy));
         drag.e.bounds[1] = drag.bounds[1] + drag.bounds[3] - h;
         drag.e.bounds[3] = h;
+      } else if (drag.tall) {
+        drag.e.bounds[3] = Math.max(10, Math.round(drag.bounds[3] + dy));
       } else {
-        if (!drag.tall) drag.e.bounds[2] = Math.max(16, Math.round(drag.bounds[2] + dx));
-        drag.e.bounds[3] = Math.max(drag.tall ? 10 : 6, Math.round(drag.bounds[3] + dy));
+        // Any corner: the opposite one stays where it is.
+        const [bx, by, bw, bh] = drag.bounds;
+        const w = Math.max(16, Math.round(bw + (drag.west ? -dx : dx)));
+        const h = Math.max(6, Math.round(bh + (drag.north ? -dy : dy)));
+        drag.e.bounds[2] = w;
+        drag.e.bounds[3] = h;
+        drag.e.bounds[0] = drag.west ? bx + bw - w : bx;
+        drag.e.bounds[1] = drag.north ? by + bh - h : by;
       }
       draw();
     } else if (drag.mode === 'way') {
@@ -759,7 +792,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       d.line?.remove();
       const pt = toModel(ev);
       const to = elementAt(pt, d.grow ? d.from.id : null) || (!d.grow ? elementAt(pt) : null);
-      if (to && ev.shiftKey && to !== d.from) return pickLink(d, to, ev);
+      if (to && ev.shiftKey && !d.direct && to !== d.from) return pickLink(d, to, ev);
       if (to) return connect(d.type, d.from, to, d.start);
       if (!d.grow) return say('Let go on an element to connect to it.');
       // Let go on empty space: a new element like the one it started from, connected to it.
@@ -1398,6 +1431,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   };
   undoBtn.onclick = () => stepHistory(undo, redo);
   redoBtn.onclick = () => stepHistory(redo, undo);
+  // Fingers and pen as on the pages: two- and three-finger taps undo and redo, two fingers or
+  // the pen held still open the quick menu, a hovering pen shows where it points.
+  canvas.addEventListener('pointerdown', (ev) => { lastPointerType = ev.pointerType || 'mouse'; }, true);
+  const fingers = editorTouch(canvas, {
+    undo: () => stepHistory(undo, redo),
+    redo: () => stepHistory(redo, undo),
+    menuAt: (x, y) => ring.quick.open(x, y),
+    cancel: () => { drag?.line?.remove(); drag = null; draw(); },
+  });
   delBtn.onclick = removeSelected;
   clearAllBtn.onclick = () => {
     if (!model.elements.length && !model.connectors.length) return;
@@ -1497,7 +1539,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     setView,
     preamble: () => [...docPreamble],
     renderedSvg: () => (currentView === 'render' && lastRender.svg ? lastRender.svg : null),
-    destroy: () => { sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    destroy: () => { fingers.destroy(); sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 

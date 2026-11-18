@@ -162,3 +162,7 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 
 /* The full editor's notice (uml-editor.js buildPalette). */
 .uml-palette .uml-warn { margin: 6px 4px 2px; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, #d97706 14%, transparent); color: var(--u-ink); font-size: 11.5px; line-height: 1.35; }
+
+/* Where a hovering pen points, over the chart and diagram editors (editor-touch.js). */
+.pen-hover-ring { position: fixed; left: 0; top: 0; z-index: 2147483000; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1.5px solid #0a84ff; border-radius: 50%; background: #0a84ff22; pointer-events: none; }
+.pen-hover-ring[hidden] { display: none; }
