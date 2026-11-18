@@ -77,9 +77,9 @@ impl TextBox {
             && self.align <= 2
             && self.font_size.is_finite()
             && (2.0..=400.).contains(&self.font_size)
-            && self
-                .line_height
-                .is_none_or(|h| h.is_finite() && h >= self.font_size * 0.5 && h <= self.font_size * 6.)
+            && self.line_height.is_none_or(|h| {
+                h.is_finite() && h >= self.font_size * 0.5 && h <= self.font_size * 6.
+            })
             && self
                 .rgba
                 .iter()

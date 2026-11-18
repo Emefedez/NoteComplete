@@ -231,12 +231,18 @@ fn text_box_line_height_spaces_lines_and_survives_native_export() {
     let svg = editor.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
     let lines = ys(&svg);
     assert_eq!(lines.len(), 2, "{svg}");
-    assert!((lines[1] - lines[0] - 24.).abs() < 1e-9, "baselines 24 apart: {lines:?}");
+    assert!(
+        (lines[1] - lines[0] - 24.).abs() < 1e-9,
+        "baselines 24 apart: {lines:?}"
+    );
     // The native file keeps key 11, and the font name with it.
     let native = Editor::open(&editor.export_noteful().unwrap()).unwrap();
     let v = native.view(0).unwrap();
     assert_eq!(v["texts"][0]["runs"][0]["line_height"].as_f64(), Some(24.));
-    assert_eq!(v["texts"][0]["runs"][0]["font_family"], "LiberationSans pdf9695dc85");
+    assert_eq!(
+        v["texts"][0]["runs"][0]["font_family"],
+        "LiberationSans pdf9695dc85"
+    );
     let again = ys(v["svg"].as_str().unwrap());
     assert!((again[1] - again[0] - 24.).abs() < 1e-9);
 }

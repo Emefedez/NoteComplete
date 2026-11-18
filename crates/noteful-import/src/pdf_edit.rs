@@ -118,6 +118,9 @@ impl Default for State {
     }
 }
 
+/// A page's runs, what was left out, and its fonts by resource name.
+type PageRuns = (Vec<Run>, Skipped, BTreeMap<Vec<u8>, Font>);
+
 /// One text-showing operator: where its glyphs are, horizontally laid out in user space.
 #[derive(Clone, Debug)]
 struct Run {
@@ -421,10 +424,7 @@ impl PdfEdit {
     }
 
     /// The page's text runs, in content order, and what was left out.
-    fn runs(
-        &mut self,
-        page: ObjectId,
-    ) -> Result<(Vec<Run>, Skipped, BTreeMap<Vec<u8>, Font>), String> {
+    fn runs(&mut self, page: ObjectId) -> Result<PageRuns, String> {
         let ops = self.operations(page)?;
         let mut fonts: BTreeMap<Vec<u8>, Font> = BTreeMap::new();
         let mut encodings: HashMap<Vec<u8>, Option<lopdf::Encoding>> = HashMap::new();
