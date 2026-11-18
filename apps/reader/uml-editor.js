@@ -16,6 +16,7 @@ import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
+import { resizablePanels } from './panel-resize.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -136,6 +137,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const work = make('div', { className: 'uml-work' }, canvas, codePane, renderPane);
   const main = make('div', { className: 'uml-main' }, palette, work, notes.pane, panel);
   root.append(bar, main, status);
+  // The tools, the notes and the properties, each as wide as dragged.
+  const sides = resizablePanels(main, [
+    { panel: palette, variable: '--u-left', side: 'left', key: 'uml-left', min: 120, max: 360 },
+    { panel: notes.pane, variable: '--u-notes', side: 'right', key: 'uml-notes', min: 200, max: 700 },
+    { panel, variable: '--u-panel', side: 'right', key: 'uml-panel', min: 220, max: 600 },
+  ]);
   // The properties panel: closed unless asked for (names change in place, on the canvas).
   let panelOpen = false;
   try { panelOpen = localStorage.getItem(PANEL_KEY) === '1'; } catch { /* Optional. */ }
@@ -286,7 +293,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     sel.onclick = () => setTool({ kind: 'select' });
     const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
     sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-    palette.replaceChildren(sel, make('h4', { textContent: 'Elements and connectors' }), list,
+    palette.replaceChildren(sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list,
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
@@ -1488,7 +1495,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     setView,
     preamble: () => [...docPreamble],
     renderedSvg: () => (currentView === 'render' && lastRender.svg ? lastRender.svg : null),
-    destroy: () => { releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    destroy: () => { sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 
