@@ -9,6 +9,14 @@ import { sortable } from './reorder.js';
 
 const $ = id => document.getElementById(id);
 
+// Ctrl/Cmd + 1–8 goes to that tab, Ctrl/Cmd + 9 to the last, as in browsers: the tab id for
+// `digit` in `list` (the bridge's list, in strip order), or null when there is none or it is
+// the tab already shown.
+export function tabForDigit(list, digit) {
+  if (!Array.isArray(list) || !list.length || !(digit >= 1 && digit <= 9)) return null;
+  const tab = digit === 9 ? list[list.length - 1] : list[digit - 1];
+  return tab && !tab.active ? tab.id : null;
+}
 export function tabStrip(bridge, { dirty, beforeClose = () => true, onCurrent = null, onMenu = null } = {}) {
   if (!bridge) return { update() {} };
   const strip = $('tabStrip');

@@ -7,7 +7,7 @@ import { chromium, startReader, samplePath } from './e2e_common.mjs';
 
 const DIR = process.argv[2] ? process.argv[2].replace(/\/?$/, '/') : '';
 const server = await startReader({ port: 0 });
-const b = await chromium.launch();
+const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const errors = [];
 try {
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
@@ -40,6 +40,16 @@ try {
   await p.waitForFunction(() => document.querySelectorAll('iframe').length === 2);
   f = await reader();
   await f.waitForFunction(() => document.querySelectorAll('#tabStrip .tab').length === 2);
+  // Ctrl + 1 and Ctrl + 2 go to the first and the second tab.
+  const shown = () => p.evaluate(() => [...document.querySelectorAll('iframe')].findIndex((fr) => fr.offsetParent));
+  assert.equal(await shown(), 1, 'the new tab is shown');
+  await f.locator('body').press('Control+1');
+  await p.waitForFunction(() => [...document.querySelectorAll('iframe')].findIndex((fr) => fr.offsetParent) === 0);
+  f = await reader();
+  await f.locator('body').press('Control+9');
+  await p.waitForFunction(() => [...document.querySelectorAll('iframe')].findIndex((fr) => fr.offsetParent) === 1);
+  f = await reader();
+  console.log('· Ctrl + 1 goes to the first tab, Ctrl + 9 to the last');
   // In the new tab, the other tab's menu: switch to it, and no save or export for it.
   await f.click('#tabStrip .tab:not(.current)', { button: 'right' });
   await f.waitForSelector('.context-menu');

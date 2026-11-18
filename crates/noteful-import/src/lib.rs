@@ -14,6 +14,8 @@ use pdf_writer::{Content, Finish, Name, Pdf, Rect, Ref, TextStr};
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
+pub mod pdf_edit;
+
 /// Noteful page units per PDF point.
 const UNITS_PER_POINT: f64 = 11. / 6.;
 
@@ -583,6 +585,7 @@ fn convert_page(
                         underline: false,
                         strikethrough: false,
                         math: false,
+                        line_height: None,
                     }),
                     joined: false,
                     part: None,

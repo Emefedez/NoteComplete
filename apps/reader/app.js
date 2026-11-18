@@ -73,6 +73,7 @@ import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
 import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.js";
+import { pdfEditController } from "./pdf-edit.js";
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
@@ -81,7 +82,7 @@ import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefab
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
-import { tabStrip } from "./tab-strip.js";
+import { tabStrip, tabForDigit } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
@@ -283,6 +284,27 @@ function status(text, error = false) {
   clearTimeout(statusTimer);
   if (text) statusTimer = setTimeout(() => $("status").classList.remove("show"), error ? 8000 : 2800);
 }
+// A click on the message copies its text (an error to report, a path, a link), and it stays a
+// moment longer to say so; the pointer over it keeps it shown.
+$("status").addEventListener("click", () => {
+  const box = $("status"), text = box.textContent.trim();
+  if (!text || !box.classList.contains("show")) return;
+  const done = () => {
+    box.classList.add("copied");
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => box.classList.remove("show", "copied"), 1600);
+  };
+  (navigator.clipboard?.writeText(text) ?? Promise.reject()).then(done, () => {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(area);
+    area.select();
+    try { if (document.execCommand("copy")) done(); } finally { area.remove(); }
+  });
+});
+$("status").addEventListener("pointerenter", () => clearTimeout(statusTimer));
+$("status").addEventListener("pointerleave", () => {
+  if ($("status").classList.contains("show")) statusTimer = setTimeout(() => $("status").classList.remove("show", "copied"), 1500);
+});
 // The app's own links (notecomplete:install), e.g. in the website's welcome notebook.
 document.addEventListener("click", (event) => {
   const link = event.target.closest?.("a.ink-link, a[href^='notecomplete:']");
@@ -812,6 +834,7 @@ function buildPages(sizes) {
     el.onpointermove = (e) => {
       if (p.audioTap && Math.hypot(e.clientX - p.audioTap[0], e.clientY - p.audioTap[1]) > 6)
         p.audioTap = null;
+      if (tool === "pdfedit" && !e.buttons) pdfEdit.hover(e, p);
       longPress.move(e);
       pointerMove(e);
     };
@@ -1082,6 +1105,24 @@ const textBox = textBoxController({
   toolOptions: () => toolOptions(),
   insertCompound: (...a) => insertCompound(...a),
   $,
+});
+// Edit PDF (pdf-edit.js): a PDF's printed text turned into text boxes, block by block.
+const pdfEdit = pdfEditController({
+  call,
+  action: (...a) => action(...a),
+  status,
+  getPanels: () => panels,
+  getDoc: () => doc,
+  getActiveLayer: () => ensureEditableLayer()?.id ?? activeLayer,
+  backgrounds: () => backgrounds,
+  point: (e, p) => point(e, p),
+  openText: (p, at) => textBox.open(p, at),
+  // An object taken out of the PDF: selected with Select, to drag it.
+  selectNew: (p) => {
+    document.querySelector('#toolbar [data-tool="select"]')?.click();
+    selection.selectId(p.index, `image:${doc.edit_count - 1}`);
+  },
+  isBusy: () => busy(),
 });
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
 function lockMarks(view) {
@@ -1616,6 +1657,8 @@ async function renderPage(p, provided) {
     p.inkItems = inkItems;
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     textBox.restoreOnRender(p, shows, typing);
+    // Text boxes made from a PDF are drawn in its own font (pdf-edit.js), also in a later session.
+    pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
     find.paint(p);
     find.selectable(p);
@@ -2086,14 +2129,17 @@ function showEdit(op, args, result) {
   layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
   const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
-  const affected = op === "setPageBackgrounds" && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
-  const bgDirty = op === "setPageBackgrounds" || op === "undo" || op === "redo";
+  const newBackground = op === "setPageBackgrounds" || op === "replacePdfText";
+  const affected = newBackground && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
+  const bgDirty = newBackground || op === "undo" || op === "redo";
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
     if (affected && !affected.has(p.index)) continue;
     p.edits = pageEdits(p) + 1;
     p.token++;
     if (bgDirty) {
+      // Edit PDF's outlines were of the PDF page shown before; the next hover reads the new one.
+      p.el.querySelector(":scope > .pdf-edit-layer")?.remove();
       if (!(p.near || p.index === page)) p.view = null;
       p.thumbnailReady = false;
       updatePagePreview(p, true);
@@ -2750,6 +2796,10 @@ function pointerDown(e, p) {
   // Text with a finger or stylus: the box opens when the tap lifts, since phones open the
   // keyboard only for a focus made then (not when the tap starts); a drag moves the page.
   const textTap = tool === "text" && e.pointerType !== "mouse" && !textBox.active;
+  if (tool === "pdfedit" && !touchPan) {
+    if (!e.target.closest?.(".text-editor, .text-discard")) pdfEdit.down(e, p);
+    return;
+  }
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan || textTap) {
     // On PDF or recognized words the mouse selects text instead of panning. A stylus pans in
@@ -3306,7 +3356,9 @@ function selectTool(name, { fromMenu = false } = {}) {
     return;
   }
   const prevGrab = grabbed;
+  if (tool === "pdfedit") pdfEdit.leave();
   tool = name;
+  if (tool === "pdfedit") pdfEdit.enter();
   endResizeDrag();
   // From the menu the bar's settings stay closed: the menu shows them. Select's panel
   // belongs to what is selected, so it still opens as usual.
@@ -3345,6 +3397,8 @@ function selectTool(name, { fromMenu = false } = {}) {
           ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
         : tool === "erase"
           ? "Drag to erase whole strokes."
+        : tool === "pdfedit"
+          ? "Edit PDF: double-click text to edit it, or an image or drawing to move it."
           : tool === "pan"
             ? "Scroll through the pages."
             : "Draw on the selected layer.",
@@ -4055,6 +4109,19 @@ function uiZoomStepForEvent(e) {
   if (k === "+" || (k === "=" && c !== "Digit0") || (k === "*" && c !== "Digit8") || c === "Equal" || c === "NumpadAdd") return 1;
   return null;
 }
+// Ctrl/Cmd + 1–9: to that tab (9: the last), in the desktop app and the web's tabs page.
+// Typing in a field is left alone; a browser tab may keep these keys for itself.
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !/^Digit[1-9]$/.test(e.code)) return;
+  const tabs = window.notecompleteTabs;
+  if (!tabs?.list || !tabs.activate) return;
+  e.preventDefault();
+  const digit = Number(e.code.slice(5));
+  tabs.list().then((list) => {
+    const id = tabForDigit(list, digit);
+    if (id != null) return tabs.activate(id);
+  }).catch(() => { /* No tabs here. */ });
+}, true);
 document.addEventListener("keydown", (e) => {
   const uiStep = uiZoomStepForEvent(e);
   if (uiStep !== null) {
@@ -6589,7 +6656,7 @@ function compoundLabel(c) {
 // finishing it goes back to the tool it came from.
 let lastPress = null;
 async function editTextAt(p, event) {
-  if (!["select", "pan"].includes(tool) || !doc || editing || !p.view) return;
+  if (!["select", "pan", "pdfedit"].includes(tool) || !doc || editing || !p.view) return;
   const at = point(event, p);
   const item = await pickWhole({ page: p.index, x: at[0], y: at[1], tolerance: 6 * p.size[0] / p.el.getBoundingClientRect().width }).catch(() => null);
   if (item?.kind === "text") editTextItem(item, at);

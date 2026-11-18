@@ -20,8 +20,19 @@ export async function noteFingerprint(file) {
   return 'note-v1:' + [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// How the PDF words kept with a note were measured. 2 (2026-11-18): word boxes from the
+// font's widths, not by character count; older kept words are read again.
+const PDF_WORDS = 2;
+// What a page's PDF words were read from: the PDF page and where it sits. A page whose PDF
+// background was replaced (Edit PDF, a new background) reads its words again.
+const pdfSource = (view) => {
+  const bg = view.pdf_background;
+  return [bg.resource_id, bg.page_index, (bg.rect || []).join(','), view.size.join(',')].join('|');
+};
+const emptyStore = () => ({ pdf: {}, ocr: {}, pdfFrom: {}, pdfWords: PDF_WORDS });
+
 export function findController({ call, library, backgrounds, panels, jump, audio, status, pageCanvas, documentInfo, jobs }) {
-  let index = new SearchIndex(), fingerprint = '', stored = { pdf: {}, ocr: {} };
+  let index = new SearchIndex(), fingerprint = '', stored = emptyStore();
   let building = null, generation = 0, hits = [], current = -1, debounce = 0, ocrRun = null, loading = null;
   // Sources to search, any combination; remembered on this device.
   let sources = new Set(['text', 'pdf', 'ocr', 'audio']);
@@ -29,7 +40,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
 
   function reset(nextFingerprint) {
     generation++; building = null; loading = null; ocrRun?.cancel();
-    index = new SearchIndex(); fingerprint = nextFingerprint || ''; stored = { pdf: {}, ocr: {} };
+    index = new SearchIndex(); fingerprint = nextFingerprint || ''; stored = emptyStore();
     hits = []; current = -1;
     close();
   }
@@ -47,8 +58,20 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const token = generation;
     return loading ||= (async () => {
       const kept = fingerprint ? await library.searchData(fingerprint) : null;
-      if (token === generation && kept?.pdf) stored = { pdf: kept.pdf || {}, ocr: kept.ocr || {} };
+      if (token === generation && kept?.pdf) {
+        const current = kept.pdfWords === PDF_WORDS;
+        stored = { ...emptyStore(), pdf: current ? kept.pdf : {}, pdfFrom: current ? kept.pdfFrom || {} : {}, ocr: kept.ocr || {} };
+      }
     })();
+  }
+  // Reads a page's PDF words unless the kept ones are from the PDF page it shows now.
+  // True when they were read.
+  async function readPdfWords(slot, view) {
+    const source = pdfSource(view);
+    if (stored.pdf[slot] && stored.pdfFrom[slot] === source) return false;
+    stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
+    stored.pdfFrom[slot] = source;
+    return true;
   }
 
   // Index every page once: typed text, PDF text (kept), OCR (kept) and transcripts.
@@ -71,10 +94,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
           index.add({ page, source: 'text', words: content.split(/\s+/).filter(Boolean).map(t => ({ text: t, box: text.bounds })) });
         }
         if (view.pdf_background) {
-          if (!stored.pdf[slot]) {
-            stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
-            extracted = true;
-          }
+          if (await readPdfWords(slot, view)) extracted = true;
           index.add({ page, source: 'pdf', words: stored.pdf[slot] });
         }
         const recognized = stored.ocr[slot] || written(view);
@@ -208,10 +228,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     if (!view) return;
     await load();
     const slot = view.slot ?? p.index;
-    if (view.pdf_background && !stored.pdf[slot]) {
-      stored.pdf[slot] = await backgrounds().words(view.pdf_background, view.size).catch(() => []);
-      if (token === generation) persistSoon();
-    }
+    if (view.pdf_background && await readPdfWords(slot, view) && token === generation) persistSoon();
     if (token !== generation || p.view !== view || !p.el) return;
     const recognized = stored.ocr[slot] || written(view);
     // The same words as the layer already made (a stroke redrew the page): it goes back as it

@@ -758,6 +758,7 @@ mod tests {
             underline: false,
             strikethrough: false,
             math,
+            line_height: None,
         }
     }
 

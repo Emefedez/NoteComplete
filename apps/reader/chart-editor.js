@@ -14,6 +14,7 @@ import { icon } from './icons.js';
 import { codeBox, jsonErrorAt } from './json-code.js';
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
+import { resizablePanels } from './panel-resize.js';
 import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
@@ -342,7 +343,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   };
   document.addEventListener('paste', onPaste, true);
   const status = make('div', { className: 'ch-status', role: 'status' });
-  root.append(bar, make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonCode.box, previewBox), panel), status);
+  const main = make('div', { className: 'ch-main' }, palette, make('div', { className: 'ch-center' }, canvas, jsonCode.box, previewBox), panel);
+  root.append(bar, main, status);
+  // The tools on the left and the properties on the right, each as wide as dragged.
+  const sides = resizablePanels(main, [
+    { panel: palette, variable: '--ch-left', side: 'left', key: 'chart-left', min: 120, max: 360 },
+    { panel, variable: '--ch-right', side: 'right', key: 'chart-right', min: 240, max: 640 },
+  ]);
   function layoutPreview() {
     // A plot has no canvas: its figure is the view, always shown.
     const open = kind === 'plot' || prefs.open, notes = !!prefs.notes && kind !== 'plot';
@@ -486,6 +493,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
           { icon: 'erase', does: 'Right-click or right-drag: erase' },
           { keys: 'Shift', does: 'Drag from a cell sideways: slide the rest of its row (held: every row)' },
           { icon: 'pan', does: 'Scroll over the grid: its length · Ctrl scroll: zoom the time axis' },
+          { icon: 'select', does: 'Arrival brush: a first dot where a process arrives, a second where it ends (nothing paints past it)' },
+          { icon: 'select', does: 'The number before a process is its service time (CPU burst + blocked)' },
+          { icon: 'select', does: 'Drag a brush in the list to reorder the brushes' },
           { icon: 'select', does: 'Bars and histograms: drag a bar to its value' },
           { icon: 'pan', does: 'With a pen: fingers scroll and zoom' },
         ] },
@@ -571,7 +581,8 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
         palette.append(input, make('p', { className: 'ch-hint', textContent: 'Enter adds it as a brush.' }));
       }
       palette.append(make('h4', { className: 'ch-length-label', textContent: `Length${base.unit ? ` (${base.unit})` : ''}` }), lengthBox());
-      palette.append(make('p', { className: 'ch-hint', textContent: 'Arrival: a first dot is when it arrives, a second one later where it ends (nothing paints past it). The number before each letter is its service time (CPU burst + blocked). Keys 1–9 pick a brush, Shift S opens them at the pointer. Drag one to reorder them. Scroll over the grid to change the length, Ctrl + scroll to zoom the time axis; right-click or right-drag erases. Shift: drag from a cell left or right to slide the rest of that row (Shift held: every row).' }));
+      // One line here; the rest is in the cheat sheet (?), which had been a paragraph here.
+      palette.append(make('p', { className: 'ch-hint', textContent: 'Scroll on the grid: length. ? for all controls.' }));
     } else if (kind === 'bars') {
       palette.append(make('p', { className: 'ch-hint', textContent: mode === 'answer' ? 'Drag each bar up or down to its value.' : 'Drag a bar up or down to its value. Names and values are also on the right.' }));
     } else {
@@ -1180,7 +1191,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     spec: current,
     mode: () => mode,
     set(spec, m = 'author') { snapshot(); load(spec, m); buildPalette(); changed(); },
-    destroy() { help?.destroy(); document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
+    destroy() { sides.destroy(); help?.destroy(); document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
   };
 }
 

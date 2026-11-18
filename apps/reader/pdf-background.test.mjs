@@ -57,6 +57,25 @@ test("PDF text words land in the page's PDF rect, including rotated pages", () =
   assert.deepEqual(textWords([{ str: "  ", transform: [1, 0, 0, 1, 0, 0], width: 1 }], viewport, place), []);
 });
 
+test("PDF words are placed by the font's widths, not by character count", () => {
+  // "iii MMM": with widths by count, MMM would start at 4/7 of the item. Narrow i (1) and wide
+  // M and space (3) put it at (3 + 3) / 15.
+  const viewport = { width: 100, height: 100, scale: 1, transform: [1, 0, 0, -1, 0, 100] };
+  const place = { x: 0, y: 0, width: 100, height: 100 };
+  const widths = { i: 1, M: 3, " ": 3 };
+  let fonts = [];
+  const measure = (text, font) => { fonts.push(font); return [...text].reduce((sum, c) => sum + widths[c], 0); };
+  const item = { str: "iii MMM", transform: [10, 0, 0, 10, 0, 50], width: 75, fontName: "g_d0_f1" };
+  const [narrow, wide] = textWords([item], viewport, place, measure, { g_d0_f1: { fontFamily: "serif" } });
+  assert.ok(Math.abs(narrow.box[2] - 15) < 1e-9, "iii is 3 of 15 units of 75");
+  assert.ok(Math.abs(wide.box[0] - 30) < 1e-9);
+  assert.ok(Math.abs(wide.box[2] - 45) < 1e-9);
+  assert.equal(fonts[0], '"g_d0_f1", serif', "the loaded PDF font first, then pdf.js's family");
+  // A measure that fails leaves the count.
+  const [byCount] = textWords([item], viewport, place, () => { throw Error("no font"); });
+  assert.ok(Math.abs(byCount.box[2] - 75 * 3 / 7) < 1e-9);
+});
+
 import { PdfBackgrounds, RASTERS_KEPT } from "./pdf-background.js";
 test("page rasters: one render per page and size, the last few kept, URLs revoked when dropped", async () => {
   const own = !globalThis.document;

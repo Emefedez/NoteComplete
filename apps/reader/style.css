@@ -1,3 +1,9 @@
+/* Comic Neue (vendor/fonts, SIL OFL 1.1): the face Comic Sans and Handwriting text uses where
+   those fonts are not installed. */
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
 :root {
   color-scheme: light dark;
   font:
@@ -1406,8 +1412,10 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 }
 
 /* Status: a transient toast that never takes layout space. */
-#status { position: fixed; left: 50%; bottom: calc(var(--above-bars, 0px) + 12px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: 99px; background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
-#status.show { opacity: 1; transform: translate(-50%, 0); }
+#status { position: fixed; left: 50%; bottom: calc(var(--above-bars, 0px) + 12px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+/* Shown, it can be clicked: its text goes to the clipboard (app.js status). */
+#status.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: copy; }
+#status.copied::after { content: " · Copied"; color: var(--accent); font-weight: 600; }
 @media (max-width: 700px) { #status { padding: 5px 12px; font-size: 11px; max-width: calc(100vw - 48px); } }
 
 /* Home: recent notes and the Google Drive library. */
@@ -2160,6 +2168,14 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 
 /* Selectable PDF and recognized text: invisible words over the page; with the
    Pan tool the cursor turns to a text cursor over them and drags select. */
+/* Edit PDF (pdf-edit.js): the PDF's text blocks outlined over the page, the one under the
+   pointer filled. The layer takes no pointer events: pdf-edit.js finds the block itself. */
+.pdf-edit-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
+.pdf-edit-layer rect { fill: transparent; stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pdf-edit-layer rect.object { stroke: color-mix(in srgb, #16a34a 50%, transparent); }
+.pdf-edit-layer rect.object.hover { fill: color-mix(in srgb, #16a34a 12%, transparent); stroke: #16a34a; }
+.pdf-edit-layer rect.hover { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
+.sheet[data-tool="pdfedit"] { cursor: text; }
 .text-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; user-select: text; -webkit-user-select: text; }
 .text-layer text { fill: transparent; font-family: sans-serif; white-space: pre; }
 .text-layer text::selection, .text-layer tspan::selection { fill: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -3978,6 +3994,20 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-big .prefab-preview { height: 240px; border: 1px solid var(--line); }
 .prefab-big .prefab-icon svg { width: 64px; height: 64px; }
 .prefab-picker > .ocr-actions { flex: none; padding-top: 10px; border-top: 1px solid var(--line); }
+/* Compact picker (2026-11-18): each card a row, its picture small on the left and the name and
+   hint beside it, so most prefabs show without scrolling; the large preview stays on the right. */
+.prefab-picker { gap: 8px; }
+.prefab-picker .prefab-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; max-height: min(64dvh, 600px); }
+.prefab-picker .prefab-card { grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; row-gap: 1px; align-items: center; padding: 6px 8px; }
+.prefab-picker .prefab-card .prefab-preview { grid-row: 1 / span 2; width: 52px; height: 38px; border-radius: 5px; overflow: hidden; }
+.prefab-picker .prefab-card .prefab-icon svg { width: 22px; height: 22px; }
+.prefab-picker .prefab-card strong { align-self: end; font-size: 12.5px; line-height: 1.25; }
+.prefab-picker .prefab-card span { align-self: start; font-size: 11.5px; line-height: 1.3; -webkit-line-clamp: 2; color: var(--muted); }
+.prefab-picker .prefab-grid h4 { margin: 4px 2px 0; font-size: 10.5px; }
+.prefab-picker .prefab-side { padding: 8px; }
+.prefab-picker .prefab-big .prefab-preview { height: 190px; }
+.prefab-picker .prefab-big .prefab-icon svg { width: 48px; height: 48px; }
+.prefab-picker > .ocr-actions { padding-top: 8px; }
 @media (max-width: 760px) { .prefab-split { grid-template-columns: 1fr; } .prefab-side { display: none; } }
 .prefab-card { display: grid; gap: 4px; align-content: start; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); color: inherit; cursor: pointer; }
 .prefab-card:hover, .prefab-card:focus-visible { border-color: var(--accent); }

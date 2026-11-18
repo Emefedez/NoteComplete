@@ -209,7 +209,11 @@ pub fn text_svg(text: &RichText, width: f64) -> String {
     let mut output = String::new();
     let mut y = 8.;
     for line in lines {
-        let size = line.iter().map(|(r, _)| r.font_size).fold(15., f64::max);
+        // Lines are at least 15 units tall, as Noteful draws them; text with its own line
+        // height (from a PDF) keeps its true size, so its baselines land where the PDF had them.
+        let own = line.iter().any(|(r, _)| r.line_height > 0.);
+        let floor = if own { 0. } else { 15. };
+        let size = line.iter().map(|(r, _)| r.font_size).fold(floor, f64::max);
         y += size;
         let align = line.first().map_or(0, |(r, _)| r.alignment);
         let (x, anchor) = match align {
@@ -253,16 +257,16 @@ pub fn text_svg(text: &RichText, width: f64) -> String {
             output.push_str(&format!("<tspan font-family=\"{}\" font-size=\"{}\" font-weight=\"{}\" font-style=\"{}\" text-decoration=\"{decoration}\" fill=\"{}\" fill-opacity=\"{}\">{}</tspan>",xml(&fonts),run.font_size,if run.bold {700}else{400},if run.italic {"italic"}else{"normal"},crate::scene::color(&run.rgba),run.rgba[3],xml(content)));
         }
         output.push_str("</text>");
-        y += line
-            .iter()
-            .map(|(r, _)| {
-                if r.line_height > 0. {
-                    (r.line_height - size).max(0.)
-                } else {
-                    size * 0.2 + r.line_spacing
-                }
-            })
-            .fold(8., f64::max);
+        // A line height (native key 11) is the whole distance to the next baseline, so it
+        // may be tighter than the usual spacing, which keeps at least 8 units between lines.
+        let set = line.iter().map(|(r, _)| r.line_height).fold(0., f64::max);
+        y += if set > 0. {
+            (set - size).max(0.)
+        } else {
+            line.iter()
+                .map(|(r, _)| size * 0.2 + r.line_spacing)
+                .fold(8., f64::max)
+        };
     }
     output
 }

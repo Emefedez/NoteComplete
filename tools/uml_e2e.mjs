@@ -31,6 +31,8 @@ try {
   for (const name of ['UML use case', 'UML class', 'UML state machine', 'UML activity', 'UML sequence']) assert.ok(cards.includes(name), `the picker offers ${name}: ${cards}`);
   if (DIR) await p.screenshot({ path: DIR + 'picker.png' });
   await p.click('.prefab-card:has-text("UML class")');
+  // A class diagram asks for its editor first (prefabs.js editorStep): the visual one.
+  await p.click('.prefab-editor[data-view="visual"]');
   await p.waitForSelector('.uml-dialog .uml-canvas svg [data-uml-id]');
   await sleep(300);
   const before = await p.locator('.uml-dialog [data-uml-kind="element"]').count();
@@ -158,7 +160,7 @@ try {
   await q.keyboard.type("20");
   await q.keyboard.press("Enter");
   await q.locator('.uml-canvas text:text-is("20")').waitFor();
-  const h2 = await q.locator('.uml-canvas .uml-connect').boundingBox();
+  const h2 = await q.locator('.uml-canvas .uml-connect').last().boundingBox();
   const seven = await q.locator('.uml-canvas [data-uml-kind="element"]:has(text:text-is("7"))').boundingBox();
   await q.mouse.move(h2.x + h2.width / 2, h2.y + h2.height / 2);
   await q.mouse.down();
