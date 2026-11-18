@@ -2,15 +2,29 @@ import init, { EditorSession, markdown_html, markdown_export, jpeg_pages_pdf, md
 const ready = init();
 // The notebook importer (pkg/import), loaded the first time a notebook is opened.
 let importer = null;
-async function convertNotebook(name, bytes) {
+async function importModule() {
   importer ||= import("./pkg/import/noteful_import_wasm.js").then(async (m) => { await m.default(); return m; });
-  const m = await importer.catch((e) => { importer = null; throw e; });
+  return importer.catch((e) => { importer = null; throw e; });
+}
+async function convertNotebook(name, bytes) {
+  const m = await importModule();
   const format = m.notebook_format(bytes);
   if (!format) throw Error("This is not a Goodnotes or Notability notebook.");
   const noteful = m.convert_notebook(name, bytes);
   return { noteful, format, warnings: JSON.parse(m.notebook_warnings()) };
 }
 let session;
+// Another note, or none: the PDF kept for Edit PDF belonged to the last one (ids repeat across
+// notes, "imported-pdf").
+function forgetPdf() {
+  importer?.then((m) => m.pdf_edit_close()).catch(() => { /* Not loaded. */ });
+}
+// The importer with the PDF `resource` of the open note read (Edit PDF mode).
+async function pdfEditing(resource) {
+  const m = await importModule();
+  if (!m.pdf_edit_has(resource)) m.pdf_edit_open(resource, session.pdf_bytes(resource));
+  return m;
+}
 ready
   .then(() => postMessage({ ready: true }))
   .catch((e) => postMessage({ fatal: String(e) }));
@@ -26,7 +40,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile"]);
+const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile", "pdfBlocks", "pdfWithout", "pdfFont", "pdfFontMissing", "pdfEditClose"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -92,6 +106,7 @@ const standalone = {
       }
       session?.free();
       session = candidate;
+      forgetPdf();
       candidate = undefined;
       return result;
     } finally {
@@ -104,6 +119,7 @@ const standalone = {
   close() {
     session?.free();
     session = undefined;
+    forgetPdf();
     return true;
   },
   // Handwriting preview of Markdown; needs no open document.
@@ -164,6 +180,28 @@ const onDocument = {
   audio: (args) => session.audio_bytes(args.resource),
   pdf: (args) => session.pdf_bytes(args.resource),
   pdfResources: () => JSON.parse(session.pdf_resources()),
+  // Edit PDF mode (pdf-edit.js, docs/PDF-EDITOR.md), in the importer module: the PDF resource
+  // is read there once and kept while its pages are asked about.
+  async pdfBlocks(args) {
+    const m = await pdfEditing(args.resource);
+    return JSON.parse(m.pdf_edit_blocks(args.resource, args.pageIndex));
+  },
+  async pdfWithout(args) {
+    const m = await pdfEditing(args.resource);
+    return m.pdf_edit_without(args.resource, args.pageIndex, JSON.stringify(args.ops));
+  },
+  async pdfFont(args) {
+    const m = await pdfEditing(args.resource);
+    return m.pdf_edit_font(args.resource, args.pageIndex ?? 0, args.hash);
+  },
+  async pdfFontMissing(args) {
+    const m = await pdfEditing(args.resource);
+    return m.pdf_edit_font_missing(args.resource, args.hash, args.text);
+  },
+  async pdfEditClose() {
+    if (importer) (await importModule()).pdf_edit_close();
+    return true;
+  },
   recognized(args) {
     session.set_recognized_text(JSON.stringify(args.pages || {}));
     return true;
@@ -226,6 +264,12 @@ const onDocument = {
   insertHandwritten: edit((args) => session.insert_handwritten(args.at, args.markdown, JSON.stringify(args.options || {}))),
   insertPages: edit((args) => session.insert_pages(args.at, JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
   setPageBackgrounds: edit((args) => session.set_page_backgrounds(JSON.stringify(args.pages), args.pdf ? JSON.stringify(args.pdf) : undefined)),
+  // Edit PDF: a page's PDF without the converted text, then the text boxes that replace it,
+  // as one undo step.
+  replacePdfText: edit((args, page) => {
+    session.set_page_backgrounds(JSON.stringify(args.pages), JSON.stringify(args.pdf));
+    for (const image of args.images || []) session.add_image(page, JSON.stringify({ ...image, joined: true }));
+  }),
   movePage: edit((args) => session.move_page(args.from, args.to)),
   deleteAudio: edit((args) => session.delete_audio(args.assetId)),
   stripAudioMedia: edit((args) => session.strip_audio_media(args.assetId)),
@@ -234,7 +278,7 @@ const onDocument = {
 };
 
 // Replies that are bytes made for this message: their buffer is handed over, not copied.
-const TRANSFERRED = new Set(["jpegPagesPdf", "exportNotecomplete", "export", "audio", "pdf"]);
+const TRANSFERRED = new Set(["jpegPagesPdf", "exportNotecomplete", "export", "audio", "pdf", "pdfWithout", "pdfFont"]);
 
 self.onmessage = async ({ data: { id, op, page = 0, ...args } }) => {
   try {

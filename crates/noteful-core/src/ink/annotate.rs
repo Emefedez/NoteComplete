@@ -211,6 +211,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                         underline: it.underline,
                         strikethrough: it.strikethrough,
                         math: is_math,
+                        line_height: None,
                     }),
                 });
             }

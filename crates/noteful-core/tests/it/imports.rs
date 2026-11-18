@@ -108,6 +108,7 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         underline: false,
         strikethrough: false,
         math: false,
+        line_height: None,
     };
     let image = |t: TextBox| Image {
         base64: String::new(),
@@ -187,4 +188,55 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         .as_str()
         .unwrap()
         .contains(">mundo</tspan>"));
+}
+
+#[test]
+fn text_box_line_height_spaces_lines_and_survives_native_export() {
+    use noteful_core::TextBox;
+    let mut editor = Editor::create_document("Text", &[[600., 800.]], &[]).unwrap();
+    let text = |h: Option<f64>| TextBox {
+        text: "uno\ndos".into(),
+        font_size: 20.,
+        rgba: [0., 0., 0., 1.],
+        bold: false,
+        italic: false,
+        font: "LiberationSans pdf9695dc85".into(),
+        align: 0,
+        underline: false,
+        strikethrough: false,
+        math: false,
+        line_height: h,
+    };
+    let image = |t: TextBox| Image {
+        base64: String::new(),
+        mime: String::new(),
+        bounds: [100., 100., 300., 80.],
+        layer: 0,
+        text: Some(t),
+        joined: false,
+        part: None,
+    };
+    // Out of range: under half the size.
+    assert!(editor.add_image(0, image(text(Some(5.)))).is_err());
+    editor.add_image(0, image(text(Some(24.)))).unwrap();
+    let ys = |svg: &str| -> Vec<f64> {
+        svg.match_indices("<text x=")
+            .map(|(i, _)| {
+                let rest = &svg[i..];
+                let y = rest.find(" y=\"").unwrap() + 4;
+                rest[y..y + rest[y..].find('"').unwrap()].parse().unwrap()
+            })
+            .collect()
+    };
+    let svg = editor.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+    let lines = ys(&svg);
+    assert_eq!(lines.len(), 2, "{svg}");
+    assert!((lines[1] - lines[0] - 24.).abs() < 1e-9, "baselines 24 apart: {lines:?}");
+    // The native file keeps key 11, and the font name with it.
+    let native = Editor::open(&editor.export_noteful().unwrap()).unwrap();
+    let v = native.view(0).unwrap();
+    assert_eq!(v["texts"][0]["runs"][0]["line_height"].as_f64(), Some(24.));
+    assert_eq!(v["texts"][0]["runs"][0]["font_family"], "LiberationSans pdf9695dc85");
+    let again = ys(v["svg"].as_str().unwrap());
+    assert!((again[1] - again[0] - 24.).abs() < 1e-9);
 }

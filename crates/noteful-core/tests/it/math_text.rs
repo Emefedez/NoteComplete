@@ -21,6 +21,7 @@ fn math_box(text: &str, math: bool) -> Image {
             underline: false,
             strikethrough: false,
             math,
+            line_height: None,
         }),
     }
 }

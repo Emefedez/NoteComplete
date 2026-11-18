@@ -29,6 +29,7 @@ The format work behind the core (Ghidra scripts and static-analysis evidence, th
 - `docs/GOOGLE_DRIVE.md`, `docs/BUILDS.md`: Drive setup; packaging procedure and its validation/signing limits.
 - `docs/SHAPES-TABLES-MATH.md`: shapes from the pen, the star, math (LaTeX) text boxes and the math keypad, graphs, and the planned tables, with each task's design and status.
 - `docs/LOCAL-AI.md`: the AI provider that runs a model in the reader itself (WebLLM on WebGPU): web without install, desktop as an extra choice.
+- `docs/PDF-EDITOR.md`: planned Edit PDF mode (printed PDF text turned into editable text boxes, incremental PDF updates); plan and spike only.
 - `spec/`: observed native semantics and the project's own editing format.
 
 Generated media, reports, dependencies, bindings and packages belong in ignored directories (`work/`, `pkg`, `vendor`). The corpus in `samples/` and the synthetic fixtures in `tests/fixtures/` are required by the Rust and WASM tests.

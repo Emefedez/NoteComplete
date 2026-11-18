@@ -53,6 +53,10 @@ pub struct TextBox {
     /// text box keeps the source, since Noteful has no math.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub math: bool,
+    /// Distance from one baseline to the next, in page units: native key 11 (line height,
+    /// pool 10). Text taken from a PDF keeps its own spacing; the usual one when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_height: Option<f64>,
 }
 fn default_font() -> String {
     "Helvetica".into()
@@ -73,6 +77,9 @@ impl TextBox {
             && self.align <= 2
             && self.font_size.is_finite()
             && (2.0..=400.).contains(&self.font_size)
+            && self
+                .line_height
+                .is_none_or(|h| h.is_finite() && h >= self.font_size * 0.5 && h <= self.font_size * 6.)
             && self
                 .rgba
                 .iter()
@@ -97,6 +104,9 @@ impl TextBox {
                 keys.push(key);
                 decorations.push(V::UInt(value));
             }
+        }
+        if self.line_height.is_some() {
+            keys.push(11);
         }
         keys.extend([9, 10]);
         let first_run = keys.len() as u64 - 1;
@@ -129,7 +139,14 @@ impl TextBox {
                 0x407,
                 V::Array(vec![V::Fields(vec![f(1, 0x407, V::Array(vec![]))])]),
             ),
-            f(10, 0x420, floats(&[self.font_size, self.font_size])),
+            f(
+                10,
+                0x420,
+                floats(&match self.line_height {
+                    Some(h) => vec![self.font_size, h, self.font_size],
+                    None => vec![self.font_size, self.font_size],
+                }),
+            ),
         ]
     }
 }

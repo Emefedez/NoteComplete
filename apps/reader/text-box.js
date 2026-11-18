@@ -8,6 +8,7 @@ import { mathSize, previewMath } from "./math-boxes.js";
 import { matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js";
 import { mathKeypad } from "./math-keypad.js";
 import { mathField, styleField, mounted, focusField } from "./math-field.js";
+import { fontStack, importFont, loadImportedFonts, pdfFontHash } from "./fonts.js";
 
 export const FONT_STACKS = {
   Helvetica: "Helvetica, Arial, sans-serif",
@@ -18,7 +19,12 @@ export const FONT_STACKS = {
 };
 export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 export const textAdvance = (size) => size + Math.max(8, size * 0.2 + 8);
-export const cssFont = (style, size = style.size) => `${style.italic ? "italic " : ""}${style.bold ? 700 : 400} ${size}px ${FONT_STACKS[style.font] || FONT_STACKS.Helvetica}`;
+// From one baseline to the next: the box's own line height (text from a PDF), else the usual.
+export const lineAdvance = (style) => (style.lineHeight > 0 ? style.lineHeight : textAdvance(style.size));
+// Any font: the five built in by their stacks, others (imported, from a PDF) by name first.
+export const cssFont = (style, size = style.size) => `${style.italic ? "italic " : ""}${style.bold ? 700 : 400} ${size}px ${FONT_STACKS[style.font] || (style.font ? fontStack(style.font) : FONT_STACKS.Helvetica)}`;
+// What the font menu calls a font: a PDF's font by its own name.
+export const fontLabel = (font) => (pdfFontHash(font) ? `${font.replace(/ pdf[0-9a-f]{8}$/, "")} (PDF)` : font);
 
 export function textBoxSize(text, style, measure = null) {
   const widthOf = measure || (() => {
@@ -27,7 +33,10 @@ export function textBoxSize(text, style, measure = null) {
     return (line) => context.measureText(line).width;
   })();
   const lines = text.split("\n");
-  return [Math.ceil(Math.max(...lines.map((l) => widthOf(l))) + 12), Math.ceil(8 + lines.length * textAdvance(style.size))];
+  // With a line height the last line needs its size and descent below its baseline, not a
+  // whole advance.
+  const height = style.lineHeight > 0 ? 8 + style.size * 1.3 + (lines.length - 1) * style.lineHeight : 8 + lines.length * textAdvance(style.size);
+  return [Math.ceil(Math.max(...lines.map((l) => widthOf(l))) + 12), Math.ceil(height)];
 }
 
 export function wrapText(text, style, width, measure = null) {
@@ -52,7 +61,8 @@ export const hexColor = (rgba) => "#" + rgba.slice(0, 3).map((c) => Math.round(c
 export const rgbaOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).concat(1);
 
 // `math`: the text is LaTeX, typeset by KaTeX (math-boxes.js); sent only when set.
-export const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font, ...(style.math ? { math: true } : {}) });
+// `line_height`: the box's own spacing (text from a PDF), sent only when it has one.
+export const textPayload = (value, style) => ({ text: value, font_size: style.size, rgba: style.rgba, bold: style.bold, italic: style.italic, font: style.font, ...(style.math ? { math: true } : {}), ...(style.lineHeight > 0 ? { line_height: style.lineHeight } : {}) });
 export const boxText = (existing) => existing.runs.map((r) => r.text).join("").replaceAll("​", "");
 
 // A typed text box's drawn copy, hidden while the box over it shows its text instead.
@@ -114,7 +124,7 @@ export function textBoxController({
 }) {
   let textDefaults = { font: "Helvetica", size: 16, bold: false, italic: false, rgba: [0.12, 0.14, 0.16, 1] };
   try { textDefaults = { ...textDefaults, ...JSON.parse(localStorage.getItem("notecomplete-text-style") || "{}") }; } catch { /* Optional. */ }
-  const styleOf = (run) => run ? { font: run.font_family || "Helvetica", size: run.font_size, bold: run.bold, italic: run.italic, rgba: run.rgba } : { ...textDefaults };
+  const styleOf = (run) => run ? { font: run.font_family || "Helvetica", size: run.font_size, bold: run.bold, italic: run.italic, rgba: run.rgba, ...(run.line_height > 0 ? { lineHeight: run.line_height } : {}) } : { ...textDefaults };
   // A typed box's style, with its math flag (kept by the box, not by its runs).
   const boxStyleOf = (existing) => ({ ...styleOf(existing?.runs?.[0]), ...(existing?.math ? { math: true } : {}) });
   // The size a box needs: typeset math is measured, other text from its lines.
@@ -139,7 +149,8 @@ export function textBoxController({
   const textFormatDocked = () => doc.body.classList.contains("text-format-docked");
 
   function syncTextFormatControls(style) {
-    $("textFont").value = FONT_STACKS[style.font] ? style.font : "Helvetica";
+    fontOption(style.font);
+    $("textFont").value = style.font || "Helvetica";
     if (![...$("textSize").options].some((o) => Number(o.value) === style.size)) $("textSize").add(new Option(String(style.size), String(style.size)));
     $("textSize").value = String(style.size);
     $("textBold").setAttribute("aria-pressed", String(!!style.bold));
@@ -208,8 +219,10 @@ export function textBoxController({
     const t = textFormatTarget;
     if (!t) return;
     Object.assign(t.style, change);
-    // Math is chosen per box: new boxes start as plain text.
-    const { math: _math, ...defaults } = t.style;
+    // Math and a PDF's line spacing are the box's own: new boxes start as plain text, with
+    // the usual spacing, and in the last font that is not one PDF's subset.
+    const { math: _math, lineHeight: _lineHeight, ...defaults } = t.style;
+    if (pdfFontHash(defaults.font)) defaults.font = textDefaults.font;
     textDefaults = defaults;
     try { localStorage.setItem("notecomplete-text-style", JSON.stringify(textDefaults)); } catch { /* Optional. */ }
     syncTextFormatControls(t.style);
@@ -224,7 +237,42 @@ export function textBoxController({
   $("textBold").onclick = () => changeTextStyle({ bold: !textFormatTarget?.style.bold });
   $("textItalic").onclick = () => changeTextStyle({ italic: !textFormatTarget?.style.italic });
   $("textMath").onclick = () => changeTextStyle({ math: !textFormatTarget?.style.math });
-  $("textFont").onchange = () => changeTextStyle({ font: $("textFont").value });
+  // The font menu: the five built in, the fonts imported on this device, a box's own font
+  // (from a PDF, or imported elsewhere), and Import font… at the end.
+  const IMPORT = "__import__";
+  function fontOption(font, label = fontLabel(font)) {
+    const select = $("textFont");
+    if (!select || !font || [...select.options].some((o) => o.value === font)) return;
+    const option = new Option(label, font);
+    const importer = [...select.options].find((o) => o.value === IMPORT);
+    select.add(option, importer || null);
+  }
+  if ($("textFont")) {
+    const choose = new Option("Import font…", IMPORT);
+    $("textFont").add(choose);
+    loadImportedFonts().then((families) => families.forEach((f) => fontOption(f))).catch(() => { /* No storage. */ });
+  }
+  let lastFont = "Helvetica";
+  $("textFont").onfocus = () => { lastFont = $("textFont").value; };
+  $("textFont").onchange = () => {
+    if ($("textFont").value !== IMPORT) return changeTextStyle({ font: $("textFont").value });
+    $("textFont").value = textFormatTarget?.style.font || lastFont;
+    const input = Object.assign(doc.createElement("input"), { type: "file", accept: ".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" });
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const family = await importFont(file);
+        fontOption(family);
+        status(`Font ${family} imported: it is in the font menu on this device.`);
+        if (textFormatTarget) changeTextStyle({ font: family });
+        else $("textFont").value = family;
+      } catch (e) {
+        status(e.message, true);
+      }
+    };
+    input.click();
+  };
   $("textSize").onchange = () => changeTextStyle({ size: Number($("textSize").value) });
   $("textColor").oninput = () => changeTextStyle({ rgba: rgbaOf($("textColor").value) });
   $("textSwatches").onclick = (e) => { const c = e.target.closest("[data-color]")?.dataset.color; if (c) changeTextStyle({ rgba: rgbaOf(c) }); };
@@ -323,8 +371,8 @@ export function textBoxController({
       Object.assign(area.style, {
         left: `${(bx / p.size[0]) * 100}%`, top: `${(by / p.size[1]) * 100}%`,
         width: `${Math.max(w, 40) * s}px`, height: `${h * s}px`,
-        font: `${cssFont(style, style.size * s).replace(/px /, `px/${textAdvance(style.size) * s}px `)}`,
-        padding: `${Math.max(0, 8 + 0.2 * style.size - (textAdvance(style.size) - style.size) / 2) * s}px 0 0 ${5 * s}px`,
+        font: `${cssFont(style, style.size * s).replace(/px /, `px/${lineAdvance(style) * s}px `)}`,
+        padding: `${Math.max(0, 8 + 0.2 * style.size - (lineAdvance(style) - style.size) / 2) * s}px 0 0 ${5 * s}px`,
         color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
       });
     };

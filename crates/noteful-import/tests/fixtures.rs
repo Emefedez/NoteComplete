@@ -154,6 +154,7 @@ fn imported_notes_edit_save_and_reopen_like_any_note() {
                         underline: false,
                         strikethrough: false,
                         math: false,
+                        line_height: None,
                     }),
                     joined: false,
                     part: None,

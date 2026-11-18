@@ -1,3 +1,9 @@
+/* Comic Neue (vendor/fonts, SIL OFL 1.1): the face Comic Sans and Handwriting text uses where
+   those fonts are not installed. */
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("vendor/fonts/comic-neue-700-italic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
 :root {
   color-scheme: light dark;
   font:
@@ -2160,6 +2166,12 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
 
 /* Selectable PDF and recognized text: invisible words over the page; with the
    Pan tool the cursor turns to a text cursor over them and drags select. */
+/* Edit PDF (pdf-edit.js): the PDF's text blocks outlined over the page, the one under the
+   pointer filled. The layer takes no pointer events: pdf-edit.js finds the block itself. */
+.pdf-edit-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
+.pdf-edit-layer rect { fill: transparent; stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.pdf-edit-layer rect.hover { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
+.sheet[data-tool="pdfedit"] { cursor: text; }
 .text-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; user-select: text; -webkit-user-select: text; }
 .text-layer text { fill: transparent; font-family: sans-serif; white-space: pre; }
 .text-layer text::selection, .text-layer tspan::selection { fill: transparent; background: color-mix(in srgb, var(--accent) 35%, transparent); }

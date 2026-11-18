@@ -1,0 +1,71 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { toPage, rectOnPage, assignText, nearestFamily, textBoxFor } from "./pdf-edit.js";
+import { fontName, pdfFontName, pdfFontHash, genericFor, fontStack, familyInFont } from "./fonts.js";
+
+// An A4 page at scale 1 (pdf.js: y flipped), drawn on a page twice its size at 100, 50.
+const viewport = { width: 595, height: 842, transform: [1, 0, 0, -1, 0, 842] };
+const place = { x: 100, y: 50, width: 1190, height: 1684 };
+
+test("PDF user space maps onto the page through the viewport and the PDF's rect", () => {
+  assert.deepEqual(toPage([0, 842], viewport.transform, viewport, place), [100, 50]);
+  assert.deepEqual(toPage([595, 0], viewport.transform, viewport, place), [1290, 1734]);
+  // A box with y up becomes a page rect with y down.
+  assert.deepEqual(rectOnPage([72, 686, 172, 700], viewport.transform, viewport, place), [244, 334, 200, 28]);
+});
+
+test("pdf.js text replaces the engine's per line, with spaces only where there were gaps", () => {
+  const blocks = [{ size: 11, lines: [{ x0: 72, x1: 300, base: 700, text: "?? engine" }, { x0: 72, x1: 200, base: 686, text: "kept" }] }];
+  const items = [
+    { str: "dos", transform: [11, 0, 0, 11, 120, 700.2], width: 18 },
+    { str: "Línea", transform: [11, 0, 0, 11, 72, 700], width: 28 },
+    { str: "uno,", transform: [11, 0, 0, 11, 103.5, 700], width: 13 },
+    // Glued to the word before it (a kerned run split in two): no space.
+    { str: "s", transform: [11, 0, 0, 11, 138.2, 700], width: 5 },
+    { str: "otra página", transform: [11, 0, 0, 11, 72, 400], width: 50 },
+  ];
+  assignText(blocks, items);
+  assert.equal(blocks[0].lines[0].text, "Línea uno, doss");
+  assert.equal(blocks[0].lines[1].text, "kept", "nothing from pdf.js: the engine's text");
+});
+
+test("a block becomes a text box with its size, spacing, colour and first baseline", () => {
+  const block = { size: 12, leading: 13.5, bold: true, italic: false, rgba: [0.2, 0.4, 0.6, 1], align: 0, lines: [{ text: "Uno" }, { text: "dos" }] };
+  const box = textBoxFor(block, { origin: [244, 400], scale: 2, font: "Helvetica" });
+  assert.equal(box.text, "Uno\ndos");
+  assert.deepEqual(box.style, { font: "Helvetica", size: 24, bold: true, italic: false, rgba: [0.2, 0.4, 0.6, 1], lineHeight: 27 });
+  // The core draws the first baseline 8 + size below the top and 5 units in.
+  assert.deepEqual(box.at, [239, 368]);
+  // One line: no line height of its own.
+  assert.equal(textBoxFor({ ...block, lines: [{ text: "Uno" }] }, { origin: [0, 100], scale: 1, font: "Helvetica" }).style.lineHeight, undefined);
+  assert.equal(nearestFamily({ serif: true }), "Times New Roman");
+  assert.equal(nearestFamily({ mono: true, serif: true }), "Courier New");
+  assert.equal(nearestFamily({}), "Helvetica");
+});
+
+test("font names fit the core's rules and PDF fonts carry their program's hash", () => {
+  assert.equal(fontName("Arial,Bold+X"), "Arial-Bold-X");
+  assert.equal(fontName(""), "Font");
+  assert.equal(fontName("x".repeat(80)).length, 64);
+  const name = pdfFontName("ABCDEF+Weird/Name", "1a2b3c4d");
+  assert.equal(name, "ABCDEF-Weird-Name pdf1a2b3c4d");
+  assert.equal(pdfFontHash(name), "1a2b3c4d");
+  assert.equal(pdfFontHash("Helvetica"), null);
+  assert.equal(genericFor("LiberationSerif"), "'Times New Roman', serif");
+  assert.equal(genericFor("LiberationSans"), "Arial, sans-serif");
+  assert.equal(genericFor("JetBrainsMonoNF-Regular"), "'Courier New', monospace");
+  assert.equal(fontStack("O'Neil"), "'O\\'Neil', Arial, sans-serif");
+});
+
+test("a font file's family comes from its name table", () => {
+  // A minimal sfnt: one table, 'name', with a Windows (3,1) family name record (id 1).
+  const family = "Mi Fuente";
+  const utf16 = [...family].flatMap((c) => [0, c.charCodeAt(0)]);
+  const nameTable = [0, 0, 0, 1, 0, 18, 0, 3, 0, 1, 0x04, 0x09, 0, 1, 0, utf16.length, 0, 0, ...utf16];
+  const header = [0, 1, 0, 0, 0, 1, 0, 16, 0, 0, 0, 0];
+  const offset = header.length + 16;
+  const record = [..."name"].map((c) => c.charCodeAt(0)).concat([0, 0, 0, 0], [0, 0, 0, offset], [0, 0, 0, nameTable.length]);
+  const bytes = new Uint8Array([...header, ...record, ...nameTable]);
+  assert.equal(familyInFont(bytes), family);
+  assert.equal(familyInFont(new Uint8Array([1, 2, 3])), null);
+});

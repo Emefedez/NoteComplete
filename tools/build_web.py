@@ -51,6 +51,16 @@ def main():
     for folder in ['cmaps','standard_fonts','wasm']:
         shutil.copytree(pdfjs/folder,vendor/folder,dirs_exist_ok=True)
     shutil.copy2(pdfjs/'LICENSE',vendor/'LICENSE')
+    # Comic Neue (SIL OFL 1.1): what Comic Sans and Handwriting text falls back to where those
+    # fonts are not installed (Linux, Android), so it never ends as a generic cursive.
+    comic=ROOT/'apps/reader/node_modules/@fontsource/comic-neue'
+    fonts=ROOT/'apps/reader/vendor/fonts'
+    if fonts.exists(): shutil.rmtree(fonts)
+    fonts.mkdir(parents=True,exist_ok=True)
+    for weight in ['400','700']:
+        for style in ['normal','italic']:
+            shutil.copy2(comic/'files'/f'comic-neue-latin-{weight}-{style}.woff2',fonts/f'comic-neue-{weight}-{style}.woff2')
+    shutil.copy2(comic/'LICENSE',fonts/'LICENSE-comic-neue')
     # Bundle the local speech engine; model weights are fetched only on user request.
     speech=ROOT/'apps/reader/vendor/transformers'
     if speech.exists(): shutil.rmtree(speech)

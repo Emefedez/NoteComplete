@@ -73,6 +73,7 @@ import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
 import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.js";
+import { pdfEditController } from "./pdf-edit.js";
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
@@ -812,6 +813,7 @@ function buildPages(sizes) {
     el.onpointermove = (e) => {
       if (p.audioTap && Math.hypot(e.clientX - p.audioTap[0], e.clientY - p.audioTap[1]) > 6)
         p.audioTap = null;
+      if (tool === "pdfedit" && !e.buttons) pdfEdit.hover(e, p);
       longPress.move(e);
       pointerMove(e);
     };
@@ -1082,6 +1084,19 @@ const textBox = textBoxController({
   toolOptions: () => toolOptions(),
   insertCompound: (...a) => insertCompound(...a),
   $,
+});
+// Edit PDF (pdf-edit.js): a PDF's printed text turned into text boxes, block by block.
+const pdfEdit = pdfEditController({
+  call,
+  action: (...a) => action(...a),
+  status,
+  getPanels: () => panels,
+  getDoc: () => doc,
+  getActiveLayer: () => ensureEditableLayer()?.id ?? activeLayer,
+  backgrounds: () => backgrounds,
+  point: (e, p) => point(e, p),
+  openText: (p, at) => textBox.open(p, at),
+  isBusy: () => busy(),
 });
 // Locked items: a dashed outline with a padlock, shown while the Lock tool is chosen.
 function lockMarks(view) {
@@ -1616,6 +1631,8 @@ async function renderPage(p, provided) {
     p.inkItems = inkItems;
     if (resizeMode?.page === p.index) p.el.append(resizeFrame(p));
     textBox.restoreOnRender(p, shows, typing);
+    // Text boxes made from a PDF are drawn in its own font (pdf-edit.js), also in a later session.
+    pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
     find.paint(p);
     find.selectable(p);
@@ -2086,14 +2103,17 @@ function showEdit(op, args, result) {
   layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
   const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
-  const affected = op === "setPageBackgrounds" && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
-  const bgDirty = op === "setPageBackgrounds" || op === "undo" || op === "redo";
+  const newBackground = op === "setPageBackgrounds" || op === "replacePdfText";
+  const affected = newBackground && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
+  const bgDirty = newBackground || op === "undo" || op === "redo";
   for (const p of panels) {
     if (only != null && p.index !== only) continue;
     if (affected && !affected.has(p.index)) continue;
     p.edits = pageEdits(p) + 1;
     p.token++;
     if (bgDirty) {
+      // Edit PDF's outlines were of the PDF page shown before; the next hover reads the new one.
+      p.el.querySelector(":scope > .pdf-edit-layer")?.remove();
       if (!(p.near || p.index === page)) p.view = null;
       p.thumbnailReady = false;
       updatePagePreview(p, true);
@@ -2750,6 +2770,10 @@ function pointerDown(e, p) {
   // Text with a finger or stylus: the box opens when the tap lifts, since phones open the
   // keyboard only for a focus made then (not when the tap starts); a drag moves the page.
   const textTap = tool === "text" && e.pointerType !== "mouse" && !textBox.active;
+  if (tool === "pdfedit" && !touchPan) {
+    if (!e.target.closest?.(".text-editor, .text-discard")) pdfEdit.down(e, p);
+    return;
+  }
   if (!touchPan && selection.down(e, p, tool)) return;
   if (tool === "pan" || touchPan || textTap) {
     // On PDF or recognized words the mouse selects text instead of panning. A stylus pans in
@@ -3306,7 +3330,9 @@ function selectTool(name, { fromMenu = false } = {}) {
     return;
   }
   const prevGrab = grabbed;
+  if (tool === "pdfedit") pdfEdit.leave();
   tool = name;
+  if (tool === "pdfedit") pdfEdit.enter();
   endResizeDrag();
   // From the menu the bar's settings stay closed: the menu shows them. Select's panel
   // belongs to what is selected, so it still opens as usual.
@@ -3345,6 +3371,8 @@ function selectTool(name, { fromMenu = false } = {}) {
           ? "Tape: drag across text to cover it; tap a tape to lift or cover it."
         : tool === "erase"
           ? "Drag to erase whole strokes."
+        : tool === "pdfedit"
+          ? "Edit PDF: double-click a block of the PDF's text to edit it as a text box."
           : tool === "pan"
             ? "Scroll through the pages."
             : "Draw on the selected layer.",
@@ -6589,7 +6617,7 @@ function compoundLabel(c) {
 // finishing it goes back to the tool it came from.
 let lastPress = null;
 async function editTextAt(p, event) {
-  if (!["select", "pan"].includes(tool) || !doc || editing || !p.view) return;
+  if (!["select", "pan", "pdfedit"].includes(tool) || !doc || editing || !p.view) return;
   const at = point(event, p);
   const item = await pickWhole({ page: p.index, x: at[0], y: at[1], tolerance: 6 * p.size[0] / p.el.getBoundingClientRect().width }).catch(() => null);
   if (item?.kind === "text") editTextItem(item, at);

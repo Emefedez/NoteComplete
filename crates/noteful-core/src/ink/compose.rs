@@ -626,6 +626,7 @@ impl Composer {
                 underline: false,
                 strikethrough: false,
                 math: true,
+                line_height: None,
             }),
         });
         self.y = y + h + if display { 10. } else { 6. };
