@@ -1,0 +1,17 @@
+{
+  "id": "truthtable",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 60,
+  "label": "Truth table",
+  "kind": "custom",
+  "output": "picture",
+  "types": ["truthtable"],
+  "names": { "truthtable": "Truth table" },
+  "editor": "editor.js",
+  "groups": { "maths": "Maths" },
+  "prefabs": [
+    { "id": "truthtable", "group": "maths", "label": "Truth table", "hint": "Every row of some variables, with a boolean expression's value (or an empty column to fill in)", "icon": "table",
+      "spec": { "type": "truthtable", "title": "", "variables": ["A", "B"], "expr": "A and not B", "label": "", "output": "values", "notation": "10" } }
+  ]
+}

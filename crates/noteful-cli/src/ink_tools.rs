@@ -331,6 +331,7 @@ const SHIPPED_PREFAB_NOTES: &str = concat!(
     include_str!("../../../apps/reader/prefabs/charts/ai.md"),
     include_str!("../../../apps/reader/prefabs/uml/ai.md"),
     include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
+    include_str!("../../../apps/reader/prefabs/truthtable/ai.md"),
 );
 fn module_ai_notes(dir: &Path) -> String {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -1406,6 +1407,17 @@ mod tests {
         ]))
         .is_err());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn shipped_prefab_notes_match_the_modules() {
+        // The compiled-in notes are every shipped module's ai.md, in order; the template
+        // (prefabs/_template) and the kit are not modules.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/reader/prefabs");
+        let notes = module_ai_notes(&dir);
+        assert_eq!(notes, SHIPPED_PREFAB_NOTES);
+        assert!(notes.contains("\"type\":\"truthtable\""));
+        assert!(!notes.contains("\"type\":\"example\""));
     }
 
     #[test]
