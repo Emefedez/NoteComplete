@@ -41,6 +41,7 @@
       "updater.js",
       "session.js",
       "prefab-folder.js",
+      "png-clipboard.js",
       "app-menu.js",
       "app-log.js",
       "agent-setup.js",

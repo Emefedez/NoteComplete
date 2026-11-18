@@ -1,4 +1,4 @@
-import { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, BrowserWindow, ClipboardItem, Menu, WebContentsView, clipboard, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,6 +22,8 @@ import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 import { appLog } from './app-log.js';
 import { diagramRenderer } from './diagrams.js';
+import { pngClipboard, processRunner } from './png-clipboard.js';
+import { spawn } from 'node:child_process';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
@@ -504,6 +506,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   // PlantUML diagrams drawn by the PlantUML installed here (diagrams.js).
   const diagrams = diagramRenderer({ folderOf: file => files.documentFolder(file) });
+  // Copied items as a picture that keeps them (png-clipboard.js): the PNG byte for byte.
+  const pictures = pngClipboard({ clipboard, ClipboardItem, run: processRunner(spawn) });
+  ipcMain.handle('clipboard:write-png', guarded((_event, bytes, text) => pictures.write(bytes, typeof text === 'string' ? text : '')));
   ipcMain.handle('diagrams:plantuml', guarded((_event, text, file) => diagrams.plantuml(text, typeof file === 'string' ? file : '')));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
   // by the reader's cancel message or when its tab goes away (archive-download.js).

@@ -14,6 +14,7 @@ import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
 import { savedUmlView } from "./uml.js";
 import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
+import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -730,6 +731,15 @@ async function load(file, preparedDocument = null) {
 // reads (the clipboard's).
 async function importImages(files, { at = null, any = false } = {}) {
   if (!doc || busy()) return;
+  // Pictures copied from NoteComplete carry their items (png-clip.js): those come back editable.
+  const plain = [];
+  for (const file of files) {
+    const c = await pictureClip(file);
+    if (c) await pasteFromPicture(c, at);
+    else plain.push(file);
+  }
+  if (!plain.length) return;
+  files = plain;
   const targetPage = at?.page ?? page,
     layer = activeLayer,
     note = epoch;
@@ -6839,14 +6849,51 @@ function clipBox({ lines, images }) {
   for (const { bounds: [x, y, w, h] } of images) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h); }
   return Number.isFinite(x0) ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
 }
+// The system clipboard after a copy: a picture of the items that carries them (png-clip.js),
+// so it pastes as a picture in other apps and as the items again in NoteComplete, and the
+// marker text. On the desktop the PNG goes as it is (desktop png-clipboard.js); a browser
+// re-encodes it, so there other apps get the picture only (the copy here still pastes).
+async function clipToSystem(item, c) {
+  let png = null;
+  try {
+    const blob = await itemPicture(item, 2);
+    const { page: _page, pastes: _pastes, ...kept } = c;
+    png = await addClipChunk(new Uint8Array(await blob.arrayBuffer()), kept);
+  } catch { /* Not drawn (page off screen…): the marker only. */ }
+  try {
+    if (png && window.notecompleteClipboard?.writePng) return void await window.notecompleteClipboard.writePng(png, CLIP_MARK);
+    if (png && navigator.clipboard?.write && window.ClipboardItem)
+      return void await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([png], { type: "image/png" }), "text/plain": new Blob([CLIP_MARK], { type: "text/plain" }) })]);
+  } catch { /* Fall back to the marker. */ }
+  try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
+}
+// The copy carried by a picture (pasted, dropped or imported), or null.
+async function pictureClip(file) {
+  try {
+    if (!file || file.size > 96 * 1024 * 1024) return null;
+    if (!(file.type === "image/png" || /\.png$/i.test(file.name || "") || isPng(new Uint8Array(await file.slice(0, 8).arrayBuffer())))) return null;
+    const c = await readClipChunk(new Uint8Array(await file.arrayBuffer()));
+    return validClip(c) ? c : null;
+  } catch { return null; }
+}
+// Items from a picture: this tab's own copy pastes as Ctrl V does; one from elsewhere goes
+// with its parts given new ids, centred on `at` ({ page, point }) or where it was.
+async function pasteFromPicture(c, at = null) {
+  if (clip && c.id && c.id === clip.id) return pasteClip(at ? panels[at.page] : panels[page]);
+  const restored = { lines: c.lines, images: c.images, box: clipBox(c), pastes: 0 };
+  const p = at ? panels[at.page] : panels[page];
+  const done = await pasteClip(p, at?.point ? cornerFor(restored.box, at.point) : null, restored);
+  if (done) status("Pasted from a NoteComplete picture: editable again.");
+}
+const cornerFor = ([, , w, h], [x, y]) => [x - w / 2, y - h / 2];
 async function copyItem(item, { cut = false } = {}) {
   if (!doc || !item) return;
   try {
     const copied = await copiedItems(item);
-    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now() };
+    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now(), id: Math.random().toString(36).slice(2, 12) };
     const specRaw = copied.images.length === 1 && copied.images[0]?.prefab?.kind === "prefab" ? copied.images[0].prefab.spec : null;
     if (specRaw) { try { const spec = JSON.parse(specRaw); if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
-    try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
+    await clipToSystem(item, clip);
     if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
     else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
   } catch (e) { status(e.message, true); }
@@ -6867,17 +6914,18 @@ async function pasteUmlIntoPage(parsedClip, p = panels[page], at = null) {
 }
 // The copy on page `p`: at page point `at` (its top left corner), else where it was (a little
 // lower and to the right on its own page, again with each paste), kept on the page.
-async function pasteClip(p = panels[page], at = null) {
-  if (!doc || !clip || !p || editing || !ensureEditableLayer()) return;
-  const [x, y, w, h] = clip.box;
+async function pasteClip(p = panels[page], at = null, c = clip) {
+  if (!doc || !c || !p || editing || !ensureEditableLayer()) return false;
+  const [x, y, w, h] = c.box;
   let to;
   if (at) to = at;
-  else { const step = p.index === clip.page ? 16 * ++clip.pastes : 0; to = [x + step, y + step]; }
+  else { const step = p.index === c.page ? 16 * ++c.pastes : 0; to = [x + step, y + step]; }
   to = [Math.max(0, Math.min(p.size[0] - w, to[0])), Math.max(0, Math.min(p.size[1] - h, to[1]))];
-  const moved = shifted(clip, [to[0] - x, to[1] - y]);
+  const moved = shifted(c, [to[0] - x, to[1] - y]);
   const layer = activeLayer;
   await action("drawMany", { page: p.index, lines: moved.lines.map((l) => ({ ...l, layer })), images: moved.images.map((i) => ({ ...i, layer })) });
   status(`Pasted on page ${p.index + 1}. One undo takes it away.`);
+  return true;
 }
 // Items let go over another page (selection.js): taken off theirs and put where they were
 // let go, in one undo step.
@@ -6947,10 +6995,19 @@ for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
 document.addEventListener("paste", (event) => {
   if (!itemKeys(event)) return;
   const text = event.clipboardData?.getData("text/plain") || "";
-  if (clip && text === CLIP_MARK) {
+  const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+  // A copy made in NoteComplete: this tab's own, or (its picture carrying another copy) one
+  // made in another tab or window.
+  if (text === CLIP_MARK && (clip || images.length)) {
     pastedAt = event.timeStamp;
     event.preventDefault();
-    pasteClip();
+    const spot = pasteSpot();
+    (async () => {
+      const c = images.length ? await pictureClip(images[0]) : null;
+      if (c && c.id !== clip?.id) return pasteFromPicture(c, spot);
+      if (clip) return pasteClip();
+      if (images.length) return importImages(images, { at: spot, any: true });
+    })().catch((e) => status(e.message, true));
     return;
   }
   const umlClip = readUmlClipFromText(text);
@@ -6961,8 +7018,7 @@ document.addEventListener("paste", (event) => {
     return;
   }
   // From other apps: a picture goes on the page where the pointer is (selected, to move it);
-  // plain text becomes a text box there.
-  const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+  // plain text becomes a text box there. A picture copied from NoteComplete brings its items.
   if (images.length) {
     pastedAt = event.timeStamp;
     event.preventDefault();
