@@ -27,6 +27,17 @@ export const DIAGRAMS = {
   // Not UML: nodes and arrows for trees, automata and graphs (no UML badge, no UML files).
   graph: { label: 'Node graph', notUml: true, elements: ['node', 'boxNode', 'note'], connectors: ['edge', 'line', 'anchor'], vp: null },
 };
+// The full editor: every element and connector of the kinds above, for a drawing that fits
+// none of them. Not recommended (the editor says so): it follows no single UML diagram, so it
+// is not exported to Visual Paradigm XML, XMI or PlantUML; a picture or a NoteComplete
+// diagram keeps it.
+DIAGRAMS.full = {
+  label: 'Full editor (every element)',
+  notRecommended: true,
+  elements: [...new Set(Object.values(DIAGRAMS).flatMap((d) => d.elements.filter((t) => t !== 'note')).concat('note'))],
+  connectors: [...new Set(Object.values(DIAGRAMS).flatMap((d) => d.connectors.filter((t) => t !== 'anchor')).concat('anchor'))],
+  vp: null,
+};
 
 // Field kinds understood by the property panel: text, longText, bool, tags (a list of words),
 // an enum name of ENUMS, or { list: <LISTS key> }.
@@ -309,7 +320,14 @@ export function starterModel(diagram = 'class') {
   const m = { type: 'uml', version: UML_VERSION, diagram, name: '', badge: !DIAGRAMS[diagram]?.notUml, elements: [], connectors: [] };
   const el = (type, x, y, extra = {}) => { const e = makeElement(type, [x, y], extra, m); m.elements.push(e); return e; };
   const link = (type, a, b, extra = {}) => { const c = makeConnector(type, a.id, b.id, extra, m); m.connectors.push(c); return c; };
-  if (diagram === 'useCase') {
+  if (diagram === 'full') {
+    // A taste of mixing kinds: an actor, a use case and the class behind it.
+    const u = el('actor', 20, 40, { name: 'Member' });
+    const a = el('useCase', 130, 60, { name: 'Borrow book' });
+    const c = el('class', 340, 40, { name: 'Loan' });
+    link('association', u, a);
+    link('dependency', a, c);
+  } else if (diagram === 'useCase') {
     const sys = el('system', 140, 20, { name: 'Library', bounds: [140, 20, 260, 220] });
     const u = el('actor', 30, 70, { name: 'Member' });
     const a = el('useCase', 195, 70, { name: 'Borrow book', parent: sys.id });

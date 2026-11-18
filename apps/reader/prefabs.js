@@ -4,64 +4,24 @@
 // are drawn by exam-html.js, as in generated exams, and placed as a picture with a frame that
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { imageReady } from './image-ready.js';
-import { renderVisualSvg, normalizeVisualSpec } from './exam-html.js';
+import { cards, groups, onModules, nameOf, renderSpec, stamp } from './prefab-registry.js';
 import { icon } from './icons.js';
 import { jsonErrorAt, codeBox } from './json-code.js';
-import { displaySpec } from './chart-model.js';
-import { DIAGRAMS, renderUml, starterModel, umlName, CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
+import { CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
 import { toPlantUml } from './uml-plantuml.js';
 
-// What each prefab starts as. `kind`: "graph" and "table" open their own editors; "prefab"
-// is an exam figure, described by `spec` (the exam visual spec); "uml" a UML diagram (uml.js),
-// edited in the diagram editor (uml-editor.js) and kept as a prefab whose spec has type "uml".
-export const PREFABS = [
-  { id: 'graph', kind: 'graph', group: 'basic', label: 'Function graph', hint: 'Axes and a grid, with functions of x', icon: 'graph' },
-  { id: 'table', kind: 'table', group: 'basic', label: 'Table', hint: 'Rows and columns of typed cells, with headers; edit cells in place later', icon: 'table' },
-  {
-    id: 'histogram', kind: 'prefab', group: 'exam', label: 'Histogram', hint: 'Frequencies of intervals, bars touching', icon: 'graph',
-    spec: { type: 'histogram', title: 'Histogram', xLabel: 'Interval', yLabel: 'Frequency', bins: [{ label: '0-10', value: 3 }, { label: '10-20', value: 7 }, { label: '20-30', value: 5 }, { label: '30-40', value: 2 }] },
-  },
-  {
-    id: 'bar', kind: 'prefab', group: 'exam', label: 'Bar chart', hint: 'Separate bars for categories', icon: 'graph',
-    spec: { type: 'bar', title: 'Bar chart', xLabel: '', yLabel: 'Value', bins: [{ label: 'A', value: 4 }, { label: 'B', value: 6 }, { label: 'C', value: 3 }] },
-  },
-  {
-    id: 'states', kind: 'prefab', group: 'exam', label: 'Process states', hint: 'Running, ready and blocked over time (scheduling), painted cell by cell', icon: 'clock',
-    spec: {
-      type: 'states', title: 'FIFO', tStart: 0, tEnd: 30, tStep: 5, unit: 'u.t.', legend: { run: 'Running', ready: 'Ready', blocked: 'Blocked' },
-      processes: [
-        { label: 'A', arrival: 0, segments: [{ state: 'run', start: 0, end: 10 }, { state: 'blocked', start: 10, end: 20 }, { state: 'run', start: 20, end: 25 }] },
-        { label: 'B', arrival: 5, segments: [{ state: 'ready', start: 5, end: 10 }, { state: 'run', start: 10, end: 20 }] },
-        { label: 'C', arrival: 10, segments: [{ state: 'ready', start: 10, end: 25 }, { state: 'run', start: 25, end: 30 }] },
-      ],
-    },
-  },
-  {
-    id: 'timeline', kind: 'prefab', group: 'exam', label: 'CPU timeline', hint: 'Gantt chart of what runs on each row, painted cell by cell', icon: 'monitor',
-    spec: { type: 'timeline', title: 'CPU (RR q=2)', tStart: 0, tEnd: 10, tStep: 1, unit: 'ms', rows: [{ label: 'CPU', intervals: [{ label: 'P1', start: 0, end: 2 }, { label: 'P2', start: 2, end: 4 }, { label: 'P1', start: 4, end: 6 }, { label: 'P3', start: 6, end: 9 }] }] },
-  },
-  {
-    id: 'states-exercise', kind: 'prefab', group: 'exam', label: 'Scheduling exercise', hint: 'Process states to fill in on the page: draw the solution, then Fill in paints the answer and Check marks it', icon: 'clock',
-    spec: {
-      type: 'states', title: 'FIFO', exercise: true, tStart: 0, tEnd: 20, tStep: 2, unit: 'u.t.', legend: { run: 'Running', ready: 'Ready', blocked: 'Blocked' },
-      processes: [
-        { label: 'A', arrival: 0, segments: [{ state: 'run', start: 0, end: 4 }, { state: 'blocked', start: 4, end: 8 }, { state: 'ready', start: 8, end: 10 }, { state: 'run', start: 10, end: 12 }] },
-        { label: 'B', arrival: 2, segments: [{ state: 'ready', start: 2, end: 4 }, { state: 'run', start: 4, end: 10 }] },
-        { label: 'C', arrival: 4, segments: [{ state: 'ready', start: 4, end: 12 }, { state: 'run', start: 12, end: 16 }] },
-      ],
-    },
-  },
-  // Drawn in the diagram editor: nodes, and arrows dragged from one to another.
-  { id: 'tree', kind: 'uml', group: 'diagram', label: 'Tree or node graph', hint: 'Nodes and arrows: trees, automata, graphs. Drag from a node to connect or grow it', icon: 'share', spec: starterModel('graph') },
-  {
-    id: 'plot', kind: 'prefab', group: 'exam', label: 'Exam plot', hint: 'A plot as exams draw it: curves, points and shaded areas', icon: 'graph',
-    spec: { type: 'plot', title: 'f(x)', xMin: -4, xMax: 4, yMin: -2, yMax: 6, functions: [{ expr: 'x^2 - 1', label: 'f(x)' }], points: [{ x: 0, y: -1, label: '(0,-1)' }] },
-  },
-  ...Object.entries(DIAGRAMS).filter(([, d]) => !d.notUml).map(([diagram, d]) => ({ id: `uml-${diagram}`, kind: 'uml', group: 'diagram', label: `UML ${d.label.replace(/ diagram$/, '').toLowerCase()}`, hint: `${d.label}, as in Visual Paradigm: opens the diagram editor`, icon: 'uml', spec: starterModel(diagram) })),
-];
-
-// The picker's groups, in order.
-export const PREFAB_GROUPS = [['basic', 'Tables and graphs'], ['exam', 'Exam figures'], ['diagram', 'Diagrams']];
+// What each prefab starts as: the cards of the prefab modules (prefab-registry.js,
+// docs/PREFAB-MODULES.md). `kind`: "graph" and "table" open their own editors; "prefab" is a
+// figure drawn as a picture from its `spec` (the charts module: exam figures); "uml" a diagram
+// edited in the diagram editor. Live lists: modules added at start join them.
+export const PREFABS = [];
+export const PREFAB_GROUPS = [];
+function refreshCards() {
+  PREFABS.splice(0, PREFABS.length, ...cards());
+  PREFAB_GROUPS.splice(0, PREFAB_GROUPS.length, ...groups());
+}
+refreshCards();
+onModules(refreshCards);
 
 // The prefabs used last (ids, newest first): the picker shows them first, and the page's
 // menu offers them beside Insert prefab.
@@ -75,36 +35,12 @@ export function notePrefabUsed(id) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recentPrefabs(12).map((p) => p.id).filter((q) => q !== id)].slice(0, 12))); } catch { /* Optional. */ }
 }
 
-const NAMES = { plot: 'Exam plot', histogram: 'Histogram', states: 'Process states', timeline: 'CPU timeline', tree: 'Tree or node graph', graph_nodes: 'Tree or node graph' };
-// The name of a prefab's figure, for menus ("Histogram").
-export function prefabName(spec) {
-  if (spec?.type === 'uml') return umlName(spec);
-  const s = normalizeVisualSpec(spec);
-  if (s?.type === 'histogram' && !s.contiguous) return 'Bar chart';
-  return NAMES[s?.type] || 'Prefab';
-}
+// The name of a prefab's figure, for menus ("Histogram"): its module says.
+export const prefabName = (spec) => nameOf(spec);
 
-function svgSize(svg) {
-  const tag = String(svg || '').match(/<svg\b[^>]*>/i)?.[0] || '';
-  const vb = tag.match(/\bviewBox=["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/i);
-  if (vb) return [Number(vb[1]) || 600, Number(vb[2]) || 400];
-  const w = Number(tag.match(/\bwidth=["']([\d.]+)/i)?.[1]), h = Number(tag.match(/\bheight=["']([\d.]+)/i)?.[1]);
-  return [w || 600, h || 400];
-}
-
-// The figure as SVG text with its size, or null when the spec draws nothing.
-export function prefabSvg(spec) {
-  if (spec?.type === 'uml') {
-    if (spec.style === 'plantuml' && typeof spec.plantumlSvg === 'string' && spec.plantumlSvg.includes('<svg')) {
-      const [width, height] = svgSize(spec.plantumlSvg);
-      return { svg: spec.plantumlSvg, width, height };
-    }
-    return renderUml(spec);
-  }
-  // An exercise shows the student's answer, not its solution (chart-model.js).
-  const out = renderVisualSvg(displaySpec(spec), { forMcp: false });
-  return out?.svg ? out : null;
-}
+// The figure as SVG text with its size, or null when the spec draws nothing (or its module
+// is missing).
+export const prefabSvg = (spec) => renderSpec(spec);
 
 const make = (tag, props = {}, ...children) => {
   const el = Object.assign(document.createElement(tag), props);
@@ -160,9 +96,12 @@ export function choosePrefab() {
     const importBtn = make('button', { type: 'button', title: 'Open a PlantUML (.puml), Visual Paradigm XML, XMI or NoteComplete diagram file' }, icon('import'), ' Import .puml / diagram…');
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
+    // The modules in use, and the folder of modules (prefab-modules-ui.js).
+    const modulesBtn = make('button', { type: 'button', className: 'prefab-modules-open', title: 'Prefab modules: which are in use, and a folder of your own' }, icon('settings'), ' Modules…');
+    modulesBtn.onclick = () => import('./prefab-modules-ui.js').then((m) => m.openModulesDialog({ status: (text) => { hint.textContent = text; } }));
     const filter = make('div', { className: 'prefab-filter' }, search, pills);
     const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, editorChip));
-    const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
+    const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, modulesBtn, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
     // The next step for a class or use case diagram: which editor, the two side by side.
     const step = make('div', { className: 'prefab-step', hidden: true });
     dialog.append(
@@ -376,7 +315,9 @@ export async function prefabPng(spec, size, scale = 3) {
   if (!out) throw Error('Nothing to draw.');
   const img = new Image();
   // As a picture it has no page styles: its text takes a sans font, as in the exam pages.
-  const svg = out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
+  // (Not twice: a module that names its own font keeps it; a repeated attribute breaks the SVG.)
+  const root = out.svg.match(/<svg\b[^>]*>/)?.[0] || '';
+  const svg = /\sfont-family=/.test(root) ? out.svg : out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
   await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   const canvas = document.createElement('canvas');
   try {
@@ -405,7 +346,7 @@ export function prefabAspect(spec) {
 // a frame that keeps the spec (invisible under the picture) and the picture, parts of `id`.
 export function prefabItems(box, spec, png, { layer = 0, id = `p${Date.now().toString(36)}` } = {}) {
   const [x, y, w, h] = box;
-  const frame = { points: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]], width: 0.5, rgba: [0.8, 0.84, 0.9, 1], tool: 0, layer, shape: { kind: 'rectangle', start: [x, y], end: [x + w, y + h] }, part: { id, kind: 'prefab', spec: JSON.stringify(spec) } };
+  const frame = { points: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]], width: 0.5, rgba: [0.8, 0.84, 0.9, 1], tool: 0, layer, shape: { kind: 'rectangle', start: [x, y], end: [x + w, y + h] }, part: { id, kind: 'prefab', spec: JSON.stringify(stamp(spec)) } };
   const picture = { base64: png.base64, mime: png.mime, bounds: [x, y, w, h], layer, part: { id, kind: 'prefab' } };
   return { lines: [frame], images: [picture] };
 }

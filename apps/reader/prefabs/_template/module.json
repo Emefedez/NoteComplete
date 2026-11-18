@@ -1,0 +1,17 @@
+{
+  "id": "example",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 1000,
+  "label": "Example list",
+  "kind": "custom",
+  "output": "picture",
+  "types": ["example"],
+  "names": { "example": "Example list" },
+  "editor": "editor.js",
+  "groups": { "mine": "My prefabs" },
+  "prefabs": [
+    { "id": "example", "group": "mine", "label": "Example list", "hint": "A title and a list of lines in a box: the template to start a module from", "icon": "note",
+      "spec": { "type": "example", "title": "Things to remember", "lines": [{ "text": "First" }, { "text": "Second" }] } }
+  ]
+}

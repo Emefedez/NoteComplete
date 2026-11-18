@@ -1,0 +1,4 @@
+- Process states: {"type":"states","title":"FIFO","tStart":0,"tEnd":30,"tStep":5,"unit":"u.t.","legend":{"run":"Activo","ready":"Listo","blocked":"Block"},"processes":[{"label":"A","arrival":0,"segments":[{"state":"run","start":0,"end":10}]}]} (add "exercise":true for an interactive blank/checkable scheduling exercise)
+- CPU timeline: {"type":"timeline","title":"CPU (RR q=2)","tStart":0,"tEnd":10,"tStep":1,"unit":"ms","rows":[{"label":"CPU","intervals":[{"label":"P1","start":0,"end":2}]}]}
+- Histogram / bar: {"type":"histogram"|"bar","title":"...","xLabel":"...","yLabel":"...","bins":[{"label":"0-10","value":3}]}
+- Exam plot: {"type":"plot","title":"f(x)","xMin":-4,"xMax":4,"yMin":-2,"yMax":6,"functions":[{"expr":"x^2-1","label":"f(x)"}],"points":[{"x":0,"y":-1,"label":"(0,-1)"}]}

@@ -1,0 +1,1 @@
+- UML / node graph: {"type":"uml","diagram":"class"|"sequence"|"state"|"activity"|"usecase"|"graph", ...}

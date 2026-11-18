@@ -76,6 +76,78 @@ test("PDF words are placed by the font's widths, not by character count", () => 
   assert.ok(Math.abs(byCount.box[2] - 75 * 3 / 7) < 1e-9);
 });
 
+import { textGlyphs, letterSpaced } from "./pdf-background.js";
+// Operator numbers for the tests (pdf.js's own OPS in the app).
+const OPS = { save: 10, restore: 11, transform: 12, beginText: 31, setCharSpacing: 33, setWordSpacing: 34, setHScale: 35, setFont: 37, moveText: 40, setTextMatrix: 42, showText: 44 };
+const glyph = (unicode, width) => ({ unicode, width, isSpace: unicode === " " });
+test("glyph places follow the PDF's text state: cm, Tm, Td, Tc, TJ numbers, Tz", () => {
+  const ops = { fnArray: [], argsArray: [] };
+  const op = (fn, ...args) => { ops.fnArray.push(OPS[fn]); ops.argsArray.push(args); };
+  op("save"); op("transform", 2, 0, 0, 2, 10, 20);
+  op("beginText"); op("setFont", "f1", 10); op("setTextMatrix", new Float32Array([1, 0, 0, 1, 5, 0]));
+  op("setCharSpacing", 1);
+  // A (5 wide + 1 spacing), a TJ kern of -500 (+5), B; then Td and C at half width.
+  op("showText", [glyph("A", 500), -500, glyph("B", 500)]);
+  op("moveText", 0, -12); op("setHScale", 50); op("showText", [glyph("C", 400)]);
+  op("restore");
+  const [a, b, c] = textGlyphs(ops, OPS);
+  assert.deepEqual([a.text, a.x, a.y, a.ex, a.size], ["A", 20, 20, 30, 20]);
+  assert.deepEqual([b.x, b.ex], [20 + 2 * (5 + 1 + 5), 20 + 2 * (5 + 1 + 5 + 5)]);
+  assert.deepEqual([c.text, c.x, c.y, c.ex], ["C", 20, -4, 24]);
+});
+
+// A spaced-out line as a PDF draws it (one glyph per Tj, letters 0.14 em apart; a space glyph,
+// or only a wider gap, between words) and as pdf.js gives it: one item, a space between every
+// two letters.
+function spacedOut(text, { size = 8, letter = 0.14, spaceGlyphs = true, space = 0.25 } = {}) {
+  const ops = { fnArray: [], argsArray: [] };
+  const op = (fn, ...args) => { ops.fnArray.push(OPS[fn]); ops.argsArray.push(args); };
+  op("beginText"); op("setFont", "f1", size); op("setTextMatrix", [1, 0, 0, 1, 50, 700]);
+  let x = 0;
+  for (const ch of text) {
+    if (ch === " ") {
+      if (spaceGlyphs) op("showText", [glyph(" ", space * 1000)]);
+      else { op("moveText", (space + letter) * size, 0); x += (space + letter) * size; }
+      if (!spaceGlyphs) continue;
+    } else op("showText", [glyph(ch, 600)]);
+    const step = ((ch === " " ? space : 0.6) + letter) * size;
+    op("moveText", step, 0); x += step;
+  }
+  const item = { str: [...text.replace(/ /g, "")].join(" "), transform: [size, 0, 0, size, 50, 700], width: x - letter * size, fontName: "f1" };
+  return { item, glyphs: textGlyphs(ops, OPS) };
+}
+test("a spaced-out title's letters join into words, its spaces stay", () => {
+  const viewport = { width: 600, height: 800, scale: 1, transform: [1, 0, 0, -1, 0, 800] };
+  const place = { x: 0, y: 0, width: 600, height: 800 };
+  const { item, glyphs } = spacedOut("ARQUI DE COMPU II");
+  assert.equal(item.str, "A R Q U I D E C O M P U I I", "pdf.js: no telling letters from words");
+  assert.equal(letterSpaced(item.str), true);
+  assert.deepEqual(textWords([item], viewport, place).map((w) => w.text).join("|"), "A|R|Q|U|I|D|E|C|O|M|P|U|I|I", "without glyphs, as before");
+  const words = textWords([{ str: "AC", transform: [5, 0, 0, 5, 10, 700], width: 8 }, { str: " ", transform: [5, 0, 0, 5, 18, 700], width: 30 }, item], viewport, place, null, {}, glyphs);
+  assert.deepEqual(words.map((w) => w.text), ["AC", "ARQUI", "DE", "COMPU", "II"]);
+  assert.deepEqual(words.map((w) => w.space), [false, true, true, true, true]);
+  // Boxes from the glyphs: ARQUI from A's start to I's end, DE after the space.
+  const [, arqui, de] = words;
+  assert.ok(Math.abs(arqui.box[0] - 50) < 1e-9);
+  assert.ok(Math.abs(arqui.box[0] + arqui.box[2] - (50 + 4 * 0.74 * 8 + 0.6 * 8)) < 1e-9);
+  assert.ok(Math.abs(de.box[0] - (50 + 5 * 0.74 * 8 + 0.39 * 8)) < 1e-9);
+});
+
+test("without space glyphs, a spaced-out title breaks at the wider gaps; plain spaced letters stay apart", () => {
+  const viewport = { width: 600, height: 800, scale: 1, transform: [1, 0, 0, -1, 0, 800] };
+  const place = { x: 0, y: 0, width: 600, height: 800 };
+  const title = spacedOut("PRÁCTICA 3", { letter: 0.2, spaceGlyphs: false });
+  assert.deepEqual(textWords([title.item], viewport, place, null, {}, title.glyphs).map((w) => w.text), ["PRÁCTICA", "3"]);
+  // "x y z" with gaps a space wide and no space glyphs: spaces, not letter-spacing.
+  const plain = spacedOut("xyz", { letter: 0.28, spaceGlyphs: false });
+  assert.deepEqual(textWords([plain.item], viewport, place, null, {}, plain.glyphs).map((w) => w.text), ["x", "y", "z"]);
+  // Glyphs that are not the item's text (another line): the item's pieces as they are.
+  const other = spacedOut("OTRO");
+  assert.deepEqual(textWords([title.item], viewport, place, null, {}, other.glyphs).map((w) => w.text), ["P", "R", "Á", "C", "T", "I", "C", "A", "3"]);
+  // Normal text is not read by glyph.
+  assert.equal(letterSpaced("Parcial I · Control de lavadora"), false);
+});
+
 import { PdfBackgrounds, RASTERS_KEPT } from "./pdf-background.js";
 test("page rasters: one render per page and size, the last few kept, URLs revoked when dropped", async () => {
   const own = !globalThis.document;

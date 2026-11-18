@@ -17,6 +17,8 @@ import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
+import { editorTouch } from './editor-touch.js';
+import { loadKitStyles } from './prefabs/kit/shell.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -36,6 +38,8 @@ const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w
 
 // Loads uml.css once (the reader's own page does not carry it).
 function ensureStyles() {
+  // The kit's shared rules (panel grips, the pen's ring) first.
+  loadKitStyles();
   if (document.querySelector('link[data-uml-css]')) return;
   const link = make('link', { rel: 'stylesheet', href: new URL('./uml.css', import.meta.url).href });
   link.dataset.umlCss = '';
@@ -88,7 +92,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Layout -------------------------------------------------------------------------
   root.classList.add('uml-editor');
   root.replaceChildren();
-  const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.label })));
+  // A finger or a pen is the main pointer (or one is in use now): bigger handles.
+  let lastPointerType = 'mouse';
+  const coarse = () => lastPointerType !== 'mouse' || matchMedia('(pointer: coarse)').matches;
+  const kindSelect = make('select', { className: 'uml-kind', title: 'Diagram type' }, ...Object.entries(DIAGRAMS).map(([k, d]) => make('option', { value: k, textContent: d.notRecommended ? `${d.label} — not recommended` : d.label })));
   const undoBtn = iconButton('undo', 'Undo (Ctrl Z)');
   const redoBtn = iconButton('redo', 'Redo (Ctrl Y)');
   const delBtn = iconButton('backspace', 'Delete the selection (Delete or Backspace)');
@@ -293,7 +300,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     sel.onclick = () => setTool({ kind: 'select' });
     const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
     sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-    palette.replaceChildren(sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list,
+    // The full editor says what it gives up, above its long list.
+    const warn = DIAGRAMS[model.diagram].notRecommended && make('p', { className: 'uml-hint uml-warn', textContent: 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.' });
+    palette.replaceChildren(...[sel, warn, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
@@ -380,16 +389,21 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       if (e) {
         const [x, y, w, h] = fitBounds(e);
         const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1;
-        const s = 10 * k;
-        const handle = document.createElementNS(SVG, 'rect');
+        // Larger for a finger or a pen.
+        const s = (coarse() ? 16 : 10) * k;
+        const square = (cx, cy, name, cursor) => {
+          const r = document.createElementNS(SVG, 'rect');
+          Object.entries({ x: cx - s / 2, y: cy - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': name }).forEach(([a, v]) => r.setAttribute(a, v));
+          r.style.cursor = cursor;
+          return r;
+        };
         // A narrow bar (an activation, a fork) grows along its length: handles at both ends.
+        // Anything else: a handle on every corner.
         const tall = ELEMENTS[e.type]?.shape === 'activation';
-        Object.entries(tall
-          ? { x: x + w / 2 - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }
-          : { x: x + w - s / 2, y: y + h - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resize' }).forEach(([a, v]) => handle.setAttribute(a, v));
-        const top = tall && document.createElementNS(SVG, 'rect');
-        if (top) Object.entries({ x: x + w / 2 - s / 2, y: y - s / 2, width: s, height: s, class: 'uml-handle', 'data-handle': 'resizeTop' }).forEach(([a, v]) => top.setAttribute(a, v));
-        svg.append(handle, ...(top ? [top] : []), connectHandle(e, k));
+        const handles = tall
+          ? [square(x + w / 2, y + h, 'resize', 'ns-resize'), square(x + w / 2, y, 'resizeTop', 'ns-resize')]
+          : [square(x, y, 'resize:nw', 'nwse-resize'), square(x + w, y, 'resize:ne', 'nesw-resize'), square(x, y + h, 'resize:sw', 'nesw-resize'), square(x + w, y + h, 'resize:se', 'nwse-resize')];
+        svg.append(...handles, connectHandle(e, k));
       }
     } else if (selected?.kind === 'connector') {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -539,6 +553,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Pointer ------------------------------------------------------------------------
   let drag = null;
   svg.addEventListener('pointerdown', (ev) => {
+    // A second finger is a pinch (below), not a press: it started a pan of its own here, which
+    // undid the zoom at every move.
+    if (ev.pointerType === 'touch' && touches.size > 1) return;
     // The middle button pans from anywhere, over elements too, as on the note's pages.
     if (ev.button === 1) {
       ev.preventDefault();
@@ -569,10 +586,23 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true };
       return;
     }
-    if (handle === 'resize' || handle === 'resizeTop') {
+    if (handle === 'resize' || handle === 'resizeTop' || handle?.startsWith('resize:')) {
       const e = model.elements.find((q) => q.id === selected.id);
-      drag = { mode: 'resize', e, start: pt, bounds: [...e.bounds], snapped: false, top: handle === 'resizeTop', tall: ELEMENTS[e.type]?.shape === 'activation' };
+      const corner = handle.startsWith('resize:') ? handle.slice(7) : 'se';
+      // From the box as drawn (it may be wider than its stored bounds, to fit its text), so the
+      // opposite corner stays exactly where it is seen.
+      const tall = ELEMENTS[e.type]?.shape === 'activation';
+      drag = { mode: 'resize', e, start: pt, bounds: tall ? [...e.bounds] : [...fitBounds(e)], snapped: false, top: handle === 'resizeTop', tall, west: corner.includes('w'), north: corner.includes('n') };
       return;
+    }
+    // Shift and a press anywhere on an element: a connection from it, of the kind it takes,
+    // made where it is let go (no menu of kinds).
+    if (ev.shiftKey && tool.kind === 'select' && (kind === 'element' || (!id && elementAt(pt)))) {
+      const from = model.elements.find((q) => q.id === id) || elementAt(pt);
+      if (from && !ELEMENTS[from.type]?.container) {
+        drag = { mode: 'connect', type: connectorFor(from), from, start: pt, line: null, grow: true, direct: true };
+        return;
+      }
     }
     if (handle?.startsWith('way:')) {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -656,9 +686,17 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const h = Math.max(10, Math.round(drag.bounds[3] - dy));
         drag.e.bounds[1] = drag.bounds[1] + drag.bounds[3] - h;
         drag.e.bounds[3] = h;
+      } else if (drag.tall) {
+        drag.e.bounds[3] = Math.max(10, Math.round(drag.bounds[3] + dy));
       } else {
-        if (!drag.tall) drag.e.bounds[2] = Math.max(16, Math.round(drag.bounds[2] + dx));
-        drag.e.bounds[3] = Math.max(drag.tall ? 10 : 6, Math.round(drag.bounds[3] + dy));
+        // Any corner: the opposite one stays where it is.
+        const [bx, by, bw, bh] = drag.bounds;
+        const w = Math.max(16, Math.round(bw + (drag.west ? -dx : dx)));
+        const h = Math.max(6, Math.round(bh + (drag.north ? -dy : dy)));
+        drag.e.bounds[2] = w;
+        drag.e.bounds[3] = h;
+        drag.e.bounds[0] = drag.west ? bx + bw - w : bx;
+        drag.e.bounds[1] = drag.north ? by + bh - h : by;
       }
       draw();
     } else if (drag.mode === 'way') {
@@ -757,7 +795,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       d.line?.remove();
       const pt = toModel(ev);
       const to = elementAt(pt, d.grow ? d.from.id : null) || (!d.grow ? elementAt(pt) : null);
-      if (to && ev.shiftKey && to !== d.from) return pickLink(d, to, ev);
+      if (to && ev.shiftKey && !d.direct && to !== d.from) return pickLink(d, to, ev);
       if (to) return connect(d.type, d.from, to, d.start);
       if (!d.grow) return say('Let go on an element to connect to it.');
       // Let go on empty space: a new element like the one it started from, connected to it.
@@ -834,34 +872,76 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     view[1] += (ev.shiftKey ? 0 : ev.deltaY) * k;
     applyView();
   }, { passive: false });
-  // Two fingers: zoom and pan the canvas.
+  // Two fingers: zoom and pan the view, as on the note's pages, whatever is selected. The second
+  // finger takes the gesture over from the first: what the first one had begun (a move, a
+  // resize, a new element, a pan, the selection it changed) is put back as it was, and from then
+  // on both fingers only move the view. One finger left of a pinch goes on panning.
   const touches = new Map();
-  let pinch = null;
+  let pinch = null, touchBefore = null;
+  const pinchFrom = () => {
+    if (!view) fit();
+    const pts = [...touches.values()], n = pts.length || 1;
+    const mid = [pts.reduce((a, q) => a + q[0], 0) / n, pts.reduce((a, q) => a + q[1], 0) / n];
+    const d = pts.length > 1 ? Math.hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1]) : 0;
+    pinch = { d, view: [...view], mid };
+  };
   canvas.addEventListener('pointerdown', (ev) => {
     if (ev.pointerType !== 'touch') return;
+    // A first finger starts a new gesture (a finger lifted where it was not seen is forgotten).
+    if (ev.isPrimary || !touches.size) { touches.clear(); pinch = null; touchBefore = { model: JSON.stringify(model), undo: [...undo], redo: [...redo], selected }; }
     touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    if (touches.size === 2) { drag?.line?.remove(); drag = null; const [a, b] = [...touches.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), view: [...view], mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; }
+    if (touches.size < 2) return;
+    // Not a press on the diagram: neither the element nor a handle under this finger sees it.
+    ev.stopPropagation();
+    ev.preventDefault();
+    if (!pinch) {
+      drag?.line?.remove();
+      drag = null;
+      unpress();
+      const b = touchBefore;
+      if (b && (b.model !== JSON.stringify(model) || b.undo.length !== undo.length || b.selected !== selected)) {
+        model = JSON.parse(b.model);
+        undo.splice(0, undo.length, ...b.undo);
+        redo.splice(0, redo.length, ...b.redo);
+        selected = b.selected && [...model.elements, ...model.connectors].some((q) => q.id === b.selected.id) ? b.selected : null;
+        lastSnap = { key: '', at: 0 };
+        changed();
+      } else draw();
+    }
+    // Every finger of the pinch is followed here, not by what the first one pressed on.
+    for (const id of touches.keys()) { try { svg.releasePointerCapture(id); } catch { /* not held */ } try { canvas.setPointerCapture(id); } catch { /* a synthetic event */ } }
+    pinchFrom();
   }, true);
   canvas.addEventListener('pointermove', (ev) => {
     if (!touches.has(ev.pointerId)) return;
     touches.set(ev.pointerId, [ev.clientX, ev.clientY]);
-    if (!pinch || touches.size !== 2) return;
-    const [a, b] = [...touches.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), r = canvas.getBoundingClientRect();
-    const f = pinch.d / Math.max(10, d), W = Math.min(8000, Math.max(120, pinch.view[2] * f)), k0 = pinch.view[2] / r.width, k = W / r.width;
-    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (!pinch) return;
+    ev.stopPropagation();
+    const pts = [...touches.values()], r = canvas.getBoundingClientRect();
+    const mid = pts.length > 1 ? [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2] : pts[0];
+    const d = pts.length > 1 ? Math.hypot(pts[0][0] - pts[1][0], pts[0][1] - pts[1][1]) : 0;
+    const f = pinch.d > 0 && d > 0 ? pinch.d / Math.max(10, d) : 1;
+    const W = Math.min(8000, Math.max(120, pinch.view[2] * f)), k0 = pinch.view[2] / r.width, k = W / r.width;
+    // The point of the diagram that was between the fingers stays between them.
     const ax = pinch.view[0] + (pinch.mid[0] - r.left) * k0, ay = pinch.view[1] + (pinch.mid[1] - r.top) * k0;
     view = [ax - (mid[0] - r.left) * k, ay - (mid[1] - r.top) * k, W, W];
     viewMoved = true;
     applyView();
   }, true);
-  const lift = (ev) => { touches.delete(ev.pointerId); if (touches.size < 2) pinch = null; };
+  const lift = (ev) => {
+    if (!touches.delete(ev.pointerId)) return;
+    if (!pinch) return;
+    ev.stopPropagation();
+    if (touches.size) pinchFrom(); else pinch = null;
+  };
   canvas.addEventListener('pointerup', lift, true);
   canvas.addEventListener('pointercancel', lift, true);
 
   // --- Keys ---------------------------------------------------------------------------
   // Keys pressed with nothing focused (focus left on the page after a menu or a button)
   // still reach the editor.
-  const stray = (ev) => { if (root.isConnected && !root.contains(ev.target) && !document.querySelector('.context-menu') && (ev.target === document.body || ev.target === document.documentElement)) keys(ev); };
+  // Also with the focus on the dialog that holds the editor (where it is when the editor opens).
+  const stray = (ev) => { if (root.isConnected && !root.contains(ev.target) && !document.querySelector('.context-menu') && (ev.target === document.body || ev.target === document.documentElement || (ev.target instanceof Element && ev.target.contains(root)))) keys(ev); };
   document.addEventListener('keydown', stray);
   root.addEventListener('keydown', keys);
   function keys(ev) {
@@ -1396,6 +1476,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   };
   undoBtn.onclick = () => stepHistory(undo, redo);
   redoBtn.onclick = () => stepHistory(redo, undo);
+  // Fingers and pen as on the pages: two- and three-finger taps undo and redo, two fingers or
+  // the pen held still open the quick menu, a hovering pen shows where it points.
+  canvas.addEventListener('pointerdown', (ev) => { lastPointerType = ev.pointerType || 'mouse'; }, true);
+  const fingers = editorTouch(canvas, {
+    undo: () => stepHistory(undo, redo),
+    redo: () => stepHistory(redo, undo),
+    menuAt: (x, y) => ring.quick.open(x, y),
+    cancel: () => { drag?.line?.remove(); drag = null; draw(); },
+  });
   delBtn.onclick = removeSelected;
   clearAllBtn.onclick = () => {
     if (!model.elements.length && !model.connectors.length) return;
@@ -1485,6 +1574,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   setView(startView || (model.style === 'plantuml' && drawPlantuml ? 'render' : savedView()));
   changed();
   requestAnimationFrame(fit);
+  // Keys (N, 1–9, Shift S, Ctrl Z) go to the editor from the start, as in the chart editor.
+  requestAnimationFrame(() => { if (root.isConnected && !root.contains(document.activeElement)) canvas.focus({ preventScroll: true }); });
   return {
     model: () => normalizeModel(model),
     set: (m) => setModel(m),
@@ -1495,7 +1586,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     setView,
     preamble: () => [...docPreamble],
     renderedSvg: () => (currentView === 'render' && lastRender.svg ? lastRender.svg : null),
-    destroy: () => { sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    destroy: () => { fingers.destroy(); sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 

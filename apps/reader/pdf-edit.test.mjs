@@ -88,3 +88,14 @@ test("a line keeps its parts' styles: a bold word becomes a span in its own font
   const box = textBoxFor(block, { origin: [0, 100], scale: 1, font: "Barlow pdfaaaaaaaa", fontOf });
   assert.deepEqual(box.spans, [{ len: 9 }, { len: 12, bold: true, font: "Barlow-Bold pdfbbbbbbbb" }, { len: 5 }]);
 });
+
+test("letter-spaced text keeps the engine's real spaces, not pdf.js's one per letter", () => {
+  const part = { font: "Barlow Condensed", bold: false, italic: false, rgba: [0, 0, 0, 1] };
+  const block = { size: 8, lines: [{ x0: 425, x1: 512, base: 765, text: "", parts: [{ ...part, x0: 425, x1: 509, text: "VOLUMEN 1 ALUMNADO" }] }] };
+  assignText([block], [{ str: "V O L U M E N 1 A L U M N A D O", transform: [8, 0, 0, 8, 425.2, 765], width: 83.6 }]);
+  assert.equal(block.lines[0].text, "VOLUMEN 1 ALUMNADO");
+  // An engine that could not decode the font: pdf.js's text.
+  const garbled = { size: 8, lines: [{ x0: 425, x1: 512, base: 765, text: "", parts: [{ ...part, x0: 425, x1: 509, text: "\u0001\u0002" }] }] };
+  assignText([garbled], [{ str: "Hola", transform: [8, 0, 0, 8, 425.2, 765], width: 20 }]);
+  assert.equal(garbled.lines[0].text, "Hola");
+});

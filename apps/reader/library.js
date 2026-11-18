@@ -421,7 +421,7 @@ export class Library {
     return folder.kind === 'folder' ? `${folder.label.replace(/\/$/, '')}/${entry.filename}` : '';
   }
   async open(entry) {
-    if (entry.source === 'web') return null;
+    if (entry.source === 'web' || entry.source === 'archive') return null;
     if (entry.source === 'local') {
       const bytes = await this.bridge?.readRecent(entry.path);
       return bytes ? new File([bytes], entry.name) : null;

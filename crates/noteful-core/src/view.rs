@@ -268,22 +268,39 @@ impl Editor {
                     imported += 1;
                 }
             }
-            for (id, image) in &facts.images {
-                if image.layer == layer.id && !deleted.contains(id.as_str()) {
+            // Added pictures, text boxes and ink in the order they were made: a text box added
+            // after a stroke is over it, and a stroke added after it is over the box. Both ids
+            // carry their place in the history, so no order is stored.
+            let mut pictures = facts
+                .images
+                .iter()
+                .filter(|(id, image)| image.layer == layer.id && !deleted.contains(id.as_str()))
+                .peekable();
+            let mut lines = added_in_layer(false).peekable();
+            loop {
+                let picture_first = match (pictures.peek(), lines.peek()) {
+                    (None, None) => break,
+                    (Some(_), None) => true,
+                    (None, Some(_)) => false,
+                    (Some((id, _)), Some(a)) => {
+                        crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
+                    }
+                };
+                if picture_first {
+                    let (id, image) = pictures.next().unwrap();
                     let svg = item_svg(
                         &image.item(id.clone()),
                         adjustments.get(id.as_str()).copied(),
                     )?;
                     let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
-                    added += 1;
-                }
-            }
-            for a in added_in_layer(false) {
-                let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                if a.line.tool == 2 {
-                    write_added(&mut layer_tapes, &a.id, &svg, true);
                 } else {
-                    write_added(&mut content, &a.id, &svg, false);
+                    let a = lines.next().unwrap();
+                    let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
+                    if a.line.tool == 2 {
+                        write_added(&mut layer_tapes, &a.id, &svg, true);
+                    } else {
+                        write_added(&mut content, &a.id, &svg, false);
+                    }
                 }
                 added += 1;
             }
@@ -489,7 +506,7 @@ impl Editor {
             return Ok(out);
         }
         // The element that follows a line under the ink: the layer's first imported item,
-        // else its first picture or text box, else its first line over the ink.
+        // else the first of its pictures, text boxes and lines over the ink.
         let before = if line.under {
             let facts = self.page_facts(page)?;
             let shown = |id: &str| !facts.deleted.contains(id);
@@ -516,7 +533,18 @@ impl Editor {
                     .map(|a| a.id.clone())
                     .next()
             };
-            imported.or_else(image).or_else(over)
+            // Pictures and lines over the ink are drawn in the order they were made: the
+            // first of either.
+            imported.or_else(|| match (image(), over()) {
+                (Some(a), Some(b)) => Some(
+                    if crate::editor::edit_index(&a) < crate::editor::edit_index(&b) {
+                        a
+                    } else {
+                        b
+                    },
+                ),
+                (a, b) => a.or(b),
+            })
         } else {
             None
         };

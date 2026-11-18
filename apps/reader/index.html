@@ -58,10 +58,11 @@
           <button data-proxy-tool="select" data-icon="select" role="menuitemradio">Select<kbd>S</kbd></button>
           <button data-proxy-tool="draw" data-icon="draw" role="menuitemradio">Pen<kbd>P</kbd></button>
           <button data-proxy-tool="highlight" data-icon="highlight" role="menuitemradio">Highlight<kbd>H</kbd></button>
-          <button data-proxy-tool="erase" data-icon="erase" role="menuitemradio">Erase<kbd>E</kbd></button>
+          <button data-proxy-tool="erase" data-icon="erase" role="menuitemradio">Erase<kbd>B</kbd></button>
           <button data-proxy-tool="tape" data-icon="tape" role="menuitemradio">Tape<kbd>T</kbd></button>
           <button data-proxy-tool="shape" data-icon="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
           <button data-proxy-tool="grab" data-icon="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
+          <button data-proxy-tool="pdfedit" data-icon="pdfedit" role="menuitemradio">Edit PDF: its text and objects<kbd>E</kbd></button>
           <hr />
           <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
           <button id="insertGraph" data-icon="graph" disabled data-palette="Insert prefab (graph, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
@@ -306,7 +307,7 @@
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -511,8 +512,6 @@
             <span class="tool-name">Grab</span></button
           ><button data-tool="text" aria-pressed="false">
             <span class="tool-name">Text</span></button
-          ><button data-tool="pdfedit" aria-pressed="false" title="Edit PDF: double-click a block of a PDF's text to edit it">
-            <span class="tool-name">Edit PDF</span></button
           ><button data-tool="lock" aria-pressed="false" title="Lock in place: click an item to lock or unlock it">
             <span class="tool-name">Lock</span></button
           ><button data-tool="shape" aria-pressed="false">
@@ -627,10 +626,12 @@
               ><button
                 id="cropSelection"
                 type="button"
-                title="Show only part of the image"
+                class="icon-button sel-accent"
+                data-icon="crop"
+                title="Crop: show only part of the image"
+                aria-label="Crop the image"
                 hidden
-              >
-                Crop</button
+              ></button
               ><button
                 id="editCompound"
                 type="button"
@@ -638,20 +639,21 @@
               >
                 Edit…</button
               ><button
+                id="clearSelection"
+                type="button"
+                class="icon-button sel-accent"
+                data-icon="check"
+                title="Done: deselect"
+                aria-label="Deselect item"
+              ></button
+              ><button
                 id="deleteSelection"
                 type="button"
                 class="icon-button"
                 data-icon="trash"
                 title="Delete"
                 aria-label="Delete item"
-              ></button
-              ><button
-                id="clearSelection"
-                type="button"
-                aria-label="Deselect item"
-              >
-                Done
-              </button>
+              ></button>
             </fieldset>
           </div>
           <div id="drawingOptions" class="option-group">
@@ -781,6 +783,12 @@
           aria-pressed="false"
           data-icon="moon"
         ></button
+        ><button
+          data-tool="pdfedit"
+          class="pages-dark-toggle pdf-edit-toggle"
+          aria-pressed="false"
+          data-title="Edit PDF: double-click its text to edit it, or an image or drawing to move it (E)"
+        ><span class="sr-only">Edit PDF</span></button
         ><label
           >Page
           <input
@@ -1086,7 +1094,7 @@
     <option value="Noteworthy">Handwriting</option>
     <option value="Comic Sans MS">Comic Sans</option>
   </select>
-  <select id="textSize" data-native aria-label="Size" title="Size"></select>
+  <span class="size-field"><input id="textSize" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Size" title="Size: type it, or use the arrows (↑ ↓)" /><span class="size-steps"><button id="textSizeUp" type="button" tabindex="-1" aria-label="Bigger" title="Bigger (↑)" data-icon="collapse"></button><button id="textSizeDown" type="button" tabindex="-1" aria-label="Smaller" title="Smaller (↓)" data-icon="collapse"></button></span></span>
   <button id="textBold" type="button" class="fmt-bold" aria-pressed="false" title="Bold">B</button>
   <button id="textItalic" type="button" class="fmt-italic" aria-pressed="false" title="Italic">I</button>
   <button id="textMath" type="button" class="fmt-math" aria-pressed="false" title="Math: the text is LaTeX, typeset (the whole box, or the parts between $…$ and $$…$$)">∑</button>
@@ -1327,6 +1335,17 @@
   <button id="forgetCancel" type="button" hidden>Cancel</button>
 </div>
 
+<dialog id="zipWindow" class="ocr-dialog float-dialog floating zip-window" data-window aria-labelledby="zipTitle">
+  <div class="float-head"><h2 id="zipTitle">Archive</h2><button id="zipX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
+  <div class="panel-body zip-body">
+    <nav id="zipCrumbs" class="zip-crumbs" aria-label="Archives opened inside each other"></nav>
+    <p id="zipSummary" class="zip-summary" role="status" aria-live="polite"></p>
+    <label class="drive-filter zip-filter"><span class="sr-only">Filter this archive</span><input id="zipFilter" type="search" placeholder="Filter…" /></label>
+    <ul id="zipTree" class="zip-tree" role="tree" aria-label="Archive contents"></ul>
+    <p id="zipEmpty" class="muted" hidden>This archive is empty.</p>
+  </div>
+</dialog>
+
 <dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog float-dialog floating" data-window aria-labelledby="scratchTitle">
   <div class="float-head"><h2 id="scratchTitle">Scratchpad</h2><button id="scratchX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
@@ -1513,6 +1532,7 @@
     <li><b>Study material (.ncstudy)</b> export or share flashcards, quizzes and scratchpad on their own, or bundle them inside <b>.nfedit</b>.</li>
     <li>Pages as SVG, PDF or images · study decks for Anki. <b>File → Import…</b> brings any of these back, plus quizzes from Quiz Toolkit.</li>
   </ul>
+  <p><strong>Archives</strong> (.zip, .tar, .tar.gz/.tgz, .gz) open to show what they hold, each file checked (CRC-32 for zip and gzip, header checksums for tar) and marked intact or damaged; notes, PDFs, pictures, text and Office files open from inside, and any file can be saved. Nothing is extracted to disk. A zipped Goodnotes notebook opens as the notebook; a zip of several notebooks opens as a group of documents. 7-Zip and RAR archives cannot be opened.</p>
   <p class="muted">Legacy .notecomp and .notepart files also open cleanly here.</p>
   <div class="ocr-actions"><button id="formatsClose" type="button" class="primary">OK</button></div>
 </dialog>

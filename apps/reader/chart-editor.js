@@ -15,6 +15,8 @@ import { codeBox, jsonErrorAt } from './json-code.js';
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
+import { editorTouch } from './editor-touch.js';
+import { loadKitStyles } from './prefabs/kit/shell.js';
 import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
@@ -71,6 +73,8 @@ export function chartName(spec) {
 
 // Loads chart-editor.css once (the reader's own page does not carry it).
 function ensureStyles() {
+  // The kit's shared rules (panel grips, the pen's ring) first.
+  loadKitStyles();
   if (document.querySelector('link[data-chart-css]')) return;
   const link = make('link', { rel: 'stylesheet', href: new URL('./chart-editor.css', import.meta.url).href });
   link.dataset.chartCss = '';
@@ -1182,6 +1186,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   updateButtons();
   const resize = new ResizeObserver(() => draw());
   resize.observe(canvas);
+  // Fingers and pen as on the pages: two- and three-finger taps undo and redo, two fingers or
+  // the pen held still open the brushes' ring, a hovering pen shows where it points.
+  const fingers = editorTouch(canvas, {
+    undo: () => undoBtn.onclick(),
+    redo: () => redoBtn.onclick(),
+    menuAt: (x, y) => ring.quick.open(x, y),
+  });
   draw();
   // Keys (1–9, Shift S, Ctrl Z) go to the editor from the start.
   (mode === 'json' ? jsonArea : canvas).focus({ preventScroll: true });
@@ -1191,7 +1202,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     spec: current,
     mode: () => mode,
     set(spec, m = 'author') { snapshot(); load(spec, m); buildPalette(); changed(); },
-    destroy() { sides.destroy(); help?.destroy(); document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
+    destroy() { fingers.destroy(); sides.destroy(); help?.destroy(); document.removeEventListener('paste', onPaste, true); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', keys, true); root.replaceChildren(); root.classList.remove('chart-editor'); },
   };
 }
 

@@ -2,7 +2,6 @@
 // A group is a folder on disk (File → Open folder…), a folder made in NoteComplete (Home →
 // New folder, kind 'folder'), or files added to an open document (Add documents…). Saved in the library as settings `group:<id>`; the files stay where they are.
 // A member is { key, name, source: 'local', path } or a Drive note from Recent { key, name, source: 'drive' }.
-import { TYPES, typeOf } from './note-facts.js';
 import { icon } from './icons.js';
 
 const PREFIX = 'group:';
@@ -26,6 +25,17 @@ export function mergeMembers(listed = [], added = []) {
   for (const m of [...listed.map((f) => ({ ...localMember(f.path, f.name), inFolder: true })), ...added])
     if (m?.key && !seen.has(m.key)) { seen.add(m.key); out.push(m); }
   return out;
+}
+
+// The chip before a document's name: its real format, short.
+const CHIPS = { pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', goodnotes: 'Goodnotes', ntb: 'Notability', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart', md: 'Markdown', markdown: 'Markdown', txt: 'TXT', html: 'HTML', htm: 'HTML', docx: 'DOCX', odt: 'ODT', xlsx: 'XLSX', ods: 'ODS', csv: 'CSV', tsv: 'TSV', json: 'JSON', zip: 'ZIP', tar: 'TAR', gz: 'GZ', tgz: 'TGZ', puml: 'PlantUML', plantuml: 'PlantUML' };
+export function formatChip(member) {
+  if (member?.source === 'web') return 'Web';
+  if (member?.folder || member?.kind === 'dir') return 'Folder';
+  const name = String(member?.name || '').split('/').pop().replace(/\.zip$/i, (z, at, all) => (/\.(goodnotes|ntb)\.zip$/i.test(all) ? '' : z));
+  const ext = /\.([^.]+)$/.exec(name)?.[1]?.toLowerCase();
+  if (!ext) return 'Text';
+  return CHIPS[ext] || ext.toUpperCase().slice(0, 5);
 }
 
 export function starredFirst(members, starred = []) {
@@ -213,10 +223,10 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
     list.replaceChildren(...members.map((m) => {
       const li = document.createElement('li'), button = document.createElement('button'), kind = document.createElement('span'), label = document.createElement('span');
       button.type = 'button';
-      button.className = 'group-item';
+      button.className = 'group-item marquee-host';
       kind.className = 'group-kind';
-      kind.textContent = m.source === 'web' ? 'Web' : TYPES[typeOf(m.name)]?.[0] || 'File';
-      label.className = 'group-name';
+      kind.textContent = formatChip(m);
+      label.className = 'group-name marquee';
       label.textContent = m.source === 'web' ? m.name : m.name.replace(/\.[^.]+$/, '');
       button.title = m.source === 'web' ? m.url : m.name;
       button.append(kind, label);

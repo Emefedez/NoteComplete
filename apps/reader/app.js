@@ -7,12 +7,14 @@ import {
   prepareDocument,
   readImage,
   imageBounds,
+  centredAt,
   fileKind,
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
 import { savedUmlView } from "./uml.js";
 import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
+import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -21,6 +23,10 @@ import { driveBrowser } from "./drive-browser.js";
 import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { archiveBrowser } from "./archive-browser.js";
+import { archiveView } from "./archive-view.js";
+import { resizablePanels } from "./panel-resize.js";
+import { installMarquee } from "./marquee.js";
+import { archiveFormat, unsupportedMessage, readArchive, looksLikeGoodnotes, notebookTitle, notebooksIn, extractEntry, packFolder } from "./archive.js";
 import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
@@ -78,6 +84,7 @@ import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
+import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
@@ -429,12 +436,15 @@ async function openLaunched() {
     const desktop = await window.notecompleteFiles?.launched?.();
     if (desktop) {
       const file = new File([desktop.bytes], desktop.name);
+      if (await openArchiveFile(file, { path: desktop.path })) return;
       await load(file);
       return await openedLocal(desktop.path, desktop.name, file);
     }
     if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
     const [file, ...rest] = launchedFiles.splice(0);
-    if (!file || busy() || !canReplace()) return;
+    if (!file || busy()) return;
+    if (await openArchiveFile(file, { origin: "Opened file" })) return;
+    if (!canReplace()) return;
     await load(file);
     if (rest.length) status(`Opened ${file.name}. Open ${rest.map((f) => f.name).join(", ")} on its own; one document per window.`);
   } catch (e) { status(e.message, true); }
@@ -491,7 +501,8 @@ const engine = new Engine({
     $("open").disabled = $("emptyOpen").disabled = false;
     status("Ready. Everything is processed on your device.");
     openFromAddress();
-    openLaunched();
+    // Back from a restart for an update: this tab's document again; otherwise files handed over.
+    restoreAfterUpdate().then((restored) => { if (!restored) openLaunched(); });
     window.ReactNativeWebView?.postMessage(
       JSON.stringify({ type: "noteful-ready" }),
     );
@@ -723,9 +734,20 @@ async function load(file, preparedDocument = null) {
     editing = false;
   }
 }
-async function importImages(files) {
+// `at`: { page, point } where a pasted picture goes (its centre); `any`: any image the browser
+// reads (the clipboard's).
+async function importImages(files, { at = null, any = false } = {}) {
   if (!doc || busy()) return;
-  const targetPage = page,
+  // Pictures copied from NoteComplete carry their items (png-clip.js): those come back editable.
+  const plain = [];
+  for (const file of files) {
+    const c = await pictureClip(file);
+    if (c) await pasteFromPicture(c, at);
+    else plain.push(file);
+  }
+  if (!plain.length) return;
+  files = plain;
+  const targetPage = at?.page ?? page,
     layer = activeLayer,
     note = epoch;
   const targetLayer = doc.layers.find((l) => l.id === layer);
@@ -737,12 +759,13 @@ async function importImages(files) {
   status("Importing image…");
   try {
     for (const file of files) {
-      const decoded = await readImage(file);
+      const decoded = await readImage(file, { any });
       if (note !== epoch) return;
+      const fitted = imageBounds(decoded.size, panels[targetPage].size);
       const image = {
         base64: decoded.base64,
         mime: decoded.mime,
-        bounds: imageBounds(decoded.size, panels[targetPage].size),
+        bounds: at?.point ? centredAt(fitted, at.point, panels[targetPage].size) : fitted,
         layer,
       };
       const result = await mutate("image", { page: targetPage, image });
@@ -835,6 +858,7 @@ function buildPages(sizes) {
       if (p.audioTap && Math.hypot(e.clientX - p.audioTap[0], e.clientY - p.audioTap[1]) > 6)
         p.audioTap = null;
       if (tool === "pdfedit" && !e.buttons) pdfEdit.hover(e, p);
+      pagePointer = { p, clientX: e.clientX, clientY: e.clientY };
       longPress.move(e);
       pointerMove(e);
     };
@@ -3654,7 +3678,17 @@ function fillFor(kind, hex) {
   const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   return { fill: [...rgb, shapeFill === "tint" ? 0.25 : 1] };
 }
-$("pageNumber").onchange = () => jump(Number($("pageNumber").value) - 1);
+// Once on the page, the keys are the pages' again (N, the tools, Ctrl Z), not the box's.
+$("pageNumber").onchange = () => {
+  jump(Number($("pageNumber").value) - 1);
+  if (document.activeElement === $("pageNumber")) $("viewport").focus({ preventScroll: true });
+};
+// Enter (also on the page already shown, which changes nothing) and Esc leave the box too.
+$("pageNumber").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== "Escape") return;
+  if (e.key === "Enter") jump(Number($("pageNumber").value) - 1);
+  $("viewport").focus({ preventScroll: true });
+});
 $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
 $("zoomIn").onclick = () => stepZoom(1);
@@ -4136,7 +4170,7 @@ document.addEventListener("keydown", (e) => {
   penMenu({ clientX: at.x, clientY: at.y });
 }, true);
 let quickKeyAt = 0;
-const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true],[contenteditable='']") && !document.querySelector("dialog[open]");
+const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !typingIn(e.target) && !document.querySelector("dialog[open]");
 document.addEventListener("keydown", (e) => {
   if (quick.isOpen && quick.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
   // Shift pressed while a pen hovers over the pages: the menu at the pen.
@@ -4250,10 +4284,11 @@ $("resetToolOrder").onclick = () => {
   try { localStorage.removeItem("notecomplete-tool-order"); } catch { /* Optional. */ }
   if (!$("toolOptions").hidden) toolOptions();
 };
-const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", e: "erase", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
+// B (borrar) erases; E edits a PDF's text and objects (Edit PDF).
+const TOOL_KEYS = { v: "pan", s: "select", p: "draw", h: "highlight", b: "erase", e: "pdfedit", t: "tape", r: "shape", g: "grab", w: "text", o: "lock" };
 // "?" toggles a key badge on every button with a single-key shortcut (menus already show theirs, Ctrl ones included).
 const KEY_HINTS = {
-  ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`#toolbar [data-tool="${tool}"]`, key.toUpperCase()])),
+  ...Object.fromEntries(Object.entries(TOOL_KEYS).map(([key, tool]) => [`button[data-tool="${tool}"]`, key.toUpperCase()])),
   "#notesToggle": "N", "#audioToggle": "A", "#audioPage": "⇧A", "#recordAudio": "⇧R", "#stopRecording": "⇧R", ".icon-toggle:has(#syncEnabled)": "I", "#layersToggle": "⇧L", "#pagesToggle": "⇧P", "#findToggle": "/", "#importImage": "⇧I", "#pagesDark": "D", "#htmlDark": "D", "#textDark": "D", "#webDark": "D", "#backAudio": "J", "#playAudio": "K", "#forwardAudio": "L",
   "#chatToggle": "Ctrl J", "#findClose": "Esc", "#quizMinimize": "M",
   "#practiceReveal": "Space", "#practiceAgain": "1", "#practiceKnow": "2",
@@ -4279,7 +4314,7 @@ function shortcut(e) {
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   if (k === "f" && tool === "shape" && !$("editor").hidden) return setShapeFill({ none: "tint", tint: "solid", solid: "none" }[shapeFill]), status(`Shape fill: ${shapeFill === "none" ? "outline only" : shapeFill}.`), true;
   const keyTool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
-  if (keyTool && !$("editor").hidden) return document.querySelector(`#toolbar [data-tool="${keyTool}"]`)?.click(), true;
+  if (keyTool && !$("editor").hidden) return document.querySelector(`button[data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
   if (k === "L") return $("layersToggle").click(), true;
   if (k === "P") return $("pagesToggle").click(), true;
@@ -4317,13 +4352,20 @@ function shortcut(e) {
   return false;
 }
 document.addEventListener("keydown", (e) => {
+  // Ctrl B: the right side panel (notes); Ctrl Alt B: the left one (pages). In a text field
+  // Ctrl B stays bold.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyB" && !typingIn(e.target)) {
+    e.preventDefault();
+    toggleSide(e.altKey ? "left" : "right");
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
     if (!$("qualityDialog").open) openPalette();
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
-  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
     e.preventDefault();
     toggleKeyHints();
     return;
@@ -4340,7 +4382,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     // Escape lets go of what is selected first.
-    if (selection.item && !e.target.matches?.("input,select,textarea,[contenteditable=true]")) {
+    if (selection.item && !typingIn(e.target)) {
       e.preventDefault();
       selection.clear();
       return;
@@ -4413,7 +4455,7 @@ document.addEventListener("keydown", (e) => {
     else save(false, "project", null, { inPlace: true });
     return;
   }
-  if (e.target.matches?.("input,select,textarea,[contenteditable=true]"))
+  if (typingIn(e.target))
     return;
   const navDir = keyNavDirection(e);
   if (navDir) {
@@ -4461,7 +4503,8 @@ for (const event of ["dragover", "drop"])
     const files = [...e.dataTransfer.files];
     try {
       const bytes = new Uint8Array(await files[0].slice(0, 64).arrayBuffer());
-      if (doc && fileKind(files[0].name, bytes) === "image")
+      if (archiveFormat(files[0].name, bytes)) await openImportedFile(files[0], { origin: "Dropped file" });
+      else if (doc && fileKind(files[0].name, bytes) === "image")
         await importImages(files);
       else await openImportedFile(files[0], { origin: "Dropped file" });
     } catch (error) {
@@ -4786,6 +4829,38 @@ for (const id of ["htmlNotes", "textNotes"]) $(id).onclick = async () => {
   for (const button of ["htmlNotes", "textNotes", "notesToggle"]) $(button).setAttribute("aria-expanded", String(api.visible));
 };
 $("closeNotes").onclick = () => notesButton().click();
+// The side panels hidden and shown directly: Ctrl Alt B and Ctrl B, and a tab on the window's
+// edge while one is hidden (the page list on the left, the notes on the right).
+function toggleSide(side) {
+  if (side === "left") { if (doc) $("pagesToggle").click(); }
+  else if (doc || htmlView.visible || textView.visible) notesButton().click();
+}
+const sideTabs = Object.fromEntries(["left", "right"].map((side) => {
+  const tab = Object.assign(document.createElement("button"), { type: "button", className: `side-edge ${side}`, hidden: true });
+  tab.setAttribute("aria-label", side === "left" ? "Show the pages" : "Show the notes");
+  tab.title = side === "left" ? "Show the pages (Ctrl Alt B)" : "Show the notes (Ctrl B)";
+  tab.append(icon(side === "left" ? "chevronRight" : "chevronLeft"));
+  tab.onclick = () => toggleSide(side);
+  document.querySelector(".workspace")?.append(tab);
+  return [side, tab];
+}));
+function syncSideTabs() {
+  const pagesShown = phoneLayout.matches ? $("pagesPanel").classList.contains("open") : !$("pagesPanel").hidden;
+  sideTabs.left.hidden = !doc || pagesShown || $("editor").hidden;
+  sideTabs.right.hidden = !(doc || htmlView.visible || textView.visible) || !$("notesPanel").hidden || document.body.classList.contains("guest-mode");
+}
+const sideWatch = new MutationObserver(syncSideTabs);
+for (const id of ["pagesPanel", "notesPanel", "editor"]) sideWatch.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] });
+for (const id of ["closePages", "closeNotes"]) $(id).title = id === "closePages" ? "Hide the pages (Ctrl Alt B)" : "Hide the notes (Ctrl B)";
+// The pages panel and the documents list beside HTML, text and web documents: their inner edge
+// resizes them (panel-resize.js); the width is remembered.
+resizablePanels(document.querySelector("#editor .workspace"), [{ panel: $("pagesPanel"), variable: "--pages-width", side: "left", key: "pages", min: 132, max: 560 }]);
+for (const slot of ["htmlGroupSlot", "textGroupSlot", "webGroupSlot"]) {
+  const body = $(slot)?.closest(".side-body");
+  if (body) resizablePanels(body, [{ panel: $("groupPanel"), variable: "--group-width", side: "left", key: "group", min: 150, max: 560 }]);
+}
+// Names cut short slide to show their end while hovered (marquee.js).
+installMarquee();
 // The panel's left edge resizes it; the width is remembered.
 try { const w = Number(localStorage.getItem("notecomplete-notes-width")); if (w >= 240) $("notesPanel").style.width = `${w}px`; } catch { /* Optional. */ }
 $("notesResize").onpointerdown = (down) => {
@@ -5010,6 +5085,7 @@ $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
 async function openChosen(file) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
+  if (await openArchiveFile(file)) return false;
   if (!canReplace()) return false;
   await load(file);
   return true;
@@ -5214,7 +5290,43 @@ async function ensureDocumentCover({ skipExisting = true } = {}) {
     if (home?.visible) home.renderRecent?.();
   } catch { /* Optional cover fallback. */ }
 }
+// A restart for an update (desktop session.js): before it, what this tab shows, for it to
+// open again after: its Recent entry and page, and an automatic save of unsaved changes (or
+// of a note never saved), made now even with auto-save off. Null on Home.
+window.notecompleteSession = async () => {
+  if (!doc && !sideView()) return null;
+  const state = { entryKey: noteEntryKey || "", page: doc ? page : 0, title: $("title").textContent || "" };
+  if (doc && ((dirty && changed) || !noteEntryKey)) {
+    const slot = await autosave.now({ force: true, always: true }).catch(() => null);
+    if (slot?.id) state.slot = slot.id;
+  }
+  return state;
+};
+// After it: the entry opened as from Recent, then its automatic save over it (the same file
+// to save to, unsaved), then the page it was on. True when there was something to restore.
+async function restoreAfterUpdate() {
+  // Prefab modules from the folder in use (desktop), before anything asks for a prefab.
+  if (window.notecompletePrefabs) await import("./prefab-modules-ui.js").then((m) => m.loadFolderModules()).catch((e) => console.warn(e));
+  const state = await window.notecompleteRestore?.take?.().catch(() => null);
+  if (!state) return false;
+  try {
+    const entry = state.entryKey ? await library.store.get("entries", state.entryKey).catch(() => null) : null;
+    if (entry?.source === "web") await openWeb(webMember(entry.url, entry.name));
+    else if (entry) {
+      const file = await library.open(entry);
+      if (file) await openFromLibrary(file, entry);
+    }
+    if (state.slot && !(await autosave.restore(state.slot)) && !doc) throw Error(`The unsaved changes of “${state.title || "a note"}” were not kept.`);
+    if (doc && state.page > 0) jump(Math.min(state.page, (doc.pages || 1) - 1));
+    if (doc || sideView()) status(state.slot ? "Updated. Your note is open again, with its unsaved changes." : "Updated. Your note is open again.");
+    else status(`${state.title || "The note"} could not be opened again; it is in Recent.`, true);
+  } catch (e) {
+    status(e.message, true);
+  }
+  return true;
+}
 async function openFromLibrary(file, entry) {
+  if (await openArchiveFile(file, { key: entry?.key || "", entry })) return false;
   const opened = await openChosen(file);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
@@ -5606,6 +5718,7 @@ var home = homeScreen({
   versions,
   open: openFromLibrary,
   openLink: (entry) => openWeb(webMember(entry.url, entry.name)),
+  openArchive: (member) => openArchiveMember(member).catch((error) => status(error.message, true)),
   groups,
   status,
   exportStudy: exportStudyOf,
@@ -5627,7 +5740,9 @@ async function openLocal() {
     const chosen = await bridge.openFile();
     if (!chosen) return;
     const file = new File([chosen.bytes], chosen.name);
-    if (busy() || !canReplace()) return;
+    if (busy()) return;
+    if (await openArchiveFile(file, { path: chosen.path })) return;
+    if (!canReplace()) return;
     await load(file);
     await openedLocal(chosen.path, chosen.name, file);
   } catch (error) {
@@ -5643,6 +5758,130 @@ async function openedLocal(path, name, file) {
   home.rememberFacts(entry.key, file);
   setDocMember(localMember(path, name));
   void Promise.resolve(home.rememberCover(entry.key, file)).then(() => ensureDocumentCover({ skipExisting: true }));
+}
+// Archives (.zip, .tar, .tar.gz/.tgz, .gz; archive.js): opened, they show what they hold in
+// the archive window (archive-view.js), checked entry by entry, and each entry NoteComplete
+// reads opens from there as a document. Nothing is extracted to disk. A zipped Goodnotes
+// notebook opens as the notebook; a zip of several notebooks (a Goodnotes folder export) as a
+// group of documents beside the open one, each unpacked and converted when it is opened.
+// The last archive read stays in memory for its notebooks (one at a time: they can be large).
+let archiveCache = { key: "", name: "", bytes: null };
+const zipWin = archiveView({ open: (file, title) => openFromArchive(file, title), save: saveFromArchive, status });
+function showArchiveTitle(title) {
+  $("title").textContent = title;
+  document.title = `${title} — NoteComplete`;
+  tabBar.update({ title });
+}
+async function openFromArchive(file, title, member = null) {
+  if (!ready || busy()) { status("Wait for the current operation to finish.", true); return false; }
+  if (!canReplace()) return false;
+  notePath = noteEntryKey = "";
+  await load(file);
+  await setDocMember(member);
+  showArchiveTitle(title);
+  return true;
+}
+async function saveFromArchive(bytes, name) {
+  const bridge = window.notecompleteFiles;
+  if (bridge?.saveEntry) {
+    const chosen = await bridge.saveEntry(name, bytes);
+    if (chosen) status(`Saved ${chosen.name}.`);
+    return;
+  }
+  await download(bytes, name, "application/octet-stream");
+  status(`${name} downloaded.`);
+}
+// Returns true when `file` is an archive (shown, or reported when it cannot be read here).
+// `path`: its place on this computer (desktop); `origin`: kept in the library as imported;
+// `key`: its Recent entry when it already has one.
+async function openArchiveFile(file, { path = "", origin = "", key = "" } = {}) {
+  if (!file) return false;
+  const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  const format = archiveFormat(file.name, head);
+  if (!format) return false;
+  if (format === "7z" || format === "rar") { status(unsupportedMessage(format), true); return true; }
+  status(`Reading ${file.name}…`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  // Recent keeps the archive: reopened from there, it shows again.
+  if (!key && path) key = (await library.rememberLocal(path, file.name, file.size).catch(() => null))?.key || "";
+  else if (!key && origin) key = (await library.rememberImported(file, { origin }).catch(() => null))?.key || "";
+  else if (key) await library.touch(key).catch(() => {});
+  if (home?.visible) home.renderRecent();
+  if (format === "zip") {
+    const listing = await readArchive(bytes, { name: file.name, verify: false }).catch(() => null);
+    if (listing && looksLikeGoodnotes(listing.entries)) {
+      const notebook = new File([bytes], `${notebookTitle(file.name)}.goodnotes`);
+      if (busy() || !canReplace()) return true;
+      notePath = noteEntryKey = "";
+      await load(notebook);
+      if (path) await openedLocal(path, file.name, notebook);
+      else if (key) { noteEntryKey = key; activeCoverKeyOverride = key; rememberDocument(key); await setDocMember({ key, name: file.name, source: "imported" }); }
+      return true;
+    }
+    if (listing && await openNotebookPack(listing, key || `temp:${file.name}`, file.name)) return true;
+  }
+  archiveCache = { key, name: file.name, bytes };
+  await zipWin.show(bytes, file.name);
+  const checked = zipWin.current?.summary;
+  if (checked) status(`${file.name}: ${checked.text}.`, checked.broken);
+  return true;
+}
+// The notebooks in an archive and in the zips inside it (three levels at most), with their
+// folders. Two or more: a group of documents, the first one opened.
+async function openNotebookPack(archive, key, name) {
+  const found = [];
+  const walk = async (arch, trail, depth) => {
+    for (const nb of notebooksIn(arch)) {
+      if (nb.kind !== "archive") { found.push({ trail: [...trail, nb.path], kind: nb.kind }); continue; }
+      if (depth >= 3 || nb.entry.size > 512 * 1048576) continue;
+      const inner = await extractEntry(arch, nb.entry).catch(() => null);
+      const sub = inner && await readArchive(inner, { name: nb.name, verify: false }).catch(() => null);
+      if (!sub) continue;
+      if (looksLikeGoodnotes(sub.entries)) found.push({ trail: [...trail, nb.path], kind: "file" });
+      else await walk(sub, [...trail, nb.path], depth + 1);
+    }
+  };
+  await walk(archive, [], 0);
+  if (found.length < 2) return false;
+  archiveCache = { key, name, bytes: archive.bytes };
+  const members = found.map((f) => ({ key: `archive:${key}#${f.trail.join("#")}`, name: f.trail.join(" › "), source: "archive", archive: key, archiveName: name, trail: f.trail, kind: f.kind }));
+  const id = `archive:${key}`, before = await library.store.get("settings", `group:${id}`).catch(() => null);
+  await groups.save({ id, name: notebookTitle(name), kind: "folder", archive: key, members, starred: before?.starred || [], openedAt: Date.now() });
+  await openArchiveMember(members[0]);
+  status(`${name}: ${members.length} notebooks, listed beside the document. Each one is converted when you open it.`);
+  return true;
+}
+// A notebook of a pack: unpacked from its archive (read again from Recent when it is not the
+// one in memory), through the zips it is inside, and opened.
+async function openArchiveMember(member) {
+  if (!ready || busy()) return;
+  if (!canReplace()) return;
+  let bytes = archiveCache.key === member.archive ? archiveCache.bytes : null;
+  if (!bytes) {
+    const entry = await library.store.get("entries", member.archive).catch(() => null);
+    const file = entry && await library.open(entry).catch(() => null);
+    if (!file) throw Error(`${member.archiveName || "Its archive"} is no longer where it was: open it again.`);
+    bytes = new Uint8Array(await file.arrayBuffer());
+    archiveCache = { key: member.archive, name: entry.name, bytes };
+  }
+  const leafPath = member.trail[member.trail.length - 1];
+  const progress = (done, total) => status(`Unpacking ${leafPath}… ${Math.round((done / Math.max(1, total)) * 100)}%`);
+  status(`Unpacking ${leafPath}…`);
+  let arch = await readArchive(bytes, { name: member.archiveName, verify: false });
+  for (let i = 0; i < member.trail.length; i++) {
+    const path = member.trail[i], last = i === member.trail.length - 1;
+    if (last && member.kind === "folder") { bytes = await packFolder(arch, path, { zipFiles, onProgress: progress }); break; }
+    const entry = arch.entries.find((e) => e.path === path && e.kind === "file");
+    if (!entry) throw Error(`${path} is no longer in ${member.archiveName}.`);
+    bytes = await extractEntry(arch, entry);
+    if (!last) arch = await readArchive(bytes, { name: path, verify: false });
+  }
+  const leaf = leafPath.split("/").pop().replace(/\.zip$/i, "");
+  const file = new File([bytes], /\.(goodnotes|ntb)$/i.test(leaf) ? leaf : `${leaf}.goodnotes`);
+  notePath = noteEntryKey = "";
+  await load(file);
+  await setDocMember(member);
+  showArchiveTitle(`${member.archiveName} › ${member.trail.join(" › ")}`);
 }
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
@@ -5722,11 +5961,14 @@ async function openMember(member) {
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
     navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
   if (member.source === "web") return openWeb(member);
-  if (busy() || !canReplace()) return;
+  if (member.source === "archive") return openArchiveMember(member);
+  if (busy()) return;
   if (member.source === "local") {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
     if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
     const file = new File([bytes], member.name);
+    if (await openArchiveFile(file, { path: member.path })) return;
+    if (!canReplace()) return;
     await load(file);
     return openedLocal(member.path, member.name, file);
   }
@@ -5908,7 +6150,7 @@ const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #comman
 function proxyTarget(item) {
   return item.dataset.proxy
     ? $(item.dataset.proxy)
-    : document.querySelector(`#toolbar button[data-tool="${item.dataset.proxyTool}"]`);
+    : document.querySelector(`button[data-tool="${item.dataset.proxyTool}"]`);
 }
 function syncMenus() {
   syncPageMoveMenus();
@@ -6325,13 +6567,20 @@ async function insertCompound(p, kind, box = null, spec = {}) {
   if (!doc || !p) return false;
   if (!ensureEditableLayer()) return false;
   const note = epoch;
-  const chosen = kind === "graph" ? await editGraph({ spec, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec });
+  const chosen = await oneFigure(() => compoundEditor(kind, spec));
   if (!chosen || !sameNote(note)) return false;
   let items;
   try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
   await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
   status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
   return true;
+}
+// The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
+// over the page, compound-dialogs.js), or the editor.js of a module put in their place.
+async function compoundEditor(kind, spec = {}, editing = false) {
+  const { editor, module } = editorOf({ module: kind });
+  if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
+  return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
 }
 $("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
@@ -6402,7 +6651,10 @@ async function insertPrefab(p, box = null, choice = null) {
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
   if (!ensureEditableLayer()) return false;
   const note = epoch;
-  const spec = await figureEditor(choice.spec);
+  // A card of a type module draws a type another module owns: its spec names its own module,
+  // so that it edits in that module's base editor (and keeps its name) from the start.
+  const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
+  const spec = await figureEditor(start);
   if (!spec || !sameNote(note)) return false;
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
@@ -6432,17 +6684,34 @@ function figureEditor(spec, options = {}) {
   return oneFigure(() => openFigureEditor(spec, options));
 }
 async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
-  if (spec?.type === "uml") return openUmlEditor(spec, editing);
-  if (editorKind(spec)) {
+  // The editor its module's manifest names (prefab-registry.js editorOf): its own editor.js,
+  // the chart or diagram editor, a window, or the JSON one; a type module edits in its base.
+  // A manifest that names none: chosen by the spec's type, as before modules.
+  const { editor, module: owner } = editorOf(spec);
+  const keepModule = (result) => (result && spec?.module && result.module !== spec.module ? { ...result, module: spec.module } : result);
+  if (editor === "module") {
+    try {
+      const { openModuleEditor } = await loading(import("./prefab-host.js"));
+      return keepModule(await openModuleEditor(owner, spec, { editing }));
+    } catch (e) {
+      status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
+      return null;
+    }
+  }
+  if (editor === "graph" || editor === "table") return keepModule(await compoundEditor(editor, spec, editing));
+  if (editor === "data") return keepModule(await editPrefab({ spec, editing }));
+  if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing));
+  if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) });
+      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
     }
   }
-  return editPrefab({ spec, editing });
+  // The chart module's figures the chart editor does not paint (custom SVG), and the rest.
+  return keepModule(await editPrefab({ spec, editing }));
 }
 // "To look at" in the chart editors: another note's pages as pictures. The note opens in an
 // engine worker of its own (the open note's stays as it is), its pages are drawn like the
@@ -6587,9 +6856,10 @@ async function editCompound(item, mode = "author") {
     return;
   }
   const note = epoch;
-  const chosen = c.kind === "graph" ? await editGraph({ spec, editing: true, rgba: penStyle().rgba, keypad: textBox.mathKeys }) : await editTable({ spec, editing: true });
+  const chosen = await oneFigure(() => compoundEditor(c.kind, spec, true));
   if (!chosen || !sameNote(note)) return;
   let items;
+  // The page stayed usable behind the window: it may have been moved, or deleted meanwhile.
   try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
   selection.clear();
   await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
@@ -6688,7 +6958,14 @@ async function removeItem(item) {
 // system clipboard gets a marker, so a paste knows the copy is still the last thing copied.
 const CLIP_MARK = "NoteComplete items (paste them in NoteComplete)";
 let clip = null; // { page, lines, images, box, pastes }
-const typingIn = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
+// Whether keys pressed in `t` are typing: text fields, lists and editable text. A colour
+// picker, slider, check box or button keeps the focus after it is used (the pen's colour),
+// and the shortcuts and Ctrl Z must still work there.
+const NOT_TYPED = new Set(["color", "range", "checkbox", "radio", "button", "submit", "reset", "file", "image"]);
+function typingIn(t) {
+  if (t instanceof HTMLInputElement) return !NOT_TYPED.has(t.type);
+  return t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
+}
 const itemIds = (item) => (item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
 const blobBase64 = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(r.error); r.readAsDataURL(blob); });
 // The items of `item` as lines and pictures that can go on any page.
@@ -6721,14 +6998,53 @@ function clipBox({ lines, images }) {
   for (const { bounds: [x, y, w, h] } of images) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h); }
   return Number.isFinite(x0) ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
 }
+// The system clipboard after a copy: a picture of the items that carries them (png-clip.js),
+// so it pastes as a picture in other apps and as the items again in NoteComplete, and the
+// marker text. On the desktop the PNG goes as it is (desktop png-clipboard.js); a browser
+// re-encodes it, so there other apps get the picture only (the copy here still pastes).
+async function clipToSystem(item, c) {
+  let png = null;
+  try {
+    const blob = await itemPicture(item, 2);
+    const { page: _page, pastes: _pastes, ...kept } = c;
+    png = await addClipChunk(new Uint8Array(await blob.arrayBuffer()), kept);
+  } catch { /* Not drawn (page off screen…): the marker only. */ }
+  try {
+    if (png && window.notecompleteClipboard?.writePng) return void await window.notecompleteClipboard.writePng(png, CLIP_MARK);
+    if (png && navigator.clipboard?.write && window.ClipboardItem)
+      return void await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([png], { type: "image/png" }), "text/plain": new Blob([CLIP_MARK], { type: "text/plain" }) })]);
+  } catch { /* Fall back to the marker. */ }
+  try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
+}
+// The copy carried by a picture (pasted, dropped or imported), or null.
+async function pictureClip(file) {
+  try {
+    if (!file || file.size > 96 * 1024 * 1024) return null;
+    if (!(file.type === "image/png" || /\.png$/i.test(file.name || "") || isPng(new Uint8Array(await file.slice(0, 8).arrayBuffer())))) return null;
+    const c = await readClipChunk(new Uint8Array(await file.arrayBuffer()));
+    return validClip(c) ? c : null;
+  } catch { return null; }
+}
+// Items from a picture: this tab's own copy pastes as Ctrl V does; one from elsewhere goes
+// with its parts given new ids, centred on `at` ({ page, point }) or where it was.
+async function pasteFromPicture(c, at = null) {
+  if (clip && c.id && c.id === clip.id) return pasteClip(at ? panels[at.page] : panels[page]);
+  const restored = { lines: c.lines, images: c.images, box: clipBox(c), pastes: 0 };
+  const p = at ? panels[at.page] : panels[page];
+  const done = await pasteClip(p, at?.point ? cornerFor(restored.box, at.point) : null, restored);
+  if (done) status("Pasted from a NoteComplete picture: editable again.");
+}
+const cornerFor = ([, , w, h], [x, y]) => [x - w / 2, y - h / 2];
 async function copyItem(item, { cut = false } = {}) {
   if (!doc || !item) return;
   try {
     const copied = await copiedItems(item);
-    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now() };
-    const specRaw = copied.images.length === 1 && copied.images[0]?.prefab?.kind === "prefab" ? copied.images[0].prefab.spec : null;
-    if (specRaw) { try { const spec = JSON.parse(specRaw); if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
-    try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
+    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now(), id: Math.random().toString(36).slice(2, 12) };
+    // A prefab's spec is on its frame line's part (the core), or on its picture in older copies.
+    const parts = [...copied.lines.map((l) => l.part), ...copied.images.map((i) => i.part || i.prefab)].filter((q) => q?.spec);
+    const specRaw = new Set(parts.map((q) => q.id)).size === 1 ? parts[0].spec : null;
+    if (specRaw) { try { const spec = typeof specRaw === "string" ? JSON.parse(specRaw) : specRaw; if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
+    await clipToSystem(item, clip);
     if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
     else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
   } catch (e) { status(e.message, true); }
@@ -6749,17 +7065,18 @@ async function pasteUmlIntoPage(parsedClip, p = panels[page], at = null) {
 }
 // The copy on page `p`: at page point `at` (its top left corner), else where it was (a little
 // lower and to the right on its own page, again with each paste), kept on the page.
-async function pasteClip(p = panels[page], at = null) {
-  if (!doc || !clip || !p || editing || !ensureEditableLayer()) return;
-  const [x, y, w, h] = clip.box;
+async function pasteClip(p = panels[page], at = null, c = clip) {
+  if (!doc || !c || !p || editing || !ensureEditableLayer()) return false;
+  const [x, y, w, h] = c.box;
   let to;
   if (at) to = at;
-  else { const step = p.index === clip.page ? 16 * ++clip.pastes : 0; to = [x + step, y + step]; }
+  else { const step = p.index === c.page ? 16 * ++c.pastes : 0; to = [x + step, y + step]; }
   to = [Math.max(0, Math.min(p.size[0] - w, to[0])), Math.max(0, Math.min(p.size[1] - h, to[1]))];
-  const moved = shifted(clip, [to[0] - x, to[1] - y]);
+  const moved = shifted(c, [to[0] - x, to[1] - y]);
   const layer = activeLayer;
   await action("drawMany", { page: p.index, lines: moved.lines.map((l) => ({ ...l, layer })), images: moved.images.map((i) => ({ ...i, layer })) });
   status(`Pasted on page ${p.index + 1}. One undo takes it away.`);
+  return true;
 }
 // Items let go over another page (selection.js): taken off theirs and put where they were
 // let go, in one undo step.
@@ -6779,6 +7096,21 @@ async function moveToPage(item, target, start, client) {
 // copy or paste event when nothing on the page is selected or editable); the clipboard
 // events, where they come, only carry the marker.
 let clipKeyAt = -Infinity, pastedAt = -Infinity;
+// Where pasted pictures and text go: the pointer's place on a page, when it was last over one
+// still on screen, else the middle of what is shown of the current page.
+let pagePointer = null;
+function pasteSpot() {
+  const q = pagePointer?.p;
+  if (q?.el?.isConnected && q.view) {
+    const r = q.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect();
+    if (r.bottom > vp.top && r.top < vp.bottom) return { page: q.index, point: point(pagePointer, q) };
+  }
+  const p = panels[page];
+  if (!p) return null;
+  const r = p.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect(), k = p.size[0] / r.width;
+  const top = Math.max(r.top, vp.top), bottom = Math.min(r.bottom, vp.bottom);
+  return { page: p.index, point: [p.size[0] / 2, Math.min(p.size[1], Math.max(0, ((top + bottom) / 2 - r.top) * k))] };
+}
 const itemKeys = (e) => !e.defaultPrevented && !typingIn(e.target) && !window.getSelection()?.toString() && doc && !editing;
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !itemKeys(e)) return;
@@ -6814,10 +7146,19 @@ for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
 document.addEventListener("paste", (event) => {
   if (!itemKeys(event)) return;
   const text = event.clipboardData?.getData("text/plain") || "";
-  if (clip && text === CLIP_MARK) {
+  const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+  // A copy made in NoteComplete: this tab's own, or (its picture carrying another copy) one
+  // made in another tab or window.
+  if (text === CLIP_MARK && (clip || images.length)) {
     pastedAt = event.timeStamp;
     event.preventDefault();
-    pasteClip();
+    const spot = pasteSpot();
+    (async () => {
+      const c = images.length ? await pictureClip(images[0]) : null;
+      if (c && c.id !== clip?.id) return pasteFromPicture(c, spot);
+      if (clip) return pasteClip();
+      if (images.length) return importImages(images, { at: spot, any: true });
+    })().catch((e) => status(e.message, true));
     return;
   }
   const umlClip = readUmlClipFromText(text);
@@ -6825,6 +7166,22 @@ document.addEventListener("paste", (event) => {
     pastedAt = event.timeStamp;
     event.preventDefault();
     pasteUmlIntoPage(umlClip);
+    return;
+  }
+  // From other apps: a picture goes on the page where the pointer is (selected, to move it);
+  // plain text becomes a text box there. A picture copied from NoteComplete brings its items.
+  if (images.length) {
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    importImages(images, { at: pasteSpot(), any: true });
+    return;
+  }
+  if (text.trim() && text !== CLIP_MARK) {
+    const spot = pasteSpot();
+    if (!spot) return;
+    pastedAt = event.timeStamp;
+    event.preventDefault();
+    textBox.placeText(panels[spot.page], spot.point, text.replace(/\r\n?/g, "\n").trimEnd());
   }
 });
 // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
@@ -7759,7 +8116,7 @@ if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expan
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
 // Scratchpad, saved resources, shortcuts and pen hover settings stay open beside the note.
-for (const [id, x, key, label, w, h] of [["scratchDialog", "scratchX", "scratch", "Scratchpad", 380, 240], ["allQuizzesDialog", "allQuizzesX", "saved", "Saved resources", 520, 320], ["shortcutsDialog", "shortcutsX", "shortcuts", "Shortcuts", 320, 220], ["hoverToolsDialog", "hoverToolsX", "hover-tools", "Pen hover", 340, 220]]) {
+for (const [id, x, key, label, w, h] of [["scratchDialog", "scratchX", "scratch", "Scratchpad", 380, 240], ["allQuizzesDialog", "allQuizzesX", "saved", "Saved resources", 520, 320], ["shortcutsDialog", "shortcutsX", "shortcuts", "Shortcuts", 320, 220], ["hoverToolsDialog", "hoverToolsX", "hover-tools", "Pen hover", 340, 220], ["zipWindow", "zipX", "zip", "Archive", 420, 260]]) {
   const dlg = $(id);
   $(x).onclick = () => dlg.close();
   floatingWindow(dlg, { screen: screenArea, key: `notecomplete-${key}-window`, head: dlg.querySelector(".float-head"), close: $(x), label, compact: { cls: "minimized" }, minWidth: w, minHeight: h, scroll: true });
@@ -8490,6 +8847,9 @@ async function openImportedFile(file, meta = {}) {
       return importStudyFile(file, kind);
     }
   } catch { /* Fall through to opening as a document. */ }
+  try {
+    if (await openArchiveFile(file, { origin: meta?.origin || "Imported" })) return;
+  } catch (error) { return status(error.message, true); }
   if (!canReplace()) return;
   notePath = noteEntryKey = "";
   try {

@@ -231,9 +231,10 @@ try {
   await p.waitForSelector('.prefab-grid');
   await p.fill('.prefab-search', 'bar chart');
   await p.click('.prefab-card:has-text("Bar chart")');
-  await p.waitForSelector('.chart-dialog .ch-bars');
-  const bars = await p.locator('.chart-dialog .ch-bars').boundingBox();
-  const col = await p.locator('.chart-dialog .ch-bar-hit').first().boundingBox();
+  // The editor just opened (the one before may still be closing).
+  await p.waitForSelector('.chart-dialog[open] .ch-bars');
+  const bars = await p.locator('.chart-dialog[open] .ch-bars').boundingBox();
+  const col = await p.locator('.chart-dialog[open] .ch-bar-hit').first().boundingBox();
   await p.mouse.move(col.x + col.width / 2, col.y + col.height * 0.5);
   await p.mouse.down();
   await p.mouse.move(col.x + col.width / 2, col.y + 4, { steps: 5 });

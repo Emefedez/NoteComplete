@@ -45,8 +45,12 @@ export function assignText(blocks, items) {
       let mine = usable
         .filter((i) => Math.abs(i.transform[5] - line.base) < tol && i.transform[4] >= line.x0 - tol && i.transform[4] <= line.x1 + tol * 0.5)
         .sort((a, b) => a.transform[4] - b.transform[4]);
-      // No pdf.js text here: the engine's own, part by part.
-      if (!mine.length) mine = parts.map((p) => ({ str: p.text || "", transform: [1, 0, 0, 1, p.x0, line.base], width: p.x1 - p.x0 }));
+      // The engine's own text, part by part: when pdf.js has nothing here, and when it has the
+      // same characters (pdf.js reads letter spacing as spaces, "V O L U M E N"; the engine
+      // knows the real spaces). pdf.js's text wins only where the engine could not decode it.
+      const engine = parts.map((p) => ({ str: p.text || "", transform: [1, 0, 0, 1, p.x0, line.base], width: p.x1 - p.x0 }));
+      const bare = (list) => list.map((i) => i.str).join("").replace(/\s+/g, "");
+      if (!mine.length || (bare(engine) && bare(engine) === bare(mine))) mine = engine;
       if (!mine.length) { line.pieces = [{ text: line.text, part: null }]; continue; }
       // The part an item starts in (else the nearest).
       const partAt = (x) => parts.find((p) => x >= p.x0 - tol * 0.3 && x < p.x1 - tol * 0.1) || parts.slice().sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - x) - Math.abs((b.x0 + b.x1) / 2 - x))[0] || null;

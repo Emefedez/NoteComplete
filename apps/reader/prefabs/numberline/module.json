@@ -1,0 +1,17 @@
+{
+  "id": "numberline",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 50,
+  "label": "Number line",
+  "kind": "custom",
+  "output": "picture",
+  "types": ["numberline"],
+  "names": { "numberline": "Number line" },
+  "editor": "editor.js",
+  "groups": { "maths": "Maths" },
+  "prefabs": [
+    { "id": "numberline", "group": "maths", "label": "Number line", "hint": "A line with ticks, marked points and intervals (open or closed ends)", "icon": "minus",
+      "spec": { "type": "numberline", "title": "", "min": -5, "max": 5, "step": 1, "points": [{ "x": 2, "label": "a" }], "intervals": [{ "from": -3, "to": 1, "closedFrom": true, "closedTo": false }] } }
+  ]
+}

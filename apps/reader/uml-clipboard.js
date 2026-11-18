@@ -86,6 +86,8 @@ export function readUmlClipFromText(raw) {
 export function clipFitsDiagram(clip, diagram) {
   if (!clip?.elements?.length) return false;
   if (clip.diagram === diagram) return true;
+  // The full editor takes the elements of every kind.
+  if (DIAGRAMS[diagram]?.notRecommended) return clip.elements.every((e) => DIAGRAMS[diagram].elements.includes(e.type));
   if (CODE_DIAGRAMS.has(clip.diagram) && CODE_DIAGRAMS.has(diagram)) {
     const known = new Set(DIAGRAMS[diagram]?.elements || []);
     return clip.elements.every((e) => known.has(e.type));

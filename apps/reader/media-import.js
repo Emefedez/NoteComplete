@@ -64,9 +64,10 @@ export function fileKind(name, bytes) {
   );
 }
 
-export async function readImage(file) {
-  if (fileKind(file.name, new Uint8Array(await file.slice(0, 64).arrayBuffer())) !== "image") {
-    throw Error("Choose a PNG, JPEG or WebP image.");
+// `any`: whatever image the browser decodes (a pasted GIF, BMP or SVG too); it is kept as PNG.
+export async function readImage(file, { any = false } = {}) {
+  if (any ? !/^image\//.test(file.type || "") : fileKind(file.name, new Uint8Array(await file.slice(0, 64).arrayBuffer())) !== "image") {
+    throw Error(any ? "The clipboard does not hold an image this browser can read." : "Choose a PNG, JPEG or WebP image.");
   }
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
@@ -88,6 +89,14 @@ export async function readImage(file) {
     bitmap.close();
     canvas.width = canvas.height = 0;
   }
+}
+
+// Bounds moved so their centre is `at` (page units), kept inside the page.
+export function centredAt(bounds, at, pageSize) {
+  const [, , w, h] = bounds;
+  const x = Math.min(Math.max(0, at[0] - w / 2), Math.max(0, pageSize[0] - w));
+  const y = Math.min(Math.max(0, at[1] - h / 2), Math.max(0, pageSize[1] - h));
+  return [x, y, w, h];
 }
 
 export function imageBounds(size, pageSize) {

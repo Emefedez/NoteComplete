@@ -6,6 +6,8 @@ export const paths = {
  pages:'M4 3h16v18H4zM9 3v18M6 7h1M6 11h1M6 15h1',
  select:'m5 3 15 9-7 2-4 7L5 3Z',
  collapse:'m6 14 6-6 6 6',
+ chevronLeft:'m15 6-6 6 6 6',
+ chevronRight:'m9 6 6 6-6 6',
  pan:'M8 12V6a2 2 0 0 1 4 0v5-7a2 2 0 0 1 4 0v7-5a2 2 0 0 1 4 0v8c0 5-3 8-7 8h-1c-2 0-3-1-4-3l-4-6a2 2 0 0 1 3-2l1 1Z',
  draw:'m4 16-1 5 5-1L20 8l-4-4L4 16Zm10-10 4 4M4 16l4 4',
  highlight:'m9 4 8 8-5 5-8-8 5-5ZM5 10l-3 6 6-2M2 22h20',
@@ -64,6 +66,8 @@ export const paths = {
  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
  unplug:'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8ZM12 16v5',
  check:'m5 12.5 4.5 4.5L19 7.5',
+ warn:'M12 3.5 2.5 20h19L12 3.5ZM12 10v4.5M12 17.2h.01',
+ archive:'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
  doubleCheck:'M2.5 12.5 6.5 16.5 15 8M8.5 14.5 11.5 17.5 21 8',
  link:'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
  window:'M3 5h18v14H3zM3 9h18M6 7h.01',
@@ -84,7 +88,7 @@ export const paths = {
  flagStart:'M5 21V4M5 4h11l-2 4 2 4H5',
  flagEnd:'M19 21V4M19 4H8l2 4-2 4h11',
  playSegment:'M4 5v14M20 5v14M9 8v8l6-4-6-4Z',
- backspace:'M9 5h11v14H9l-6-7 6-7Zm4 4 6 6m0-6-6 6',
+ backspace:'M10 5h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-9l-6.5-7L10 5Zm3 4.5 5 5m0-5-5 5',
  slotNext:'M4 12h11m-4-4 4 4-4 4M20 6v12',
  slotPrev:'M20 12H9m4-4-4 4 4 4M4 6v12',
  arrowLeft:'m14 6-6 6 6 6',
@@ -119,5 +123,5 @@ export function icon(name) {
 }
 export function decorateIcons(){
  for(const el of document.querySelectorAll('[data-icon]'))el.prepend(icon(el.dataset.icon));
- for(const el of document.querySelectorAll('button[data-tool]')){el.setAttribute('aria-label',el.textContent.trim());el.title=el.textContent.trim();el.prepend(icon(el.dataset.tool));}
+ for(const el of document.querySelectorAll('button[data-tool]')){el.setAttribute('aria-label',el.textContent.trim());el.title=el.dataset.title||el.textContent.trim();el.prepend(icon(el.dataset.tool));}
 }

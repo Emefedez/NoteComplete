@@ -1,4 +1,4 @@
-import { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
+import { app, BaseWindow, BrowserWindow, ClipboardItem, Menu, WebContentsView, clipboard, dialog, nativeTheme, net, protocol, safeStorage, session, ipcMain, shell } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -14,12 +14,16 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
+import { saveSession, takeSession } from './session.js';
+import { prefabFolder, userPrefabPath } from './prefab-folder.js';
 import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
 export { uiZoomStep };
 import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 import { appLog } from './app-log.js';
 import { diagramRenderer } from './diagrams.js';
+import { pngClipboard, processRunner } from './png-clipboard.js';
+import { spawn } from 'node:child_process';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
@@ -28,6 +32,8 @@ const home = 'notecomplete://reader/';
 const log = appLog(path.join(app.getPath('userData'), 'logs'));
 log.write(`[NC] start ${app.getVersion()} pid ${process.pid}`);
 const root = fileURLToPath(new URL('./reader/', import.meta.url));
+// The prefab modules folder in use (Settings → Prefab modules).
+const prefabs = prefabFolder({ settingsFile: path.join(app.getPath('userData'), 'prefab-modules.json'), shipped: path.join(root, 'prefabs') });
 protocol.registerSchemesAsPrivileged([{ scheme: 'notecomplete', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true,
 } }]);
@@ -127,11 +133,15 @@ let tabGone = () => {};
 // its own, whose reader collects it once ready (files:launched). Launch arguments and macOS
 // open-file events that come before the app is ready wait in launchQueue.
 const launchPending = new Map();
+// After a restart for an update, what each new tab opens again (session.js), taken by the
+// tab's reader once ready (session:take).
+const restorePending = new Map();
+const sessionFile = () => path.join(app.getPath('userData'), 'session.json');
 const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
-const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tar', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
+const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 // Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
 // in their own session so sign-ins stay apart from the reader's storage.
@@ -175,13 +185,14 @@ function activate(win, id) {
   views.get(id)?.webContents.focus();
   broadcast(win);
 }
-function openTab(win, file = null) {
+function openTab(win, file = null, restore = null) {
   const view = new WebContentsView({ webPreferences });
   view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
   views.set(id, view);
   log.attach(contents, id);
   if (file) launchPending.set(id, file);
+  if (restore) restorePending.set(id, restore);
   tabs.add(win.id, id);
   contents.setWindowOpenHandler(({ url }) => {
     if (ownPage(url, home)) { openPage(url.slice(home.length)); return { action: 'deny' }; }
@@ -218,6 +229,7 @@ function openTab(win, file = null) {
   contents.on('destroyed', () => {
     views.delete(id);
     launchPending.delete(id);
+    restorePending.delete(id);
     tabGone(id);
     if (sharing?.owner === id) { sharing.server.stop(); sharing = null; }
   });
@@ -404,7 +416,11 @@ app.whenReady().then(async () => {
   protocol.handle('notecomplete', async request => {
     if (!['GET', 'HEAD'].includes(request.method)) return new Response('', { status: 405 });
     try {
-      const response = await net.fetch(pathToFileURL(assetPath(root, request.url)).href);
+      // The prefab modules folder in use, at prefabs-user/ (prefab-folder.js).
+      const relative = decodeURIComponent(new URL(request.url).pathname).replace(/^\//, '');
+      const user = relative.startsWith('prefabs-user/') ? userPrefabPath(relative, { folder: await prefabs.folder(), shipped: path.join(root, 'prefabs') }) : null;
+      if (relative.startsWith('prefabs-user/') && !user) return new Response('Not found', { status: 404 });
+      const response = await net.fetch(pathToFileURL(user || assetPath(root, request.url)).href);
       // Cross-origin isolation lets the speech engine use multiple WASM threads.
       const headers = new Headers(response.headers);
       headers.set('Cross-Origin-Opener-Policy', 'same-origin');
@@ -424,6 +440,19 @@ app.whenReady().then(async () => {
     return handler(event, ...args);
   };
   ipcMain.handle('files:folder', guarded(() => files.folder()));
+  // Settings → Prefab modules (prefab-folder.js): the folder in use and its modules; copy the
+  // app's modules to a folder, use a folder, go back to the app's own, open it.
+  ipcMain.handle('prefabs:list', guarded(() => prefabs.list()));
+  ipcMain.handle('prefabs:copy-to', guarded(async (event) => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Copy the prefab modules to…', properties: ['openDirectory', 'createDirectory'] });
+    return chosen.canceled ? null : prefabs.copyTo(chosen.filePaths[0]);
+  }));
+  ipcMain.handle('prefabs:use', guarded(async (event) => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Use this folder of prefab modules', properties: ['openDirectory'] });
+    return chosen.canceled ? null : prefabs.use(chosen.filePaths[0]);
+  }));
+  ipcMain.handle('prefabs:reset', guarded(() => prefabs.use(null)));
+  ipcMain.handle('prefabs:open', guarded(async () => { const dir = await prefabs.folder(); if (dir) await shell.openPath(dir); return !!dir; }));
   ipcMain.handle('files:choose', guarded(async event => {
     const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Keep downloaded notes in…', defaultPath: await files.folder(), properties: ['openDirectory', 'createDirectory'] });
     return chosen.canceled ? null : files.setFolder(chosen.filePaths[0]);
@@ -432,7 +461,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:write', guarded((_event, name, bytes) => files.write(name, bytes)));
   ipcMain.handle('files:remove', guarded((_event, name) => files.remove(name)));
   ipcMain.handle('files:open', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Open a note', properties: ['openFile'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files, images and archives', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return null;
     const file = chosen.filePaths[0];
     await files.remember(file);
@@ -473,10 +502,22 @@ app.whenReady().then(async () => {
     if (chosen.canceled || !chosen.filePath) return null;
     return files.saveChosen(withExtension(chosen.filePath, filters), bytes);
   }));
+  // Archive window → Save file…: one entry, anywhere, under any plain name (not remembered).
+  ipcMain.handle('files:save-entry', guarded(async (event, name, bytes) => {
+    const base = typeof name === 'string' ? path.basename(name.replace(/\\/g, '/')) : '';
+    if (!base || base.startsWith('.') || /[\x00-\x1f]/.test(base) || !(bytes instanceof Uint8Array)) throw Error('Invalid file.');
+    const chosen = await dialog.showSaveDialog(windowOf(event.sender), { title: 'Save file from the archive', defaultPath: base });
+    if (chosen.canceled || !chosen.filePath) return null;
+    await writeFile(chosen.filePath, bytes);
+    return { path: chosen.filePath, name: path.basename(chosen.filePath), size: bytes.byteLength };
+  }));
   ipcMain.handle('files:rename-opened', guarded((_event, file, name) => files.renameOpened(file, name)));
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   // PlantUML diagrams drawn by the PlantUML installed here (diagrams.js).
   const diagrams = diagramRenderer({ folderOf: file => files.documentFolder(file) });
+  // Copied items as a picture that keeps them (png-clipboard.js): the PNG byte for byte.
+  const pictures = pngClipboard({ clipboard, ClipboardItem, run: processRunner(spawn) });
+  ipcMain.handle('clipboard:write-png', guarded((_event, bytes, text) => pictures.write(bytes, typeof text === 'string' ? text : '')));
   ipcMain.handle('diagrams:plantuml', guarded((_event, text, file) => diagrams.plantuml(text, typeof file === 'string' ? file : '')));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
   // by the reader's cancel message or when its tab goes away (archive-download.js).
@@ -493,7 +534,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.on('files:download-cancel', (event, streamId) => { if (trusted(event) && typeof streamId === 'string') downloads.cancel(event.sender.id, streamId); });
   ipcMain.handle('files:pick', guarded(async event => {
-    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files and images', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), { title: 'Add documents', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Notes, PDFs, HTML pages, text, diagrams, Office files, images and archives', extensions: OPENABLE }, { name: 'All files', extensions: ['*'] }] });
     if (chosen.canceled) return [];
     for (const file of [...chosen.filePaths].reverse()) await files.remember(file);
     return chosen.filePaths.map(file => ({ path: file, name: path.basename(file) }));
@@ -566,7 +607,30 @@ app.whenReady().then(async () => {
   ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));
   // Only this project's release pages open (releases here are pre-releases, which /latest skips).
   ipcMain.handle('update:page', guarded((_event, url) => shell.openExternal(/^https:\/\/github\.com\/Emefedez\/NoteComplete\/releases\/[\w./-]+$/.test(String(url)) ? String(url) : 'https://github.com/Emefedez/NoteComplete/releases')));
-  ipcMain.handle('update:restart', guarded(() => updates.restart()));
+  // Before restarting for an update, every tab says what it shows (the reader's
+  // notecompleteSession: its Recent entry and page, and an automatic save of unsaved
+  // changes), so the same windows and tabs open again after it. A tab that does not answer
+  // in time is left out; the restart goes on.
+  ipcMain.handle('update:restart', guarded(async () => {
+    const ask = (contents) => Promise.race([
+      contents.executeJavaScript('window.notecompleteSession ? window.notecompleteSession() : null', true),
+      new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]).catch(() => null);
+    const open = await Promise.all([...windows.values()].map(async (win) => ({
+      tabs: await Promise.all(tabs.list(win.id).map(async (tab) => {
+        const contents = views.get(tab.id)?.webContents;
+        return { active: tab.active, state: contents && !contents.isDestroyed() ? await ask(contents) : null };
+      })),
+    })));
+    await saveSession(sessionFile(), open).catch((error) => log.write?.(`session: ${error.message}`));
+    updates.restart();
+  }));
+  // What this tab opens again after a restart for an update, once.
+  ipcMain.handle('session:take', guarded(event => {
+    const state = restorePending.get(event.sender.id) ?? null;
+    restorePending.delete(event.sender.id);
+    return state;
+  }));
   ipcMain.handle('windows:list', guarded(event => tabs.all().map(t => ({ id: t.id, title: t.title, current: t.id === event.sender.id }))));
   ipcMain.handle('windows:focus', guarded((_event, id) => {
     const win = windows.get(tabs.windowOf(id));
@@ -713,7 +777,18 @@ app.whenReady().then(async () => {
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   started = true;
-  createWindow({ files: launchQueue.splice(0) });
+  // Back from a restart for an update: the windows and tabs that were open, each opening its
+  // document again; files the system handed over join the first window.
+  const restored = await takeSession(sessionFile()).catch(() => null);
+  if (restored) {
+    restored.windows.forEach((w, i) => {
+      const win = createWindow({ tab: false });
+      const ids = w.tabs.map((state) => { openTab(win, null, state); return tabs.list(win.id).at(-1)?.id; });
+      if (!ids.length) openTab(win);
+      if (i === 0) for (const file of launchQueue.splice(0)) openTab(win, file);
+      if (ids[w.active] != null) activate(win, ids[w.active]);
+    });
+  } else createWindow({ files: launchQueue.splice(0) });
   app.on('activate', () => { if (!windows.size) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

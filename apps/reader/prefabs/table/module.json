@@ -1,0 +1,21 @@
+{
+  "id": "table",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 20,
+  "label": "Table",
+  "kind": "window",
+  "output": "items",
+  "legacyKind": "table",
+  "types": [],
+  "editor": "table",
+  "prefabs": [
+    {
+      "id": "table",
+      "group": "basic",
+      "label": "Table",
+      "hint": "Rows and columns of typed cells, with headers; edit cells in place later",
+      "icon": "table"
+    }
+  ]
+}

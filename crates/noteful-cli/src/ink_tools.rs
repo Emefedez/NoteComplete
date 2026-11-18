@@ -310,15 +310,56 @@ pub(super) fn tools() -> Vec<Value> {
             json!({"path":path,"page":page,"image":{"type":"boolean"},"width":{"type":"integer","minimum":200,"maximum":2400}}), &["path","page"]),
         tool("example_pages", "Example pages and drawings to imitate before create_notebook, add_pages, clean_copy or a drawing. Without name: the list and the style guide. With name: its source (study Markdown or SVG) and how it looks.",
             json!({"name":{"type":"string","enum":EXAMPLES.iter().map(|e| e.name).collect::<Vec<_>>()}}), &[]),
-        tool("add_prefab", "Insert an editable NoteComplete prefab (histogram, bar chart, process states / scheduling exercise, CPU timeline, exam plot, or UML / node graph) onto a page, written to a copy unless in_place. Users can edit it in the chart or diagram editor and resize it cleanly.\n\
-            Spec shapes:\n\
-            - Process states: {\"type\":\"states\",\"title\":\"FIFO\",\"tStart\":0,\"tEnd\":30,\"tStep\":5,\"unit\":\"u.t.\",\"legend\":{\"run\":\"Activo\",\"ready\":\"Listo\",\"blocked\":\"Block\"},\"processes\":[{\"label\":\"A\",\"arrival\":0,\"segments\":[{\"state\":\"run\",\"start\":0,\"end\":10}]}]} (add \"exercise\":true for an interactive blank/checkable scheduling exercise)\n\
-            - CPU timeline: {\"type\":\"timeline\",\"title\":\"CPU (RR q=2)\",\"tStart\":0,\"tEnd\":10,\"tStep\":1,\"unit\":\"ms\",\"rows\":[{\"label\":\"CPU\",\"intervals\":[{\"label\":\"P1\",\"start\":0,\"end\":2}]}]}\n\
-            - Histogram / bar: {\"type\":\"histogram\"|\"bar\",\"title\":\"...\",\"xLabel\":\"...\",\"yLabel\":\"...\",\"bins\":[{\"label\":\"0-10\",\"value\":3}]}\n\
-            - Exam plot: {\"type\":\"plot\",\"title\":\"f(x)\",\"xMin\":-4,\"xMax\":4,\"yMin\":-2,\"yMax\":6,\"functions\":[{\"expr\":\"x^2-1\",\"label\":\"f(x)\"}],\"points\":[{\"x\":0,\"y\":-1,\"label\":\"(0,-1)\"}]}\n\
-            - UML / node graph: {\"type\":\"uml\",\"diagram\":\"class\"|\"sequence\"|\"state\"|\"activity\"|\"usecase\"|\"graph\", ...}",
+        tool("add_prefab", &add_prefab_description(),
             merge(json!({"path":path,"page":page,"spec":{"type":"object","description":"Prefab spec object"},"box":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Optional [x, y, w, h] in page units"}}), &[&write_props]), &["path","page","spec"]),
     ]
+}
+
+/// add_prefab's description: the spec shapes come from the prefab modules' ai.md files
+/// (apps/reader/prefabs/<module>/ai.md, in their module.json "order"), so a new module is
+/// usable by AI without changing this crate. Without the reader's files, the shipped ones.
+fn add_prefab_description() -> String {
+    const HEAD: &str = "Insert an editable NoteComplete prefab onto a page, written to a copy unless in_place. Users can edit it in its editor (chart, diagram or the module's own) and resize it cleanly.\nSpec shapes:\n";
+    let notes = find_prefabs_js()
+        .and_then(|js| js.parent().map(|d| d.join("prefabs")))
+        .map(|dir| module_ai_notes(&dir))
+        .filter(|notes| !notes.is_empty())
+        .unwrap_or_else(|| SHIPPED_PREFAB_NOTES.to_owned());
+    format!("{HEAD}{notes}")
+}
+const SHIPPED_PREFAB_NOTES: &str = concat!(
+    include_str!("../../../apps/reader/prefabs/charts/ai.md"),
+    include_str!("../../../apps/reader/prefabs/uml/ai.md"),
+    include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
+    include_str!("../../../apps/reader/prefabs/truthtable/ai.md"),
+);
+fn module_ai_notes(dir: &Path) -> String {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return String::new();
+    };
+    let mut modules: Vec<(i64, String, String)> = entries
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| {
+            let path = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with('_') || name == "kit" {
+                return None;
+            }
+            let notes = std::fs::read_to_string(path.join("ai.md")).ok()?;
+            let order = std::fs::read_to_string(path.join("module.json"))
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .and_then(|v| v["order"].as_i64())
+                .unwrap_or(1000);
+            Some((order, name, notes))
+        })
+        .collect();
+    modules.sort();
+    modules
+        .into_iter()
+        .map(|(_, _, notes)| notes.trim_end().to_owned() + "\n")
+        .collect()
 }
 
 fn find_prefabs_js() -> Option<std::path::PathBuf> {
@@ -1366,6 +1407,18 @@ mod tests {
         ]))
         .is_err());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn shipped_prefab_notes_match_the_modules() {
+        // The compiled-in notes are every shipped module's ai.md, in order; the template
+        // (prefabs/_template) and the kit are not modules.
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/reader/prefabs");
+        // Line endings aside (a Windows checkout may write ai.md with CRLF).
+        let notes = module_ai_notes(&dir).replace("\r\n", "\n");
+        assert_eq!(notes, SHIPPED_PREFAB_NOTES.replace("\r\n", "\n"));
+        assert!(notes.contains("\"type\":\"truthtable\""));
+        assert!(!notes.contains("\"type\":\"example\""));
     }
 
     #[test]

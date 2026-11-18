@@ -54,6 +54,15 @@ impl Line {
         }
     }
 }
+/// The place in the history of an added item, from its id (`new:12`, `image:7`): the order
+/// added ink, pictures and text boxes are drawn in. Ids without one come first.
+pub(crate) fn edit_index(id: &str) -> usize {
+    id.rsplit(':')
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub(crate) enum Edit {

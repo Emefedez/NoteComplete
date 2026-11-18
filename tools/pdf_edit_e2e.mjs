@@ -34,7 +34,7 @@ try {
   };
 
   // 1. Outlines under the pointer.
-  await p.click('#toolbar [data-tool="pdfedit"]');
+  await p.click('button[data-tool="pdfedit"]');
   let sheet = await p.locator(sel).boundingBox();
   const blocks = await outlined();
   assert.ok(blocks >= 8, `the page's text in blocks: ${blocks}`);
@@ -79,7 +79,7 @@ try {
   await p.press('#pageNumber', 'Enter');
   await p.waitForFunction((f) => [...document.fonts].some((face) => face.family.replace(/"/g, '') === f && face.status === 'loaded'), family, { timeout: 20000 });
   console.log(`· saved and reopened: ${family} is loaded again from the page's PDF`);
-  await p.click('#toolbar [data-tool="pdfedit"]');
+  await p.click('button[data-tool="pdfedit"]');
   await sleep(1000);
   sheet = await p.locator(sel).boundingBox();
 
@@ -112,7 +112,10 @@ try {
   const to = await picture.boundingBox();
   assert.ok(Math.abs(to.x - at.x - 120) < 3 && Math.abs(to.y - at.y - 30) < 3, `dragged: ${JSON.stringify([to.x - at.x, to.y - at.y])}`);
   if (DIR) await p.screenshot({ path: DIR + 'object-moved.png' });
-  await p.click('#toolbar [data-tool="pdfedit"]');
+  // E: back to Edit PDF (the selection's settings cover the page bar while it is selected).
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('e');
+  await p.waitForFunction(() => document.querySelector('button[data-tool="pdfedit"]').getAttribute('aria-pressed') === 'true');
   assert.equal(await outlined(170), blocks - 1, 'the PDF behind no longer has the image');
   await p.keyboard.press('Control+z');
   await sleep(600);
@@ -129,7 +132,7 @@ try {
   await q.setInputFiles('#file', samplePath('Examen wuolah.pdf'));
   await q.waitForSelector('.sheet[data-page="0"] .render');
   await sleep(800);
-  await q.click('#toolbar [data-tool="pdfedit"]');
+  await q.click('button[data-tool="pdfedit"]');
   const s0 = await q.locator('.sheet[data-page="0"]').boundingBox();
   await q.mouse.click(s0.x + s0.width / 2, Math.max(s0.y, 150) + 200);
   await q.waitForFunction(() => /no text to edit/.test(document.body.textContent));

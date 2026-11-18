@@ -488,3 +488,55 @@ fn legacy_notecomplete_package_is_repaired_both_explicitly_and_on_export() {
     let auto_exported = Editor::open(&legacy).unwrap().export_noteful().unwrap();
     assert_noteful_native_structure(&auto_exported, 1);
 }
+
+#[test]
+fn added_ink_and_text_boxes_stack_in_the_order_they_were_made() {
+    use noteful_core::{Image, TextBox};
+    let mut e = Editor::create_document("Order", &[[600., 800.]], &[]).unwrap();
+    let text = Image {
+        base64: String::new(),
+        mime: String::new(),
+        bounds: [20., 20., 200., 60.],
+        layer: 0,
+        text: Some(TextBox {
+            text: "encima".into(),
+            font_size: 20.,
+            rgba: [0., 0., 0., 1.],
+            bold: false,
+            italic: false,
+            font: "Helvetica".into(),
+            align: 0,
+            underline: false,
+            strikethrough: false,
+            math: false,
+            line_height: None,
+            spans: vec![],
+        }),
+        joined: false,
+        part: None,
+    };
+    e.add_line(0, line(0, 1)).unwrap();
+    e.add_image(0, text).unwrap();
+    e.add_line(0, line(0, 1)).unwrap();
+    // On the page: the first stroke, the text box over it, the second stroke over both.
+    let svg = e.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+    let at = |needle: &str| {
+        svg.find(needle)
+            .unwrap_or_else(|| panic!("{needle} in {svg}"))
+    };
+    assert!(at("data-item=\"new:0\"") < at("data-item=\"image:1\""));
+    assert!(at("data-item=\"image:1\"") < at("data-item=\"new:2\""));
+    // In the native file, by z: Noteful (and the reader) draw them in the same order.
+    let native = Editor::open(&e.export_noteful().unwrap()).unwrap();
+    let svg = native.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+    let strokes: Vec<usize> = svg
+        .match_indices("data-item=\"stroke:")
+        .map(|(i, _)| i)
+        .collect();
+    let text_at = svg.find(">encima<").unwrap();
+    assert_eq!(strokes.len(), 2, "{svg}");
+    assert!(
+        strokes[0] < text_at && text_at < strokes[1],
+        "stroke, text, stroke: {svg}"
+    );
+}

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   pickFiles: () => ipcRenderer.invoke('files:pick'),
   writeOpened: (file, bytes) => ipcRenderer.invoke('files:write-opened', file, bytes),
   saveFile: (defaultName, bytes, filters) => ipcRenderer.invoke('files:save', defaultName, bytes, filters),
+  saveEntry: (name, bytes) => ipcRenderer.invoke('files:save-entry', name, bytes),
   readSibling: (file, relative) => ipcRenderer.invoke('files:read-sibling', file, relative),
   saveCopy: (file, options) => ipcRenderer.invoke('files:save-copy', file, options),
   renderHtmlPdf: html => ipcRenderer.invoke('files:render-html-pdf', html),
@@ -37,6 +38,11 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
 // PlantUML diagrams (.puml…) drawn by the PlantUML installed on this computer (diagrams.js).
 contextBridge.exposeInMainWorld('notecompleteDiagrams', {
   plantuml: (text, file) => ipcRenderer.invoke('diagrams:plantuml', text, file),
+});
+// Copied items as a picture that keeps them (reader png-clip.js): the PNG as it is, chunk and
+// all, with the reader's marker text (desktop png-clipboard.js).
+contextBridge.exposeInMainWorld('notecompleteClipboard', {
+  writePng: (bytes, text) => ipcRenderer.invoke('clipboard:write-png', bytes, text),
 });
 // Connecting the user's AI tools to the bundled note server (agent-setup.js).
 contextBridge.exposeInMainWorld('notecompleteAgents', {
@@ -93,6 +99,18 @@ contextBridge.exposeInMainWorld('notecompleteLog', {
   get: () => ipcRenderer.invoke('log:get'),
   set: on => ipcRenderer.invoke('log:set', on === true),
   open: () => ipcRenderer.invoke('log:open'),
+});
+// After a restart for an update: what this tab showed before it (desktop session.js).
+// Settings → Prefab modules: the folder of modules in use (desktop prefab-folder.js).
+contextBridge.exposeInMainWorld('notecompletePrefabs', {
+  list: () => ipcRenderer.invoke('prefabs:list'),
+  copyTo: () => ipcRenderer.invoke('prefabs:copy-to'),
+  use: () => ipcRenderer.invoke('prefabs:use'),
+  reset: () => ipcRenderer.invoke('prefabs:reset'),
+  open: () => ipcRenderer.invoke('prefabs:open'),
+});
+contextBridge.exposeInMainWorld('notecompleteRestore', {
+  take: () => ipcRenderer.invoke('session:take'),
 });
 contextBridge.exposeInMainWorld('notecompleteUpdates', {
   check: (manual = false) => ipcRenderer.invoke('update:check', manual === true),

@@ -16,6 +16,8 @@ except ModuleNotFoundError:
 ROOT=Path(__file__).resolve().parents[1]
 
 def main():
+    # prefabs/index.js from the module folders (tools/prefab_index.mjs).
+    subprocess.run(['node',str(ROOT/'tools/prefab_index.mjs')],check=True)
     env=dict(os.environ)
     cargo=shutil.which('cargo')
     if shutil.which('rustup') and 'RUSTC' not in env:
@@ -149,6 +151,8 @@ def write_manifest():
     reader=ROOT/'apps/reader'
     names=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
     names+=sorted(p.relative_to(reader).as_posix() for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
+    # The prefab modules (docs/PREFAB-MODULES.md): manifests, code, help and AI notes; not their tests.
+    names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'prefabs').rglob('*') if p.is_file() and '/test/' not in p.as_posix() and not p.name.endswith('.test.mjs'))
     files={name:hashlib.sha256((reader/name).read_bytes()).hexdigest()[:16] for name in names}
     shell=[name for name in names if not name.startswith(LAZY) and 'LICENSE' not in name and name!='sw.js']
     (reader/'precache.json').write_text(json.dumps({'files':files,'shell':shell})+'\n')

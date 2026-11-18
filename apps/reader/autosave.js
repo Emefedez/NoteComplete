@@ -202,9 +202,12 @@ export function autosaveController({
 
   const contentDigest = contentDigestCache(() => call('contentDigest'));
 
-  // A copy now, if auto-save is on and the note changed since the last one.
-  async function now({ force = false } = {}) {
-    if (!state.doc() || autosaving || state.editing?.() || !autosaveOn()) return null;
+  // A copy now, if auto-save is on and the note changed since the last one. `always`: also
+  // with auto-save off, after a copy under way, and while a text is being typed (a restart
+  // for an update keeps unsaved changes this way, desktop session.js).
+  async function now({ force = false, always = false } = {}) {
+    if (always) for (let i = 0; autosaving && i < 200; i++) await new Promise((r) => setTimeout(r, 50));
+    if (!state.doc() || autosaving || (!always && (state.editing?.() || !autosaveOn()))) return null;
     const rev = state.revision();
     if (!force && (rev === autosavedRevision || rev === openedRevision)) return null;
     autosaving = true;
@@ -400,6 +403,12 @@ export function autosaveController({
     now,
     opened,
     compact,
+    // An automatic save by its id, opened as when chosen from the list; false when gone.
+    async restore(id) {
+      const slot = (await store.list()).find((s) => s.id === id);
+      if (slot) await openSlot(slot);
+      return !!slot;
+    },
     takeRecoveringKey() { const k = recoveringKey; recoveringKey = null; return k; },
     markManual() {
       store.markManual(autosaveKey()).catch(() => { /* Optional. */ });

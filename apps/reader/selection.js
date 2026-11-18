@@ -165,10 +165,11 @@ export class SelectionController {
   // The ⋯ circle past the top-right corner: the item's menu (edit, lock, delete…), for
   // fingers and pens as much as for a mouse.
   if(this.menu){
-   const out=[points[1][0]+(points[1][0]-points[0][0])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*22*unit,points[1][1]+(points[1][1]-points[0][1])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*22*unit];
+   const out=[points[1][0]+(points[1][0]-points[0][0])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*20*unit,points[1][1]+(points[1][1]-points[0][1])/(Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])||1)*20*unit];
    const more=svg('g',{class:'selection-menu',tabindex:0,role:'button','data-selection-handle':'menu','aria-label':'Item menu'});
-   more.append(svg('circle',{cx:out[0],cy:out[1],r:10*unit,fill:'#1683ed',stroke:'white','stroke-width':1.5*unit}));
-   for(const dx of [-4,0,4])more.append(svg('circle',{cx:out[0]+dx*unit,cy:out[1],r:1.6*unit,fill:'white'}));
+   // The size of the corner handles, white like them, with the dots in blue.
+   more.append(svg('circle',{cx:out[0],cy:out[1],r:8*unit,fill:'white',stroke:'#1683ed','stroke-width':1.5*unit}));
+   for(const dx of [-3.2,0,3.2])more.append(svg('circle',{cx:out[0]+dx*unit,cy:out[1],r:1.3*unit,fill:'#1683ed'}));
    more.style.pointerEvents='all';more.style.cursor='pointer';
    // Its own press (not the page's): a finger on it never pans or draws, whatever the tool.
    more.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();if(this.item)this.menu(this.item,event.clientX,event.clientY);};
