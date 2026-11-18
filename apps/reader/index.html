@@ -196,7 +196,7 @@
         </div>
       </details>
           <input id="importAnyFile" type="file" hidden />
-      <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle">
+      <dialog id="exportDialog" class="ocr-dialog export-dialog" aria-labelledby="exportTitle" aria-describedby="exportKeysHint">
         <div class="export-head">
           <h2 id="exportTitle">Import, export and share</h2>
           <div class="export-tabs" role="tablist" aria-label="Import, export and share sections">
@@ -290,7 +290,7 @@
           </div>
           </div>
         </div>
-        <div class="ocr-actions"><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
+        <div class="ocr-actions"><span class="export-keys-hint" id="exportKeysHint"><kbd>Tab</kbd> next section · <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>Esc</kbd> close</span><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
       </dialog>
     </nav>
     <div class="brand">

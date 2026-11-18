@@ -3475,7 +3475,28 @@ function buildChoices() {
       };
       return b;
     }));
+    if (id === "color") numberSwatches(row.children);
   }
+}
+// The first nine colour swatches carry their number key (1–9) inside the circle, in dark or
+// light ink to stand out from the colour.
+function numberSwatches(buttons) {
+  [...buttons].slice(0, 9).forEach((b, i) => {
+    const hex = (b.dataset.value || b.dataset.color || "").replace("#", "");
+    const [r, g, bl] = [0, 2, 4].map((j) => parseInt(hex.slice(j, j + 2), 16) / 255);
+    const light = 0.2126 * r + 0.7152 * g + 0.0722 * bl > 0.55;
+    b.dataset.num = String(i + 1);
+    b.style.setProperty("--swatch-ink", light ? "#1f2328" : "#ffffff");
+    b.setAttribute("aria-keyshortcuts", String(i + 1));
+    b.title = `${b.title} (${i + 1})`;
+  });
+}
+// The swatches the number keys choose from: a selected text box's colours when its format
+// bar shows, else the drawing tool's (pen, highlighter, shapes, tape); none for other tools.
+function colourKeySwatches() {
+  if (!$("textFormat").hidden) return [...$("textSwatches").children];
+  if (!["draw", "highlight", "shape", "tape"].includes(tool)) return [];
+  return [...$("drawingOptions").querySelectorAll('.choice-row[data-for="color"] button')];
 }
 function syncChoices() {
   for (const row of document.querySelectorAll(".choice-row[data-for]")) {
@@ -3501,6 +3522,7 @@ if ($("pressureToggle")) {
 try { const saved = localStorage.getItem("notecomplete-eraser-size"); if (saved && $("eraserSize").querySelector(`option[value="${saved}"]`)) $("eraserSize").value = saved; } catch { /* Optional. */ }
 $("eraserSize").addEventListener("change", () => { try { localStorage.setItem("notecomplete-eraser-size", $("eraserSize").value); } catch { /* Optional. */ } });
 buildChoices();
+numberSwatches($("textSwatches").children);
 $("color").addEventListener("input", syncChoices);
 // Each drawing tool keeps its own colour and width (remembered on this device), and the
 // highlighter, tape and shape kinds keep theirs.
@@ -4254,7 +4276,7 @@ $("toolsToggle").onclick = () => { closeMenus(); setToolsHidden(!document.body.c
 try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHidden(true, false); } catch { /* Optional. */ }
 // Single-key shortcuts (no modifier, outside text fields). Listed in Help → Keyboard shortcuts.
 const SHORTCUTS = [
-  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"],
+  ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"], ["1–9", "Pen, highlighter, shapes, tape or a selected text box: the colour with that number on its swatch (Ctrl 1–9 change tabs)"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, table, tree or node graph, or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
   ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
@@ -4302,8 +4324,10 @@ for (const [selector, key] of Object.entries(KEY_HINTS))
   }
 function toggleKeyHints() {
   const on = document.body.classList.toggle("show-keys");
-  status(on ? "Keys shown on buttons. Press ? again to hide them; Help lists them all." : "Key hints hidden.");
+  status(on ? "Keys shown on buttons; 1–9 pick the colour numbered on each swatch. Press ? again to hide them; Help lists them all." : "Key hints hidden.");
 }
+const studyWindowUp = () => (!$("quizPanel").hidden && !$("quizPanel").classList.contains("minimized"))
+  || ($("deckDialog").open && !$("deckDialog").classList.contains("minimized"));
 function shortcut(e) {
   if (home?.visible) return false;
   const k = e.key;
@@ -4313,6 +4337,15 @@ function shortcut(e) {
   if (!doc && (htmlView.visible || textView.visible) && k === "n") return notesButton().click(), true;
   if (!doc) return sideView()?.visible && k === "d" ? ($("htmlDark").click(), true) : false;
   if (k === "f" && tool === "shape" && !$("editor").hidden) return setShapeFill({ none: "tint", tint: "solid", solid: "none" }[shapeFill]), status(`Shape fill: ${shapeFill === "none" ? "outline only" : shapeFill}.`), true;
+  // 1–9: the colour with that number on the tool's swatches, as a click on it. Not while a
+  // quiz or flashcards window is in front (their own number keys) or the focus is in a window.
+  if (/^[1-9]$/.test(k) && !$("editor").hidden && !studyWindowUp() && !e.target.closest?.("dialog, #chatPanel, #audioBar, #quizPanel")) {
+    const swatch = colourKeySwatches()[Number(k) - 1];
+    if (!swatch) return false;
+    swatch.click();
+    if ($("toolOptions").hidden) status(`Colour ${k}: ${swatch.dataset.value || swatch.dataset.color}.`);
+    return true;
+  }
   const keyTool = !e.shiftKey && TOOL_KEYS[k.toLowerCase()];
   if (keyTool && !$("editor").hidden) return document.querySelector(`button[data-tool="${keyTool}"]`)?.click(), true;
   if (k === "/") return showDocument(), find.open(), true;
@@ -8611,7 +8644,7 @@ $("hubReceive").onclick = () => $("receiveNoteQr").click();
     const active = name === "resources" ? "resources" : "notes";
     for (const t of subTabs) t.setAttribute("aria-selected", String(t.dataset.exportSubtab === active));
     for (const p of subPanels) p.hidden = p.dataset.exportSubpanel !== active;
-    try { localStorage.setItem("notecomplete-export-subtab", active); } catch { /* Optional. */ }
+    numberExportItems();
   };
   const setExportTab = (name) => {
     const mapped = (name === "notes" || name === "resources") ? "export" : name;
@@ -8620,16 +8653,57 @@ $("hubReceive").onclick = () => $("receiveNoteQr").click();
     for (const p of panels) p.hidden = p.dataset.exportPanel !== active;
     if (name === "notes" || name === "resources") setExportSubTab(name);
     try { localStorage.setItem("notecomplete-export-tab", active); } catch { /* Optional. */ }
+    numberExportItems();
   };
+  // The view shown: Open & Import, or Export's Notes or Resources; Tab and Shift Tab go round them.
+  const VIEWS = ["open", "notes", "resources"];
+  const currentView = () => ($("exportTabOpen").getAttribute("aria-selected") === "true" ? "open"
+    : subTabs.find((t) => t.getAttribute("aria-selected") === "true")?.dataset.exportSubtab || "notes");
+  const viewTab = (view) => (view === "open" ? $("exportTabOpen") : subTabs.find((t) => t.dataset.exportSubtab === view));
+  // The items of the view on screen, in reading order; the first nine have keys 1–9.
+  const exportItems = () => [...$("exportDialog").querySelectorAll(".export-item")].filter((b) => !b.closest("[hidden]"));
+  function numberExportItems() {
+    for (const b of $("exportDialog").querySelectorAll(".export-item[data-num]")) { delete b.dataset.num; b.removeAttribute("aria-keyshortcuts"); }
+    exportItems().slice(0, 9).forEach((b, i) => { b.dataset.num = String(i + 1); b.setAttribute("aria-keyshortcuts", String(i + 1)); });
+  }
   for (const t of tabs) t.onclick = () => setExportTab(t.dataset.exportTab);
   for (const t of subTabs) t.onclick = () => setExportSubTab(t.dataset.exportSubtab);
-  try {
-    setExportSubTab(localStorage.getItem("notecomplete-export-subtab") || "notes");
-    setExportTab(localStorage.getItem("notecomplete-export-tab") || "open");
-  } catch {
+  // Export opens on Notes; whether Open & Import or Export shows is remembered.
+  setExportSubTab("notes");
+  try { setExportTab(localStorage.getItem("notecomplete-export-tab") || "open"); } catch { setExportTab("open"); }
+  $("exportOpen").addEventListener("click", () => {
     setExportSubTab("notes");
-    setExportTab("open");
-  }
+    requestAnimationFrame(() => { if ($("exportDialog").open) viewTab(currentView())?.focus(); });
+  });
+  $("exportDialog").addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const at = VIEWS.indexOf(currentView());
+      const next = VIEWS[(at + (e.shiftKey ? VIEWS.length - 1 : 1)) % VIEWS.length];
+      setExportTab(next);
+      viewTab(next)?.focus();
+      return;
+    }
+    if (/^[1-9]$/.test(e.key)) {
+      const item = exportItems()[Number(e.key) - 1];
+      if (!item) return;
+      e.preventDefault();
+      if (item.disabled) { status(`${item.querySelector("b")?.textContent || "That"} needs a note open.`); return; }
+      item.focus();
+      item.click();
+      return;
+    }
+    // Arrows move between the items of the view (Enter or Space chooses).
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (step && !e.target.closest?.("[role=menu]")) {
+      const items = exportItems().filter((b) => !b.disabled);
+      if (!items.length) return;
+      e.preventDefault();
+      const i = items.indexOf(e.target);
+      items[i < 0 ? (step > 0 ? 0 : items.length - 1) : (i + step + items.length) % items.length].focus();
+    }
+  });
 }
 $("studyShare").onclick = async () => {
   closeMenus();
