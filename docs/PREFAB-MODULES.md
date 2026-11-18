@@ -186,5 +186,4 @@ Not done:
 - A "window" module with its own editor.js in a movable window: none ships, so it has no test yet. Nothing of this branch was tried by hand in the desktop app.
 - Folder modules: Reload modules re-imports render.js only; a changed editor.js (or a file render.js imports) needs a restart. MCP add_prefab sees only the shipped modules, not the desktop folder.
 - Try the truth table and the template by hand in the desktop app (Copy to…, copy _template to a new folder, Reload modules).
-- Check the PDF copy fix (text-layer.js, PDF_WORDS 3) with spaced-out titles; lavadora.pdf was not compared again after the `space` flag.
 - Copying items out of NoteComplete as a PNG: the picture of the selection, with the clip's JSON (lines, images, prefab specs) in an iTXt chunk that other apps ignore; pasting or importing that PNG in NoteComplete would bring back editable items. Chromium re-encodes PNGs written with navigator.clipboard (the chunk would be lost), so the desktop app should write the raw bytes through Electron's clipboard (writeBuffer 'image/png'; test with wl-paste). Also read the chunk in importImages (paste, drop, Insert image).
