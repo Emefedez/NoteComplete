@@ -119,7 +119,12 @@ const multiply = (m, n) => [
 // words a few letters off in proportional fonts ("iiii" is as wide as "MMMM"), so a text
 // highlight started and ended in the middle of words. Without a measure (no canvas), or
 // when it fails, the count is used.
-export function textWords(items, viewport, place, measure = textMeasure(), styles = {}) {
+//
+// A spaced-out title ("A R Q U I T E C T U R A  D E", letter-spacing in the PDF) comes from
+// pdf.js as one item with a space between every two letters, word gaps or not, so it copied as
+// separate letters. With `glyphs` (textGlyphs: where the PDF draws each glyph) its letters are
+// joined into words again, broken where the PDF drew a space or left a word-sized gap.
+export function textWords(items, viewport, place, measure = textMeasure(), styles = {}, glyphs = null) {
   const out = [];
   const sx = place.width / viewport.width, sy = place.height / viewport.height;
   // Whether a space came before each word (`space`): the PDF's own spaces, also those it
@@ -134,20 +139,162 @@ export function textWords(items, viewport, place, measure = textMeasure(), style
     const font = fontFor(item.fontName, styles);
     const whole = measured(measure, item.str, font);
     const at = (i) => whole ? width * measured(measure, item.str.slice(0, i), font) / whole : width * i / item.str.length;
-    for (const match of item.str.matchAll(/\S+/g)) {
-      const a = at(match.index), b = at(match.index + match[0].length);
+    let matches = [...item.str.matchAll(/\S+/g)].map((m) => ({ text: m[0], index: m.index, end: m.index + m[0].length, gap: m.index > 0 }));
+    const words = glyphs && letterSpaced(item.str) ? spacedWords(item, matches, glyphs, viewport.scale) : null;
+    if (words) matches = words;
+    for (const match of matches) {
+      const a = match.from ?? at(match.index), b = match.to ?? at(match.end);
       const corners = [a, b].flatMap(d => {
         const base = [t[4] + dir[0] * d, t[5] + dir[1] * d];
         return [base, [base[0] + up[0], base[1] + up[1]]];
       });
       const xs = corners.map(c => c[0]), ys = corners.map(c => c[1]);
       const x0 = Math.min(...xs), y0 = Math.min(...ys);
-      out.push({ text: match[0], box: [place.x + x0 * sx, place.y + y0 * sy, (Math.max(...xs) - x0) * sx, (Math.max(...ys) - y0) * sy], space: match.index > 0 || spaceBefore });
+      out.push({ text: match.text, box: [place.x + x0 * sx, place.y + y0 * sy, (Math.max(...xs) - x0) * sx, (Math.max(...ys) - y0) * sy], space: match.gap || spaceBefore });
       spaceBefore = false;
     }
     spaceBefore = /\s$/.test(item.str) || !!item.hasEOL;
   }
   return out;
+}
+
+// Whether pdf.js wrote an item as spaced-out letters: most of its pieces one character long
+// ("A R Q U I T E C T U R A D E", "PA R C I A L I"; "TA" where kerning closed the gap).
+export function letterSpaced(str) {
+  const pieces = str.split(/\s+/).filter(Boolean);
+  return pieces.length >= 3 && pieces.filter((p) => [...p].length === 1).length >= pieces.length * 0.6;
+}
+
+// Where a page's glyphs are drawn, from its pdf.js operator list (`OPS` names its operators;
+// `fontOf(name)` gives the loaded font, for its matrix and writing direction): each glyph's
+// text, whether it is a space, its start and end on its baseline and its size, in the PDF's
+// user space (the space of text items' transforms). Horizontal text only; what this does not
+// follow (Type 3 fonts' own drawing) still has its place, only its width may be off.
+export function textGlyphs(opList, OPS, fontOf = () => null) {
+  const out = [];
+  const { fnArray = [], argsArray = [] } = opList || {};
+  const identity = [1, 0, 0, 1, 0, 0];
+  let ctm = identity;
+  let s = { cs: 0, ws: 0, hs: 1, lead: 0, rise: 0, size: 0, dir: 1, fm: [0.001, 0, 0, 0.001, 0, 0], vertical: false, tm: identity, x: 0, y: 0, lx: 0, ly: 0 };
+  const stack = [];
+  const move = (x, y) => { s.lx += x; s.ly += y; s.x = s.lx; s.y = s.ly; };
+  const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  const show = (glyphs) => {
+    if (!s.size || s.vertical || !Array.isArray(glyphs)) return;
+    const m = multiply(ctm, s.tm), hs = s.hs * s.dir, scale = s.size * s.fm[0];
+    const size = Math.abs(s.size) * Math.hypot(m[2], m[3]);
+    let x = 0;
+    for (const g of glyphs) {
+      if (typeof g === 'number') { x -= g * s.size / 1000; continue; }
+      if (!g) continue;
+      const width = (g.width || 0) * scale, px = s.x + x * hs, py = s.y + s.rise;
+      const [x0, y0] = apply(m, px, py), [x1, y1] = apply(m, px + width * hs, py);
+      const text = typeof g.unicode === 'string' ? g.unicode : '';
+      out.push({ text, space: !!g.isSpace || (text !== '' && !text.trim()), x: x0, y: y0, ex: x1, ey: y1, size });
+      x += width + ((g.isSpace ? s.ws : 0) + s.cs) * s.dir;
+    }
+    s.x += x * hs;
+  };
+  for (let i = 0; i < fnArray.length; i++) {
+    const fn = fnArray[i], a = argsArray[i] || [];
+    switch (fn) {
+      case OPS.save: stack.push([ctm, { ...s }]); break;
+      case OPS.restore: if (stack.length) [ctm, s] = stack.pop(); break;
+      case OPS.transform: ctm = multiply(ctm, a[0]?.length === 6 ? [...a[0]] : a); break;
+      case OPS.paintFormXObjectBegin: stack.push([ctm, { ...s }]); if (a[0]?.length === 6) ctm = multiply(ctm, [...a[0]]); break;
+      case OPS.paintFormXObjectEnd: if (stack.length) [ctm, s] = stack.pop(); break;
+      case OPS.beginText: s.tm = identity; s.x = s.y = s.lx = s.ly = 0; break;
+      case OPS.setCharSpacing: s.cs = a[0] || 0; break;
+      case OPS.setWordSpacing: s.ws = a[0] || 0; break;
+      case OPS.setHScale: s.hs = (a[0] ?? 100) / 100; break;
+      case OPS.setLeading: s.lead = -(a[0] || 0); break;
+      case OPS.setTextRise: s.rise = a[0] || 0; break;
+      case OPS.setFont: {
+        const font = (() => { try { return fontOf(a[0]); } catch { return null; } })();
+        s.size = Math.abs(a[1] || 0); s.dir = a[1] < 0 ? -1 : 1;
+        s.fm = font?.fontMatrix || [0.001, 0, 0, 0.001, 0, 0];
+        s.vertical = !!font?.vertical;
+        break;
+      }
+      case OPS.moveText: move(a[0] || 0, a[1] || 0); break;
+      case OPS.setLeadingMoveText: s.lead = a[1] || 0; move(a[0] || 0, a[1] || 0); break;
+      case OPS.setTextMatrix: {
+        // One matrix (a Float32Array in pdf.js 6), or its six numbers.
+        const m = a[0]?.length === 6 ? a[0] : a;
+        if (m.length === 6) { s.tm = [...m]; s.x = s.y = s.lx = s.ly = 0; }
+        break;
+      }
+      case OPS.nextLine: move(0, s.lead); break;
+      case OPS.showText: case OPS.showSpacedText: show(a[0]); break;
+      case OPS.nextLineShowText: move(0, s.lead); show(a[0]); break;
+      case OPS.nextLineSetSpacingShowText: s.ws = a[0] || 0; s.cs = a[1] || 0; move(0, s.lead); show(a[2]); break;
+    }
+  }
+  return out;
+}
+
+// The words of a spaced-out item (letterSpaced), from where its glyphs are drawn: letters
+// joined, broken where the PDF drew a space glyph, or (a PDF that draws none) where the gap is
+// clearly wider than the gaps between letters.
+// `pieces` are the item's pdf.js pieces; each word is one or more of them with `from` and `to`
+// along the item in viewport units. Null when the glyphs do not match the item's text.
+function spacedWords(item, pieces, glyphs, scale) {
+  const [a, b, c, d, ox, oy] = item.transform;
+  const len = Math.hypot(a, b) || 1, ux = a / len, uy = b / len;
+  const size = Math.hypot(c, d) || len;
+  const along = (x, y) => (x - ox) * ux + (y - oy) * uy;
+  const across = (x, y) => (y - oy) * ux - (x - ox) * uy;
+  const chars = (text) => [...text.normalize('NFKC')];
+  const want = pieces.map((p) => chars(p.text));
+  const total = want.reduce((n, w) => n + w.length, 0);
+  const first = want[0][0];
+  const start = glyphs.findIndex((g) => !g.space && g.text && Math.abs(along(g.x, g.y)) < size * 0.3 && Math.abs(across(g.x, g.y)) < size * 0.3 && chars(g.text)[0] === first);
+  if (start < 0) return null;
+  // The item's glyphs in drawing order, each with whether a space glyph came before it.
+  const run = [];
+  let count = 0, space = false;
+  for (let i = start; i < glyphs.length && count < total; i++) {
+    const g = glyphs[i];
+    if (Math.abs(across(g.x, g.y)) > size * 0.5) return null;
+    if (g.space) { space = true; continue; }
+    if (!g.text) return null;
+    const own = chars(g.text);
+    run.push({ g, at: count, chars: own, space });
+    count += own.length; space = false;
+  }
+  if (run.flatMap((r) => r.chars).join('') !== want.flat().join('')) return null;
+  // Each piece's first and last glyph.
+  const ends = [];
+  let at = 0, k = 0;
+  for (const w of want) {
+    const from = run.findIndex((r) => r.at === at);
+    at += w.length;
+    while (k < run.length && run[k].at + run[k].chars.length < at) k++;
+    if (from < 0 || k >= run.length || run[k].at + run[k].chars.length !== at) return null;
+    ends.push([run[from], run[k]]);
+  }
+  // The gap before each piece but the first, and whether a word starts there.
+  const gaps = ends.slice(1).map(([next], i) => {
+    const last = ends[i][1].g;
+    return { gap: along(next.g.x, next.g.y) - along(last.ex, last.ey), space: next.space, letters: /[\p{L}\p{N}]$/u.test(pieces[i].text) && /^[\p{L}\p{N}]/u.test(pieces[i + 1].text) };
+  });
+  const sorted = gaps.map((g) => g.gap).sort((x, y) => x - y);
+  const letter = sorted[Math.floor(sorted.length / 4)] ?? 0;
+  const drawsSpaces = gaps.some((g) => g.space);
+  // Without space glyphs, gaps that are all as wide as a space (a quarter of the type) are
+  // spaces: letters spaced that far apart are not a title's letter-spacing.
+  const breaks = gaps.map((g) => g.space || !g.letters || (drawsSpaces
+    ? g.gap > Math.max(size * 0.3, letter + size * 0.15)
+    : letter > size * 0.25 || g.gap > letter + size * 0.12));
+  const words = [];
+  pieces.forEach((piece, i) => {
+    const [g0, g1] = ends[i];
+    const from = along(g0.g.x, g0.g.y) * scale, to = along(g1.g.ex, g1.g.ey) * scale;
+    const word = words.at(-1);
+    if (i > 0 && !breaks[i - 1]) { word.text += piece.text; word.end = piece.end; word.to = to; }
+    else words.push({ text: piece.text, index: piece.index, end: piece.end, gap: piece.gap, from, to });
+  });
+  return words;
 }
 
 // Where the PDF page sits on its Noteful page. Widened pages keep the PDF at
@@ -429,7 +576,16 @@ export class PdfBackgrounds {
     try {
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
-      return textWords(content.items, viewport, backgroundPlacement(background, size), textMeasure(), content.styles);
+      // Spaced-out titles need where each glyph is drawn (textWords); only pages with one
+      // read their operator list.
+      let glyphs = null;
+      if (pdfjs?.OPS && content.items.some((item) => typeof item.str === "string" && letterSpaced(item.str))) {
+        try {
+          const ops = await page.getOperatorList();
+          glyphs = textGlyphs(ops, pdfjs.OPS, (name) => page.commonObjs.has(name) ? page.commonObjs.get(name) : null);
+        } catch { glyphs = null; }
+      }
+      return textWords(content.items, viewport, backgroundPlacement(background, size), textMeasure(), content.styles, glyphs);
     } finally { page.cleanup(); }
   }
   close() {
