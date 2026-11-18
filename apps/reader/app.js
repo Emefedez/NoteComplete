@@ -3660,7 +3660,17 @@ function fillFor(kind, hex) {
   const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   return { fill: [...rgb, shapeFill === "tint" ? 0.25 : 1] };
 }
-$("pageNumber").onchange = () => jump(Number($("pageNumber").value) - 1);
+// Once on the page, the keys are the pages' again (N, the tools, Ctrl Z), not the box's.
+$("pageNumber").onchange = () => {
+  jump(Number($("pageNumber").value) - 1);
+  if (document.activeElement === $("pageNumber")) $("viewport").focus({ preventScroll: true });
+};
+// Enter (also on the page already shown, which changes nothing) and Esc leave the box too.
+$("pageNumber").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== "Escape") return;
+  if (e.key === "Enter") jump(Number($("pageNumber").value) - 1);
+  $("viewport").focus({ preventScroll: true });
+});
 $("zoomFit").onclick = () => setZoom("fit");
 $("zoomOut").onclick = () => stepZoom(-1);
 $("zoomIn").onclick = () => stepZoom(1);

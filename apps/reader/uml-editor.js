@@ -896,7 +896,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Keys ---------------------------------------------------------------------------
   // Keys pressed with nothing focused (focus left on the page after a menu or a button)
   // still reach the editor.
-  const stray = (ev) => { if (root.isConnected && !root.contains(ev.target) && !document.querySelector('.context-menu') && (ev.target === document.body || ev.target === document.documentElement)) keys(ev); };
+  // Also with the focus on the dialog that holds the editor (where it is when the editor opens).
+  const stray = (ev) => { if (root.isConnected && !root.contains(ev.target) && !document.querySelector('.context-menu') && (ev.target === document.body || ev.target === document.documentElement || (ev.target instanceof Element && ev.target.contains(root)))) keys(ev); };
   document.addEventListener('keydown', stray);
   root.addEventListener('keydown', keys);
   function keys(ev) {
@@ -1529,6 +1530,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   setView(startView || (model.style === 'plantuml' && drawPlantuml ? 'render' : savedView()));
   changed();
   requestAnimationFrame(fit);
+  // Keys (N, 1–9, Shift S, Ctrl Z) go to the editor from the start, as in the chart editor.
+  requestAnimationFrame(() => { if (root.isConnected && !root.contains(document.activeElement)) canvas.focus({ preventScroll: true }); });
   return {
     model: () => normalizeModel(model),
     set: (m) => setModel(m),
