@@ -87,7 +87,12 @@ pub fn convert(name: &str, bytes: &[u8]) -> Result<Converted, String> {
         .map_or(name, |(stem, _)| stem);
     let title: String = title.chars().take(200).collect();
     let mut warnings = Warnings::default();
-    let built = build(&title, &doc, &pages, scale, &mut warnings)?;
+    let stacking = if format == "goodnotes" {
+        Stacking::PicturesUnderInk
+    } else {
+        Stacking::AsDrawn
+    };
+    let built = build(&title, &doc, &pages, scale, stacking, &mut warnings)?;
     Ok(Converted {
         noteful: built.export_noteful().map_err(|e| e.message)?,
         format,
@@ -102,12 +107,79 @@ fn goodnotes(bytes: &[u8]) -> Result<(Document, Vec<Page>, f64), String> {
         .iter()
         .map(|src| {
             // A page oblyx cannot read stays as a blank page, so the others keep their places.
-            doc.decode_page(src, false)
+            let ordered = chronological(src);
+            doc.decode_page(ordered.as_ref().unwrap_or(src), false)
                 .unwrap_or_else(|_| Page::new(src.uuid.clone(), Vec::new()))
         })
         .collect();
     // Goodnotes pages are already in Noteful units (A4 points × 11/6).
     Ok((doc, pages, 1.))
+}
+
+/// Whether a Goodnotes page record is an element's header (oblyx's `is_wrapper`): its id, its
+/// replica and clock (fields 8 and 9), and the element's own record after it.
+fn is_header(keys: &[u32]) -> bool {
+    keys.contains(&8)
+        && keys
+            .iter()
+            .all(|k| matches!(k, 1 | 2 | 3 | 4 | 8 | 9 | 14 | 16 | 20 | 22 | 23))
+}
+
+/// A Goodnotes page with its elements in the order they were last written: ink written later
+/// is over ink written before it (a white pen over a mistake, a highlighter over its text). The
+/// page file does not keep that order (a real notebook stores its records in no particular
+/// order, with the strokes of one minute scattered over the file); each element's header has a
+/// clock that grows with every change (field 9, the writer's sequence number), so the records
+/// are put back in clock order, each header with its element record. A record without a header
+/// stays after the element before it. `None` when the page is already in order or its records
+/// cannot be read (oblyx reads it as it is). Pictures are then put under all ink (`Stacking`).
+fn chronological(src: &oblyx::doc::PageSource) -> Option<oblyx::doc::PageSource> {
+    use oblyx::pb::{field_nums, parse, records, varint_of};
+    let recs = records(&src.data).ok()?;
+    // Units of one or two records, with the clock they sort by.
+    let mut units: Vec<(u64, &[&[u8]])> = Vec::new();
+    let (mut i, mut last) = (0, 0);
+    while i < recs.len() {
+        let fields = parse(recs[i]).ok()?;
+        let header = is_header(&field_nums(&fields));
+        let paired = header
+            && recs
+                .get(i + 1)
+                .is_some_and(|next| parse(next).is_ok_and(|f| !is_header(&field_nums(&f))));
+        if header {
+            last = varint_of(&fields, 9).unwrap_or(last);
+        }
+        let n = if paired { 2 } else { 1 };
+        units.push((last, &recs[i..i + n]));
+        i += n;
+    }
+    if units.windows(2).all(|w| w[0].0 <= w[1].0) {
+        return None;
+    }
+    units.sort_by_key(|(clock, _)| *clock);
+    let mut data = Vec::with_capacity(src.data.len());
+    for rec in units.iter().flat_map(|(_, recs)| recs.iter()) {
+        push_record(&mut data, rec);
+    }
+    Some(oblyx::doc::PageSource {
+        uuid: src.uuid.clone(),
+        data,
+    })
+}
+
+/// A page record as Goodnotes frames it: its length (a varint), then its bytes.
+fn push_record(data: &mut Vec<u8>, rec: &[u8]) {
+    let mut n = rec.len() as u64;
+    loop {
+        let byte = (n & 0x7f) as u8;
+        n >>= 7;
+        if n == 0 {
+            data.push(byte);
+            break;
+        }
+        data.push(byte | 0x80);
+    }
+    data.extend_from_slice(rec);
 }
 
 /// The `.ntb` path of oblyx's web build: the bundle, its assets, and the worksheet PDFs.
@@ -185,11 +257,25 @@ impl Warnings {
     }
 }
 
+/// One drawn element of a page: ink (strokes, outlines, shapes), a picture or a text box.
+enum Element {
+    Line(Line),
+    Image(Image),
+}
+
+impl Element {
+    /// A picture (not a text box).
+    fn is_picture(&self) -> bool {
+        matches!(self, Element::Image(image) if image.text.is_none())
+    }
+}
+
 /// What one page becomes.
 #[derive(Default)]
 struct PageOut {
-    lines: Vec<Line>,
-    images: Vec<Image>,
+    /// Ink, pictures and text boxes in the notebook's order (for Goodnotes, the order they were
+    /// written in). The note draws them in the order they are added (`Stacking`).
+    elements: Vec<Element>,
     /// Vector drawing for the paper PDF behind the page, in PDF points.
     paper: Option<Content>,
     /// The notebook's PDF behind the page: attachment, 0-based page, rect in units.
@@ -206,11 +292,23 @@ fn over_white(c: [f32; 4]) -> [f32; 3] {
     [0, 1, 2].map(|i| c[i].clamp(0., 1.) * a + (1. - a))
 }
 
+/// How a notebook stacks pictures and ink on a page.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stacking {
+    /// Goodnotes: pictures are always under the ink, typed text and shapes, whichever came
+    /// first, so handwriting over a pasted picture stays visible (a picture pasted later does
+    /// not cover it); pictures keep their order among themselves, and so does the rest.
+    PicturesUnderInk,
+    /// Everything in the notebook's order.
+    AsDrawn,
+}
+
 fn build(
     title: &str,
     doc: &Document,
     pages: &[Page],
     scale: f64,
+    stacking: Stacking,
     warnings: &mut Warnings,
 ) -> Result<Editor, String> {
     let sizes: Vec<[f64; 2]> = pages
@@ -300,15 +398,23 @@ fn build(
             .map_err(|e| e.message)?;
     }
 
-    for (slot, out) in outs.into_iter().enumerate() {
-        for line in out.lines {
-            if editor.add_line(slot, line).is_err() {
-                warnings.add("Strokes or shapes that could not be read");
-            }
+    for (slot, mut out) in outs.into_iter().enumerate() {
+        if stacking == Stacking::PicturesUnderInk {
+            // A stable sort: pictures first, in their order, then the rest in theirs.
+            out.elements.sort_by_key(|e| !e.is_picture());
         }
-        for image in out.images {
-            if editor.add_image(slot, image).is_err() {
-                warnings.add("Pictures or text that could not be read");
+        for element in out.elements {
+            match element {
+                Element::Line(line) => {
+                    if editor.add_line(slot, line).is_err() {
+                        warnings.add("Strokes or shapes that could not be read");
+                    }
+                }
+                Element::Image(image) => {
+                    if editor.add_image(slot, image).is_err() {
+                        warnings.add("Pictures or text that could not be read");
+                    }
+                }
             }
         }
     }
@@ -452,18 +558,20 @@ fn convert_page(
     for item in &page.items {
         match item {
             Item::Stroke(st) => match line(&st.points, st.width, st.rgba) {
-                Some(l) => out.lines.push(l),
+                Some(l) => out.elements.push(Element::Line(l)),
                 None => warnings.add("Strokes that could not be read"),
             },
             Item::Path(p) => {
                 if p.points.len() >= 2 && p.width > 0. {
-                    out.lines.extend(line(&p.points, p.width, p.rgba));
+                    out.elements
+                        .extend(line(&p.points, p.width, p.rgba).map(Element::Line));
                 }
                 if let Some(head) = p.head {
                     let mut contour = head.to_vec();
                     contour.push(head[0]);
                     if !fill(&mut out, &[head.to_vec()], p.rgba) {
-                        out.lines.extend(line(&contour, p.width.max(1.), p.rgba));
+                        out.elements
+                            .extend(line(&contour, p.width.max(1.), p.rgba).map(Element::Line));
                     }
                 }
             }
@@ -503,7 +611,7 @@ fn convert_page(
                             end: [s(b[0]), s(b[1])],
                             fill: has_fill.then(|| rgba(sh.fill)),
                         });
-                        out.lines.push(l);
+                        out.elements.push(Element::Line(l));
                     }
                     if sh.radius > 0.01 {
                         warnings.add("Rounded corners drawn square");
@@ -516,7 +624,8 @@ fn convert_page(
                 }
                 if has_stroke || !has_fill {
                     let c = if has_stroke { sh.stroke } else { sh.fill };
-                    out.lines.extend(line(&outline, sh.width.max(0.5), c));
+                    out.elements
+                        .extend(line(&outline, sh.width.max(0.5), c).map(Element::Line));
                 }
             }
             Item::FillPath(fp) => {
@@ -534,7 +643,7 @@ fn convert_page(
                             end: [s(st.x + st.w), s(st.y + st.h)],
                             fill: Some(rgba(c)),
                         });
-                        out.lines.push(l);
+                        out.elements.push(Element::Line(l));
                     }
                 }
             }
@@ -568,7 +677,7 @@ fn convert_page(
                     cols * size * 0.6,
                     rows * size * 1.3,
                 ];
-                out.images.push(Image {
+                out.elements.push(Element::Image(Image {
                     base64: String::new(),
                     mime: String::new(),
                     bounds,
@@ -590,7 +699,7 @@ fn convert_page(
                     }),
                     joined: false,
                     part: None,
-                });
+                }));
             }
             Item::Image(im) => {
                 let bytes = im
@@ -609,7 +718,7 @@ fn convert_page(
                     warnings.add("Pictures in a format other than PNG or JPEG left out");
                     continue;
                 };
-                out.images.push(Image {
+                out.elements.push(Element::Image(Image {
                     base64: STANDARD.encode(bytes.as_slice()),
                     mime: mime.into(),
                     bounds: [s(im.x), s(im.y), s(im.w).max(1.), s(im.h).max(1.)],
@@ -617,7 +726,7 @@ fn convert_page(
                     text: None,
                     joined: false,
                     part: None,
-                });
+                }));
             }
             Item::PdfBackground(bg) => {
                 out.pdf = Some((
@@ -638,6 +747,56 @@ fn convert_page(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The first x of each stroke of a page, in the order oblyx reads them.
+    fn stroke_order(doc: &Document, src: &oblyx::doc::PageSource) -> Vec<f32> {
+        let page = doc.decode_page(src, false).unwrap();
+        page.items
+            .iter()
+            .filter_map(|it| match it {
+                Item::Stroke(s) => Some(s.points[0][0]),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn goodnotes_records_are_read_in_clock_order() {
+        use oblyx::doc::{PageSource, Stroke};
+        let strokes = [10., 20., 30., 40.].map(|x| {
+            Item::Stroke(Stroke {
+                points: vec![[x, 10.], [x, 50.]],
+                width: 2.,
+                rgba: [0., 0., 0., 1.],
+                dash: None,
+                parented: false,
+            })
+        });
+        let page = Page::new("page", strokes.to_vec());
+        let bytes =
+            oblyx::goodnotes_write::write_goodnotes_to_vec(&[page], &Document::empty()).unwrap();
+        let doc = Document::from_bytes(bytes).unwrap();
+        let src = &doc.pages[0];
+        // Written in clock order: nothing to do.
+        assert!(chronological(src).is_none());
+        assert_eq!(stroke_order(&doc, src), [10., 20., 30., 40.]);
+        // The same records stored in another order (header and element stay together), as
+        // Goodnotes stores them: read back in the order they were written.
+        let recs = oblyx::pb::records(&src.data).unwrap();
+        let mut data = Vec::new();
+        for unit in recs.chunks(2).rev() {
+            for rec in unit {
+                push_record(&mut data, rec);
+            }
+        }
+        let shuffled = PageSource {
+            uuid: src.uuid.clone(),
+            data,
+        };
+        assert_eq!(stroke_order(&doc, &shuffled), [40., 30., 20., 10.]);
+        let ordered = chronological(&shuffled).unwrap();
+        assert_eq!(stroke_order(&doc, &ordered), [10., 20., 30., 40.]);
+    }
 
     #[test]
     fn other_files_are_not_notebooks() {
