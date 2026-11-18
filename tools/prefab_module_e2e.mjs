@@ -1,6 +1,7 @@
 // Browser check of a prefab module with its own editor (Chromium, after a web build): the
 // number line module (apps/reader/prefabs/numberline) is in Insert prefab, its editor (built
-// with the kit) edits and undoes, it is inserted as a picture, and its menu edits it again.
+// with the kit) edits and undoes, it is inserted as a picture, and its menu edits it again; the
+// truth table module (prefabs/truthtable) computes its rows, says a broken expression, inserts.
 //   node tools/prefab_module_e2e.mjs [screenshots folder]
 import assert from 'node:assert/strict';
 import { chromium, startReader, openReader, samplePath } from './e2e_common.mjs';
@@ -44,6 +45,27 @@ assert.equal(await p.textContent('.pk-dialog .pk-button.primary'), 'Apply');
 await p.keyboard.press('Escape');
 await p.locator('.pk-dialog').waitFor({ state: 'detached' });
 console.log('· edited again from its menu, with its spec; Esc leaves it as it was');
+// The truth table (prefabs/truthtable), built only from docs/PREFAB-MODULES-GUIDE.md.
+await p.evaluate(() => document.getElementById('insertGraph').click());
+await p.locator('.prefab-grid').waitFor();
+await p.click('.prefab-card:has(strong:text-is("Truth table"))');
+await p.locator('.pk-dialog .pk-canvas svg').waitFor();
+const outputs = () => p.locator('.pk-canvas svg text[fill="#1d4ed8"]').allTextContents();
+assert.deepEqual(await outputs(), ['0', '0', '1', '0'], 'A and not B');
+await p.fill('.pk-panel .pk-field:has-text("Expression") input', 'A and');
+assert.match(await p.textContent('.pk-dialog .pk-status'), /ends too soon/, 'a broken expression is said');
+await p.fill('.pk-panel .pk-field:has-text("Expression") input', 'A xor B');
+assert.equal(await p.textContent('.pk-dialog .pk-status'), '', 'and goes once it is fixed');
+await p.fill('.pk-panel .pk-field:has-text("Variables") input', 'A, B, C');
+assert.equal((await outputs()).length, 8, 'three variables, eight rows');
+await p.selectOption('.pk-panel .pk-field:has-text("Write") select', 'VF');
+assert.deepEqual(await outputs(), ['F', 'F', 'V', 'V', 'V', 'V', 'F', 'F']);
+if (DIR) await p.screenshot({ path: DIR + '/truthtable.png' });
+const before = await p.locator('.sheet[data-page="0"] .render [data-item^="image:"]').count();
+await p.click('.pk-dialog button:has-text("Insert")');
+await p.locator('.pk-dialog').waitFor({ state: 'detached' });
+await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="image:"]').length > n, before);
+console.log('· the truth table module: picked, its expression checked, variables and notation changed, inserted');
 assert.deepEqual(errors, []);
 console.log('Prefab module from its own folder: OK');
 await b.close(); process.exit(0);

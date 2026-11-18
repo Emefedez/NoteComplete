@@ -161,7 +161,7 @@ All of these are covered by `prefabs_e2e`, `charts_e2e` and `uml_e2e` today or g
 5. **Storage and MCP** `[ ]`: `module` in specs with the fallback by type; `add_prefab` and the exam prompts read the modules.
 6. **The folder** `[ ]`: shipped modules in the build and the installers; **Settings → Prefab modules** (the folder in use, **Copy to…**, **Use this folder**, **Reload modules**, newer shipped modules offered).
 6b. **Window modules** `[ ]`: the graph and table editors as movable windows over the page (items update as they change); the *window* kind in the contract.
-7. **Docs and a proof** `[ ]`: `docs/PREFAB-MODULES-GUIDE.md` (writing a module, the contract, the kit, tests), a `prefabs/_template/`, and one new small module built only from the guide (a number line, or a truth table) to prove that it is quick.
+7. **Docs and a proof** `[!]`: [`docs/PREFAB-MODULES-GUIDE.md`](PREFAB-MODULES-GUIDE.md) (writing a module, the contract, the kit, tests, the desktop folder), `prefabs/_template/`, and the truth table module (`prefabs/truthtable/`) built only from the guide and the template.
 
 Phases 1–5 keep the app working as it is at every step and can ship on their own. Phases 6 and 6b are the parts that change what a user sees.
 
@@ -175,9 +175,12 @@ Phases 1–5 keep the app working as it is at every step and can ship on their o
 
 ## Pending (2026-11-18, for the next sprint)
 Done on branch prefab-modules-impl: the registry and four shipped modules; the kit (shell.js, kit.css, index.js); the host for a module's own editor.js; the number line module (built only from the kit); MCP add_prefab text from each module's ai.md; the modules folder (desktop serving, Copy to / Use / Reload, loading at start); PDF copy in reading order without duplicates. Not tested by hand yet.
+Done on branch docs/prefab-guide (phase 7): docs/PREFAB-MODULES-GUIDE.md; prefabs/_template/ (a working custom module, skipped by the index, the desktop folder listing and the MCP notes); the truth table module (group Maths) built from the guide and the template, with its test, ai.md (also in SHIPPED_PREFAB_NOTES, checked by the crate test shipped_prefab_notes_match_the_modules) and a pass in tools/prefab_module_e2e.mjs. Building it showed one gap in the guide (cheat sheet rows: `keys` and `icon` are optional), now in it.
 Not done:
 - Phase 6b: the graph and table editors as movable windows over the page ("window" kind).
 - openFigureEditor still picks the chart or UML editor by type; only modules with their own editor.js go through the manifest. A "type" kind with a base editor (grid-paint/bars/plot/diagram/data) is not wired yet.
-- Phase 7: docs/PREFAB-MODULES-GUIDE.md and prefabs/_template/ (the number line serves as the example for now).
+- The manifest fields `base` and `capabilities` are written but not read; a `type` module falls back to the JSON editor (see the guide).
+- Folder modules: Reload modules re-imports render.js only; a changed editor.js (or a file render.js imports) needs a restart. MCP add_prefab sees only the shipped modules, not the desktop folder.
+- Try the truth table and the template by hand in the desktop app (Copy to…, copy _template to a new folder, Reload modules).
 - Check the PDF copy fix (text-layer.js, PDF_WORDS 3) with spaced-out titles; lavadora.pdf was not compared again after the `space` flag.
 - Copying items out of NoteComplete as a PNG: the picture of the selection, with the clip's JSON (lines, images, prefab specs) in an iTXt chunk that other apps ignore; pasting or importing that PNG in NoteComplete would bring back editable items. Chromium re-encodes PNGs written with navigator.clipboard (the chunk would be lost), so the desktop app should write the raw bytes through Electron's clipboard (writeBuffer 'image/png'; test with wl-paste). Also read the chunk in importImages (paste, drop, Insert image).
