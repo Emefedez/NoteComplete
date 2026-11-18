@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
 contextBridge.exposeInMainWorld('notecompleteDiagrams', {
   plantuml: (text, file) => ipcRenderer.invoke('diagrams:plantuml', text, file),
 });
+// Copied items as a picture that keeps them (reader png-clip.js): the PNG as it is, chunk and
+// all, with the reader's marker text (desktop png-clipboard.js).
+contextBridge.exposeInMainWorld('notecompleteClipboard', {
+  writePng: (bytes, text) => ipcRenderer.invoke('clipboard:write-png', bytes, text),
+});
 // Connecting the user's AI tools to the bundled note server (agent-setup.js).
 contextBridge.exposeInMainWorld('notecompleteAgents', {
   status: () => ipcRenderer.invoke('agents:status'),
