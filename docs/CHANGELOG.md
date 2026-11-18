@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.40
+
+- **Bold words stay bold in Edit PDF.** When you double-click a paragraph of a PDF, its bold, italic and coloured words keep their style, each in the PDF's own font (a bold word in the PDF's bold font). Before, the whole paragraph took one style.
+- **Text boxes with styled parts.** A text box can have parts in another style (bold, italic, font, colour), and `.noteful` files keep them as Noteful's own styled text. Typing keeps them: new letters take the style of the letter before them. While you type, the box shows in one style, and the parts come back when you finish. Changing bold, italic, the font or the colour from the format bar applies it to the whole box.
+
 ## 1.2.39
 
 - **Edit PDF.** A new **Edit PDF** tool, next to Text. On any page from a PDF (a PDF you opened, or PDF pages in a note), the PDF's text shows as outlined blocks. **Double-click** a block and it becomes a text box in the same place, size, colour and line spacing, ready to type in: in the PDF's own font when the PDF includes it with every letter, else the nearest of Sans, Serif or Mono. The PDF's copy of that text is removed from the page, so nothing shows through, and one undo puts it back. It also works after saving and reopening. Scans and PDFs whose letters are drawn as shapes have no text to edit, and it says so. For now a text box has one style, so bold or italic words inside a paragraph take the paragraph's style.
