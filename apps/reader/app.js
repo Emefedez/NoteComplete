@@ -82,7 +82,7 @@ import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefab
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
-import { tabStrip } from "./tab-strip.js";
+import { tabStrip, tabForDigit } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
@@ -4083,6 +4083,19 @@ function uiZoomStepForEvent(e) {
   if (k === "+" || (k === "=" && c !== "Digit0") || (k === "*" && c !== "Digit8") || c === "Equal" || c === "NumpadAdd") return 1;
   return null;
 }
+// Ctrl/Cmd + 1–9: to that tab (9: the last), in the desktop app and the web's tabs page.
+// Typing in a field is left alone; a browser tab may keep these keys for itself.
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !/^Digit[1-9]$/.test(e.code)) return;
+  const tabs = window.notecompleteTabs;
+  if (!tabs?.list || !tabs.activate) return;
+  e.preventDefault();
+  const digit = Number(e.code.slice(5));
+  tabs.list().then((list) => {
+    const id = tabForDigit(list, digit);
+    if (id != null) return tabs.activate(id);
+  }).catch(() => { /* No tabs here. */ });
+}, true);
 document.addEventListener("keydown", (e) => {
   const uiStep = uiZoomStepForEvent(e);
   if (uiStep !== null) {
