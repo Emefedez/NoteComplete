@@ -78,15 +78,48 @@ export function regionTarget(original, cssWidth, box, pixelRatio = globalThis.de
   };
 }
 
+// The CSS font of a pdf.js text item: the font pdf.js loaded for it (its loadedName is the
+// item's fontName, registered in the document once the page is drawn), then the family pdf.js
+// guessed for it (serif, sans-serif, monospace), which is used when the first one is not
+// loaded or maps its glyphs elsewhere.
+function fontFor(fontName, styles) {
+  const family = styles?.[fontName]?.fontFamily || "sans-serif";
+  return /^[\w-]+$/.test(fontName || "") ? `"${fontName}", ${family}` : family;
+}
+const measured = (measure, text, font) => {
+  if (!measure || !text) return 0;
+  try { const w = measure(text, font); return Number.isFinite(w) && w > 0 ? w : 0; } catch { return 0; }
+};
+// Text widths with a canvas (100 px type, so rounding is small), or null where there is none.
+let measureContext;
+export function textMeasure() {
+  if (measureContext === undefined) {
+    try {
+      measureContext = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(1, 1).getContext("2d")
+        : typeof document === "object" ? document.createElement("canvas").getContext("2d") : null;
+    } catch { measureContext = null; }
+  }
+  if (!measureContext) return null;
+  return (text, font) => {
+    const css = `100px ${font}`;
+    if (measureContext.font !== css) measureContext.font = css;
+    return measureContext.measureText(text).width;
+  };
+}
 const multiply = (m, n) => [
   m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
   m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
   m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
 ];
 // Words of a pdf.js text layer with boxes in page units. Each item is mapped
-// through the viewport (rotation included), split at spaces with widths shared
-// by character count, then placed through the page's PDF rect.
-export function textWords(items, viewport, place) {
+// through the viewport (rotation included), split at spaces, then placed through the
+// page's PDF rect. A word's place along its item comes from `measure(text, font)`: the
+// widths of the item's text up to the word's start and end, in any unit, scaled so the
+// whole text is the item's width. Sharing the width by character count instead put
+// words a few letters off in proportional fonts ("iiii" is as wide as "MMMM"), so a text
+// highlight started and ended in the middle of words. Without a measure (no canvas), or
+// when it fails, the count is used.
+export function textWords(items, viewport, place, measure = textMeasure(), styles = {}) {
   const out = [];
   const sx = place.width / viewport.width, sy = place.height / viewport.height;
   for (const item of items) {
@@ -94,8 +127,11 @@ export function textWords(items, viewport, place) {
     const t = multiply(viewport.transform, item.transform);
     const length = Math.hypot(t[0], t[1]) || 1, width = (item.width || 0) * viewport.scale;
     const dir = [t[0] / length, t[1] / length], up = [t[2], t[3]];
+    const font = fontFor(item.fontName, styles);
+    const whole = measured(measure, item.str, font);
+    const at = (i) => whole ? width * measured(measure, item.str.slice(0, i), font) / whole : width * i / item.str.length;
     for (const match of item.str.matchAll(/\S+/g)) {
-      const a = width * match.index / item.str.length, b = width * (match.index + match[0].length) / item.str.length;
+      const a = at(match.index), b = at(match.index + match[0].length);
       const corners = [a, b].flatMap(d => {
         const base = [t[4] + dir[0] * d, t[5] + dir[1] * d];
         return [base, [base[0] + up[0], base[1] + up[1]]];
@@ -387,7 +423,7 @@ export class PdfBackgrounds {
     try {
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
-      return textWords(content.items, viewport, backgroundPlacement(background, size));
+      return textWords(content.items, viewport, backgroundPlacement(background, size), textMeasure(), content.styles);
     } finally { page.cleanup(); }
   }
   close() {
