@@ -64,51 +64,67 @@ impl Editor {
                     imported += 1;
                 }
             }
-            for (id, image) in self
+            // Pictures, text boxes and lines over the ink in the order they were made.
+            enum Next<'a> {
+                Image(String, &'a crate::Image),
+                Line(String, &'a crate::Line),
+            }
+            let mut next: Vec<(usize, Next)> = self
                 .images(page)
                 .filter(|(_, image)| image.layer == layer.id)
-            {
-                if !deleted.contains(id.as_str()) {
-                    let item = image.item(id.clone());
-                    content.push_str(&format!(
-                        "<g data-item=\"{id}\">{}</g>",
-                        crate::manipulation::item_svg(
-                            &item,
-                            adjustments.get(id.as_str()).copied()
-                        )?
-                    ));
-                    added += 1;
-                }
-            }
-            for (id, line) in added_in_layer(false) {
-                if !deleted.contains(id.as_str()) {
-                    let target = if line.tool == 2 {
-                        &mut layer_tapes
-                    } else {
-                        &mut content
-                    };
-                    target.push_str(&format!(
-                        "<g data-item=\"{id}\"{}>{}</g>",
-                        if line.tool == 2 {
-                            format!(" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\"")
-                        } else {
-                            String::new()
-                        },
-                        {
-                            let svg = added_svg(
-                                &adjustments
-                                    .get(id.as_str())
-                                    .map(|a| crate::manipulation::adjusted_line(line, a))
-                                    .unwrap_or_else(|| (*line).clone()),
-                            );
-                            if line.tool == 2 {
-                                crate::scene::tape_with_pattern(&svg)
-                            } else {
-                                svg
-                            }
+                .map(|(id, image)| (crate::editor::edit_index(&id), Next::Image(id, image)))
+                .chain(added_in_layer(false).map(|(id, line)| {
+                    (crate::editor::edit_index(id), Next::Line(id.clone(), line))
+                }))
+                .collect();
+            next.sort_by_key(|(at, _)| *at);
+            for (_, entry) in next {
+                match entry {
+                    Next::Image(id, image) => {
+                        if !deleted.contains(id.as_str()) {
+                            let item = image.item(id.clone());
+                            content.push_str(&format!(
+                                "<g data-item=\"{id}\">{}</g>",
+                                crate::manipulation::item_svg(
+                                    &item,
+                                    adjustments.get(id.as_str()).copied()
+                                )?
+                            ));
+                            added += 1;
                         }
-                    ));
-                    added += 1;
+                    }
+                    Next::Line(id, line) => {
+                        let id = &id;
+                        if !deleted.contains(id.as_str()) {
+                            let target = if line.tool == 2 {
+                                &mut layer_tapes
+                            } else {
+                                &mut content
+                            };
+                            target.push_str(&format!(
+                                "<g data-item=\"{id}\"{}>{}</g>",
+                                if line.tool == 2 {
+                                    format!(" data-tape=\"{id}\" data-revealed=\"0\" opacity=\"1\"")
+                                } else {
+                                    String::new()
+                                },
+                                {
+                                    let svg = added_svg(
+                                        &adjustments
+                                            .get(id.as_str())
+                                            .map(|a| crate::manipulation::adjusted_line(line, a))
+                                            .unwrap_or_else(|| (*line).clone()),
+                                    );
+                                    if line.tool == 2 {
+                                        crate::scene::tape_with_pattern(&svg)
+                                    } else {
+                                        svg
+                                    }
+                                }
+                            ));
+                            added += 1;
+                        }
+                    }
                 }
             }
             content.push_str("</g>");

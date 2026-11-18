@@ -639,57 +639,75 @@ impl Editor {
                 }
             }
             let mut image_objects = Vec::new();
-            for (id, image) in self
+            // Added pictures, text boxes and ink get their z in the order they were made (their
+            // ids carry their place in the history), as the reader draws them: a text box made
+            // after a stroke is over it in Noteful too.
+            let images: Vec<_> = self
                 .images(page_no)
                 .filter(|(id, _)| !deleted.contains(id.as_str()))
-            {
-                let mut suffix = 0;
-                let resource = loop {
-                    let key = format!("image-{time}-{page_no}-{id}-{suffix}");
-                    if !blocks.iter().any(|(existing, _)| existing == &key) {
-                        break key;
+                .collect();
+            let mut next_image = 0;
+            let mut added = added.into_iter().peekable();
+            while next_image < images.len() || added.peek().is_some() {
+                let image_first = match added.peek() {
+                    None => true,
+                    Some((line_id, _)) => {
+                        next_image < images.len()
+                            && crate::editor::edit_index(&images[next_image].0)
+                                < crate::editor::edit_index(line_id)
                     }
-                    suffix += 1;
                 };
-                z = z
-                    .checked_add(1)
-                    .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
-                let object_id = format!("object-{resource}");
-                image_objects.push((
-                    object_id.clone(),
-                    V::Fields(image.native_object(
-                        &object_id,
-                        &resource,
-                        z,
-                        adjustments.get(id.as_str()).copied(),
-                        time,
-                    )),
-                ));
-                // Text boxes are self-contained objects; pictures add a resource.
-                if image.text.is_none() {
-                    array(&mut index, 3)?.push(V::Text(resource.clone()));
-                    blocks.push((resource, Cow::Owned(image.bytes()?)));
-                }
-            }
-            for (_, line) in added {
-                // A filled shape: its inside as highlighter under the outline.
-                if let Some(fill) = line
-                    .shape
-                    .as_ref()
-                    .filter(|s| s.closed())
-                    .and_then(|s| s.fill)
-                {
-                    for band in crate::ink::shape_fill(&line, fill) {
-                        z = z
-                            .checked_add(1)
-                            .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
-                        new_stroke(&mut ink, &band, new_id(&mut ids)?, time, z);
+                if image_first {
+                    let (id, image) = &images[next_image];
+                    next_image += 1;
+                    let mut suffix = 0;
+                    let resource = loop {
+                        let key = format!("image-{time}-{page_no}-{id}-{suffix}");
+                        if !blocks.iter().any(|(existing, _)| existing == &key) {
+                            break key;
+                        }
+                        suffix += 1;
+                    };
+                    z = z
+                        .checked_add(1)
+                        .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                    let object_id = format!("object-{resource}");
+                    image_objects.push((
+                        object_id.clone(),
+                        V::Fields(image.native_object(
+                            &object_id,
+                            &resource,
+                            z,
+                            adjustments.get(id.as_str()).copied(),
+                            time,
+                        )),
+                    ));
+                    // Text boxes are self-contained objects; pictures add a resource.
+                    if image.text.is_none() {
+                        array(&mut index, 3)?.push(V::Text(resource.clone()));
+                        blocks.push((resource, Cow::Owned(image.bytes()?)));
                     }
+                } else {
+                    let (_, line) = added.next().unwrap();
+                    // A filled shape: its inside as highlighter under the outline.
+                    if let Some(fill) = line
+                        .shape
+                        .as_ref()
+                        .filter(|s| s.closed())
+                        .and_then(|s| s.fill)
+                    {
+                        for band in crate::ink::shape_fill(&line, fill) {
+                            z = z
+                                .checked_add(1)
+                                .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                            new_stroke(&mut ink, &band, new_id(&mut ids)?, time, z);
+                        }
+                    }
+                    z = z
+                        .checked_add(1)
+                        .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
+                    new_stroke(&mut ink, &square_band(&line), new_id(&mut ids)?, time, z);
                 }
-                z = z
-                    .checked_add(1)
-                    .ok_or_else(|| Error::new(0, "Z-order overflow"))?;
-                new_stroke(&mut ink, &square_band(&line), new_id(&mut ids)?, time, z);
             }
             set(
                 &mut fields,
