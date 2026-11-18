@@ -1,0 +1,1 @@
+- Number line: {"type":"numberline","module":"numberline","title":"", "min":-5,"max":5,"step":1,"points":[{"x":2,"label":"a"}],"intervals":[{"from":-3,"to":1,"closedFrom":true,"closedTo":false}]} — closed ends are filled dots, open ends hollow.

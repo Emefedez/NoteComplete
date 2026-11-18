@@ -16,6 +16,7 @@ import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
 import { editorTouch } from './editor-touch.js';
+import { loadKitStyles } from './prefabs/kit/shell.js';
 import { STATES, serviceOf, editorKind, canBeExercise, gridOf, rowsData, withGrid, labelsOf, resample, barsOf, emptyAnswer, answerGrid, displaySpec, checkAnswer } from './chart-model.js';
 
 // Whether a pen is used on this device (kept): then fingers scroll and zoom in the editors.
@@ -72,6 +73,8 @@ export function chartName(spec) {
 
 // Loads chart-editor.css once (the reader's own page does not carry it).
 function ensureStyles() {
+  // The kit's shared rules (panel grips, the pen's ring) first.
+  loadKitStyles();
   if (document.querySelector('link[data-chart-css]')) return;
   const link = make('link', { rel: 'stylesheet', href: new URL('./chart-editor.css', import.meta.url).href });
   link.dataset.chartCss = '';

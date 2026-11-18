@@ -312,7 +312,9 @@ export async function prefabPng(spec, size, scale = 3) {
   if (!out) throw Error('Nothing to draw.');
   const img = new Image();
   // As a picture it has no page styles: its text takes a sans font, as in the exam pages.
-  const svg = out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
+  // (Not twice: a module that names its own font keeps it; a repeated attribute breaks the SVG.)
+  const root = out.svg.match(/<svg\b[^>]*>/)?.[0] || '';
+  const svg = /\sfont-family=/.test(root) ? out.svg : out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
   await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   const canvas = document.createElement('canvas');
   try {

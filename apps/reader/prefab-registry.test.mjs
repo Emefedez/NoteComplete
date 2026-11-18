@@ -7,9 +7,9 @@ import { cards, groups, moduleOf, renderSpec, nameOf, stamp, addModule, manifest
 test('the shipped modules give the picker every prefab it had, in its groups', () => {
   const ids = cards().map((c) => c.id);
   for (const id of ['graph', 'table', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full']) assert.ok(ids.includes(id), id);
-  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram']);
+  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths']);
   assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml' });
-  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml']);
+  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline']);
 });
 
 test('specs find their module by name or by type; old notes name none', () => {

@@ -79,6 +79,7 @@ import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
+import { moduleOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
@@ -6512,6 +6513,17 @@ function figureEditor(spec, options = {}) {
   return oneFigure(() => openFigureEditor(spec, options));
 }
 async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
+  // A prefab module with an editor of its own (its editor.js, docs/PREFAB-MODULES.md).
+  const owner = moduleOf(spec);
+  if (owner && /\.js$/.test(owner.manifest.editor || "")) {
+    try {
+      const { openModuleEditor } = await loading(import("./prefab-host.js"));
+      return await openModuleEditor(owner, spec, { editing });
+    } catch (e) {
+      status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
+      return null;
+    }
+  }
   if (spec?.type === "uml") return openUmlEditor(spec, editing);
   if (editorKind(spec)) {
     try {

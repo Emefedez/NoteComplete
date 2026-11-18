@@ -38,6 +38,9 @@ const listeners = new Set();
 // Called whenever modules are added (the picker's lists follow).
 export const onModules = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export const listModules = () => [...modules];
+// Where a module's files are: shipped ones next to this file, added ones where the modules
+// folder serves them.
+export const moduleBase = (m) => m.base || new URL(`./prefabs/${m.folder}/`, import.meta.url).href;
 export const moduleById = (id) => modules.find((m) => m.manifest.id === id) || null;
 
 for (const m of SHIPPED) addModule(m.manifest, m.code, { folder: m.folder, source: 'shipped' });
@@ -84,7 +87,9 @@ export function stamp(spec) {
 // The figure as SVG ({ svg, width, height }), or null when it draws nothing or its module is
 // missing.
 export function renderSpec(spec) {
-  const m = moduleOf(spec);
+  let m = moduleOf(spec);
+  // A type module draws with the module that owns its figure's type.
+  if (m && !m.code.render) m = modules.find((q) => q.code.render && (q.manifest.types || []).includes(spec.type)) || null;
   if (!m?.code.render) return null;
   const out = m.code.render(spec);
   return out?.svg ? out : null;

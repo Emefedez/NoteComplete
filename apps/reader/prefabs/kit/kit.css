@@ -1,0 +1,58 @@
+/* The prefab kit's styles (docs/PREFAB-MODULES-GUIDE.md): the frame of a module's editor
+   (prefabs/kit/shell.js), and what every editor shares — the panel grips (panel-resize.js) and
+   the pen's hover ring (editor-touch.js). The chart and diagram editors load it too. Colours
+   come from the app's tokens where they are defined, so dark and light follow the app. */
+.pk-editor {
+  --k-ink: var(--ink, #242830); --k-muted: var(--muted, #626b76); --k-accent: var(--accent, #245dc4);
+  --k-soft: var(--accent-soft, #eaf0fc); --k-line: var(--line, #dce0e5); --k-surface: var(--surface, #fff); --k-chrome: var(--chrome, #f7f8fa);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-height: 0;
+  color: var(--k-ink); background: var(--k-chrome); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { .pk-page .pk-editor { --k-ink: #e5e8ed; --k-muted: #a6aeb9; --k-accent: #91b4ff; --k-soft: #303e57; --k-line: #3b4048; --k-surface: #24272c; --k-chrome: #202328; } }
+.pk-editor button, .pk-editor select, .pk-editor input, .pk-editor textarea { font: inherit; color: inherit; }
+.pk-editor .pk-button, .pk-editor select { min-height: 26px; padding: 2px 8px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pk-editor .pk-button:hover:not(:disabled) { background: var(--k-soft); }
+.pk-editor .pk-button:disabled { opacity: .45; cursor: default; }
+.pk-editor .pk-button.primary { background: var(--k-accent); border-color: var(--k-accent); color: #fff; font-weight: 600; }
+.pk-editor .pk-button.pk-icon { padding: 2px 6px; }
+.pk-editor .pk-button svg { width: 16px; height: 16px; flex: none; }
+.pk-bar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--k-line); }
+.pk-title { margin: 0 6px; font-size: 13px; }
+.pk-spacer { flex: 1; }
+.pk-main { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; position: relative; }
+.pk-main.with-palette { grid-template-columns: var(--pk-left, 140px) minmax(0, 1fr); }
+.pk-main.with-panel { grid-template-columns: minmax(0, 1fr) var(--pk-right, 280px); }
+.pk-main.with-palette.with-panel { grid-template-columns: var(--pk-left, 140px) minmax(0, 1fr) var(--pk-right, 280px); }
+.pk-palette { overflow: auto; padding: 6px; border-right: 1px solid var(--k-line); display: flex; flex-direction: column; gap: 2px; }
+.pk-canvas { min-width: 0; min-height: 0; overflow: auto; padding: 12px; background: var(--k-surface); outline: none; touch-action: none; display: grid; place-items: center; }
+.pk-canvas > svg { max-width: 100%; height: auto; background: #fff; border-radius: 6px; }
+.pk-panel { overflow: auto; padding: 8px 10px 16px; border-left: 1px solid var(--k-line); display: flex; flex-direction: column; gap: 6px; }
+.pk-panel h4, .pk-palette h4 { margin: 8px 2px 1px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--k-muted); }
+.pk-field { display: grid; gap: 3px; min-width: 0; }
+.pk-field > span { font-size: 11.5px; color: var(--k-muted); }
+.pk-field > small { font-size: 11px; color: var(--k-muted); }
+.pk-editor input[type="text"], .pk-editor input[type="number"], .pk-editor textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 3px 7px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); }
+.pk-check { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.pk-list { display: grid; gap: 4px; }
+.pk-row { display: flex; gap: 4px; align-items: center; }
+.pk-row { flex-wrap: wrap; }
+.pk-row > input { flex: 1 1 0; min-width: 52px; }
+.pk-status { min-height: 20px; padding: 3px 10px; font-size: 12px; color: var(--k-muted); border-top: 1px solid var(--k-line); }
+.pk-status.error { color: #b83228; }
+/* A module editor over a note: the whole window under the tab strip. */
+.pk-dialog { position: fixed; inset: var(--modal-top, 0px) 0 0 0; width: 100vw; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
+.pk-dialog > .pk-host { height: 100%; }
+@media (max-width: 760px) {
+  .pk-main, .pk-main.with-palette, .pk-main.with-panel, .pk-main.with-palette.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(220px, 1fr) minmax(0, 40%); }
+  .pk-palette { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--k-line); }
+  .pk-panel { border-left: 0; border-top: 1px solid var(--k-line); }
+}
+
+/* Shared by every editor: the grip on a side panel's inner edge (panel-resize.js) … */
+.panel-grip { position: absolute; top: 0; bottom: 0; width: 7px; z-index: 3; cursor: col-resize; touch-action: none; }
+.panel-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .12s; }
+.panel-grip:hover::after, .panel-grip.dragging::after { left: 2px; width: 3px; background: var(--k-accent, var(--c-accent, var(--u-accent, var(--accent, #245dc4)))); }
+body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+/* … and where a hovering pen points (editor-touch.js). */
+.pen-hover-ring { position: fixed; left: 0; top: 0; z-index: 2147483000; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1.5px solid #0a84ff; border-radius: 50%; background: #0a84ff22; pointer-events: none; }
+.pen-hover-ring[hidden] { display: none; }

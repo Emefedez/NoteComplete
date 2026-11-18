@@ -18,6 +18,7 @@ import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
 import { editorTouch } from './editor-touch.js';
+import { loadKitStyles } from './prefabs/kit/shell.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -37,6 +38,8 @@ const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w
 
 // Loads uml.css once (the reader's own page does not carry it).
 function ensureStyles() {
+  // The kit's shared rules (panel grips, the pen's ring) first.
+  loadKitStyles();
   if (document.querySelector('link[data-uml-css]')) return;
   const link = make('link', { rel: 'stylesheet', href: new URL('./uml.css', import.meta.url).href });
   link.dataset.umlCss = '';
