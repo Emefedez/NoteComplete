@@ -11,7 +11,7 @@ import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
-import { CLOUD_PROVIDERS } from './cloud-collab.js';
+import { CLOUD_PROVIDERS, CLOUD_CONFIG_KEYS } from './cloud-collab.js';
 import { selectionCheck } from './queue-controls.js';
 import { setupBatchTranscribe } from './batch-transcribe.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
@@ -596,10 +596,11 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   function detectActiveCloudIds() {
     const active = new Set(['drive']);
     try {
-      if (localStorage.getItem('notecomplete-dropbox-token') || localStorage.getItem('notecomplete-dropbox-client')) active.add('dropbox');
-      if (localStorage.getItem('notecomplete-github-cfg')) active.add('github');
-      if (localStorage.getItem('notecomplete-webdav-cfg')) active.add('webdav');
-      if (localStorage.getItem('notecomplete-archive-query')) active.add('archive');
+      const stored = (key) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
+      for (const [id, keys] of Object.entries(CLOUD_CONFIG_KEYS)) {
+        // Connected: a saved session or config that says so (or, for archives, a saved source).
+        if (keys.some((k) => { const v = stored(k); return Array.isArray(v) ? v.length > 0 : v && (v.connected !== false); })) active.add(id);
+      }
     } catch {}
     return ALL_CLOUD_IDS.filter(id => active.has(id));
   }
@@ -788,17 +789,24 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
 
   applySelectedCloudPanels();
 
+  // A Source filter shows those clouds' panels while it is on (opened once when it changes);
+  // the clouds chosen in the Cloud menu stay as they were and come back without it.
+  let shownSources = '';
   function applyFilters() {
     sortCards();
-    if (filters.sources.length >= 1) {
-      if ($('cloudContent')) $('cloudContent').hidden = false;
-      if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
+    const sourcesKey = filters.sources.join(',');
+    if (sourcesKey !== shownSources) {
+      shownSources = sourcesKey;
       const nextClouds = filters.sources.filter(id => ALL_CLOUD_IDS.includes(id));
       if (nextClouds.length) {
-        selectedClouds = nextClouds;
-        saveSelectedClouds();
-        applySelectedCloudPanels();
-      }
+        if ($('cloudContent')) $('cloudContent').hidden = false;
+        if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
+        for (const id of ALL_CLOUD_IDS) {
+          const [sectionId, controller] = cloudPanels[id] || [];
+          if ($(sectionId)) $(sectionId).hidden = !nextClouds.includes(id);
+          if (nextClouds.includes(id)) controller?.show?.();
+        }
+      } else applySelectedCloudPanels();
     }
     const query = ($('recentSearch')?.value || '').trim().toLowerCase();
     const terms = query ? query.split(/\s+/).filter(Boolean) : [];

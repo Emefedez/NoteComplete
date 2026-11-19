@@ -207,7 +207,9 @@ export function textBoxController({
     zhToggle.textContent = mode === "pinyin" ? "ā" : "中";
     zhToggle.setAttribute("aria-pressed", String(isZh));
     zhToggle.dataset.zhMode = mode;
-    if (zhSubOptions) zhSubOptions.hidden = !isZh;
+    // 拼 stays for a box with Chinese in it (to read it), 笔 only while typing Chinese.
+    if (zhSubOptions) zhSubOptions.hidden = !isZh && !/\p{Script=Han}/u.test(textEditor?.area?.value || "");
+    if ($("zhTraceToggle")) $("zhTraceToggle").hidden = !isZh;
   }
   zhToggle.addEventListener("click", () => {
     if (!textEditor?.area) {

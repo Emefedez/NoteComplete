@@ -4611,8 +4611,10 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   top: calc(100% + 6px);
   right: 0;
   z-index: 65;
-  min-width: 240px;
+  min-width: 260px;
+  max-width: 320px;
 }
+.home-file-menu .filter-option kbd { margin-left: auto; }
 /* The New note hub: the export dialog's two columns, as tall as its content (nothing to scroll
    on a wide screen; a phone scrolls the columns, stacked). */
 .new-note-menu-dialog[open] { height: fit-content; }

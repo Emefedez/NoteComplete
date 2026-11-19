@@ -11,6 +11,15 @@ import {
 import { addExportMenu, exportable } from './download-queue.js';
 import { icon } from './icons.js';
 
+// Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
+// Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.
+export const CLOUD_CONFIG_KEYS = {
+  dropbox: ['notecomplete-dropbox-session-v1', 'notecomplete-dropbox-config-v1'],
+  github: ['notecomplete-github-config-v1'],
+  webdav: ['notecomplete-webdav-config-v1'],
+  archive: ['notecomplete-archive-sources-v1'],
+};
+
 export const CLOUD_PROVIDERS = [
   {
     id: 'drive',
@@ -77,7 +86,7 @@ export function githubBrowser({
   storage = globalThis.localStorage,
 } = {}) {
   const $ = (id) => document.getElementById(id);
-  const CONFIG_KEY = 'notecomplete-github-config-v1';
+  const [CONFIG_KEY] = CLOUD_CONFIG_KEYS.github;
   let config = { repo: '', branch: 'main', path: '', token: '', connected: false };
   try { Object.assign(config, JSON.parse(storage?.getItem(CONFIG_KEY) || '{}')); } catch { /* Optional */ }
   const saveConfig = () => { try { storage?.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* Optional */ } };
@@ -316,7 +325,7 @@ export function webdavBrowser({
   storage = globalThis.localStorage,
 } = {}) {
   const $ = (id) => document.getElementById(id);
-  const CONFIG_KEY = 'notecomplete-webdav-config-v1';
+  const [CONFIG_KEY] = CLOUD_CONFIG_KEYS.webdav;
   let config = { url: '', password: '', connected: false };
   try { Object.assign(config, JSON.parse(storage?.getItem(CONFIG_KEY) || '{}')); } catch { /* Optional */ }
   const saveConfig = () => { try { storage?.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* Optional */ } };

@@ -360,16 +360,16 @@
         </div>
         <div class="home-actions">
           <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
-          <div class="home-file-drop-wrap">
+          <div id="homeFileDropWrap" class="home-file-drop-wrap">
             <button id="emptyOpen" type="button" class="primary home-file-drop" data-icon="note" aria-haspopup="menu" aria-expanded="false" aria-controls="homeFileMenu" title="Create a new note or open an existing file" disabled><span>File</span><span class="filter-caret" aria-hidden="true"></span></button>
-            <div id="homeFileMenu" class="select-menu home-file-menu" role="menu" aria-label="New note &amp; open file" hidden>
+            <div id="homeFileMenu" class="select-menu filter-menu home-file-menu" role="menu" aria-label="New note &amp; open file" hidden>
               <button id="homeMenuNewHub" type="button" class="filter-option" role="menuitem" data-icon="note"><span>New note…</span><kbd>Ctrl N</kbd></button>
               <button id="homeMenuBlank" type="button" class="filter-option" role="menuitem" data-icon="pages"><span>Blank pages or canvas…</span></button>
               <button id="homeNewMarkdown" type="button" class="filter-option" role="menuitem" data-icon="text"><span>New Markdown note</span></button>
               <button id="homeMenuPrefab" type="button" class="filter-option" role="menuitem" data-icon="graph"><span>Create prefab first…</span></button>
               <button id="homeMenuHandwritten" type="button" class="filter-option" role="menuitem" data-icon="draw"><span>Handwritten from Markdown…</span></button>
               <button id="homeMenuTakeNotesAi" type="button" class="filter-option" role="menuitem" data-icon="batchNotes"><span>Take notes with AI…</span></button>
-              <hr />
+              <hr role="separator" />
               <button id="emptyOpenFile" type="button" class="filter-option" role="menuitem" data-icon="open"><span>Open file…</span><kbd>Ctrl O</kbd></button>
               <button id="emptyOpenFolder" type="button" class="filter-option" role="menuitem" data-icon="folder" hidden><span>Open folder…</span></button>
             </div>

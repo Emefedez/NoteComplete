@@ -4622,7 +4622,18 @@ if ($("emptyOpen")) {
     const next = menu.hidden;
     menu.hidden = !next;
     $("emptyOpen").setAttribute("aria-expanded", String(next));
+    if (next && e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
   };
+  // Esc closes it (back on the File button), ↑ ↓ move between its items.
+  $("homeFileMenu")?.addEventListener("keydown", (e) => {
+    const items = [...$("homeFileMenu").querySelectorAll("button:not([hidden])")];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeHomeFileMenu(); $("emptyOpen").focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+    }
+  });
   document.addEventListener("click", (e) => {
     if ($("homeFileMenu") && !$("homeFileMenu").hidden && !e.target.closest?.("#homeFileDropWrap")) {
       closeHomeFileMenu();
@@ -7350,7 +7361,9 @@ async function redrawResized(item, adjustment) {
       targetW = Math.max(40, fw * scale);
       targetH = Math.max(20, targetW * aspect);
     }
-    const box = [cx - targetW / 2 + tx, cy - targetH / 2 + ty, targetW, targetH];
+    // Anchored as the drag scaled the frame (its offset from the item's centre scales too), so
+    // a graph whose labels stick out of its frame does not jump on each resize.
+    const box = [cx + (fx - cx) * (targetW / Math.max(1, fw)) + tx, cy + (fy - cy) * (targetH / Math.max(1, fh)) + ty, targetW, targetH];
     selection.clear();
     if (c.kind === "prefab") {
       if (!(await placePrefab(p, spec, box, c.items, c.id))) return false;
@@ -7373,10 +7386,12 @@ async function pickWhole(args) {
   const parts = panels[args.page]?.view?.parts;
   let part = item && parts?.find((q) => q.item === item.id);
   if (!part && parts?.length && Number.isFinite(args.x) && Number.isFinite(args.y)) {
+    // A click beside the drawn parts but inside a figure's frame: the frames asked for together
+    // (one round trip's wait, not one per figure), the topmost hit wins.
     const frames = parts.filter((q) => q.spec);
+    const infos = await Promise.all(frames.map((f) => call("selection", { page: args.page, itemId: f.item }).catch(() => null)));
     for (let i = frames.length - 1; i >= 0; i--) {
-      const f = frames[i];
-      const info = await call("selection", { page: args.page, itemId: f.item }).catch(() => null);
+      const f = frames[i], info = infos[i];
       if (!info?.bounds) continue;
       const [bx, by, bw, bh] = info.bounds, a = info.adjustment || { translation: [0, 0], scale: [1, 1] };
       const cx = bx + bw / 2 + a.translation[0], cy = by + bh / 2 + a.translation[1];
