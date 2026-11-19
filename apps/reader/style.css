@@ -4455,7 +4455,15 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .zh-lk-use:hover { background: var(--accent-soft); color: var(--accent); }
 .zh-lk-facts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
 .zh-lk-level { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 11px; line-height: 17px; white-space: nowrap; }
-.zh-lk-say { padding: 0 6px; height: 22px; border: 0; border-radius: var(--radius); background: var(--fill); cursor: pointer; }
+.zh-lk-say { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius); background: var(--fill); color: inherit; cursor: pointer; }
+.zh-lk-say svg { width: 16px; height: 16px; }
+.zh-lk-say.small { width: 22px; height: 22px; background: transparent; color: var(--muted); }
+.zh-lk-say.small svg { width: 14px; height: 14px; }
+.zh-lk-say:hover { background: var(--accent-soft); color: var(--accent); }
+.zh-lk-syl:hover { background: var(--accent-soft); }
+.zh-lk-say.playing { background: var(--accent-soft); color: var(--accent); }
+.zh-lk-syl { padding: 0 2px; border: 0; border-radius: 4px; background: none; font: inherit; cursor: pointer; }
+.zh-lk-syl.playing { background: var(--accent-soft); }
 .zh-lk-strokes { display: grid; gap: 4px; justify-items: center; padding: 4px 0; border-block: 1px solid var(--line); }
 .zh-lk-stage { width: 100%; }
 .zh-lk-stage .pk-step-player { margin-top: 4px; }

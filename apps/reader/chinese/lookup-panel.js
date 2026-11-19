@@ -1,7 +1,8 @@
 // The character panel (docs/CHINESE-INPUT.md §8): a character or a word looked up from a
 // right-click, a long press or a selection. A movable window on a computer, a bottom sheet on a
 // phone. Header: the character, every reading in tone colours (the one used here first, "Use
-// here" sets it for pinyin over characters), 🔊 when the system has a Chinese voice, and the
+// here" sets it for pinyin over characters), 🔊 to hear it (S; Shift: slower; each syllable
+// plays its own tone when clicked, chinese/speech.js streams the audio on demand), and the
 // stroke player with Practise. Then meanings, HSK level, forms, structure and words with it,
 // each a link to its own look-up (← goes back), and the actions.
 //   openLookup("好", { host, context: { reading, replace(text), setReading(pinyin) }, near })
@@ -10,6 +11,7 @@ import { openContextMenu } from '../context-menu.js';
 import { icon } from '../icons.js';
 import { zhWindow, modalHost } from './zh-window.js';
 import { levelLabel, vocabCard, HAN } from './vocab.js';
+import { speak, speakSyllable, stopSpeech, canSpeak } from './speech.js';
 
 const IDC = /[⿰-⿿]/u;
 // How the parts sit (the first Ideographic Description Character of the decomposition).
@@ -51,15 +53,6 @@ export function formsOf(result, text) {
 }
 export const lowestLevel = (result) => (result?.entries || []).reduce((l, e) => (e.level && (!l || e.level < l) ? e.level : l), 0);
 
-let voices = null;
-function zhVoice(script) {
-  const synth = globalThis.speechSynthesis;
-  if (!synth) return null;
-  voices = synth.getVoices();
-  const zh = voices.filter((v) => /^(zh|cmn)/i.test(v.lang));
-  return zh.find((v) => (script === 'traditional' ? /TW|HK|Hant/i : /CN|Hans/i).test(v.lang)) || zh[0] || null;
-}
-
 let current = null;
 export function closeLookup() { current?.close(); current = null; }
 
@@ -69,19 +62,18 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   // One panel: reused, unless it is in another modal dialog than the one asked from.
   if (current && (current.el.closest('dialog') || null) !== modalHost(near)) closeLookup();
   if (current) { current.show(text, context, true); return current; }
-  const win = zhWindow({ key: 'zh-lookup', title: `Look up ${text}`, width: 400, tall: 680, near, onClose: () => { players.forEach((p) => p.destroy?.()); current = null; } });
+  const win = zhWindow({ key: 'zh-lookup', title: `Look up ${text}`, width: 400, tall: 680, near, onClose: () => { players.forEach((p) => p.destroy?.()); stopSpeech(); current = null; } });
   win.el.classList.add('zh-lookup');
   const history = [];
   let players = [], shown = null, token = 0;
   const status = (msg, bad = false) => host.status?.(msg, bad);
   const script = () => host.script?.() || 'simplified';
-  const say = (t) => {
-    const v = zhVoice(script());
-    if (!v) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(t);
-    u.voice = v; u.lang = v.lang; u.rate = 0.8;
-    speechSynthesis.speak(u);
+  // Plays `t` (its reading when one character), lighting `button` while it plays.
+  const say = (t, { reading = '', button = null, slow = false, syllable = false } = {}) => {
+    const onState = (on) => button?.classList.toggle('playing', on);
+    const opts = { script: script(), slow, onState };
+    const run = syllable ? speakSyllable(reading, { ...opts, fallback: t }) : speak(t, { ...opts, reading });
+    run.then((ok) => { if (!ok) status(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true); });
   };
   const el = (tag, cls = '', textContent = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (textContent) e.textContent = textContent; return e; };
   const btn = (label, iconName, run, cls = '') => {
@@ -94,9 +86,22 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   };
   // A character or word that opens its own look-up.
   const link = (t, cls = 'zh-lk-link zh-cjk') => { const b = el('button', cls, t); b.type = 'button'; b.title = `Look up ${t}`; b.onclick = () => go(t); return b; };
-  const syllables = (pinyin) => {
+  // Pinyin in tone colours; each syllable plays its tone when clicked (`chars`: the characters
+  // it reads, spoken instead when there is no recording of that syllable).
+  const syllables = (pinyin, chars = '') => {
     const s = el('span', 'zh-lk-py');
-    String(pinyin).split(/(\s+)/).forEach((p) => { if (!p.trim()) s.append(p); else s.append(el('span', `zh-t${toneOf(p)}`, p)); });
+    const han = [...chars].filter((c) => HAN.test(c));
+    let k = 0;
+    String(pinyin).split(/(\s+)/).forEach((p) => {
+      if (!p.trim()) { s.append(p); return; }
+      const b = el('button', `zh-lk-syl zh-t${toneOf(p)}`, p);
+      const ch = han.length === String(pinyin).trim().split(/\s+/).length ? han[k] : (han.length === 1 ? han[0] : '');
+      k++;
+      b.type = 'button';
+      b.title = `Listen to ${p}${toneOf(p) < 5 ? ` (tone ${toneOf(p)})` : ''} · Shift-click: slower`;
+      b.onclick = (e) => { e.stopPropagation(); say(ch || '', { reading: p, button: b, slow: e.shiftKey, syllable: true }); };
+      s.append(b);
+    });
     return s;
   };
   const section = (title, open = true) => {
@@ -152,7 +157,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const list = el('div', 'zh-lk-readings');
     for (const r of readings) {
       const row = el('span', `zh-lk-reading${r.here ? ' here' : ''}`);
-      row.append(syllables(r.pinyin));
+      row.append(syllables(r.pinyin, t));
       if (r.here && readings.length > 1 && ctx.reading) row.title = 'The reading used here';
       if (ctx.setReading && readings.length > 1 && !r.here) {
         const use = el('button', 'zh-lk-use', 'Use here');
@@ -170,11 +175,14 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const facts = el('div', 'zh-lk-facts');
     if (level) facts.append(el('span', 'zh-lk-level', levelLabel(level)));
     if (result.char?.strokes) facts.append(el('span', 'muted', `${result.char.strokes} strokes`));
-    if (zhVoice(script())) {
-      const speak = el('button', 'zh-lk-say', '🔊');
-      speak.type = 'button'; speak.title = 'Say it'; speak.setAttribute('aria-label', `Say ${t}`);
-      speak.onclick = () => say(t);
-      facts.append(speak);
+    if (canSpeak(script())) {
+      const speakBtn = el('button', 'zh-lk-say');
+      speakBtn.type = 'button';
+      speakBtn.title = 'Listen (S) · Shift: slower';
+      speakBtn.setAttribute('aria-label', `Listen to ${t}`);
+      speakBtn.append(icon('speaker'));
+      speakBtn.onclick = (e) => say(t, { reading: single ? reading : '', button: speakBtn, slow: e.shiftKey });
+      facts.prepend(speakBtn);
     }
     side.append(facts);
     head.append(big, side);
@@ -230,7 +238,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
       const ol = el('ol', 'zh-lk-meanings');
       for (const m of meanings) {
         const li = el('li');
-        li.append(syllables(m.pinyin), ' ', el('span', '', m.gloss.join('; ') || '—'));
+        li.append(syllables(m.pinyin, t), ' ', el('span', '', m.gloss.join('; ') || '—'));
         if (m.level) li.append(' ', el('span', 'zh-lk-level', levelLabel(m.level)));
         if (m.forms.length) { li.append(' '); for (const f of m.forms) li.append(link(f, 'zh-lk-link zh-cjk small')); }
         ol.append(li);
@@ -301,7 +309,11 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
         const ul = el('ul', 'zh-lk-words');
         for (const w of result.words) {
           const li = el('li');
-          li.append(link(w.text), syllables(w.pinyin), el('span', 'zh-lk-gloss', w.gloss || ''));
+          const hear = el('button', 'zh-lk-say small');
+          hear.type = 'button'; hear.title = `Listen to ${w.text} · Shift: slower`; hear.setAttribute('aria-label', hear.title);
+          hear.append(icon('speaker'));
+          hear.onclick = (e) => say(w.text, { button: hear, slow: e.shiftKey });
+          li.append(link(w.text), hear, syllables(w.pinyin, w.text), el('span', 'zh-lk-gloss', w.gloss || ''));
           if (w.level) li.append(el('span', 'zh-lk-level', levelLabel(w.level)));
           ul.append(li);
         }
@@ -367,8 +379,16 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     ].filter(Boolean), { title: 'Add to flashcards', host: win.el.closest('dialog') });
   }
 
+  // S: listen (Shift+S slower), unless typing in a field of the panel.
+  win.el.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 's' || e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+    const b = win.body.querySelector('.zh-lk-head .zh-lk-say');
+    if (!b) return;
+    e.preventDefault();
+    b.dispatchEvent(new MouseEvent('click', { shiftKey: e.shiftKey, bubbles: true }));
+  });
   current = { close: () => win.close(), show, el: win.el };
   show(text, context, true);
-  if (globalThis.speechSynthesis && !voices?.length) speechSynthesis.addEventListener?.('voiceschanged', () => { if (current && shown) show(shown.text, shown.context, false); }, { once: true });
+  if (globalThis.speechSynthesis && !speechSynthesis.getVoices().length && !canSpeak()) speechSynthesis.addEventListener?.('voiceschanged', () => { if (current && shown) show(shown.text, shown.context, false); }, { once: true });
   return current;
 }
