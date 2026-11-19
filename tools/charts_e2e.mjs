@@ -158,7 +158,7 @@ try {
   // 3. A scheduling exercise: inserted empty, filled in, checked.
   await p.evaluate(() => document.getElementById('insertGraph').click());
   await p.waitForSelector('.prefab-grid');
-  await p.fill('.prefab-search', 'scheduling exercise');
+  await p.fill('.prefab-search', 'states exercise');
   await p.click('.prefab-card:has-text("Process states (exercise)")');
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.locator('.chart-dialog .ch-mode').isVisible(), true, 'Editor / Fill in');

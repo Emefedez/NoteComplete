@@ -114,6 +114,8 @@ export const paths = {
  animation:'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm6 3.5v5l5-2.5-5-2.5Z',
  exam:'M9 3h6v3H9zM6 5h12a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 21H6a1.5 1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 6 5Zm3 6.5h6M9 15h4m2.5 1.5 1.5 1.5 3-3',
  batchNotes:'M8 4h10l3 3v11H8a1.5 1.5 0 0 1-1.5-1.5V5.5A1.5 1.5 0 0 1 8 4Zm-4 4v11.5A1.5 1.5 0 0 0 5.5 21H17M11.5 10h6M11.5 13.5h4.5',
+ // Dark pages (invert the page): a sheet half light, half lined dark; not the theme's moon.
+ invertPage:'M6 3h12v18H6zM12 3v18M12 6.5h6M12 10h6M12 13.5h6M12 17h6',
  spread:'M3 4h8v16H3zM13 4h8v16h-8zM5.5 8.5h3M5.5 12h3M15.5 8.5h3M15.5 12h3'
 };
 export function icon(name) {

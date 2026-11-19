@@ -105,6 +105,8 @@ export class TranscriptController {
     const extra = await globalThis.notecompleteTranscribe?.backends?.().catch(() => []) || [];
     for (const b of extra) { const o = new Option(b.available ? b.label : `${b.label} · not installed`, b.id); o.disabled = !b.available; select.add(o); }
     try { const saved = localStorage.getItem('notecomplete-transcript-backend'); if ([...select.options].some(o => o.value === saved && !o.disabled)) select.value = saved; } catch { /* Optional. */ }
+    // Nothing to choose with Whisper alone: the engine list shows only when there is a second one.
+    select.hidden = select.options.length < 2;
     this.describe();
   }
   backend() { return $('transcriptBackend').value || 'whisper'; }

@@ -289,8 +289,8 @@ export function autosaveController({
       // after a while and the save stays in File → Automatic saves.
       const dialog = $('recoverDialog');
       $('recoverText').textContent = `“${latest.title}” has an automatic save from ${when(latest.time)}, newer than ${manual ? `your last save (${when(manual)})` : 'the file you opened'}.`;
-      $('recoverAuto').textContent = 'Open it';
-      $('recoverManual').textContent = 'Keep the file';
+      $('recoverAuto').textContent = 'Open the automatic save';
+      $('recoverManual').textContent = 'Use my file';
       clearTimeout(dialog._hide);
       const keep = () => { clearTimeout(dialog._hide); dialog.close(); store.markManual(key).catch(() => { /* Optional. */ }); };
       $('recoverAuto').onclick = () => { clearTimeout(dialog._hide); dialog.close(); openSlot(latest); };

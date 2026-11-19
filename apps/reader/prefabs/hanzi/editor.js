@@ -46,7 +46,7 @@ export function open(root, { spec, editing, host }) {
     onCancel: () => host.cancel(),
     undo: () => back(past, future),
     redo: () => back(future, past),
-    help: [{ title: 'Stroke order & Trace Prefab', icon: 'draw', rows: [
+    help: [{ title: 'Stroke order', icon: 'draw', rows: [
       { keys: 'Space', does: 'Play · pause main trace animation' },
       { keys: '← →', does: 'Stroke back · forward' },
       { keys: 'Home / End', does: 'No strokes · all strokes' },

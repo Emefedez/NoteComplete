@@ -87,12 +87,12 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       const hasExplicitSelection = Boolean(selText);
       const selectedHan = ([...selText].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
       if (hasExplicitSelection && !selectedHan) {
-        status?.('Select at least one Chinese character to insert a trace order prefab.', true);
+        status?.('Select at least one Chinese character to insert their stroke order.', true);
         return;
       }
       const han = selectedHan || (text.match(/\p{Script=Han}+/gu)?.at(-1)?.slice(0, 6)) || '';
       if (!han) {
-        status?.('Type or select a Chinese character first to insert a trace order prefab.', true);
+        status?.('Type or select a Chinese character first to insert their stroke order.', true);
         return;
       }
       const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
@@ -118,10 +118,10 @@ export function notesController({ call, jump, currentPage, store, status, editPr
               { keys: '#  **bold**  *italic*', does: 'Headings, bold and italic text' },
               { keys: '$x^2$  $$...$$', does: 'Inline and block LaTeX math' },
             ] },
-            { title: 'Chinese input & Trace Prefabs', icon: 'draw', rows: [
+            { title: 'Chinese input & stroke order', icon: 'draw', rows: [
               { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show the 笔 trace button' },
-              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order trace sheet (with English meaning & variants)' },
-              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the animated Trace Prefab Editor' },
+              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order (with English meaning & variants)' },
+              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the stroke order editor' },
             ] },
           ],
         });

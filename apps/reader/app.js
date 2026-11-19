@@ -4026,7 +4026,7 @@ const textModeEntries = () => {
     { key: "zh", label: `Chinese input (${$("zhModeToggle")?.dataset.zhMode || "off"})`, icon: textGlyphIcon($("zhModeToggle")?.textContent || "中", "sans-serif"), active: () => isZh, run: () => { $("zhModeToggle")?.click(); quick.redraw(); }, stay: () => true },
     ...(isZh ? [
       { key: "ruby", label: "Pinyin over Chinese characters", icon: textGlyphIcon("拼", "sans-serif"), active: () => $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click(), stay: () => true },
-      { key: "trace", label: "Trace & stroke order prefab", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
+      { key: "trace", label: "Stroke order…", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
     ] : []),
   ];
 };
@@ -5245,7 +5245,7 @@ function textToolFlyout(button) {
       },
       ...(isZh ? [
         { label: "Pinyin over characters (拼)", icon: "text", checked: $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click() },
-        { label: "Trace & stroke order prefab (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
+        { label: "Stroke order (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
       ] : []),
     ], { title: "Text options" });
     menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
