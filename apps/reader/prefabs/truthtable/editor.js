@@ -3,7 +3,7 @@
 // multi-column intermediate sub-conditions, quick operator chips, and clickable truth table
 // output cells on the canvas that synthesize canonical boolean formulas.
 import { editorShell, field, textInput, selectInput, make, button } from '../kit/index.js';
-import { normalize, render, evaluate, extractSubExpressions, synthesizeDnf, MAX_VARIABLES, MAX_COLUMNS } from './render.js';
+import { normalize, render, evaluate, extractSubExpressions, synthesizeDnf, parseBool, prettyBool, detectVariables, MAX_VARIABLES, MAX_COLUMNS } from './render.js';
 
 const RELATIONS = [
   ['∧', '∧  AND (both true)'],
@@ -155,10 +155,10 @@ export function open(root, { spec, editing, host }) {
     if (!operands.some(([k]) => k === builderRight)) builderRight = operands[Math.min(2, operands.length - 1)]?.[0] || builderLeft;
 
     // 1. Conditions (variables) chips + presets
-    const varChips = make('div', { style: 'display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:6px' });
+    const varChips = make('div', { className: 'pk-chips', style: 'align-items:center' });
     model.variables.forEach((v) => {
       const chip = make('span', {
-        style: 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--pk-line, #d0d7de);border-radius:6px;background:var(--pk-surface, #f6f8fa);font-size:12px;font-weight:600',
+        style: 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--k-line);border-radius:6px;background:var(--k-surface);font-size:12px;font-weight:600',
       }, make('span', { textContent: v }));
       if (model.variables.length > 1) {
         const rm = make('button', {
@@ -202,7 +202,7 @@ export function open(root, { spec, editing, host }) {
     rightSelect.disabled = builderOp === '¬';
 
     const previewFormula = make('code', {
-      style: 'display:block;padding:5px 8px;border-radius:6px;background:var(--pk-fill, rgba(127,127,127,0.1));font-size:12.5px;font-weight:600;text-align:center',
+      style: 'display:block;padding:5px 8px;border-radius:6px;background:var(--k-soft);font-size:12.5px;font-weight:600;text-align:center',
       textContent: builtExpression(),
     });
     function updatePreviewChip() {
@@ -221,7 +221,7 @@ export function open(root, { spec, editing, host }) {
     };
 
     const builderBox = make('div', {
-      style: 'display:grid;gap:6px;padding:8px;border:1px solid var(--pk-line, #d0d7de);border-radius:8px',
+      style: 'display:grid;gap:6px;padding:8px;border:1px solid var(--k-line);border-radius:8px',
     },
       field('Condition 1', leftSelect),
       field('Relation / Operation', opSelect),
@@ -231,29 +231,34 @@ export function open(root, { spec, editing, host }) {
     );
 
     // 3. Quick insert chips + Main expression
-    const chipBar = make('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px' });
-    for (const v of model.variables) {
-      chipBar.append(make('button', {
-        type: 'button',
-        className: 'pk-button',
-        textContent: v,
-        title: `Insert ${v}`,
-        style: 'height:24px;min-width:26px;padding:0 6px;font-weight:600;font-size:12px',
-        onclick: () => insertIntoExpr(v),
-      }));
-    }
-    for (const [sym, title] of QUICK_OPS) {
-      chipBar.append(make('button', {
-        type: 'button',
-        className: 'pk-button',
-        textContent: sym,
-        title: `Insert ${title}`,
-        style: 'height:24px;min-width:26px;padding:0 6px;font-size:12px',
-        onclick: () => insertIntoExpr(sym),
-      }));
-    }
+    const chipBar = make('div', { className: 'pk-chips' });
+    const chip = (text, title, bold) => chipBar.append(make('button', {
+      type: 'button', className: 'pk-button', textContent: text, title,
+      style: bold ? 'font-weight:600' : '', onclick: () => insertIntoExpr(text),
+    }));
+    model.variables.forEach((v) => chip(v, `Insert ${v}`, true));
+    QUICK_OPS.forEach(([sym, title]) => chip(sym, `Insert ${title}`));
+    const preview = make('code', { className: 'pk-preview' });
+    const errLine = make('div', { className: 'pk-fielderr' });
+    const showExpr = () => {
+      const e = model.expr.trim();
+      preview.textContent = e ? prettyBool(e) : '—';
+      errLine.replaceChildren();
+      if (!e) return;
+      try { parseBool(e, model.variables); } catch (err) {
+        errLine.append(make('span', { textContent: err.message }));
+        const missing = detectVariables(e).filter((n) => !model.variables.includes(n));
+        if (missing.length && model.variables.length + missing.length <= MAX_VARIABLES) {
+          const add = button('plus', `Add ${missing.join(', ')}`);
+          add.title = 'Add the names used in the formula as conditions';
+          add.onclick = () => change({ variables: [...model.variables, ...missing] }, true);
+          errLine.append(add);
+        }
+      }
+    };
+    showExpr();
 
-    exprInputEl = textInput(model.expr, (expr) => change({ expr }, false), { placeholder: '(A ∧ B) → ¬C' });
+    exprInputEl = textInput(model.expr, (expr) => { change({ expr }, false); showExpr(); }, { placeholder: '(A ∧ B) → ¬C' });
 
     const autoStepsBtn = button('plus', 'Auto-add sub-conditions');
     autoStepsBtn.title = 'Automatically add intermediate columns for negated variables and parenthesized groups';
@@ -278,7 +283,7 @@ export function open(root, { spec, editing, host }) {
     const extraList = make('div', { style: 'display:grid;gap:6px' });
     (model.extraColumns || []).forEach((col, idx) => {
       const row = make('div', {
-        style: 'display:grid;grid-template-columns:1fr auto auto;gap:4px;align-items:center',
+        style: 'display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center',
       },
         textInput(col.expr, (expr) => {
           const next = [...(model.extraColumns || [])];
@@ -295,7 +300,7 @@ export function open(root, { spec, editing, host }) {
           className: 'pk-button',
           textContent: '×',
           title: 'Remove column',
-          style: 'height:28px;min-width:28px;padding:0',
+          style: 'min-height:28px;min-width:28px;padding:0',
           onclick: () => {
             const next = (model.extraColumns || []).filter((_, i) => i !== idx);
             change({ extraColumns: next }, true);
@@ -315,7 +320,9 @@ export function open(root, { spec, editing, host }) {
       builderBox,
       make('h4', { textContent: 'Main Output Expression' }),
       chipBar,
-      field('Formula', exprInputEl),
+      field('Formula', exprInputEl, 'Words (and, or, not, implies, iff, xor) or symbols (& | ! -> <-> ^) work too'),
+      preview,
+      errLine,
       field('Column heading', textInput(model.label, (label) => change({ label }, false), { placeholder: 'Defaults to the formula' })),
       autoStepsBtn,
       ...(model.extraColumns?.length ? [make('h4', { textContent: 'Intermediate Step Columns' }), extraList] : []),

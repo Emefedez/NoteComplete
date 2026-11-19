@@ -106,3 +106,10 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 .pk-step-player .pk-button.primary { background: var(--k-accent); border-color: var(--k-accent); color: #fff; }
 .pk-step-player .pk-button svg { width: 16px; height: 16px; flex: none; }
 @media (pointer: coarse) { .pk-step-player .pk-button, .pk-step-player select { min-height: 40px; min-width: 40px; justify-content: center; } }
+
+/* Operator / token chip rows (truth table formula builder): wrap, never overflow */
+.pk-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pk-chips .pk-button { min-height: 28px; min-width: 28px; padding: 0 7px; justify-content: center; }
+.pk-preview { display: block; padding: 4px 8px; border-radius: 6px; background: var(--k-soft); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; min-height: 20px; }
+.pk-fielderr { font-size: 11.5px; color: #b83228; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (pointer: coarse) { .pk-chips .pk-button { min-height: 36px; min-width: 36px; } }
