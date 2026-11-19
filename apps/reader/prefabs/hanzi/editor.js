@@ -70,7 +70,7 @@ export function open(root, { spec, editing, host }) {
   const ybWrap = make('span', { className: 'hz-yb-wrap', style: 'display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center' });
   const actions = make('div', { className: 'hz-actions' }, practiseBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
   shell.canvas.append(stage, dictBar, actions);
-  let player = null, drill = null, charIme = null, charInputEl = null;
+  let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
   const size = () => Math.max(120, Math.min(240, Math.floor((shell.canvas.clientWidth || 520) / Math.max(1, [...model.text].length) - 24)));
 
   function renderDictBar(variantChars = []) {
@@ -110,28 +110,42 @@ export function open(root, { spec, editing, host }) {
           title: `Show stroke trace for variant ${vc}`,
           style: 'height:22px;min-width:26px;padding:0 7px;font-size:12.5px;font-weight:600',
           onclick: () => {
+            compareBase = '';
             pinyinAuto = true; glossAuto = true; variantsAuto = true;
             if (charInputEl) charInputEl.value = vc;
             change({ text: vc, pinyin: '', gloss: '', variants: '' }, true);
           },
         });
+        chip.setAttribute('aria-pressed', String(active));
         varRow.append(chip);
       }
-      const baseFirst = [...model.text].find(isHan) || '';
+      const baseFirst = compareBase || ([...model.text].find(isHan) || '');
       const altFirst = cleanVariants.find((c) => c !== baseFirst);
       if (baseFirst && altFirst && baseFirst !== altFirst) {
         const both = `${baseFirst}${altFirst}`;
-        varRow.append(make('button', {
+        const comparing = model.text === both;
+        const compareBtn = make('button', {
           type: 'button',
-          className: 'pk-button',
+          className: `pk-button${comparing ? ' is-active' : ''}`,
           textContent: `Compare ${baseFirst}/${altFirst}`,
-          title: `Show stroke traces for both ${baseFirst} and ${altFirst} side-by-side`,
+          title: comparing ? `Stop comparing and return to ${baseFirst}` : `Compare stroke traces for ${baseFirst} and ${altFirst} side-by-side`,
           style: 'height:22px;padding:0 8px;font-size:11.5px',
           onclick: () => {
-            if (charInputEl) charInputEl.value = both;
-            change({ text: both }, true);
+            if (comparing) {
+              const restore = compareBase || baseFirst;
+              compareBase = '';
+              pinyinAuto = true; glossAuto = true; variantsAuto = true;
+              if (charInputEl) charInputEl.value = restore;
+              change({ text: restore, pinyin: '', gloss: '', variants: '' }, true);
+            } else {
+              compareBase = baseFirst;
+              if (charInputEl) charInputEl.value = both;
+              change({ text: both }, true);
+            }
           },
-        }));
+        });
+        compareBtn.setAttribute('aria-pressed', String(comparing));
+        varRow.append(compareBtn);
       }
       dictBar.append(varRow);
     }
@@ -158,7 +172,12 @@ export function open(root, { spec, editing, host }) {
     practiseBtn.replaceChildren(...button('draw', 'Practise').childNodes);
     pageBtn.hidden = false;
     player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, colour: model.colour, start: model.step === null ? 'all' : model.step, autoplay });
-    player.ready.then(() => { say(); requestAnimationFrame(() => player?.focus()); });
+    player.ready.then(() => {
+      say();
+      const active = document.activeElement;
+      const typingInField = active && root.contains(active) && active.matches('input, textarea, select');
+      if (!typingInField) requestAnimationFrame(() => player?.focus());
+    });
   }
   function showPractice(k = 0) {
     const han = [...model.text].filter((c) => isHan(c) && model.data[c]);

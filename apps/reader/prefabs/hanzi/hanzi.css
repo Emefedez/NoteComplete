@@ -5,3 +5,10 @@
 .hz-stage svg, .hz-practice svg { background: #fff; border-radius: 6px; }
 .hz-practice-status { margin: 6px 0 0; text-align: center; }
 .hz-actions { display: flex; align-items: center; gap: 6px; }
+.hz-editor .pk-button[aria-pressed="true"],
+.hz-editor .pk-button.is-active {
+  background: var(--k-accent, var(--accent, #2563eb));
+  border-color: var(--k-accent, var(--accent, #2563eb));
+  color: #fff;
+  font-weight: 600;
+}
