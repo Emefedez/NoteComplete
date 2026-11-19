@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.47
+
+- **Improved page text input and visible math.** Text boxes now open with clearer bounds and contrast-aware paper backdrops (including light inks and Dark pages), a `⋮⋮` drag handle to reposition while typing, `Tab` indentation without closing focus, live Pinyin-on-top preview, and text formatting controls right when choosing the Text tool. Math formulas await KaTeX CSS loading before sizing, set explicit MathLive ink variables, and keep crisp light/dark paper contrast in both OS dark mode and Dark pages.
+- **Chinese input & Pinyin-on-top polish.** Moved the Pinyin-over-characters toggle (**拼**) directly into the Text format bar alongside **中** and the standalone Markdown editor (`ruby` updates reliably even before Han text is entered and after edits). Fixed Chinese IME stalls after partial selection + Backspace, sticky `Space` release state, single-letter partial matching (`n`/`m`/`r`), and immediate punctuation commits on `,` and `.`.
+- **Chinese Markdown editor & create prefabs first.** Start a new Markdown / Chinese note directly from **Home → New Markdown** or **File → New Markdown note…** with `中`, **拼**, and a live split preview—no existing file needed. Create prefabs (**Home → Create prefab…**, **Edit → Insert prefab… / table / UML diagram…**) directly before opening a document, and edit `tree`, `graph_nodes`, and `custom_svg` charts in the visual chart editor instead of raw JSON.
+- **Web full screen & updater reliability.** Added **View → Full screen** (`F11`) targeting the web host cleanly, hid un-wired updater menu rows properly on Web (`display: contents` vs `[hidden]`), and added a GitHub Releases Atom/asset fallback when `api.github.com` is rate-limited. Also documented an R math/statistics prefabs bridge plan in [R-PREFABS-PLAN.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/R-PREFABS-PLAN.md).
+
 ## 1.2.46
 
 - **Dropbox on Home.** Connect Dropbox read-only alongside Google Drive and Internet Archive under **Home → Cloud** (or **File → Import, export and share… → Dropbox**): browse folders, open a folder directly by path or `dropbox.com/home/…` address, search names (with **All Dropbox** to search everywhere), preview embedded `.noteful` covers via byte ranges and Dropbox thumbnails for PDFs and images, queue batch downloads, export from a card's **⋯** menu, filter **Recent** by Dropbox source, and check for newer revisions when reopening from **Recent** or **⋯ → Check Dropbox for updates**.
