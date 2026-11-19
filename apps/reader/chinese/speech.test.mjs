@@ -22,6 +22,13 @@ test('a character read a known way: its syllable first, then online TTS, then th
   assert.deepEqual(s.at(-1), { kind: 'voice', text: '好', lang: 'zh-CN' });
 });
 
+test('a system Chinese voice goes before the online voices, after a syllable recording', () => {
+  assert.deepEqual(sourcesFor('你好', { voice: true }).map((x) => x.kind), ['voice', 'audio', 'audio']);
+  const s = sourcesFor('好', { reading: 'hǎo', voice: true });
+  assert.equal(s[0].url, `${SYLLABLE_BASE}hao3.mp3`);
+  assert.equal(s[1].kind, 'voice');
+});
+
 test('words: no syllable recording; traditional script asks for zh-TW', () => {
   const s = sourcesFor('你好', { reading: 'nǐ hǎo', script: 'traditional' });
   assert.equal(s.length, 3);

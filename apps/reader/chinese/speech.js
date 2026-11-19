@@ -3,8 +3,8 @@
 // each click streams a short clip (the browser's HTTP cache may keep it a while, nothing else does).
 //   1. a single syllable with a tone (nǐ, hǎo, the reading used here): a human recording of that
 //      syllable and tone, so the tone is heard exactly, polyphones included;
-//   2. words and sentences: online text-to-speech (zh-CN, or zh-TW for traditional script);
-//   3. no network, or every online source failed: the system's Chinese voice, when it has one.
+//   2. words and sentences: the system's Chinese voice when it has one (offline, instant);
+//   3. otherwise online text-to-speech (zh-CN, or zh-TW for traditional script).
 // Each source is tried in turn; the first that plays wins.
 //   speak('你好')                      word or sentence
 //   speak('好', { reading: 'hào' })    a character read a given way (its syllable recording first)
@@ -28,18 +28,19 @@ export function syllableFile(syllable) {
 }
 
 // The ordered sources for `text`: [{ kind: 'audio', url } | { kind: 'voice', text, lang }].
-export function sourcesFor(text, { reading = '', script = 'simplified', online = true } = {}) {
+// `voice`: the system has a Chinese voice, which then goes before the online voices.
+export function sourcesFor(text, { reading = '', script = 'simplified', online = true, voice = false } = {}) {
   const t = String(text || '').trim().slice(0, MAX_TTS);
   const lang = script === 'traditional' ? 'zh-TW' : 'zh-CN';
   const han = /\p{Script=Han}/u.test(t); // pinyin alone is not spoken by a Chinese voice
   const out = [];
-  if (online) {
-    // One character read a known way: its syllable recording says that reading, TTS might not.
-    const syl = reading && !/\s/.test(reading.trim()) ? syllableFile(reading) : '';
-    if (syl) out.push({ kind: 'audio', url: `${SYLLABLE_BASE}${syl}.mp3` });
-    if (han) for (const url of TTS) out.push({ kind: 'audio', url: url(t, lang) });
-  }
-  if (han) out.push({ kind: 'voice', text: t, lang });
+  // One character read a known way: its syllable recording says that reading and tone exactly,
+  // which neither the system voice nor online TTS can be told to do.
+  const syl = online && reading && !/\s/.test(reading.trim()) ? syllableFile(reading) : '';
+  if (syl) out.push({ kind: 'audio', url: `${SYLLABLE_BASE}${syl}.mp3` });
+  if (han && voice) out.push({ kind: 'voice', text: t, lang });
+  if (han && online) for (const url of TTS) out.push({ kind: 'audio', url: url(t, lang) });
+  if (han && !voice) out.push({ kind: 'voice', text: t, lang }); // voices may still be loading
   return out;
 }
 
@@ -106,7 +107,7 @@ export async function speak(text, { reading = '', script = 'simplified', slow = 
   onState?.(true);
   const rate = slow ? 0.7 : 1;
   let ok = false;
-  for (const s of sourcesFor(text, { reading, script, online: online() })) {
+  for (const s of sourcesFor(text, { reading, script, online: online(), voice: !!zhVoice(script) })) {
     if (mine !== seq) return true;
     ok = s.kind === 'audio' ? await playUrl(s.url, rate) : await playVoice(s.text, s.lang, script, rate);
     if (ok) break;

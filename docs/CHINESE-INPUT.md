@@ -767,9 +767,10 @@ the `中` toolbar's "Look up" opens it too.
      clicked anywhere in the panel): a human recording of that syllable and tone from jsDelivr
      (`davinfifield/mp3-chinese-pinyin-sound`, `hao4.mp3`, ü as v), so polyphones and tones are
      heard exactly; neutral-tone syllables have none and fall through;
-  2. words and sentences: online TTS (Google Translate `translate_tts`, zh-CN or zh-TW by the
-     note's script; Youdao `dictvoice` when that fails), up to 180 characters;
-  3. offline or every online source failed: the system's `zh-CN` / `zh-TW` `speechSynthesis` voice.
+  2. words and sentences: the system's `zh-CN` / `zh-TW` `speechSynthesis` voice when the OS has
+     one (instant, offline);
+  3. otherwise online TTS (Google Translate `translate_tts`, zh-CN or zh-TW by the note's script;
+     Youdao `dictvoice` when that fails), up to 180 characters.
   A source that has not started within 6 s is skipped. The panel's 🔊 (`S`, Shift = 70 % speed)
   is shown whenever the app is online or the OS has a Chinese voice; every pinyin syllable in the
   panel plays its own tone on click, each "Words with" row has a small 🔊, and the Chinese menus
