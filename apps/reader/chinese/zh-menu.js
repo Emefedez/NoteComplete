@@ -190,6 +190,14 @@ export function extractPrefabSpecFromDataUri(src = '', alt = '') {
   return null;
 }
 
+// A data URI safe inside Markdown's ![alt](…): ( and ) escaped too (an SVG's transform="translate(…)"
+// would end the link early), and an alt text without brackets, short enough to read in a pill.
+const markdownUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg).replace(/\(/g, '%28').replace(/\)/g, '%29')}`;
+const markdownAlt = (text, max = 90) => {
+  const t = String(text || '').replace(/[[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+};
+
 export async function markdownPrefabBlockForSpec(rawSpec) {
   if (!rawSpec || typeof rawSpec !== 'object') return '';
   if (rawSpec.type === 'hanzi' || rawSpec.module === 'hanzi') {
@@ -200,17 +208,15 @@ export async function markdownPrefabBlockForSpec(rawSpec) {
     const out = render(spec);
     if (!out?.svg) return '';
     const svgWithSpec = embedPrefabSpecInSvg(out.svg, spec);
-    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
-    const caption = [han, spec.pinyin, spec.gloss, spec.variants].filter(Boolean).join(' · ');
-    return `![Stroke order ${caption}](${dataUri})`;
+    const caption = [han, spec.pinyin, spec.gloss].filter(Boolean).join(' · ');
+    return `![${markdownAlt(`Stroke order ${caption}`)}](${markdownUri(svgWithSpec)})`;
   }
   const { renderPrefab, prefabName } = await import('../prefabs.js');
   const out = renderPrefab(rawSpec);
   if (!out?.svg) return '';
   const svgWithSpec = embedPrefabSpecInSvg(out.svg, rawSpec);
-  const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
   const title = prefabName(rawSpec) || rawSpec.type || 'Prefab';
-  return `![${title}](${dataUri})`;
+  return `![${markdownAlt(title)}](${markdownUri(svgWithSpec)})`;
 }
 
 export async function markdownTraceBlockFor(rawText) {

@@ -25,7 +25,13 @@ export function loadEditor() {
   });
 }
 const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
-export const PREFAB_LINE = /^\s*!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)\s*$/;
+// A prefab picture on a line of its own: ![alt](data:image/svg+xml…). The URI runs to the line's
+// last ")" (older notes have unescaped parentheses inside it), and the alt may hold "]" (older
+// glosses such as "[Taiwan pr.]").
+const PREFAB_ALT = '((?:[^\\]]|\\](?!\\(data:))*)';
+export const PREFAB_LINE = new RegExp(`^\\s*!\\[${PREFAB_ALT}\\]\\((data:image\\/svg\\+xml\\S*)\\)\\s*$`);
+// The same pictures anywhere in a text: the URI ends at a ")" followed by a space or the end.
+const prefabPattern = () => new RegExp(`!\\[${PREFAB_ALT}\\]\\((data:image\\/svg\\+xml\\S*?)\\)(?=\\s|$)`, 'g');
 
 export function decorateTinyMdeLines(root) {
   if (!root) return;
@@ -52,7 +58,7 @@ export function attachMarkdownPrefabContextMenu({
 }) {
   const findPrefabMatches = (md) => {
     const out = [];
-    const re = /!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)/g;
+    const re = prefabPattern();
     let m;
     while ((m = re.exec(md))) {
       out.push({ full: m[0], alt: m[1], uri: m[2], index: m.index });
@@ -94,6 +100,64 @@ export function attachMarkdownPrefabContextMenu({
     ].filter(Boolean), { title: label.length > 42 ? `${label.slice(0, 42)}…` : label });
   };
   if (editorContainer) {
+    // A prefab line is one pill: the caret never edits its data. Typing or Enter on it goes to a
+    // new line after it, Backspace or Delete removes the whole picture (Ctrl Z brings it back),
+    // and a double-click opens its menu (Edit…, Copy Markdown, Delete).
+    const pillAt = () => {
+      const sel = getSelection();
+      const node = sel?.anchorNode;
+      const line = (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.('[data-prefab]');
+      return line && editorContainer.contains(line) ? line : null;
+    };
+    const lineIndex = (line) => [...(editorContainer.querySelector('.TinyMDE')?.children || [])].indexOf(line);
+    const removeAt = (idx) => {
+      const cur = String(getText() || '').split('\n');
+      if (idx < 0 || idx >= cur.length || !PREFAB_LINE.test(cur[idx])) return;
+      cur.splice(idx, 1);
+      setText(cur.join('\n'));
+    };
+    const caretToEnd = (line) => {
+      const range = document.createRange();
+      range.selectNodeContents(line);
+      range.collapse(false);
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    };
+    let marked = null;
+    const markPill = () => {
+      const line = pillAt();
+      if (line === marked) return;
+      marked?.classList.remove('prefab-caret');
+      marked = line;
+      line?.classList.add('prefab-caret');
+    };
+    document.addEventListener('selectionchange', markPill);
+    editorContainer.addEventListener('beforeinput', (event) => {
+      const line = pillAt();
+      if (!line) return;
+      const type = event.inputType || '';
+      const sel = getSelection();
+      const atEnd = sel.isCollapsed && (() => { const r = document.createRange(); r.selectNodeContents(line); r.setStart(sel.anchorNode, sel.anchorOffset); return r.toString() === ''; })();
+      if (type === 'insertParagraph' && atEnd) return;
+      event.preventDefault();
+      if (type.startsWith('delete')) { removeAt(lineIndex(line)); return; }
+      if (type.startsWith('history')) return;
+      // Text, a paste or Enter in the middle: on a new line after the picture, the caret after it.
+      const data = type === 'insertParagraph' ? '' : (event.data ?? event.dataTransfer?.getData('text/plain') ?? '');
+      const idx = lineIndex(line), cur = String(getText() || '').split('\n');
+      if (idx < 0 || idx >= cur.length) return;
+      cur.splice(idx + 1, 0, data);
+      setText(cur.join('\n'));
+      const next = editorContainer.querySelector('.TinyMDE')?.children[idx + 1];
+      if (next) caretToEnd(next);
+    }, true);
+    editorContainer.addEventListener('dblclick', (event) => {
+      const chip = event.target.closest?.('[data-prefab]');
+      if (!chip || !editPrefab) return;
+      event.preventDefault();
+      chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY }));
+    });
     editorContainer.addEventListener('contextmenu', (event) => {
       const chip = event.target.closest?.('[data-prefab]');
       if (!chip) return;
