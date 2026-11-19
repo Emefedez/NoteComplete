@@ -6126,6 +6126,16 @@ var home = homeScreen({
   pageCanvas,
   findIn: (query) => { if (doc && !$("editor").hidden) find.find(query); },
   onContentKept: (fingerprint, data) => find.adopt(fingerprint, data),
+  // Home → Recent → Share: several notes in one .zip, sent like one note (collab.js).
+  shareZip: async (file) => {
+    try {
+      const { openShareNoteQr } = await (collabLoading ||= import("./collab.js"));
+      await openShareNoteQr(collabHost, { file, title: "Share notes" });
+    } catch (e) {
+      collabLoading = null;
+      status(e.message, true);
+    }
+  },
   current: () => ({
     entryKey: noteEntryKey,
     webUrl: webView.hasDocument ? webView.url : "",

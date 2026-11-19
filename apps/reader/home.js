@@ -15,6 +15,7 @@ import { CLOUD_PROVIDERS } from './cloud-collab.js';
 import { selectionCheck } from './queue-controls.js';
 import { setupBatchTranscribe } from './batch-transcribe.js';
 import { setupBatchOcr, indexNotes } from './batch-ocr.js';
+import { setupBatchShare } from './batch-share.js';
 import { contentSearcher } from './content-search.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
@@ -68,14 +69,16 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null, pageCanvas = null, findIn = null, onContentKept = () => {} }) {
+export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null, pageCanvas = null, findIn = null, onContentKept = () => {}, shareZip = null }) {
   const $ = id => document.getElementById(id);
   // Batch actions over Recent: one selection mode at a time.
   const contents = contentSearcher(library);
   const kept = (fingerprint, data) => { contents.forget(fingerprint); onContentKept(fingerprint, data); };
-  const batchTranscriber = setupBatchTranscribe({ library, status, jobs, onEnter: () => batchOcr?.exit() });
-  const batchOcr = setupBatchOcr({ library, status, jobs, pageCanvas, onKept: kept, onEnter: () => batchTranscriber.exit() });
-  const batches = [batchTranscriber, batchOcr];
+  const others = (self) => () => { for (const batch of batches) if (batch !== self()) batch.exit(); };
+  const batchTranscriber = setupBatchTranscribe({ library, status, jobs, onEnter: others(() => batchTranscriber) });
+  const batchOcr = setupBatchOcr({ library, status, jobs, pageCanvas, onKept: kept, onEnter: others(() => batchOcr) });
+  const batchShare = setupBatchShare({ library, status, shareZip, onEnter: others(() => batchShare) });
+  const batches = [batchTranscriber, batchOcr, batchShare];
   // Search inside notes (set further down): declared first, Recent may draw before.
   let contentMode = false, contentMatches = null, contentRun = 0, contentTimer = 0;
   const ago = time => {

@@ -8,6 +8,7 @@
 ### Unreleased
 
 - **Batch OCR and search inside notes.** **Home → Recent → Batch OCR** recognizes the handwriting and scanned pages of many notes, PDFs and pictures in the background, like Batch transcribe. A second magnifier beside the Recent search box searches the text inside every document (PDF, handwriting, OCR, transcripts, Markdown), lists the matches with their page and opens the note with Find on them.
+- **Share several notes at once.** **Home → Recent → Share** selects notes like Batch transcribe and Batch OCR, then sends them with the system share sheet, as one .zip by Wi-Fi link or QR (the same window as Share note via QR), or saves that .zip.
 - **Classroom noise in transcripts.** **Revise with AI** can flag side conversations and fragments, underlined in red, to remove or keep one by one or all at once. Every AI request that includes a transcript is told that some of it may be irrelevant classroom noise.
 - **Polish.** The batch dialog's ticks now show which notes and recordings are chosen, and its × closes it.
 
