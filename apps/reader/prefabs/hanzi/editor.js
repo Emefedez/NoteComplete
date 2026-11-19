@@ -169,12 +169,13 @@ export function open(root, { spec, editing, host }) {
       none.onclick = () => setPageMeanings([]);
       quick.append(few, every, none);
     }
-    defsBox.replaceChildren(
-      make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }),
+    // replaceChildren() would write a null child as the text "null": leave it out instead.
+    defsBox.replaceChildren(...[
+      make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning' }),
       all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary: write it below.' : 'Looking up…' }),
-      field('On the page', glossInput, 'Click a meaning above to add or remove it, or write your own'),
+      field('Meaning under the characters', glossInput, 'Click a meaning above to add or remove it, or write your own'),
       all.length ? quick : null,
-    );
+    ].filter(Boolean));
     const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));
     if (model.variants || cleanVariants.length) {
       const varRow = make('div', { className: 'hz-variants' },

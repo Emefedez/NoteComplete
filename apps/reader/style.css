@@ -4316,6 +4316,9 @@ body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible),
 .float-dialog.minimized > .panel-body { display: none; }
 .float-head { display: flex; align-items: center; gap: 6px; flex: none; min-height: 40px; padding: 4px 8px 4px 14px; border-bottom: 1px solid var(--line); }
 .float-head h2 { margin: 0; font-size: 14px; flex: 1 1 0; }
+/* A heading with an icon (Saved resources): the icon at text size, never the svg's default 300 × 150. */
+h2[data-icon] > svg, h3[data-icon] > svg, h4[data-icon] > svg { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; margin-right: 6px; }
+.float-head h2[data-icon] { display: flex; align-items: center; min-width: 0; }
 .float-head button { width: 28px; padding: 0; }
 /* Pushed over an edge, a window is drawn smaller; its head gets shorter at the top, like the menu bar while scrolling. */
 .screen-window.pushed { min-width: 0 !important; min-height: 0 !important; }

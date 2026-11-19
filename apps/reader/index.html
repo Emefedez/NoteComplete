@@ -89,8 +89,9 @@
           <button id="viewSpread" data-icon="spread" role="menuitemcheckbox" aria-checked="false" data-palette="Side-by-side pages" title="Show two pages side by side">Side-by-side pages</button>
           <button id="viewFullscreen" data-icon="fit" role="menuitemcheckbox" aria-checked="false" data-palette="View: full screen (F11)" title="Toggle full screen">Full screen<kbd>F11</kbd></button>
           <hr />
-          <button id="themeToggle" data-icon="moon" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
-          <button id="themeSystem" data-icon="monitor" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
+          <button id="themeLight" data-icon="sun" role="menuitemradio" aria-checked="false" data-palette="Theme: light" title="Always use the light theme">Light theme</button>
+          <button id="themeToggle" data-icon="moon" role="menuitemradio" aria-checked="false" data-palette="Theme: dark" title="Always use the dark theme">Dark theme</button>
+          <button id="themeSystem" data-icon="monitor" role="menuitemradio" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
           <hr />
           <button id="resetToolOrder" data-icon="restart" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="resetToolOptionsPlace" data-icon="restart" title="The tool settings go back under their tool (drag their grip to move them)">Reset tool settings position</button>
@@ -174,7 +175,7 @@
         <summary role="menuitem">Help</summary>
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen" data-icon="search">Search commands<kbd>Ctrl K</kbd></button>
-          <button id="shortcutsOpen" data-icon="keyboard">Keyboard shortcuts<kbd>?</kbd></button>
+          <button id="shortcutsOpen" data-icon="keyboard">Keyboard shortcuts…</button>
           <hr />
           <button id="penTestOpen" data-icon="draw">Test pen and stylus…</button>
           <button id="hoverToolsOpen" data-icon="select" data-palette="Help: Configure hover cursor tools…" title="Choose which tools show a pen hover cursor on the page (Pan, Select, Pen, Eraser, …)">Hover cursor tools…</button>
