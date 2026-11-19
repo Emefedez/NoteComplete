@@ -188,6 +188,13 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
       const bar = el('div', 'zh-lk-row');
       let practising = false;
       const practiseBtn = btn('Practise', 'draw', () => (practising ? player() : practice(0)));
+      // No stroke data here: one link to look it up elsewhere (once, however often the player returns).
+      const yellowBridge = () => {
+        if (bar.querySelector('.zh-yb')) return;
+        const ybBtn = btn(`Look up ${han[0]} on YellowBridge ↗`, 'search', () => window.open(`https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(han[0])}`, '_blank', 'noopener,noreferrer'));
+        ybBtn.classList.add('zh-yb');
+        bar.append(ybBtn);
+      };
       const showPlayer = () => {
         players.forEach((p) => p.destroy?.()); players = [];
         stage.replaceChildren();
@@ -195,16 +202,10 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
           if (!stage.isConnected && stage.parentNode == null) return;
           const p = strokePlayer(stage, { text: han.join(''), size: han.length === 1 ? 132 : Math.max(72, Math.floor(300 / han.length)), autoplay: true });
           players.push(p);
-          p.ready?.then?.(() => {
-            if (!p.steps) {
-              const ybBtn = btn(`Look up ${han[0]} on YellowBridge ↗`, 'search', () => window.open(`https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(han[0])}`, '_blank', 'noopener,noreferrer'));
-              bar.append(ybBtn);
-            }
-          });
+          p.ready?.then?.(() => { if (!p.steps) yellowBridge(); });
         }).catch(() => {
           stage.replaceChildren(el('p', 'muted', 'Stroke order could not be loaded.'));
-          const ybBtn = btn(`Look up ${han[0]} on YellowBridge ↗`, 'search', () => window.open(`https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(han[0])}`, '_blank', 'noopener,noreferrer'));
-          bar.append(ybBtn);
+          yellowBridge();
         });
       };
       function player() { practising = false; practiseBtn.querySelector('span').textContent = 'Practise'; showPlayer(); }

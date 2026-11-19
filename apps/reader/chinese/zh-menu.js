@@ -121,14 +121,14 @@ export async function lookUp(text, context = {}, near = null) {
   const { openLookup } = await loadPanel();
   return openLookup(text, { host: panelHost(), context, near });
 }
-async function annotateQuick(text, ms = 700) {
+async function annotateQuick(text, ms = 400) {
   try {
     const { chinese } = await import('./client.js');
     const script = await scriptNow();
     return await Promise.race([chinese().annotate(text, { script }), new Promise((r) => setTimeout(() => r(null), ms))]) || [];
   } catch { return []; }
 }
-async function lookupQuick(text, ms = 650) {
+async function lookupQuick(text, ms = 350) {
   try {
     const { chinese } = await import('./client.js');
     const script = await scriptNow();
@@ -238,12 +238,14 @@ export async function convertFrom(text, near = null) {
 async function hitEntries(hit, ctx = () => ({}), near = null) {
   const c = charAround(hit.text, hit.index);
   if (!c || !HAN.test(c.char)) return [];
+  // The character's look-up runs while the word is found, so the menu waits for one, not two.
+  const charLookup = lookupQuick(c.char);
   const runs = await annotateQuick(hit.text);
   const w = wordAround(runs, c.start);
   const k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
   const [wordInfo, charInfo] = await Promise.all([
     w && [...w.text].length > 1 ? lookupQuick(w.text) : Promise.resolve(null),
-    lookupQuick(c.char),
+    charLookup,
   ]);
   const out = [];
   if (w && [...w.text].length > 1) {
@@ -264,7 +266,8 @@ const selectionEntries = (text, near, replace = null, info = null) => {
   return [
     lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
     hanOnly && host.openTracePrefab && { label: `Trace & stroke order prefab (${hanOnly})…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
-    hanOnly && replace && {
+    // Only in a Markdown editor (notes, documents): a plain field would get the picture's raw data.
+    hanOnly && replace && near?.closest?.('.notes-editor, #textEditor') && {
       label: `Insert trace order sheet for “${hanOnly}” here`,
       icon: 'graph',
       run: async () => {
