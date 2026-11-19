@@ -230,7 +230,8 @@ test('homeScreen rememberCover does not throw for .nfedit and recentCard marks m
     await home.renderRecent();
     await new Promise((r) => setTimeout(r, 15));
     const card = fake.byId.get('recentList').children[0]?.children[0];
-    const coverImg = card?.children[0];
+    // The card holds the selection check first, then the cover.
+    const coverImg = card?.children.find((c) => c.className?.split?.(' ').includes('note-cover') || c.classList?.contains('note-cover'));
     assert.equal(coverImg?.classList.contains('missing'), true);
   } finally {
     globalThis.document = prevDoc;
