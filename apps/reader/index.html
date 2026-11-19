@@ -401,17 +401,30 @@
             <input id="recentSearch" type="search" placeholder="Search recent notes…" aria-label="Search recent notes" autocomplete="off" spellcheck="false" />
             <button id="recentSearchClear" type="button" class="icon-button recent-search-clear" data-icon="close" aria-label="Clear search" title="Clear search" hidden></button>
           </div>
+          <button id="recentContentSearch" type="button" class="icon-button recent-content-toggle" data-icon="searchText" aria-pressed="false" aria-label="Search inside notes" title="Search inside notes: PDF text, handwriting, OCR and transcripts of Recent (Shift Enter in the search box)" aria-keyshortcuts="Shift+Enter"></button>
           <div class="recent-batch-actions">
-            <button id="batchTranscribeMode" type="button" class="chip" data-icon="headphones" title="Select recent notes with audio recordings to transcribe in batch (notes without audio are greyed out)">Batch transcribe</button>
+            <button id="batchTranscribeMode" type="button" class="chip batch-mode-btn" data-icon="headphones" title="Select recent notes with audio recordings to transcribe in batch (notes without audio are greyed out)">Batch transcribe</button>
             <button id="batchTranscribeSelectAll" type="button" class="chip" hidden>Select all</button>
             <button id="batchTranscribeStart" type="button" class="primary chip" data-icon="headphones" disabled hidden>Transcribe (0)…</button>
             <button id="batchTranscribeCancel" type="button" class="chip" hidden>Cancel</button>
+            <button id="batchOcrMode" type="button" class="chip batch-mode-btn" data-icon="grab" title="Select recent notes, PDFs and pictures to recognize their handwriting and scanned pages in batch (OCR); the text becomes searchable">Batch OCR</button>
+            <button id="batchOcrSelectAll" type="button" class="chip" hidden>Select all</button>
+            <button id="batchOcrStart" type="button" class="primary chip" data-icon="grab" disabled hidden>Recognize (0)…</button>
+            <button id="batchOcrCancel" type="button" class="chip" hidden>Cancel</button>
+            <button id="batchShareMode" type="button" class="chip batch-mode-btn" data-icon="share" title="Select several recent notes to send at once: system share sheet, or one .zip by Wi-Fi link, P2P QR or file">Share</button>
+            <button id="batchShareSelectAll" type="button" class="chip" hidden>Select all</button>
+            <button id="batchShareStart" type="button" class="primary chip" data-icon="share" disabled hidden>Share (0)…</button>
+            <button id="batchShareCancel" type="button" class="chip" hidden>Cancel</button>
             <button id="findDuplicates" type="button" class="chip find-duplicates-btn" data-icon="copy" title="Scan recent notes for duplicates by name, note ID, and hash, and combine them">Find duplicates…</button>
           </div>
         </div>
         <div id="recentContent" class="category-content">
           <p id="folderEmpty" class="muted" hidden>Nothing in this folder yet. Move a note here from its ⋯ menu.</p>
           <p id="recentSearchEmpty" class="muted" hidden>No notes match your search.</p>
+          <div id="contentResults" class="content-results" role="region" aria-label="Matches inside notes" aria-live="polite" hidden>
+            <div class="content-results-head"><span id="contentSummary" class="muted"></span><button id="contentIndex" type="button" class="chip" data-icon="grab" hidden>Index…</button></div>
+            <ul id="contentList" class="content-list"></ul>
+          </div>
           <ul id="recentList" class="note-grid"></ul>
         </div>
       </section>
@@ -1079,7 +1092,7 @@
               <button id="transcribeAudio" type="button" class="primary" title="Transcribe this recording. Shift-click to transcribe again instead of loading the saved transcript">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
               <button id="transcriptEdit" type="button" class="icon-button" data-icon="draw" aria-pressed="false" aria-label="Edit" hidden title="Edit: click a word to correct it"></button>
-              <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation; every word keeps its time"></button>
+              <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation (every word keeps its time) and can flag side talk and fragments in red for you to remove or keep"></button>
               <button id="transcriptRestore" type="button" class="icon-button" data-icon="undo" aria-label="Undo revision" hidden title="Undo revision: bring back the automatic transcript from before the AI revision"></button>
               <span class="spacer"></span>
               <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">TXT</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="json">JSON</option></select>
@@ -1336,6 +1349,71 @@
     <div class="ocr-actions">
       <button id="btCancelBtn" type="button">Cancel</button>
       <button id="btConfirmBtn" class="primary" type="button">Transcribe</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="batchOcrDialog" class="ocr-dialog batch-transcribe-dialog" aria-labelledby="batchOcrTitle">
+  <div class="batch-transcribe-form">
+    <div class="ocr-header">
+      <div>
+        <p class="eyebrow">Search &amp; OCR</p>
+        <h2 id="batchOcrTitle">Batch recognize text</h2>
+      </div>
+      <button id="boClose" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+    </div>
+    <p class="ocr-hint">Handwriting and scanned pages of the chosen documents are recognized on this device, one after the other, in the background. Results are kept with each note: Find, the AI and the search inside notes use them.</p>
+    <div class="bt-grid">
+      <label class="ocr-field"><span>Languages <span class="muted">(Ctrl/⌘-click for several)</span></span><select id="boLanguage" multiple size="4"></select></label>
+      <div class="bt-choices-box">
+        <span class="bt-section-title">Quality</span>
+        <label class="ocr-check" title="Three passes over a page"><input type="radio" name="boQuality" value="normal" checked /> <span>Normal</span></label>
+        <label class="ocr-check" title="Eight passes over a page; about three times slower, fewer misread words"><input type="radio" name="boQuality" value="high" /> <span>High <span class="muted">(slower)</span></span></label>
+      </div>
+    </div>
+    <div class="bt-choices-box">
+      <span class="bt-section-title">Pages</span>
+      <label class="ocr-check"><input id="boSkipPdf" type="checkbox" checked /> <span>Skip the printed text of PDF pages (handwriting on them is still read)</span></label>
+      <label class="ocr-check"><input id="boRedo" type="checkbox" /> <span>Recognize again pages already done</span></label>
+    </div>
+    <div class="bt-recordings-section">
+      <div class="bt-recordings-header">
+        <span id="boSummary" class="bt-summary">0 documents queued</span>
+        <button id="boSelectAll" class="ghost small" type="button">Select all</button>
+      </div>
+      <div id="boNotesList" class="bt-notes-list"></div>
+    </div>
+    <p id="boStatus" class="muted" role="status" aria-live="polite"></p>
+    <div class="ocr-actions">
+      <button id="boCancel" class="ghost" type="button">Cancel</button>
+      <button id="boConfirm" class="primary" type="button">Recognize</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="batchShareDialog" class="ocr-dialog batch-transcribe-dialog" aria-labelledby="batchShareTitle">
+  <div class="batch-transcribe-form">
+    <div class="ocr-header">
+      <div>
+        <p class="eyebrow">Share</p>
+        <h2 id="batchShareTitle">Share notes</h2>
+      </div>
+      <button id="bsClose" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+    </div>
+    <p class="ocr-hint">The chosen notes are sent as they are saved in Recent. Several notes travel together as one .zip: the receiver opens it in NoteComplete and picks the notes inside.</p>
+    <div class="bt-recordings-section">
+      <div class="bt-recordings-header">
+        <span id="bsSummary" class="bt-summary">0 notes to share</span>
+        <button id="bsSelectAll" class="ghost small" type="button">Select all</button>
+      </div>
+      <div id="bsNotesList" class="bt-notes-list"></div>
+    </div>
+    <p id="bsStatus" class="muted" role="status" aria-live="polite"></p>
+    <div class="ocr-actions">
+      <button id="bsCancel" class="ghost" type="button">Cancel</button>
+      <button id="bsZip" type="button" data-icon="save" title="Save the chosen notes as one .zip file">Save .zip</button>
+      <button id="bsSystem" type="button" data-icon="share" title="Send the notes with this device's share sheet (Mail, Messages, Drive, AirDrop…)" hidden>Share sheet…</button>
+      <button id="bsQr" class="primary" type="button" data-icon="qr" title="Send one .zip by Wi-Fi link, peer-to-peer QR or offline QR, like Share note via QR">QR or link…</button>
     </div>
   </div>
 </dialog>

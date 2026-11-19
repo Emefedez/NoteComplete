@@ -3993,6 +3993,25 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .recent-search-clear { position: absolute; right: 3px; width: 24px; min-width: 24px; min-height: 24px; padding: 0; border-radius: 50%; background: transparent; color: var(--muted); }
 .recent-search-clear svg { width: 13px; height: 13px; }
 #recentSearchEmpty { margin: 8px 2px; font-size: 13px; }
+/* Search inside notes: the second magnifier, pressed while the box searches note contents. */
+.recent-content-toggle { flex: none; width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; margin-left: -6px; border-radius: 99px; background: var(--fill); color: var(--muted); }
+.recent-content-toggle svg { width: 16px; height: 16px; }
+.recent-content-toggle:hover { background: var(--accent-soft); color: var(--accent); }
+.recent-content-toggle[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.recent-heading.content-mode #recentSearch { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.content-results { margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-box, var(--radius)); background: var(--surface); }
+.content-results[hidden] { display: none; }
+.content-results-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; font-size: 12.5px; }
+.content-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; max-height: min(320px, 40dvh); overflow-y: auto; overscroll-behavior: contain; }
+.content-list:empty { display: none; }
+.content-list > li { display: grid; gap: 2px; padding: 6px 0 4px; border-top: 1px solid var(--line); }
+.content-list > li:first-child { border-top: 0; }
+.content-note { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.content-note .find-badge { grid-row: auto; }
+.content-hit, .content-more { display: flex; align-items: baseline; justify-content: flex-start; gap: 8px; width: 100%; min-height: 0; padding: 3px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.content-hit:hover, .content-hit:focus-visible, .content-more:hover { background: var(--accent-soft); }
+.content-hit .find-where { flex: none; min-width: 3.5em; }
+.content-more { font-size: 11.5px; color: var(--accent); }
 
 /* Expand with AI dialog */
 .expand-dialog { width: min(1040px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
@@ -4658,15 +4677,17 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   gap: 6px;
   flex-wrap: wrap;
 }
-.note-grid.batch-transcribe-selecting .note-card.no-audio {
+.note-grid.batch-selecting .note-card.no-items {
   opacity: 0.38;
   filter: grayscale(0.85);
   cursor: not-allowed;
 }
-.note-grid.batch-transcribe-selecting .note-card.no-audio .note-select-check {
+.note-grid.batch-selecting .note-card.no-items .note-select-check {
   display: none !important;
 }
-.card-audio-pick {
+/* While one batch mode selects, the other modes' buttons step aside. */
+#recentSection:has(#recentList.batch-selecting) .batch-mode-btn { display: none; }
+.card-batch-pick {
   position: absolute;
   left: 8px;
   top: 8px;
@@ -4788,7 +4809,7 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   gap: 8px;
   font-size: 12.5px;
 }
-.bt-rec-list {
+.bt-rec-items, .bt-rec-list {
   display: grid;
   gap: 3px;
 }
@@ -4815,7 +4836,7 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .bt-rec-row:hover {
   background: var(--accent-soft);
 }
-.bt-rec-name {
+.bt-rec-title, .bt-rec-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -4862,3 +4883,15 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 
 /* File formats: a reading dialog, wide so it is read without scrolling on a laptop screen. */
 .formats-dialog { width: min(900px, calc(100vw - 24px)); }
+/* Ticks in the batch dialogs' note lists (batch-select.js): the same circle as on the cards. */
+:is(.bt-note-head, .bt-rec-row) { cursor: pointer; }
+:is(.bt-note-head, .bt-rec-row) .note-select-check { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); color: transparent; transition: background .15s ease, border-color .15s ease; }
+:is(.bt-note-head, .bt-rec-row).is-selected .note-select-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bt-note-head .bt-note-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-rec-row { width: 100%; border: 0; color: inherit; text-align: left; }
+#boLanguage { width: 100%; min-height: 84px; }
+
+/* Transcript words Revise with AI flagged as likely noise (side talk, fragments): kept until
+   the user removes or keeps them (transcript.js). */
+#transcriptWords button.noise { text-decoration: underline wavy #d23b3b; text-decoration-thickness: 1.5px; text-underline-offset: 3px; color: color-mix(in srgb, var(--ink) 70%, #d23b3b); }
+#transcriptWords button.noise:hover { background: color-mix(in srgb, #d23b3b 14%, transparent); }

@@ -468,7 +468,8 @@ function noteShareBridge() {
 }
 
 /**
- * Export → Share with others → Share note via QR…
+ * Export → Share with others → Share note via QR…  (also Home → Recent → Share, with `file`:
+ * several notes packed in one .zip by batch-share.js, sent as they are with no format choice)
  * On desktop & Android: serves the chosen note (.nfedit, .notecomp, or .noteful) over the local
  * sharing server (plus optional Cloudflare online link on desktop), or sends directly via
  * zero-server WebRTC P2P QR / compact offline QR stream.
@@ -477,8 +478,8 @@ function noteShareBridge() {
 const MAX_OFFLINE_NOTE_BYTES = 48 * 1024;
 const formatByteSize = (n) => (n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${(n / 1024).toFixed(n >= 102400 ? 0 : 1)} KB`);
 
-export async function openShareNoteQr(host) {
-  if (!host.doc) throw Error('Open a note first.');
+export async function openShareNoteQr(host, { file = null, title = 'Share note via QR' } = {}) {
+  if (!file && !host.doc) throw Error('Open a note first.');
   let format = 'project';
   let projectOptions = null;
   let sharedId = null;
@@ -497,7 +498,10 @@ export async function openShareNoteQr(host) {
       }
     },
   });
-  const formats = [
+  // The file to send, and a copy saved instead: the open note in the chosen format, or `file`.
+  const exportNow = () => (file ? Promise.resolve(file) : host.exportNote(format, format === 'project' ? projectOptions : undefined));
+  const saveCopy = () => (file ? host.download(file.bytes, file.name, file.mime) : host.exportAndDownload(format, format === 'project' ? projectOptions : undefined));
+  const formats = file ? [] : [
     ['project', 'NoteComplete project (.nfedit)', 'Original note, edit history, PDFs, audio recordings, Markdown notes, handwriting text & study sets'],
     ...(!host.doc.canvas ? [['noteful', 'Noteful (.noteful)', 'Flattened pages & ink for Noteful']] : []),
   ];
@@ -515,6 +519,7 @@ export async function openShareNoteQr(host) {
   }
   customizeBtn.hidden = !host.pickProjectOptions;
   fieldset.append(customizeBtn);
+  if (file) fieldset.hidden = true;
 
   const tabs = el('div', { className: 'collab-tabs', role: 'tablist', 'aria-label': 'Note QR transfer method' });
   const tabDefs = bridge
@@ -615,7 +620,7 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(
       el('div', { className: 'collab-pair' }, qrBox, meta),
       buttons(
-        iconBtn('save', 'Save / share file', { onclick: async () => { closeDialog(); await host.exportAndDownload(format, format === 'project' ? projectOptions : undefined); } }),
+        iconBtn('save', 'Save / share file', { onclick: async () => { closeDialog(); await saveCopy(); } }),
         scanBtn,
         iconBtn('close', 'Close', { onclick: closeDialog }),
         connectBtn));
@@ -628,7 +633,7 @@ export async function openShareNoteQr(host) {
         title: `Share “${exported.name}” offline via QR`,
         subtitle: 'Receiver opens Export & share… → Receive note via QR / P2P… → Scan QR stream.',
         payload: { kind: 'note', name: exported.name, mime: exported.mime, base64: base64UrlEncode(exported.bytes) },
-        onDownloadFallback: () => host.exportAndDownload(format, format === 'project' ? projectOptions : undefined),
+        onDownloadFallback: () => saveCopy(),
         fallbackLabel: 'Save file instead',
         status: host.status,
       });
@@ -638,9 +643,9 @@ export async function openShareNoteQr(host) {
         el('p', {}, el('strong', { textContent: exported.name }), ` is ${formatByteSize(exported.bytes.byteLength)}.`),
         el('p', { className: 'muted', textContent: `Pure offline visual QR frames work best up to ${Math.round(MAX_OFFLINE_NOTE_BYTES / 1024)} KB (smaller ink/Markdown notes or study packs). Strip PDFs/media in .nfedit, or use Web / iOS P2P QR.` }),
         buttons(
-          ...(format === 'project' && host.pickProjectOptions ? [iconBtn('trim', 'Strip PDFs / media…', { onclick: () => customizeBtn.click() })] : []),
+          ...(!file && format === 'project' && host.pickProjectOptions ? [iconBtn('trim', 'Strip PDFs / media…', { onclick: () => customizeBtn.click() })] : []),
           iconBtn('share', 'Use Web / iOS P2P QR', { className: 'primary', onclick: () => tabButtons.p2p.click() }),
-          iconBtn('cards', 'Share quizzes & decks (QR)…', { onclick: () => { closeDialog(); void openStudyShare(host); } }),
+          ...(file ? [] : [iconBtn('cards', 'Share quizzes & decks (QR)…', { onclick: () => { closeDialog(); void openStudyShare(host); } })]),
           iconBtn('qr', 'Force QR stream (not recommended)', { className: 'danger', title: 'Export this large note as an offline QR stream anyway — takes many QR frames to scan', onclick: launchOfflineQr }),
           iconBtn('close', 'Close', { onclick: closeDialog }),
         ));
@@ -658,7 +663,7 @@ export async function openShareNoteQr(host) {
     stage.replaceChildren(el('p', { className: 'muted', textContent: 'Preparing note package…' }));
     try {
       await cleanupActive();
-      const exported = await host.exportNote(format, format === 'project' ? projectOptions : undefined);
+      const exported = await exportNow();
       if (mode === 'p2p') {
         await renderP2pShare(exported);
         return;
@@ -711,7 +716,7 @@ export async function openShareNoteQr(host) {
       },
     }));
     actions.push(iconBtn('save', 'Save file copy', {
-      onclick: async () => { closeDialog(); await host.exportAndDownload(format); },
+      onclick: async () => { closeDialog(); await saveCopy(); },
     }));
     if (bridge.canOnline) {
       const onlineBtn = iconBtn('cloud', sharedMeta.online ? 'Turn off online link' : 'Make reachable online (Cloudflare)…', {
@@ -739,7 +744,7 @@ export async function openShareNoteQr(host) {
     );
   }
 
-  const d = dialog('Share note via QR', tabs, fieldset, stage);
+  const d = dialog(title, tabs, fieldset, stage);
   d.addEventListener('close', () => { void cleanupActive(); }, { once: true });
   await render();
 }

@@ -34,6 +34,8 @@ import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
+import { sideDocument } from "./side-document.js";
+import { rememberFingerprint } from "./content-search.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
 import { updateNotice } from "./updates.js";
@@ -5736,6 +5738,8 @@ async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
+    // Search inside notes from Recent finds this note's kept text without reading it again.
+    if (entry && find.fingerprint) rememberFingerprint(library, entry, find.fingerprint);
     activeCoverKeyOverride = entry?.source === "drive"
       ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
       : entry?.source === "dropbox"
@@ -6164,6 +6168,20 @@ var home = homeScreen({
   exportStudy: exportStudyOf,
   cutHistory: cutHistoryOf,
   exportNote: exportNoteOf,
+  // Batch OCR and the search inside notes read other notes' pages like the open one's.
+  pageCanvas,
+  findIn: (query) => { if (doc && !$("editor").hidden) find.find(query); },
+  onContentKept: (fingerprint, data) => find.adopt(fingerprint, data),
+  // Home → Recent → Share: several notes in one .zip, sent like one note (collab.js).
+  shareZip: async (file) => {
+    try {
+      const { openShareNoteQr } = await (collabLoading ||= import("./collab.js"));
+      await openShareNoteQr(collabHost, { file, title: "Share notes" });
+    } catch (e) {
+      collabLoading = null;
+      status(e.message, true);
+    }
+  },
   current: () => ({
     entryKey: noteEntryKey,
     webUrl: webView.hasDocument ? webView.url : "",
@@ -7239,30 +7257,11 @@ async function notePages(file, maxPages = 20) {
   const kind = fileKind(file.name, bytes);
   if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
   if (!["note", "notecomplete", "project", "notebook"].includes(kind)) throw Error("only notes, notebooks, PDFs and pictures can be shown here");
-  const worker = new Worker("./worker.js", { type: "module" });
-  const waiting = new Map();
-  let next = 0;
-  const ready = new Promise((resolve, reject) => {
-    worker.onmessage = ({ data }) => {
-      if (data.ready) return resolve();
-      if (data.fatal) return reject(Error(data.fatal));
-      const w = waiting.get(data.id);
-      if (!w) return;
-      waiting.delete(data.id);
-      if (data.error) w.reject(Error(data.error)); else w.resolve(data.result);
-    };
-  });
-  const ask = (op, args = {}, page = 0) => new Promise((resolve, reject) => {
-    const id = ++next;
-    waiting.set(id, { resolve, reject });
-    worker.postMessage({ id, op, page, ...args });
-  });
-  const pdfs = new PdfBackgrounds((resource) => ask("pdf", { resource }));
+  const side = sideDocument();
   try {
-    await ready;
-    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete", notebook: kind === "notebook", name: file.name });
+    const first = await side.open(file, { kind, bytes: bytes.buffer });
     const count = Math.min(Number(first.pages) || 1, maxPages);
-    const source = { view: (i) => (i === 0 ? first : ask("view", {}, i)), backgrounds: pdfs };
+    const source = { view: (i) => (i === 0 ? first : side.view(i)), backgrounds: side.backgrounds };
     const pages = [];
     for (let i = 0; i < count; i++) {
       const { canvas } = await pageCanvas(i, 1200, {}, source);
@@ -7271,8 +7270,7 @@ async function notePages(file, maxPages = 20) {
     }
     return { pages };
   } finally {
-    pdfs.close?.();
-    worker.terminate();
+    side.close();
   }
 }
 // Recent notes the editor can show: the ones this device can read without a download.

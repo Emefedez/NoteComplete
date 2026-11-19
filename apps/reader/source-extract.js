@@ -1,6 +1,6 @@
 // Shared multi-source text & image extraction for AI Batch Notes and Exam Generator.
 import { decodeText, isOfficeName, isTextName, looksLikeText } from './text-types.js';
-import { SOURCE_NAMES, canvasImage } from './ai-context.js';
+import { canvasImage, labelledText } from './ai-context.js';
 
 const ARCHIVE_EXT = /\.(noteful|nfedit|notepart|notecomp|notecomplete)$/i;
 const IMAGE_MIME = {
@@ -486,10 +486,7 @@ export async function extractFileBytes(name, bytes, { call, openPdf, maxPages = 
 export function coercePageText(raw) {
   if (typeof raw === 'string') return raw.trim();
   if (!raw || typeof raw !== 'object') return '';
-  return Object.entries(raw)
-    .filter(([, v]) => typeof v === 'string' && v.trim())
-    .map(([k, v]) => `${SOURCE_NAMES[k] || k}: ${v.trim()}`)
-    .join('\n');
+  return labelledText(raw);
 }
 
 async function readOpenSource(source, { pageText, pageCanvas, notesText, documentInfo }) {
