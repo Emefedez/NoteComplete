@@ -105,3 +105,73 @@ export async function archiveCover(read, size) {
 export function blobReader(blob) {
   return async (start, end) => new Uint8Array(await blob.slice(start, end).arrayBuffer());
 }
+
+// A Goodnotes or Notability notebook's own picture (thumbnail.jpg / thumbnail.png at its root,
+// or in its one folder when the notebook was zipped as a folder), read from the zip with ranged
+// reads: the end record, the central directory, then that one member. Null when the zip has no
+// notebook (index.notes.pb or noteBundle beside the picture) or no picture.
+const THUMBNAILS = ['thumbnail.jpg', 'thumbnail.jpeg', 'thumbnail.png'];
+const NOTEBOOK_MARKS = ['index.notes.pb', 'noteBundle'];
+export async function notebookCover(read, size) {
+  if (!(size >= 22)) return null;
+  const tailStart = Math.max(0, size - 22 - 65535);
+  const tail = await read(tailStart, size);
+  const view = (bytes) => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const t = view(tail);
+  let end = -1;
+  for (let i = tail.length - 22; i >= 0; i--) if (t.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  if (end < 0) return null;
+  let count = t.getUint16(end + 10, true), dirSize = t.getUint32(end + 12, true), dirAt = t.getUint32(end + 16, true);
+  if ((count === 0xffff || dirSize === 0xffffffff || dirAt === 0xffffffff) && end >= 20 && t.getUint32(end - 20, true) === 0x07064b50) {
+    // Zip64: the locator before the end record points at the zip64 end record.
+    const at = Number(t.getBigUint64(end - 12, true));
+    const z = view(await read(at, at + 56));
+    if (z.getUint32(0, true) !== 0x06064b50) return null;
+    count = Number(z.getBigUint64(32, true)); dirSize = Number(z.getBigUint64(40, true)); dirAt = Number(z.getBigUint64(48, true));
+  }
+  if (!(dirSize > 0) || dirAt + dirSize > size || dirSize > 32 * 1048576) return null;
+  const dir = await read(dirAt, dirAt + dirSize), d = view(dir), entries = new Map();
+  const decoder = new TextDecoder();
+  for (let at = 0, n = 0; at + 46 <= dir.length && n < count; n++) {
+    if (d.getUint32(at, true) !== 0x02014b50) return null;
+    const method = d.getUint16(at + 10, true), nameLength = d.getUint16(at + 28, true);
+    const extraLength = d.getUint16(at + 30, true), commentLength = d.getUint16(at + 32, true);
+    let compressed = d.getUint32(at + 20, true), plain = d.getUint32(at + 24, true), local = d.getUint32(at + 42, true);
+    const name = decoder.decode(dir.subarray(at + 46, at + 46 + nameLength));
+    // Zip64 sizes and offset, in that order, for the fields that are 0xffffffff.
+    for (let e = at + 46 + nameLength, stop = e + extraLength; e + 4 <= stop;) {
+      const id = d.getUint16(e, true), length = d.getUint16(e + 2, true);
+      if (id === 1) {
+        let p = e + 4;
+        if (plain === 0xffffffff) { plain = Number(d.getBigUint64(p, true)); p += 8; }
+        if (compressed === 0xffffffff) { compressed = Number(d.getBigUint64(p, true)); p += 8; }
+        if (local === 0xffffffff) local = Number(d.getBigUint64(p, true));
+      }
+      e += 4 + length;
+    }
+    entries.set(name, { method, compressed, plain, local });
+    at += 46 + nameLength + extraLength + commentLength;
+  }
+  const folders = new Set([...entries.keys()].map((n) => (n.includes('/') ? n.slice(0, n.indexOf('/') + 1) : '')));
+  const prefix = ['', ...(folders.size === 1 ? folders : [])].find((p) => NOTEBOOK_MARKS.some((m) => entries.has(p + m)));
+  if (prefix === undefined) return null;
+  const found = THUMBNAILS.map((n) => entries.get(prefix + n)).find(Boolean);
+  if (!found || found.compressed > 8 * 1048576 || found.plain > 32 * 1048576 || ![0, 8].includes(found.method)) return null;
+  const head = view(await read(found.local, found.local + 30));
+  if (head.getUint32(0, true) !== 0x04034b50) return null;
+  const start = found.local + 30 + head.getUint16(26, true) + head.getUint16(28, true);
+  let bytes = await read(start, start + found.compressed);
+  if (found.method === 8) {
+    if (typeof DecompressionStream !== 'function') return null;
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const mime = bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg' : bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : '';
+  return mime ? { bytes, mime } : null;
+}
+
+// A notebook's own picture kept as its cover until its first page is drawn (it is often the
+// notebook's coloured cover, not a page): marked in the data URL, which still loads as is.
+const NOTEBOOK_MARK = ';cover=notebook';
+export const markNotebookCover = (url) => String(url || '').replace(/^data:([^;,]+)/, `data:$1${NOTEBOOK_MARK}`);
+export const isNotebookCover = (url) => typeof url === 'string' && url.startsWith('data:') && url.slice(0, 64).includes(NOTEBOOK_MARK);

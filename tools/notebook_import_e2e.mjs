@@ -177,6 +177,41 @@ try {
     console.log(`· ${file}: opened as a note (${before} items), ink and a prefab added, saved as v13 with the notebook kept, reopened with undo`);
   }
 
+  // Recent covers: a notebook (and a zipped one, as Goodnotes exports them) gets its first
+  // page as its cover once it is open (its own thumbnail stands in before), kept after a restart.
+  const coverOf = (name) => p.evaluate(async (name) => {
+    const { Library } = await import('./library.js');
+    const lib = new Library();
+    const entry = (await lib.store.values('entries')).filter((e) => e.name === name).sort((a, b) => b.openedAt - a.openedAt)[0];
+    return entry ? String((await lib.cover(entry.key)) || '') : 'no entry';
+  }, name);
+  const firstPageCover = async (name) => {
+    for (let i = 0; i < 100; i++) {
+      const url = await coverOf(name);
+      if (url.startsWith('data:image/jpeg;base64,')) return url;
+      await sleep(100);
+    }
+    throw Error(`${name}: cover ${(await coverOf(name)).slice(0, 60)}`);
+  };
+  const covered = [['goodnotes-basic.goodnotes', 'Lecture 5.goodnotes.zip'], ['goodnotes-pdf.goodnotes', 'Worksheet.goodnotes'], ['notability-basic.ntb', 'Biology.ntb']];
+  for (const [fixture, name] of covered) {
+    const bytes = readFileSync(fileURLToPath(new URL(`../tests/fixtures/import/${fixture}`, import.meta.url)));
+    await p.evaluate(() => { document.getElementById('status').textContent = ''; });
+    await p.setInputFiles('#file', { name, mimeType: 'application/octet-stream', buffer: bytes });
+    await p.waitForFunction((t) => document.getElementById('title').textContent.startsWith(t), name.replace(/\..*$/, ''));
+    await p.waitForSelector('.sheet[data-page="0"] .render');
+    await keepFile();
+    await firstPageCover(name);
+  }
+  await freshPage();
+  await p.waitForFunction(() => document.querySelectorAll('#recentList .note-card').length > 0);
+  for (const title of ['Lecture 5', 'Worksheet', 'Biology']) {
+    const card = p.locator('#recentList .note-card', { has: p.locator('strong', { hasText: new RegExp(`^${title}`) }) }).first();
+    await p.waitForFunction((el) => el?.getAttribute('src')?.startsWith('data:image/jpeg') && !el.classList.contains('missing'), await card.locator('img.note-cover').elementHandle())
+      .catch(async (e) => { throw Error(`${title}: card cover ${await card.locator('img.note-cover').getAttribute('src')} (${e.message})`); });
+  }
+  console.log('· notebook covers: the first page, for .goodnotes, .ntb and .goodnotes.zip, after a restart too');
+
   assert.deepEqual(errors, []);
   console.log('notebook import e2e: ok');
 } catch (error) {

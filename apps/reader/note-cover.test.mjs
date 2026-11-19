@@ -80,3 +80,38 @@ test('files that are not tar packages have no archive cover', async () => {
   const bytes = new Uint8Array(readFileSync(new URL('Practice%20book%20(vol.%201).noteful', folder)));
   assert.equal(await archiveCover(async (a, b) => bytes.slice(a, b), bytes.length), null);
 });
+
+test('a notebook\'s own picture is read from its zip with a few ranged reads', async () => {
+  const { notebookCover } = await import('./note-cover.js');
+  const fixtures = new URL('../../tests/fixtures/import/', import.meta.url);
+  for (const [name, mime] of [['goodnotes-basic.goodnotes', 'image/jpeg'], ['notability-basic.ntb', 'image/png']]) {
+    const bytes = new Uint8Array(readFileSync(new URL(name, fixtures)));
+    const { calls, read } = ranged(bytes);
+    const cover = await notebookCover(read, bytes.length);
+    assert.equal(cover?.mime, mime, name);
+    assert.ok(cover.bytes.length > 50, name);
+    // The end record, the directory, the member's header and its bytes: never the whole file.
+    assert.ok(calls.length <= 4, `${name}: ${calls.length} reads`);
+  }
+});
+
+test('a notebook zipped as a folder has its picture; other zips have none', async () => {
+  const { notebookCover } = await import('./note-cover.js');
+  const { zipFiles } = await import('./zip.js');
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+  const folder = zipFiles([{ name: 'Lecture.goodnotes/index.notes.pb', bytes: new Uint8Array(4) }, { name: 'Lecture.goodnotes/thumbnail.jpg', bytes: jpeg }]);
+  const read = async (a, b) => folder.slice(a, b);
+  assert.deepEqual([...(await notebookCover(read, folder.length)).bytes], [...jpeg]);
+  const other = zipFiles([{ name: 'thumbnail.jpg', bytes: jpeg }, { name: 'notes.txt', bytes: new Uint8Array(3) }]);
+  assert.equal(await notebookCover(async (a, b) => other.slice(a, b), other.length), null);
+  assert.equal(await notebookCover(async (a, b) => jpeg.slice(a, b), jpeg.length), null);
+});
+
+test('a notebook\'s own picture is marked as standing in for its first page', async () => {
+  const { markNotebookCover, isNotebookCover } = await import('./note-cover.js');
+  const marked = markNotebookCover('data:image/jpeg;base64,AAAA');
+  assert.equal(marked, 'data:image/jpeg;cover=notebook;base64,AAAA');
+  assert.ok(isNotebookCover(marked));
+  assert.ok(!isNotebookCover('data:image/jpeg;base64,AAAA'));
+  assert.ok(!isNotebookCover(null));
+});

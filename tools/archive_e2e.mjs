@@ -107,6 +107,8 @@ await p.click('#zipX');
 await p.setInputFiles('#file', onePath);
 await p.waitForFunction(() => document.getElementById('title').textContent && !document.getElementById('zipWindow').open && document.querySelector('.sheet[data-page="0"] .render'));
 await p.waitForFunction(() => /Mi libreta/.test(document.getElementById('title').textContent));
+// The title shows before the notebook has finished opening: a file chosen meanwhile is ignored.
+await p.waitForFunction(() => /notebook opened as a note/.test(document.getElementById('status').textContent));
 assert.doesNotMatch(await p.textContent('#title'), /\.zip|\.goodnotes/);
 console.log(`· a zipped Goodnotes notebook opens as the notebook: "${await p.textContent('#title')}"`);
 

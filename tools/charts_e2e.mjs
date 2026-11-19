@@ -232,9 +232,19 @@ try {
   await p.fill('.prefab-search', 'bar chart');
   await p.click('.prefab-card:has-text("Bar chart")');
   // The editor just opened (the one before may still be closing).
-  await p.waitForSelector('.chart-dialog[open] .ch-bars');
-  const bars = await p.locator('.chart-dialog[open] .ch-bars').boundingBox();
-  const col = await p.locator('.chart-dialog[open] .ch-bar-hit').first().boundingBox();
+  // Its bars are drawn again just after it opens: measure them once they hold still.
+  const boxOf = async (sel) => {
+    let last = null;
+    for (let i = 0; i < 50; i++) {
+      const box = await p.locator(sel).first().boundingBox().catch(() => null);
+      if (box && last && box.width === last.width && box.y === last.y) return box;
+      last = box;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    throw Error(`${sel} never settled`);
+  };
+  const bars = await boxOf('.chart-dialog[open] .ch-bars');
+  const col = await boxOf('.chart-dialog[open] .ch-bar-hit');
   await p.mouse.move(col.x + col.width / 2, col.y + col.height * 0.5);
   await p.mouse.down();
   await p.mouse.move(col.x + col.width / 2, col.y + 4, { steps: 5 });

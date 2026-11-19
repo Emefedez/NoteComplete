@@ -540,3 +540,50 @@ fn added_ink_and_text_boxes_stack_in_the_order_they_were_made() {
         "stroke, text, stroke: {svg}"
     );
 }
+
+#[test]
+fn a_notes_own_order_of_pictures_and_ink_is_kept_through_edits() {
+    use noteful_core::Image;
+    let picture = |x: f64| {
+        Image {
+        base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),
+        mime: "image/png".into(),
+        bounds: [x, 30., 300., 300.],
+        layer: 0,
+        text: None,
+        joined: false,
+        part: None,
+    }
+    };
+    // What each item of a page is, in the order it is drawn: `p` a picture, `s` ink.
+    let drawn = |e: &Editor| -> String {
+        let svg = e.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+        svg.split("data-item=\"")
+            .skip(1)
+            .map(|rest| {
+                if rest[..rest.find("</g>").unwrap()].contains("<image") {
+                    'p'
+                } else {
+                    's'
+                }
+            })
+            .collect()
+    };
+    // A note whose file has a picture under a stroke, then a picture over both (as an
+    // imported Goodnotes or Noteful page can).
+    let mut e = Editor::create_document("Order", &[[600., 800.]], &[]).unwrap();
+    e.add_image(0, picture(20.)).unwrap();
+    e.add_line(0, line(0, 1)).unwrap();
+    e.add_image(0, picture(200.)).unwrap();
+    let note = Editor::open(&e.export_noteful().unwrap()).unwrap();
+    assert_eq!(drawn(&note), "psp");
+    // Edited: ink and a picture added after it are over the note's own items, and the
+    // note's items keep their order when it is saved again.
+    let mut edited = note;
+    edited.add_line(0, line(0, 1)).unwrap();
+    edited.add_image(0, picture(100.)).unwrap();
+    edited.add_line(0, line(0, 1)).unwrap();
+    assert_eq!(drawn(&edited), "pspsps");
+    let saved = Editor::open(&edited.export_noteful().unwrap()).unwrap();
+    assert_eq!(drawn(&saved), "pspsps");
+}
