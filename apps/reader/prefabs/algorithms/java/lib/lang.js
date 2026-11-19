@@ -257,7 +257,7 @@ export function stringMethod(rt, s0, name, args) {
         while ((m = re.exec(s)) !== null) {
           if (m[0].length === 0) { if (m.index >= s.length) break; if (m.index === 0) { re.lastIndex++; continue; } }
           if (limit > 0 && parts.length === limit - 1) break;
-          if (!(m.index === 0 && m[0].length > 0 && last === 0 && parts.length === 0 && false)) parts.push(s.slice(last, m.index));
+          parts.push(s.slice(last, m.index));
           last = m.index + m[0].length;
           if (m[0].length === 0) re.lastIndex++;
         }

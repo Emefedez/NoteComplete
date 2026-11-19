@@ -6,6 +6,7 @@
 import { renderAnswer } from './chat.js';
 import { explainBox } from './explain.js';
 import { textBlock, notesBlock } from './ai-context.js';
+import { validBox } from './small-model.js';
 
 const $ = id => document.getElementById(id);
 
@@ -29,8 +30,6 @@ export function quizPrompt(instructions, { amount, language, title, unit = 'page
     return `${instructions.trim()}\nThe notes are the text document "${title}", split into numbered sections; there are no page images, so ignore any instruction about boxes.${multiInfo} ${lang} Ask about all of each section's material evenly. For every question give the section number and a short exact quote from that section (up to 25 words, copied as written) that shows the answer.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":${samplePage},"quote":"…"}}]}`;
   return `${instructions.trim()}\nThe notes are "${title}".${multiInfo} ${lang} Pages are shown with tape lifted so covered parts are readable; ask about all of each page's material evenly, not mainly what is taped or highlighted.\nReply with ONLY this JSON: {"questions":[{"question":"…","options":["…","…","…","…"],"answer":0,"source":{"page":${samplePage},"box":[0.05,0.3,0.95,0.5]}}]}`;
 }
-
-const validBox = b => Array.isArray(b) && b.length === 4 && b.every(v => Number.isFinite(v) && v >= 0 && v <= 1) && b[2] - b[0] > 0.02 && b[3] - b[1] > 0.01;
 
 // Keep well-formed questions, shuffle their options and remember the new answer index.
 export function prepareQuestions(value, pages, random = Math.random) {

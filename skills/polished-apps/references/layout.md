@@ -64,3 +64,7 @@ Use the `--z-*` scale (tokens.css): in-view overlays 1–9 (cursors, selections,
 ## Dialogs
 
 Wide (~580px), labels left of fields, radio groups as rows of choices, actions bottom-right (secondary filled, primary pale accent). Prefer inspector/inline editing over dialogs; dialogs for one-off tasks (export, new project, preferences).
+
+**Size: large and steady, no scrolling on a wide screen.** A dialog shows everything at once wherever it fits: wider (two columns from ~680px) rather than taller, and never a fixed small box that leaves its content scrolling inside. A menu-like dialog (a hub of choices, one panel) is `height: fit-content` up to the window; a dialog with tabs gets one fixed height, that of its tallest tab, so switching tabs never makes it jump. Only on a phone or a tall, narrow window (where it can't fit) do its columns stack and scroll — the whole body, not a small inner box. Check every dialog at 1280×720 and 1400×900 for inner scrollbars, and at 390px wide for horizontal overflow.
+
+**On a phone, movable windows fill the screen** under the tab strip (no drag, resize or `_ □`), and small look-up panels become bottom sheets. Editors inside a window stack their side panels under the canvas by a **container query on the editor itself**, not a media query on the viewport, so a narrow window on a wide screen stacks too.

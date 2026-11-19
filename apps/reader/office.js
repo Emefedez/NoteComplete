@@ -29,7 +29,6 @@ export function imageExtension(typeOrName) {
   const ext = text.match(/\.([a-z0-9]+)$/)?.[1];
   return ext && IMAGE_TYPES[ext] ? (ext === 'jpeg' ? 'jpg' : ext) : null;
 }
-export const imageType = (name) => IMAGE_TYPES[String(name).toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]] || 'application/octet-stream';
 // The folder for a document's pictures: its name without extension, with nothing a file system dislikes.
 export const imageFolder = (name) => `${String(name).replace(/\.[^./\\]+$/, '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/^\.+/, '').trim().slice(0, 120) || 'document'}_files`;
 // A path inside a Markdown link: spaces and brackets encoded, slashes kept.

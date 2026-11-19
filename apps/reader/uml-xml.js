@@ -79,7 +79,6 @@ const XMI_NS = { 'xmlns:xmi': 'http://schema.omg.org/spec/XMI/2.1', 'xmlns:uml':
 const PRIMITIVES = new Set(['String', 'Integer', 'Boolean', 'Real', 'UnlimitedNatural']);
 const VISIBILITY = { '+': 'public', '-': 'private', '#': 'protected', '~': 'package' };
 const VISIBILITY_BACK = Object.fromEntries(Object.entries(VISIBILITY).map(([k, v]) => [v, k]));
-const CONTEXT = { class: 'uml:Package', useCase: 'uml:Package', state: 'uml:StateMachine', activity: 'uml:Activity', sequence: 'uml:Interaction' };
 // Multiplicity text ↔ lower and upper values.
 function multiplicity(text) {
   const t = String(text || '').trim();

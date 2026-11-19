@@ -3,9 +3,10 @@
 // OCR runs only when the user starts it from the Recognize text dialog, then
 // continues in the background as a job chip in the bar.
 import { SearchIndex } from './search-index.js';
-import { ocrWorker, recognizePage, lineWords, uniqueLines, voteWords, ocrPasses, OCR_LANGUAGES } from './ocr.js';
+import { ocrWorker, recognizePage, lineWords, voteWords, ocrPasses, readPagePasses, pageHasInk, hasPdfText, OCR_LANGUAGES } from './ocr.js';
 import { loadDictionary, releaseDictionaries, correctWords, isWord as isLexiconWord, DICTIONARY_LANGUAGES } from './ocr-dictionary.js';
 import { textLayer } from './text-layer.js';
+import { transcriptText } from './ai-context.js';
 
 const $ = id => document.getElementById(id);
 const ns = 'http://www.w3.org/2000/svg';
@@ -24,14 +25,19 @@ export async function noteFingerprint(file) {
 // font's widths, not by character count; older kept words are read again. 3: each word
 // knows whether the PDF put a space before it. 4: spaced-out titles' letters joined into
 // words from where the PDF draws each glyph.
-const PDF_WORDS = 4;
+export const PDF_WORDS = 4;
 // What a page's PDF words were read from: the PDF page and where it sits. A page whose PDF
 // background was replaced (Edit PDF, a new background) reads its words again.
-const pdfSource = (view) => {
+export const pdfSource = (view) => {
   const bg = view.pdf_background;
   return [bg.resource_id, bg.page_index, (bg.rect || []).join(','), view.size.join(',')].join('|');
 };
-const emptyStore = () => ({ pdf: {}, ocr: {}, pdfFrom: {}, pdfWords: PDF_WORDS });
+// Kept per note fingerprint in the library's `search` store: PDF and OCR words with their
+// boxes (per page slot), and, for searching inside notes from Recent (content-search.js)
+// without opening them, the plain text of typed boxes and handwriting (`text`, per slot),
+// transcripts (`audio`, per recording) and which page each slot is (`pages`).
+export const emptyStore = () => ({ pdf: {}, ocr: {}, pdfFrom: {}, pdfWords: PDF_WORDS, text: {}, audio: {}, pages: {} });
+export const plainText = words => (words || []).map(w => w.text).join(' ');
 
 export function findController({ call, library, backgrounds, panels, jump, audio, status, pageCanvas, documentInfo, jobs }) {
   let index = new SearchIndex(), fingerprint = '', stored = emptyStore();
@@ -60,9 +66,9 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     const token = generation;
     return loading ||= (async () => {
       const kept = fingerprint ? await library.searchData(fingerprint) : null;
-      if (token === generation && kept?.pdf) {
+      if (token === generation && kept && (kept.pdf || kept.ocr || kept.text)) {
         const current = kept.pdfWords === PDF_WORDS;
-        stored = { ...emptyStore(), pdf: current ? kept.pdf : {}, pdfFrom: current ? kept.pdfFrom || {} : {}, ocr: kept.ocr || {} };
+        stored = { ...emptyStore(), pdf: current ? kept.pdf : {}, pdfFrom: current ? kept.pdfFrom || {} : {}, ocr: kept.ocr || {}, text: kept.text || {}, audio: kept.audio || {}, pages: kept.pages || {} };
       }
     })();
   }
@@ -86,15 +92,22 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       const { pages } = documentInfo();
       const timings = new Map();
       let extracted = false;
+      const before = JSON.stringify([stored.text, stored.pages]);
+      stored.text = {}; stored.pages = {};
       for (let page = 0; page < pages; page++) {
         if (token !== generation) return;
         if (page % 8 === 0) progress(`Indexing page ${page + 1} of ${pages}…`);
         const view = await call('view', { page });
         const slot = view.slot ?? page;
+        const typed = [];
         for (const text of view.texts || []) {
           const content = (text.runs || []).map(r => r.text).join('');
+          typed.push(content);
           index.add({ page, source: 'text', words: content.split(/\s+/).filter(Boolean).map(t => ({ text: t, box: text.bounds })) });
         }
+        stored.pages[slot] = page;
+        const ink = plainText(written(view));
+        if (typed.join('').trim() || ink) stored.text[slot] = { typed: typed.join('\n').trim(), ink };
         if (view.pdf_background) {
           if (await readPdfWords(slot, view)) extracted = true;
           index.add({ page, source: 'pdf', words: stored.pdf[slot] });
@@ -107,7 +120,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
         }
         if (page % 16 === 15) refresh();
       }
-      if (extracted) persist();
+      if (extracted || before !== JSON.stringify([stored.text, stored.pages])) persist();
       pageTimes = timings;
       await addTranscripts(token);
       if (token === generation) { progress(''); refresh(); }
@@ -123,10 +136,13 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   function addTranscript(entry, words) {
     const recordingId = entry.recording?.id, label = audio.label?.(entry) || 'Recording';
     index.remove(u => u.source === 'audio' && u.assetId === entry.asset.id);
+    // Kept for searching from Recent: a changed transcript (edited, revised) is written again.
+    const text = plainText(words);
+    if (stored.audio[entry.asset.id]?.text !== text) { stored.audio[entry.asset.id] = { label, text }; persistSoon(); }
     // Units per ~40 words so audio hits land on the right page as the lecture moves on.
     for (let i = 0; i < words.length; i += 40) {
       const chunk = words.slice(i, i + 48);
-      index.add({ page: pageAt(recordingId, chunk[0].start), source: 'audio', assetId: entry.asset.id, recordingId, label, words: chunk.map(w => ({ text: w.text, time: w.start })) });
+      index.add({ page: pageAt(recordingId, chunk[0].start), source: 'audio', assetId: entry.asset.id, recordingId, label, words: chunk.map(w => ({ text: w.text, time: w.start, ...(w.noise ? { noise: true } : {}) })) });
     }
   }
   async function addTranscripts(token) {
@@ -334,11 +350,11 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     for (const p of selected) {
       const view = await call('view', { page: p });
       slots.set(p, view.slot ?? p);
-      if (/data-item="stroke:/.test(view.svg)) inked.add(p);
+      if (pageHasInk(view)) inked.add(p);
     }
     // Pages with PDF text skip the whole-page pass, but their handwriting is still read.
     // Pages recognized before are kept, so a stopped run carries on from there.
-    const whole = p => !(skipPdf && (stored.pdf[slots.get(p)]?.length || 0) > 20);
+    const whole = p => !(skipPdf && hasPdfText(stored.pdf[slots.get(p)]));
     const wanted = selected.filter(p => whole(p) || inked.has(p));
     const pages = $('ocrRedo').checked ? wanted : wanted.filter(p => !stored.ocr[slots.get(p)]);
     const skipped = wanted.length - pages.length;
@@ -386,29 +402,10 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       }
       const deep = quality === 'high', isWord = dictionary ? text => isLexiconWord(text, dictionary) : null;
       // One page read with some passes, added to readings it already has.
-      const readPage = async (page, set, readings = []) => {
-        if (whole(page)) for (const { width, sparse } of set.whole) {
-          if (cancelled || token !== generation) return readings;
-          const { canvas, scale } = await race(pageCanvas(page, width));
-          try { readings.push(await race(read(canvas, scale, { sparse }))); }
-          finally { canvas.width = canvas.height = 0; }
-        }
-        if (inked.has(page)) for (const { width, sparse, bold } of set.ink) {
-          if (cancelled || token !== generation) return readings;
-          const ink = await race(pageCanvas(page, width, { inkOnly: true, bold }));
-          if (!ink) break;
-          try { readings.push(await race(read(ink.canvas, ink.scale, { sparse }))); }
-          finally { ink.canvas.width = ink.canvas.height = 0; }
-        }
-        // High quality: every line found, read again on its own.
-        if (set.lines && inked.has(page) && !cancelled && token === generation) {
-          const lines = uniqueLines(...readings.map(r => r.lines || []));
-          const ink = lines.length ? await race(pageCanvas(page, set.lines.width, { inkOnly: true })) : null;
-          if (ink) try { readings.push(await race(busy = lineWords(worker, ink.canvas, ink.scale, lines))); }
-          finally { ink.canvas.width = ink.canvas.height = 0; }
-        }
-        return readings;
-      };
+      const readPage = (page, set, readings = []) => readPagePasses(page, set, {
+        pageCanvas, read, readLines: (canvas, scale, lines) => (busy = lineWords(worker, canvas, scale, lines)),
+        whole: whole(page), inked: inked.has(page), alive: () => !cancelled && token === generation, wait: race,
+      }, readings);
       // The readings of a page voted into words, corrected, kept and searchable at once.
       const keep = async (page, readings, { deep: thorough }) => {
         const merged = voteWords(readings, { isWord: thorough ? isWord : null });
@@ -472,23 +469,18 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   let aiOcr = null, aiOcrIdle = 0;
   async function recognizeForAI(page) {
     const view = await call('view', { page }), slot = view.slot ?? page;
-    if (stored.ocr[slot] || !/data-item="stroke:/.test(view.svg)) return false;
+    if (stored.ocr[slot] || !pageHasInk(view)) return false;
     const token = generation;
     clearTimeout(aiOcrIdle);
     let chosen = 'spa,eng';
     try { chosen = localStorage.getItem('notecomplete-ocr-languages') || chosen; } catch { /* Optional. */ }
     aiOcr ||= ocrWorker(chosen.split(',').join('+')).catch(error => { aiOcr = null; throw error; });
-    const worker = await aiOcr, set = ocrPasses('normal'), readings = [];
+    const worker = await aiOcr;
+    let readings = [];
     try {
-      if (!((stored.pdf[slot]?.length || 0) > 20)) for (const { width, sparse } of set.whole) {
-        const { canvas, scale } = await pageCanvas(page, width);
-        try { readings.push(await recognizePage(worker, canvas, scale, { sparse })); } finally { canvas.width = canvas.height = 0; }
-      }
-      for (const { width, sparse, bold } of set.ink) {
-        const ink = await pageCanvas(page, width, { inkOnly: true, bold });
-        if (!ink) break;
-        try { readings.push(await recognizePage(worker, ink.canvas, ink.scale, { sparse })); } finally { ink.canvas.width = ink.canvas.height = 0; }
-      }
+      readings = await readPagePasses(page, ocrPasses('normal'), {
+        pageCanvas, read: (canvas, scale, options) => recognizePage(worker, canvas, scale, options), whole: !hasPdfText(stored.pdf[slot]),
+      });
     } finally {
       aiOcrIdle = setTimeout(async () => { const w = aiOcr; aiOcr = null; (await w?.catch(() => null))?.terminate?.(); }, 60000);
     }
@@ -509,7 +501,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     if (recognize) await recognizeForAI(page).catch(() => false);
     const parts = {};
     for (const unit of index.units)
-      if (unit.page === page) (parts[unit.source] ||= []).push(unit.words.map(w => w.text).join(' '));
+      if (unit.page === page) (parts[unit.source] ||= []).push(unit.source === 'audio' ? transcriptText(unit.words) : unit.words.map(w => w.text).join(' '));
     return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.join('\n')]));
   }
   // The page's words with their boxes (page units) and its size: where a quote is.
@@ -554,6 +546,13 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       return out;
     },
     find(query) { open(); $('findInput').value = query; current = 0; build().then(run); run(); $('findResults').hidden = false; },
+    // Batch OCR from Recent recognized pages of this very note: take them in, so a later
+    // save of this note's search data keeps them.
+    adopt(note, data) {
+      if (!note || note !== fingerprint || !data?.ocr) return;
+      stored.ocr = { ...stored.ocr, ...data.ocr };
+      restructure();
+    },
     // A transcript finished while the note is open: make it searchable right away.
     transcribed(entry, words) { if (building && words.length) { addTranscript(entry, words); refresh(); } },
     get visible() { return !$('findBar').hidden; },

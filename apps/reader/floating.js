@@ -6,7 +6,6 @@
 // large) next to ×. Place and size are remembered per window.
 import { icon } from './icons.js';
 
-const $ = id => document.getElementById(id);
 // How much of a window must stay on screen when it is dragged out of bounds.
 const GRAB = 56;
 const EDGES = { left: 'l', right: 'r', top: 't', bottom: 'b', 'bottom-left': 'bl', 'bottom-right': 'br', 'top-left': 'tl', 'top-right': 'tr' };
@@ -37,7 +36,8 @@ export function shownRect({ left, top, width, height }, area) {
 }
 
 // A comfortable reading/workspace rect centered inside `area`, clamped to `area` and `min`.
-export function largeRect(area, { ratio = 0.88, maxWidth = 1040, maxHeight = 820, min = { width: 0, height: 0 } } = {}) {
+// No upper limit by default: on a small screen "large" is almost all of it.
+export function largeRect(area, { ratio = 0.94, maxWidth = Infinity, maxHeight = Infinity, min = { width: 0, height: 0 } } = {}) {
   const aw = Math.max(0, Number(area?.width) || 0);
   const ah = Math.max(0, Number(area?.height) || 0);
   const mw = Math.max(0, Number(min?.width) || 0);
@@ -72,7 +72,14 @@ export function resizeRect(start, dx, dy, edges, min, area) {
 const stack = [];
 const windows = new WeakMap();
 export function windowOf(el) { return el ? windows.get(el) || null : null; }
-function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(var(--window-z, 26) + ${i})`; }); }
+// A window moved over the top bar comes above it (--window-floor, `.over-bar`): it is where the
+// user put it, so it is not hidden under the bar.
+function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(max(var(--window-z, 26), var(--window-floor, 0)) + ${i})`; }); }
+// Whether a rect drawn on the screen covers part of the top bar (header.chrome).
+export function overBar(top) {
+  const bar = typeof document !== 'undefined' && typeof document.querySelector === 'function' ? document.querySelector('header.chrome')?.getBoundingClientRect?.() : null;
+  return !!bar && bar.height > 0 && top < bar.bottom;
+}
 function raise(el) {
   if (stack.at(-1) === el) return;
   stack.splice(stack.indexOf(el), 1);
@@ -109,9 +116,15 @@ function renderTray() {
   }));
   if (!trayed.size) el.show(false);
 }
+// For other movable windows (the prefab kit's): the same tray. `restore` brings it back.
+export function trayPut(el, label, restore) {
+  trayed.set(el, { label, restore: () => { trayed.delete(el); renderTray(); restore(); } });
+  renderTray();
+}
+export function trayDrop(el) { if (trayed.delete(el)) renderTray(); }
 
-// Windows are free on the whole screen below the top bar (`screen`), over the toolbars
-// and side panels. They start where their CSS places them in the work area.
+// Windows are free on the whole screen (`screen`), over the toolbars, side panels and, when
+// moved there, the top bar; pushed against an edge of the screen they get smaller from that edge. They start where their CSS places them in the work area.
 export function floatingWindow(el, { key, head, close, label, compact = null, enabled = () => true, minWidth = 280, minHeight = 200, scroll = false, buttonClass = '', screen = null }) {
   key = `${key}:screen`;
   const fixed = () => getComputedStyle(el).position === 'fixed';
@@ -142,6 +155,7 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     el.classList.toggle('pushed', pushed);
     el.classList.toggle('tucked', c.top < 0 && !isCompact());
     Object.assign(el.style, { left: `${off.left + v.left}px`, top: `${off.top + v.top}px`, width: `${v.width}px`, right: 'auto', bottom: 'auto', margin: '0' });
+    el.classList.toggle('over-bar', fixed() && overBar(off.top + v.top));
     if (!isCompact()) el.style.height = `${v.height}px`;
     if (save) {
       if (large) {

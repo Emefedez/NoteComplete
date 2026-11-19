@@ -63,7 +63,6 @@ const server = await startReader({ port: 0 });
 const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const p = await b.newPage({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark' });
 const errors = []; p.on('pageerror', (e) => errors.push(e.message));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await openReader(p, server.origin);
 
 await p.setInputFiles('#file', goodPath);

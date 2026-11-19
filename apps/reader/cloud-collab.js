@@ -9,7 +9,15 @@ import {
   decryptInvite,
 } from './chunked-note.js';
 import { addExportMenu, exportable } from './download-queue.js';
-import { icon } from './icons.js';
+
+// Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
+// Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.
+export const CLOUD_CONFIG_KEYS = {
+  dropbox: ['notecomplete-dropbox-session-v1', 'notecomplete-dropbox-config-v1'],
+  github: ['notecomplete-github-config-v1'],
+  webdav: ['notecomplete-webdav-config-v1'],
+  archive: ['notecomplete-archive-sources-v1'],
+};
 
 export const CLOUD_PROVIDERS = [
   {
@@ -60,7 +68,7 @@ function cardCoverSvg(name, badgeLabel = 'NOTE') {
   const label = isPdf ? 'PDF' : badgeLabel;
   const baseName = String(name || 'Note').replace(/\.[^.]+$/, '').trim().slice(0, 34);
   const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="48" y="24" width="224" height="192" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/><rect x="68" y="44" width="56" height="20" rx="4" fill="${color}" fill-opacity="0.12"/><text x="96" y="58" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="${color}" text-anchor="middle">${esc(label)}</text><text x="68" y="98" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#1e2433">${esc(baseName)}</text><rect x="68" y="122" width="160" height="6" rx="3" fill="#eef2f6"/><rect x="68" y="138" width="130" height="6" rx="3" fill="#eef2f6"/><rect x="68" y="154" width="145" height="6" rx="3" fill="#eef2f6"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect x="48" y="24" width="224" height="192" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/><rect x="68" y="44" width="56" height="20" rx="4" fill="${color}" fill-opacity="0.12"/><text x="96" y="58" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="${color}" text-anchor="middle">${esc(label)}</text><text x="68" y="98" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#1e2433">${esc(baseName)}</text><rect x="68" y="122" width="160" height="6" rx="3" fill="#eef2f6"/><rect x="68" y="138" width="130" height="6" rx="3" fill="#eef2f6"/><rect x="68" y="154" width="145" height="6" rx="3" fill="#eef2f6"/></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
@@ -77,7 +85,7 @@ export function githubBrowser({
   storage = globalThis.localStorage,
 } = {}) {
   const $ = (id) => document.getElementById(id);
-  const CONFIG_KEY = 'notecomplete-github-config-v1';
+  const [CONFIG_KEY] = CLOUD_CONFIG_KEYS.github;
   let config = { repo: '', branch: 'main', path: '', token: '', connected: false };
   try { Object.assign(config, JSON.parse(storage?.getItem(CONFIG_KEY) || '{}')); } catch { /* Optional */ }
   const saveConfig = () => { try { storage?.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* Optional */ } };
@@ -105,7 +113,7 @@ export function githubBrowser({
     }
     if ($('githubRefresh')) $('githubRefresh').disabled = !config.connected || loading;
     if ($('githubBack')) $('githubBack').disabled = !config.connected || loading || !history.length;
-    if ($('githubPublishBtn')) $('githubPublishBtn').disabled = !config.connected || !config.token || loading;
+    if ($('githubPublishBtn')) { $('githubPublishBtn').hidden = !config.connected || !config.token; $('githubPublishBtn').disabled = loading; }
     if ($('githubPath')) $('githubPath').textContent = config.connected ? `${client.slug}${currentPath ? '/' + currentPath : ''}` : 'GitHub';
   }
 
@@ -316,7 +324,7 @@ export function webdavBrowser({
   storage = globalThis.localStorage,
 } = {}) {
   const $ = (id) => document.getElementById(id);
-  const CONFIG_KEY = 'notecomplete-webdav-config-v1';
+  const [CONFIG_KEY] = CLOUD_CONFIG_KEYS.webdav;
   let config = { url: '', password: '', connected: false };
   try { Object.assign(config, JSON.parse(storage?.getItem(CONFIG_KEY) || '{}')); } catch { /* Optional */ }
   const saveConfig = () => { try { storage?.setItem(CONFIG_KEY, JSON.stringify(config)); } catch { /* Optional */ } };
@@ -344,7 +352,7 @@ export function webdavBrowser({
     }
     if ($('webdavRefresh')) $('webdavRefresh').disabled = !config.connected || loading;
     if ($('webdavBack')) $('webdavBack').disabled = !config.connected || loading || !history.length;
-    if ($('webdavPublishBtn')) $('webdavPublishBtn').disabled = !config.connected || loading;
+    if ($('webdavPublishBtn')) { $('webdavPublishBtn').hidden = !config.connected; $('webdavPublishBtn').disabled = loading; }
     if ($('webdavPath')) {
       const host = client.target?.host || 'Nextcloud / WebDAV';
       $('webdavPath').textContent = `${host}${currentPath ? '/' + currentPath : ''}`;

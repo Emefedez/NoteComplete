@@ -55,7 +55,6 @@ await p.waitForTimeout(2500);
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu });
 
 const visible = (sel) => `(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; })()`;
-const gone = (sel) => `!(${visible(sel)})`;
 const menu = (id) => `#${id} > summary`;
 const openMenu = (id) => async () => { await p.click(menu(id)); await p.waitForSelector(`#${id}[open] .menu-content`); await p.waitForTimeout(150); };
 // Escape, and then close what a dialog left open (some keep themselves open on Escape).

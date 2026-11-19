@@ -4,8 +4,8 @@
 // the Drive version, keep their copy, keep both, or compare them page by page side by
 // side first. Taking a new version offers to bring the old one's flashcards, quizzes
 // and Markdown notes along (they are stored per version of the file).
-import { prepareDocument } from './media-import.js';
-import { PdfBackgrounds, backgroundPlacement } from './pdf-background.js';
+import { backgroundPlacement } from './pdf-background.js';
+import { sideDocument } from './side-document.js';
 
 const $ = id => document.getElementById(id);
 
@@ -74,33 +74,6 @@ export async function carryStudy(store, from, to, kinds) {
   }
 }
 
-// A second document opened in its own worker, so comparing never touches the open note.
-function sideDocument() {
-  const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-  const pending = new Map();
-  let next = 0;
-  const ready = new Promise((resolve, reject) => {
-    worker.onmessage = ({ data }) => {
-      if (data.ready) return resolve();
-      if (data.fatal) return reject(Error(data.fatal));
-      const p = pending.get(data.id);
-      if (!p) return;
-      pending.delete(data.id);
-      data.error ? p.reject(Error(data.error)) : p.resolve(data.result);
-    };
-  });
-  const call = async (op, args = {}) => { await ready; const id = ++next; return new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); worker.postMessage({ id, op, ...args }, args.bytes instanceof ArrayBuffer ? [args.bytes] : []); }); };
-  const backgrounds = new PdfBackgrounds(resource => call('pdf', { resource }));
-  return {
-    call, backgrounds,
-    async open(file) {
-      const prepared = await prepareDocument(file);
-      return call('open', { ...prepared, project: prepared.kind === 'project', notecomplete: prepared.kind === 'notecomplete', page: 0 });
-    },
-    view: page => call('view', { page }),
-    close() { backgrounds.closed = true; worker.terminate(); },
-  };
-}
 // A page as an image URL (SVG with its PDF page behind it), for the side-by-side view.
 async function pageImage(side, view, width) {
   const holder = document.createElement('div');
@@ -286,7 +259,7 @@ export function versionChooser({ library, drive, dropbox = null, open, status, f
     }
     if ($('versionTitle')) $('versionTitle').textContent = `Newer version in ${service}`;
     if ($('versionRemoteLabel')) $('versionRemoteLabel').textContent = service;
-    if ($('versionOpenDrive')) $('versionOpenDrive').textContent = `Open ${short} version`;
+    if ($('versionOpenDrive')) $('versionOpenDrive').textContent = `Use the ${short} version`;
     if ($('compareDrive')) $('compareDrive').textContent = `Use ${short} version`;
     $('versionText').textContent = `“${entry.name.replace(/\.noteful$/i, '')}” has a newer version in ${service}.`;
     $('versionMine').textContent = `${when(entry.modifiedTime)} · ${mb(entry.size)}`;

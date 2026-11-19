@@ -105,8 +105,9 @@ function smallControls(after) {
   const box = Object.assign(document.createElement('input'), { type: 'checkbox' });
   const label = document.createElement('label');
   label.className = 'small-model';
-  label.title = 'Small model: each page is read and worked on alone, in short steps. Best for the model in this app; for large AI tools it is slower and sees less at once.';
-  label.append(box, ' Small model');
+  // Named for what it does: it does not choose a model (the list beside it does).
+  label.title = 'One page at a time: each page is read and worked on alone, in short steps, then merged. Best for small models such as the one in this app; for large AI tools it is slower and sees less at once.';
+  label.append(box, ' One page at a time');
   const badge = Object.assign(document.createElement('span'), { className: 'text-only-badge', textContent: 'Text only', hidden: true });
   badge.title = 'This model cannot read page images: it gets the text extracted from the pages (typed, PDF, recognized handwriting, transcripts). For handwriting, run Recognize handwriting first, or choose Phi 3.5 Vision.';
   after.after(label, badge);

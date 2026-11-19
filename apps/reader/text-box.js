@@ -29,7 +29,6 @@ export const FONT_STACKS = {
   Noteworthy: `Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive, ${CJK_SANS}`,
   "Comic Sans MS": `'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive, ${CJK_SANS}`,
 };
-export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 // Text sizes the core takes (imports.rs TextBox::valid), and how the size field shows one.
 export const clampSize = (n) => Math.min(4000, Math.max(0.5, n));
 export const sizeText = (n) => String(Math.round(n * 100) / 100);
@@ -207,7 +206,9 @@ export function textBoxController({
     zhToggle.textContent = mode === "pinyin" ? "ā" : "中";
     zhToggle.setAttribute("aria-pressed", String(isZh));
     zhToggle.dataset.zhMode = mode;
-    if (zhSubOptions) zhSubOptions.hidden = !isZh;
+    // 拼 stays for a box with Chinese in it (to read it), 笔 only while typing Chinese.
+    if (zhSubOptions) zhSubOptions.hidden = !isZh && !/\p{Script=Han}/u.test(textEditor?.area?.value || "");
+    if ($("zhTraceToggle")) $("zhTraceToggle").hidden = !isZh;
   }
   zhToggle.addEventListener("click", () => {
     if (!textEditor?.area) {
@@ -451,6 +452,7 @@ export function textBoxController({
       keyboardPrimer = Object.assign(doc.createElement("textarea"), { className: "keyboard-primer", tabIndex: -1 });
       keyboardPrimer.setAttribute("aria-hidden", "true");
     }
+    keyboardPrimer.value = "";
     doc.body.append(keyboardPrimer);
     keyboardPrimer.focus({ preventScroll: true });
   }
@@ -463,8 +465,21 @@ export function textBoxController({
   // A tap with Text (finger or stylus, pointerUp): finish the open box, or start one there.
   async function typeAt(p, at) {
     if (textEditor) return commit();
-    primeKeyboard();
-    try { await open(p, at); } finally { if (!textEditor) unprime(); }
+    return open(p, at);
+  }
+  // Keys typed while the box was opening went to the primer: typed again in the box, through
+  // its Chinese input ("Ni" typed at once after the click is pinyin, not a lost or stray "N").
+  function handOn(area) {
+    const typed = keyboardPrimer?.isConnected ? keyboardPrimer.value : "";
+    if (keyboardPrimer) keyboardPrimer.value = "";
+    for (const key of typed) {
+      const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      area.dispatchEvent(e);
+      if (!e.defaultPrevented) {
+        area.setRangeText(key, area.selectionStart, area.selectionEnd, "end");
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
   }
 
   // The on-screen keyboard covers the bottom of the screen (the visual viewport shrinks): the
@@ -487,8 +502,14 @@ export function textBoxController({
   if (typeof window !== "undefined") window.visualViewport?.addEventListener("resize", keepTextVisible);
 
   // `after`: called once the box is finished or thrown away (a double-click's way back).
-  async function open(p, [x, y], known = null, { after = null } = {}) {
+  // A box opens after an await (what is under the pointer): a hidden field takes the keys and,
+  // on phones, the on-screen keyboard meanwhile (primeKeyboard).
+  async function open(p, at, known = null, options = {}) {
     if (textEditor) return commit();
+    primeKeyboard();
+    try { await openBox(p, at, known, options); } finally { if (!textEditor) unprime(); }
+  }
+  async function openBox(p, [x, y], known = null, { after = null } = {}) {
     const currentDoc = getDoc(), activeLayer = getActiveLayer();
     if (!currentDoc || isEditing() || isBusy() || !p.view) return;
     const layer = currentDoc.layers.find((l) => l.id === activeLayer);
@@ -692,7 +713,7 @@ export function textBoxController({
       if (textEditor?.area !== area || doc.activeElement === area || (textEditor.field && doc.activeElement === textEditor.field) || textFormatBar.contains(doc.activeElement) || Date.now() - textFormatPressed < 1000 || Date.now() - imeMenuPressedAt() < 1000) return;
       commit();
     }, 0));
-    requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
+    requestAnimationFrame(() => { area.focus(); handOn(area); unprime(); keepTextVisible(); });
     status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
   }
 
@@ -832,6 +853,37 @@ export function textBoxController({
 
   // A typed box's text replaced (Chinese conversion, chinese/zh-menu.js), its style and its
   // styled parts kept; one undo brings it back.
+  // The box being typed under client (x, y): its text, the UTF-16 index of the character there
+  // (lines as typed, no wrapping) and how to put other text in a range. Null elsewhere.
+  let measureContext = null;
+  function typedAt(clientX, clientY) {
+    const area = textEditor?.area;
+    if (!area || textEditor.field) return null;
+    const r = area.getBoundingClientRect(), cs = getComputedStyle(area), px = (v) => parseFloat(v) || 0;
+    const lineHeight = px(cs.lineHeight) || px(cs.fontSize) * 1.2;
+    const x = clientX - r.left - px(cs.paddingLeft) - px(cs.borderLeftWidth) + area.scrollLeft;
+    const y = clientY - r.top - px(cs.paddingTop) - px(cs.borderTopWidth) + area.scrollTop;
+    const lines = area.value.split("\n"), line = Math.floor(y / lineHeight);
+    if (x < 0 || line < 0 || line >= lines.length) return null;
+    measureContext ||= doc.createElement("canvas").getContext("2d");
+    measureContext.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    let index = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0), left = 0;
+    for (const ch of lines[line]) {
+      const w = measureContext.measureText(ch).width;
+      if (x < left + w) {
+        const value = area.value;
+        return { text: value, index, area, replace: (start, end, from, to) => {
+          if (textEditor?.area !== area || area.value.slice(start, end) !== from) throw new Error("The text changed; look it up again.");
+          area.focus();
+          area.setRangeText(to, start, end, "end");
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+        } };
+      }
+      left += w;
+      index += ch.length;
+    }
+    return null;
+  }
   async function replaceText(p, id, value) {
     const existing = (p?.view?.texts || []).find((t) => String(t.id) === String(id));
     if (!existing) throw new Error("This text box cannot be changed here.");
@@ -842,6 +894,7 @@ export function textBoxController({
   return {
     get active() { return Boolean(textEditor); },
     replaceText,
+    typedAt,
     open,
     typeAt,
     commit,

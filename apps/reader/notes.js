@@ -8,6 +8,9 @@ import { renderMarkdown } from './rich-text.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { noteMode, setNoteMode } from './chinese/ruby.js';
+import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './markdown-prefab.js';
+
+export { PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu };
 
 const $ = id => document.getElementById(id);
 let library = null;
@@ -24,136 +27,6 @@ export function loadEditor() {
     document.head.append(script);
   });
 }
-const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
-export const PREFAB_LINE = /^\s*!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)\s*$/;
-
-export function decorateTinyMdeLines(root) {
-  if (!root) return;
-  for (const line of root.children || []) {
-    const raw = line.textContent || '';
-    const page = raw.match(MARKER)?.[1];
-    if (page) line.dataset.page = page;
-    else delete line.dataset.page;
-    const prefab = raw.match(PREFAB_LINE);
-    if (prefab) {
-      line.dataset.prefab = (prefab[1] || 'Prefab').trim() || 'Prefab';
-    } else {
-      delete line.dataset.prefab;
-    }
-  }
-}
-
-export function attachMarkdownPrefabContextMenu({
-  editorContainer,
-  previewContainer,
-  getText,
-  setText,
-  editPrefab = null,
-}) {
-  const findPrefabMatches = (md) => {
-    const out = [];
-    const re = /!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)/g;
-    let m;
-    while ((m = re.exec(md))) {
-      out.push({ full: m[0], alt: m[1], uri: m[2], index: m.index });
-    }
-    return out;
-  };
-  const openMenuFor = async (event, { alt, uri, replaceLine, removeLine }) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const { openContextMenu } = await import('./context-menu.js');
-    const { extractPrefabSpecFromDataUri, markdownPrefabBlockForSpec } = await import('./chinese/zh-menu.js');
-    const spec = extractPrefabSpecFromDataUri(uri, alt);
-    const label = (alt || 'Prefab').trim() || 'Prefab';
-    const fullLine = `![${alt}](${uri})`;
-    openContextMenu(event.clientX, event.clientY, [
-      spec && editPrefab && {
-        label: `Edit ${label.length > 32 ? `${label.slice(0, 32)}…` : label}…`,
-        icon: 'draw',
-        run: async () => {
-          const updated = await editPrefab(spec);
-          if (!updated) return;
-          const nextBlock = await markdownPrefabBlockForSpec(updated);
-          if (nextBlock) replaceLine(nextBlock);
-        },
-      },
-      {
-        label: 'Copy Markdown',
-        icon: 'copy',
-        key: 'Ctrl C',
-        run: () => navigator.clipboard?.writeText(fullLine),
-      },
-      '-',
-      {
-        label: 'Delete prefab',
-        icon: 'trash',
-        danger: true,
-        run: () => removeLine(),
-      },
-    ].filter(Boolean), { title: label.length > 42 ? `${label.slice(0, 42)}…` : label });
-  };
-  if (editorContainer) {
-    editorContainer.addEventListener('contextmenu', (event) => {
-      const chip = event.target.closest?.('[data-prefab]');
-      if (!chip) return;
-      const root = editorContainer.querySelector('.TinyMDE');
-      if (!root) return;
-      const idx = [...root.children].indexOf(chip);
-      if (idx < 0) return;
-      const lines = String(getText() || '').split('\n');
-      const m = (lines[idx] || '').match(PREFAB_LINE);
-      if (!m) return;
-      openMenuFor(event, {
-        alt: m[1],
-        uri: m[2],
-        replaceLine: (nextLine) => {
-          const cur = String(getText() || '').split('\n');
-          if (idx < cur.length) {
-            cur[idx] = nextLine;
-            setText(cur.join('\n'));
-          }
-        },
-        removeLine: () => {
-          const cur = String(getText() || '').split('\n');
-          if (idx < cur.length) {
-            cur.splice(idx, 1);
-            setText(cur.join('\n'));
-          }
-        },
-      });
-    });
-  }
-  if (previewContainer) {
-    previewContainer.addEventListener('contextmenu', (event) => {
-      const img = event.target.closest?.('img[src^="data:image/svg+xml"]');
-      if (!img) return;
-      const src = img.getAttribute('src') || '';
-      const alt = img.getAttribute('alt') || 'Prefab';
-      const allImgs = [...previewContainer.querySelectorAll('img[src^="data:image/svg+xml"]')];
-      const occurrence = allImgs.indexOf(img);
-      const replaceOccurrence = (replacement) => {
-        const md = String(getText() || '');
-        const matches = findPrefabMatches(md);
-        const hit = matches.find((x, i) => (occurrence >= 0 && i === occurrence) || x.uri === src) || matches[0];
-        if (!hit) return;
-        const before = md.slice(0, hit.index);
-        const after = md.slice(hit.index + hit.full.length);
-        const nextMd = replacement === null
-          ? `${before.replace(/\n?$/, '')}${after.replace(/^\n?/, '\n')}`
-          : `${before}${replacement}${after}`;
-        setText(nextMd);
-      };
-      openMenuFor(event, {
-        alt,
-        uri: src,
-        replaceLine: (nextLine) => replaceOccurrence(nextLine),
-        removeLine: () => replaceOccurrence(null),
-      });
-    });
-  }
-}
-
 // Positions in the editor are { row, col }; Yjs counts characters from the start.
 export function toIndex(text, { row, col }) {
   const lines = text.split('\n');
@@ -214,12 +87,12 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       const hasExplicitSelection = Boolean(selText);
       const selectedHan = ([...selText].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
       if (hasExplicitSelection && !selectedHan) {
-        status?.('Select at least one Chinese character to insert a trace order prefab.', true);
+        status?.('Select at least one Chinese character to insert their stroke order.', true);
         return;
       }
       const han = selectedHan || (text.match(/\p{Script=Han}+/gu)?.at(-1)?.slice(0, 6)) || '';
       if (!han) {
-        status?.('Type or select a Chinese character first to insert a trace order prefab.', true);
+        status?.('Type or select a Chinese character first to insert their stroke order.', true);
         return;
       }
       const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
@@ -245,10 +118,10 @@ export function notesController({ call, jump, currentPage, store, status, editPr
               { keys: '#  **bold**  *italic*', does: 'Headings, bold and italic text' },
               { keys: '$x^2$  $$...$$', does: 'Inline and block LaTeX math' },
             ] },
-            { title: 'Chinese input & Trace Prefabs', icon: 'draw', rows: [
+            { title: 'Chinese input & stroke order', icon: 'draw', rows: [
               { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show the 笔 trace button' },
-              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order trace sheet (with English meaning & variants)' },
-              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the animated Trace Prefab Editor' },
+              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order (with English meaning & variants)' },
+              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the stroke order editor' },
             ] },
           ],
         });
@@ -368,6 +241,15 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       const inFile = core ? await call('getMarkdown').catch(() => '') : '';
       const kept = key ? await store.get('settings', key).catch(() => '') : '';
       text = inFile || kept || '';
+      // Transcripts appended from Recent (batch-transcribe.js) while the note was closed.
+      const pending = key ? await store.get('settings', `notes-pending:${fingerprint}`).catch(() => '') : '';
+      if (pending) {
+        text = `${text.trimEnd()}${pending}`;
+        await store.set('settings', `notes-pending:${fingerprint}`, '').catch(() => {});
+        if (core) await call('setMarkdown', { text }).catch((e) => console.warn('Set markdown:', e));
+        await store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
+        status?.('Transcripts from Recent added to the Markdown notes.');
+      }
       if (core && text && !inFile) await call('setMarkdown', { text }).catch((e) => console.warn('Set markdown:', e));
       if (text && inFile && key && kept !== inFile) store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
       // The placeholder differs between notes and pages: the editor is made again for it.

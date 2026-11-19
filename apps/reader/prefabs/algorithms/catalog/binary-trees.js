@@ -9,7 +9,6 @@ import { parseBinary, binaryText, cloneTree } from './trees-common.js';
 const TREE_HINT = 'A(B, C(D, E)); a missing child is "-": A(-, C)';
 const treeField = { key: 'tree', type: 'line', label: 'Tree', hint: TREE_HINT };
 const readTree = (raw, fallback) => { const text = typeof raw === 'string' ? raw : fallback; return { text, root: parseBinary(text) }; };
-const kids = (n) => [n.left, n.right].filter(Boolean);
 const randomTree = (r, n = r.int(5, 9), letters = true) => {
   let root = null;
   const vals = letters ? 'ABCDEFGHIJKLMNOP'.split('') : Array.from({ length: 30 }, (_, i) => i + 1);

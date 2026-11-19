@@ -12,7 +12,7 @@
   <meta name="google-drive-api-key" content="" />
   <meta name="dropbox-app-key" content="" />
   <!-- Copied from tools/reader-csp.mjs (node tools/reader-csp.mjs prints it); a test keeps them equal. Delete this meta tag to switch the policy off. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com/gsi/; object-src 'none'; base-uri 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data: https://cdn.jsdelivr.net https://translate.google.com https://dict.youdao.com; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com/gsi/; object-src 'none'; base-uri 'none'" />
   <title>NoteComplete</title
   ><link rel="manifest" href="./manifest.webmanifest" /><link
     rel="icon"
@@ -59,15 +59,17 @@
           <button data-proxy-tool="erase" data-icon="erase" role="menuitemradio">Erase<kbd>B</kbd></button>
           <button data-proxy-tool="tape" data-icon="tape" role="menuitemradio">Tape<kbd>T</kbd></button>
           <button data-proxy-tool="shape" data-icon="shape" role="menuitemradio">Shapes<kbd>R</kbd></button>
+          <button data-proxy-tool="text" data-icon="text" role="menuitemradio">Text<kbd>W</kbd></button>
+          <button data-proxy-tool="lock" data-icon="lock" role="menuitemradio">Lock in place<kbd>O</kbd></button>
           <button data-proxy-tool="grab" data-icon="grab" role="menuitemradio">Grab: copy text or ask AI<kbd>G</kbd></button>
           <button data-proxy-tool="pdfedit" data-icon="pdfedit" role="menuitemradio">Edit PDF: its text and objects<kbd>E</kbd></button>
           <hr />
           <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
-          <button id="insertGraph" data-icon="graph" data-palette="Insert prefab (graph, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
+          <button id="insertGraph" data-icon="graph" data-palette="Insert prefab (graph, table, UML diagram, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
           <button id="insertTable" data-icon="table" data-palette="Insert table" title="Rows and columns of typed cells; select it later to edit it, add rows or columns">Insert table<kbd>Shift Y</kbd></button>
-          <button id="insertUml" data-icon="uml" data-palette="Insert UML diagram (use case, class, state machine, activity, sequence)" title="A UML diagram drawn in the diagram editor, as in Visual Paradigm; it imports and exports Visual Paradigm XML and XMI. It stays editable: right-click it, hold it, or tap its ⋯">Insert UML diagram…</button>
+          <button id="insertUml" data-icon="uml" hidden data-palette="Insert UML diagram (use case, class, state machine, activity, sequence)" title="A UML diagram drawn in the diagram editor, as in Visual Paradigm; it imports and exports Visual Paradigm XML and XMI. It stays editable: right-click it, hold it, or tap its ⋯">Insert UML diagram…</button>
           <button id="openUmlPage" data-icon="uml" data-palette="UML diagram editor (own page)" title="The UML diagram editor on a page of its own, outside any note">UML diagram editor…</button>
-          <button id="openChartsPage" data-icon="clock" data-palette="Chart and timeline editor (own page): process states, CPU timelines, bar charts" title="The chart editor on a page of its own: process states, CPU timelines, bar charts, histograms and exam plots, painted and dragged instead of typed">Chart and timeline editor…</button>
+          <button id="openChartsPage" data-icon="graph" data-palette="Chart and timeline editor (own page): process states, CPU timelines, bar charts" title="The chart editor on a page of its own: process states, CPU timelines, bar charts, histograms and exam plots, painted and dragged instead of typed">Chart and timeline editor…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="viewMenu">
@@ -77,10 +79,10 @@
           <button data-proxy="layersToggle" data-icon="layers">Layers</button>
           <button data-proxy="notesToggle" data-icon="note">Notes<kbd>N</kbd></button>
           <button id="viewExamHtml" data-icon="exam" hidden data-palette="Interactive exam HTML" title="View or edit the interactive HTML version saved inside this .nfedit exam">Interactive exam HTML</button>
-          <button id="toolsToggle" data-icon="menu" role="menuitemcheckbox" aria-checked="true" data-palette="Show or hide the tool bar" title="The row of tools and their settings; with it hidden, use the quick menu (Shift + S, a pen's button or two fingers held still)">Tool bar<kbd>Shift T</kbd></button>
+          <button id="toolsToggle" data-icon="menu" role="menuitemcheckbox" aria-checked="true" data-palette="Show or hide the tool bar" title="The row of tools and their settings; with it hidden, use the quick menu (Shift + S, a pen's button or two fingers held still)">Show tool bar<kbd>Shift T</kbd></button>
           <hr />
           <div class="menu-export" role="group" aria-label="Page position">
-            <span data-icon="pages">Pages</span>
+            <span data-icon="pages" title="Where the pages sit when they are narrower than the window">Pages</span>
             <button type="button" class="menu-icon" data-align-menu="left" title="Pages on the left" aria-label="Pages on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button>
             <button type="button" class="menu-icon" data-align-menu="center" title="Pages in the middle" aria-label="Pages in the middle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button>
             <button type="button" class="menu-icon" data-align-menu="right" title="Pages on the right" aria-label="Pages on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button>
@@ -89,26 +91,30 @@
           <button id="viewSpread" data-icon="spread" role="menuitemcheckbox" aria-checked="false" data-palette="Side-by-side pages" title="Show two pages side by side">Side-by-side pages</button>
           <button id="viewFullscreen" data-icon="fit" role="menuitemcheckbox" aria-checked="false" data-palette="View: full screen (F11)" title="Toggle full screen">Full screen<kbd>F11</kbd></button>
           <hr />
-          <button id="themeToggle" data-icon="moon" role="menuitemcheckbox" aria-checked="false" data-palette="Toggle light/dark theme" title="Switch between the light and dark theme">Dark theme</button>
-          <button id="themeSystem" data-icon="monitor" role="menuitemcheckbox" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
+          <button id="themeLight" data-icon="sun" role="menuitemradio" aria-checked="false" data-palette="Theme: light" title="Always use the light theme">Light theme</button>
+          <button id="themeToggle" data-icon="moon" role="menuitemradio" aria-checked="false" data-palette="Theme: dark" title="Always use the dark theme">Dark theme</button>
+          <button id="themeSystem" data-icon="monitor" role="menuitemradio" aria-checked="true" data-palette="Theme: follow the system" title="Use the system's light or dark setting">Theme follows the system</button>
           <hr />
           <button id="resetToolOrder" data-icon="restart" title="Drag the tool buttons to reorder them">Reset tool order</button>
           <button id="resetToolOptionsPlace" data-icon="restart" title="The tool settings go back under their tool (drag their grip to move them)">Reset tool settings position</button>
           <button id="toolSettingsAuto" data-icon="settings" role="menuitemcheckbox" aria-checked="true" title="When off, press the selected tool again to see its settings">Auto-open tool settings</button>
-          <button id="penHoverToggle" data-icon="draw" role="menuitemcheckbox" aria-checked="false" data-palette="Pen hover preview: on or off" title="Shows where the pen will draw, and its size, while it hovers over the page (Apple Pencil). Samsung and other Android devices already show their own hover pointer system-wide, so it is off there by default.">Pen hover preview</button>
-          <button id="penSmoothToggle" data-icon="smooth" role="menuitemcheckbox" aria-checked="true" data-palette="Pen smoothing: on or off" title="Smooths the strokes of the Pen and the free highlighter while you draw (most for a finger or stylus, a little for a mouse). Off: the line follows the pen exactly as it moves.">Pen smoothing</button>
-          <button id="shapeSnapMenu" data-icon="shape" role="menuitemcheckbox" aria-checked="true" data-palette="Shapes from the pen: on or off" title="With the Pen, a stroke held still for a moment becomes a clean line, arrow, rectangle, ellipse, triangle or star. The Pen's settings also offer making shapes on every lift">Shapes from the pen</button>
           <button id="menuBarAutoHide" data-icon="menu" role="menuitemcheckbox" aria-checked="false" data-palette="Hide the menu bar (it peeks out at the top): on or off" title="The bar with File, Edit, View… slides away and comes back when the pointer reaches the top edge of the window (or a tap there), so the pages get its room">Hide the menu bar</button>
           <button id="toolNames" data-icon="text" role="menuitemcheckbox" aria-checked="true" data-palette="Tool names in the tool bar: on or off" title="Off: the tool bar shows only icons (their names are in the tooltips)">Tool names in the tool bar</button>
           <div class="menu-export" role="group" aria-label="Tool bar position">
-            <span data-icon="menu" title="Where the page row and the tools go: at the top or the bottom, or as a column on the left or right (not on a phone held upright)">Tool bar</span>
+            <span data-icon="menu" title="Where the page row and the tools go: at the top or the bottom, or as a column on the left or right (not on a phone held upright)">Tool bar at</span>
             <button type="button" class="menu-icon" data-dock-menu="top" aria-pressed="true" title="Tool bar at the top" aria-label="Tool bar at the top"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9.5h18"/><rect x="4.5" y="6.5" width="15" height="1.6" rx=".8" fill="currentColor" stroke="none"/></svg></button>
             <button type="button" class="menu-icon" data-dock-menu="bottom" aria-pressed="false" title="Tool bar at the bottom" aria-label="Tool bar at the bottom"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 14.5h18"/><rect x="4.5" y="15.9" width="15" height="1.6" rx=".8" fill="currentColor" stroke="none"/></svg></button>
             <button type="button" class="menu-icon" data-dock-menu="left" aria-pressed="false" title="Tool bar on the left" aria-label="Tool bar on the left"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8.5 5v14"/><rect x="5" y="6.5" width="1.6" height="11" rx=".8" fill="currentColor" stroke="none"/></svg></button>
             <button type="button" class="menu-icon" data-dock-menu="right" aria-pressed="false" title="Tool bar on the right" aria-label="Tool bar on the right"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15.5 5v14"/><rect x="17.4" y="6.5" width="1.6" height="11" rx=".8" fill="currentColor" stroke="none"/></svg></button>
           </div>
           <button id="textFormatDock" data-icon="text" role="menuitemcheckbox" aria-checked="false" data-palette="Text format bar in the tool bar" title="Font, size, bold, italic and colour of text boxes in the tool bar's settings row, instead of a bar floating over the box">Text format bar in the tool bar</button>
+          <hr />
+          <button id="penHoverToggle" data-icon="draw" role="menuitemcheckbox" aria-checked="false" data-palette="Pen hover preview: on or off" title="Shows where the pen will draw, and its size, while it hovers over the page (Apple Pencil). Samsung and other Android devices already show their own hover pointer system-wide, so it is off there by default.">Pen hover preview</button>
+          <button id="penSmoothToggle" data-icon="smooth" role="menuitemcheckbox" aria-checked="true" data-palette="Pen smoothing: on or off" title="Smooths the strokes of the Pen and the free highlighter while you draw (most for a finger or stylus, a little for a mouse). Off: the line follows the pen exactly as it moves.">Pen smoothing</button>
+          <button id="shapeSnapMenu" data-icon="shape" role="menuitemcheckbox" aria-checked="true" data-palette="Shapes from the pen: on or off" title="With the Pen, a stroke held still for a moment becomes a clean line, arrow, rectangle, ellipse, triangle or star. The Pen's settings also offer making shapes on every lift">Shapes from the pen</button>
           <button id="penSetupOpen" data-icon="draw" title="Teach NoteComplete your pen's side button, or choose another way to open the quick menu">Pen button…</button>
+          <button id="penTestOpen" data-icon="draw">Test pen and stylus…</button>
+          <button id="hoverToolsOpen" data-icon="select" data-palette="Pen hover cursor: which tools show it…" title="Choose which tools show a pen hover cursor on the page (Pan, Select, Pen, Eraser, …)">Hover cursor tools…</button>
           <button id="zhSettingsOpen" data-icon="text" data-palette="Chinese input settings" title="Typing Chinese with pinyin: modes, keys, punctuation, and the HSK dictionaries to download or delete">Chinese input…</button>
           <hr />
           <button data-proxy="zoomIn" data-icon="plus">Zoom in<kbd>Ctrl +</kbd></button>
@@ -121,13 +127,12 @@
             <button id="uiReset" data-icon="fit" data-palette="Interface size 100%">Interface size 100%<kbd>Ctrl Shift 0</kbd></button>
             <hr />
           </div>
-          <button id="tapeReveal" data-icon="tape" disabled>Lift all tape<kbd>Shift U</kbd></button>
-          <button id="tapeCover" data-icon="tape" disabled>Cover with all tape<kbd>Shift U</kbd></button>
+          <button id="tapeReveal" data-icon="tape" disabled title="Shift U lifts all tape, and again covers it">Lift all tape<kbd>Shift U</kbd></button>
+          <button id="tapeCover" data-icon="tape" disabled title="Shift U lifts all tape, and again covers it">Cover with all tape</button>
           <button id="tapeNote" data-icon="tape" disabled>Tape as saved</button>
           <hr />
-          <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
+          <button data-proxy="pagesDark" data-icon="invertPage">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
-          <button id="lagLogOpen" data-icon="clock">Lag log…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="pagesMenu">
@@ -142,7 +147,6 @@
           <button id="insertBlank" data-icon="plus" disabled>Insert blank page…<kbd>Shift B</kbd></button>
           <button id="insertPdf" data-icon="note" disabled>Insert PDF pages…</button>
           <button id="insertHandwritten" data-icon="draw" disabled data-palette="Insert handwritten pages from Markdown…" title="Write Markdown as real handwriting ink on new pages">Insert handwritten pages…</button>
-          <button id="pagesExpandAi" data-icon="spark" disabled data-palette="Pages: Expand with AI…" title="Generate and append new handwritten pages or exam problems from selected Recents, folders or files">Expand with AI…</button>
           <hr />
           <button id="resizePage" data-icon="fit" disabled>Page size…</button>
           <button id="resizeDrag" data-icon="maximize" disabled>Resize by dragging the borders</button>
@@ -154,7 +158,7 @@
         <summary role="menuitem">Study</summary>
         <div class="menu-content" role="menu">
           <button id="chatOpen" data-icon="spark" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
-          <button id="studyExpandAi" data-icon="batchNotes" disabled data-palette="Study: Expand note or exam with AI…" title="Expand the current note or exam with new pages generated from selected source files">Expand with AI…</button>
+          <button id="studyExpandAi" data-icon="batchNotes" disabled data-palette="Study: Expand note or exam with AI…" title="Add handwritten pages or exam problems to this note, written from it or from other notes, folders or files">Expand with AI…</button>
           <button id="studyCards" data-icon="cards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
           <button id="studyQuiz" data-icon="help" disabled>Quiz me…<kbd>Shift Q</kbd></button>
           <button id="studyCreateExam" data-icon="exam" data-palette="Study: Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders, notes or topics">Create exam (AI)…</button>
@@ -174,16 +178,14 @@
         <summary role="menuitem">Help</summary>
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen" data-icon="search">Search commands<kbd>Ctrl K</kbd></button>
-          <button id="shortcutsOpen" data-icon="keyboard">Keyboard shortcuts<kbd>?</kbd></button>
-          <hr />
-          <button id="penTestOpen" data-icon="draw">Test pen and stylus…</button>
-          <button id="hoverToolsOpen" data-icon="select" data-palette="Help: Configure hover cursor tools…" title="Choose which tools show a pen hover cursor on the page (Pan, Select, Pen, Eraser, …)">Hover cursor tools…</button>
+          <button id="shortcutsOpen" data-icon="keyboard">Keyboard shortcuts…</button>
           <hr />
           <button id="welcomeToggle" data-icon="note" role="menuitemcheckbox" aria-checked="true" data-palette="Help: Open the welcome note at start" title="Whether this site opens its welcome note in a tab each time it starts (remembered in this browser)" hidden>Open the welcome note at start</button>
           <button id="installApp" data-icon="import" data-palette="Add this site as an app…" title="Install NoteComplete from this site: it opens from your Home Screen or app list, offline">Add this site as an app…</button>
           <button id="agentsOpen" data-icon="share" data-palette="Connect AI tools to your notes…" title="Let Claude Code, Codex, Antigravity or OpenCode read and write your notes" hidden>Connect AI tools…</button>
+          <hr />
+          <button id="lagLogOpen" data-icon="clock" title="Write down every moment the app freezes, with what was going on">Lag log…</button>
           <div id="logItems" class="menu-group" hidden>
-            <hr />
             <button id="logToggle" data-icon="note" role="menuitemcheckbox" aria-checked="false" data-palette="Help: Keep a diagnostic log" title="Write warnings, errors and the steps of AI runs, Expand and saves to a log file (no note contents), to find out what went wrong">Keep a diagnostic log</button>
             <button id="logOpen" data-icon="open" data-palette="Help: Open the diagnostic log" title="Open the log file (or its folder when nothing was logged yet)">Open the log</button>
           </div>
@@ -200,11 +202,11 @@
         <div class="export-head">
           <h2 id="exportTitle">Import, export and share</h2>
           <div class="export-tabs" role="tablist" aria-label="Import, export and share sections">
-            <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="open" aria-selected="true" aria-controls="exportPanelOpen">
+            <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="import" aria-selected="true" aria-controls="exportPanelOpen">
               <span class="export-tab-text"><b>Open &amp; Import</b><small>Folders, links, Drive, files &amp; study packs</small></span>
             </button>
             <button id="exportTabExport" type="button" class="export-tab" role="tab" data-export-tab="export" data-icon="export" aria-selected="false" aria-controls="exportPanelExport">
-              <span class="export-tab-text"><b>Export</b><small>Notes, pages, study resources, QR &amp; sharing</small></span>
+              <span class="export-tab-text"><b>Export</b><small>Notes, pages, study material, sharing</small></span>
             </button>
           </div>
         </div>
@@ -218,7 +220,7 @@
                 <button id="openLink" class="export-item" data-icon="link"><b>Open link…</b><small>A web page, such as a Notion page, like a document</small></button>
                 <button id="driveOpen" class="export-item" data-icon="cloud"><b>Google Drive</b><small>Open a note from your Drive library</small></button>
                 <button id="dropboxOpen" class="export-item" data-icon="cloud"><b>Dropbox</b><small>Open a note from your Dropbox</small></button>
-                <button id="githubOpen" class="export-item" data-icon="cloud"><b>GitHub (Auto-Chunked)</b><small>Open or publish auto-chunked notes on GitHub</small></button>
+                <button id="githubOpen" class="export-item" data-icon="cloud"><b>GitHub</b><small>Open or publish auto-chunked notes on GitHub</small></button>
                 <button id="webdavOpen" class="export-item" data-icon="cloud"><b>Nextcloud / WebDAV</b><small>Open or save notes in a shared WebDAV folder</small></button>
                 <button id="addDocuments" hidden disabled class="export-item" data-icon="plus"><b>Add documents…</b><small>Add files to the open document’s group</small></button>
                 <button data-proxy="libraryChoose" class="export-item" data-icon="folder"><b>Downloads folder…</b><small>Where downloaded notes are kept</small></button>
@@ -228,7 +230,7 @@
               <section aria-labelledby="exportImportHead">
                 <h3 id="exportImportHead">Import</h3>
                 <button id="importAny" class="export-item" data-icon="import"><b>Import…</b><small>Study material, quizzes (Markdown), flashcard decks, notes or any document</small></button>
-                <button id="hubReceive" type="button" class="export-item" data-icon="qr"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
+                <button id="hubReceive" type="button" class="export-item" data-icon="qr" data-palette="Receive notes or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file: notes, quizzes and flashcards are recognised on their own"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
               </section>
             </div>
           </div>
@@ -261,9 +263,8 @@
             </div>
             <div class="export-column">
               <section aria-labelledby="exportShareHead">
-                <h3 id="exportShareHead">Share &amp; receive notes</h3>
+                <h3 id="exportShareHead">Share notes</h3>
                 <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
-                <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes, quizzes &amp; flashcards"><b>Receive notes or study…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
               </section>
               <section aria-labelledby="exportCollabHead">
                 <h3 id="exportCollabHead">Live collaboration</h3>
@@ -278,17 +279,14 @@
           <div class="export-columns">
             <div class="export-column">
               <section aria-labelledby="exportResOutHead">
-                <h3 id="exportResOutHead">Export &amp; manage</h3>
+                <h3 id="exportResOutHead">Export</h3>
                 <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Export all to Anki</b><small>All flashcards and quizzes of this note (.txt)</small></button>
-                <button id="exportSavedResources" class="export-item" data-icon="storage" title="Open all saved quizzes, flashcard decks, exams, and AI scratchpad conversations"><b>Browse saved resources…</b><small>Manage, export or share quizzes, decks, exams &amp; scratchpad</small></button>
               </section>
             </div>
             <div class="export-column">
               <section aria-labelledby="exportResShareHead">
-                <h3 id="exportResShareHead">Share &amp; receive study material</h3>
-                <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
-                <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or save a .ncstudy file (QR code and PIN, link, or file)"><b>Send or receive study pack…</b><small>Another NoteComplete (Wi-Fi PIN, QR, link) or .ncstudy file</small></button>
-                <button id="receiveStudyQr" class="export-item" data-icon="qr" title="Scan any NoteComplete QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes &amp; study packs"><b>Receive via QR, code or file…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
+                <h3 id="exportResShareHead">Share study material</h3>
+                <button id="studyShare" class="export-item" data-icon="share" data-palette="Send study material…" title="Send flashcards, quizzes and notes to another NoteComplete (Wi-Fi PIN, link or an offline QR stream), or save a .ncstudy file"><b>Send study material…</b><small>Wi-Fi PIN, link, offline QR stream or .ncstudy file</small></button>
               </section>
             </div>
           </div>
@@ -307,7 +305,7 @@
                 <h3 id="newBlankHead">Blank &amp; Prefab</h3>
                 <button id="newDocument" type="button" class="export-item" data-icon="note"><b>Blank pages or canvas…</b><small>Choose page size, page count, or an infinite canvas (.nfedit or .noteful)</small></button>
                 <button id="newMarkdownDoc" type="button" class="export-item" data-icon="text" data-palette="New Markdown / Chinese note…"><b>Markdown note</b><small>Write Markdown or Chinese with live Pinyin &amp; math without needing a file first</small></button>
-                <button id="homeCreatePrefab" type="button" class="export-item" data-icon="graph" data-palette="Create prefab in a new note…"><b>Start with a prefab…</b><small>Create a graph, chart, truth table, Chinese trace or UML diagram in a new note</small></button>
+                <button id="homeCreatePrefab" type="button" class="export-item" data-icon="graph" data-palette="Create prefab in a new note…"><b>Start with a prefab…</b><small>Create a graph, chart, truth table, Chinese stroke order or UML diagram in a new note</small></button>
               </section>
             </div>
             <div class="export-column">
@@ -360,16 +358,16 @@
         </div>
         <div class="home-actions">
           <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
-          <div class="home-file-drop-wrap">
+          <div id="homeFileDropWrap" class="home-file-drop-wrap">
             <button id="emptyOpen" type="button" class="primary home-file-drop" data-icon="note" aria-haspopup="menu" aria-expanded="false" aria-controls="homeFileMenu" title="Create a new note or open an existing file" disabled><span>File</span><span class="filter-caret" aria-hidden="true"></span></button>
-            <div id="homeFileMenu" class="select-menu home-file-menu" role="menu" aria-label="New note &amp; open file" hidden>
+            <div id="homeFileMenu" class="select-menu filter-menu home-file-menu" role="menu" aria-label="New note &amp; open file" hidden>
               <button id="homeMenuNewHub" type="button" class="filter-option" role="menuitem" data-icon="note"><span>New note…</span><kbd>Ctrl N</kbd></button>
               <button id="homeMenuBlank" type="button" class="filter-option" role="menuitem" data-icon="pages"><span>Blank pages or canvas…</span></button>
-              <button id="homeNewMarkdown" type="button" class="filter-option" role="menuitem" data-icon="text"><span>New Markdown note</span></button>
-              <button id="homeMenuPrefab" type="button" class="filter-option" role="menuitem" data-icon="graph"><span>Create prefab first…</span></button>
+              <button id="homeNewMarkdown" type="button" class="filter-option" role="menuitem" data-icon="text"><span>Markdown note</span></button>
+              <button id="homeMenuPrefab" type="button" class="filter-option" role="menuitem" data-icon="graph"><span>Start with a prefab…</span></button>
               <button id="homeMenuHandwritten" type="button" class="filter-option" role="menuitem" data-icon="draw"><span>Handwritten from Markdown…</span></button>
               <button id="homeMenuTakeNotesAi" type="button" class="filter-option" role="menuitem" data-icon="batchNotes"><span>Take notes with AI…</span></button>
-              <hr />
+              <hr role="separator" />
               <button id="emptyOpenFile" type="button" class="filter-option" role="menuitem" data-icon="open"><span>Open file…</span><kbd>Ctrl O</kbd></button>
               <button id="emptyOpenFolder" type="button" class="filter-option" role="menuitem" data-icon="folder" hidden><span>Open folder…</span></button>
             </div>
@@ -403,17 +401,30 @@
             <input id="recentSearch" type="search" placeholder="Search recent notes…" aria-label="Search recent notes" autocomplete="off" spellcheck="false" />
             <button id="recentSearchClear" type="button" class="icon-button recent-search-clear" data-icon="close" aria-label="Clear search" title="Clear search" hidden></button>
           </div>
+          <button id="recentContentSearch" type="button" class="icon-button recent-content-toggle" data-icon="searchText" aria-pressed="false" aria-label="Search inside notes" title="Search inside notes: PDF text, handwriting, OCR and transcripts of Recent (Shift Enter in the search box)" aria-keyshortcuts="Shift+Enter"></button>
           <div class="recent-batch-actions">
-            <button id="batchTranscribeMode" type="button" class="chip" data-icon="headphones" title="Select recent notes with audio recordings to transcribe in batch (notes without audio are greyed out)">Batch transcribe</button>
+            <button id="batchTranscribeMode" type="button" class="chip batch-mode-btn" data-icon="headphones" title="Select recent notes with audio recordings to transcribe in batch (notes without audio are greyed out)">Batch transcribe</button>
             <button id="batchTranscribeSelectAll" type="button" class="chip" hidden>Select all</button>
             <button id="batchTranscribeStart" type="button" class="primary chip" data-icon="headphones" disabled hidden>Transcribe (0)…</button>
             <button id="batchTranscribeCancel" type="button" class="chip" hidden>Cancel</button>
+            <button id="batchOcrMode" type="button" class="chip batch-mode-btn" data-icon="grab" title="Select recent notes, PDFs and pictures to recognize their handwriting and scanned pages in batch (OCR); the text becomes searchable">Batch OCR</button>
+            <button id="batchOcrSelectAll" type="button" class="chip" hidden>Select all</button>
+            <button id="batchOcrStart" type="button" class="primary chip" data-icon="grab" disabled hidden>Recognize (0)…</button>
+            <button id="batchOcrCancel" type="button" class="chip" hidden>Cancel</button>
+            <button id="batchShareMode" type="button" class="chip batch-mode-btn" data-icon="share" title="Select several recent notes to send at once: system share sheet, or one .zip by Wi-Fi link, P2P QR or file">Share</button>
+            <button id="batchShareSelectAll" type="button" class="chip" hidden>Select all</button>
+            <button id="batchShareStart" type="button" class="primary chip" data-icon="share" disabled hidden>Share (0)…</button>
+            <button id="batchShareCancel" type="button" class="chip" hidden>Cancel</button>
             <button id="findDuplicates" type="button" class="chip find-duplicates-btn" data-icon="copy" title="Scan recent notes for duplicates by name, note ID, and hash, and combine them">Find duplicates…</button>
           </div>
         </div>
         <div id="recentContent" class="category-content">
           <p id="folderEmpty" class="muted" hidden>Nothing in this folder yet. Move a note here from its ⋯ menu.</p>
           <p id="recentSearchEmpty" class="muted" hidden>No notes match your search.</p>
+          <div id="contentResults" class="content-results" role="region" aria-label="Matches inside notes" aria-live="polite" hidden>
+            <div class="content-results-head"><span id="contentSummary" class="muted"></span><button id="contentIndex" type="button" class="chip" data-icon="grab" hidden>Index…</button></div>
+            <ul id="contentList" class="content-list"></ul>
+          </div>
           <ul id="recentList" class="note-grid"></ul>
         </div>
       </section>
@@ -422,7 +433,7 @@
           <button id="cloudToggle" type="button" class="category-toggle" aria-expanded="true" aria-controls="cloudContent"><h3 id="cloudTitle">Cloud</h3><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <div class="cloud-toolbar">
             <input id="cloudMultiSearch" type="search" class="cloud-multi-search" placeholder="Search selected clouds…" aria-label="Search selected cloud services" autocomplete="off" spellcheck="false" />
-            <button id="cloudProviderDrop" type="button" class="chip filter-drop has-value" aria-haspopup="true" aria-expanded="false" aria-controls="cloudProviderMenu" title="Select one or more cloud services to browse and search together"></button>
+            <button id="cloudProviderDrop" type="button" class="chip filter-drop has-value" aria-haspopup="menu" aria-expanded="false" aria-controls="cloudProviderMenu" title="Select one or more cloud services to browse and search together"></button>
             <div id="cloudProviderMenu" class="select-menu filter-menu cloud-provider-menu" role="menu" aria-label="Cloud services" hidden></div>
           </div>
         </div>
@@ -449,8 +460,8 @@
                 <button id="driveRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
                 <button id="driveDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Google Drive on this device (no files change in Drive)" disabled hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="Google Drive guided setup">
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="drive:user" data-icon="open" title="Guided user setup: open a shared Drive folder or sign in">User</button>
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="drive:creator" data-icon="share" title="Guided creator setup: share a Drive folder or configure OAuth">Creator</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="drive:user" data-icon="open" title="Step-by-step guide to open: open a shared Drive folder or sign in">Open guide</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="drive:creator" data-icon="share" title="Step-by-step guide to share: share a Drive folder or configure OAuth">Share guide</button>
                 </span>
               </div>
             </div>
@@ -460,7 +471,7 @@
                 <div class="drive-signin-body">
                   <div class="cloud-connect-row">
                     <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
-                    <span class="muted cloud-connect-hint">Read-only access to your Drive folders, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
+                    <span class="muted cloud-connect-hint">Read-only access to your Drive folders, or use <strong>Open guide</strong> / <strong>Share guide</strong> for guided setup.</span>
                   </div>
                   <div class="cloud-details-row">
                     <details class="drive-setup">
@@ -502,8 +513,8 @@
                 <button id="dropboxRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
                 <button id="dropboxDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Dropbox on this device (no files change in Dropbox)" disabled hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="Dropbox guided setup">
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="dropbox:user" data-icon="open" title="Guided user setup: connect Dropbox or open a folder path">User</button>
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="dropbox:creator" data-icon="share" title="Guided creator setup: create a Dropbox App Key and share a folder">Creator</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="dropbox:user" data-icon="open" title="Step-by-step guide to open: connect Dropbox or open a folder path">Open guide</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="dropbox:creator" data-icon="share" title="Step-by-step guide to share: create a Dropbox App Key and share a folder">Share guide</button>
                 </span>
               </div>
             </div>
@@ -513,7 +524,7 @@
                 <div class="drive-signin-body">
                   <div class="cloud-connect-row">
                     <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button></div>
-                    <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
+                    <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>Open guide</strong> / <strong>Share guide</strong> for guided setup.</span>
                   </div>
                   <details class="drive-setup">
                     <summary>Connection setup</summary>
@@ -553,8 +564,8 @@
                 <button id="githubPublishBtn" type="button" class="chip" data-icon="export" title="Split open note into ≤4 MiB chunks and commit to GitHub" hidden>Publish note</button>
                 <button id="githubDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect GitHub repository on this device" hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="GitHub guided setup">
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="github:user" data-icon="open" title="Guided user setup: open a public repo or unlock a PIN invite link">User</button>
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="github:creator" data-icon="share" title="Guided creator setup: connect write token, create PIN invite &amp; auto-chunk notes">Creator</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="github:user" data-icon="open" title="Step-by-step guide to open: open a public repo or unlock a PIN invite link">Open guide</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="github:creator" data-icon="share" title="Step-by-step guide to share: connect write token, create PIN invite &amp; auto-chunk notes">Share guide</button>
                 </span>
               </div>
             </div>
@@ -591,8 +602,8 @@
                 <button id="webdavPublishBtn" type="button" class="chip" data-icon="export" title="Save open note into this shared WebDAV folder" hidden>Save note</button>
                 <button id="webdavDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect WebDAV folder on this device" hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="Nextcloud / WebDAV guided setup">
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="webdav:user" data-icon="open" title="Guided user setup: open a Nextcloud shared folder link">User</button>
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="webdav:creator" data-icon="share" title="Guided creator setup: create and share an editable Nextcloud folder link">Creator</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="webdav:user" data-icon="open" title="Step-by-step guide to open: open a Nextcloud shared folder link">Open guide</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="webdav:creator" data-icon="share" title="Step-by-step guide to share: create and share an editable Nextcloud folder link">Share guide</button>
                 </span>
               </div>
             </div>
@@ -627,8 +638,8 @@
                 <button id="archiveFolderUp" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Up one folder" title="Up one folder" hidden></button>
                 <button id="archiveAddBtn" type="button" class="bar-icon" title="Add an Internet Archive repository" aria-label="Add repository">+</button>
                 <span class="cloud-role-group" role="group" aria-label="Internet Archive guided setup">
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="archive:user" data-icon="open" title="Guided user setup: browse or add an archive.org item">User</button>
-                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="archive:creator" data-icon="share" title="Guided creator setup: publish open educational material on archive.org">Creator</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="archive:user" data-icon="open" title="Step-by-step guide to open: browse or add an archive.org item">Open guide</button>
+                  <button type="button" class="chip cloud-role-btn" data-cloud-guide="archive:creator" data-icon="share" title="Step-by-step guide to share: publish open educational material on archive.org">Share guide</button>
                 </span>
               </div>
             </div>
@@ -659,7 +670,7 @@
       <footer class="home-foot">
         <span>Downloaded notes are kept in <strong id="libraryFolder">…</strong></span>
         <button id="libraryChoose" type="button" data-icon="folder" hidden>Change folder…</button>
-        <span class="supported-formats">Noteful · NotePart · NoteComp · PDF · HTML · Text · Markdown · PNG · JPEG · WebP · Your documents stay on this device.</span>
+        <span class="supported-formats">Noteful · NoteComplete (.nfedit, .notecomp) · Goodnotes · Notability · PDF · Word · HTML · Text · Markdown · images · Your documents stay on this device.</span>
         <span id="homeVersion" class="home-version">v1.1.37</span>
       </footer>
     </section>
@@ -672,7 +683,7 @@
       <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
     </section>
     <section id="textView" hidden>
-      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textFindToggle" type="button" data-icon="search" aria-label="Find in document" title="Find in document (Ctrl F)" aria-expanded="false"></button><button id="textIntoNote" type="button" data-icon="import" title="Insert this diagram into a note (editable if class, package or use case)" hidden>Insert into note…</button><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textSplitToggle" type="button" aria-pressed="false" title="Show live formatted preview (with math &amp; pinyin) beside the editor" hidden>Split</button><span id="textZhOptions" class="zh-sub-options" hidden><button id="textRubyToggle" type="button" class="fmt-ruby" aria-pressed="false" title="Pinyin over Chinese characters (live in preview)">拼</button><button id="textTraceBtn" type="button" class="fmt-trace" title="Generate &amp; insert stroke order trace prefab for highlighted Chinese characters">笔 Trace</button></span><button id="textHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Markdown &amp; Chinese cheat sheet" title="What the keys and Markdown do (?)"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
+      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textFindToggle" type="button" data-icon="search" aria-label="Find in document" title="Find in document (Ctrl F)" aria-expanded="false"></button><button id="textIntoNote" type="button" data-icon="import" title="Insert this diagram into a note (editable if class, package or use case)" hidden>Insert into note…</button><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textSplitToggle" type="button" aria-pressed="false" title="Show live formatted preview (with math &amp; pinyin) beside the editor" hidden>Split</button><span id="textZhOptions" class="zh-sub-options" hidden><button id="textRubyToggle" type="button" class="fmt-ruby" aria-pressed="false" title="Pinyin over Chinese characters (live in preview)">拼</button><button id="textTraceBtn" type="button" class="fmt-trace" title="Stroke order: insert it for the highlighted Chinese characters">笔 Trace</button></span><button id="textHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Markdown &amp; Chinese cheat sheet" title="What the keys and Markdown do (?)"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
       <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button><button id="textFindNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
     </section>
     <section id="editor" hidden>
@@ -963,7 +974,7 @@
           aria-label="Dark pages"
           title="Dark pages: invert the document's contrast (D)"
           aria-pressed="false"
-          data-icon="moon"
+          data-icon="invertPage"
         ></button
         ><button
           data-tool="pdfedit"
@@ -1010,7 +1021,7 @@
         </div>
       </div>
       <div class="workspace">
-        <div id="grabMenu" class="grab-menu grab-icons" role="toolbar" aria-label="Grabbed region" hidden><button id="grabSelect" type="button" class="icon-button" data-icon="select" title="Select what is inside" aria-label="Select what is inside"></button><button id="grabCopy" type="button" class="icon-button" data-icon="copy" title="Copy text" aria-label="Copy text"></button><button id="grabAsk" type="button" class="icon-button primary" data-icon="spark" title="Ask AI" aria-label="Ask AI"></button><button id="grabAttach" type="button" class="icon-button" data-icon="attach" title="Add to chat" aria-label="Add to chat"></button><button id="grabErase" type="button" class="icon-button" data-icon="erase" title="Erase the ink in this region" aria-label="Erase the ink in this region"></button><button id="grabKeep" type="button" class="icon-button" data-icon="star" title="Keep for exercises: shown beside the canvas while filling in a figure" aria-label="Keep for exercises"></button><button id="grabCancel" type="button" class="icon-button" data-icon="close" title="Cancel" aria-label="Cancel"></button></div>
+        <div id="grabMenu" class="grab-menu grab-icons" role="toolbar" aria-label="Grabbed region" hidden><button id="grabSelect" type="button" class="icon-button" data-icon="select" title="Select what is inside" aria-label="Select what is inside"></button><button id="grabCopy" type="button" class="icon-button" data-icon="copy" title="Copy text" aria-label="Copy text"></button><button id="grabZh" type="button" class="icon-button zh-grab" hidden title="Chinese here: translate, look up, stroke order, listen" aria-label="Chinese in this region">中</button><button id="grabAsk" type="button" class="icon-button primary" data-icon="spark" title="Ask AI" aria-label="Ask AI"></button><button id="grabAttach" type="button" class="icon-button" data-icon="attach" title="Add to chat" aria-label="Add to chat"></button><button id="grabErase" type="button" class="icon-button" data-icon="erase" title="Erase the ink in this region" aria-label="Erase the ink in this region"></button><button id="grabKeep" type="button" class="icon-button" data-icon="star" title="Keep for exercises: shown beside the canvas while filling in a figure" aria-label="Keep for exercises"></button><button id="grabCancel" type="button" class="icon-button" data-icon="close" title="Cancel" aria-label="Cancel"></button></div>
         <section id="audioBar" class="audio-panel side-panel" hidden aria-label="Audio and transcript">
           <div class="audio-head"><span class="audio-icon" data-icon="headphones"></span><h2 id="recordingTitle"></h2><a id="audioDownload" class="icon-button" title="Download this recording" aria-label="Download this recording" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg></a><button id="audioClose" type="button" class="icon-button" aria-label="Close" title="Close (A)">×</button></div>
           <!-- The recording & animation list, with Record, Animate, and Import beside it (recorder.js). -->
@@ -1058,28 +1069,30 @@
               <select id="transcriptBackend" data-native aria-label="Transcription engine"><option value="whisper">Whisper on this device</option></select>
               <span id="transcriptModelRow" class="transcript-model-wrap">
                 <select id="transcriptModel" data-native aria-label="Whisper model">
-                  <option value="tiny">Tiny · fastest</option>
-                  <option value="base" selected>Base · balanced</option>
-                  <option value="small">Small · more accurate</option>
+                  <option value="tiny">Tiny · fastest (~40 MB)</option>
+                  <option value="base" selected>Base · balanced (~75 MB)</option>
+                  <option value="small">Small · most accurate (~245 MB)</option>
                 </select>
               </span>
               <select id="transcriptLanguage" data-native aria-label="Spoken language">
                 <option value="">Detect language</option>
                 <option value="spanish" selected>Castellano</option>
                 <option value="galician">Galego</option>
-                <option value="english">English</option>
                 <option value="catalan">Català</option>
+                <option value="english">English</option>
                 <option value="french">Français</option>
                 <option value="german">Deutsch</option>
                 <option value="italian">Italiano</option>
                 <option value="portuguese">Português</option>
+                <option value="chinese">中文</option>
+                <option value="japanese">日本語</option>
               </select>
             </div>
             <div class="transcript-controls transcript-actions">
               <button id="transcribeAudio" type="button" class="primary" title="Transcribe this recording. Shift-click to transcribe again instead of loading the saved transcript">Transcribe</button>
               <button id="cancelTranscript" type="button" hidden>Cancel</button>
               <button id="transcriptEdit" type="button" class="icon-button" data-icon="draw" aria-pressed="false" aria-label="Edit" hidden title="Edit: click a word to correct it"></button>
-              <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation; every word keeps its time"></button>
+              <button id="transcriptRevise" type="button" class="icon-button" data-icon="spark" aria-label="Revise with AI" hidden title="Revise with AI: your AI tool corrects misheard words and punctuation (every word keeps its time) and can flag side talk and fragments in red for you to remove or keep"></button>
               <button id="transcriptRestore" type="button" class="icon-button" data-icon="undo" aria-label="Undo revision" hidden title="Undo revision: bring back the automatic transcript from before the AI revision"></button>
               <span class="spacer"></span>
               <select id="transcriptFormat" data-native aria-label="Export format" hidden><option value="txt">TXT</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="json">JSON</option></select>
@@ -1121,7 +1134,7 @@
             <label><input id="chatPage" type="checkbox" checked /> <span id="chatPageLabel">This page</span></label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
             <label title="Your Markdown notes for this document" data-material="notes"><input id="chatNotes" type="checkbox" /> My notes</label>
-            <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
+            <label id="chatNoteLabel" title="The AI tool may open any other page of the note when it needs to (slower)"><input id="chatNote" type="checkbox" checked /> Other pages when needed</label>
           </div>
           <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
           <div id="chatAttachments" class="chat-attachments" hidden></div>
@@ -1257,42 +1270,42 @@
   <div class="batch-transcribe-form">
     <div class="ocr-header">
       <div>
-        <p class="eyebrow">Audio &amp; AI</p>
         <h2 id="batchTranscribeTitle">Batch transcribe recordings</h2>
       </div>
-      <button id="btCloseBtn" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+      <button id="btCloseBtn" class="icon-button" data-icon="close" type="button" title="Close (Esc)" aria-label="Close"></button>
     </div>
 
-    <p class="ocr-hint">Choose the transcription engine, output actions, and which recordings from your selected notes to transcribe.</p>
+    <p class="muted">Choose the transcription engine, output actions, and which recordings from your selected notes to transcribe.</p>
 
     <div class="bt-grid">
       <label class="ocr-field">
         <span>Engine</span>
         <select id="btBackend" data-native>
-          <option value="whisper" selected>Local Whisper (offline in browser)</option>
-          <option value="gemini">Gemini Audio (cloud API key)</option>
+          <option value="whisper" selected>Whisper on this device</option>
         </select>
       </label>
       <label id="btModelField" class="ocr-field">
         <span>Whisper model</span>
         <select id="btModel" data-native>
-          <option value="tiny">Tiny (~40 MB, fastest)</option>
-          <option value="base" selected>Base (~75 MB, balanced)</option>
-          <option value="small">Small (~245 MB, highest accuracy)</option>
+          <option value="tiny">Tiny · fastest (~40 MB)</option>
+          <option value="base" selected>Base · balanced (~75 MB)</option>
+          <option value="small">Small · most accurate (~245 MB)</option>
         </select>
       </label>
       <label class="ocr-field">
         <span>Language</span>
         <select id="btLanguage" data-native>
-          <option value="" selected>Auto-detect</option>
-          <option value="es">Spanish (Español)</option>
-          <option value="en">English</option>
-          <option value="zh">Chinese (中文)</option>
-          <option value="fr">French (Français)</option>
-          <option value="de">German (Deutsch)</option>
-          <option value="it">Italian (Italiano)</option>
-          <option value="pt">Portuguese (Português)</option>
-          <option value="ja">Japanese (日本語)</option>
+          <option value="" selected>Detect language</option>
+          <option value="spanish">Castellano</option>
+          <option value="galician">Galego</option>
+          <option value="catalan">Català</option>
+          <option value="english">English</option>
+          <option value="french">Français</option>
+          <option value="german">Deutsch</option>
+          <option value="italian">Italiano</option>
+          <option value="portuguese">Português</option>
+          <option value="chinese">中文</option>
+          <option value="japanese">日本語</option>
         </select>
       </label>
     </div>
@@ -1328,14 +1341,79 @@
     <div class="bt-recordings-section">
       <div class="bt-recordings-header">
         <span id="btSummary" class="bt-summary">0 recordings selected</span>
-        <button id="btModalSelectAll" class="ghost small" type="button">Select all</button>
+        <button id="btModalSelectAll" class="chip" type="button">Select all</button>
       </div>
       <div id="btNotesList" class="bt-notes-list"></div>
     </div>
 
     <div class="ocr-actions">
-      <button id="btCancelBtn" class="ghost" type="button">Cancel</button>
+      <button id="btCancelBtn" type="button">Cancel</button>
       <button id="btConfirmBtn" class="primary" type="button">Transcribe</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="batchOcrDialog" class="ocr-dialog batch-transcribe-dialog" aria-labelledby="batchOcrTitle">
+  <div class="batch-transcribe-form">
+    <div class="ocr-header">
+      <div>
+        <p class="eyebrow">Search &amp; OCR</p>
+        <h2 id="batchOcrTitle">Batch recognize text</h2>
+      </div>
+      <button id="boClose" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+    </div>
+    <p class="ocr-hint">Handwriting and scanned pages of the chosen documents are recognized on this device, one after the other, in the background. Results are kept with each note: Find, the AI and the search inside notes use them.</p>
+    <div class="bt-grid">
+      <label class="ocr-field"><span>Languages <span class="muted">(Ctrl/⌘-click for several)</span></span><select id="boLanguage" multiple size="4"></select></label>
+      <div class="bt-choices-box">
+        <span class="bt-section-title">Quality</span>
+        <label class="ocr-check" title="Three passes over a page"><input type="radio" name="boQuality" value="normal" checked /> <span>Normal</span></label>
+        <label class="ocr-check" title="Eight passes over a page; about three times slower, fewer misread words"><input type="radio" name="boQuality" value="high" /> <span>High <span class="muted">(slower)</span></span></label>
+      </div>
+    </div>
+    <div class="bt-choices-box">
+      <span class="bt-section-title">Pages</span>
+      <label class="ocr-check"><input id="boSkipPdf" type="checkbox" checked /> <span>Skip the printed text of PDF pages (handwriting on them is still read)</span></label>
+      <label class="ocr-check"><input id="boRedo" type="checkbox" /> <span>Recognize again pages already done</span></label>
+    </div>
+    <div class="bt-recordings-section">
+      <div class="bt-recordings-header">
+        <span id="boSummary" class="bt-summary">0 documents queued</span>
+        <button id="boSelectAll" class="ghost small" type="button">Select all</button>
+      </div>
+      <div id="boNotesList" class="bt-notes-list"></div>
+    </div>
+    <p id="boStatus" class="muted" role="status" aria-live="polite"></p>
+    <div class="ocr-actions">
+      <button id="boCancel" class="ghost" type="button">Cancel</button>
+      <button id="boConfirm" class="primary" type="button">Recognize</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="batchShareDialog" class="ocr-dialog batch-transcribe-dialog" aria-labelledby="batchShareTitle">
+  <div class="batch-transcribe-form">
+    <div class="ocr-header">
+      <div>
+        <p class="eyebrow">Share</p>
+        <h2 id="batchShareTitle">Share notes</h2>
+      </div>
+      <button id="bsClose" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+    </div>
+    <p class="ocr-hint">The chosen notes are sent as they are saved in Recent. Several notes travel together as one .zip: the receiver opens it in NoteComplete and picks the notes inside.</p>
+    <div class="bt-recordings-section">
+      <div class="bt-recordings-header">
+        <span id="bsSummary" class="bt-summary">0 notes to share</span>
+        <button id="bsSelectAll" class="ghost small" type="button">Select all</button>
+      </div>
+      <div id="bsNotesList" class="bt-notes-list"></div>
+    </div>
+    <p id="bsStatus" class="muted" role="status" aria-live="polite"></p>
+    <div class="ocr-actions">
+      <button id="bsCancel" class="ghost" type="button">Cancel</button>
+      <button id="bsZip" type="button" data-icon="save" title="Save the chosen notes as one .zip file">Save .zip</button>
+      <button id="bsSystem" type="button" data-icon="share" title="Send the notes with this device's share sheet (Mail, Messages, Drive, AirDrop…)" hidden>Share sheet…</button>
+      <button id="bsQr" class="primary" type="button" data-icon="qr" title="Send one .zip by Wi-Fi link, peer-to-peer QR or offline QR, like Share note via QR">QR or link…</button>
     </div>
   </div>
 </dialog>
@@ -1371,7 +1449,7 @@
   <button id="textMath" type="button" class="fmt-math" aria-pressed="false" title="Math: the text is LaTeX, typeset (the whole box, or the parts between $…$ and $$…$$)">∑</button>
   <span id="zhTextSubOptions" class="zh-sub-options" hidden>
     <button id="zhRubyToggle" type="button" class="fmt-ruby" aria-pressed="false" data-palette="Pinyin over characters: on or off" title="Pinyin over Chinese characters (saved per note with Chinese; exports keep it when it is on)">拼</button>
-    <button id="zhTraceToggle" type="button" class="fmt-trace" title="Trace &amp; stroke order prefab: open the animated trace editor (with English meanings &amp; variants) and insert the stroke order prefab">笔</button>
+    <button id="zhTraceToggle" type="button" class="fmt-trace" title="Stroke order: open the stroke order editor (with English meanings &amp; variants) and insert the stroke order prefab">笔</button>
   </span>
   <span id="textSwatches" class="text-swatches" role="radiogroup" aria-label="Color"></span>
   <label class="color-label" title="Custom color"><input type="color" id="textColor" value="#1f2328" aria-label="Custom color" /></label>
@@ -1446,7 +1524,7 @@
   </fieldset>
   <div class="study-row">
     <label id="studyAmountLabel" class="ocr-languages">Cards per page <select id="studyAmount" data-native><option>1</option><option>2</option><option selected>4</option><option>6</option><option>8</option><option>10</option><option>15</option><option>20</option></select></label>
-    <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Español</option><option value="English">English</option></select></label>
+    <label class="ocr-languages">Language<select id="studyLanguage" data-native><option value="">Same as the note</option><option value="Spanish">Castellano</option><option value="Galician">Galego</option><option value="Catalan">Català</option><option value="English">English</option><option value="French">Français</option><option value="German">Deutsch</option><option value="Italian">Italiano</option><option value="Portuguese">Português</option><option value="Chinese">中文</option><option value="Japanese">日本語</option></select></label>
   </div>
   <p id="studyStatus" class="muted" role="status" aria-live="polite"></p>
   <div class="ocr-actions"><button id="studyPromptEdit" type="button" hidden>Edit quiz instructions…</button><span class="spacer"></span><button id="studyClose" type="button">Close</button><button id="studyGo" type="button" class="primary">Generate in background</button></div>
@@ -1504,7 +1582,7 @@
   <h2 id="versionTitle">Newer version in Google Drive</h2>
   <p id="versionText"></p>
   <dl class="version-facts"><dt>Your copy</dt><dd id="versionMine"></dd><dt id="versionRemoteLabel">Google Drive</dt><dd id="versionDrive"></dd></dl>
-  <div class="ocr-actions"><button id="versionCompare" type="button">Compare…</button><span class="spacer"></span><button id="versionOpenMine" type="button">Open my copy</button><button id="versionBoth" type="button" title="Download the Drive version and keep your copy too">Keep both</button><button id="versionOpenDrive" type="button" class="primary">Open Drive version</button></div>
+  <div class="ocr-actions"><button id="versionCompare" type="button">Compare…</button><span class="spacer"></span><button id="versionOpenMine" type="button">Use my copy</button><button id="versionBoth" type="button" title="Download the Drive version and keep your copy too">Keep both</button><button id="versionOpenDrive" type="button" class="primary">Use the Drive version</button></div>
 </dialog>
 <dialog id="compareDialog" class="compare-dialog" aria-labelledby="compareTitle">
   <div class="compare-head"><h2 id="compareTitle">Compare</h2><p id="compareSummary" class="muted" role="status" aria-live="polite"></p></div>
@@ -1589,9 +1667,9 @@
   <button id="forgetCut" type="button" role="menuitem" data-icon="trim" title="Open this note and delete its undo history to make the file smaller; the note stays as it is until you save" hidden>Cut history…</button>
   <div id="forgetFiles" class="note-export" role="group" aria-label="Open and export" hidden>
     <span data-icon="export" title="Opens the note, then exports it">Export</span>
-    <button type="button" data-export="noteful" title="Export Noteful (.noteful)">NF</button>
-    <button type="button" data-export="markdown" title="Export Noteful + Markdown">N+MD</button>
-    <button type="button" data-export="project" title="Export NoteComplete (.nfedit): choose which resources to include">NFE</button>
+    <button type="button" data-export="noteful" title="Export Noteful (.noteful)">Noteful</button>
+    <button type="button" data-export="markdown" title="Export Noteful + Markdown">+ Markdown</button>
+    <button type="button" data-export="project" title="Export NoteComplete (.nfedit): choose which resources to include">Project</button>
     <button type="button" data-export="pdf" title="Every page as one PDF">PDF</button>
   </div>
   <button id="forgetExport" type="button" role="menuitem" data-icon="cards" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck">Export to Anki</button>
@@ -1779,7 +1857,7 @@
 <dialog id="recoverDialog" class="ocr-dialog recover-toast" aria-labelledby="recoverTitle">
   <h2 id="recoverTitle">Newer automatic save</h2>
   <p id="recoverText"></p>
-  <div class="ocr-actions"><button id="recoverManual" type="button">Keep the file</button><button id="recoverAuto" type="button" class="primary">Open it</button><button id="recoverDismiss" type="button" class="recover-x" aria-label="Keep the file">×</button></div>
+  <div class="ocr-actions"><button id="recoverManual" type="button">Use my file</button><button id="recoverAuto" type="button" class="primary">Open the automatic save</button><button id="recoverDismiss" type="button" class="recover-x" aria-label="Use my file">×</button></div>
 </dialog>
 
 <dialog id="autosavesDialog" class="ocr-dialog saved-dialog" aria-labelledby="autosavesTitle">
@@ -1789,7 +1867,7 @@
   <div class="ocr-actions"><button id="autosavesClear" type="button" class="danger">Delete all</button><span class="spacer"></span><button id="autosavesClose" type="button" class="primary">Close</button></div>
 </dialog>
 
-<dialog id="formatsDialog" class="ocr-dialog" aria-labelledby="formatsTitle">
+<dialog id="formatsDialog" class="ocr-dialog formats-dialog" aria-labelledby="formatsTitle">
   <h2 id="formatsTitle">File formats</h2>
   <p>A note is saved in one of two formats. Export makes other files from it.</p>
   <table class="formats-table">

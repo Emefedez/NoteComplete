@@ -70,7 +70,6 @@ function store(mode, work) {
   });
 }
 export const importedFonts = () => store("readonly", (s) => s.getAll()).catch(() => []);
-export const forgetFont = (family) => store("readwrite", (s) => s.delete(family));
 
 // The family name inside a font file (its `name` table: typographic family 16, else family 1),
 // or null. TrueType/OpenType only; WOFF is compressed, so its name comes from the file name.

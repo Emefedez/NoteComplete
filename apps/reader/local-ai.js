@@ -249,7 +249,7 @@ export function friendlyError(error) {
   }
   if (/ShaderF16/i.test(name)) return Error('This GPU cannot run half-precision models. Choose another model.');
   if (/WebGPUNot/i.test(name)) return Error(NO_WEBGPU);
-  if (/NonVLM/i.test(name)) return Error('This model cannot read images. Choose Phi 3.5 Vision, or tick Small model so images are left out.');
+  if (/NonVLM/i.test(name)) return Error('This model cannot read images. Choose Phi 3.5 Vision, or tick One page at a time so images are left out.');
   if (/QuotaExceeded|quota|NoModificationAllowed|SecurityError|InvalidStateError|OPFSStore|Database error|database/i.test(combined)) {
     return Error('Not enough browser storage for this model (or Private Browsing is blocking offline storage). Free space, use a normal tab, or choose Qwen3 0.6B (0.3 GB).');
   }

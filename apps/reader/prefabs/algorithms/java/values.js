@@ -84,7 +84,6 @@ export class ClassRef {
 
 export const isStr = (v) => typeof v === 'string' || v instanceof String;
 export const sv = (v) => (typeof v === 'string' ? v : v.valueOf());
-export const isNum = (v) => typeof v === 'number' || typeof v === 'bigint' || v instanceof JDouble || v instanceof JChar;
 
 // numeric kind: i int, l long, d double, c char
 export function nkind(v) {

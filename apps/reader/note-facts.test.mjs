@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { noteFacts, matches } from './note-facts.js';
+import { noteFacts, matches, compareNotes } from './note-facts.js';
 
 const ranged = bytes => { const calls = []; return { calls, read: async (a, b) => { calls.push(b - a); return bytes.slice(a, b); } }; };
 const sample = name => new Uint8Array(readFileSync(new URL(`../../samples/${encodeURIComponent(name)}`, import.meta.url)));
@@ -38,7 +38,6 @@ test('filters stack: period, audio, all selected tags and any selected size', ()
   assert.ok(!matches(note, { sizes: ['small', 'large'] }));
   assert.ok(!matches({ ...note, facts: { audio: { count: 0 }, tags: null } }, { audio: true }));
 });
-import { compareNotes } from './note-facts.js';
 test('sorting is natural A–Z by default, or by date and size', () => {
   const notes = [{ name: 'Tema 10', modified: 3, size: 5 }, { name: 'tema 2', modified: 1, size: 50 }, { name: 'Álgebra', modified: 2, size: 1 }];
   assert.deepEqual([...notes].sort(compareNotes()).map(n => n.name), ['Álgebra', 'tema 2', 'Tema 10']);

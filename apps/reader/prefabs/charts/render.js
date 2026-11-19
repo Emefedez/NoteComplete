@@ -3,6 +3,7 @@
 // exams' own custom SVG) from their visual spec. Pure: no DOM, so it runs in the reader, in
 // workers and in Node (the MCP add_prefab tool). Moved from exam-html.js, which re-exports it.
 import { escapeHtml, evalMathExpr, sanitizeSvg } from '../kit/svg.js';
+import { displaySpec } from '../../chart-model.js';
 
 const VISUAL_PALETTE = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4f46e5'];
 const DATA_IMG_URI_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i;
@@ -971,7 +972,6 @@ export function renderVisualSvg(rawSpec, { forMcp = false } = {}) {
 }
 
 // --- The module's hooks (docs/PREFAB-MODULES.md, api 1) -------------------------------------
-import { displaySpec } from '../../chart-model.js';
 const NAMES = { plot: 'Exam plot', histogram: 'Histogram', states: 'Process states', timeline: 'CPU timeline', tree: 'Tree or node graph', graph_nodes: 'Tree or node graph' };
 // The figure as drawn on the page: an exercise shows the student's answer, not its solution.
 export function render(spec) {

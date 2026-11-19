@@ -1060,13 +1060,15 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (canBeExercise(base)) {
       out.push(check1('Exercise: filled in here, then checked', base.exercise, edit('exercise', (v) => {
         base.exercise = v;
+        // An exercise and an empty figure would contradict each other: one or the other.
+        if (v) base.blank = false;
         if (v) { ans = grid ? answerGrid({ ...current(), answer: emptyAnswer(current()) }) : barsOf(emptyAnswer(current())); }
         else ans = null;
       }, { palette: true }), 'The page shows the student\'s answer (empty to start); what you draw here is the solution it is checked against'));
       if (base.exercise) out.push(check1('Show the solution on the page', base.reveal, edit('reveal', (v) => { base.reveal = v; })));
     }
-    if (kind !== 'nodes' && kind !== 'svg') {
-      out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only'));
+    if (kind !== 'nodes' && kind !== 'svg' && !base.exercise) {
+      out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only (not an exercise: nothing is checked)'));
     }
     if (grid) out.push(...gridPanel());
     else if (bars) out.push(...barsPanel());
@@ -1094,7 +1096,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (kind === 'states') {
       out.push(make('h4', { textContent: 'Legend' }));
       const legend = base.legend || (base.legend = {});
-      for (const s of STATES) out.push(field(STATE_NAMES[s], text(legend[s] ?? '', edit(`legend-${s}`, (v) => { legend[s] = v; }, { panel: false, palette: true }), { placeholder: { run: 'Activo', ready: 'Listo', blocked: 'Bloqueado' }[s] })));
+      for (const s of STATES) out.push(field(STATE_NAMES[s], text(legend[s] ?? '', edit(`legend-${s}`, (v) => { legend[s] = v; }, { panel: false, palette: true }), { placeholder: { run: 'e.g. Running, Activo', ready: 'e.g. Ready, Listo', blocked: 'e.g. Blocked, Bloqueado' }[s] })));
     } else {
       out.push(field('Axis label', text(base.xLabel, edit('xlabel', (v) => { base.xLabel = v; }, { panel: false }), { placeholder: 'Time (ms)' })));
     }
@@ -1204,7 +1206,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       make('h4', { textContent: 'Nodes' }),
     ];
     nodes.forEach((n, i) => {
-      const shape = make('select', { 'aria-label': 'Shape', className: 'ch-short' }, ...['circle', 'rect', 'doublecircle'].map((s) => make('option', { value: s, textContent: s, selected: (n.shape || 'circle') === s })));
+      const shape = make('select', { 'aria-label': 'Shape', className: 'ch-short' }, ...['circle', 'rect', 'doublecircle'].map((s) => make('option', { value: s, textContent: { circle: 'Circle', rect: 'Box', doublecircle: 'Double circle' }[s], selected: (n.shape || 'circle') === s })));
       shape.onchange = edit(`ns-${i}`, () => { n.shape = shape.value; }, { panel: false });
       out.push(make('div', { className: 'ch-rowedit' },
         text(n.id, edit(`ni-${i}`, (v) => {

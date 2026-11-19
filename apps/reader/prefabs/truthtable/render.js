@@ -37,22 +37,50 @@ export function normalize(raw = {}) {
   };
 }
 
+const SYMBOLS = [
+  ['&&', 'and'], ['||', 'or'], ['<->', 'iff'], ['<=>', 'iff'], ['↔', 'iff'],
+  ['->', 'imp'], ['=>', 'imp'], ['→', 'imp'],
+  ['⊽', 'nor'], ['⊼', 'nand'], ['⊙', 'iff'],
+  ['∨', 'or'], ['|', 'or'], ['+', 'or'],
+  ['⊕', 'xor'], ['^', 'xor'],
+  ['∧', 'and'], ['&', 'and'], ['·', 'and'], ['*', 'and'],
+  ['¬', 'not'], ['!', 'not'], ['~', 'not'], ["'", 'prime'],
+  ['(', '('], [')', ')'],
+];
+const SHOWN = { iff: '↔', imp: '→', nor: '⊽', nand: '⊼', or: '∨', xor: '⊕', and: '∧', not: '¬', prime: '′' };
+
+// The expression as it will be printed: words and ASCII forms become the math symbols
+// (variables and 0/1 are kept; anything unrecognised is copied as typed).
+export function prettyBool(text) {
+  const src = String(text ?? '');
+  const out = [];
+  for (let i = 0; i < src.length;) {
+    if (/\s/.test(src[i])) { i++; continue; }
+    const sym = SYMBOLS.find(([x]) => src.startsWith(x, i));
+    if (sym) { out.push(SHOWN[sym[1]] ?? sym[1]); i += sym[0].length; continue; }
+    const word = /^[A-Za-z_][A-Za-z0-9_]*|^[01]/.exec(src.slice(i))?.[0] ?? src[i];
+    const k = word.toLowerCase();
+    out.push(k === 'implies' ? '→' : k === 'xnor' ? '↔' : SHOWN[k] ?? word);
+    i += word.length;
+  }
+  return out.join(' ').replace(/ ?′/g, '′').replace(/¬ /g, '¬').replace(/\( /g, '(').replace(/ \)/g, ')');
+}
+
+// Identifiers in an expression that are not operators or constants (the variables it uses).
+export function detectVariables(text) {
+  const found = [];
+  for (const w of String(text ?? '').match(/[A-Za-z_][A-Za-z0-9_]*/g) || []) {
+    if (isName(w) && !found.includes(w)) found.push(w);
+  }
+  return found;
+}
+
 // A boolean expression → a function of the variables' values, or throws with what is wrong.
 // Operators, loosest first: ↔ <-> <=> iff, → -> => implies, or ∨ | +, nor ⊽, xor ⊕ ^, xnor ⊙,
 // and ∧ & · *, nand ⊼, not ¬ ! ~ (before) or ' (after); 1/0 true/false; parentheses.
 export function parseBool(text, variables) {
   const src = String(text ?? '');
   const tokens = [];
-  const SYMBOLS = [
-    ['<->', 'iff'], ['<=>', 'iff'], ['↔', 'iff'],
-    ['->', 'imp'], ['=>', 'imp'], ['→', 'imp'],
-    ['⊽', 'nor'], ['⊼', 'nand'], ['⊙', 'iff'],
-    ['∨', 'or'], ['|', 'or'], ['+', 'or'],
-    ['⊕', 'xor'], ['^', 'xor'],
-    ['∧', 'and'], ['&', 'and'], ['·', 'and'], ['*', 'and'],
-    ['¬', 'not'], ['!', 'not'], ['~', 'not'], ["'", 'prime'],
-    ['(', '('], [')', ')'],
-  ];
   for (let i = 0; i < src.length;) {
     if (/\s/.test(src[i])) { i++; continue; }
     const sym = SYMBOLS.find(([s]) => src.startsWith(s, i));

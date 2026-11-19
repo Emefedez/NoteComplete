@@ -45,8 +45,6 @@ function assertV13(bytes, label) {
 const server = await startReader({ port: 0 });
 const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 const errors = [];
-// Checks that fail without stopping the rest: reported together at the end.
-const failures = [];
 try {
   const ctx = await b.newContext({ viewport: { width: 1200, height: 900 }, acceptDownloads: true });
   ctx.setDefaultTimeout(20000);
@@ -110,16 +108,6 @@ try {
     await p.waitForFunction(() => !document.getElementById('saveState').classList.contains('dirty'));
     return savedCopy(name);
   };
-  const newDocument = async (title, format) => {
-    await p.evaluate(() => document.getElementById('newDocument').click());
-    await p.fill('#newName', title);
-    await p.check(`[name="newFormat"][value="${format}"]`);
-    await p.click('#newCreate');
-    await p.waitForFunction((t) => document.getElementById('title').textContent === t, title)
-      .catch(async (e) => { throw Error(`${e.message}\nFile → New “${title}” did not open; title ${await p.textContent('#title')}; status: ${await p.textContent('#status')}`); });
-    await p.waitForSelector('.sheet[data-page="0"] .render');
-    await sleep(300);
-  };
 
   // Every notebook fixture: it opens as a note (with its PDF pages), takes ink, a text box and
   // a prefab, saves as a v13 .nfedit that keeps the notebook, and reopens with its undo.
@@ -153,7 +141,7 @@ try {
     // A prefab on the imported page.
     await p.evaluate(() => document.getElementById('insertGraph').click());
     await p.waitForSelector('.prefab-grid');
-    await p.click('.prefab-card:has-text("Process states")');
+    await p.click('.prefab-card:has(strong:text-is("Process states"))');
     await p.waitForSelector('.chart-dialog button.primary');
     await p.click('.chart-dialog button.primary');
     await p.waitForFunction(() => !document.querySelector('.chart-dialog'));

@@ -40,8 +40,10 @@ test('pageSvg restores paper colour and embeds the PDF raster when present', asy
     view: { pdf_background: { index: 0 } },
     render: {
       dataset: { paper: '#faf8f2' },
-      firstElementChild: { cloneNode: () => clonedSvg },
+      // The raster canvas comes first on a PDF page; the page's SVG is found by its tag.
+      firstElementChild: { cloneNode: () => { throw new Error('the canvas is not the page'); } },
       querySelector(sel) {
+        if (sel === ':scope > svg') return { cloneNode: () => clonedSvg };
         if (sel === ':scope > canvas.pdf-raster') return { toDataURL: () => 'data:image/png;base64,AAA=' };
         return null;
       },

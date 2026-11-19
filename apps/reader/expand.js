@@ -980,13 +980,14 @@ export function expandController({
       for (const k of Object.keys(LOOK_FIELDS)) {
         el(`exp-${k}`).value = prefs.style?.[k] ?? LOOK_FIELDS[k][0][0];
       }
-      el('expTargetDesc').textContent = `Add new questions or handwritten notes to “${openDocTitle()}” (${openDocPages()} page${openDocPages() === 1 ? '' : 's'}). Leave sources empty to expand directly from this open document, or add extra notes/folders/topics below.`;
+      el('expTargetDesc').textContent = `Add new questions or handwritten notes to “${openDocTitle()}” (${openDocPages()} page${openDocPages() === 1 ? '' : 's'}). The open document is ticked as the source: tick more notes, folders or topics to add them, or untick it to use only those.`;
       el('expWarning').textContent = '';
       el('expWarning').hidden = true;
       el('expStatus').textContent = '';
       syncDraftBar();
       dialog.showModal();
-      await picker.refresh({ preselectOpen: false });
+      // Ticked from the start, so the box says what an empty choice used to mean.
+      await picker.refresh({ preselectOpen: true });
       const select = el('expTool');
       if (!select.options.length) {
         const providers = (await ai?.providers?.()) || [];

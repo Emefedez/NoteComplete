@@ -60,9 +60,3 @@ export function generalText(n) {
   return n.children?.length ? `${n.label}(${n.children.map(generalText).join(', ')})` : String(n.label);
 }
 export const cloneTree = (n) => (n ? structuredClone(n) : null);
-// A binary tree's input made whole: its text kept, or the given default.
-export function treeInput(text, fallback, binary = true) {
-  const t = typeof text === 'string' ? text : fallback;
-  (binary ? parseBinary : parseGeneral)(t);
-  return t;
-}

@@ -139,11 +139,6 @@ function turnAt(a, b, c) {
   while (t <= -180) t += 360;
   return t;
 }
-// Points in a frame centred on `c` and turned by `angle`.
-const local = (p, c, angle) => {
-  const x = p[0] - c[0], y = p[1] - c[1], cs = Math.cos(angle), sn = Math.sin(angle);
-  return [x * cs + y * sn, -x * sn + y * cs];
-};
 // Angle in degrees to the nearest of a set of steps, when within `tolerance`.
 function snapAngle(degrees, step, tolerance) {
   const nearest = Math.round(degrees / step) * step;

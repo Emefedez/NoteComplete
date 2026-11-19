@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalize, render, evaluate, parseBool, name } from '../render.js';
+import { normalize, render, evaluate, parseBool, name, prettyBool, detectVariables } from '../render.js';
+
+test('symbol, ASCII and word forms of every operator agree', () => {
+  const vars = ['A', 'B'];
+  const table = (e) => [0, 1, 2, 3].map((n) => (parseBool(e, vars)([!!(n & 2), !!(n & 1)]) ? 1 : 0)).join('');
+  const same = (...forms) => forms.forEach((f) => assert.equal(table(f), table(forms[0]), f));
+  same('A ∧ B', 'A & B', 'A && B', 'A · B', 'A AND B', 'A and B');
+  same('A ∨ B', 'A | B', 'A || B', 'A + B', 'A OR B');
+  same('¬A', '!A', '~A', 'NOT A', "A'");
+  same('A → B', 'A -> B', 'A => B', 'A IMPLIES B');
+  same('A ↔ B', 'A <-> B', 'A <=> B', 'A Iff B');
+  same('A ⊕ B', 'A ^ B', 'A xor B');
+  assert.equal(table('A && B'), '0001');
+  assert.equal(table('A || B'), '0111');
+});
+
+test('the preview prints math symbols and variables are detected', () => {
+  assert.equal(prettyBool('(A and not B) -> C'), '(A ∧ ¬B) → C');
+  assert.equal(prettyBool('A && B || !C'), 'A ∧ B ∨ ¬C');
+  assert.deepEqual(detectVariables('P and (Q or not R) implies P'), ['P', 'Q', 'R']);
+  assert.throws(() => parseBool('A and Z', ['A']), /Z is not one of the variables/);
+});
 
 test('a truth table spec is made whole', () => {
   assert.deepEqual(normalize({}).variables, ['A', 'B']);

@@ -1,6 +1,6 @@
 import { touchGestures, palmPointer } from "./touch.js";
 import { followPoint, smoothStroke, pressureRadii } from "./stroke-smoothing.js";
-import { textLines } from "./text-layer.js";
+import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
 import {
@@ -34,6 +34,8 @@ import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
+import { sideDocument } from "./side-document.js";
+import { rememberFingerprint } from "./content-search.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
 import { updateNotice } from "./updates.js";
@@ -45,7 +47,6 @@ import { themeController } from "./theme.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
-import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter, packPages } from "./page-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
@@ -103,7 +104,8 @@ import { runAI, smallSetting } from "./small-model.js";
 import { installModalDialogs } from "./modal-dialogs.js";
 import { chineseField, imeMenuOpen, openSettings as openZhSettings } from "./chinese/ime.js";
 import { configureRuby, noteOpened as zhNoteOpened, rubySvg, rubyForExport, wireRubyControls } from "./chinese/ruby.js";
-import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan } from "./chinese/zh-menu.js";
+import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
+import { installZhSelection, showBar as showZhBar } from "./chinese/zh-select.js";
 import { embedChineseFont } from "./chinese/fonts.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
@@ -200,9 +202,8 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status });
+themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
-let chromeSettling = false;
 let panels = [],
   observer = null,
   thumbnailObserver = null,
@@ -880,9 +881,28 @@ function buildPages(sizes) {
       if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) < 8) editTextAt(p, e);
     };
     el.onpointercancel = () => { p.audioTap = null; longPress.end(); cancelGesture(); };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button === 2 && e.target.matches?.(".text-editor")) e.target.selectionBeforeRightClick = [e.target.selectionStart, e.target.selectionEnd];
+    }, true);
     el.oncontextmenu = async (event) => {
+      // Inside the text box being typed nothing is removed: right-click (Shift too) on Chinese
+      // opens its panel (the selected Chinese when there is some); elsewhere the field's own menu.
+      if (textBox.active && event.target.closest?.(".text-editor")) {
+        // The selection from before this click (the browser may have just selected the word under it).
+        const area = event.target.closest(".text-editor"), [a, b] = area.selectionBeforeRightClick || [0, 0];
+        const chosen = area.value.slice(a, b).trim();
+        area.setSelectionRange(a, b);
+        if (lookupable(chosen)) { event.preventDefault(); zhLookUp(chosen, {}, area); return; }
+        const at = textBox.typedAt(event.clientX, event.clientY);
+        if (at && hasHan(String.fromCodePoint(at.text.codePointAt(at.index)))) {
+          event.preventDefault();
+          lookUpTyped(at.text, at.index, at.replace, area);
+        }
+        return;
+      }
       // Right-click: a menu for what is under the pointer (or the page). Shift + right-click
-      // removes it at once, as right-click did before; Ctrl+Z brings it back.
+      // removes it at once, as right-click did before; Ctrl+Z brings it back. On Chinese printed
+      // in the PDF (its text layer), Shift + right-click opens that character's panel instead.
       event.preventDefault();
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
@@ -891,6 +911,8 @@ function buildPages(sizes) {
       if (chosen && hasHan(chosen)) return pageZhSelection(chosen, event.clientX, event.clientY);
       if (chosen) return status("Press Ctrl+C to copy the selected text.");
       if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
+      const zh = hasHan(p.el.textContent) && svgHit(p.el, event.clientX, event.clientY);
+      if (zh && !zh.item && await pageZhLongPress(p, event.clientX, event.clientY)) return;
       const [x, y] = point(event, p);
       try {
         const item = await call("pick", { page: p.index, x, y,
@@ -1917,6 +1939,9 @@ const toolMirror = (() => {
     copy.removeAttribute("style");
     copy.className = `tool-options inline${row ? " inline-row" : ""}`;
     copy.setAttribute("aria-hidden", "false");
+    // Its ids go (kept as data-mirror-id): the panel's own controls stay the ones found by id
+    // (the View menu's "Pinyin over characters" clicks #zhRubyToggle, which the copy was).
+    for (const n of copy.querySelectorAll("[id]")) { n.dataset.mirrorId = n.id; n.removeAttribute("id"); }
     // Values typed or picked are properties, not attributes: carried across by hand.
     const from = $("toolOptions").querySelectorAll("input, select"), to = copy.querySelectorAll("input, select");
     from.forEach((f, i) => { if (to[i]) { to[i].value = f.value; if ("checked" in f) to[i].checked = f.checked; } });
@@ -2068,11 +2093,9 @@ function setCompact(compact) {
   chromeState.compact = compact;
   toolOptions();
   if (changed) {
-    chromeSettling = true;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         chromeState.anchor = $("viewport").scrollTop;
-        chromeSettling = false;
       }),
     );
   }
@@ -3115,11 +3138,14 @@ const SNAP_HOLD_MS = 550;
 // View → Shapes from the pen: on (hold, or on lift when chosen in the Pen's settings) or off.
 function syncShapeSnapMenu() { $("shapeSnapMenu").setAttribute("aria-checked", String(shapeSnap() !== "off")); }
 $("shapeSnap").addEventListener("change", syncShapeSnapMenu);
+// Turning it back on brings the mode that was chosen before (Hold or On lift), not always Hold.
+let shapeSnapLastOn = shapeSnap() === "off" ? "hold" : shapeSnap();
+$("shapeSnap").addEventListener("change", () => { if (shapeSnap() !== "off") shapeSnapLastOn = shapeSnap(); });
 $("shapeSnapMenu").onclick = () => {
-  $("shapeSnap").value = shapeSnap() === "off" ? "hold" : "off";
+  $("shapeSnap").value = shapeSnap() === "off" ? shapeSnapLastOn : "off";
   $("shapeSnap").dispatchEvent(new Event("change"));
   syncChoices();
-  status(shapeSnap() === "off" ? "Shapes from the pen off: strokes stay as drawn." : "Shapes from the pen: hold the pen still at the end of a stroke to make it a shape.");
+  status(shapeSnap() === "off" ? "Shapes from the pen off: strokes stay as drawn." : shapeSnap() === "lift" ? "Shapes from the pen: clean shapes snap as you lift the pen." : "Shapes from the pen: hold the pen still at the end of a stroke to make it a shape.");
 };
 // The timer restarts whenever the pen moves more than a few pixels.
 function watchHold(g, e) {
@@ -4023,7 +4049,7 @@ const textModeEntries = () => {
     { key: "zh", label: `Chinese input (${$("zhModeToggle")?.dataset.zhMode || "off"})`, icon: textGlyphIcon($("zhModeToggle")?.textContent || "中", "sans-serif"), active: () => isZh, run: () => { $("zhModeToggle")?.click(); quick.redraw(); }, stay: () => true },
     ...(isZh ? [
       { key: "ruby", label: "Pinyin over Chinese characters", icon: textGlyphIcon("拼", "sans-serif"), active: () => $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click(), stay: () => true },
-      { key: "trace", label: "Trace & stroke order prefab", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
+      { key: "trace", label: "Stroke order…", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
     ] : []),
   ];
 };
@@ -4367,7 +4393,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"], ["1–9", "Pen, highlighter, shapes, tape or a selected text box: the colour with that number on its swatch (Ctrl 1–9 change tabs)"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, table, tree or node graph, or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z (or Ctrl Y)", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -4607,6 +4633,11 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     action(e.shiftKey ? "redo" : "undo");
   }
+  // Ctrl+Y redoes too, as in most Windows and Linux apps.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    action("redo");
+  }
 });
 $("open").onclick = () => openLocal();
 if ($("emptyOpenFile")) $("emptyOpenFile").onclick = () => { closeHomeFileMenu(); openLocal(); };
@@ -4622,7 +4653,18 @@ if ($("emptyOpen")) {
     const next = menu.hidden;
     menu.hidden = !next;
     $("emptyOpen").setAttribute("aria-expanded", String(next));
+    if (next && e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
   };
+  // Esc closes it (back on the File button), ↑ ↓ move between its items.
+  $("homeFileMenu")?.addEventListener("keydown", (e) => {
+    const items = [...$("homeFileMenu").querySelectorAll("button:not([hidden])")];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeHomeFileMenu(); $("emptyOpen").focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+    }
+  });
   document.addEventListener("click", (e) => {
     if ($("homeFileMenu") && !$("homeFileMenu").hidden && !e.target.closest?.("#homeFileDropWrap")) {
       closeHomeFileMenu();
@@ -5226,7 +5268,7 @@ function textToolFlyout(button) {
       },
       ...(isZh ? [
         { label: "Pinyin over characters (拼)", icon: "text", checked: $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click() },
-        { label: "Trace & stroke order prefab (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
+        { label: "Stroke order (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
       ] : []),
     ], { title: "Text options" });
     menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
@@ -5393,7 +5435,8 @@ $("speechSettingsToggle").onclick = () => {
 try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
 // Floating windows may cover the whole screen below the top bar (menus stay reachable).
-const screenArea = () => { const top = Math.round(document.querySelector("header.chrome")?.getBoundingClientRect().bottom || 0); return { left: 0, top, width: innerWidth, height: innerHeight - top }; };
+// Floating windows may go anywhere on the screen, over the top bar too (floating.js `.over-bar`).
+const screenArea = () => ({ left: 0, top: 0, width: innerWidth, height: innerHeight });
 floatingWindow($("audioBar"), { screen: screenArea, key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
 floatingWindow($("chatPanel"), { screen: screenArea, key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
 $("audioClose").onclick = () => toggleAudio(false);
@@ -5691,6 +5734,8 @@ async function openFromLibrary(file, entry) {
   const opened = await openChosen(file);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
+    // Search inside notes from Recent finds this note's kept text without reading it again.
+    if (entry && find.fingerprint) rememberFingerprint(library, entry, find.fingerprint);
     activeCoverKeyOverride = entry?.source === "drive"
       ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
       : entry?.source === "dropbox"
@@ -6078,7 +6123,8 @@ const archive = archiveBrowser({
 });
 async function exportOpenNoteFile() {
   if (doc) {
-    const bytes = await call("export_nfedit");
+    // The .nfedit archive, as File → Save writes it.
+    const { bytes } = await exportNoteBytes("project");
     const rawTitle = ($("title")?.textContent || "Note").trim().replace(/[^\w.\- ]+/g, "_") || "Note";
     const fileName = /\.(nfedit|noteful)$/i.test(rawTitle) ? rawTitle : `${rawTitle}.nfedit`;
     return new File([bytes], fileName, { type: "application/octet-stream" });
@@ -6118,6 +6164,20 @@ var home = homeScreen({
   exportStudy: exportStudyOf,
   cutHistory: cutHistoryOf,
   exportNote: exportNoteOf,
+  // Batch OCR and the search inside notes read other notes' pages like the open one's.
+  pageCanvas,
+  findIn: (query) => { if (doc && !$("editor").hidden) find.find(query); },
+  onContentKept: (fingerprint, data) => find.adopt(fingerprint, data),
+  // Home → Recent → Share: several notes in one .zip, sent like one note (collab.js).
+  shareZip: async (file) => {
+    try {
+      const { openShareNoteQr } = await (collabLoading ||= import("./collab.js"));
+      await openShareNoteQr(collabHost, { file, title: "Share notes" });
+    } catch (e) {
+      collabLoading = null;
+      status(e.message, true);
+    }
+  },
   current: () => ({
     entryKey: noteEntryKey,
     webUrl: webView.hasDocument ? webView.url : "",
@@ -6561,7 +6621,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -6570,9 +6630,9 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   const canViewHtml = open && !!doc?.has_exam;
   if ($("viewExamHtml")) {
@@ -6636,6 +6696,10 @@ function showGrabMenu(p, rect, el) {
   menu.hidden = false;
   menu.style.left = `${Math.max(8, Math.min(work.width - menu.offsetWidth - 8, box.left - work.left + rect[0] * k))}px`;
   menu.style.top = `${Math.max(8, Math.min(work.height - 44, box.top - work.top + (rect[1] + rect[3]) * k + 8))}px`;
+  // 中 when the region holds Chinese (text layer, text boxes or recognized text).
+  $("grabZh").hidden = true;
+  const asked = grabbed;
+  find.wordsIn(p.index, rect).then((text) => { if (grabbed === asked && hasHan(text)) { $("grabZh").hidden = false; grabbed.text = text; } }).catch(() => {});
 }
 function clearGrab() {
   grabbed?.el.remove();
@@ -6780,6 +6844,14 @@ $("grabAsk").onclick = async () => {
   clearGrab();
 };
 $("grabCancel").onclick = clearGrab;
+// The Chinese in the region: its own bar (translate, look up, stroke order, listen).
+$("grabZh").onclick = () => {
+  if (!grabbed?.text) return;
+  const text = grabbed.text.replace(/\s+/g, hasHan(grabbed.text) ? "" : " ").trim();
+  const r = $("grabMenu").getBoundingClientRect();
+  clearGrab();
+  showZhBar(text, r);
+};
 $("grabKeep").onclick = async () => {
   if (!grabbed) return;
   try {
@@ -7026,7 +7098,7 @@ async function insertCompound(p, kind, box = null, spec = {}) {
 // The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
 // over the page, compound-dialogs.js), or the editor.js of a module put in their place.
 async function compoundEditor(kind, spec = {}, editing = false) {
-  const { editor, module } = editorOf({ module: kind });
+  const { editor } = editorOf({ module: kind });
   if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
   return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
 }
@@ -7181,30 +7253,11 @@ async function notePages(file, maxPages = 20) {
   const kind = fileKind(file.name, bytes);
   if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
   if (!["note", "notecomplete", "project", "notebook"].includes(kind)) throw Error("only notes, notebooks, PDFs and pictures can be shown here");
-  const worker = new Worker("./worker.js", { type: "module" });
-  const waiting = new Map();
-  let next = 0;
-  const ready = new Promise((resolve, reject) => {
-    worker.onmessage = ({ data }) => {
-      if (data.ready) return resolve();
-      if (data.fatal) return reject(Error(data.fatal));
-      const w = waiting.get(data.id);
-      if (!w) return;
-      waiting.delete(data.id);
-      if (data.error) w.reject(Error(data.error)); else w.resolve(data.result);
-    };
-  });
-  const ask = (op, args = {}, page = 0) => new Promise((resolve, reject) => {
-    const id = ++next;
-    waiting.set(id, { resolve, reject });
-    worker.postMessage({ id, op, page, ...args });
-  });
-  const pdfs = new PdfBackgrounds((resource) => ask("pdf", { resource }));
+  const side = sideDocument();
   try {
-    await ready;
-    const first = await ask("open", { bytes: bytes.buffer, project: kind === "project", notecomplete: kind === "notecomplete", notebook: kind === "notebook", name: file.name });
+    const first = await side.open(file, { kind, bytes: bytes.buffer });
     const count = Math.min(Number(first.pages) || 1, maxPages);
-    const source = { view: (i) => (i === 0 ? first : ask("view", {}, i)), backgrounds: pdfs };
+    const source = { view: (i) => (i === 0 ? first : side.view(i)), backgrounds: side.backgrounds };
     const pages = [];
     for (let i = 0; i < count; i++) {
       const { canvas } = await pageCanvas(i, 1200, {}, source);
@@ -7213,8 +7266,7 @@ async function notePages(file, maxPages = 20) {
     }
     return { pages };
   } finally {
-    pdfs.close?.();
-    worker.terminate();
+    side.close();
   }
 }
 // Recent notes the editor can show: the ones this device can read without a download.
@@ -7348,7 +7400,9 @@ async function redrawResized(item, adjustment) {
       targetW = Math.max(40, fw * scale);
       targetH = Math.max(20, targetW * aspect);
     }
-    const box = [cx - targetW / 2 + tx, cy - targetH / 2 + ty, targetW, targetH];
+    // Anchored as the drag scaled the frame (its offset from the item's centre scales too), so
+    // a graph whose labels stick out of its frame does not jump on each resize.
+    const box = [cx + (fx - cx) * (targetW / Math.max(1, fw)) + tx, cy + (fy - cy) * (targetH / Math.max(1, fh)) + ty, targetW, targetH];
     selection.clear();
     if (c.kind === "prefab") {
       if (!(await placePrefab(p, spec, box, c.items, c.id))) return false;
@@ -7371,10 +7425,12 @@ async function pickWhole(args) {
   const parts = panels[args.page]?.view?.parts;
   let part = item && parts?.find((q) => q.item === item.id);
   if (!part && parts?.length && Number.isFinite(args.x) && Number.isFinite(args.y)) {
+    // A click beside the drawn parts but inside a figure's frame: the frames asked for together
+    // (one round trip's wait, not one per figure), the topmost hit wins.
     const frames = parts.filter((q) => q.spec);
+    const infos = await Promise.all(frames.map((f) => call("selection", { page: args.page, itemId: f.item }).catch(() => null)));
     for (let i = frames.length - 1; i >= 0; i--) {
-      const f = frames[i];
-      const info = await call("selection", { page: args.page, itemId: f.item }).catch(() => null);
+      const f = frames[i], info = infos[i];
       if (!info?.bounds) continue;
       const [bx, by, bw, bh] = info.bounds, a = info.adjustment || { translation: [0, 0], scale: [1, 1] };
       const cx = bx + bw / 2 + a.translation[0], cy = by + bh / 2 + a.translation[1];
@@ -7889,7 +7945,7 @@ function pageEntry(id, p, at, x, y) {
     case "tape": return p.view?.tapes?.length ? { label: "Tape", icon: "tape", submenu: tapeEntries(p, p.view.tapes[0])[1].submenu } : null;
     case "quick": return { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) };
     case "undo": return { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() };
-    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Y", disabled: $("redo").disabled, run: () => $("redo").click() };
+    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Shift Z", disabled: $("redo").disabled, run: () => $("redo").click() };
   }
   return null;
 }
@@ -8319,13 +8375,21 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   const height = Math.round(h * scale);
   // Chinese: pinyin over it in exports when chosen, and the font, which a picture cannot fetch.
   if (exporting && rubyForExport()) await rubySvg(svg, { force: true }).catch(() => {});
-  await embedChineseFont(svg);
+  const fonts = await embedChineseFont(svg);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
-    const image = new Image();
+    let image = new Image();
     await imageReady(image, url);
+    // An SVG picture is ready before the fonts inside it the first time (Chromium): its text
+    // would be missing. Drawn once to start them, then loaded again once they are there.
+    if (fonts) {
+      document.createElement("canvas").getContext("2d").drawImage(image, 0, 0, 1, 1);
+      await new Promise((r) => setTimeout(r, 150));
+      image = new Image();
+      await imageReady(image, url);
+    }
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -8385,8 +8449,7 @@ async function reloadNoteFromDisk(targetPath) {
   const diskFile = new File([opened.bytes], opened.name);
   if (dirty || busy()) {
     try {
-      const current = await call(opened.name.endsWith(".nfedit") ? "saveFile" : "export", { note: await notesPayload() });
-      const localBytes = current?.bytes || (typeof current === "string" ? new TextEncoder().encode(current) : current);
+      const { bytes: localBytes } = await exportNoteBytes(opened.name.endsWith(".nfedit") ? "project" : "noteful");
       if (localBytes) {
         const localFile = new File([localBytes], opened.name);
         const choice = await versions.compareFiles({
@@ -8432,7 +8495,7 @@ const chat = chatController({ ...studyDeps, selection, selectedText: () => textS
 audio.transcript.jobs = jobs;
 audio.transcript.ai = ai;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
-const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
+audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
 audio.transcript.context = () => ({ title: doc?.title || "" });
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {
@@ -8496,6 +8559,20 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
+// The stroke order editor for `target`, put on the page (or in the Markdown being edited).
+async function openTracePrefab(target) {
+  const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
+  if (!chosen) return;
+  if (textView.visible && textView.editing && textView.insertTraceSpec) {
+    await textView.insertTraceSpec(chosen);
+    status(`${prefabName(chosen)} inserted into Markdown.`);
+    return;
+  }
+  let p = panels[page];
+  if (!doc) p = await openBlankNoteForPrefab(prefabName(chosen) || "Stroke order");
+  if (!p || !ensureEditableLayer()) return;
+  if (await placePrefab(p, chosen)) status(`${prefabName(chosen)} inserted. Double-click or right-click it to edit; one undo removes it.`);
+}
 // Chinese: the character panel, conversion and vocabulary cards (chinese/zh-menu.js).
 configureZh({
   status,
@@ -8512,21 +8589,11 @@ configureZh({
     const full = await prepareWithDict(spec);
     if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Double-click or right-click it to edit; one undo removes it.`);
   },
-  openTracePrefab: async (target) => {
-    const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
-    if (!chosen) return;
-    if (textView.visible && textView.editing && textView.insertTraceSpec) {
-      await textView.insertTraceSpec(chosen);
-      status(`${prefabName(chosen)} inserted into Markdown.`);
-      return;
-    }
-    let p = panels[page];
-    if (!doc) p = await openBlankNoteForPrefab(prefabName(chosen) || "Stroke order");
-    if (!p || !ensureEditableLayer()) return;
-    if (await placePrefab(p, chosen)) status(`${prefabName(chosen)} inserted. Double-click or right-click it to edit; one undo removes it.`);
-  },
+  openTracePrefab,
 });
 installZhContext();
+// Chinese selected anywhere: Translate, Look up, Stroke order and Listen beside it (chinese/zh-select.js).
+installZhSelection({ pageText: (sel) => selectedText(sel), openTracePrefab, status });
 const openGeneratedFile = async (file, entry) => {
   if (entry) return openFromLibrary(file, entry);
   if (!canReplace()) return false;
@@ -8611,7 +8678,6 @@ const expandMaker = expandController({
       await action("drawMany", { page: targetPage, lines: pageLines });
     }
   },
-  call,
   // The merged exam lives in the note: mark it unsaved so it is written, and refresh an open HTML exam view.
   markEmbeddedExamUpdated: async () => {
     if (!doc) return;
@@ -8648,7 +8714,6 @@ if (window.notecompleteLog && $("logItems")) {
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
-if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "note" }); };
 if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : undefined }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
@@ -8690,7 +8755,6 @@ $("studyExportQuiz").onclick = () => study.exportQuiz();
 $("quizQr").onclick = () => study.qrQuiz(quizzes.current);
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
-$("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
 function currentDocResource() {
   if (doc && !$("editor").hidden) {
     return {
@@ -9122,7 +9186,7 @@ $("shareNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-$("receiveNoteQr").onclick = async () => {
+$("hubReceive").onclick = async () => {
   closeMenus();
   try {
     const { openReceiveNoteQr } = await (collabLoading ||= import("./collab.js"));
@@ -9132,13 +9196,7 @@ $("receiveNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-if ($("receiveStudyQr")) $("receiveStudyQr").onclick = () => $("receiveNoteQr")?.click();
-if ($("exportSavedResources")) $("exportSavedResources").onclick = () => {
-  closeMenus();
-  quizIndex.open();
-};
 $("hubOpen").onclick = () => $("open").click();
-$("hubReceive").onclick = () => $("receiveNoteQr").click();
 {
   const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
   const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];

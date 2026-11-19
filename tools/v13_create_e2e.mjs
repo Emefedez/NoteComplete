@@ -329,7 +329,7 @@ try {
   const none = await items();
   await p.evaluate(() => document.getElementById('insertGraph').click());
   await p.waitForSelector('.prefab-grid');
-  await p.click('.prefab-card:has-text("Process states")');
+  await p.click('.prefab-card:has(strong:text-is("Process states"))');
   await p.waitForSelector('.chart-dialog .ch-notes-fold');
   if (!(await p.locator('.chart-dialog .fig-notes-editor .TinyMDE, .chart-dialog .fig-notes-plain').isVisible().catch(() => false))) await p.click('.chart-dialog .ch-notes-fold');
   await p.waitForSelector('.chart-dialog :is(.fig-notes-editor .TinyMDE, .fig-notes-plain)');

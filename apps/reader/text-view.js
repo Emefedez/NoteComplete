@@ -8,7 +8,7 @@ import { highlight, langFromName, codeEditor } from './code-highlight.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { rubyOn, setRuby, rubyElement } from './chinese/ruby.js';
-import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './notes.js';
+import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './markdown-prefab.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -118,7 +118,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       zhToggle.setAttribute('aria-pressed', String(isZh));
       zhToggle.dataset.zhMode = mode;
     }
-    if (zhOptionsEl) zhOptionsEl.hidden = !isZh;
+    // 拼 (pinyin over characters) is there whenever the text has Chinese, to read it; 笔 (trace)
+    // only while typing Chinese.
+    if (zhOptionsEl) zhOptionsEl.hidden = !isZh && !/\p{Script=Han}/u.test(text || '');
+    if (traceBtn) traceBtn.hidden = !isZh;
   };
   if (zhToggle) {
     zhToggle.addEventListener('click', () => {
@@ -199,11 +202,11 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
               { keys: '- item  1. item', does: 'Bullet and numbered lists' },
               { keys: '`code`  ```lang', does: 'Inline code and fenced code blocks' },
             ] },
-            { title: 'Chinese input, Pinyin & Trace Prefabs', icon: 'draw', rows: [
+            { title: 'Chinese input, pinyin & stroke order', icon: 'draw', rows: [
               { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show Pinyin & Trace tools' },
               { keys: '拼', does: 'Show or hide Pinyin ruby annotations above Chinese characters' },
-              { keys: '笔 Trace', does: 'Highlight Chinese characters and click 笔 Trace to automatically generate & insert their stroke order trace sheet (with English meaning & variants)' },
-              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the animated Trace Prefab Editor' },
+              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order (with English meaning & variants)' },
+              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the stroke order editor' },
             ] },
             { title: 'Document shortcuts', icon: 'keyboard', rows: [
               { keys: 'Ctrl S', does: 'Save changes' },

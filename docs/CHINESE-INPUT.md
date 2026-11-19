@@ -761,9 +761,21 @@ the `中` toolbar's "Look up" opens it too.
   layout (Hanzi / Pinyin / Meaning) as a separate "Chinese vocabulary" export, keeping the
   existing two-field layout for other decks. The MCP `write_anki_deck` gets the same fields only
   if asked (open question).
-- Audio: no bundled TTS. `speechSynthesis` with a `zh-CN` / `zh-TW` voice is used **if the OS has
-  one** (a 🔊 in the panel and menu, hidden when `speechSynthesis.getVoices()` has no zh voice).
-  Noted only; no audio data shipped.
+- Audio (`chinese/speech.js`): no audio data shipped or stored; each 🔊 streams a short clip on
+  demand (only the browser's HTTP cache may keep it). Sources, tried in order until one plays:
+  1. one character read a known way (the reading used here, a reading in the header, a syllable
+     clicked anywhere in the panel): a human recording of that syllable and tone from jsDelivr
+     (`davinfifield/mp3-chinese-pinyin-sound`, `hao4.mp3`, ü as v), so polyphones and tones are
+     heard exactly; neutral-tone syllables have none and fall through;
+  2. words and sentences: the system's `zh-CN` / `zh-TW` `speechSynthesis` voice when the OS has
+     one (instant, offline);
+  3. otherwise online TTS (Google Translate `translate_tts`, zh-CN or zh-TW by the note's script;
+     Youdao `dictvoice` when that fails), up to 180 characters.
+  A source that has not started within 6 s is skipped. The panel's 🔊 (`S`, Shift = 70 % speed)
+  is shown whenever the app is online or the OS has a Chinese voice; every pinyin syllable in the
+  panel plays its own tone on click, each "Words with" row has a small 🔊, and the Chinese menus
+  (right-click / long press, a selection) have **Listen to …**. The three hosts are in the CSP's
+  `media-src` (`tools/reader-csp.mjs`).
 
 ---
 
@@ -856,7 +868,7 @@ candidate menu ▶ popover; practice log.
 **Phase 6 — Polish and learning extras (≈ 5 d, pick and choose).** Writing-practice study mode
 over a deck; tone sandhi option for ruby; tone colours on characters; HSK-level filter for ruby
 (if a licensable list is found); Chinese OCR corrections via the word list; TW/HK variants;
-stroke type names; `speechSynthesis` 🔊 where a zh voice exists.
+stroke type names; 🔊 pronunciation streamed on demand (§10, `chinese/speech.js`).
 
 Total ≈ 36 days; Phases 1–2 (≈ 11 d) already deliver the owner's request; 3–5 add the later
 asks.
@@ -965,3 +977,58 @@ chinese().convert(text, "s2t"|"t2s")          // → string
 chinese().packs()                             // → [{id, name, levels, bundled, installed, words, bytes}]
 chinese().installPack(id, onProgress) / removePack(id)
 ```
+
+## 16. Translating selections, es | en, overlays (2026-11-19)
+
+**Selection bar** (`chinese/zh-select.js`). Chinese selected anywhere (the PDF/OCR text layer with
+Pan, a text box being typed, Markdown and HTML views, cards, chat) shows a bar of icons beside
+the selection, styled as the grab tool's (`.grab-menu.grab-icons`): Translate, Look up (≤ 8
+characters), Stroke order (≤ 12 characters, `openTracePrefab`) and Listen (`speech.js`). It goes
+when the selection does, on Esc, a press elsewhere or a scroll. Pinyin written out is detected by
+`isPinyin` (two words or more, tone marks or numbers, ≥ 80 % of the words made of syllables) and
+turned into characters with the input method's dictionary (`pinyinToHanzi`: the best candidate
+for what is left, repeatedly). Pinyin shown over characters (`<rt>`, `<rp>`, the pages' `.zh-ruby`)
+is left out of the selected text, so the "metadata" of ruby needs no guessing. The grab tool shows
+**中** when its region's text (`find.wordsIn`: text layer, text boxes, recognised text) has Han,
+and that opens the same bar.
+
+**Translation** (`chinese/translate.js`). No key and no account: Google's public endpoint
+(`translate.googleapis.com/translate_a/single?client=gtx`, CORS-enabled, used by browser
+extensions) first, MyMemory (`api.mymemory.translated.net`, 500 bytes a request, anonymous daily
+quota) when it fails or does not answer in 8 s. Answers are cached in memory and in localStorage
+(`notecomplete-zh-translations`, the last 600). Both hosts are covered by `connect-src https:` and
+listed in `tools/reader-csp.mjs`'s inventory. A LibreTranslate instance would need a key or a
+server; WebLLM would download a model for each device, so neither is used.
+
+**Colours** (`alignWords`). Behind a button (remembered once on): the sentence is split into words
+by the local dictionary (`annotate`), every word is translated in one request (one per line), and
+in English the dictionary meanings are added. Each word's candidates are reduced to their content
+words and looked for in the translation, longest first, allowing endings (a shared start of 4+
+letters: *gustar* ~ *gusta*, *study* ~ *studying*); a place is used once. Matched pairs get the
+Okabe–Ito colours (colour-blind safe) as a soft highlight with a 3 px underline. A word that is
+not found stays plain: no guessing.
+
+**es | en** (`langToggle` in `zh-window.js`, setting `lang` in Settings → Chinese storage). A
+two-sided pressed switch with the `language` icon in the look-up panel, the translation window
+and the stroke-order editor's meanings; every toggle follows the others (`zh-settings` event).
+Spanish meanings are the dictionary's English ones translated (`localizeLookup`: entries, the
+character's definition and the first 30 "words with it" in one request, cached). The stroke
+figure's caption follows it while automatic.
+
+**Right-click in a text box being typed** never removes the box: on a character (found by
+measuring the textarea's lines, `textBox.typedAt`) or a selection made before the click, the
+panel opens at once (`lookUpTyped`, with Convert here for that place); elsewhere the browser's
+text menu. **Shift + right-click on the PDF's text layer** opens the character's panel; on an
+item it still removes it.
+
+**Exports.** The pinyin over Chinese in PDF, image and SVG exports is what the view shows when
+exporting (the Export dialog's checkbox starts there). Two bugs made it look otherwise: the SVG
+export of a page with a PDF background saved the raster `<canvas>` instead of the page's SVG, and
+the tool bar's copy of the text options kept the panel's ids, so **View → Pinyin over characters**
+clicked the copy (which does nothing). The first PNG/PDF export of a page with Chinese also lost
+its text (Chromium draws an SVG picture before its embedded fonts are ready): the picture is now
+drawn once and loaded again.
+
+Tests: `chinese/translate.test.mjs` (services, cache, batching, Spanish meanings, pinyin,
+alignment), `tools/chinese_translate_e2e.mjs` (stand-in services; bar, translation, colours,
+es | en, right-click in a box being typed, grab 中, exports, a PDF with Chinese).

@@ -213,8 +213,8 @@
     {
       "id": "states-exercise",
       "group": "exam",
-      "label": "Scheduling exercise",
-      "hint": "Process states to fill in on the page: draw the solution, then Fill in paints the answer and Check marks it",
+      "label": "Process states (exercise)",
+      "hint": "The same process states, as an exercise: draw the solution here; on the page the student paints it and Check marks it",
       "icon": "clock",
       "spec": {
         "type": "states",

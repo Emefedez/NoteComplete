@@ -6,7 +6,6 @@ import { marksToNumbers } from './pinyin.js';
 let el = null, owner = null, view = null, pressedAt = 0, raf = 0, expanded = false;
 // When the menu was last pressed (the text box's blur → commit ignores that press).
 export const imeMenuPressedAt = () => pressedAt;
-export const imeMenuContains = (t) => !!el && el.contains(t);
 
 function build(doc) {
   const m = doc.createElement('div');

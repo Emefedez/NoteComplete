@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rasterTarget } from "./pdf-background.js";
+import { rasterTarget, rasterKind, CANVAS_MAX_SIDE, textWords, textGlyphs, letterSpaced, PdfBackgrounds, RASTERS_KEPT } from "./pdf-background.js";
 
 test("PDF raster target follows displayed width and keeps a bounded pixel budget", () => {
   const target = rasterTarget({ width: 612, height: 792 }, 960, 1);
@@ -24,7 +24,6 @@ test("PDF raster quality: the setting is for a 2× screen, and a 1× screen gets
   assert.equal(rasterTarget(page, 600, 1, fast).width, 600, "never below the screen");
   assert.equal(rasterTarget(page, 600, 1.5, balanced).width, 900);
 });
-import { rasterKind, CANVAS_MAX_SIDE } from "./pdf-background.js";
 test("PDF raster kind: a canvas larger than some tablets can show becomes a picture", () => {
   const a4 = { width: 595, height: 842 }, balanced = { scale: 2, megapixels: 12 };
   // Fit width on a 2× tablet: a canvas.
@@ -37,7 +36,6 @@ test("PDF raster kind: a canvas larger than some tablets can show becomes a pict
   assert.equal(rasterKind("canvas", { width: 4096, height: 3800 }), "canvas");
   assert.equal(rasterKind("url", { width: 100, height: 100 }), "url", "a page with much ink stays a picture");
 });
-import { textWords } from "./pdf-background.js";
 test("PDF text words land in the page's PDF rect, including rotated pages", () => {
   // 720x540 pt slide drawn at [0,0,1320,990] on a 2242.6-wide page (Temas1+2).
   const viewport = { width: 720, height: 540, scale: 1, transform: [1, 0, 0, -1, 0, 540] };
@@ -76,7 +74,6 @@ test("PDF words are placed by the font's widths, not by character count", () => 
   assert.ok(Math.abs(byCount.box[2] - 75 * 3 / 7) < 1e-9);
 });
 
-import { textGlyphs, letterSpaced } from "./pdf-background.js";
 // Operator numbers for the tests (pdf.js's own OPS in the app).
 const OPS = { save: 10, restore: 11, transform: 12, beginText: 31, setCharSpacing: 33, setWordSpacing: 34, setHScale: 35, setFont: 37, moveText: 40, setTextMatrix: 42, showText: 44 };
 const glyph = (unicode, width) => ({ unicode, width, isSpace: unicode === " " });
@@ -148,7 +145,6 @@ test("without space glyphs, a spaced-out title breaks at the wider gaps; plain s
   assert.equal(letterSpaced("Parcial I · Control de lavadora"), false);
 });
 
-import { PdfBackgrounds, RASTERS_KEPT } from "./pdf-background.js";
 test("page rasters: one render per page and size, the last few kept, URLs revoked when dropped", async () => {
   const own = !globalThis.document;
   globalThis.document ??= {};

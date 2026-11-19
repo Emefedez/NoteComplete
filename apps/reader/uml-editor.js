@@ -178,7 +178,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const say = (text, error = false) => { status.textContent = text; status.classList.toggle('error', error); };
 
   // --- Views: drawing, PlantUML, both, or PlantUML's own rendering ----------------------
-  let currentView = 'visual', codeTimer = 0, codeError = '';
+  let currentView = 'visual', codeTimer = 0;
   let renderSeq = 0, renderUrl = '', renderZoom = 1, lastRender = { source: '', svg: '', naturalW: 0 };
   const releaseRenderUrl = () => { if (renderUrl) URL.revokeObjectURL(renderUrl); renderUrl = ''; };
   function applyRenderZoom() {
@@ -236,10 +236,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     clearTimeout(codeTimer);
     codeTimer = setTimeout(() => {
       let parsed;
-      try { parsed = parsePlantUml(code.value); } catch (e) { codeError = e.message; codeNote.textContent = e.message; codeNote.classList.add('error'); return; }
+      try { parsed = parsePlantUml(code.value); } catch (e) { codeNote.textContent = e.message; codeNote.classList.add('error'); return; }
       const next = parsed.model;
       docPreamble = parsed.preamble;
-      codeError = ''; codeNote.textContent = ''; codeNote.classList.remove('error');
+      codeNote.textContent = ''; codeNote.classList.remove('error');
       const old = new Map(model.elements.map((e) => [e.id, e]));
       for (const e of next.elements) {
         const was = old.get(e.id);

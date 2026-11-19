@@ -128,5 +128,3 @@ export function editorOf(spec) {
   }
   return { editor: '', module: m || moduleOf(spec) };
 }
-// The text a module gives AI tools about its spec (ai.md), shipped modules' in order.
-export const aiNotes = () => modules.map((m) => m.code.ai || '').filter(Boolean);

@@ -56,7 +56,7 @@ try {
   console.log('· a dialog leaves the tabs clickable, with no grey backdrop');
 
   await p.fill('.prefab-search', 'process states');
-  await p.click('.prefab-card:has-text("Process states")');
+  await p.click('.prefab-card:has(strong:text-is("Process states"))');
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.locator('.sheet').first().evaluate((el) => el.closest('[inert]') !== null), true);
   const before = await p.locator('.chart-dialog .ch-preview svg line').count();
@@ -158,8 +158,8 @@ try {
   // 3. A scheduling exercise: inserted empty, filled in, checked.
   await p.evaluate(() => document.getElementById('insertGraph').click());
   await p.waitForSelector('.prefab-grid');
-  await p.fill('.prefab-search', 'scheduling exercise');
-  await p.click('.prefab-card:has-text("Scheduling exercise")');
+  await p.fill('.prefab-search', 'states exercise');
+  await p.click('.prefab-card:has-text("Process states (exercise)")');
   await p.waitForSelector('.chart-dialog .ch-grid');
   assert.equal(await p.locator('.chart-dialog .ch-mode').isVisible(), true, 'Editor / Fill in');
   await p.click('.chart-dialog button.primary');

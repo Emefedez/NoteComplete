@@ -46,7 +46,7 @@ Target: lightweight, feature-rich, wide and calm, fast to render. One set of dec
 - **One UI accent** (any hue) with soft + hover tints: selection, chosen tool, focus, main action. Buttons are transparent on bars, lightly filled in panels and dialogs, pale-accent when chosen or primary. Solid accent only for small indicators (progress, playhead, markers).
 - **Data colours are separate** from UI colours: a fixed categorical series palette (6–8, colour-blind safe) for channels/tracks/series, a sequential ramp for intensity (spectrograms, heatmaps). The UI stays neutral so data stands out.
 - Semantic colours (danger, ok, warning) only for meaning, always paired with text or an icon. Use their **soft** tints for buttons and states: "fix it" actions (double check, report, dispute) are soft red (`.fix`), a correct answer soft green, a wrong one soft red; solid red only for text or a tiny mark. Destructive confirmation = soft red + an explicit label ("Press again to discard").
-- Wide and low: controls in rows, labels left of fields, dialogs wider than tall.
+- Wide and low: controls in rows, labels left of fields, dialogs wider than tall, as large as their content: no inner scrolling on a wide screen (phones may scroll), one fixed height for tabbed dialogs (`references/layout.md` → Dialogs).
 - Rounded pills only for secondary status items (tags, filters, background jobs, toasts).
 - Numbers: tabular figures, monospace for timecodes/addresses, units always shown.
 - Dark mode is the same tokens redefined; many media/analysis tools default to dark.
@@ -74,6 +74,8 @@ Tool windows that sit over the work (assistant, audio, quiz, practice, inspector
 - place and size remembered per window; modal dialogs stay modal and fixed;
 - `□` collapses under the head: same width, head stays put (place windows by left/top, not bottom); expanding restores the exact size;
 - Ctrl (⌘) + drag anywhere moves a window and Ctrl + right-button drag resizes it from the corner nearest the pointer, as in a tiling window manager; text fields keep their own clicks, and the click that ends the gesture doesn't press the button it started on;
+- **one tray** for every kind of floating window (the app's and the editors'): never a second pill of its own;
+- on a phone: filling the screen under the top bar (big editors) or a bottom sheet (small panels), not movable;
 - stacking like a desktop: the window pressed last is in front, a window that opens comes in front; a focus mode that dims the background lifts the whole stack above its veil without reordering it.
 
 Optional focus mode (`templates/focus-dim.js`, details in `references/export-and-focus.md`): a sun toggle in a study/review window's head dims everything behind it to ~70%. One remembered preference for all such windows; the veil shows only while one of them is really shown (not small, put away, closed or docked) and lets clicks through; every floating window stays above it in the same order (`--window-z` raised to `--z-focus`).

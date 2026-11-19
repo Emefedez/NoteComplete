@@ -102,16 +102,6 @@ export async function removeExam(store, id) {
 }
 
 /**
- * Restores a previously removed exam record.
- * @param {object} store
- * @param {object} record
- * @returns {Promise<object|null>}
- */
-export async function restoreExam(store, record) {
-  return recordExam(store, record);
-}
-
-/**
  * Builds canonical resource lookup keys for a resource identity or open document.
  * @param {object} resource
  * @returns {string[]}

@@ -121,6 +121,13 @@ export async function lookUp(text, context = {}, near = null) {
   const { openLookup } = await loadPanel();
   return openLookup(text, { host: panelHost(), context, near });
 }
+// Says `text` (a character read `reading`, a word or a sentence), streamed (speech.js).
+export async function listen(text, reading = '') {
+  const [{ speak }, script] = await Promise.all([import('./speech.js'), scriptNow()]);
+  const ok = await speak(text, { reading: [...text].length === 1 ? reading : '', script });
+  if (!ok) host.status?.(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true);
+}
+const listenEntry = (text, reading = '') => ({ label: `Listen to ${[...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text}`, icon: 'speaker', run: () => listen(text, reading) });
 async function annotateQuick(text, ms = 700) {
   try {
     const { chinese } = await import('./client.js');
@@ -128,7 +135,7 @@ async function annotateQuick(text, ms = 700) {
     return await Promise.race([chinese().annotate(text, { script }), new Promise((r) => setTimeout(() => r(null), ms))]) || [];
   } catch { return []; }
 }
-async function lookupQuick(text, ms = 650) {
+async function lookupQuick(text, ms = 350) {
   try {
     const { chinese } = await import('./client.js');
     const script = await scriptNow();
@@ -190,6 +197,14 @@ export function extractPrefabSpecFromDataUri(src = '', alt = '') {
   return null;
 }
 
+// A data URI safe inside Markdown's ![alt](…): ( and ) escaped too (an SVG's transform="translate(…)"
+// would end the link early), and an alt text without brackets, short enough to read in a pill.
+const markdownUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg).replace(/\(/g, '%28').replace(/\)/g, '%29')}`;
+const markdownAlt = (text, max = 90) => {
+  const t = String(text || '').replace(/[[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+};
+
 export async function markdownPrefabBlockForSpec(rawSpec) {
   if (!rawSpec || typeof rawSpec !== 'object') return '';
   if (rawSpec.type === 'hanzi' || rawSpec.module === 'hanzi') {
@@ -200,17 +215,15 @@ export async function markdownPrefabBlockForSpec(rawSpec) {
     const out = render(spec);
     if (!out?.svg) return '';
     const svgWithSpec = embedPrefabSpecInSvg(out.svg, spec);
-    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
-    const caption = [han, spec.pinyin, spec.gloss, spec.variants].filter(Boolean).join(' · ');
-    return `![Stroke order ${caption}](${dataUri})`;
+    const caption = [han, spec.pinyin, spec.gloss].filter(Boolean).join(' · ');
+    return `![${markdownAlt(`Stroke order ${caption}`)}](${markdownUri(svgWithSpec)})`;
   }
   const { renderPrefab, prefabName } = await import('../prefabs.js');
   const out = renderPrefab(rawSpec);
   if (!out?.svg) return '';
   const svgWithSpec = embedPrefabSpecInSvg(out.svg, rawSpec);
-  const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
   const title = prefabName(rawSpec) || rawSpec.type || 'Prefab';
-  return `![${title}](${dataUri})`;
+  return `![${markdownAlt(title)}](${markdownUri(svgWithSpec)})`;
 }
 
 export async function markdownTraceBlockFor(rawText) {
@@ -232,12 +245,14 @@ export async function convertFrom(text, near = null) {
 async function hitEntries(hit, ctx = () => ({}), near = null) {
   const c = charAround(hit.text, hit.index);
   if (!c || !HAN.test(c.char)) return [];
+  // The character's look-up runs while the word is found, so the menu waits for one, not two.
+  const charLookup = lookupQuick(c.char);
   const runs = await annotateQuick(hit.text);
   const w = wordAround(runs, c.start);
   const k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
   const [wordInfo, charInfo] = await Promise.all([
     w && [...w.text].length > 1 ? lookupQuick(w.text) : Promise.resolve(null),
-    lookupQuick(c.char),
+    charLookup,
   ]);
   const out = [];
   if (w && [...w.text].length > 1) {
@@ -245,10 +260,11 @@ async function hitEntries(hit, ctx = () => ({}), near = null) {
   }
   out.push({ label: richLookupLabel(c.char, charInfo), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
   const target = (w && [...w.text].length > 1 ? w.text : c.char);
+  out.push(listenEntry(target, target === c.char ? (w?.pinyin?.[k] || '') : ''));
   if (host.openTracePrefab) {
-    out.push({ label: `Trace & stroke order prefab (${target})…`, icon: 'draw', run: () => host.openTracePrefab(target) });
+    out.push({ label: `Stroke order of ${target}…`, icon: 'draw', run: () => host.openTracePrefab(target) });
   } else if (host.insertFigure) {
-    out.push({ label: `Insert trace order prefab (${target})`, icon: 'draw', run: () => host.insertFigure({ type: 'hanzi', text: target, show: 'steps', grid: 'mi', outline: true }) });
+    out.push({ label: `Insert the stroke order of ${target}`, icon: 'draw', run: () => host.insertFigure({ type: 'hanzi', text: target, show: 'steps', grid: 'mi', outline: true }) });
   }
   return out;
 }
@@ -257,9 +273,11 @@ const selectionEntries = (text, near, replace = null, info = null) => {
   const hanOnly = ([...clean].filter((c) => HAN.test(c))).slice(0, 12).join('');
   return [
     lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
-    hanOnly && host.openTracePrefab && { label: `Trace & stroke order prefab (${hanOnly})…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
-    hanOnly && replace && {
-      label: `Insert trace order sheet for “${hanOnly}” here`,
+    hanOnly && listenEntry(clean),
+    hanOnly && host.openTracePrefab && { label: `Stroke order of ${hanOnly}…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
+    // Only in a Markdown editor (notes, documents): a plain field would get the picture's raw data.
+    hanOnly && replace && near?.closest?.('.notes-editor, #textEditor') && {
+      label: `Insert the stroke order of “${hanOnly}” here`,
       icon: 'graph',
       run: async () => {
         const block = await markdownTraceBlockFor(hanOnly);
@@ -330,6 +348,17 @@ export async function pageZhLongPress(p, x, y) {
   const runs = await annotateQuick(hit.text);
   const w = wordAround(runs, c.start), k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
   lookUp(c.char, pageContext(p, hit, c.start, c.end, w?.pinyin?.[k] || ''), root);
+  return true;
+}
+
+// A character of text being typed (a page text box): its panel at once. `replace(start, end, from,
+// to)` puts another form in that place. False when there is no Chinese at `index`.
+export async function lookUpTyped(text, index, replace = null, near = null) {
+  const c = charAround(text, index);
+  if (!c || !HAN.test(c.char)) return false;
+  const runs = await annotateQuick(text);
+  const w = wordAround(runs, c.start), k = w ? [...text.slice(w.start, c.start)].length : 0;
+  lookUp(c.char, { reading: w?.pinyin?.[k] || '', ...(replace ? { replace: (to) => replace(c.start, c.end, c.char, to) } : {}) }, near);
   return true;
 }
 

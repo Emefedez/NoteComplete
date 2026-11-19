@@ -24,9 +24,6 @@ export function orderedIds(name, ids, storage = store()) {
 export function saveOrder(name, ids, storage = store()) {
   try { storage?.setItem(PREFIX + name, JSON.stringify(ids)); } catch { /* Private window: not kept. */ }
 }
-export function forgetOrder(name, storage = store()) {
-  try { storage?.removeItem(PREFIX + name); } catch { /* Nothing kept. */ }
-}
 
 // The key that chooses the palette entry at `index` (from 0): "1"… "9", "0", or "".
 export const keyFor = (index) => (index < 9 ? String(index + 1) : index === 9 ? '0' : '');

@@ -30,7 +30,6 @@ export const SYLLABLE_LIST = Object.freeze((
   'm n ng hm hng r yai cei sei kiu biang'
 ).split(' '));
 export const SYLLABLES = new Set(SYLLABLE_LIST);
-export const syllableId = s => SYLLABLE_LIST.indexOf(s);
 // Syllables almost never meant when a split is ambiguous (interjections, erhua, rare readings).
 const RARE = new Set(['m', 'n', 'ng', 'hm', 'hng', 'r', 'ê', 'yai', 'cei', 'sei', 'kiu', 'biang', 'o', 'e', 'lo', 'yo', 'den', 'nun', 'tei', 'pou']);
 const PREFIXES = new Set(SYLLABLE_LIST.flatMap(s => [...s].map((_, i) => s.slice(0, i + 1))));

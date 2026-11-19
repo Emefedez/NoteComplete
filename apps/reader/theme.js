@@ -1,4 +1,5 @@
-// Light/dark theme: follows the system until the user picks one (View → Dark theme).
+// Light/dark theme: follows the system until the user picks one. View has the three choices
+// (Light, Dark, Follows the system) as one radio group.
 // The stylesheet's dark rules sit in `prefers-color-scheme: dark` media blocks; a chosen
 // theme switches those blocks on or off, so there is a single source of colours.
 const KEY = 'notecomplete-theme';
@@ -6,7 +7,7 @@ const DARK = /\(prefers-color-scheme:\s*dark\)/;
 
 export const effectiveTheme = (choice, systemDark) => (choice === 'dark' || choice === 'light' ? choice : systemDark ? 'dark' : 'light');
 
-export function themeController({ toggle, system, status = () => {} }) {
+export function themeController({ toggle, system, light = null, status = () => {} }) {
   const query = window.matchMedia?.('(prefers-color-scheme: dark)');
   const rules = [];
   for (const sheet of document.styleSheets) {
@@ -20,7 +21,8 @@ export function themeController({ toggle, system, status = () => {} }) {
     for (const { rule, original } of rules) rule.media.mediaText = choice === 'system' ? original : choice === 'dark' ? 'all' : 'not all';
     document.documentElement.style.colorScheme = choice === 'system' ? '' : choice;
     document.documentElement.dataset.theme = theme;
-    toggle.setAttribute('aria-checked', String(theme === 'dark'));
+    toggle.setAttribute('aria-checked', String(choice === 'dark'));
+    light?.setAttribute('aria-checked', String(choice === 'light'));
     system.setAttribute('aria-checked', String(choice === 'system'));
   }
   function set(next) {
@@ -29,7 +31,8 @@ export function themeController({ toggle, system, status = () => {} }) {
     apply();
     status(next === 'system' ? 'Theme follows the system.' : `${next === 'dark' ? 'Dark' : 'Light'} theme.`);
   }
-  toggle.onclick = () => set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  toggle.onclick = () => set('dark');
+  if (light) light.onclick = () => set('light');
   system.onclick = () => set('system');
   query?.addEventListener?.('change', apply);
   apply();

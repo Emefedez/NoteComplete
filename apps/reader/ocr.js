@@ -150,3 +150,36 @@ export function readingOrder(words) {
   }
   return lines.flatMap(line => line.words.sort((a, b) => a.box[0] - b.box[0]));
 }
+
+// A page with handwriting: its ink is read on its own as well.
+export const pageHasInk = view => /data-item="stroke:/.test(view?.svg || '');
+// A PDF page with more words than this has printed text: "Skip the printed text" leaves it.
+export const hasPdfText = words => (words?.length || 0) > 20;
+
+// One page read with a set of passes (ocrPasses), added to the readings it has: the whole
+// page (unless `whole` is false), the ink alone when the page has some, and on high quality
+// each line found read again on its own. `read(canvas, scale, options)` and
+// `readLines(canvas, scale, lines)` run the engine; `wait` lets a Stop interrupt any step.
+// Shared by Recognize text (find.js) and Batch OCR over Recent (batch-ocr.js).
+export async function readPagePasses(page, set, { pageCanvas, read, readLines, whole = true, inked = true, alive = () => true, wait = p => p }, readings = []) {
+  if (whole) for (const { width, sparse } of set.whole) {
+    if (!alive()) return readings;
+    const { canvas, scale } = await wait(pageCanvas(page, width));
+    try { readings.push(await wait(read(canvas, scale, { sparse }))); }
+    finally { canvas.width = canvas.height = 0; }
+  }
+  if (inked) for (const { width, sparse, bold } of set.ink) {
+    if (!alive()) return readings;
+    const ink = await wait(pageCanvas(page, width, { inkOnly: true, bold }));
+    if (!ink) break;
+    try { readings.push(await wait(read(ink.canvas, ink.scale, { sparse }))); }
+    finally { ink.canvas.width = ink.canvas.height = 0; }
+  }
+  if (set.lines && inked && readLines && alive()) {
+    const lines = uniqueLines(...readings.map(r => r.lines || []));
+    const ink = lines.length ? await wait(pageCanvas(page, set.lines.width, { inkOnly: true })) : null;
+    if (ink) try { readings.push(await wait(readLines(ink.canvas, ink.scale, lines))); }
+    finally { ink.canvas.width = ink.canvas.height = 0; }
+  }
+  return readings;
+}

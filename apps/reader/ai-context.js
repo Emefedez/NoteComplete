@@ -1,7 +1,26 @@
 // What the AI sees of a page: an image (tape lifted, since covered answers are
 // study material) and the page's text from Find: typed, PDF, OCR and audio.
 import { rememberAiFile } from './rich-text.js';
-export const SOURCE_NAMES = { text: 'Typed text', pdf: 'PDF text', ocr: 'Recognized handwriting/scan text', audio: 'Lecture transcript', document: 'Text' };
+// Transcripts are of live classes: the AI is told every time that some of it is noise.
+export const TRANSCRIPT_CAVEAT = 'automatic speech recognition of a live class: some phrases may be misheard, cut off, or not part of the lesson at all (students talking among themselves, remarks the microphone half caught). Ignore what is incoherent or irrelevant to the subject instead of explaining, summarizing or checking it; passages in [likely noise: …] were flagged as such';
+export const SOURCE_NAMES = { text: 'Typed text', pdf: 'PDF text', ocr: 'Recognized handwriting/scan text', audio: `Lecture transcript (${TRANSCRIPT_CAVEAT})`, document: 'Text' };
+// A page's text by source (find.js pageText) as one block, each part named, so the AI knows
+// which part is a transcript.
+export function labelledText(parts) {
+  if (typeof parts === 'string') return parts.trim();
+  return Object.entries(parts || {}).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => `${SOURCE_NAMES[k] || k}: ${v.trim()}`).join('\n');
+}
+// Transcript words as text for the AI: runs the user left flagged as likely noise (Revise
+// with AI, transcript.js) are marked rather than dropped, since the flag may be wrong.
+export function transcriptText(words) {
+  let out = '', inNoise = false;
+  for (const w of words || []) {
+    if (w.noise && !inNoise) { out += `${out ? ' ' : ''}[likely noise: ${w.text}`; inNoise = true; continue; }
+    if (!w.noise && inNoise) { out += ']'; inNoise = false; }
+    out += `${out ? ' ' : ''}${w.text}`;
+  }
+  return inNoise ? `${out}]` : out;
+}
 
 const JSON_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't']);
 
@@ -326,7 +345,9 @@ export function notesBlock(text, limit = 20000) {
   const notes = String(text || '').trim();
   if (!notes) return '';
   const cut = notes.length > limit ? `${notes.slice(0, limit)}\n[… ${notes.length - limit} more characters not included]` : notes;
-  return `The student's own Markdown notes for this document (lines like "[p. 3]" tie a section to a page):\n${cut}`;
+  // Batch transcribe can append transcripts to the notes ("## Transcript — …").
+  const caveat = /^## Transcript\b/m.test(cut) ? `\nThe sections headed "Transcript" are ${TRANSCRIPT_CAVEAT}.` : '';
+  return `The student's own Markdown notes for this document (lines like "[p. 3]" tie a section to a page):${caveat}\n${cut}`;
 }
 // Page images plus text for a list of display pages; text documents have no
 // image (pageCanvas gives null), only their sections' text.

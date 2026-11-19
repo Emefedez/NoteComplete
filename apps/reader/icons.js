@@ -34,6 +34,8 @@ export const paths = {
  qr:'M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h2v2h-2zm4 0h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm4 0h2v2h-2z',
  home:'M3 11 12 3l9 8M5 9v12h5v-6h4v6h5V9',
  search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4',
+ // Search inside documents: a page of lines with a magnifier over its corner.
+ searchText:'M12 21H5V3h10l4 4v3M8 8h5M8 12h3M16 12a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm5 9-2.5-2.5',
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
  cloud:'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8H7Z',
  cards:'M7 4h12v14H7zM4 7v13h12',
@@ -114,7 +116,12 @@ export const paths = {
  animation:'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm6 3.5v5l5-2.5-5-2.5Z',
  exam:'M9 3h6v3H9zM6 5h12a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 21H6a1.5 1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 6 5Zm3 6.5h6M9 15h4m2.5 1.5 1.5 1.5 3-3',
  batchNotes:'M8 4h10l3 3v11H8a1.5 1.5 0 0 1-1.5-1.5V5.5A1.5 1.5 0 0 1 8 4Zm-4 4v11.5A1.5 1.5 0 0 0 5.5 21H17M11.5 10h6M11.5 13.5h4.5',
- spread:'M3 4h8v16H3zM13 4h8v16h-8zM5.5 8.5h3M5.5 12h3M15.5 8.5h3M15.5 12h3'
+ // Dark pages (invert the page): a sheet half light, half lined dark; not the theme's moon.
+ invertPage:'M6 3h12v18H6zM12 3v18M12 6.5h6M12 10h6M12 13.5h6M12 17h6',
+ spread:'M3 4h8v16H3zM13 4h8v16h-8zM5.5 8.5h3M5.5 12h3M15.5 8.5h3M15.5 12h3',
+ speaker:'M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
+ translate:'M3 5h9M7.5 3v2M5 5c.9 3 3 5.4 6 7M10 5c-.9 3.3-3 6-6.5 8M12.5 21l4.25-10L21 21M14 17.5h5.5',
+ language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.5 5.6-3.5 9s1.1 6.4 3.5 9c2.4-2.6 3.5-5.6 3.5-9S14.4 5.6 12 3Z'
 };
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
