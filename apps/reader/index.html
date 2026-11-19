@@ -33,11 +33,7 @@
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
           <hr />
           <button id="newTab" data-icon="plus" hidden>New tab<kbd>Ctrl T</kbd></button>
-          <button id="newDocument" data-icon="note">New document…<kbd>Ctrl N</kbd></button>
-          <button id="newMarkdownDoc" data-icon="note" data-palette="New Markdown / Chinese note…" title="Write a Markdown or Chinese note directly with Pinyin over characters, without needing a file first">New Markdown note…</button>
-          <button id="newHandwritten" data-icon="text" data-palette="New handwritten note from Markdown…" title="Write Markdown as real handwriting ink: a new note">New from Markdown…</button>
-          <button id="newWithAi" data-icon="spark" data-palette="New note with AI…" title="Your AI tool writes a handwritten note about a topic, from what you paste or from documents you add (notes, PDFs, Office files, Drive), with the length, focus and language you choose" hidden>New note with AI…</button>
-          <button id="takeNotesAi" data-icon="batchNotes" data-palette="Take notes with AI…" title="Batch-create handwritten notebooks from Recents, folders, PDFs, Office docs or topics">Take notes with AI…</button>
+          <button id="newNoteOpen" data-icon="note" data-palette="New note…" title="Create a blank note or infinite canvas, Markdown note, prefab-first note, handwritten note from Markdown, or AI-generated note">New note…<kbd>Ctrl N</kbd></button>
           <button id="newWindow" data-icon="window">New window<kbd>Ctrl Shift N</kbd></button>
           <hr />
           <button id="save" data-icon="save" disabled title="Save .nfedit project: original note, full undo history, Markdown notes, handwriting text, added recordings, quizzes, flashcards and scratchpad."><span class="menu-label">Save project (.nfedit)</span><kbd>Ctrl S</kbd></button>
@@ -300,6 +296,32 @@
         </div>
         <div class="ocr-actions"><span class="export-keys-hint" id="exportKeysHint"><kbd>Tab</kbd> next section · <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>Esc</kbd> close</span><span class="spacer"></span><button id="exportClose" type="button">Close</button></div>
       </dialog>
+      <dialog id="newNoteMenuDialog" class="ocr-dialog export-dialog new-note-menu-dialog" aria-labelledby="newNoteMenuTitle">
+        <div class="export-head">
+          <h2 id="newNoteMenuTitle">New note</h2>
+        </div>
+        <div class="export-tabpanel">
+          <div class="export-columns">
+            <div class="export-column">
+              <section aria-labelledby="newBlankHead">
+                <h3 id="newBlankHead">Blank &amp; Prefab</h3>
+                <button id="newDocument" type="button" class="export-item" data-icon="note"><b>Blank pages or canvas…</b><small>Choose page size, page count, or an infinite canvas (.nfedit or .noteful)</small></button>
+                <button id="newMarkdownDoc" type="button" class="export-item" data-icon="text" data-palette="New Markdown / Chinese note…"><b>Markdown note</b><small>Write Markdown or Chinese with live Pinyin &amp; math without needing a file first</small></button>
+                <button id="homeCreatePrefab" type="button" class="export-item" data-icon="graph" data-palette="Create prefab in a new note…"><b>Start with a prefab…</b><small>Create a graph, chart, truth table, Chinese trace or UML diagram in a new note</small></button>
+              </section>
+            </div>
+            <div class="export-column">
+              <section aria-labelledby="newAiHead">
+                <h3 id="newAiHead">From Markdown &amp; AI</h3>
+                <button id="newHandwritten" type="button" class="export-item" data-icon="draw" data-palette="New handwritten note from Markdown…"><b>Handwritten from Markdown…</b><small>Convert Markdown text &amp; math into real handwriting ink on new pages</small></button>
+                <button id="newWithAi" type="button" class="export-item" data-icon="spark" data-palette="New note with AI…" hidden><b>New note with AI…</b><small>Have your AI tool write a handwritten note on a topic or from documents</small></button>
+                <button id="takeNotesAi" type="button" class="export-item" data-icon="batchNotes" data-palette="Take notes with AI…"><b>Take notes with AI…</b><small>Batch-create handwritten notebooks from Recents, folders, PDFs or Office docs</small></button>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div class="ocr-actions"><span class="export-keys-hint"><kbd>Esc</kbd> close</span><span class="spacer"></span><button id="newNoteMenuClose" type="button">Close</button></div>
+      </dialog>
     </nav>
     <div class="brand">
       <p id="title">Home</p>
@@ -338,10 +360,20 @@
         </div>
         <div class="home-actions">
           <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
-          <button id="emptyOpen" class="primary" data-icon="open" title="Open a note, PDF, HTML page, text file or image (Ctrl O)" disabled>File</button>
-          <button id="emptyOpenFolder" data-icon="folder" title="Open a folder: its notes and files as a group, listed beside the document" hidden>Folder</button>
-          <button id="homeNewMarkdown" data-icon="note" title="Write a Markdown or Chinese note directly without needing an existing file">New Markdown</button>
-          <button id="homeCreatePrefab" data-icon="graph" title="Create a prefab first (graph, chart, table, UML diagram…) in a new note">Create prefab…</button>
+          <div class="home-file-drop-wrap">
+            <button id="emptyOpen" type="button" class="primary home-file-drop" data-icon="note" aria-haspopup="menu" aria-expanded="false" aria-controls="homeFileMenu" title="Create a new note or open an existing file" disabled><span>File</span><span class="filter-caret" aria-hidden="true"></span></button>
+            <div id="homeFileMenu" class="select-menu home-file-menu" role="menu" aria-label="New note &amp; open file" hidden>
+              <button id="homeMenuNewHub" type="button" class="filter-option" role="menuitem" data-icon="note"><span>New note…</span><kbd>Ctrl N</kbd></button>
+              <button id="homeMenuBlank" type="button" class="filter-option" role="menuitem" data-icon="pages"><span>Blank pages or canvas…</span></button>
+              <button id="homeNewMarkdown" type="button" class="filter-option" role="menuitem" data-icon="text"><span>New Markdown note</span></button>
+              <button id="homeMenuPrefab" type="button" class="filter-option" role="menuitem" data-icon="graph"><span>Create prefab first…</span></button>
+              <button id="homeMenuHandwritten" type="button" class="filter-option" role="menuitem" data-icon="draw"><span>Handwritten from Markdown…</span></button>
+              <button id="homeMenuTakeNotesAi" type="button" class="filter-option" role="menuitem" data-icon="batchNotes"><span>Take notes with AI…</span></button>
+              <hr />
+              <button id="emptyOpenFile" type="button" class="filter-option" role="menuitem" data-icon="open"><span>Open file…</span><kbd>Ctrl O</kbd></button>
+              <button id="emptyOpenFolder" type="button" class="filter-option" role="menuitem" data-icon="folder" hidden><span>Open folder…</span></button>
+            </div>
+          </div>
         </div>
       </div>
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
@@ -371,7 +403,13 @@
             <input id="recentSearch" type="search" placeholder="Search recent notes…" aria-label="Search recent notes" autocomplete="off" spellcheck="false" />
             <button id="recentSearchClear" type="button" class="icon-button recent-search-clear" data-icon="close" aria-label="Clear search" title="Clear search" hidden></button>
           </div>
-          <button id="findDuplicates" type="button" class="chip find-duplicates-btn" data-icon="copy" title="Scan recent notes for duplicates by name, note ID, and hash, and combine them">Find duplicates…</button>
+          <div class="recent-batch-actions">
+            <button id="batchTranscribeMode" type="button" class="chip" data-icon="headphones" title="Select recent notes with audio recordings to transcribe in batch (notes without audio are greyed out)">Batch transcribe</button>
+            <button id="batchTranscribeSelectAll" type="button" class="chip" hidden>Select all</button>
+            <button id="batchTranscribeStart" type="button" class="primary chip" data-icon="headphones" disabled hidden>Transcribe (0)…</button>
+            <button id="batchTranscribeCancel" type="button" class="chip" hidden>Cancel</button>
+            <button id="findDuplicates" type="button" class="chip find-duplicates-btn" data-icon="copy" title="Scan recent notes for duplicates by name, note ID, and hash, and combine them">Find duplicates…</button>
+          </div>
         </div>
         <div id="recentContent" class="category-content">
           <p id="folderEmpty" class="muted" hidden>Nothing in this folder yet. Move a note here from its ⋯ menu.</p>
@@ -405,7 +443,7 @@
           </div>
           <div id="driveSection" class="cloud-panel" role="region" aria-labelledby="driveTitle">
             <div class="drive-heading">
-              <h4 id="driveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.96h5.36c-.46 2.3-2.43 3.94-5.36 3.94a5.99 5.99 0 0 1-6-6 5.99 5.99 0 0 1 6-6c1.47 0 2.8.56 3.82 1.48l2.2-2.2A9.97 9.97 0 0 0 12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9c5.21 0 8.66-3.66 8.66-8.83 0-.71-.07-1.4-.2-2.07h-.11z"/></svg><span>Google Drive</span></h4>
+              <button id="drivePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="drivePanelBody"><h4 id="driveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.96h5.36c-.46 2.3-2.43 3.94-5.36 3.94a5.99 5.99 0 0 1-6-6 5.99 5.99 0 0 1 6-6c1.47 0 2.8.56 3.82 1.48l2.2-2.2A9.97 9.97 0 0 0 12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9c5.21 0 8.66-3.66 8.66-8.83 0-.71-.07-1.4-.2-2.07h-.11z"/></svg><span>Google Drive</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
               <div class="drive-actions">
                 <button id="driveBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="driveRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
@@ -416,47 +454,49 @@
                 </span>
               </div>
             </div>
-            <div id="driveSignin" class="drive-signin drive-signin-compact">
-              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
-              <div class="drive-signin-body">
-                <div class="cloud-connect-row">
-                  <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
-                  <span class="muted cloud-connect-hint">Read-only access to your Drive folders, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
-                </div>
-                <div class="cloud-details-row">
-                  <details class="drive-setup">
-                    <summary>Connection setup</summary>
-                    <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
-                    <p id="driveOrigin" class="muted"></p>
-                    <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
-                  </details>
-                  <details id="driveLinkSetup" class="drive-setup"><summary>Use a public folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
-                </div>
-              </div>
-            </div>
-            <div id="driveBrowse" hidden>
-              <div class="drive-search">
-                <strong id="drivePath">Find your Noteful folder</strong>
-                <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label>
-                <button id="driveScope" type="button" class="chip" aria-pressed="false" title="Search all of Drive (folders and notes) instead of only this folder" hidden>All Drive</button>
-                <button id="driveFind" type="button" disabled>Search</button>
-                <div class="cloud-queue-controls">
-                  <button id="driveQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
-                  <button id="driveQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
-                  <button id="driveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
-                  <button id="driveQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+            <div id="drivePanelBody" class="cloud-panel-body">
+              <div id="driveSignin" class="drive-signin drive-signin-compact">
+                <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+                <div class="drive-signin-body">
+                  <div class="cloud-connect-row">
+                    <div class="drive-actions"><button id="driveConnect" type="button" class="primary" disabled>Connect Google Drive</button></div>
+                    <span class="muted cloud-connect-hint">Read-only access to your Drive folders, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
+                  </div>
+                  <div class="cloud-details-row">
+                    <details class="drive-setup">
+                      <summary>Connection setup</summary>
+                      <label>Google OAuth web client ID<input id="driveClientId" type="text" autocomplete="off" placeholder="…apps.googleusercontent.com" /></label>
+                      <p id="driveOrigin" class="muted"></p>
+                      <label>Personal Google API key (optional, for public folder links)<input id="driveApiKey" type="text" autocomplete="off" placeholder="AIza…" /></label>
+                    </details>
+                    <details id="driveLinkSetup" class="drive-setup"><summary>Use a public folder link</summary><label>Drive folder link or ID<input id="driveFolderLink" type="text" autocomplete="off" placeholder="https://drive.google.com/drive/folders/…" /></label><button id="driveUseFolder" type="button" disabled>Open folder</button></details>
+                  </div>
                 </div>
               </div>
+              <div id="driveBrowse" hidden>
+                <div class="drive-search">
+                  <strong id="drivePath">Find your Noteful folder</strong>
+                  <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="driveSearch" type="search" value="Noteful" placeholder="Search names; clear to list the top level" /></label>
+                  <button id="driveScope" type="button" class="chip" aria-pressed="false" title="Search all of Drive (folders and notes) instead of only this folder" hidden>All Drive</button>
+                  <button id="driveFind" type="button" disabled>Search</button>
+                  <div class="cloud-queue-controls">
+                    <button id="driveQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
+                    <button id="driveQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
+                    <button id="driveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                    <button id="driveQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+                  </div>
+                </div>
+              </div>
+              <p id="driveStatus" role="status" aria-live="polite"></p>
+              <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+              <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
+              <button id="driveMore" type="button" hidden>Load more</button>
             </div>
-            <p id="driveStatus" role="status" aria-live="polite"></p>
-            <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
-            <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
-            <button id="driveMore" type="button" hidden>Load more</button>
           </div>
 
           <div id="dropboxSection" class="cloud-panel" role="region" aria-labelledby="dropboxTitle" hidden>
             <div class="drive-heading">
-              <h4 id="dropboxTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg><span>Dropbox</span></h4>
+              <button id="dropboxPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="dropboxPanelBody"><h4 id="dropboxTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg><span>Dropbox</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
               <div class="drive-actions">
                 <button id="dropboxBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="dropboxRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
@@ -467,44 +507,46 @@
                 </span>
               </div>
             </div>
-            <div id="dropboxSignin" class="drive-signin drive-signin-compact">
-              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
-              <div class="drive-signin-body">
-                <div class="cloud-connect-row">
-                  <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button></div>
-                  <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
-                </div>
-                <details class="drive-setup">
-                  <summary>Connection setup</summary>
-                  <label>Dropbox app key<input id="dropboxAppKey" type="text" autocomplete="off" spellcheck="false" placeholder="App key from the Dropbox App Console" /></label>
-                  <p id="dropboxRedirect" class="muted"></p>
-                </details>
-              </div>
-            </div>
-            <div id="dropboxBrowse" hidden>
-              <div class="drive-search">
-                <strong id="dropboxPath">Dropbox</strong>
-                <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="dropboxSearch" type="search" placeholder="Search names; clear to list the top level" /></label>
-                <button id="dropboxScope" type="button" class="chip" aria-pressed="false" title="Search all of Dropbox (folders and notes) instead of only this folder" hidden>All Dropbox</button>
-                <button id="dropboxFind" type="button" disabled>Search</button>
-                <div class="cloud-queue-controls">
-                  <button id="dropboxQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
-                  <button id="dropboxQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
-                  <button id="dropboxQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
-                  <button id="dropboxQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+            <div id="dropboxPanelBody" class="cloud-panel-body">
+              <div id="dropboxSignin" class="drive-signin drive-signin-compact">
+                <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+                <div class="drive-signin-body">
+                  <div class="cloud-connect-row">
+                    <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button></div>
+                    <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>User</strong> / <strong>Creator</strong> for guided setup.</span>
+                  </div>
+                  <details class="drive-setup">
+                    <summary>Connection setup</summary>
+                    <label>Dropbox app key<input id="dropboxAppKey" type="text" autocomplete="off" spellcheck="false" placeholder="App key from the Dropbox App Console" /></label>
+                    <p id="dropboxRedirect" class="muted"></p>
+                  </details>
                 </div>
               </div>
-              <details class="drive-setup"><summary>Open a folder by path</summary><label>Dropbox folder path<input id="dropboxFolderPath" type="text" autocomplete="off" spellcheck="false" placeholder="/Noteful" /></label><button id="dropboxUseFolder" type="button" disabled>Open folder</button></details>
+              <div id="dropboxBrowse" hidden>
+                <div class="drive-search">
+                  <strong id="dropboxPath">Dropbox</strong>
+                  <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="dropboxSearch" type="search" placeholder="Search names; clear to list the top level" /></label>
+                  <button id="dropboxScope" type="button" class="chip" aria-pressed="false" title="Search all of Dropbox (folders and notes) instead of only this folder" hidden>All Dropbox</button>
+                  <button id="dropboxFind" type="button" disabled>Search</button>
+                  <div class="cloud-queue-controls">
+                    <button id="dropboxQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
+                    <button id="dropboxQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
+                    <button id="dropboxQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                    <button id="dropboxQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+                  </div>
+                </div>
+                <details class="drive-setup"><summary>Open a folder by path</summary><label>Dropbox folder path<input id="dropboxFolderPath" type="text" autocomplete="off" spellcheck="false" placeholder="/Noteful" /></label><button id="dropboxUseFolder" type="button" disabled>Open folder</button></details>
+              </div>
+              <p id="dropboxStatus" role="status" aria-live="polite"></p>
+              <progress id="dropboxProgress" class="drive-progress" max="1" value="0" hidden></progress>
+              <ul id="dropboxList" class="note-grid" aria-label="Dropbox files"></ul>
+              <button id="dropboxMore" type="button" hidden>Load more</button>
             </div>
-            <p id="dropboxStatus" role="status" aria-live="polite"></p>
-            <progress id="dropboxProgress" class="drive-progress" max="1" value="0" hidden></progress>
-            <ul id="dropboxList" class="note-grid" aria-label="Dropbox files"></ul>
-            <button id="dropboxMore" type="button" hidden>Load more</button>
           </div>
 
           <div id="githubSection" class="cloud-panel" role="region" aria-labelledby="githubTitle" hidden>
             <div class="drive-heading">
-              <h4 id="githubTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg><span>GitHub · Auto-Chunked</span></h4>
+              <button id="githubPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="githubPanelBody"><h4 id="githubTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg><span>GitHub · Auto-Chunked</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
               <div class="drive-actions">
                 <button id="githubBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="githubRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh repository" disabled></button>
@@ -516,31 +558,33 @@
                 </span>
               </div>
             </div>
-            <div id="githubSignin" class="drive-signin drive-signin-compact">
-              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
-              <div class="drive-signin-body">
-                <div class="cloud-inline-form">
-                  <input id="githubRepoInput" type="text" placeholder="owner/repo or https://github.com/owner/repo" aria-label="GitHub repository" autocomplete="off" spellcheck="false" />
-                  <input id="githubTokenInput" type="password" placeholder="Optional PAT (ghp_… / github_pat_…)" aria-label="GitHub personal access token" autocomplete="off" spellcheck="false" />
-                  <button id="githubConnect" type="button" class="primary">Connect</button>
+            <div id="githubPanelBody" class="cloud-panel-body">
+              <div id="githubSignin" class="drive-signin drive-signin-compact">
+                <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+                <div class="drive-signin-body">
+                  <div class="cloud-inline-form">
+                    <input id="githubRepoInput" type="text" placeholder="owner/repo or https://github.com/owner/repo" aria-label="GitHub repository" autocomplete="off" spellcheck="false" />
+                    <input id="githubTokenInput" type="password" placeholder="Optional PAT (ghp_… / github_pat_…)" aria-label="GitHub personal access token" autocomplete="off" spellcheck="false" />
+                    <button id="githubConnect" type="button" class="primary">Connect</button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div id="githubBrowse" hidden>
-              <div class="drive-search">
-                <strong id="githubPath">GitHub</strong>
-                <label class="drive-filter"><span class="sr-only">Filter repository files</span><input id="githubSearch" type="search" placeholder="Filter repo notes &amp; .ncchunk bundles…" /></label>
-                <button id="githubFind" type="button">Filter</button>
+              <div id="githubBrowse" hidden>
+                <div class="drive-search">
+                  <strong id="githubPath">GitHub</strong>
+                  <label class="drive-filter"><span class="sr-only">Filter repository files</span><input id="githubSearch" type="search" placeholder="Filter repo notes &amp; .ncchunk bundles…" /></label>
+                  <button id="githubFind" type="button">Filter</button>
+                </div>
               </div>
+              <p id="githubStatus" role="status" aria-live="polite"></p>
+              <progress id="githubProgress" class="drive-progress" max="1" value="0" hidden></progress>
+              <ul id="githubList" class="note-grid" aria-label="GitHub repository files"></ul>
             </div>
-            <p id="githubStatus" role="status" aria-live="polite"></p>
-            <progress id="githubProgress" class="drive-progress" max="1" value="0" hidden></progress>
-            <ul id="githubList" class="note-grid" aria-label="GitHub repository files"></ul>
           </div>
 
           <div id="webdavSection" class="cloud-panel" role="region" aria-labelledby="webdavTitle" hidden>
             <div class="drive-heading">
-              <h4 id="webdavTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="4.8" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19.2" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Nextcloud / WebDAV</span></h4>
+              <button id="webdavPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="webdavPanelBody"><h4 id="webdavTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="4.8" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19.2" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Nextcloud / WebDAV</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
               <div class="drive-actions">
                 <button id="webdavBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="webdavRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh folder" disabled></button>
@@ -552,30 +596,32 @@
                 </span>
               </div>
             </div>
-            <div id="webdavSignin" class="drive-signin drive-signin-compact">
-              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
-              <div class="drive-signin-body">
-                <div class="cloud-inline-form">
-                  <input id="webdavUrlInput" type="text" placeholder="https://cloud.example.com/s/AbCdEf12345" aria-label="Nextcloud share link or WebDAV URL" autocomplete="off" spellcheck="false" />
-                  <input id="webdavPassInput" type="password" placeholder="Share password (if set)" aria-label="WebDAV password" autocomplete="off" spellcheck="false" />
-                  <button id="webdavConnect" type="button" class="primary">Open folder</button>
+            <div id="webdavPanelBody" class="cloud-panel-body">
+              <div id="webdavSignin" class="drive-signin drive-signin-compact">
+                <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+                <div class="drive-signin-body">
+                  <div class="cloud-inline-form">
+                    <input id="webdavUrlInput" type="text" placeholder="https://cloud.example.com/s/AbCdEf12345" aria-label="Nextcloud share link or WebDAV URL" autocomplete="off" spellcheck="false" />
+                    <input id="webdavPassInput" type="password" placeholder="Share password (if set)" aria-label="WebDAV password" autocomplete="off" spellcheck="false" />
+                    <button id="webdavConnect" type="button" class="primary">Open folder</button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div id="webdavBrowse" hidden>
-              <div class="drive-search">
-                <strong id="webdavPath">Shared Folder</strong>
-                <label class="drive-filter"><span class="sr-only">Filter shared folder files</span><input id="webdavSearch" type="search" placeholder="Filter shared folder notes…" /></label>
-                <button id="webdavFind" type="button">Filter</button>
+              <div id="webdavBrowse" hidden>
+                <div class="drive-search">
+                  <strong id="webdavPath">Shared Folder</strong>
+                  <label class="drive-filter"><span class="sr-only">Filter shared folder files</span><input id="webdavSearch" type="search" placeholder="Filter shared folder notes…" /></label>
+                  <button id="webdavFind" type="button">Filter</button>
+                </div>
               </div>
+              <p id="webdavStatus" role="status" aria-live="polite"></p>
+              <ul id="webdavList" class="note-grid" aria-label="Nextcloud / WebDAV files"></ul>
             </div>
-            <p id="webdavStatus" role="status" aria-live="polite"></p>
-            <ul id="webdavList" class="note-grid" aria-label="Nextcloud / WebDAV files"></ul>
           </div>
 
           <div id="archiveSection" class="cloud-panel" role="region" aria-labelledby="archiveTitle" hidden>
             <div class="drive-heading">
-              <h4 id="archiveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M4 10v9M8 10v9M12 10v9M16 10v9M20 10v9M2 20h20M12 3 3 6h18z"/></svg><span>Internet Archive</span></h4>
+              <button id="archivePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="archivePanelBody"><h4 id="archiveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M4 10v9M8 10v9M12 10v9M16 10v9M20 10v9M2 20h20M12 3 3 6h18z"/></svg><span>Internet Archive</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
               <div class="drive-actions">
                 <button id="archiveBack" type="button" class="icon-button nav-arrow" data-icon="back" aria-label="Back to repositories" title="Back to repositories" hidden></button>
                 <button id="archiveFolderUp" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Up one folder" title="Up one folder" hidden></button>
@@ -586,24 +632,26 @@
                 </span>
               </div>
             </div>
-            <div id="archiveRepoView">
-              <p class="muted archive-repo-hint">Select a repository to browse notes and files, or add another archive.org item with +.</p>
-              <ul id="archiveRepoList" class="note-grid" aria-label="Internet Archive repositories"></ul>
-            </div>
-            <div id="archiveFileView" hidden>
-              <div class="drive-search">
-                <strong id="archivePath"></strong>
-                <label class="drive-filter"><span class="sr-only">Filter this repository folder</span><input id="archiveSearch" type="search" placeholder="Filter this folder…" /></label>
-                <div class="cloud-queue-controls">
-                  <button id="archiveQueueMode" type="button" class="chip" title="Select documents to queue for download" hidden>Queue</button>
-                  <button id="archiveQueueDownload" type="button" class="primary chip" title="Download selected documents" hidden>Download (0)</button>
-                  <button id="archiveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
-                  <button id="archiveQueueAll" type="button" class="chip" title="Queue all documents in this folder for download" hidden>Queue all</button>
-                </div>
+            <div id="archivePanelBody" class="cloud-panel-body">
+              <div id="archiveRepoView">
+                <p class="muted archive-repo-hint">Select a repository to browse notes and files, or add another archive.org item with +.</p>
+                <ul id="archiveRepoList" class="note-grid" aria-label="Internet Archive repositories"></ul>
               </div>
-              <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
-              <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
-              <ul id="archiveList" class="note-grid" aria-label="Internet Archive files"></ul>
+              <div id="archiveFileView" hidden>
+                <div class="drive-search">
+                  <strong id="archivePath"></strong>
+                  <label class="drive-filter"><span class="sr-only">Filter this repository folder</span><input id="archiveSearch" type="search" placeholder="Filter this folder…" /></label>
+                  <div class="cloud-queue-controls">
+                    <button id="archiveQueueMode" type="button" class="chip" title="Select documents to queue for download" hidden>Queue</button>
+                    <button id="archiveQueueDownload" type="button" class="primary chip" title="Download selected documents" hidden>Download (0)</button>
+                    <button id="archiveQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                    <button id="archiveQueueAll" type="button" class="chip" title="Queue all documents in this folder for download" hidden>Queue all</button>
+                  </div>
+                </div>
+                <p id="archiveStatus" class="drive-status" role="status" aria-live="polite"></p>
+                <progress id="archiveProgress" class="drive-progress" max="1" value="0" hidden></progress>
+                <ul id="archiveList" class="note-grid" aria-label="Internet Archive files"></ul>
+              </div>
             </div>
           </div>
         </div>
@@ -1203,6 +1251,93 @@
     <label><input type="radio" name="newFormat" value="noteful" /> <strong>Noteful</strong> <span class="muted">.noteful · opens in Noteful on the iPad; notes stay in NoteComplete</span></label>
   </fieldset>
   <div class="ocr-actions"><button id="newCancel" type="button">Cancel</button><button id="newCreate" type="button" class="primary">Create</button></div>
+</dialog>
+
+<dialog id="batchTranscribeDialog" class="ocr-dialog batch-transcribe-dialog" aria-labelledby="batchTranscribeTitle">
+  <div class="batch-transcribe-form">
+    <div class="ocr-header">
+      <div>
+        <p class="eyebrow">Audio &amp; AI</p>
+        <h2 id="batchTranscribeTitle">Batch transcribe recordings</h2>
+      </div>
+      <button id="btCloseBtn" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+    </div>
+
+    <p class="ocr-hint">Choose the transcription engine, output actions, and which recordings from your selected notes to transcribe.</p>
+
+    <div class="bt-grid">
+      <label class="ocr-field">
+        <span>Engine</span>
+        <select id="btBackend" data-native>
+          <option value="whisper" selected>Local Whisper (offline in browser)</option>
+          <option value="gemini">Gemini Audio (cloud API key)</option>
+        </select>
+      </label>
+      <label id="btModelField" class="ocr-field">
+        <span>Whisper model</span>
+        <select id="btModel" data-native>
+          <option value="tiny">Tiny (~40 MB, fastest)</option>
+          <option value="base" selected>Base (~75 MB, balanced)</option>
+          <option value="small">Small (~245 MB, highest accuracy)</option>
+        </select>
+      </label>
+      <label class="ocr-field">
+        <span>Language</span>
+        <select id="btLanguage" data-native>
+          <option value="" selected>Auto-detect</option>
+          <option value="es">Spanish (Español)</option>
+          <option value="en">English</option>
+          <option value="zh">Chinese (中文)</option>
+          <option value="fr">French (Français)</option>
+          <option value="de">German (Deutsch)</option>
+          <option value="it">Italian (Italiano)</option>
+          <option value="pt">Portuguese (Português)</option>
+          <option value="ja">Japanese (日本語)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="bt-choices-box">
+      <span class="bt-section-title">Output choices</span>
+      <label class="ocr-check">
+        <input id="btOutCache" type="checkbox" checked />
+        <span>Save timed transcript to local playback &amp; search cache</span>
+      </label>
+      <label class="ocr-check">
+        <input id="btOutNotes" type="checkbox" />
+        <span>Append transcript sections into each note’s Markdown notes</span>
+      </label>
+      <div class="bt-download-row">
+        <label class="ocr-check">
+          <input id="btOutDownload" type="checkbox" />
+          <span>Download transcript file</span>
+        </label>
+        <select id="btFormat" data-native aria-label="Download format">
+          <option value="txt" selected>Plain text (.txt)</option>
+          <option value="srt">SubRip (.srt)</option>
+          <option value="vtt">WebVTT (.vtt)</option>
+          <option value="json">Timed JSON (.json)</option>
+        </select>
+      </div>
+      <label class="ocr-check">
+        <input id="btSkipCached" type="checkbox" checked />
+        <span>Skip recordings that already have a cached transcript</span>
+      </label>
+    </div>
+
+    <div class="bt-recordings-section">
+      <div class="bt-recordings-header">
+        <span id="btSummary" class="bt-summary">0 recordings selected</span>
+        <button id="btModalSelectAll" class="ghost small" type="button">Select all</button>
+      </div>
+      <div id="btNotesList" class="bt-notes-list"></div>
+    </div>
+
+    <div class="ocr-actions">
+      <button id="btCancelBtn" class="ghost" type="button">Cancel</button>
+      <button id="btConfirmBtn" class="primary" type="button">Transcribe</button>
+    </div>
+  </div>
 </dialog>
 
 <dialog id="insertDialog" class="ocr-dialog" aria-labelledby="insertTitle">

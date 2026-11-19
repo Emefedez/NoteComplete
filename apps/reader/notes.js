@@ -25,6 +25,134 @@ export function loadEditor() {
   });
 }
 const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
+export const PREFAB_LINE = /^\s*!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)\s*$/;
+
+export function decorateTinyMdeLines(root) {
+  if (!root) return;
+  for (const line of root.children || []) {
+    const raw = line.textContent || '';
+    const page = raw.match(MARKER)?.[1];
+    if (page) line.dataset.page = page;
+    else delete line.dataset.page;
+    const prefab = raw.match(PREFAB_LINE);
+    if (prefab) {
+      line.dataset.prefab = (prefab[1] || 'Prefab').trim() || 'Prefab';
+    } else {
+      delete line.dataset.prefab;
+    }
+  }
+}
+
+export function attachMarkdownPrefabContextMenu({
+  editorContainer,
+  previewContainer,
+  getText,
+  setText,
+  editPrefab = null,
+}) {
+  const findPrefabMatches = (md) => {
+    const out = [];
+    const re = /!\[([^\]]*)\]\((data:image\/svg\+xml[^\s)]*)\)/g;
+    let m;
+    while ((m = re.exec(md))) {
+      out.push({ full: m[0], alt: m[1], uri: m[2], index: m.index });
+    }
+    return out;
+  };
+  const openMenuFor = async (event, { alt, uri, replaceLine, removeLine }) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const { openContextMenu } = await import('./context-menu.js');
+    const { extractPrefabSpecFromDataUri, markdownPrefabBlockForSpec } = await import('./chinese/zh-menu.js');
+    const spec = extractPrefabSpecFromDataUri(uri, alt);
+    const label = (alt || 'Prefab').trim() || 'Prefab';
+    const fullLine = `![${alt}](${uri})`;
+    openContextMenu(event.clientX, event.clientY, [
+      spec && editPrefab && {
+        label: `Edit ${label.length > 32 ? `${label.slice(0, 32)}…` : label}…`,
+        icon: 'draw',
+        run: async () => {
+          const updated = await editPrefab(spec);
+          if (!updated) return;
+          const nextBlock = await markdownPrefabBlockForSpec(updated);
+          if (nextBlock) replaceLine(nextBlock);
+        },
+      },
+      {
+        label: 'Copy Markdown',
+        icon: 'copy',
+        key: 'Ctrl C',
+        run: () => navigator.clipboard?.writeText(fullLine),
+      },
+      '-',
+      {
+        label: 'Delete prefab',
+        icon: 'trash',
+        danger: true,
+        run: () => removeLine(),
+      },
+    ].filter(Boolean), { title: label.length > 42 ? `${label.slice(0, 42)}…` : label });
+  };
+  if (editorContainer) {
+    editorContainer.addEventListener('contextmenu', (event) => {
+      const chip = event.target.closest?.('[data-prefab]');
+      if (!chip) return;
+      const root = editorContainer.querySelector('.TinyMDE');
+      if (!root) return;
+      const idx = [...root.children].indexOf(chip);
+      if (idx < 0) return;
+      const lines = String(getText() || '').split('\n');
+      const m = (lines[idx] || '').match(PREFAB_LINE);
+      if (!m) return;
+      openMenuFor(event, {
+        alt: m[1],
+        uri: m[2],
+        replaceLine: (nextLine) => {
+          const cur = String(getText() || '').split('\n');
+          if (idx < cur.length) {
+            cur[idx] = nextLine;
+            setText(cur.join('\n'));
+          }
+        },
+        removeLine: () => {
+          const cur = String(getText() || '').split('\n');
+          if (idx < cur.length) {
+            cur.splice(idx, 1);
+            setText(cur.join('\n'));
+          }
+        },
+      });
+    });
+  }
+  if (previewContainer) {
+    previewContainer.addEventListener('contextmenu', (event) => {
+      const img = event.target.closest?.('img[src^="data:image/svg+xml"]');
+      if (!img) return;
+      const src = img.getAttribute('src') || '';
+      const alt = img.getAttribute('alt') || 'Prefab';
+      const allImgs = [...previewContainer.querySelectorAll('img[src^="data:image/svg+xml"]')];
+      const occurrence = allImgs.indexOf(img);
+      const replaceOccurrence = (replacement) => {
+        const md = String(getText() || '');
+        const matches = findPrefabMatches(md);
+        const hit = matches.find((x, i) => (occurrence >= 0 && i === occurrence) || x.uri === src) || matches[0];
+        if (!hit) return;
+        const before = md.slice(0, hit.index);
+        const after = md.slice(hit.index + hit.full.length);
+        const nextMd = replacement === null
+          ? `${before.replace(/\n?$/, '')}${after.replace(/^\n?/, '\n')}`
+          : `${before}${replacement}${after}`;
+        setText(nextMd);
+      };
+      openMenuFor(event, {
+        alt,
+        uri: src,
+        replaceLine: (nextLine) => replaceOccurrence(nextLine),
+        removeLine: () => replaceOccurrence(null),
+      });
+    });
+  }
+}
 
 // Positions in the editor are { row, col }; Yjs counts characters from the start.
 export function toIndex(text, { row, col }) {
@@ -60,7 +188,7 @@ export function markerLine(text, page) {
   return i < 0 ? null : i;
 }
 
-export function notesController({ call, jump, currentPage, store, status }) {
+export function notesController({ call, jump, currentPage, store, status, editPrefab = null }) {
   // `core`: notes of a note live in its session (saved with projects and .notecomplete);
   // an HTML page has no session or pages, so its notes are only kept on this device.
   let text = '', key = '', editor = null, bar = null, saveTimer = 0, previewing = false, core = true;
@@ -83,13 +211,24 @@ export function notesController({ call, jump, currentPage, store, status }) {
   if (traceBtn) {
     traceBtn.onclick = async () => {
       const selText = globalThis.getSelection?.()?.toString?.() || '';
-      const han = ([...selText].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('') || (text.match(/\p{Script=Han}+/gu)?.at(-1)?.slice(0, 6)) || '你好';
+      const hasExplicitSelection = Boolean(selText);
+      const selectedHan = ([...selText].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
+      if (hasExplicitSelection && !selectedHan) {
+        status?.('Select at least one Chinese character to insert a trace order prefab.', true);
+        return;
+      }
+      const han = selectedHan || (text.match(/\p{Script=Han}+/gu)?.at(-1)?.slice(0, 6)) || '';
+      if (!han) {
+        status?.('Type or select a Chinese character first to insert a trace order prefab.', true);
+        return;
+      }
       const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
       const block = await markdownTraceBlockFor(han);
       if (block && editor) {
         const sel = globalThis.getSelection?.();
         if (sel?.rangeCount && !sel.isCollapsed && $('notesEditor')?.contains(sel.anchorNode)) sel.collapseToEnd();
         editor.paste(block);
+        requestAnimationFrame(markLines);
       }
     };
   }
@@ -128,13 +267,10 @@ export function notesController({ call, jump, currentPage, store, status }) {
     if (key) await store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
   }
   // Marker lines are HTML blocks to the editor: tag them so they show as
-  // chips, and a click on one shows its page.
+  // chips, and a click on one shows its page. Prefab SVG data-URI lines are
+  // also tagged so they render as compact truncated medallions like page chips.
   function markLines() {
-    for (const line of $('notesEditor').querySelector('.TinyMDE')?.children || []) {
-      const page = line.textContent.match(MARKER)?.[1];
-      if (page) line.dataset.page = page;
-      else delete line.dataset.page;
-    }
+    decorateTinyMdeLines($('notesEditor').querySelector('.TinyMDE'));
   }
   async function mount() {
     const TinyMDE = await loadEditor();
@@ -184,6 +320,22 @@ export function notesController({ call, jump, currentPage, store, status }) {
   $('notesRender').addEventListener('click', event => {
     const chip = event.target.closest('.md-page');
     if (chip) jump(Number(chip.dataset.page) - 1);
+  });
+  attachMarkdownPrefabContextMenu({
+    editorContainer: $('notesEditor'),
+    previewContainer: $('notesRender'),
+    getText: () => text,
+    setText: (next) => {
+      text = next;
+      if (editor) {
+        editor.setContent(text);
+        requestAnimationFrame(markLines);
+      }
+      if (previewing && !panel.hidden) render();
+      if (shared) shared.local(text);
+      if (!shared || shared.persist) save();
+    },
+    editPrefab,
   });
   $('notesMarker').onclick = () => {
     if (!editor) return;

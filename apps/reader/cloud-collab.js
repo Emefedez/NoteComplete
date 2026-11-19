@@ -293,6 +293,8 @@ export function githubBrowser({
 
   return {
     show: () => { syncUi(); if (config.connected && !itemsCache.length && !loading) void refresh(); },
+    hide: () => {},
+    setQuick: () => {},
     connect,
     disconnect,
     refresh,
@@ -519,6 +521,8 @@ export function webdavBrowser({
 
   return {
     show: () => { syncUi(); if (config.connected && !itemsCache.length && !loading) void refresh(); },
+    hide: () => {},
+    setQuick: () => {},
     connect,
     disconnect,
     refresh,

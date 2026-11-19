@@ -193,8 +193,19 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
         stage.replaceChildren();
         return import('./stroke-player.js').then(({ strokePlayer }) => {
           if (!stage.isConnected && stage.parentNode == null) return;
-          players.push(strokePlayer(stage, { text: han.join(''), size: han.length === 1 ? 132 : Math.max(72, Math.floor(300 / han.length)), autoplay: true }));
-        }).catch(() => stage.replaceChildren(el('p', 'muted', 'Stroke order could not be loaded.')));
+          const p = strokePlayer(stage, { text: han.join(''), size: han.length === 1 ? 132 : Math.max(72, Math.floor(300 / han.length)), autoplay: true });
+          players.push(p);
+          p.ready?.then?.(() => {
+            if (!p.steps) {
+              const ybBtn = btn(`Look up ${han[0]} on YellowBridge ↗`, 'search', () => window.open(`https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(han[0])}`, '_blank', 'noopener,noreferrer'));
+              bar.append(ybBtn);
+            }
+          });
+        }).catch(() => {
+          stage.replaceChildren(el('p', 'muted', 'Stroke order could not be loaded.'));
+          const ybBtn = btn(`Look up ${han[0]} on YellowBridge ↗`, 'search', () => window.open(`https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(han[0])}`, '_blank', 'noopener,noreferrer'));
+          bar.append(ybBtn);
+        });
       };
       function player() { practising = false; practiseBtn.querySelector('span').textContent = 'Practise'; showPlayer(); }
       function practice(i) {

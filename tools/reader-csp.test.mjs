@@ -118,6 +118,7 @@ const NOT_REQUESTED = [
   ['https://notecomplete.app/xmi/layout', 'the XML namespace of the layout NoteComplete keeps in XMI files (uml-xml.js)'],
   ['https://cloud.example.com/s/', 'example Nextcloud share link placeholder (index.html, cloud-collab.js)'],
   ['https://cloud.example.edu/s/', 'example Nextcloud share link placeholder (cloud-collab.js)'],
+  ['https://www.yellowbridge.com/chinese/character-stroke-order.php', 'external link to YellowBridge stroke order dictionary opened in a new tab (prefabs/hanzi/editor.js, chinese/lookup-panel.js)'],
   ['https://cloud.university.edu/s/', 'example Nextcloud share link placeholder (cloud-collab.js)'],
   ['https://host/[index.php/]s/', 'comment describing Nextcloud share link pattern (chunked-note.js)'],
   ['http://127.0.0.1:53691/callback', 'desktop loopback OAuth callback shown in guided setup (cloud-collab.js)'],

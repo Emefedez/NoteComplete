@@ -4537,7 +4537,7 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
     e.preventDefault();
-    $("newDocument").click();
+    ($("newNoteOpen") || $("newDocument")).click();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n") {
@@ -4608,7 +4608,27 @@ document.addEventListener("keydown", (e) => {
     action(e.shiftKey ? "redo" : "undo");
   }
 });
-$("open").onclick = $("emptyOpen").onclick = () => openLocal();
+$("open").onclick = () => openLocal();
+if ($("emptyOpenFile")) $("emptyOpenFile").onclick = () => { closeHomeFileMenu(); openLocal(); };
+function closeHomeFileMenu() {
+  if ($("homeFileMenu")) $("homeFileMenu").hidden = true;
+  if ($("emptyOpen")) $("emptyOpen").setAttribute("aria-expanded", "false");
+}
+if ($("emptyOpen")) {
+  $("emptyOpen").onclick = (e) => {
+    const menu = $("homeFileMenu");
+    if (!menu) return openLocal();
+    e.stopPropagation();
+    const next = menu.hidden;
+    menu.hidden = !next;
+    $("emptyOpen").setAttribute("aria-expanded", String(next));
+  };
+  document.addEventListener("click", (e) => {
+    if ($("homeFileMenu") && !$("homeFileMenu").hidden && !e.target.closest?.("#homeFileDropWrap")) {
+      closeHomeFileMenu();
+    }
+  });
+}
 function openFileObject(file, meta = { origin: "File picker" }) {
   if (file) void openImportedFile(file, meta);
 }
@@ -4878,9 +4898,29 @@ async function openNewMarkdown({ title = "Untitled", initialText = "" } = {}) {
   status("Chinese Markdown editor ready: click 中 (or Ctrl+Shift+Space) to type Chinese, 拼 for pinyin on top.");
   return true;
 }
+if ($("newNoteOpen")) {
+  $("newNoteOpen").onclick = () => {
+    closeMenus();
+    closeHomeFileMenu();
+    $("newNoteMenuDialog")?.showModal();
+  };
+}
+if ($("newNoteMenuClose")) $("newNoteMenuClose").onclick = () => $("newNoteMenuDialog")?.close();
+if ($("newNoteMenuDialog")) {
+  $("newNoteMenuDialog").addEventListener("click", (e) => {
+    if (e.target.closest?.("button[id]") && e.target.closest("button[id]").id !== "newNoteMenuClose") {
+      $("newNoteMenuDialog").close();
+    }
+  });
+}
 if ($("newMarkdownDoc")) $("newMarkdownDoc").onclick = () => openNewMarkdown();
-if ($("homeNewMarkdown")) $("homeNewMarkdown").onclick = () => openNewMarkdown();
+if ($("homeNewMarkdown")) $("homeNewMarkdown").onclick = () => { closeHomeFileMenu(); openNewMarkdown(); };
 if ($("homeCreatePrefab")) $("homeCreatePrefab").onclick = () => insertPrefab(panels[page]);
+if ($("homeMenuNewHub")) $("homeMenuNewHub").onclick = () => { closeHomeFileMenu(); $("newNoteOpen")?.click(); };
+if ($("homeMenuBlank")) $("homeMenuBlank").onclick = () => { closeHomeFileMenu(); $("newDocument")?.click(); };
+if ($("homeMenuPrefab")) $("homeMenuPrefab").onclick = () => { closeHomeFileMenu(); insertPrefab(panels[page]); };
+if ($("homeMenuHandwritten")) $("homeMenuHandwritten").onclick = () => { closeHomeFileMenu(); $("newHandwritten")?.click(); };
+if ($("homeMenuTakeNotesAi")) $("homeMenuTakeNotesAi").onclick = () => { closeHomeFileMenu(); $("takeNotesAi")?.click(); };
 $("newCancel").onclick = () => $("newDialog").close();
 $("newCreate").onclick = async () => {
   if (!canReplace()) return;
@@ -4976,7 +5016,14 @@ wireRubyControls();
 let notes = null, notesLoading = null;
 function notesApi() {
   return notesLoading ||= import("./notes.js").then(({ notesController }) => {
-    notes = notesController({ call, jump, currentPage: () => page, store: library.store, status });
+    notes = notesController({
+      call,
+      jump,
+      currentPage: () => page,
+      store: library.store,
+      status,
+      editPrefab: (spec) => figureEditor(spec, { editing: true }),
+    });
     if (doc) return notes.load(find.fingerprint).then(() => notes);
     if (htmlView.hasDocument || textView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
     return notes;
@@ -5776,6 +5823,7 @@ const textView = textViewer({
   },
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
+  editPrefab: (spec) => figureEditor(spec, { editing: true }),
   // A relative link to another file opens it here, from this file's folder.
   openLink: (href) => {
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return status(`NoteComplete cannot open ${href.split(":")[0]}: links.`, true);
@@ -6064,6 +6112,7 @@ var home = homeScreen({
   openArchive: (member) => openArchiveMember(member).catch((error) => status(error.message, true)),
   groups,
   status,
+  jobs,
   exportStudy: exportStudyOf,
   cutHistory: cutHistoryOf,
   exportNote: exportNoteOf,

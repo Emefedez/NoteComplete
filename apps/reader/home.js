@@ -12,6 +12,8 @@ import { localMember, webMember, starButton } from './groups.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
 import { CLOUD_PROVIDERS } from './cloud-collab.js';
+import { selectionCheck } from './queue-controls.js';
+import { setupBatchTranscribe } from './batch-transcribe.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
 // The cover of a text or Markdown file: its first lines drawn like a page, each wrapped to
@@ -64,8 +66,9 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
+export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null }) {
   const $ = id => document.getElementById(id);
+  const batchTranscriber = setupBatchTranscribe({ library, status, jobs });
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
     if (minutes < 1) return 'just now';
@@ -221,6 +224,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     for (const entry of entries) fragment.append(...recentCard(entry));
     $('recentList').replaceChildren(fragment);
     applyFilters();
+    batchTranscriber.onRecentRendered();
   }
   // One Recent card; an entry that cannot be shown is skipped instead of emptying the list.
   function recentCard(entry) {
@@ -228,6 +232,8 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       const item = document.createElement('li'), button = document.createElement('button');
       button.type = 'button';
       button.className = 'note-card';
+      button.noteEntry = entry;
+      button.dataset.entryKey = entry.key;
       const cover = document.createElement('img');
       cover.className = 'note-cover';
       cover.alt = '';
@@ -244,7 +250,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         badge.textContent = hit;
         meta.append(badge);
       }
-      button.append(cover, meta);
+      button.append(selectionCheck(), cover, meta);
       const remove = document.createElement('button');
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
@@ -277,6 +283,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
       button.onclick = async () => {
+        if (batchTranscriber.handleCardClick(button, entry)) return;
         try {
           const now = current();
           if (entry.source === 'web') {
@@ -571,6 +578,11 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   setupCollapsible('foldersToggle', 'foldersContent', 'folders');
   setupCollapsible('recentToggle', 'recentContent', 'recent');
   setupCollapsible('cloudToggle', 'cloudContent', 'cloud');
+  setupCollapsible('drivePanelToggle', 'drivePanelBody', 'cloud_drive');
+  setupCollapsible('dropboxPanelToggle', 'dropboxPanelBody', 'cloud_dropbox');
+  setupCollapsible('githubPanelToggle', 'githubPanelBody', 'cloud_github');
+  setupCollapsible('webdavPanelToggle', 'webdavPanelBody', 'cloud_webdav');
+  setupCollapsible('archivePanelToggle', 'archivePanelBody', 'cloud_archive');
 
   // Cloud providers multi-select checkbox dropdown & simultaneous cross-cloud search
   const ALL_CLOUD_IDS = CLOUD_PROVIDERS.map(p => p.id);
@@ -581,14 +593,25 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     webdav: ['webdavSection', webdav],
     archive: ['archiveSection', archive],
   };
-  let selectedClouds = ['drive'];
+  function detectActiveCloudIds() {
+    const active = new Set(['drive']);
+    try {
+      if (localStorage.getItem('notecomplete-dropbox-token') || localStorage.getItem('notecomplete-dropbox-client')) active.add('dropbox');
+      if (localStorage.getItem('notecomplete-github-cfg')) active.add('github');
+      if (localStorage.getItem('notecomplete-webdav-cfg')) active.add('webdav');
+      if (localStorage.getItem('notecomplete-archive-query')) active.add('archive');
+    } catch {}
+    return ALL_CLOUD_IDS.filter(id => active.has(id));
+  }
+  let selectedClouds = detectActiveCloudIds();
   try {
     const savedMulti = JSON.parse(localStorage.getItem('notecomplete-cloud-providers') || 'null');
     const savedSingle = localStorage.getItem('notecomplete-cloud-provider');
+    const configured = detectActiveCloudIds();
     if (Array.isArray(savedMulti) && savedMulti.length) {
-      selectedClouds = savedMulti.filter(id => ALL_CLOUD_IDS.includes(id));
+      selectedClouds = ALL_CLOUD_IDS.filter(id => savedMulti.includes(id) || configured.includes(id));
     } else if (savedSingle && ALL_CLOUD_IDS.includes(savedSingle)) {
-      selectedClouds = [savedSingle];
+      selectedClouds = ALL_CLOUD_IDS.filter(id => id === savedSingle || configured.includes(id));
     }
   } catch {}
   if (!selectedClouds.length) selectedClouds = ['drive'];
@@ -960,7 +983,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         $('homeButton').setAttribute('aria-pressed', 'true');
         $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and cloud storage';
       }
-      if (!shown) { shown = true; drive.show(); dropbox?.show(); github?.show(); webdav?.show(); archive?.show(); }
+      if (!shown) { shown = true; drive?.show?.(); dropbox?.show?.(); github?.show?.(); webdav?.show?.(); archive?.show?.(); }
       renderRecent(); renderFolder();
     },
     hide() {
@@ -970,7 +993,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         $('homeButton').setAttribute('aria-pressed', 'false');
         $('homeButton').title = 'Home: recent notes and cloud storage';
       }
-      if (shown) { shown = false; drive.hide(); dropbox?.hide(); github?.hide(); webdav?.hide(); archive?.hide(); }
+      if (shown) { shown = false; drive?.hide?.(); dropbox?.hide?.(); github?.hide?.(); webdav?.hide?.(); archive?.hide?.(); }
     },
     get visible() { return !$('empty').hidden; },
     rememberCover,

@@ -155,16 +155,69 @@ function richLookupLabel(t, info) {
   if (info.variants?.length) parts.push(`Variants: ${info.variants.join(' ')}`);
   return `${base} (${parts.join(' · ')})`;
 }
+export const PREFAB_SPEC_ATTR = 'data-nc-prefab-spec';
+
+export function embedPrefabSpecInSvg(svgText, spec) {
+  if (!svgText || !spec) return svgText;
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(spec));
+    return String(svgText).replace(/^<svg\b/, `<svg ${PREFAB_SPEC_ATTR}="${encoded}"`);
+  } catch {
+    return svgText;
+  }
+}
+
+export function extractPrefabSpecFromDataUri(src = '', alt = '') {
+  const raw = String(src || '');
+  if (!/^data:image\/svg\+xml/i.test(raw)) return null;
+  let svg = '';
+  const comma = raw.indexOf(',');
+  if (comma >= 0) {
+    const head = raw.slice(0, comma), body = raw.slice(comma + 1);
+    try {
+      svg = /;base64/i.test(head) ? atob(body) : decodeURIComponent(body);
+    } catch { svg = body; }
+  }
+  const attrMatch = svg.match(/data-nc-prefab-spec="([^"]+)"/);
+  if (attrMatch) {
+    try { return JSON.parse(decodeURIComponent(attrMatch[1])); } catch {}
+  }
+  const altText = String(alt || '').trim();
+  const hanFromAlt = [...altText].filter((c) => HAN.test(c)).slice(0, 12).join('');
+  if (/^Stroke order\b/i.test(altText) || hanFromAlt) {
+    return { type: 'hanzi', text: hanFromAlt || '你好', show: 'steps', grid: 'mi', outline: true };
+  }
+  return null;
+}
+
+export async function markdownPrefabBlockForSpec(rawSpec) {
+  if (!rawSpec || typeof rawSpec !== 'object') return '';
+  if (rawSpec.type === 'hanzi' || rawSpec.module === 'hanzi') {
+    const han = ([...String(rawSpec.text ?? '')].filter((c) => HAN.test(c))).slice(0, 12).join('');
+    if (!han) return '';
+    const { prepareWithDict, render } = await import('../prefabs/hanzi/render.js');
+    const spec = await prepareWithDict({ ...rawSpec, type: 'hanzi', text: han, show: rawSpec.show || 'steps' });
+    const out = render(spec);
+    if (!out?.svg) return '';
+    const svgWithSpec = embedPrefabSpecInSvg(out.svg, spec);
+    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
+    const caption = [han, spec.pinyin, spec.gloss, spec.variants].filter(Boolean).join(' · ');
+    return `![Stroke order ${caption}](${dataUri})`;
+  }
+  const { renderPrefab, prefabName } = await import('../prefabs.js');
+  const out = renderPrefab(rawSpec);
+  if (!out?.svg) return '';
+  const svgWithSpec = embedPrefabSpecInSvg(out.svg, rawSpec);
+  const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgWithSpec)}`;
+  const title = prefabName(rawSpec) || rawSpec.type || 'Prefab';
+  return `![${title}](${dataUri})`;
+}
+
 export async function markdownTraceBlockFor(rawText) {
   const han = ([...String(rawText || '')].filter((c) => HAN.test(c))).slice(0, 12).join('');
   if (!han) return '';
-  const { prepareWithDict, render } = await import('../prefabs/hanzi/render.js');
-  const spec = await prepareWithDict({ type: 'hanzi', text: han, show: 'steps', grid: 'mi', outline: true });
-  const out = render(spec);
-  if (!out?.svg) return '';
-  const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(out.svg)}`;
-  const caption = [han, spec.pinyin, spec.gloss, spec.variants].filter(Boolean).join(' · ');
-  return `\n\n![Stroke order ${caption}](${dataUri})\n`;
+  const line = await markdownPrefabBlockForSpec({ type: 'hanzi', text: han, show: 'steps', grid: 'mi', outline: true });
+  return line ? `\n\n${line}\n` : '';
 }
 export async function vocabFrom(text, near = null) {
   const { vocabDialog } = await import('./vocab-dialog.js');

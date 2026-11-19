@@ -8,6 +8,7 @@ import { highlight, langFromName, codeEditor } from './code-highlight.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { rubyOn, setRuby, rubyElement } from './chinese/ruby.js';
+import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './notes.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -75,8 +76,24 @@ export function headingFor(headings, fragment) {
 // (a file next to this one).
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
-export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
+export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null, helpSheet = null;
+  attachMarkdownPrefabContextMenu({
+    editorContainer: editorHost,
+    previewContainer: body,
+    getText: () => text,
+    setText: (next) => {
+      if (mde?.editor) {
+        mde.editor.setContent(next);
+        requestAnimationFrame(() => decorateTinyMdeLines(editorHost?.querySelector('.TinyMDE')));
+      }
+      const area = editorHost?.querySelector('textarea.doc-editor-plain');
+      if (area) area.value = next;
+      changed(next);
+      if (!editing || splitPreview) render();
+    },
+    editPrefab,
+  });
   const rubyBtn = ruby || root?.querySelector?.('#textRubyToggle') || null;
   const splitBtn = split || root?.querySelector?.('#textSplitToggle') || null;
   const zhOptionsEl = root?.querySelector?.('#textZhOptions') || null;
@@ -123,6 +140,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
         sel.collapseToEnd();
       }
       mde.editor.paste(snippet);
+      requestAnimationFrame(() => decorateTinyMdeLines(editorHost?.querySelector('.TinyMDE')));
     } else if (area) {
       const pos = Math.max(area.selectionStart ?? area.value.length, area.selectionEnd ?? area.value.length);
       area.setRangeText(snippet, pos, pos, 'end');
@@ -133,30 +151,35 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
   }
   async function insertTraceForSelected() {
     let selected = '';
+    let hasExplicitSelection = false;
     const area = editorHost?.querySelector('textarea.doc-editor-plain');
     if (area && area.selectionStart !== area.selectionEnd) {
       selected = area.value.slice(area.selectionStart, area.selectionEnd);
+      hasExplicitSelection = true;
     } else {
       selected = globalThis.getSelection?.()?.toString?.() || '';
+      hasExplicitSelection = Boolean(selected);
     }
     let han = ([...selected].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
+    if (hasExplicitSelection && !han) {
+      return;
+    }
     if (!han) {
       // Fallback: last Chinese characters in the document
       const allHan = text.match(/\p{Script=Han}+/gu);
-      han = allHan?.at(-1)?.slice(0, 6) || '你好';
+      han = allHan?.at(-1)?.slice(0, 6) || '';
     }
+    if (!han) return;
     const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
     const block = await markdownTraceBlockFor(han);
     if (block) await insertMarkdownSnippet(block);
   }
   async function insertTraceSpec(spec) {
-    const { prepareWithDict, render: renderHanzi } = await import('./prefabs/hanzi/render.js');
-    const full = await prepareWithDict({ ...spec, show: spec?.show || 'steps' });
-    const out = renderHanzi(full);
-    if (!out?.svg) return;
-    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(out.svg)}`;
-    const caption = [full.text, full.pinyin, full.gloss, full.variants].filter(Boolean).join(' · ');
-    await insertMarkdownSnippet(`\n\n![Stroke order ${caption}](${dataUri})\n`);
+    const han = ([...String(spec?.text ?? '')].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
+    if (!han) return;
+    const { markdownPrefabBlockForSpec } = await import('./chinese/zh-menu.js');
+    const block = await markdownPrefabBlockForSpec({ ...spec, type: 'hanzi', text: han, show: spec?.show || 'steps' });
+    if (block) await insertMarkdownSnippet(`\n\n${block}\n`);
   }
   if (traceBtn) {
     traceBtn.onclick = () => { insertTraceForSelected().catch((e) => console.warn(e)); };
@@ -372,8 +395,13 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       editorHost.append(commands, area);
       const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, $math$, - list)…' });
       const bar = new TinyMDE.CommandBar({ element: commands, editor });
-      editor.addEventListener('change', (event) => changed(event.content));
+      const markEditorLines = () => decorateTinyMdeLines(area.querySelector('.TinyMDE'));
+      editor.addEventListener('change', (event) => {
+        changed(event.content);
+        requestAnimationFrame(markEditorLines);
+      });
       mde = { editor, bar };
+      markEditorLines();
       wireIme(area.querySelector('.TinyMDE'), (t) => editor.paste(t));
       area.querySelector('.TinyMDE')?.focus?.();
     } else if (!markdown && codeLang() && text.length <= CODE_LIMIT) {
