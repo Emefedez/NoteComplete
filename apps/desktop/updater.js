@@ -61,12 +61,39 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     if (!response.ok) throw Error(`GitHub answered ${response.status}`);
     return response.json();
   };
+  // Fallback when GitHub REST API hits its unauthenticated rate limit (403/429):
+  // releases.atom + releases/expanded_assets/<tag> are not subject to the REST quota.
+  async function webReleases() {
+    const atom = await fetch(`https://github.com/${REPOSITORY}/releases.atom`, { headers: { Accept: 'application/atom+xml, text/xml', 'User-Agent': 'NoteComplete' } });
+    if (!atom.ok) throw Error(`GitHub answered ${atom.status}`);
+    const xml = await atom.text();
+    const tags = [], seen = new Set();
+    for (const m of xml.matchAll(/\/releases\/tag\/([^"<\s/&]+)/g)) {
+      const tag = decodeURIComponent(m[1]);
+      if (!seen.has(tag) && parseVersion(tag)) { seen.add(tag); tags.push({ tag_name: tag, html_url: `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`, draft: false, assets: [] }); }
+    }
+    const top = latestRelease(tags);
+    if (!top) return [];
+    const page = await fetch(`https://github.com/${REPOSITORY}/releases/expanded_assets/${encodeURIComponent(top.tag_name)}`, { headers: { 'User-Agent': 'NoteComplete' } });
+    if (page.ok) {
+      const html = await page.text();
+      const assets = [];
+      for (const m of html.matchAll(/href="(\/[^"]+\/releases\/download\/[^"/]+\/([^"?#]+))"/g)) {
+        assets.push({ name: decodeURIComponent(m[2]), browser_download_url: `https://github.com${m[1]}`, size: 0 });
+      }
+      top.assets = assets;
+    }
+    return [top];
+  }
+  const fetchReleases = () => api('releases?per_page=10').catch(async (err) => {
+    try { return await webReleases(); } catch { throw err; }
+  });
   // What the reader shows: current version, the newer one (if any), and how it installs.
   async function check({ manual = false } = {}) {
     const s = await state();
     if (!manual && s.checkOnOpen === false) return { current: app.getVersion(), disabled: true };
     if (!manual && s.lastCheck && now() - s.lastCheck < CHECK_EVERY && !s.available) return { current: app.getVersion(), recent: true };
-    const release = latestRelease(await api('releases?per_page=10'));
+    const release = latestRelease(await fetchReleases());
     await remember({ lastCheck: now() });
     const current = app.getVersion();
     if (!release || !newer(release.tag_name, current)) { found = null; await remember({ available: null }); return { current }; }

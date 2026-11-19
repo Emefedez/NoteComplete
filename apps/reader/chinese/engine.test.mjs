@@ -175,4 +175,7 @@ test('the built ime-core.bin', { skip: !real && 'vendor/chinese not built' }, ()
   const t0 = performance.now();
   for (let i = 0; i < 50; i++) e.candidates('woxihuanxuexizhongwen');
   assert.ok((performance.now() - t0) / 50 < 20, 'a keystroke stays far below a frame');
+  // Single-letter syllables like n/m/r fall back to partial prefix matching instead of empty lists.
+  assert.ok(e.candidates('n').items.length > 0, 'typing n shows candidates without needing another letter');
+  assert.ok(e.candidates('m').items.length > 0, 'typing m shows candidates');
 });

@@ -39,3 +39,24 @@ test('tone numbers and tones', () => {
   assert.equal(rubyLabel('lǜ', 'marks'), 'lǜ');
   assert.deepEqual(['zhōng', 'guó', 'nǐ', 'shì', 'de'].map(toneOf), [1, 2, 3, 4, 5]);
 });
+
+test('setRuby overrides note "off" state even before Han text is seen and sets aria-pressed', async () => {
+  const { configureRuby, noteOpened, setRuby, rubyOn, refreshRuby } = await import('./ruby.js');
+  const saved = [];
+  const attrs = new Map();
+  const toggle = { setAttribute: (k, v) => attrs.set(k, v) };
+  globalThis.document = { getElementById: (id) => (id === 'zhRubyToggle' ? toggle : null) };
+  configureRuby({
+    getNote: async () => ({ ruby: 'off' }),
+    setNote: async (next) => { saved.push(next); },
+    roots: () => [],
+  });
+  await noteOpened();
+  assert.equal(rubyOn(), false);
+  setRuby(true);
+  await Promise.resolve();
+  assert.equal(rubyOn(), true);
+  assert.deepEqual(saved, [{ ruby: 'on' }]);
+  refreshRuby();
+  assert.equal(attrs.get('aria-pressed'), 'true');
+});

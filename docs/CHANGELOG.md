@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.46
+
+- **Dropbox on Home.** Connect Dropbox read-only alongside Google Drive and Internet Archive under **Home → Cloud** (or **File → Import, export and share… → Dropbox**): browse folders, open a folder directly by path or `dropbox.com/home/…` address, search names (with **All Dropbox** to search everywhere), preview embedded `.noteful` covers via byte ranges and Dropbox thumbnails for PDFs and images, queue batch downloads, export from a card's **⋯** menu, filter **Recent** by Dropbox source, and check for newer revisions when reopening from **Recent** or **⋯ → Check Dropbox for updates**.
+- **Web and desktop sign-in.** Uses OAuth 2 PKCE in a same-origin popup (`dropbox-callback.html`) in the web reader and a system-browser loopback callback (`127.0.0.1:53691`) on desktop with encrypted refresh-token persistence shared across tabs. Setup details are in [DROPBOX.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/DROPBOX.md).
+
 ## 1.2.45
 
 - **Chinese input (pinyin and hanzi).** Type Chinese in text boxes, Notes, Ask AI, flashcard editors, quiz checks and Find without an OS keyboard (**Ctrl Shift Space** or **中** cycles Off → Hanzi → Pinyin → Off). **Pinyin** turns tone numbers (`ni3hao3`) into tone marks with no dictionary. **Hanzi** shows a candidate menu at the caret with tone-coloured pinyin and HSK levels (**Space** commits, hold **Space + 1–9** chooses, digits filter tones, **Shift** switches to Latin, full-width punctuation, phone candidate strip). Common words and HSK 1–3 come bundled offline; **HSK 4, 5, 6 and 7–9** can be downloaded and deleted in **View → Chinese input…** (or **Settings → Chinese**), alongside your own words.

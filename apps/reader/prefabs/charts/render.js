@@ -324,7 +324,7 @@ export function normalizeVisualSpec(raw) {
       .filter(Boolean);
     if (!nodes.length) return null;
     const nodeIds = new Set(nodes.map((n) => n.id));
-    const defaultDirected = ['tree', 'fsm', 'automaton', 'dag'].includes(rawType) || raw.directed === true;
+    const defaultDirected = typeof raw.directed === 'boolean' ? raw.directed : ['tree', 'fsm', 'automaton', 'dag'].includes(rawType);
     const edges = (Array.isArray(raw.edges) ? raw.edges : [])
       .map((e) => {
         if (Array.isArray(e) && e.length >= 2) {

@@ -670,7 +670,7 @@ app.whenReady().then(async () => {
   // Windows opening together share one check; a later one (the app left running) asks again.
   let opening = null, openedAt = 0;
   ipcMain.handle('update:check', guarded((_event, manual) => {
-    if (manual) return updates.check({ manual: true });
+    if (manual) return updates.check({ manual: true }).catch(error => ({ current: app.getVersion(), error: error.message }));
     if (!opening || Date.now() - openedAt > 60_000) {
       openedAt = Date.now();
       opening = updates.check().catch(error => ({ current: app.getVersion(), error: error.message }));

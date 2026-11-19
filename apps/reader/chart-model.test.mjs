@@ -19,6 +19,9 @@ test('each figure opens in its editor', () => {
   assert.equal(editorKind(BARS), 'bars');
   assert.equal(editorKind({ type: 'histogram' }), 'bars');
   assert.equal(editorKind({ type: 'plot' }), 'plot');
+  assert.equal(editorKind({ type: 'tree', nodes: ['A', 'B'] }), 'nodes');
+  assert.equal(editorKind({ type: 'graph_nodes', nodes: ['A', 'B'] }), 'nodes');
+  assert.equal(editorKind({ type: 'custom_svg', svg: '<svg/>' }), 'svg');
   assert.equal(editorKind({ type: 'uml' }), null);
   assert.ok(canBeExercise(STATES) && canBeExercise(BARS) && !canBeExercise({ type: 'plot' }));
 });

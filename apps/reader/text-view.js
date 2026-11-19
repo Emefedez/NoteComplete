@@ -5,6 +5,9 @@
 // text; the app saves the result (onChange reports every edit).
 import { renderMarkdown } from './rich-text.js';
 import { highlight, langFromName, codeEditor } from './code-highlight.js';
+import { attachIme, zhButton } from './chinese/ime.js';
+import { fieldMode, setFieldMode } from './chinese/settings.js';
+import { rubyOn, setRuby, rubyElement } from './chinese/ruby.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -72,8 +75,32 @@ export function headingFor(headings, fragment) {
 // (a file next to this one).
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
-export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, code = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
+export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
+  const rubyBtn = ruby || root?.querySelector?.('#textRubyToggle') || null;
+  const splitBtn = split || root?.querySelector?.('#textSplitToggle') || null;
+  const syncRubyBtn = () => { if (rubyBtn) rubyBtn.setAttribute('aria-pressed', String(rubyOn())); };
+  if (rubyBtn) rubyBtn.onclick = () => { setRuby(!rubyOn()); syncRubyBtn(); };
+  globalThis.addEventListener?.('zh-ruby-refresh', syncRubyBtn);
+  const zhToggle = edit?.parentElement ? zhButton(() => mde?.editor ? editorHost?.querySelector('.TinyMDE') : editorHost?.querySelector('textarea.doc-editor-plain')) : null;
+  if (zhToggle) { zhToggle.hidden = true; edit.before(zhToggle); }
+  const syncSplitLayout = () => {
+    const canSplit = Boolean(editing && markdown && !isDiagram());
+    if (splitBtn) {
+      splitBtn.hidden = !canSplit;
+      splitBtn.setAttribute('aria-pressed', String(canSplit && splitPreview));
+    }
+    root?.classList?.toggle('split-preview', Boolean(canSplit && splitPreview));
+    if (canSplit && splitPreview) body.hidden = false;
+    else if (editing) body.hidden = true;
+  };
+  if (splitBtn) {
+    splitBtn.onclick = () => {
+      splitPreview = !splitPreview;
+      syncSplitLayout();
+      if (editing && splitPreview) render();
+    };
+  }
   // The language of the open file when it is source code ('' for plain text and Markdown).
   const codeLang = () => { const lang = langFromName(key || name); return lang === 'markdown' ? '' : lang; };
   // The UML editor showing a .puml file (diagram.mount), while it is open.
@@ -182,13 +209,24 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
     if (token !== renders) return;
     body.replaceChildren(...scratch.childNodes);
-    // Pinyin over the Chinese where it now is (chinese/ruby.js).
-    if (/[\u3400-\u9fff]/.test(text)) import('./chinese/ruby.js').then(m => m.rubyElement(body)).catch(() => {});
+    // Pinyin over the Chinese where it now is (chinese/ruby.js), kept registered for live toggles.
+    if (/\p{Script=Han}/u.test(text)) rubyElement(body).catch(() => {});
   }
-  function changed(next) { text = next; onChange(text); }
+  function changed(next) {
+    text = next;
+    onChange(text);
+    if (editing && splitPreview && markdown && !isDiagram()) {
+      clearTimeout(splitTimer);
+      splitTimer = setTimeout(() => { if (editing && splitPreview) render(); }, 120);
+    }
+  }
   // The editor follows MD: with it, TinyMDE (formatting toolbar) for any text file; without, plain.
   function unmount() {
     mount++;
+    clearTimeout(splitTimer);
+    ime?.detach?.();
+    ime = null;
+    if (zhToggle) zhToggle.hidden = true;
     mde?.bar?.destroy?.();
     mde?.editor?.destroy?.();
     mde = null;
@@ -200,10 +238,22 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     dropDiagramDoc();
     editing = true;
     edit.setAttribute('aria-pressed', 'true');
-    body.hidden = true;
     editorHost.hidden = false;
+    syncSplitLayout();
     unmount();
     const mine = mount;
+    const zhKey = () => `zh-md-${key || 'draft'}`;
+    const wireIme = (target, insert = null) => {
+      if (!target || !zhToggle) return;
+      zhToggle.hidden = false;
+      ime = attachIme(target, {
+        kind: insert ? 'contenteditable' : 'textarea',
+        ...(insert ? { insert } : {}),
+        getMode: () => fieldMode(zhKey()),
+        setMode: (m) => setFieldMode(zhKey(), m),
+      });
+      ime.addButton(zhToggle);
+    };
     if (markdown && loadEditor && !isDiagram()) {
       const TinyMDE = await loadEditor();
       if (!editing || mine !== mount) return;
@@ -212,14 +262,17 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       commands.className = 'notes-commands';
       area.className = 'notes-editor';
       editorHost.append(commands, area);
-      const editor = new TinyMDE.Editor({ element: area, content: text });
+      const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown or Chinese here (Ctrl+Shift+Space switches Chinese input)…' });
       const bar = new TinyMDE.CommandBar({ element: commands, editor });
       editor.addEventListener('change', (event) => changed(event.content));
       mde = { editor, bar };
+      wireIme(area.querySelector('.TinyMDE'), (t) => editor.paste(t));
+      area.querySelector('.TinyMDE')?.focus?.();
     } else if (!markdown && codeLang() && text.length <= CODE_LIMIT) {
       // Source code: coloured as it is typed; Tab indents, Enter keeps the indentation. The
       // textarea keeps the plain editor's class, so Find in the document works the same.
       code = codeEditor(editorHost, { value: text, lang: codeLang(), onChange: changed, className: 'doc-code', inputClass: 'doc-editor-plain', label: name || 'Code' });
+      wireIme(editorHost.querySelector('textarea.doc-editor-plain'));
       code.focus();
     } else {
       const area = document.createElement('textarea');
@@ -228,8 +281,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       area.value = text;
       area.oninput = () => changed(area.value);
       editorHost.append(area);
+      wireIme(area);
       area.focus();
     }
+    if (splitPreview) render();
   }
   function stopEditing() {
     if (!editing) return;
@@ -237,6 +292,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     unmount();
     editorHost.hidden = true;
     body.hidden = false;
+    syncSplitLayout();
     edit.setAttribute('aria-pressed', 'false');
     render();
   }
@@ -246,19 +302,22 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     markdown = !markdown;
     try { if (key) localStorage.setItem(`notecomplete-text-md:${key}`, markdown ? '1' : '0'); } catch { /* Optional. */ }
     format.setAttribute('aria-pressed', String(markdown));
+    syncSplitLayout();
     if (editing) startEditing(); else render();
   };
   edit.onclick = () => (editing ? stopEditing() : startEditing());
   return {
     // Markdown files start formatted, other text as written, until MD is switched for that file.
-    open({ text: content, name: shown, markdown: formatted, key: id = shown }) {
+    open({ text: content, name: shown, markdown: formatted, key: id = shown, edit: openEdit = false, split: openSplit = false }) {
       stopEditing();
-      text = content; name = shown; key = id; markdown = remembered(id, formatted);
+      text = content; name = shown; key = id; markdown = openEdit && formatted ? true : remembered(id, formatted);
+      splitPreview = Boolean(openSplit);
       labelFormat();
+      syncRubyBtn();
       if (title) title.textContent = shown;
       root.hidden = false;
       body.scrollTop = 0;
-      return render();
+      return openEdit ? startEditing() : render();
     },
     // New text for the open document (a shared one following its host), keeping the place read.
     async setText(content) {

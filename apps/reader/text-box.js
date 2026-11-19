@@ -13,7 +13,14 @@ import { fromRuns, remapSpans, withoutKeys, spansFor } from "./rich-spans.js";
 import { attachIme, zhButton } from "./chinese/ime.js";
 import { imeMenuPressedAt } from "./chinese/ime-menu.js";
 import { fieldMode, setFieldMode } from "./chinese/settings.js";
-import { noteMode, setNoteMode } from "./chinese/ruby.js";
+import { noteMode, setNoteMode, rubyOn, rubyElement } from "./chinese/ruby.js";
+
+const HAN_SCRIPT = /\p{Script=Han}/u;
+export const isLightInk = (rgba) => {
+  if (!Array.isArray(rgba)) return false;
+  const [r = 0, g = 0, b = 0, a = 1] = rgba;
+  return a > 0.05 && (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.62;
+};
 
 export const FONT_STACKS = {
   Helvetica: `Helvetica, Arial, sans-serif, ${CJK_SANS}`,
@@ -253,13 +260,13 @@ export function textBoxController({
     bar.style.top = `${top - page.top}px`;
   }
 
-  function hideTextFormat() {
+  function hideTextFormat(quiet = false) {
     textFormatTarget = null;
     placing = null;
     const docked = textFormatBar.parentElement === $("toolOptions");
     textFormatBar.hidden = true;
     doc.body.append(textFormatBar);
-    if (docked) toolOptions();
+    if (!quiet && docked) toolOptions();
   }
 
   function setTextFormatDocked(on) {
@@ -366,19 +373,33 @@ export function textBoxController({
   });
 
   // With Select: the bar follows a selected typed text box and restyles it at once.
-  function syncFormat() {
+  // With Text: the bar is docked in tool options so defaults and Chinese/ruby toggles are ready.
+  function syncFormat({ quiet = false } = {}) {
     if (textEditor) return;
     const panels = getPanels();
     const item = selection.item, p = item && panels[item.page];
     const existing = getTool() === "select" && item?.kind === "text" && (p?.view?.texts || []).find((t) => t.id === item.id);
-    if (!existing) return hideTextFormat();
-    const style = boxStyleOf(existing);
-    showTextFormat(p, existing.bounds, style, async (next) => {
-      const value = boxText(existing), [w, h] = await boxSize(value, next);
-      // A change from the bar is for the whole box: parts give up what changed.
-      const spans = withoutKeys(boxSpansOf(existing), changedKeys(style, next));
-      action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next, spans), width: w, height: h });
-    });
+    if (existing) {
+      const style = boxStyleOf(existing);
+      return showTextFormat(p, existing.bounds, style, async (next) => {
+        const value = boxText(existing), [w, h] = await boxSize(value, next);
+        // A change from the bar is for the whole box: parts give up what changed.
+        const spans = withoutKeys(boxSpansOf(existing), changedKeys(style, next));
+        action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, next, spans), width: w, height: h });
+      });
+    }
+    if (getTool() === "text") {
+      textFormatTarget = { p: null, style: textDefaults, apply: () => {} };
+      placing = null;
+      syncTextFormatControls(textDefaults);
+      if (textFormatBar.parentElement !== $("toolOptions")) $("toolOptions")?.append(textFormatBar);
+      textFormatBar.classList.remove("below", "placed");
+      textFormatBar.style.left = textFormatBar.style.top = "";
+      textFormatBar.hidden = false;
+      if (!quiet) toolOptions();
+      return;
+    }
+    hideTextFormat(quiet);
   }
 
   // The math keypad: shown while a math box (∑) is typed; its Graph key draws the box's function.
@@ -418,9 +439,12 @@ export function textBoxController({
     const covered = Math.max(0, Math.round(innerHeight - vv.offsetTop - vv.height), Math.round(keypad));
     $("pages").style.marginBottom = covered ? `${covered}px` : "";
     // Up by what is hidden, but never past the box's top (and the format bar above it).
-    const box = textEditor.area.getBoundingClientRect(), bottom = Math.min(vv.offsetTop + vv.height, mathKeys.open ? mathKeys.top : Infinity) - 16;
+    const box = (textEditor.field || textEditor.area).getBoundingClientRect(), bottom = Math.min(vv.offsetTop + vv.height, mathKeys.open ? mathKeys.top : Infinity) - 16;
     const by = Math.min(box.bottom - bottom, box.top - vv.offsetTop - 56);
     if (by > 0) $("viewport").scrollTop += by;
+    const right = vv.offsetLeft + vv.width - 16;
+    const dx = Math.min(box.right - right, box.left - vv.offsetLeft - 16);
+    if (dx > 0) $("viewport").scrollLeft += dx;
   }
   if (typeof window !== "undefined") window.visualViewport?.addEventListener("resize", keepTextVisible);
 
@@ -446,28 +470,82 @@ export function textBoxController({
     } catch { /* Nothing under the pointer. */ }
     if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
     const style = existing ? boxStyleOf(existing) : styleOf(null);
-    const [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - style.size * 0.8];
+    let [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - style.size * 0.8];
+    const origBx = bx, origBy = by;
     const area = doc.createElement("textarea");
     area.className = "text-editor";
     area.wrap = "off";
+    area.placeholder = "Type text…";
     area.value = existing ? boxText(existing) : "";
     area.setAttribute("aria-label", "Text box");
     const fit = () => {
       const s = p.el.clientWidth / p.size[0], [w, h] = textBoxSize(area.value || " ", style);
+      const minW = area.value ? 56 : 112;
+      const lightInk = isLightInk(style.rgba);
+      area.classList.toggle("light-ink", lightInk);
       Object.assign(area.style, {
         left: `${(bx / p.size[0]) * 100}%`, top: `${(by / p.size[1]) * 100}%`,
-        width: `${Math.max(w, 40) * s}px`, height: `${h * s}px`,
+        width: `${Math.max(w, minW) * s}px`, height: `${h * s}px`,
         font: `${cssFont(style, style.size * s).replace(/px /, `px/${lineAdvance(style) * s}px `)}`,
         padding: `${Math.max(0, 8 + 0.2 * style.size - (lineAdvance(style) - style.size) / 2) * s}px 0 0 ${5 * s}px`,
         color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
       });
     };
+    // The ⋮⋮ grip at the top-left corner lets the box be dragged into place while typing.
+    const drag = Object.assign(doc.createElement("button"), { type: "button", className: "text-drag", textContent: "⋮⋮", title: "Drag to move text box" });
+    drag.setAttribute("aria-label", "Move text box");
+    drag.addEventListener("pointerdown", (down) => {
+      down.preventDefault();
+      down.stopPropagation();
+      const s = p.el.clientWidth / p.size[0] || 1;
+      const startX = down.clientX, startY = down.clientY, startBx = bx, startBy = by;
+      const move = (ev) => {
+        bx = Math.max(0, Math.min(p.size[0] - 24, startBx + (ev.clientX - startX) / s));
+        by = Math.max(0, Math.min(p.size[1] - 16, startBy + (ev.clientY - startY) / s));
+        if (textEditor?.area === area) { textEditor.bx = bx; textEditor.by = by; }
+        if (placing) placing.bounds = [bx, by, 0, 0];
+        refit();
+      };
+      const done = () => {
+        globalThis.removeEventListener("pointermove", move);
+        globalThis.removeEventListener("pointerup", done);
+        globalThis.removeEventListener("pointercancel", done);
+        (textEditor?.field || area).focus({ preventScroll: true });
+      };
+      globalThis.addEventListener("pointermove", move);
+      globalThis.addEventListener("pointerup", done);
+      globalThis.addEventListener("pointercancel", done);
+    });
     // The × at the box's top-right corner discards the typing.
     const discard = Object.assign(doc.createElement("button"), { type: "button", className: "text-discard", textContent: "×", title: "Discard (Shift + Esc)" });
     discard.setAttribute("aria-label", "Discard this text");
     discard.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); });
     discard.onclick = (e) => { e.stopPropagation(); close(); };
-    const placeDiscard = () => Object.assign(discard.style, { left: `calc(${area.style.left} + ${area.style.width})`, top: area.style.top });
+    const placeDiscard = () => {
+      Object.assign(drag.style, { left: area.style.left, top: area.style.top });
+      Object.assign(discard.style, { left: `calc(${area.style.left} + ${area.style.width})`, top: area.style.top });
+    };
+    // Live Pinyin-on-top preview under plain-text boxes whenever Pinyin over characters is on.
+    const rubyPreview = Object.assign(doc.createElement("div"), { className: "text-ruby-preview", hidden: true });
+    rubyPreview.setAttribute("aria-hidden", "true");
+    const showRuby = () => {
+      const value = area.value;
+      const show = !style.math && rubyOn() && HAN_SCRIPT.test(value);
+      rubyPreview.hidden = !show;
+      if (!show) { rubyPreview.textContent = ""; return; }
+      const s = p.el.clientWidth / p.size[0];
+      rubyPreview.classList.toggle("light-ink", isLightInk(style.rgba));
+      Object.assign(rubyPreview.style, {
+        left: area.style.left,
+        top: `calc(${area.style.top} + ${area.style.height} + 6px)`,
+        fontSize: `${Math.max(12, style.size * s)}px`,
+        color: area.style.color,
+      });
+      rubyPreview.textContent = value;
+      rubyElement(rubyPreview).catch(() => {});
+    };
+    const onRubyChange = () => { if (textEditor?.area === area) { showRuby(); placeTextFormat(); } };
+    globalThis.addEventListener?.("zh-ruby-refresh", onRubyChange);
     // Math (the ∑ button): the formula typeset live under the box while its LaTeX is typed.
     const mathPreview = Object.assign(doc.createElement("div"), { className: "math-preview" });
     mathPreview.setAttribute("aria-hidden", "true");
@@ -478,9 +556,11 @@ export function textBoxController({
     const placeField = () => {
       if (!field) return;
       const s = p.el.clientWidth / p.size[0];
+      const lightInk = isLightInk(style.rgba);
+      field.classList.toggle("light-ink", lightInk);
       styleField(field, { ...style, size: style.size * s });
-      Object.assign(field.style, { left: area.style.left, top: area.style.top, minWidth: `${Math.max(48, 40 * s)}px`, minHeight: area.style.height });
-      discard.style.left = `calc(${area.style.left} + ${field.offsetWidth}px)`;
+      Object.assign(field.style, { left: area.style.left, top: area.style.top, minWidth: `${Math.max(72, 56 * s)}px`, minHeight: area.style.height });
+      discard.style.left = `calc(${area.style.left} + ${Math.max(field.offsetWidth, area.offsetWidth)}px)`;
     };
     const dropField = () => {
       if (!field) return;
@@ -528,16 +608,17 @@ export function textBoxController({
       if (formula) return useField();
       mathKeys.attach(area);
       const s = p.el.clientWidth / p.size[0];
+      mathPreview.classList.toggle("light-ink", isLightInk(style.rgba));
       Object.assign(mathPreview.style, { left: area.style.left, top: `calc(${area.style.top} + ${area.style.height} + 6px)` });
       previewMath(mathPreview, area.value, { ...style, size: style.size * s }).catch(() => { mathPreview.textContent = "Math needs KaTeX, which could not load."; });
     };
-    const refit = () => { fit(); placeDiscard(); showMath(); placeTextFormat(); };
+    const refit = () => { fit(); placeDiscard(); showRuby(); showMath(); placeTextFormat(); if (textEditor?.area === area) keepTextVisible(); };
     refit();
     area.oninput = refit;
     hideText(p, existing?.id);
-    p.el.append(area, discard, mathPreview);
+    p.el.append(area, drag, discard, rubyPreview, mathPreview);
     selection.clear();
-    textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, layer: activeLayer, fit: refit, after };
+    textEditor = { p, area, drag, discard, rubyPreview, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, origBx, origBy, layer: activeLayer, fit: refit, after, cleanup: () => globalThis.removeEventListener?.("zh-ruby-refresh", onRubyChange) };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); }, area);
     // Chinese input (its keys come first, in the capture phase: Esc with pinyin typed only clears it).
     textEditor.ime = attachIme(area, { kind: "pagebox", getMode: () => noteMode(fieldMode(zhKey())), setMode: (m) => { setFieldMode(zhKey(), m); setNoteMode(m); } });
@@ -545,8 +626,22 @@ export function textBoxController({
     area.addEventListener("keydown", (e) => {
       // A system input method composing: its Esc and Enter are its own.
       if (e.isComposing || e.keyCode === 229) return e.stopPropagation();
-      // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
-      if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) close(); else commit(); }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const start = area.selectionStart ?? area.value.length, end = area.selectionEnd ?? start;
+        if (e.shiftKey) {
+          const lineStart = area.value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+          const match = area.value.slice(lineStart).match(/^ {1,2}/);
+          if (match) {
+            area.setRangeText("", lineStart, lineStart + match[0].length, "end");
+            const n = match[0].length;
+            area.setSelectionRange(Math.max(lineStart, start - n), Math.max(lineStart, end - n));
+          }
+        } else {
+          area.setRangeText("  ", start, end, "end");
+        }
+        refit();
+      } else if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) close(); else commit(); }
       else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { commit(); return; }
       // Typing stays in the box: no tool or study shortcuts while editing.
@@ -565,8 +660,11 @@ export function textBoxController({
   function endText() {
     const t = textEditor;
     t?.ime?.detach();
+    t?.cleanup?.();
     textEditor = null;
+    t?.drag?.remove();
     t?.discard.remove();
+    t?.rubyPreview?.remove();
     t?.mathPreview.remove();
     mathKeys.detach();
     $("pages").style.marginBottom = "";
@@ -616,11 +714,19 @@ export function textBoxController({
     const spans = remapSpans(t.initialText, value, withoutKeys(t.spans, changedKeys(t.initial, t.style)));
     const text = textPayload(value, t.style, spans);
     const same = t.existing && value === boxText(t.existing) && JSON.stringify(t.style) === JSON.stringify(t.initial);
-    if (same || (!t.existing && !value.trim())) return close();
+    const dx = t.existing ? t.bx - t.origBx : 0, dy = t.existing ? t.by - t.origBy : 0;
+    const moved = t.existing && (Math.abs(dx) > 0.25 || Math.abs(dy) > 0.25);
+    if ((same && !moved) || (!t.existing && !value.trim())) return close();
     const hold = holdText();
     if (t.existing && !value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
+    if (t.existing) {
+      if (same && moved) return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: { translation: [dx, dy], scale: [1, 1], rotation: 0 } }, hold);
+      const [w, h] = await boxSize(value || " ", t.style);
+      if (!moved) return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
+      await action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
+      return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: { translation: [dx, dy], scale: [1, 1], rotation: 0, joined: true } }, hold);
+    }
     const [w, h] = await boxSize(value || " ", t.style);
-    if (t.existing) return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
     await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } }, hold);
   }
 
@@ -677,7 +783,7 @@ export function textBoxController({
   function restoreOnRender(p, shows, typing) {
     keepHeld(p, shows, false);
     if (textEditor?.p === p) {
-      p.el.append(textEditor.area, textEditor.discard, textEditor.mathPreview, ...(textEditor.field ? [textEditor.field] : []));
+      p.el.append(textEditor.area, textEditor.drag, textEditor.discard, textEditor.rubyPreview, textEditor.mathPreview, ...(textEditor.field ? [textEditor.field] : []));
       hideText(p, textEditor.existing?.id);
       textEditor.fit();
       if (typing) (textEditor.field || textEditor.area).focus({ preventScroll: true });

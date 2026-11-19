@@ -8,6 +8,8 @@ const STATE_TYPES = ['states', 'process_states', 'occupancy', 'ocupacion', 'ocup
 const TIMELINE_TYPES = ['timeline', 'gantt', 'cpu', 'schedule', 'timing'];
 const BAR_TYPES = ['histogram', 'bar', 'barchart', 'freq', 'frequency'];
 const PLOT_TYPES = ['plot', 'graph', 'function', 'axes', 'curve'];
+const GRAPH_TYPES = ['tree', 'graph_nodes', 'fsm', 'automaton', 'network', 'dag'];
+const SVG_TYPES = ['custom_svg', 'diagram', 'circuit', 'svg'];
 const STATE_WORDS = [
   ['run', /^(cpu|run(ning)?|activo|active|ejec(uci[oó]n|utando)?|exec(uting)?)$/i],
   ['ready', /^(ready|listo|espera|wait(ing)?|preparado)$/i],
@@ -22,13 +24,15 @@ const num = (v, d = null) => (v != null && v !== '' && Number.isFinite(Number(v)
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const EPS = 1e-6;
 
-// Which editor a spec opens in: 'states', 'timeline', 'bars', 'plot', or null (its JSON).
+// Which editor a spec opens in: 'states', 'timeline', 'bars', 'plot', 'nodes', 'svg', or null (its JSON).
 export function editorKind(spec) {
   const t = String(spec?.type || spec?.kind || '').trim().toLowerCase();
   if (STATE_TYPES.includes(t)) return 'states';
   if (TIMELINE_TYPES.includes(t)) return 'timeline';
   if (BAR_TYPES.includes(t)) return 'bars';
   if (PLOT_TYPES.includes(t)) return 'plot';
+  if (GRAPH_TYPES.includes(t) || (!spec?.svg && Array.isArray(spec?.nodes) && spec.nodes.length)) return 'nodes';
+  if (SVG_TYPES.includes(t) || typeof spec?.svg === 'string') return 'svg';
   return null;
 }
 // Kinds that can be an exercise filled in in the editor.

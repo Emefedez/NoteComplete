@@ -11,7 +11,7 @@ export const nextMode = (mode) => IME_MODES[(IME_MODES.indexOf(mode) + 1) % IME_
 
 const FULL = { ',': '，', '.': '。', '?': '？', '!': '！', ':': '：', ';': '；', '\\': '、', '(': '（', ')': '）', '<': '《', '>': '》', '[': '【', ']': '】' };
 const MODS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph', 'Fn'];
-const PAGE_KEYS = { PageUp: -1, PageDown: 1, '-': -1, '=': 1, ',': -1, '.': 1 };
+const PAGE_KEYS = { PageUp: -1, PageDown: 1, '-': -1, '=': 1 };
 
 export const imeInitial = (mode = 'off', opts = {}) => ({
   mode, latin: false, composing: false, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false,
@@ -76,14 +76,14 @@ export function imeReduce(state, k) {
   // Hanzi mode, pinyin typed: Space chooses when released, and a digit pressed while it is held
   // chooses candidate n of the page (Space+2, then Space+1… within one hold).
   if (k.type === 'spaceDown') {
+    if (s.mode !== 'hanzi' || s.latin || s.composing || (!s.buffer && !s.chosen.length)) return { state: s.spaceHeld ? { ...s, spaceHeld: false, chord: false } : s };
     if (s.spaceHeld) return { state: s, handled: true }; // key repeat: nothing twice
-    if (s.mode !== 'hanzi' || s.latin || s.composing || (!s.buffer && !s.chosen.length)) return { state: s };
     return { state: { ...s, spaceHeld: true, chord: false }, handled: true };
   }
   if (k.type === 'spaceUp') {
     if (!s.spaceHeld) return { state: s };
     if (s.chord || (!s.buffer && !s.chosen.length)) return { state: { ...s, spaceHeld: false, chord: false }, handled: true };
-    if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
+    if (!fresh(s) && s.buffer) return { state: { ...s, spaceHeld: false, chord: false }, handled: true, wait: true };
     const out = imeReduce({ ...s, spaceHeld: false }, { key: ' ' });
     return { ...out, state: { ...out.state, spaceHeld: false, chord: false }, handled: true };
   }
@@ -128,6 +128,7 @@ export function imeReduce(state, k) {
   }
   if (/^[0-9]$/.test(key)) {
     const d = +key, afterLetter = /[a-zü]$/i.test(s.buffer);
+    if (!s.buffer) return { state: clear(s), handled: true, commit: typed(s) + key };
     if (s.spaceHeld && d >= 1) {
       if (!fresh(s)) return { state: s, handled: true, wait: true };
       const out = choose(s, s.page * s.opts.perPage + d - 1);
@@ -152,7 +153,7 @@ export function imeReduce(state, k) {
       if (s.sel >= 0 && fresh(s) && items(s).length) return choose(s, s.sel);
       return { state: clear(s), pass: true, commit: typed(s) + numbersToMarks(s.buffer) };
     }
-    if (!fresh(s)) return { state: s, handled: true, wait: true };
+    if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
     if (!items(s).length) return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
     return choose(s, Math.max(0, s.sel));
   }
@@ -173,7 +174,7 @@ export function imeReduce(state, k) {
   if (key.length === 1) {
     // Other punctuation: Hanzi mode writes the highlighted candidate then the mark; Pinyin mode the pinyin.
     if (s.mode === 'hanzi') {
-      if (!fresh(s)) return { state: s, handled: true, wait: true };
+      if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
       const c = items(s)[Math.max(0, s.sel)];
       const mark = s.opts.fullWidth && FULL[key] ? FULL[key] : key;
       if (!c || c.consumed < s.buffer.length) return { state: clear(s), handled: true, commit: typed(s) + (c ? '' : s.buffer) + (c ? c.text + numbersToMarks(s.buffer.slice(c.consumed)) : '') + mark };
@@ -219,7 +220,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     }
   }
 
-  async function query(input) {
+  async function query(input, retry = 0) {
     const id = ++seq;
     if (st.mode === 'pinyin' && /\d/.test(input)) return;
     const zh = await zhClient();
@@ -230,8 +231,12 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     let res;
     try { res = await zh.candidates(input, { script: st.opts.script, limit: 60 }); } catch { res = { items: [] }; }
     clearTimeout(loadingTimer);
-    // null: a newer request was made meanwhile (possibly by another field).
-    if (id !== seq || input !== st.buffer || res === null) return;
+    if (id !== seq || input !== st.buffer) return;
+    // null: another caller superseded the worker query; retry once if this buffer is still active.
+    if (res === null) {
+      if (retry < 1) { Promise.resolve().then(() => { if (id === seq && input === st.buffer) query(input, retry + 1); }); return; }
+      res = { items: [] };
+    }
     let list = res?.items || [];
     if (st.mode === 'pinyin') {
       // Pinyin mode: the readings of words for these letters (nǐhǎo, níhǎo…).
@@ -252,8 +257,9 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       zhClient().then((zh) => { zh?.choose?.(out.learn.input, out.learn.item, script); if (out.learnSeq) zh?.chooseSequence?.(out.learnSeq, script); }).catch(() => {});
     }
     if (out.query) query(out.query);
-    if (out.wait) pending = k;
-    else if (k.type === 'cands' && pending && fresh(st)) { const again = pending; pending = null; apply(again); return out; }
+    if (out.wait) pending = k.type === 'spaceUp' ? { key: ' ' } : k;
+    else if (k.type !== 'cands') pending = null;
+    else if (pending && fresh(st)) { const again = pending; pending = null; apply(again); return out; }
     paint();
     return out;
   }
@@ -316,7 +322,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); }
   }
   function onKeyUp(e) {
-    if (e.key === ' ' && st.spaceHeld) { const out = apply({ type: 'spaceUp' }); if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+    if ((e.key === ' ' || e.code === 'Space') && st.spaceHeld) { const out = apply({ type: 'spaceUp' }); if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
     if (e.key === 'Shift' && shiftAlone && st.mode !== 'off' && zhSettings().shiftLatin) { shiftAlone = false; apply({ type: 'latin' }); syncButtons(); }
     shiftAlone = false;
   }
@@ -352,6 +358,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   // A press in the field moves the caret: what was being typed is written first, as letters.
   const onPointerDown = () => { if (busy()) { const text = typed(st) + st.buffer; st = clear(st); write(text); paint(); } };
   const onSettings = () => { sync(); paint(); };
+  const onWindowBlur = () => { if (st.spaceHeld) st = imeReduce(st, { type: 'spaceCancel' }).state; shiftAlone = false; };
 
   el.addEventListener?.('keydown', onKeyDown, true);
   el.addEventListener?.('keyup', onKeyUp, true);
@@ -361,6 +368,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   el.addEventListener?.('blur', onBlur);
   el.addEventListener?.('pointerdown', onPointerDown);
   globalThis.addEventListener?.('zh-settings', onSettings);
+  globalThis.addEventListener?.('blur', onWindowBlur);
   const buttons = new Set();
   function syncButtons() {
     for (const b of buttons) paintButton(b, st.mode, st.latin);
@@ -384,6 +392,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       el.removeEventListener?.('blur', onBlur);
       el.removeEventListener?.('pointerdown', onPointerDown);
       globalThis.removeEventListener?.('zh-settings', onSettings);
+      globalThis.removeEventListener?.('blur', onWindowBlur);
       menu().then((m) => m.hideImeMenu(el));
       delete el.__zhIme;
     },

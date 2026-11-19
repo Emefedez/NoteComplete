@@ -56,8 +56,9 @@ export function setNoteMode(mode) {
 export const rubyOn = () => (note.ruby === "on" ? true : note.ruby === "off" ? false : !!rubySettings().ruby);
 export function setRuby(on) {
   rubySettings({ ruby: on });
-  // Kept in a note only when it has Chinese, so other notes stay as they were.
-  if (sawHan) setNoteChinese({ ruby: on ? "on" : "off" }).catch(() => {});
+  // Kept in a note when it has Chinese or already had a note-specific choice, so
+  // switching notes does not get stuck in "off".
+  if (sawHan || note.ruby) setNoteChinese({ ruby: on ? "on" : "off" }).catch(() => {});
   else refreshRuby();
 }
 // The Export dialog's "Pinyin over Chinese": the view's state unless changed there.
@@ -252,9 +253,10 @@ export function refreshRuby() {
   const on = rubyOn();
   const doc = globalThis.document;
   const toggle = doc?.getElementById?.("zhRubyToggle");
-  if (toggle) toggle.setAttribute("aria-checked", String(on));
+  if (toggle) toggle.setAttribute("aria-pressed", String(on));
   exportChoice = null;
   exportRow();
+  globalThis.dispatchEvent?.(new CustomEvent("zh-ruby-refresh", { detail: { on } }));
   for (const root of [...roots]) root.isConnected ? rubyElement(root) : roots.delete(root);
   for (const render of host.roots?.() || []) {
     const svg = render?.querySelector?.(":scope > svg") || render?.querySelector?.("svg");

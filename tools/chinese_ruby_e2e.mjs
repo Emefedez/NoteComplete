@@ -57,7 +57,7 @@ try {
   await p.waitForFunction(() => document.querySelectorAll('.sheet[data-page="0"] .zh-ruby text').length >= 11, null, { timeout: 8000 });
   const layer = await p.evaluate(() => [...document.querySelectorAll('.sheet[data-page="0"] .zh-ruby text')].map((t) => t.textContent));
   assert.deepEqual(layer.slice(0, 9), ['wǒ', 'bù', 'zhī', 'dào', 'yín', 'háng', 'zài', 'nǎ', 'lǐ']);
-  assert.equal(await p.evaluate(() => document.getElementById('zhRubyToggle').getAttribute('aria-checked')), 'true');
+  assert.equal(await p.evaluate(() => document.getElementById('zhRubyToggle').getAttribute('aria-pressed')), 'true');
   // Each reading sits above its character, centred on it.
   const placed = await p.evaluate(() => {
     const t = [...document.querySelectorAll('.sheet[data-page="0"] .render [data-item] text')].find((e) => e.textContent.startsWith('我'));

@@ -40,11 +40,12 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
   $('updateLater').onclick = hide;
   $('updateSkip').onclick = async () => { if (offer) await bridge.skip(offer.version); hide(); status(`Version ${offer?.version} will not be offered again. Help → Check for updates… still finds it.`); };
   async function check(manual = false) {
+    if (manual) status('Checking for updates…');
     try {
       const result = await bridge.check(manual);
       $('updateVersion').textContent = `This is version ${result.current}`;
       if (result.version && (manual || !result.skipped)) show(result);
-      else if (manual) status(result.error ? `Could not check for updates: ${result.error}` : `NoteComplete ${result.current} is the latest version.`);
+      else if (manual) status(result.error ? `Could not check for updates: ${result.error}` : `NoteComplete ${result.current} is the latest version.`, Boolean(result.error));
     } catch (error) { if (manual) status(`Could not check for updates: ${error.message}`, true); }
   }
   $('updateCheck').onclick = () => { for (const m of document.querySelectorAll('details.menu')) m.open = false; check(true); };

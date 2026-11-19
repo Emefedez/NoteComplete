@@ -74,7 +74,7 @@ function build(client) {
   <label class="ocr-skip"><input type="checkbox" name="fullWidth"> <span>Chinese punctuation in Hanzi mode (，。？！：；、)</span></label>
   <label class="ocr-skip"><input type="checkbox" name="bothScripts"> <span>Show the other script's form beside a candidate</span></label>
   <h3>Pinyin over characters</h3>
-  <p class="muted">Pinyin shown above Chinese in notes, text boxes and exports (View → Pinyin over characters; a note can keep its own choice).</p>
+  <p class="muted">Pinyin shown above Chinese in notes, text boxes and exports (Pinyin toggle in the Text format bar; a note can keep its own choice).</p>
   <label class="ocr-skip"><input type="checkbox" name="ruby" data-ruby> <span>On in notes that have no choice of their own</span></label>
   <div class="zh-settings-grid">
     <label>Written as<select name="rubyFormat" data-ruby data-native>${opt('marks', 'Tone marks (nǐ hǎo)')}${opt('numbers', 'Tone numbers (ni3 hao3)')}</select></label>

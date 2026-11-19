@@ -41,9 +41,32 @@ export function androidUpdates({ app, fetch = globalThis.fetch, storage = global
       let releases;
       try {
         const response = await fetch(`https://api.github.com/repos/${REPOSITORY}/releases?per_page=10`, { headers: { Accept: 'application/vnd.github+json' } });
-        if (!response.ok) return { current, error: `GitHub answered ${response.status}` };
+        if (!response.ok) throw Error(`GitHub answered ${response.status}`);
         releases = await response.json();
-      } catch (error) { return { current, error: error.message || 'no connection' }; }
+      } catch (apiErr) {
+        try {
+          const atom = await fetch(`https://github.com/${REPOSITORY}/releases.atom`);
+          if (!atom.ok) return { current, error: apiErr.message || `GitHub answered ${atom.status}` };
+          const xml = await atom.text();
+          const tags = [], seen = new Set();
+          for (const m of xml.matchAll(/\/releases\/tag\/([^"<\s/&]+)/g)) {
+            const tag = decodeURIComponent(m[1]);
+            if (!seen.has(tag) && parseVersion(tag)) { seen.add(tag); tags.push({ tag_name: tag, html_url: `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`, draft: false, assets: [] }); }
+          }
+          const top = latestRelease(tags);
+          if (top) {
+            const page = await fetch(`https://github.com/${REPOSITORY}/releases/expanded_assets/${encodeURIComponent(top.tag_name)}`);
+            if (page.ok) {
+              const html = await page.text();
+              top.assets = [...html.matchAll(/href="(\/[^"]+\/releases\/download\/[^"/]+\/([^"?#]+))"/g)]
+                .map((m) => ({ name: decodeURIComponent(m[2]), browser_download_url: new URL(m[1], 'https://github.com/').href }));
+            }
+            releases = [top];
+          } else {
+            releases = [];
+          }
+        } catch (error) { return { current, error: apiErr.message || error.message || 'no connection' }; }
+      }
       const release = latestRelease(releases);
       const version = release?.tag_name?.replace(/^v/i, '');
       if (!release || !newer(version, current)) return { current };

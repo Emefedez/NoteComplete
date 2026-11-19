@@ -59,6 +59,11 @@ export function focusField(mf, tries = 6) {
   requestAnimationFrame(() => attempt(tries));
 }
 export function styleField(mf, { size = 16, rgba = [0, 0, 0, 1] } = {}) {
+  const color = `rgba(${rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(',')},${rgba[3] ?? 1})`;
   mf.style.fontSize = `${size}px`;
-  mf.style.color = `rgba(${rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(',')},${rgba[3] ?? 1})`;
+  mf.style.color = color;
+  mf.style.setProperty('--text-color', color);
+  mf.style.setProperty('--caret-color', 'var(--accent, #2f6fed)');
+  mf.style.setProperty('--smart-fence-color', color);
+  mf.style.setProperty('--placeholder-color', color);
 }

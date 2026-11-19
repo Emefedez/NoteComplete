@@ -146,6 +146,7 @@ export const inventory = [
   { url: 'https://huggingface.co/', directive: 'connect-src', feature: 'Whisper models (Transformers.js in transcript-worker.js) and WebLLM model weights', literal: false },
   { url: 'https://cas-bridge.xethub.hf.co/', directive: 'connect-src', feature: 'Hugging Face storage: where huggingface.co redirects to (also cdn-lfs*.huggingface.co, cdn-lfs*.hf.co)', literal: false },
   { url: 'https://api.github.com/repos/', directive: 'connect-src', feature: 'Update check in the Android app (android-updates.js); the desktop app checks from its main process' },
+  { url: 'https://github.com/', directive: 'connect-src', feature: 'GitHub Releases Atom/assets fallback when api.github.com is rate-limited (android-updates.js)' },
   { url: 'ws://192.168.1.20:41237/', directive: 'connect-src', feature: 'Sharing on the local network (sync.js)', literal: false },
   { url: 'ws://127.0.0.1:41237/', directive: 'connect-src', feature: "Sharing: the host's own reader (sync.js)", literal: false },
   { url: 'wss://example.trycloudflare.com/', directive: 'connect-src', feature: 'Sharing over the internet (sync.js)', literal: false },

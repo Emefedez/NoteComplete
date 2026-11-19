@@ -67,11 +67,22 @@ export function normalizeMarkdown(markdown, { links = true } = {}) {
 }
 
 export function loadKatex() {
-  return katex ||= import('./vendor/katex/katex.mjs').then(module => {
-    const css = document.createElement('link');
-    css.rel = 'stylesheet';
-    css.href = new URL('./vendor/katex/katex.min.css', import.meta.url).href;
-    document.head.append(css);
+  return katex ||= import('./vendor/katex/katex.mjs').then(async module => {
+    if (typeof document !== 'undefined' && document.head) {
+      let css = document.querySelector('link[data-katex-css]');
+      if (!css) {
+        css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.dataset.katexCss = '1';
+        css.href = new URL('./vendor/katex/katex.min.css', import.meta.url).href;
+        const ready = new Promise(resolve => {
+          css.addEventListener('load', resolve, { once: true });
+          css.addEventListener('error', resolve, { once: true });
+        });
+        document.head.append(css);
+        if (!css.sheet) await ready;
+      }
+    }
     return module.default;
   }).catch(error => { katex = null; throw error; });
 }

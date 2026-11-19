@@ -199,3 +199,72 @@ test('Chinese wraps between characters, never before closing punctuation', async
   assert.deepEqual(wrapPieces('「你好」'), ['「你', '好」']);
   assert.equal(wrapText('我不知道银行在哪里，你呢？ hello', { size: 16 }, 40, (l) => [...l].length * 10), '我不知道\n银行在哪\n里，你\n呢？\nhello');
 });
+
+test('isLightInk and styleField ensure high contrast in dark themes and light inks', async () => {
+  const { isLightInk } = await import('./text-box.js');
+  const { styleField } = await import('./math-field.js');
+  assert.equal(isLightInk([0.12, 0.14, 0.16, 1]), false);
+  assert.equal(isLightInk([0.98, 0.98, 0.98, 1]), true);
+  assert.equal(isLightInk([1, 1, 1, 0]), false);
+
+  const props = new Map();
+  const mf = { style: { setProperty: (k, v) => props.set(k, v) } };
+  styleField(mf, { size: 20, rgba: [0.1, 0.2, 0.3, 1] });
+  assert.equal(mf.style.fontSize, '20px');
+  assert.equal(props.get('--text-color'), 'rgba(26,51,77,1)');
+  assert.equal(props.get('--smart-fence-color'), 'rgba(26,51,77,1)');
+  assert.equal(props.get('--placeholder-color'), 'rgba(26,51,77,1)');
+});
+
+test('textBoxController docks format bar for Text tool and keeps Tab inside the box', async () => {
+  globalThis.Option = class Option { constructor(text, value) { this.text = text; this.value = value; } };
+  globalThis.requestAnimationFrame = (fn) => fn();
+  globalThis.cancelAnimationFrame = () => {};
+  const makeEl = (tag = 'div') => ({
+    tag, value: '', hidden: true, style: { setProperty() {} }, dataset: {}, attrs: {}, children: [], options: [], listeners: {},
+    classList: { classes: new Set(), add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); }, toggle(c, on) { if (on ?? !this.classes.has(c)) { this.classes.add(c); return true; } this.classes.delete(c); return false; }, contains(c) { return this.classes.has(c); } },
+    add(o) { this.options.push(o); },
+    append(...nodes) { for (const n of nodes) { n.parentElement = this; this.children.push(n); } },
+    remove() {}, focus() {}, blur() {}, contains() { return false; },
+    setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; },
+    querySelectorAll() { return []; }, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
+    setRangeText(txt, start, end) { this.value = this.value.slice(0, start) + txt + this.value.slice(end); },
+    getBoundingClientRect() { return { left: 10, right: 110, top: 10, bottom: 40, width: 100, height: 30 }; },
+  });
+  const els = new Map();
+  for (const id of ['textSize', 'textSwatches', 'textFormat', 'toolOptions', 'viewport', 'textFont', 'textBold', 'textItalic', 'textMath', 'textColor', 'textFormatDock', 'pages']) {
+    els.set(id, makeEl(id));
+  }
+  const fakeDoc = {
+    body: makeEl('body'), activeElement: null,
+    createElement(tag) {
+      if (tag === 'canvas') return { getContext: () => ({ font: '', measureText: (s) => ({ width: s.length * 8 }) }) };
+      return makeEl(tag);
+    },
+    querySelector() { return { click() {} }; }, querySelectorAll() { return []; },
+  };
+  globalThis.document = fakeDoc;
+  let tool = 'text';
+  const p = { index: 0, size: [600, 800], view: { texts: [] }, el: Object.assign(makeEl('page'), { clientWidth: 600 }), render: { querySelector: () => null } };
+  const controller = textBoxController({
+    call: async () => null, action: async () => {}, status: () => {}, selection: { item: null, clear() {}, async selectId() {} },
+    swatches: ['#1f2328'], getDoc: () => ({ edit_count: 1, layers: [{ id: 0, visible: true, locked: false }] }),
+    getActiveLayer: () => 0, getTool: () => tool, getPanels: () => [p], getPage: () => 0, $: (id) => els.get(id), doc: fakeDoc,
+  });
+
+  controller.syncFormat({ quiet: true });
+  assert.equal(els.get('textFormat').hidden, false);
+  assert.equal(els.get('textFormat').parentElement, els.get('toolOptions'));
+
+  await controller.open(p, [100, 120]);
+  const area = p.el.children.find((c) => c.className === 'text-editor');
+  const drag = p.el.children.find((c) => c.className === 'text-drag');
+  assert.ok(drag, 'drag handle is mounted');
+  area.value = 'abc';
+  area.selectionStart = area.selectionEnd = 3;
+  let prevented = false;
+  for (const fn of area.listeners.keydown || []) fn({ key: 'Tab', shiftKey: false, preventDefault() { prevented = true; }, stopPropagation() {} });
+  assert.equal(prevented, true);
+  assert.equal(area.value, 'abc  ');
+  await controller.close();
+});

@@ -95,3 +95,19 @@ test('elsewhere the app restarts with app.relaunch', () => {
   updater({ app, stateFile: '/nonexistent', appImage: '', platform: 'darwin', spawn: () => assert.fail('no shell') }).restart();
   assert.deepEqual(calls, ['relaunch', 'exit 0']);
 });
+
+test('falls back to GitHub releases.atom and expanded_assets when api.github.com is rate-limited (403)', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-update-fallback-'));
+  const atom = '<feed><entry><link href="https://github.com/Emefedez/NoteComplete/releases/tag/v1.3.0"/></entry></feed>';
+  const expanded = '<a href="/Emefedez/NoteComplete/releases/download/v1.3.0/NoteComplete-1.3.0-linux-x86_64.AppImage">AppImage</a>';
+  const fetch = async (url) => {
+    if (url.includes('api.github.com')) return { ok: false, status: 403 };
+    if (url.endsWith('/releases.atom')) return { ok: true, text: async () => atom };
+    if (url.includes('/releases/expanded_assets/v1.3.0')) return { ok: true, text: async () => expanded };
+    return { ok: false, status: 404 };
+  };
+  const u = updater({ app: { getVersion: () => '1.2.46' }, fetch, stateFile: path.join(dir, 'state.json'), appImage: '/tmp/NC.AppImage', platform: 'linux', arch: 'x64' });
+  const found = await u.check({ manual: true });
+  assert.equal(found.version, '1.3.0');
+  assert.equal(found.install, 'appimage');
+});

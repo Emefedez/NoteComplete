@@ -51,6 +51,10 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
+html:fullscreen, body:fullscreen {
+  width: 100%;
+  height: 100%;
+}
 button,
 input,
 select,
@@ -227,7 +231,7 @@ header > .row {
   width: 290px;
   z-index: 30;
 }
-.menu-group { display: contents; }
+.menu-group:not([hidden]) { display: contents; }
 .menu-content button {
   width: 100%;
   justify-content: space-between;
@@ -349,7 +353,16 @@ main {
 .link-error { color: var(--danger); }
 #textView .html-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
 #textView .html-bar .spacer { flex: 1; }
-#textMarkdown[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#textMarkdown[aria-pressed="true"], #textSplitToggle[aria-pressed="true"], #textRubyToggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#textRubyToggle { min-width: 30px; min-height: 28px; padding: 2px 6px 0; border-radius: 6px; font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+#textRubyToggle ruby { ruby-position: over; }
+#textRubyToggle rt { font-size: 8px; line-height: 1; font-weight: 500; }
+#textView.split-preview #textEditor { order: 1; flex: 1 1 50%; min-width: 0; border-right: 1px solid var(--line); }
+#textView.split-preview #textBody { order: 2; flex: 1 1 50%; min-width: 0; padding: 22px 24px 30vh; }
+@media (max-width: 720px) {
+  #textView.split-preview .side-body { flex-direction: column; }
+  #textView.split-preview #textEditor { border-right: 0; border-bottom: 1px solid var(--line); }
+}
 .notes-render.text-doc { flex: 1; min-height: 0; overflow: auto; padding: 28px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); line-height: 1.65; background: var(--surface); }
 .text-doc:focus { outline: none; }
 .notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
@@ -2216,7 +2229,17 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 /* Holds the focus between a tap with Text and its box opening, so the phone's keyboard opens
    (app.js primeKeyboard). 16px: iOS zooms into smaller fields. */
 .keyboard-primer { position: fixed; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; }
-.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1px dashed var(--accent); border-radius: 2px; background: color-mix(in srgb, #fff 72%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.text-editor, .text-placeholder { position: absolute; z-index: 6; box-sizing: border-box; margin: 0; border: 1.5px dashed var(--accent); border-radius: 4px; background: color-mix(in srgb, #fff 92%, transparent); resize: none; overflow: hidden; white-space: pre; outline: none; }
+.text-editor:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
+.text-editor::placeholder { color: #6e7781; opacity: .75; }
+.text-editor.light-ink { background: color-mix(in srgb, #1c2026 92%, transparent); }
+.text-editor.light-ink::placeholder { color: #a7b1bd; }
+.text-drag { position: absolute; z-index: 7; min-width: 22px; height: 18px; min-height: 18px; padding: 0 4px; margin: -20px 0 0 0; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 5px; background: var(--menu); color: var(--muted); font-size: 11px; line-height: 1; letter-spacing: -1px; cursor: grab; box-shadow: 0 2px 6px #0002; user-select: none; touch-action: none; }
+.text-drag:hover { color: var(--accent); border-color: var(--accent); }
+.text-drag:active { cursor: grabbing; }
+.text-ruby-preview { position: absolute; z-index: 7; max-width: 90%; padding: 6px 10px 4px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, #fff 96%, transparent); box-shadow: 0 4px 16px #0002; pointer-events: none; white-space: pre-wrap; line-height: 1.85; width: max-content; }
+.text-ruby-preview.light-ink { background: color-mix(in srgb, #1c2026 94%, transparent); }
+.text-ruby-preview[hidden] { display: none; }
 /* Finished text, shown as typed until the page's render has it: no frame, no clicks. */
 .text-placeholder { border-color: transparent; background: none; pointer-events: none; }
 .sheet[data-tool="text"] { cursor: text; }
@@ -2284,8 +2307,8 @@ body.bar-compact .tab { height: 22px; }
 .text-format.placed, .text-format.placed.below { transform: none; }
 .text-format:not(.docked) { flex-wrap: wrap; max-width: calc(100vw - 16px); }
 .text-format[hidden] { display: none; }
-/* Docked (View → Text format bar in the tool bar): one more group in the settings row. */
-.text-format-docked #toolOptions .text-format { position: static; z-index: auto; transform: none; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+/* Docked or shown in the toolbar's settings row (e.g. Text tool): one more group in the settings row. */
+#toolOptions .text-format, #toolOptionsMirror .text-format { position: static; z-index: auto; transform: none; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .text-format select { min-height: 28px; padding: 0 6px; font-size: 12px; }
 /* It sits on the page, which keeps a light paper look: the bar takes the app's own colours. */
 .text-format { color: var(--ink); }
@@ -2304,14 +2327,20 @@ body.bar-compact .tab { height: 22px; }
 .text-format .fmt-bold, .text-format .fmt-italic { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 14px; }
 .text-format .fmt-bold { font-weight: 700; }
 .text-format .fmt-math { width: 28px; min-height: 28px; padding: 0; border-radius: 6px; font-family: Georgia, serif; font-size: 15px; }
+.text-format .fmt-ruby { min-width: 30px; min-height: 28px; padding: 2px 6px 0; border-radius: 6px; font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.text-format .fmt-ruby ruby { ruby-position: over; }
+.text-format .fmt-ruby rt { font-size: 8px; line-height: 1; font-weight: 500; }
+.text-format .fmt-ruby[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
 /* Math text boxes (math-boxes.js): the formula over the box's plain-text source. */
 .math-box { width: max-content; padding: 2px 4px; line-height: 1.25; white-space: pre-wrap; transform-origin: 0 0; }
 .math-box .katex-display { margin: 0.15em 0; }
 .math-probe { position: fixed; left: -10000px; top: 0; visibility: hidden; }
-.math-preview { position: absolute; z-index: 7; max-width: 90%; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--menu); box-shadow: 0 4px 16px #0002; pointer-events: none; width: max-content; }
+.math-preview { position: absolute; z-index: 7; max-width: 90%; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, #fff 96%, transparent); color: #1f2328; box-shadow: 0 4px 16px #0002; pointer-events: none; width: max-content; }
+.math-preview.light-ink { background: color-mix(in srgb, #1c2026 94%, transparent); color: #f4f6f8; }
 .math-preview[hidden] { display: none; }
 /* A formula edited in place (math-field.js), over its text box, in the box's look. */
-.text-math-field { position: absolute; z-index: 7; display: inline-block; width: auto; padding: 2px 6px; border: 1px dashed var(--accent); border-radius: 3px; background: color-mix(in srgb, var(--surface) 92%, transparent); --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: color-mix(in srgb, var(--accent) 8%, transparent); --placeholder-color: var(--muted); }
+.text-math-field { position: absolute; z-index: 7; display: inline-block; width: auto; min-width: 72px; min-height: 1.5em; padding: 2px 6px; border: 1.5px dashed var(--accent); border-radius: 4px; background: color-mix(in srgb, #fff 94%, transparent); color: #1f2328; --text-color: #1f2328; --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: color-mix(in srgb, var(--accent) 12%, transparent); --placeholder-color: #6e7781; --smart-fence-color: currentColor; }
+.text-math-field.light-ink { background: color-mix(in srgb, #1c2026 94%, transparent); color: #f4f6f8; --text-color: #f4f6f8; --placeholder-color: #a7b1bd; }
 .text-math-field::part(menu-toggle), .text-math-field::part(virtual-keyboard-toggle) { display: none; }
 .text-math-field[read-only] { border-color: transparent; background: none; }
 .text-editor.under-field { visibility: hidden; }

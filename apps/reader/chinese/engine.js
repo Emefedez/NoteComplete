@@ -71,7 +71,13 @@ export function parseInput(pack, input) {
     const parsed = splits?.map(parts => {
       let at = c.index;
       const syls = parts.map((p, i) => {
-        const s = p.toLowerCase(), partial = !SYLLABLES.has(s), range = rankRange(pack, s, partial);
+        const s = p.toLowerCase();
+        let partial = !SYLLABLES.has(s), range = rankRange(pack, s, partial);
+        const hasRows = range && pack.index[range[1] + 1] > pack.index[range[0]];
+        if (!hasRows && !partial && last && tone == null && whole && i === parts.length - 1) {
+          partial = true;
+          range = rankRange(pack, s, true);
+        }
         at += p.length;
         return range && { syl: s, range, partial, tone: i === parts.length - 1 && whole ? tone : null, end: i === parts.length - 1 ? end : at };
       });

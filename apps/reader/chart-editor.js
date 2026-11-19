@@ -64,10 +64,11 @@ function labelColor(label, order) {
   const i = order.indexOf(label);
   return PALETTE[(i < 0 ? order.length : i) % PALETTE.length];
 }
-const KIND_NAMES = { states: 'Process states', timeline: 'CPU timeline', bars: 'Chart', plot: 'Exam plot' };
+const KIND_NAMES = { states: 'Process states', timeline: 'CPU timeline', bars: 'Chart', plot: 'Exam plot', nodes: 'Node graph', svg: 'Custom diagram' };
 export function chartName(spec) {
   const k = editorKind(spec);
   if (k === 'bars') return String(spec.type).toLowerCase() === 'histogram' || spec.contiguous === true ? 'Histogram' : 'Bar chart';
+  if (k === 'nodes') return String(spec?.type || '').toLowerCase() === 'tree' ? 'Tree' : 'Node graph';
   return KIND_NAMES[k] || 'Chart';
 }
 
@@ -354,17 +355,19 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     { panel: palette, variable: '--ch-left', side: 'left', key: 'chart-left', min: 120, max: 360 },
     { panel, variable: '--ch-right', side: 'right', key: 'chart-right', min: 240, max: 640 },
   ]);
+  const isPreviewOnly = () => ['plot', 'nodes', 'svg'].includes(kind);
   function layoutPreview() {
-    // A plot has no canvas: its figure is the view, always shown.
-    const open = kind === 'plot' || prefs.open, notes = !!prefs.notes && kind !== 'plot';
+    // Plots, node graphs and SVG diagrams use the live SVG preview as their main canvas.
+    const previewOnly = isPreviewOnly();
+    const open = previewOnly || prefs.open, notes = !!prefs.notes && !previewOnly;
     previewBox.classList.toggle('open', open);
     previewBox.classList.toggle('notes-open', notes);
-    previewBox.style.height = (open || notes) && kind !== 'plot' ? `${Math.max(90, prefs.height)}px` : '';
+    previewBox.style.height = (open || notes) && !previewOnly ? `${Math.max(90, prefs.height)}px` : '';
     fold.replaceChild(icon(open ? 'arrowDown' : 'arrowUp'), fold.firstChild);
     fold.setAttribute('aria-expanded', String(open));
     notesFold.setAttribute('aria-pressed', String(notes));
     notesFold.setAttribute('aria-expanded', String(notes));
-    fold.hidden = grip.hidden = notesFold.hidden = kind === 'plot';
+    fold.hidden = grip.hidden = notesFold.hidden = previewOnly;
   }
   fold.onclick = () => { prefs.open = !prefs.open; savePreview(prefs); layoutPreview(); draw(); };
   grip.addEventListener('pointerdown', (e) => {
@@ -427,7 +430,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     let spec = null;
     let at = null;
     try { spec = JSON.parse(jsonArea.value); } catch (e) { at = jsonErrorAt(jsonArea.value, e); jsonError = at.message; }
-    if (spec) jsonError = editorKind(spec) ? '' : 'This JSON is not a process-state diagram, CPU timeline, chart or plot.';
+    if (spec) jsonError = editorKind(spec) ? '' : 'This JSON is not a figure this editor knows.';
     jsonArea.classList.toggle('invalid', Boolean(jsonError));
     jsonCode.mark(at?.line || null);
     if (jsonError) {
@@ -1009,12 +1012,12 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (mode === 'json') { /* The text is the view. */ }
     else if (grid) drawGrid();
     else if (bars) drawBars();
-    else canvas.replaceChildren(make('p', { className: 'ch-hint', textContent: 'An exam plot is drawn from its curves, points and areas: change them on the right.' }));
-    canvas.hidden = kind === 'plot' || mode === 'json';
+    else canvas.replaceChildren(make('p', { className: 'ch-hint', textContent: 'Edited from its structured panel on the right.' }));
+    canvas.hidden = isPreviewOnly() || mode === 'json';
     jsonCode.box.hidden = mode !== 'json';
     layoutPreview();
     // The notes follow the figure (undo, the JSON, another figure loaded).
-    if (prefs.notes && kind !== 'plot') {
+    if (prefs.notes && !isPreviewOnly()) {
       notes.sync();
     }
     if (!previewBox.classList.contains('open')) { preview.replaceChildren(); return; }
@@ -1062,9 +1065,13 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       }, { palette: true }), 'The page shows the student\'s answer (empty to start); what you draw here is the solution it is checked against'));
       if (base.exercise) out.push(check1('Show the solution on the page', base.reveal, edit('reveal', (v) => { base.reveal = v; })));
     }
-    out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only'));
+    if (kind !== 'nodes' && kind !== 'svg') {
+      out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only'));
+    }
     if (grid) out.push(...gridPanel());
     else if (bars) out.push(...barsPanel());
+    else if (kind === 'nodes') out.push(...nodesPanel());
+    else if (kind === 'svg') out.push(...svgPanel());
     else out.push(...plotPanel());
     // Something to copy from while drawing: a picture or PDF, or a snippet grabbed from a note.
     buildRefs();
@@ -1176,6 +1183,99 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     list('Points', 'points', [['x', 'x', 'number'], ['y', 'y', 'number'], ['label', 'label', 'text'], ['open', 'open', 'check']], () => ({ x: 0, y: 0, label: '' }), 'Add point');
     list('Shaded areas (under a curve, from … to …)', 'areas', [['expr', 'f(x)', 'text'], ['from', 'from', 'number'], ['to', 'to', 'number']], () => ({ expr: base.functions?.[0]?.expr || 'x', from: 0, to: 1 }), 'Add area');
     return out;
+  }
+  function nodesPanel() {
+    const rawType = String(base.type || base.kind || '').toLowerCase();
+    const defaultDir = typeof base.directed === 'boolean' ? base.directed : ['tree', 'fsm', 'automaton', 'dag'].includes(rawType);
+    const nodes = (Array.isArray(base.nodes) ? base.nodes : []).map((n, i) => (
+      typeof n === 'string' || typeof n === 'number'
+        ? { id: String(n), label: String(n), shape: 'circle' }
+        : { shape: 'circle', ...n, id: String(n?.id ?? n?.name ?? n?.label ?? `n${i + 1}`), label: String(n?.label ?? n?.name ?? n?.id ?? `n${i + 1}`) }
+    ));
+    base.nodes = nodes;
+    const edges = (Array.isArray(base.edges) ? base.edges : []).map((e) => (
+      Array.isArray(e) ? { from: String(e[0] ?? ''), to: String(e[1] ?? ''), label: String(e[2] ?? '') }
+        : { from: String(e?.from ?? e?.source ?? e?.u ?? ''), to: String(e?.to ?? e?.target ?? e?.v ?? ''), label: String(e?.label ?? e?.weight ?? ''), directed: typeof e?.directed === 'boolean' ? e.directed : undefined, dashed: Boolean(e?.dashed) }
+    ));
+    base.edges = edges;
+    const out = [
+      check1('Directed arrows', defaultDir, edit('directed', (v) => { base.directed = v; for (const e of edges) e.directed = v; })),
+      field('Caption', text(base.caption, edit('caption', (v) => { base.caption = v; }, { panel: false }))),
+      make('h4', { textContent: 'Nodes' }),
+    ];
+    nodes.forEach((n, i) => {
+      const shape = make('select', { 'aria-label': 'Shape', className: 'ch-short' }, ...['circle', 'rect', 'doublecircle'].map((s) => make('option', { value: s, textContent: s, selected: (n.shape || 'circle') === s })));
+      shape.onchange = edit(`ns-${i}`, () => { n.shape = shape.value; }, { panel: false });
+      out.push(make('div', { className: 'ch-rowedit' },
+        text(n.id, edit(`ni-${i}`, (v) => {
+          const prev = n.id, nextId = v.trim() || prev;
+          n.id = nextId;
+          for (const e of edges) { if (e.from === prev) e.from = nextId; if (e.to === prev) e.to = nextId; }
+        }, { panel: false }), { 'aria-label': 'ID', placeholder: 'id', className: 'ch-short' }),
+        text(n.label, edit(`nl-${i}`, (v) => { n.label = v; }, { panel: false }), { 'aria-label': 'Label', placeholder: 'label', className: 'ch-name' }),
+        shape,
+        iconBtn('backspace', 'Remove node', () => {
+          if (nodes.length < 2) return;
+          snapshot();
+          const gone = n.id;
+          nodes.splice(i, 1);
+          base.edges = edges.filter((e) => e.from !== gone && e.to !== gone);
+          changed();
+        })));
+    });
+    out.push(Object.assign(button('plus', 'Add node', 'Add a node'), { onclick: () => {
+      snapshot();
+      const taken = new Set(nodes.map((n) => n.id));
+      let k = nodes.length + 1;
+      while (taken.has(`N${k}`)) k++;
+      nodes.push({ id: `N${k}`, label: `N${k}`, shape: 'circle' });
+      changed();
+    } }));
+    const nodeSelect = (val, onPick, aria) => {
+      const s = make('select', { 'aria-label': aria, className: 'ch-short' }, ...nodes.map((n) => make('option', { value: n.id, textContent: n.label && n.label !== n.id ? `${n.id} (${n.label})` : n.id, selected: n.id === val })));
+      s.onchange = () => onPick(s.value);
+      return s;
+    };
+    out.push(make('h4', { textContent: 'Edges' }));
+    edges.forEach((e, i) => {
+      const dashed = make('input', { type: 'checkbox', checked: Boolean(e.dashed), title: 'Dashed edge' });
+      dashed.onchange = edit(`ed-${i}`, () => { e.dashed = dashed.checked; }, { panel: false });
+      out.push(make('div', { className: 'ch-rowedit' },
+        nodeSelect(e.from, edit(`ef-${i}`, (v) => { e.from = v; }, { panel: false }), 'From'),
+        nodeSelect(e.to, edit(`et-${i}`, (v) => { e.to = v; }, { panel: false }), 'To'),
+        text(e.label, edit(`el-${i}`, (v) => { e.label = v; }, { panel: false }), { 'aria-label': 'Label', placeholder: 'label', className: 'ch-short' }),
+        make('label', { className: 'ch-check', title: 'Dashed' }, dashed, 'dashed'),
+        iconBtn('backspace', 'Remove edge', () => { snapshot(); edges.splice(i, 1); changed(); })));
+    });
+    out.push(Object.assign(button('plus', 'Add edge', 'Add an edge'), { onclick: () => {
+      if (!nodes.length) return;
+      snapshot();
+      edges.push({ from: nodes[0].id, to: (nodes[1] || nodes[0]).id, label: '' });
+      changed();
+    } }));
+    return out;
+  }
+  function svgPanel() {
+    const area = make('textarea', { rows: 12, spellcheck: false, value: base.svg || '', 'aria-label': 'SVG markup' });
+    area.style.cssText = 'width:100%;box-sizing:border-box;min-height:180px;font:12px/1.4 ui-monospace,monospace;padding:6px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--ink);';
+    area.addEventListener('input', edit('svg', () => { base.svg = area.value; }, { panel: false }));
+    const file = make('input', { type: 'file', accept: '.svg,image/svg+xml', hidden: true });
+    file.onchange = async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (!f) return;
+      snapshot('svg-import');
+      base.svg = await f.text();
+      area.value = base.svg;
+      changed({ panel: false });
+    };
+    const loadBtn = button('image', 'Import SVG…', 'Load an .svg file from disk');
+    loadBtn.onclick = () => file.click();
+    return [
+      field('Caption', text(base.caption, edit('caption', (v) => { base.caption = v; }, { panel: false }))),
+      make('div', { className: 'ch-rowedit' }, loadBtn, file),
+      field('SVG markup', area, 'Sanitized live when rendered on the page'),
+    ];
   }
 
   // --- Start -------------------------------------------------------------------------------

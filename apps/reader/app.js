@@ -1699,7 +1699,9 @@ async function renderPage(p, provided) {
     pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
     // Pinyin over the Chinese in text boxes, when on (chinese/ruby.js).
-    if (/[\u3400-\u9fff]/.test(result.svg)) rubySvg(render.querySelector(":scope > svg")).catch(() => {});
+    // Math and Chinese pinyin overlays on page text boxes, drawn on the SVG after render.
+    const svgEl = render.querySelector(":scope > svg");
+    if (svgEl && /\p{Script=Han}/u.test(result.svg)) rubySvg(svgEl).catch(() => {});
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -1949,7 +1951,7 @@ $("toolSettingsAuto").onclick = () => {
 };
 function hasToolSettings() {
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
-  return ["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && !!selection.item) || textDock;
+  return ["draw", "highlight", "shape", "tape", "erase", "text"].includes(tool) || (tool === "select" && !!selection.item) || textDock;
 }
 function inlineToolOptionsSpace() {
   const dock = document.body.dataset.landscapeDock;
@@ -1972,7 +1974,8 @@ function toolOptions() {
   $("drawingOptions").dataset.forTool = tool;
   $("eraseOptions").hidden = tool !== "erase";
   $("selectionOptions").hidden = tool !== "select" || !selection.item;
-  // The text format bar, when docked here, shows while a text box is typed or selected.
+  textBox.syncFormat({ quiet: true });
+  // The text format bar, when docked here, shows for Text tool and while a text box is typed or selected.
   const canOpen = hasToolSettings();
   const textDock = !$("textFormat").hidden && $("textFormat").parentElement === $("toolOptions");
   // Inline beside the tools when they leave room; otherwise inline too, as a row of its own
@@ -1989,7 +1992,7 @@ function toolOptions() {
     opts.hidden = chromeState.compact || !canOpen;
     $("toolbarToggle").hidden = true;
   } else {
-    const usual = (optionsOpen || optionsPopped) && (["draw", "highlight", "shape", "tape", "erase"].includes(tool) || (tool === "select" && selection.item));
+    const usual = (optionsOpen || optionsPopped) && (["draw", "highlight", "shape", "tape", "erase", "text"].includes(tool) || (tool === "select" && selection.item));
     opts.hidden = chromeState.compact || !(usual || textDock);
     $("toolbarToggle").hidden = !canOpen;
   }
@@ -2003,7 +2006,6 @@ function toolOptions() {
       opts.style.left = `${Math.max(8, Math.min(left, bar.width - opts.offsetWidth - 8))}px`;
     }
   }
-  textBox.syncFormat();
   toolMirror.show(optionsPopped && fits && !opts.hidden && !chromeState.compact, ownRow);
   // The panel opens under the strip's own row, not over it.
   const mirror = $("toolOptionsMirror");
@@ -4401,6 +4403,11 @@ function shortcut(e) {
   return false;
 }
 document.addEventListener("keydown", (e) => {
+  if (e.key === "F11" && !e.ctrlKey && !e.metaKey && !e.altKey && !window.notecompleteUpdates && !window.ReactNativeWebView) {
+    e.preventDefault();
+    void toggleFullscreen();
+    return;
+  }
   // Ctrl B: the right side panel (notes); Ctrl Alt B: the left one (pages). In a text field
   // Ctrl B stays bold.
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "KeyB" && !typingIn(e.target)) {
@@ -4768,6 +4775,41 @@ $("newDocument").onclick = () => {
   $("newDialog").showModal();
   $("newName").select();
 };
+async function openBlankNoteForPrefab(title = "Prefab") {
+  let format = "project";
+  try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
+  const seed = crypto.getRandomValues(new Uint8Array(16));
+  notePath = noteEntryKey = ""; setDocMember(null);
+  await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: [[595, 842]], bytes: new ArrayBuffer(0), saveAs: format, canvas: false });
+  return panels[0] || null;
+}
+async function openNewMarkdown({ title = "Untitled", initialText = "" } = {}) {
+  for (const m of document.querySelectorAll("details.menu")) m.open = false;
+  if (!canReplace()) return false;
+  reset({ opening: true });
+  notePath = noteEntryKey = "";
+  setDocMember(null);
+  const key = `md-draft-${Date.now()}`;
+  const fileName = `${title}.md`;
+  activeFileName = fileName;
+  activeDocKind = "text";
+  sideFp = await noteFingerprint(new File([initialText], fileName)).catch(() => "");
+  $("title").textContent = title;
+  document.title = `${title} — NoteComplete`;
+  tabBar.update({ title, dirty: false });
+  await textView.open({ text: initialText, name: title, markdown: true, key, edit: true, split: true });
+  textSource.forget();
+  if (collab?.role !== "guest") notes?.load(sideFp, { core: false });
+  showDocument();
+  rememberDocument();
+  documentControls();
+  collab?.documentChanged();
+  status("Chinese Markdown editor ready: click 中 (or Ctrl+Shift+Space) to type Chinese, 拼 for pinyin on top.");
+  return true;
+}
+if ($("newMarkdownDoc")) $("newMarkdownDoc").onclick = () => openNewMarkdown();
+if ($("homeNewMarkdown")) $("homeNewMarkdown").onclick = () => openNewMarkdown();
+if ($("homeCreatePrefab")) $("homeCreatePrefab").onclick = () => insertPrefab(panels[page]);
 $("newCancel").onclick = () => $("newDialog").close();
 $("newCreate").onclick = async () => {
   if (!canReplace()) return;
@@ -4974,6 +5016,8 @@ async function patchItem(item, adjustment, crop = null) {
       el.removeAttribute("transform");
       paintTapes(p.render, p.index);
       typesetMath(p.render, p.view?.texts);
+      const svgEl = p.render.querySelector(":scope > svg");
+      if (svgEl) rubySvg(svgEl).catch(() => {});
     }
     if (p.view) {
       Object.assign(p.view, {
@@ -4999,7 +5043,7 @@ prefabFlyout($("shapePrefab"), () => panels[page]);
 function prefabFlyout(button, panel) {
   let timer = 0, menu = null;
   const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
-  button.onclick = () => { close(); if (doc) insertPrefab(panel()); };
+  button.onclick = () => { close(); insertPrefab(panel()); };
   button.addEventListener("pointerenter", (e) => {
     if (e.pointerType === "touch" || !doc) return;
     clearTimeout(timer);
@@ -5124,6 +5168,45 @@ function setPageSpread(value) {
 }
 if ($("pagesSpread")) $("pagesSpread").onclick = () => setPageSpread(spread === 2 ? 1 : 2);
 if ($("viewSpread")) $("viewSpread").onclick = () => { setPageSpread(spread === 2 ? 1 : 2); closeMenus(); };
+// Full screen on web (tabs.html iframe hosts app.html, so target top same-origin document when available).
+function fullscreenDoc() {
+  try {
+    if (window.top && window.top !== window && window.top.document?.documentElement?.requestFullscreen) {
+      return window.top.document;
+    }
+  } catch { /* Cross-origin frame: stay inside document. */ }
+  return document;
+}
+function isFullscreen() {
+  const topDoc = fullscreenDoc();
+  return Boolean(topDoc.fullscreenElement || document.fullscreenElement);
+}
+function syncFullscreen() {
+  if ($("viewFullscreen")) $("viewFullscreen").setAttribute("aria-checked", String(isFullscreen()));
+  fitTools();
+  if (doc) requestAnimationFrame(resize);
+}
+async function toggleFullscreen() {
+  const targetDoc = fullscreenDoc();
+  try {
+    if (isFullscreen()) await (targetDoc.fullscreenElement ? targetDoc : document).exitFullscreen?.();
+    else await (targetDoc.documentElement.requestFullscreen ? targetDoc : document).documentElement.requestFullscreen?.();
+  } catch {
+    if (targetDoc !== document && !isFullscreen()) {
+      try { await document.documentElement.requestFullscreen?.(); } catch { status("Full screen is unavailable in this browser view.", true); }
+    } else {
+      status("Full screen is unavailable in this browser view.", true);
+    }
+  }
+  syncFullscreen();
+}
+if ($("viewFullscreen")) {
+  if (window.notecompleteUpdates || window.ReactNativeWebView) $("viewFullscreen").hidden = true;
+  $("viewFullscreen").onclick = () => { closeMenus(); void toggleFullscreen(); };
+  document.addEventListener("fullscreenchange", syncFullscreen);
+  const topDoc = fullscreenDoc();
+  if (topDoc !== document) topDoc.addEventListener?.("fullscreenchange", syncFullscreen);
+}
 try { setPageSpread(localStorage.getItem("notecomplete-page-spread") === "2" ? 2 : 1); } catch { setPageSpread(1); }
 // Audio for transcription: a small popover under the transport row.
 $("speechSettingsToggle").onclick = () => {
@@ -5626,7 +5709,8 @@ async function saveText() {
   const view = textView.hasDocument ? textView : htmlView.hasDocument ? htmlView : null;
   if (view === textView && converted) return saveConvertedCopy();
   if (!view || !changed) return;
-  const html = view === htmlView, name = docMember?.name || `${view.name}${html ? ".html" : ".txt"}`;
+  const html = view === htmlView, ext = html ? ".html" : view.markdown ? ".md" : ".txt";
+  const name = docMember?.name || (/\.(md|markdown|txt|html?)$/i.test(view.name) ? view.name : `${view.name}${ext}`);
   try {
     if (docMember?.source === "local" && window.notecompleteFiles?.writeOpened) {
       await window.notecompleteFiles.writeOpened(docMember.path, new TextEncoder().encode(view.text));
@@ -6240,7 +6324,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "insertGraph", "insertTable", "insertUml", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -6685,12 +6769,17 @@ function compoundBox(p, kind, box = null, size = COMPOUND_SIZE[kind]) {
   return [Math.max(20, Math.min(x, p.size[0] - w - 40)), Math.max(30, Math.min(y, p.size[1] - h - 30)), w, h];
 }
 // The editor for a new graph or table, then the object in `box` (one undo step).
+// If no document is open, edits first and opens a fresh note once accepted.
 async function insertCompound(p, kind, box = null, spec = {}) {
-  if (!doc || !p) return false;
-  if (!ensureEditableLayer()) return false;
+  const startedEmpty = !doc;
+  if (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer())) return false;
   const note = epoch;
   const chosen = await oneFigure(() => compoundEditor(kind, spec));
-  if (!chosen || !sameNote(note)) return false;
+  if (!chosen || !sameNote(note, startedEmpty)) return false;
+  if (startedEmpty) {
+    p = await openBlankNoteForPrefab(kind === "graph" ? "Graph" : "Table");
+    if (!p || !ensureEditableLayer()) return false;
+  }
   let items;
   try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
   await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
@@ -6704,7 +6793,7 @@ async function compoundEditor(kind, spec = {}, editing = false) {
   if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
   return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
 }
-$("insertGraph").onclick = () => doc && insertPrefab(panels[page]);
+$("insertGraph").onclick = () => insertPrefab(panels[page]);
 // Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
 // `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
 // `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
@@ -6746,16 +6835,20 @@ async function importDiagramSpec(text, fileName = "") {
   return importUml(text, list.length > 1 ? { diagram: list[0].index } : undefined);
 }
 async function insertPrefab(p, box = null, choice = null) {
-  if (!doc || !p || editing || figureOpen) return false;
+  const startedEmpty = !doc;
+  if (editing || figureOpen) return false;
+  if (startedEmpty ? !canReplace() : !p) return false;
   choice ||= await oneFigure(() => choosePrefab());
   if (!choice) return false;
   if (choice.kind === "uml-import") {
-    if (!ensureEditableLayer()) return false;
+    if (!startedEmpty && !ensureEditableLayer()) return false;
     try {
       const imported = await importDiagramSpec(choice.text, choice.fileName);
       const note = epoch;
       const spec = await umlEditor(imported, false);
-      if (!spec || !sameNote(note)) return false;
+      if (!spec || !sameNote(note, startedEmpty)) return false;
+      if (startedEmpty) p = await openBlankNoteForPrefab(prefabName(spec) || choice.fileName || "Diagram");
+      if (!p || !ensureEditableLayer()) return false;
       const done = await placePrefab(p, spec, box);
       if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
       return done;
@@ -6763,7 +6856,11 @@ async function insertPrefab(p, box = null, choice = null) {
       // Non-editable PlantUML diagrams (activity, sequence, state…) insert as a rendered picture.
       if (/picture/i.test(e.message) && /@startuml/i.test(choice.text)) {
         const res = await drawPlantuml(choice.text);
-        if (res?.svg) { await importImages([await svgToPngFile(res.svg, choice.fileName)]); return true; }
+        if (res?.svg) {
+          if (startedEmpty) await openBlankNoteForPrefab(choice.fileName?.replace(/\.[^.]+$/, "") || "Diagram");
+          await importImages([await svgToPngFile(res.svg, choice.fileName)]);
+          return true;
+        }
       }
       status(e.message, true);
       return false;
@@ -6771,13 +6868,17 @@ async function insertPrefab(p, box = null, choice = null) {
   }
   notePrefabUsed(choice.id);
   if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
-  if (!ensureEditableLayer()) return false;
+  if (!startedEmpty && !ensureEditableLayer()) return false;
   const note = epoch;
   // A card of a type module draws a type another module owns: its spec names its own module,
   // so that it edits in that module's base editor (and keeps its name) from the start.
   const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
   const spec = await figureEditor(start);
-  if (!spec || !sameNote(note)) return false;
+  if (!spec || !sameNote(note, startedEmpty)) return false;
+  if (startedEmpty) {
+    p = await openBlankNoteForPrefab(prefabName(spec) || choice.label || "Prefab");
+    if (!p || !ensureEditableLayer()) return false;
+  }
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
@@ -6790,8 +6891,8 @@ async function insertPrefab(p, box = null, choice = null) {
 const exerciseRefs = [];
 // The menu bar stays usable over the editors: if another note was opened (or this one closed)
 // meanwhile, what the editor returns is not put on it.
-function sameNote(note) {
-  if (doc && note === epoch) return true;
+function sameNote(note, startedEmpty = false) {
+  if (startedEmpty ? (!doc && note === epoch) : (doc && note === epoch)) return true;
   status("Another note was opened while the editor was open; nothing was changed.", true);
   return false;
 }
@@ -6930,19 +7031,24 @@ async function placePrefab(p, spec, box = null, replace = null, id = undefined) 
     return false;
   }
 }
-$("insertTable").onclick = () => doc && insertCompound(panels[page], "table");
+$("insertTable").onclick = () => insertCompound(panels[page], "table");
 // A UML diagram straight away (the picker's UML cards do the same): a class diagram to start.
 async function insertUml(p, box = null, diagram = "class") {
-  if (!doc || !p || editing || !ensureEditableLayer()) return false;
+  const startedEmpty = !doc;
+  if (editing || (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer()))) return false;
   const { starterModel } = await import("./uml.js");
   const note = epoch;
   const spec = await umlEditor(starterModel(diagram));
-  if (!spec || !sameNote(note)) return false;
+  if (!spec || !sameNote(note, startedEmpty)) return false;
+  if (startedEmpty) {
+    p = await openBlankNoteForPrefab(prefabName(spec) || "UML Diagram");
+    if (!p || !ensureEditableLayer()) return false;
+  }
   const done = await placePrefab(p, spec, box);
   if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
   return done;
 }
-$("insertUml").onclick = () => doc && insertUml(panels[page]);
+$("insertUml").onclick = () => insertUml(panels[page]);
 // The editor on a page of its own (a window of its own in the desktop app).
 $("openUmlPage").onclick = () => { if (!window.open("./uml.html", "_blank")) status("The UML editor page could not open here; it is at uml.html next to the app.", true); };
 $("openChartsPage").onclick = () => { if (!window.open("./charts.html", "_blank")) status("The chart editor page could not open here; it is at charts.html next to the app.", true); };
@@ -8133,8 +8239,9 @@ configureZh({
   boxText: (p, id) => { const t = (p?.view?.texts || []).find((x) => String(x.id) === String(id)); return t ? boxText(t) : ""; },
   editBox: (p, id, value) => textBox.replaceText(p, id, value),
   insertFigure: async (spec) => {
-    const p = panels[page];
-    if (!doc || !p || !ensureEditableLayer()) throw new Error("Open a note to insert the stroke order.");
+    let p = panels[page];
+    if (!doc) p = await openBlankNoteForPrefab(spec?.char ? `Stroke order ${spec.char}` : "Stroke order");
+    if (!p || !ensureEditableLayer()) throw new Error("Open a note to insert the stroke order.");
     const { prepare } = await import("./prefabs/hanzi/render.js");
     const full = await prepare(spec);
     if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Right-click it, hold it, or tap its ⋯ to edit it; one undo removes it.`);

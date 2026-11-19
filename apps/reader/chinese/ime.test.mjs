@@ -215,3 +215,25 @@ test('a letter rolled over a held Space takes Space\'s choice first', () => {
   assert.equal(r.text, '好你');
   assert.equal(chord([...seq('nihao'), 'v', { type: 'spaceCancel' }, '^']).text, '');
 });
+
+test('partial pick + Backspace emptying buffer never stalls Space or punctuation; comma/period commit directly', () => {
+  // Partial pick '你' from 'nihao' leaves buffer='hao', typing 'h' clears justChose so 4 Backspaces empty buffer cleanly.
+  const emptyBuf = run('hanzi', [...seq('nihao'), 'ArrowRight', ' ', 'h', 'Backspace', 'Backspace', 'Backspace', 'Backspace'], { dict: DICT });
+  assert.equal(emptyBuf.state.buffer, '');
+  assert.deepEqual(emptyBuf.state.chosen.map((c) => c.text), ['你']);
+  // Space must immediately commit '你' without requiring a Latin character.
+  const spaceOut = imeReduce(emptyBuf.state, { key: ' ' });
+  assert.equal(spaceOut.wait, undefined);
+  assert.equal(spaceOut.commit, '你');
+  // Comma and period must commit immediately instead of paging candidates.
+  assert.equal(run('hanzi', [...seq('ni'), ','], { dict: DICT }).text, '你，');
+  assert.equal(run('hanzi', [...seq('ni'), '.'], { dict: DICT }).text, '你。');
+  // spaceUp while waiting clears spaceHeld so a follow-up letter is not treated as a chord.
+  let s = imeInitial('hanzi');
+  for (const k of 'nihao') s = imeReduce(s, { key: k }).state;
+  s = imeReduce(s, { type: 'spaceDown' }).state;
+  const up = imeReduce(s, { type: 'spaceUp' });
+  assert.equal(up.wait, true);
+  assert.equal(up.state.spaceHeld, false);
+  assert.equal(up.state.chord, false);
+});
