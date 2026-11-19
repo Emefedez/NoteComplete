@@ -4829,3 +4829,6 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   cursor: context-menu;
   border-radius: var(--radius);
 }
+
+/* File formats: a reading dialog, wide so it is read without scrolling on a laptop screen. */
+.formats-dialog { width: min(900px, calc(100vw - 24px)); }
