@@ -115,8 +115,8 @@ export function imeReduce(state, k) {
   // Shortcuts keep working; what was being typed is written first (Ctrl+Enter finishes a text box with it).
   if (k.ctrl || k.alt || k.meta) return empty ? { state: s } : { state: clear(s), commit: enterText(s, { lineBefore: k.lineBefore }) };
   if (/^[a-zA-Z]$/.test(key)) {
-    // Hanzi mode: a capital starting a word is Latin (names, acronyms), as phone IMEs do.
-    if (empty && s.mode === 'hanzi' && /[A-Z]/.test(key)) return { state: s };
+    // A capital (the start of a sentence: "Ni") is pinyin too; letters with no characters
+    // (names, acronyms) are written as typed with Space or Enter.
     const buffer = s.buffer + key;
     return { state: { ...s, buffer, justChose: false }, handled: true, query: buffer };
   }

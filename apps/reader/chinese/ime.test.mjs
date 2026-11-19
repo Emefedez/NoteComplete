@@ -138,8 +138,10 @@ test('shortcuts pass; composition and Latin stand down', () => {
   assert.equal(s.latin, true);
   assert.equal(imeReduce(s, { key: 'n' }).handled, undefined);
   assert.equal(imeReduce(imeInitial('off'), { key: 'n' }).handled, undefined);
-  // A capital first letter in Hanzi mode is Latin.
-  assert.equal(imeReduce(imeInitial('hanzi'), { key: 'N' }).handled, undefined);
+  // A capital first letter is pinyin too ("Ni" at the start of a sentence), never left behind as Latin.
+  const cap = imeReduce(imeInitial('hanzi'), { key: 'N' });
+  assert.equal(cap.handled, true);
+  assert.equal(imeReduce(cap.state, { key: 'i' }).state.buffer, 'Ni');
 });
 
 test('the mode cycles Off → Hanzi → Pinyin → Off and writes what was typed', () => {
