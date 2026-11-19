@@ -1,0 +1,2 @@
+fibonacciDynamic(10)=55
+fillRucksackDynamic(9)=[doll, ball]

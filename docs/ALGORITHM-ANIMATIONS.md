@@ -58,13 +58,17 @@ the app's realm as is: run translated code in a worker or scope those shims.
 
 ```
 apps/reader/prefabs/algorithms/
-  module.json        kind "custom", output "picture", editor "editor.js", group "algorithms"
+  module.json        kind "window" (the player opens in the kit's movable window, not a modal
+                     dialog), output "picture", editor "editor.js", group "algorithms",
+                     prefabs "code" (render.js prefabs(): one card per algorithm)
   render.js          spec → SVG of one step (pure, no DOM; runs the trace, cached)
-  editor.js          the player window + input forms + code editor
+  editor.js          the player window + catalog + input forms (algorithms.css)
   trace/             the trace contract and recorder (pure)
   structures/        one SVG renderer per structure kind (pure) + layout (graph positions kept)
-  catalog/           one file per algorithm: { id, name, topic, input schema, presets,
-                     javaSource (shown), run(input, t) } written in JS against the recorder
+  catalog/           the algorithms: { id, name, topic, hint, fields (input schema), presets,
+                     random(seed), normalize(input), source (Java, shown), run(input, t) }
+                     written in JS against the recorder; lines found by their text
+                     (lineFinder), so `line` follows the source
   java/              the Java subset interpreter (lexer, parser, interpreter, library)
   test/
 ```
@@ -96,19 +100,124 @@ size, loadFactor}, `map`/`set` {entries | items}, `tree` / `binarytree` {root: {
 automatically, plus `t.step(caption, {line, vars})`, `t.mark`, `t.call/ret`. A cap (e.g. 5 000
 steps) stops runaway runs with a clear message.
 
+Details fixed by the phase 1 implementation (all optional, so a trace without them still
+draws; the Java layer emits the same):
+- `trace` also has `version: 1`, and `result` (what the run returned) and `error` (why it
+  stopped: the cap or bad input; the last step's caption says it too) when there are.
+- Element keys for `marks` and `changes[].path`: array index; heap **position from 1** (the
+  course's arrayHeap); graph node id, and edges as `"from-to"` (either order matches when
+  undirected); map key; set item; hashtable bucket index (`"3"`) or entry `"k:<key>"` (path
+  `[bucket, i]`); matrix and board `"r,c"`; queue/stack/pq index from the front/bottom.
+- Snapshots may carry `ids` (one hidden id per item, parallel to `items`) so a swap or a
+  shift is drawn as a move; arrays `pointers: {name: index}` and `base` (first index shown);
+  stacks `sized: true` (discs, Hanoi); matrices `rowLabels`, `colLabels`.
+- Marks: current, visited, done, compare, path, new, removed, error, and `queued` (waiting in
+  a queue). A step's own marks (`t.step(…, {marks})`) last that step only; `t.mark` lasts.
+- An element changed in a step and not marked is drawn as "new" (adds) and with an
+  "old → new" badge (sets).
+
 ### The Java simulation layer
 
-A tree-walking interpreter for the Java subset the course uses (no JVM): classes (fields,
-constructors, static and instance methods, inner/nested static classes, interfaces with
-default methods ignored if simple), generics parsed and erased, primitives with int/long/double
-arithmetic and integer division/overflow, `char`, `String` (common methods), arrays (1-D, 2-D),
-`if/else`, `for`, for-each, `while`, `do`, `switch` (classic and arrow), `break/continue`,
-`return`, `try/catch/throw` with the library's exceptions, recursion with a depth limit, lambdas
-for `Comparator`/`forEach` where simple. Library classes are JS implementations that are also
-tracked structures (a `PriorityQueue` the user creates appears in the player). Each statement
-executed records the current line and locals; structure operations record changes. Runs are
-step-limited and time-limited (a worker, cancellable) so an infinite loop cannot hang the app.
-The interpreter is exposed as `runJava(source, entry, input, recorder)`.
+Implemented in `apps/reader/prefabs/algorithms/java/` (pure ES modules, no DOM, no eval). A
+tree-walking interpreter (not the simulators' regex translator: a real lexer/parser gives
+lines, columns and steppable statements), with the owner's TAD replicas ported to ES modules
+and no global prototype patches.
+
+```
+java/lexer.js  parser.js      tokens (line/column) → AST; generics parsed, erased later
+java/values.js                runtime values (int = number, long = BigInt, double/float/char boxed, …)
+java/interpreter.js           classes, statements, expressions, steps, tracked structures
+java/prelude.js               Throwable and the exception hierarchy, written in Java
+java/lib/                     java.lang, java.util and the course's TADs as JS classes
+java/library.js               class registry: imports, star imports, default names
+java/index.js                 runJava(); java/worker.js runs it in a Worker
+java/test/                    node --test suites, fixtures, run.mjs (CLI: prints a run step by step)
+```
+
+**API.** `runJava(source, { entry, args, input, recorder, maxSteps, maxMs, maxDepth, maxFrames,
+record, shouldCancel, cancelFlag })` → the trace (`{ structures, steps }`) plus `result` (plain
+JS), `resultText` (as Java prints it), `output`, `errOutput`, `stepsRun`, `truncated` and, when
+the run did not complete, `error: { kind: 'compile'|'runtime'|'limit'|'cancelled'|'internal',
+message, line, column, file, exception?, stack? }`. `source` is a string or several files
+(`[{ name, text }]`); `entry` is `"Class.method"` (default: `main`); `args` are converted to the
+parameter types: numbers, strings, arrays (Java arrays or lists), objects (maps, the course's or
+java.util's per the imports), graphs as `{ vertices, edges }` or `"A-B 4, B-C 2"` (`->` for
+directed), or `{ $java: "new int[]{1, 2}" }` for anything else. `input` feeds
+`new Scanner(System.in)`. Errors are reported on Run (no live checking while typing): syntax
+errors from the parser, symbol errors (unknown variable/method, wrong arguments) when the
+statement runs, both with line and column; uncaught exceptions with the line where they were
+created, their message (Java's, e.g. `Cannot invoke "length()" because "s" is null`) and the
+call stack.
+
+**Recorder interface**: the module's one recorder, `trace/recorder.js` (java/index.js's
+`createRecorder` is it with `stopAtCap` and `stepMarks`): `structure(id, kind, label)`,
+`set(id, snapshot, changes?)`, `mark(id, key, state)` (next step only), `call(fn, args)`,
+`ret()`, `step(caption, { line, vars, file })` (false past the cap; the trace is then
+`truncated`), `finish(extra)` → trace. The catalog uses the same recorder's tracked
+structures (its set is `t.hashSet`) and lasting marks, and throws at the cap. A structure may
+first appear in a later step (steps before it have no snapshot of it).
+
+**Steps.** A step per executed statement (after it runs), per loop/if/switch condition (caption
+`while (i < n)  → true`, for-each `→ x = 3`), per method entry (`dijkstra(graph, ONE)`) and
+return (`return 12`), per catch. Each has the line, the locals of the current frame (and `this.`
+fields), the call stack and every structure's snapshot. Library code and the prelude record no
+steps; the user's comparators/lambdas called by the library do.
+
+**Structures.** A library object or array bound to a variable, parameter or field becomes a
+structure named after it (one per binding site, re-pointed when the variable gets another
+object): lists → `array` (`queue`/`deque` when declared as Queue/Deque), Stack/LinkedStack →
+`stack`, LinkedQueue → `queue`, ArrayDeque → `deque`, PriorityQueue → `pq`, maps (java.util
+and the course's) → `map`, sets → `set`, Graph/AdjacencyList → `graph`, LinkedBinaryTree →
+`binarytree`, LinkedTree → `tree`, BinaryMaxHeap → `heap`, StringBuilder → `text`, 1-D arrays
+→ `array` (with `pointers` from index variables), 2-D → `matrix`, System.out → `text`
+"console". Their operations record `changes` (`add`/`remove`/`set`/`clear` with path and
+old/new values); array reads and writes are marked (`compare`/`current`).
+
+**Supported.** Classes (fields, constructors with this()/super(), static and instance methods,
+overloading by arity and argument types, static nested, inner (also `outer.new Inner()`), and
+anonymous classes, interfaces with default and static methods, abstract classes, simple enums
+(values, valueOf, ordinal, switch on enums), records); generics parsed and erased; int, long
+(64-bit), short, byte, double, float (printed as Java does), char, boolean with Java's integer
+division, overflow, shifts, `/ by zero`, casts, compound-assignment narrowing, char arithmetic;
+String (reference `==`, literals interned, the usual methods incl. split/format/repeat/
+compareTo), StringBuilder; 1-D, 2-D and jagged arrays with bounds checks; if/else, for,
+for-each, while, do, switch (classic with fall-through, arrow, switch expressions with yield,
+on int/char/String/enum), labelled break/continue, return, try/catch (multi-catch)/finally,
+try-with-resources, throw, user exceptions extending the prelude's; lambdas and method
+references (`String::length`, `Integer::compare`, `ArrayList::new`) for Comparator, Consumer,
+BiConsumer, Function, Predicate, Supplier, Runnable; static imports; Math, Integer, Long,
+Double, Character, Boolean, Objects, Arrays, Collections, List/Set/Map.of, Comparator.comparing,
+System.out/err (print, println, printf), Scanner, Random (Java's generator, seed 42 by default).
+java.util: ArrayList, LinkedList, Vector, Stack, ArrayDeque, PriorityQueue (Java's heap layout),
+HashMap/HashSet (Java's bucket order, resizing and `merge`/`compute` insertion), LinkedHashMap/
+Set, TreeMap/TreeSet, iterators failing fast with ConcurrentModificationException. The course:
+aed1 LinkedList/LinkedQueue/LinkedStack, aed2 Vertex (prints `" " + value` like the jar), Edge,
+AdjacencyList (Graph), MapOfMap, the course's Map/HashMap (50 buckets, no isEmpty/containsKey),
+LinkedBinaryTree, LinkedBinarySearchTree, LinkedTree, BinaryMaxHeap, Pair, EmptyException/
+EmptyTreeException/HeapEmptyException. Without imports, `HashMap`/`Map` mean the course's, the
+other names java.util's; imports decide otherwise.
+
+**Checked against the JVM.** `java/test/fixtures/` has the activities 1, 4, 6, 7 (owner's code)
+and 8–11 (the repo's stubs filled in the course's style: Dijkstra, Prim, placeQueens,
+quickSelection, Hanoi, fibonacciDynamic, fillRucksackDynamic), each with a driver running its
+JUnit cases; the simulator's output equals the JVM's byte for byte (including the owner's heap
+bugs that fail the same JUnit tests on the JVM), and the JUnit expected values are asserted.
+`Semantics.java` covers the language edge cases against the JVM too.
+
+**Not supported / differences.** Streams; generic type checks (wrong generic types are not
+reported; types are erased, primitives are converted at declarations, parameters, returns and
+array stores); most compile-time checks (definite assignment only when a value is read,
+unreachable code, checked exceptions, missing returns only when reached); local classes;
+extending a library class (`class MyList extends ArrayList`); interfaces from java.util as
+user-implemented collections (a user `Iterable` works in for-each); boxed `Integer == Integer`
+compares values (Java compares references above 127); `list.remove(x)` with an int-valued
+Integer removes by index; `keySet()/values()/entrySet()/subList()` are copies, not live views;
+`Set.of`/`Map.of` iterate in insertion order (the JVM's is randomized); ternaries do not
+promote int/double across branches; threads, I/O beyond System.in/out, reflection, `var` in
+lambda parameters, annotations (ignored). Recursion: `StackOverflowError` is thrown (and
+catchable) when the JS engine's stack runs out, at about 500 Java frames in Node's default
+stack (engine-dependent), or at `maxDepth` (3000). Defaults: 100 000 statements, 10 s, 5 000
+recorded steps (`maxFrames`; the run continues past it and `truncated` is set).
 
 ## Catalog (first the AEDII activities)
 
@@ -146,6 +255,32 @@ The interpreter is exposed as `runJava(source, entry, input, recorder)`.
    algorithm is run through Java), errors with lines.
 4. **On the page**: inline ▶ playback in the reader and presentations; export a step range as
    GIF/frames.
+
+## Status
+
+- **Phase 1 done**: the recorder (`trace/recorder.js`, cap 5 000 steps), the renderers
+  (`structures/`, light and dark palettes), the player, the catalog UI, the input forms,
+  unit tests (`prefabs/algorithms/test`) and `tools/algorithms_e2e.mjs`.
+- **Phase 2 done**: 69 algorithms, the whole catalog above and the extras, on the activities'
+  test data where they have it (a test checks every result their JUnit tests expect). The
+  code pane scrolls sideways (the step's line in sight) or wraps; the side panels resize.
+  The figure's menu has Play…, Edit input…, Edit code… (module.json `menu`, host.mode) and
+  Edit Greedy: Dijkstra…; the player's list has each algorithm's picture.
+  Graph input stays the player's own edge list and drag-to-place drawing: the diagram
+  editor's node graphs open only from the app (one figure editor at a time, `oneFigure`, as
+  a modal over the note), so a module editor cannot open it for its input without a new host
+  call (host.edit(kind, spec)): left for later.
+- **Phase 3 done (integration)**: one recorder for both layers; "New from Java…" (catalog):
+  your class in the code editor (highlighted, no errors while typing), Entry, Arguments
+  (JSON), System.in, a step limit, Run in a worker (Cancel) and the run's steps in the same
+  player; errors with line and column in the code pane. A spec is then `{ algorithm: "java",
+  source, entry, args, stdin, maxSteps }` ("Java: Count.sum"). "Edit code…" opens it (a
+  built-in with a Java version opens as that program, its input as the arguments). Built-ins
+  with a Java version (`catalog/java-versions.js`: recursion, DFS/BFS, Dijkstra, Prim, heap,
+  HashMap, queens, quickselect, quicksort, Hanoi, Fibonacci, knapsack, the simple sorts) have
+  "Run the Java version": their shown source runs through the interpreter (a one-line prefix
+  keeps its lines), `{ java: true }` in the spec.
+- The code pane uses the shared highlighter (`apps/reader/code-highlight.js`).
 
 ## Open questions for the owner
 - Show the AEDII sources (the owner's own code from the activities repo) inside the app, or

@@ -3,6 +3,7 @@ import * as m_charts from './charts/render.js';
 import * as m_uml from './uml/render.js';
 import * as m_numberline from './numberline/render.js';
 import * as m_truthtable from './truthtable/render.js';
+import * as m_algorithms from './algorithms/render.js';
 
 export const MODULES = [
   { folder: "graph", manifest: {"id":"graph","api":1,"version":"1.0.0","order":10,"label":"Function graph","kind":"window","output":"items","legacyKind":"graph","types":[],"editor":"graph","prefabs":[{"id":"graph","group":"basic","label":"Function graph","hint":"Axes and a grid, with functions of x","icon":"graph"}]}, code: {} },
@@ -11,4 +12,5 @@ export const MODULES = [
   { folder: "uml", manifest: {"id":"uml","api":1,"version":"1.0.0","order":40,"label":"Diagrams (UML and node graphs)","kind":"custom","output":"picture","legacyKind":"uml","types":["uml"],"editor":"uml-editor","capabilities":["notes","json","export","import","clipboard"],"prefabs":"code"}, code: m_uml },
   { folder: "numberline", manifest: {"id":"numberline","api":1,"version":"1.0.0","order":50,"label":"Number line","kind":"custom","output":"picture","types":["numberline"],"names":{"numberline":"Number line"},"editor":"editor.js","groups":{"maths":"Maths"},"prefabs":[{"id":"numberline","group":"maths","label":"Number line","hint":"A line with ticks, marked points and intervals (open or closed ends)","icon":"minus","spec":{"type":"numberline","title":"","min":-5,"max":5,"step":1,"points":[{"x":2,"label":"a"}],"intervals":[{"from":-3,"to":1,"closedFrom":true,"closedTo":false}]}}]}, code: m_numberline },
   { folder: "truthtable", manifest: {"id":"truthtable","api":1,"version":"1.0.0","order":60,"label":"Truth table","kind":"custom","output":"picture","types":["truthtable"],"names":{"truthtable":"Truth table"},"editor":"editor.js","groups":{"maths":"Maths"},"prefabs":[{"id":"truthtable","group":"maths","label":"Truth table","hint":"Every row of some variables, with a boolean expression's value (or an empty column to fill in)","icon":"table","spec":{"type":"truthtable","title":"","variables":["A","B"],"expr":"A and not B","label":"","output":"values","notation":"10"}}]}, code: m_truthtable },
+  { folder: "algorithms", manifest: {"id":"algorithms","api":1,"version":"1.0.0","order":70,"label":"Algorithms","kind":"window","output":"picture","types":["algorithm"],"names":{"algorithm":"Algorithm"},"editor":"editor.js","window":{"width":1120,"height":700},"groups":{"algorithms":"Algorithms"},"capabilities":["player"],"prefabs":"code","menu":[{"label":"Play…","icon":"play","mode":"play"},{"label":"Edit input…","icon":"settings","mode":"input"},{"label":"Edit code…","icon":"code","mode":"code"}]}, code: m_algorithms },
 ];

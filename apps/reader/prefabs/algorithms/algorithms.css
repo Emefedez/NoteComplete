@@ -1,0 +1,79 @@
+/* The algorithm player (prefabs/algorithms/editor.js), in the kit's movable window. Colours
+   from the kit's tokens (which follow the app's, dark and light). */
+.alg-editor .pk-main { --pk-left: 270px; --pk-right: 330px; }
+.alg-editor .pk-palette { gap: 6px; padding: 8px; }
+.alg-canvas.pk-canvas { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px 8px; touch-action: auto; overflow: hidden; }
+.alg-stage { flex: 1 1 auto; min-height: 120px; display: grid; place-items: center; overflow: hidden; border-radius: 8px; background: var(--k-surface); }
+.alg-stage > svg { width: 100%; height: 100%; max-height: 100%; display: block; background: transparent !important; }
+.alg-caption { margin: 0; min-height: 2.9em; font-size: 13.5px; line-height: 1.45; color: var(--k-ink); }
+.alg-caption.error { color: #d0453a; }
+.alg-timeline { width: 100%; margin: 0; accent-color: var(--k-accent); }
+.alg-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.alg-controls .pk-button.pk-icon { min-width: 32px; justify-content: center; }
+.alg-count { min-width: 64px; text-align: center; font: 12px/1 ui-monospace, Menlo, Consolas, monospace; color: var(--k-muted); }
+.alg-speed { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--k-muted); }
+.alg-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--k-line); }
+.alg-tabs button { flex: 1; padding: 5px 6px; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer; color: var(--k-muted); font-weight: 600; }
+.alg-tabs button[aria-selected="true"] { color: var(--k-ink); border-bottom-color: var(--k-accent); }
+.alg-side { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.alg-search { box-sizing: border-box; width: 100%; padding: 4px 8px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); }
+.alg-row { display: flex; gap: 4px; }
+.alg-row select { flex: 1; min-width: 0; }
+.alg-list { display: flex; flex-direction: column; gap: 2px; }
+.alg-heading { margin: 8px 2px 2px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--k-muted); }
+.alg-item { display: grid; grid-template-columns: 54px minmax(0, 1fr); column-gap: 8px; align-items: center; justify-items: start; width: 100%; box-sizing: border-box; gap: 1px; text-align: left; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: none; cursor: pointer; }
+.alg-item strong { font-size: 12.5px; font-weight: 600; }
+.alg-item small { font-size: 11px; color: var(--k-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alg-item:hover { background: var(--k-soft); }
+.alg-item.on { border-color: var(--k-accent); background: var(--k-soft); }
+.alg-hint { margin: 0; font-size: 11.5px; color: var(--k-muted); }
+.alg-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.alg-side h4 { margin: 8px 2px 1px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--k-muted); }
+.alg-text { font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
+.alg-draw { width: 100%; aspect-ratio: 3 / 2; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); touch-action: none; user-select: none; }
+.alg-draw .e { stroke: var(--k-muted); stroke-width: 2; }
+.alg-draw .w { fill: var(--k-muted); font: 12px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.alg-draw .tip { fill: var(--k-muted); }
+.alg-draw .v { cursor: grab; }
+.alg-draw .v circle { fill: var(--k-soft); stroke: var(--k-accent); stroke-width: 2; }
+.alg-draw .v text { fill: var(--k-ink); font: 600 13px system-ui, sans-serif; text-anchor: middle; pointer-events: none; }
+.alg-draw .link { stroke: var(--k-accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.alg-code { max-height: 46%; min-height: 120px; overflow: auto; padding: 6px 0; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-chrome); font: 12px/1.5 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; }
+.alg-line { display: flex; width: max-content; min-width: 100%; box-sizing: border-box; white-space: pre; padding-right: 8px; border-left: 3px solid transparent; }
+.alg-code.wrap .alg-line { width: auto; white-space: pre-wrap; }
+.alg-code.wrap .alg-line code { min-width: 0; overflow-wrap: anywhere; padding-left: 2ch; text-indent: -2ch; }
+.alg-code-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.alg-code-head h4 { margin-bottom: 1px; }
+.alg-wrap { font-size: 11.5px; color: var(--k-muted); }
+.alg-code.tall { max-height: 72%; }
+.alg-line.on { background: var(--k-soft); border-left-color: var(--k-accent); }
+.alg-line.on code { font-weight: 700; }
+/* The line numbers stay put while long lines scroll sideways. */
+.alg-ln { flex: none; width: 2.6em; padding-right: .8em; text-align: right; color: color-mix(in srgb, var(--k-muted) 75%, transparent); user-select: none; position: sticky; left: 0; z-index: 1; background: var(--k-chrome); }
+.alg-line.on .alg-ln { background: color-mix(in srgb, var(--k-soft) 100%, var(--k-chrome)); }
+.alg-line code { font: inherit; color: var(--k-ink); }
+.alg-vars { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.alg-vars dt { color: var(--k-muted); }
+.alg-vars dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.alg-calls, .alg-changes { margin: 0; padding-left: 0; list-style: none; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.alg-calls li { padding: 1px 6px; border-left: 3px solid var(--k-line); }
+.alg-calls li.on { border-left-color: var(--k-accent); font-weight: 600; }
+.alg-changes li b { font-weight: 600; color: var(--k-accent); }
+.alg-none { color: var(--k-muted); font-style: italic; }
+.alg-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11.5px; color: var(--k-muted); }
+.alg-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.alg-legend i { width: 12px; height: 12px; border: 1.5px solid; border-radius: 3px; }
+@media (max-width: 760px) { .alg-code { max-height: 220px; } }
+.alg-stage:focus { outline: none; }
+.alg-item strong, .alg-item small { max-width: 100%; }
+.alg-code, .alg-vars, .alg-calls, .alg-changes, .alg-text { font-variant-ligatures: none; }
+.alg-item-text { display: grid; gap: 1px; min-width: 0; max-width: 100%; }
+.alg-thumb { width: 54px; height: 38px; display: grid; place-items: center; overflow: hidden; border-radius: 4px; background: var(--k-surface); border: 1px solid var(--k-line); }
+.alg-thumb > svg { width: 100%; height: 100%; }
+.alg-code-edit { min-height: 220px; max-height: 60%; display: flex; flex-direction: column; }
+.alg-code-edit .code-editor { flex: 1; min-height: 220px; border: 1px solid var(--k-line); border-radius: 6px; }
+.alg-code-error { margin: 0; padding: 5px 8px; border-radius: 6px; font-size: 12px; color: #fff; background: #b3261e; }
+.alg-line.error { background: color-mix(in srgb, #d0453a 22%, transparent); border-left-color: #d0453a; }
+.alg-code-head .alg-edit-code { margin-left: auto; min-height: 22px; font-size: 11.5px; }
+.alg-new-java { justify-content: center; }
+.alg-run-row { gap: 6px; }

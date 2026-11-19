@@ -1,0 +1,9 @@
+size=6 get(3)=TRES get(100)=null get(null)=null
+after re-add size=6 get(3)=''
+add(null): NullPointerException
+remove(3)='' remove(100)=null size=5
+keys=[1, 2, 4, 5, 6]
+values=UNO DOS CUATRO CINCO SEIS
+forEach=1=UNO 2=DOS 4=CUATRO 5=CINCO 6=SEIS
+collisions=1,2 size=2
+clear size=0

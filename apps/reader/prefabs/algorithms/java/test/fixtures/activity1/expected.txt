@@ -1,0 +1,14 @@
+factorial(0)=1
+factorial(4)=24
+square(0)=0
+square(5)=25
+sumDigits(1111)=4
+sumDigitsString(1369)=19
+mcd(22,12)=2
+invert=elpmaxe
+addValues=20
+addValuesWithFor=20
+invertArray=[8, 6, 4, 2]
+minimum=2
+binarySearch=2
+copyStack=[AEDII, Actividad, Uno] equal=true same=false
