@@ -123,7 +123,7 @@ async function pageImage(side, view, width) {
 const when = value => { const t = Date.parse(value || ''); return t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown date'; };
 const mb = bytes => `${(Number(bytes || 0) / 1048576).toFixed(1)} MB`;
 
-export function versionChooser({ library, drive, open, status, fingerprint }) {
+export function versionChooser({ library, drive, dropbox = null, open, status, fingerprint }) {
   let warned = false;
   // Choices resolve one promise; the dialogs are plain <dialog>s in index.html.
   const choose = (dialog, buttons) => new Promise(resolve => {
@@ -151,9 +151,9 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
     if (picked.length) status(`Brought ${picked.length === kinds.length ? 'everything' : picked.length + ' of ' + kinds.length} to the new version.`);
   }
 
-  async function fetchDrive(file) {
+  async function fetchRemote(provider, file) {
     let shown = 0, downloaded = false;
-    const result = await drive.fetch(file, (received, total) => {
+    const result = await provider.fetch(file, (received, total) => {
       downloaded = true;
       if (Date.now() - shown < 300) return;
       shown = Date.now();
@@ -215,75 +215,94 @@ export function versionChooser({ library, drive, open, status, fingerprint }) {
     }
   }
 
-  async function compare(entry, local, newest) {
+  async function compare(entry, local, newest, { provider = drive, service = 'Google Drive', short = 'Drive' } = {}) {
     $('compareSummary').textContent = 'Downloading and reading both versions…';
-    let driveFile = null;
+    let remoteFile = null;
     try {
-      driveFile = await fetchDrive(newest);
+      remoteFile = await fetchRemote(provider, newest);
     } catch (error) {
       $('compareSummary').textContent = error.message;
-      return { choice: 'cancel', driveFile: null };
+      return { choice: 'cancel', remoteFile: null };
     }
     const choice = await compareFiles({
       title: entry.name,
       leftLabel: `Your copy · ${when(entry.modifiedTime)}`,
-      rightLabel: `Google Drive · ${when(newest.modifiedTime)}`,
+      rightLabel: `${service} · ${when(newest.modifiedTime)}`,
       localFile: local,
-      remoteFile: driveFile,
-      remoteName: 'Drive',
+      remoteFile,
+      remoteName: short,
     });
-    return { choice, driveFile };
+    return { choice, remoteFile };
   }
 
-  // Opening a Drive note from Recent: true when handled here (opened or cancelled).
-  // `force` (⋯ → Check Drive for a newer version) always answers, compares by content and not
-  // only by date, and says so when the kept copy is already the newest.
+  // Opening a Drive or Dropbox note from Recent: true when handled here (opened or cancelled).
+  // `force` (⋯ → Check Drive/Dropbox for updates) always answers, compares by content and
+  // not only by date, and says so when the kept copy is already the newest.
   async function openRecent(entry, local, { force = false } = {}) {
-    if (entry.source !== 'drive') return false;
-    if (!drive.ready) {
-      if (force) status('Connect Google Drive first (Home → Google Drive), then check again.', true);
-      else if (!warned) status('Opened the copy on this device. Connect Google Drive to check for newer versions.');
+    if (entry.source !== 'drive' && entry.source !== 'dropbox') return false;
+    const isDropbox = entry.source === 'dropbox';
+    const provider = isDropbox ? dropbox : drive;
+    const service = isDropbox ? 'Dropbox' : 'Google Drive';
+    const short = isDropbox ? 'Dropbox' : 'Drive';
+    if (!provider?.ready) {
+      if (force) status(`Connect ${service} first (Home → ${service}), then check again.`, true);
+      else if (!warned) status(`Opened the copy on this device. Connect ${service} to check for newer versions.`);
       warned = true;
       return force;
     }
     let newest;
-    try { newest = (await drive.newest(entry))?.[0]; }
-    catch (error) { status(`Could not check Drive for a newer version: ${error.message}`, true); return force; }
+    try { newest = (await provider.newest(entry))?.[0]; }
+    catch (error) { status(`Could not check ${short} for a newer version: ${error.message}`, true); return force; }
     if (!newest) {
-      if (force) status(`Nothing named ${entry.name} was found in its Drive folder. It may have been renamed, moved or deleted there.`, true);
+      if (force) status(`Nothing named ${entry.name} was found in its ${short} folder. It may have been renamed, moved or deleted there.`, true);
       return force;
     }
-    if (!entry.md5 && library.md5) {
-      entry.md5 = await library.md5(new Uint8Array(await local.arrayBuffer()));
-      await library.store.set('entries', entry.key, entry);
+    if (!isDropbox) {
+      if (!entry.md5 && library.md5) {
+        entry.md5 = await library.md5(new Uint8Array(await local.arrayBuffer()));
+        await library.store.set('entries', entry.key, entry);
+      }
+      // Same content under a new Drive file: adopt it quietly.
+      if (newest.md5Checksum && newest.md5Checksum === entry.md5) {
+        if (newest.id !== entry.driveId) await library.cached(newest).catch(() => null);
+        if (force) status(`${entry.name} is up to date: the copy on this device matches Drive (${when(newest.modifiedTime)}).`);
+        return force;
+      }
+    } else {
+      const sameHash = newest.contentHash && entry.contentHash && newest.contentHash === entry.contentHash;
+      const sameRev = newest.rev && entry.rev && newest.rev === entry.rev;
+      if (sameHash || sameRev) {
+        if (force) status(`${entry.name} is up to date: the copy on this device matches Dropbox (${when(newest.modifiedTime)}).`);
+        return force;
+      }
     }
-    // Same content under a new Drive file: adopt it quietly.
-    if (newest.md5Checksum && newest.md5Checksum === entry.md5) {
-      if (newest.id !== entry.driveId) await library.cached(newest).catch(() => null);
-      if (force) status(`${entry.name} is up to date: the copy on this device matches Drive (${when(newest.modifiedTime)}).`);
-      return force;
-    }
-    // A forced check trusts a different checksum over the dates (an upload can keep an old date).
-    const differs = force && newest.md5Checksum && entry.md5 && newest.md5Checksum !== entry.md5;
+    // A forced check trusts a different checksum/rev over the dates (an upload can keep an old date).
+    const differs = force && (isDropbox
+      ? ((newest.contentHash && entry.contentHash && newest.contentHash !== entry.contentHash) || (newest.rev && entry.rev && newest.rev !== entry.rev))
+      : (newest.md5Checksum && entry.md5 && newest.md5Checksum !== entry.md5));
     if (!differs && Date.parse(newest.modifiedTime || 0) <= Date.parse(entry.modifiedTime || 0)) {
-      if (force) status(`${entry.name} is up to date: Drive's newest copy is from ${when(newest.modifiedTime)}.`);
+      if (force) status(`${entry.name} is up to date: ${short}'s newest copy is from ${when(newest.modifiedTime)}.`);
       return force;
     }
-    $('versionText').textContent = `“${entry.name.replace(/\.noteful$/i, '')}” has a newer version in Google Drive.`;
+    if ($('versionTitle')) $('versionTitle').textContent = `Newer version in ${service}`;
+    if ($('versionRemoteLabel')) $('versionRemoteLabel').textContent = service;
+    if ($('versionOpenDrive')) $('versionOpenDrive').textContent = `Open ${short} version`;
+    if ($('compareDrive')) $('compareDrive').textContent = `Use ${short} version`;
+    $('versionText').textContent = `“${entry.name.replace(/\.noteful$/i, '')}” has a newer version in ${service}.`;
     $('versionMine').textContent = `${when(entry.modifiedTime)} · ${mb(entry.size)}`;
     $('versionDrive').textContent = `${when(newest.modifiedTime)} · ${mb(newest.size)}`;
     let choice = await choose($('versionDialog'), { versionCompare: 'compare', versionOpenMine: 'mine', versionBoth: 'both', versionOpenDrive: 'drive' });
-    let driveFile = null;
-    if (choice === 'compare') ({ choice, driveFile } = await compare(entry, local, newest));
+    let remoteFile = null;
+    if (choice === 'compare') ({ choice, remoteFile } = await compare(entry, local, newest, { provider, service, short }));
     if (choice === 'cancel') return true;
     if (choice === 'mine') { await library.touch(entry.key); await open(local, entry); return true; }
     try {
-      driveFile ||= await fetchDrive(newest);
-      await offerStudy(local, driveFile);
-      // Using the Drive version replaces the kept copy; keeping both leaves it in Recent.
+      remoteFile ||= await fetchRemote(provider, newest);
+      await offerStudy(local, remoteFile);
+      // Using the remote version replaces the kept copy; keeping both leaves it in Recent.
       if (choice === 'drive') await library.forget(entry.key, { deleteFile: true });
       const opened = await library.entry(newest);
-      await open(driveFile, opened);
+      await open(remoteFile, opened);
     } catch (error) { status(error.message, true); }
     return true;
   }

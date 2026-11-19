@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
+import { dropboxDesktopSignIn, refreshDropboxDesktopToken } from './dropbox-auth.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles, withExtension } from './library-files.js';
@@ -124,6 +125,80 @@ async function refreshDriveKind(kind, { force = false } = {}) {
     }
   })();
   refreshingDrive.set(kind, task);
+  return task;
+}
+// Dropbox tokens, shared by all tabs and persisted encrypted when available so sign-in survives restarts.
+let dropboxSession = null;
+let refreshingDropbox = null;
+const dropboxSessionPath = () => path.join(app.getPath('userData'), 'dropbox-session.json');
+async function saveDropboxSession() {
+  try {
+    const s = dropboxSession;
+    if (!s || (!s.refreshToken && !(s.access_token && s.expires - Date.now() > 10000))) {
+      await rm(dropboxSessionPath(), { force: true });
+      return;
+    }
+    const raw = JSON.stringify(s);
+    const wrapped = safeStorage.isEncryptionAvailable()
+      ? JSON.stringify({ encrypted: true, data: safeStorage.encryptString(raw).toString('base64') })
+      : raw;
+    await writeFile(dropboxSessionPath(), wrapped, { mode: 0o600 });
+  } catch { /* Optional on read-only environments. */ }
+}
+async function loadDropboxSession() {
+  try {
+    const parsed = JSON.parse(await readFile(dropboxSessionPath(), 'utf8'));
+    const data = parsed?.encrypted
+      ? (safeStorage.isEncryptionAvailable() ? JSON.parse(safeStorage.decryptString(Buffer.from(parsed.data, 'base64'))) : null)
+      : parsed;
+    if (data && typeof data === 'object') dropboxSession = data;
+  } catch { /* No saved session yet. */ }
+}
+function currentDropboxSession() {
+  const t = dropboxSession;
+  if (t && t.expires - Date.now() > 10000) return { access_token: t.access_token, scope: t.scope, expires_in: Math.floor((t.expires - Date.now()) / 1000) };
+  return null;
+}
+function sendDropboxSession() {
+  const session = currentDropboxSession();
+  for (const view of views.values()) if (!view.webContents.isDestroyed()) view.webContents.send('dropbox:session', session);
+}
+function shareDropboxSession(token, refreshToken = dropboxSession?.refreshToken || '', appKey = dropboxSession?.appKey || '') {
+  dropboxSession = {
+    access_token: token.access_token,
+    scope: token.scope,
+    expires: Date.now() + Number(token.expires_in || 0) * 1000,
+    ...(refreshToken ? { refreshToken } : {}),
+    ...(appKey ? { appKey } : {}),
+  };
+  void saveDropboxSession();
+  sendDropboxSession();
+}
+async function refreshDropboxSession({ force = false } = {}) {
+  const current = dropboxSession;
+  if (!force && current?.access_token && current.expires - Date.now() > 60000) {
+    return { access_token: current.access_token, scope: current.scope, expires_in: Math.floor((current.expires - Date.now()) / 1000) };
+  }
+  if (!current?.refreshToken || !current?.appKey) throw Error('Connect to Dropbox to continue.');
+  if (refreshingDropbox) return refreshingDropbox;
+  const task = (async () => {
+    try {
+      let nextRefresh = current.refreshToken;
+      const token = await refreshDropboxDesktopToken({ appKey: current.appKey, refreshToken: current.refreshToken, onRefreshToken: rt => { nextRefresh = rt; } });
+      shareDropboxSession(token, nextRefresh, current.appKey);
+      return token;
+    } catch (error) {
+      if (error.code === 'invalid_grant') {
+        dropboxSession = null;
+        await saveDropboxSession();
+        sendDropboxSession();
+      }
+      throw error;
+    } finally {
+      refreshingDropbox = null;
+    }
+  })();
+  refreshingDropbox = task;
   return task;
 }
 const views = new Map(), windows = new Map();
@@ -432,6 +507,7 @@ app.whenReady().then(async () => {
     catch { return new Response('Not found', { status: 404 }); }
   });
   const pendingAuth = new Map();
+  const pendingDropboxAuth = new Map();
   const trusted = event => event.senderFrame === event.sender.mainFrame && event.senderFrame.url.startsWith(home);
   // Downloads folder and Recent for the reader; see library-files.js for the limits.
   const files = libraryFiles({ settingsFile: path.join(app.getPath('userData'), 'library.json'), defaultFolder: path.join(app.getPath('documents'), 'NoteComplete'), trash: (file) => shell.trashItem(file) });
@@ -737,6 +813,7 @@ app.whenReady().then(async () => {
     if (win && tabs.update(event.sender.id, { title: state.title, dirty: state.dirty })) broadcast(win);
   }));
   await loadDriveSession();
+  await loadDropboxSession();
   // The Drive session belongs to the app and persists encrypted in userData (refresh tokens
   // stay in the main process); renderers get short-lived access tokens and silent refreshes.
   ipcMain.handle('drive:session', async event => {
@@ -775,6 +852,32 @@ app.whenReady().then(async () => {
       shareDriveSession(kind, token, refreshToken);
       return token;
     } finally { pendingAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
+  });
+  ipcMain.handle('dropbox:session', async event => {
+    if (!trusted(event)) return null;
+    if (!currentDropboxSession() && dropboxSession?.refreshToken && dropboxSession?.appKey) await refreshDropboxSession().catch(() => {});
+    return currentDropboxSession();
+  });
+  ipcMain.handle('dropbox:refresh', async (event, options = {}) => {
+    if (!trusted(event)) throw Error('Unexpected authentication origin.');
+    return refreshDropboxSession({ force: options?.force === true });
+  });
+  ipcMain.on('dropbox:forget', event => { if (trusted(event)) { dropboxSession = null; void saveDropboxSession(); sendDropboxSession(); } });
+  ipcMain.on('dropbox:cancel', event => { if (trusted(event)) pendingDropboxAuth.get(event.sender.id)?.abort(); });
+  ipcMain.handle('dropbox:sign-in', async (event, options = {}) => {
+    if (!trusted(event)) throw Error('Unexpected authentication origin.');
+    if (pendingDropboxAuth.has(event.sender.id)) throw Error('Finish the current Dropbox sign-in first.');
+    const abort = new AbortController(), sender = event.sender;
+    pendingDropboxAuth.set(sender.id, abort);
+    const cancelled = () => abort.abort();
+    sender.once('destroyed', cancelled);
+    try {
+      let refreshToken = '';
+      const appKey = String(options?.appKey || '').trim();
+      const token = await dropboxDesktopSignIn({ appKey, signal: abort.signal, openExternal: url => shell.openExternal(url), onRefreshToken: rt => { refreshToken = rt; } });
+      shareDropboxSession(token, refreshToken, appKey);
+      return token;
+    } finally { pendingDropboxAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   started = true;
   // Back from a restart for an update: the windows and tabs that were open, each opening its

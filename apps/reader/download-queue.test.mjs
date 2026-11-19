@@ -78,3 +78,21 @@ test('cancel aborts active item and clears queue', async () => {
   assert.ok(aborted);
   assert.equal(queue.stats().total, 0);
 });
+
+test('Dropbox items enqueue, download and deduplicate by dropbox id', async () => {
+  const completed = [];
+  const fakeClient = {
+    download: async (doc, _signal, onProgress) => {
+      onProgress(10, 10);
+      return new Blob(['dbx'], { type: 'application/octet-stream' });
+    },
+  };
+  const queue = createDownloadQueue({ onItemDone: item => completed.push(item.id) });
+  assert.equal(queue.enqueue({ source: 'dropbox', doc: { id: 'id:1', name: 'Note.noteful' }, client: fakeClient }), 1);
+  assert.equal(queue.enqueue({ source: 'dropbox', id: 'dropbox:id:1', doc: { id: 'id:1', name: 'Note.noteful' }, client: fakeClient }), 0);
+  await new Promise(resolve => {
+    const check = () => (queue.stats().isBusy ? setTimeout(check, 10) : resolve());
+    check();
+  });
+  assert.deepEqual(completed, ['dropbox:id:1']);
+});

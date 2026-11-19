@@ -1466,7 +1466,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .note-meta strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .note-meta span { color: var(--muted); font-size: 12px; }
 .note-meta .note-badge { align-self: flex-start; margin-top: 3px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; }
-#driveList li:has(.folder-chip), #archiveList li:has(.folder-chip) { grid-column: auto; min-width: 0; }
+#driveList li:has(.folder-chip), #dropboxList li:has(.folder-chip), #archiveList li:has(.folder-chip) { grid-column: auto; min-width: 0; }
 .folder-chip { width: 100%; height: 100%; justify-content: flex-start; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); text-align: left; white-space: normal; min-width: 0; }
 .folder-chip::before { content: ""; flex: none; width: 18px; height: 14px; border: 1.6px solid var(--muted); border-radius: 2px 2px 3px 3px; border-top-width: 4px; }
 .folder-chip .note-meta { flex: 1; min-width: 0; padding: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -1476,11 +1476,11 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .drive-heading { justify-content: space-between; margin: 0 0 10px; flex-wrap: wrap; }
 .drive-actions { flex-wrap: wrap; }
 .drive-search { flex-wrap: wrap; margin: 2px 0 6px; }
-#drivePath { overflow-wrap: anywhere; min-width: 0; flex: 1 1 200px; }
+#drivePath, #dropboxPath { overflow-wrap: anywhere; min-width: 0; flex: 1 1 200px; }
 .drive-filter { flex: 0 1 300px; min-width: 160px; }
-#driveSection input { display: block; width: 100%; min-width: 0; margin-top: 6px; min-height: var(--control); padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+#driveSection input, #dropboxSection input { display: block; width: 100%; min-width: 0; margin-top: 6px; min-height: var(--control); padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .drive-filter input { margin-top: 0 !important; }
-#driveSection label { display: block; font-size: 13px; margin: 8px 0; }
+#driveSection label, #dropboxSection label { display: block; font-size: 13px; margin: 8px 0; }
 .drive-signin { display: flex; gap: 18px; align-items: flex-start; padding: 16px 20px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--surface); max-width: 760px; }
 .drive-signin-icon svg { width: 40px; height: 40px; color: var(--accent); }
 .drive-signin p { margin: 0 0 8px; line-height: 1.5; color: var(--ink) !important; }
@@ -1492,8 +1492,8 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .drive-signin.compact > div:last-child::before { content: "Browsing a public folder. Connect for your whole Drive."; color: var(--muted); font-size: 13px; }
 .drive-setup { margin: 10px 0 0; }
 .drive-setup summary { padding-left: 0; color: var(--muted); }
-#driveStatus { min-height: 1.6em; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
-#driveMore { margin: 14px auto 0; display: flex; }
+#driveStatus, #dropboxStatus { min-height: 1.6em; margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+#driveMore, #dropboxMore { margin: 14px auto 0; display: flex; }
 .home-foot { max-width: 1240px; margin: 30px auto 0; padding-top: 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .home-foot strong { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .home-foot .supported-formats { margin: 0 0 0 auto !important; }

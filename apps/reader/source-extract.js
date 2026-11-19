@@ -565,6 +565,7 @@ export function contentSignature(bytes) {
 export function normalizeSourceKey(entry) {
   if (!entry || typeof entry !== 'object') return '';
   if (entry.key) return String(entry.key);
+  if (entry.dropboxId) return `dropbox:${entry.dropboxId}`;
   if (entry.path) return `local:${entry.path}`;
   if (entry.driveId) return `drive:${entry.driveId}`;
   return String(entry.name || '').trim().toLowerCase();

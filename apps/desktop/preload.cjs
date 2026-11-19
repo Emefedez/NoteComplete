@@ -134,6 +134,15 @@ contextBridge.exposeInMainWorld('notecompleteDrive', {
   onSession: callback => { ipcRenderer.on('drive:session', (_event, session) => callback(session)); },
   disconnect: () => ipcRenderer.send('drive:forget'),
 });
+contextBridge.exposeInMainWorld('notecompleteDropbox', {
+  signIn: (options = {}) => ipcRenderer.invoke('dropbox:sign-in', { appKey: typeof options.appKey === 'string' ? options.appKey : '' }),
+  refresh: (options = {}) => ipcRenderer.invoke('dropbox:refresh', { force: options.force === true }),
+  cancel: () => ipcRenderer.send('dropbox:cancel'),
+  // The session shared by every tab: what is signed in now, and changes made in other tabs.
+  session: () => ipcRenderer.invoke('dropbox:session'),
+  onSession: callback => { ipcRenderer.on('dropbox:session', (_event, session) => callback(session)); },
+  disconnect: () => ipcRenderer.send('dropbox:forget'),
+});
 // Sharing notes and pairing drawing tablets (docs/COLLABORATION.md): the server runs in the
 // main process; the reader connects to it as the host.
 contextBridge.exposeInMainWorld('notecompleteCollab', {

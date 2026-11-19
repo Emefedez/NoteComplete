@@ -106,6 +106,8 @@ const NOT_REQUESTED = [
   ['http://www.w3.org/2000/svg', 'XML namespace of createElementNS'],
   ['http://www.w3.org/1999/xhtml', 'XML namespace (math-boxes.js)'],
   ['https://www.googleapis.com/auth/drive', 'OAuth scope names (drive-client.js), not addresses that are fetched'],
+  ['https://www.dropbox.com/oauth2/authorize', 'Dropbox OAuth authorization page opened in a sign-in popup (dropbox-auth.js)'],
+  ['http://127.0.0.1:53691/dropbox-callback', 'desktop loopback redirect URI shown in Connection setup (dropbox-browser.js)'],
   ['https://archive.org/details/', 'example text and placeholders: the address a person pastes (archive-client.js, index.html)'],
   ['https://drive.google.com/drive/folders/', 'placeholder text in index.html'],
   ['http://host', 'a comment in sync.js describing an invite link'],

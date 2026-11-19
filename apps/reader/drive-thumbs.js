@@ -58,7 +58,7 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
     const kept = key && await library.cover(key);
     if (kept) return kept;
     let url = '';
-    if (typeof client.thumbnail === 'function' && file.thumbnailLink) url = await client.thumbnail(file, signal).catch(error => { if (error.name === 'AbortError') throw error; return ''; });
+    if (typeof client.thumbnail === 'function' && (file.thumbnailLink || file.source === 'dropbox')) url = await client.thumbnail(file, signal).catch(error => { if (error.name === 'AbortError') throw error; return ''; });
     // A note's own cover also stands in when Google has no usable thumbnail for it.
     if (!url && isNote(file)) {
       const cover = await noteCover(readerFor(file, signal), Number(file.size));

@@ -10,6 +10,7 @@
   />
   <meta name="google-drive-client-id" content="" />
   <meta name="google-drive-api-key" content="" />
+  <meta name="dropbox-app-key" content="" />
   <!-- Copied from tools/reader-csp.mjs (node tools/reader-csp.mjs prints it); a test keeps them equal. Delete this meta tag to switch the policy off. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com/gsi/; object-src 'none'; base-uri 'none'" />
   <title>NoteComplete</title
@@ -21,7 +22,7 @@
     content="NoteComplete"
   /><link rel="stylesheet" href="./style.css" />
   <header class="chrome command-bar" id="commandBar">
-    <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and Google Drive"></button>
+    <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and cloud storage"></button>
     <button id="tabCount" class="tab-count" type="button" aria-haspopup="menu" aria-expanded="false" title="Open tabs" hidden>1</button>
     <div id="tabMenu" class="tab-menu" role="menu" aria-label="Open tabs" hidden></div>
     <nav class="bar-actions" role="menubar" aria-label="Application menu">
@@ -42,7 +43,7 @@
           <button id="autosaveToggle" data-icon="clock" role="menuitemcheckbox" aria-checked="true" data-palette="Auto-save on or off" title="Copies the note every minute into automatic slots on this device, never over your file">Auto-save</button>
           <div id="autosaveList" class="autosave-list" role="group" aria-label="Automatic saves of this note" hidden></div>
           <hr />
-          <button id="exportOpen" data-icon="export" data-palette="Import, export and share…" title="Open from a folder, link or Google Drive, import files and study material, export and share notes and resources (PDF, images, .nfedit, .noteful, Anki, QR, live collab)">Import, export and share…</button>
+          <button id="exportOpen" data-icon="export" data-palette="Import, export and share…" title="Open from a folder, link, Google Drive or Dropbox, import files and study material, export and share notes and resources (PDF, images, .nfedit, .noteful, Anki, QR, live collab)">Import, export and share…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="editMenu">
@@ -219,6 +220,7 @@
                 <button id="openFolder" hidden class="export-item" data-icon="folder"><b>Open folder…</b><small>Notes in a folder, as a group beside the document</small></button>
                 <button id="openLink" class="export-item" data-icon="link"><b>Open link…</b><small>A web page, such as a Notion page, like a document</small></button>
                 <button id="driveOpen" class="export-item" data-icon="cloud"><b>Google Drive</b><small>Open a note from your Drive library</small></button>
+                <button id="dropboxOpen" class="export-item" data-icon="cloud"><b>Dropbox</b><small>Open a note from your Dropbox</small></button>
                 <button id="addDocuments" hidden disabled class="export-item" data-icon="plus"><b>Add documents…</b><small>Add files to the open document’s group</small></button>
                 <button data-proxy="libraryChoose" class="export-item" data-icon="folder"><b>Downloads folder…</b><small>Where downloaded notes are kept</small></button>
               </section>
@@ -329,7 +331,7 @@
       <div class="home-head">
         <div>
           <h2 id="homeTitle">Your notes</h2>
-          <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive.</p>
+          <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive or Dropbox.</p>
         </div>
         <div class="home-actions">
           <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
@@ -379,6 +381,10 @@
             <button id="cloudTabDrive" type="button" class="cloud-tab" role="tab" aria-selected="true" aria-controls="driveSection">
               <svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.96h5.36c-.46 2.3-2.43 3.94-5.36 3.94a5.99 5.99 0 0 1-6-6 5.99 5.99 0 0 1 6-6c1.47 0 2.8.56 3.82 1.48l2.2-2.2A9.97 9.97 0 0 0 12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9c5.21 0 8.66-3.66 8.66-8.83 0-.71-.07-1.4-.2-2.07h-.11z"/></svg>
               Google Drive
+            </button>
+            <button id="cloudTabDropbox" type="button" class="cloud-tab" role="tab" aria-selected="false" aria-controls="dropboxSection">
+              <svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg>
+              Dropbox
             </button>
             <button id="cloudTabArchive" type="button" class="cloud-tab" role="tab" aria-selected="false" aria-controls="archiveSection">
               <svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M4 10v9M8 10v9M12 10v9M16 10v9M20 10v9M2 20h20M12 3 3 6h18z"/></svg>
@@ -444,6 +450,50 @@
             <progress id="driveProgress" class="drive-progress" max="1" value="0" hidden></progress>
             <ul id="driveList" class="note-grid" aria-label="Google Drive files"></ul>
             <button id="driveMore" type="button" hidden>Load more</button>
+          </div>
+
+          <div id="dropboxSection" class="cloud-panel" role="tabpanel" aria-labelledby="cloudTabDropbox" hidden>
+            <div class="drive-heading">
+              <h4 id="dropboxTitle" class="cloud-panel-title">Dropbox</h4>
+              <div class="drive-actions"><button id="dropboxBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button><button id="dropboxRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button><button id="dropboxDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Dropbox on this device (no files change in Dropbox)" disabled hidden></button></div>
+            </div>
+            <div id="dropboxSignin" class="drive-signin">
+              <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+              <div>
+                <p><strong>Open notes kept in Dropbox.</strong> NoteComplete only reads Dropbox; it never uploads, edits or deletes files.</p>
+                <ol>
+                  <li>In Noteful (or any app), back up or export your notebooks to a Dropbox folder.</li>
+                  <li>Choose <strong>Connect Dropbox</strong> and allow access in the Dropbox window.</li>
+                  <li>Open that folder below. It reopens automatically next time, and opened notes are kept on this device.</li>
+                </ol>
+                <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button></div>
+                <details class="drive-setup">
+                  <summary>Connection setup</summary>
+                  <label>Dropbox app key<input id="dropboxAppKey" type="text" autocomplete="off" spellcheck="false" placeholder="App key from the Dropbox App Console" /></label>
+                  <p id="dropboxRedirect" class="muted"></p>
+                  <p class="muted">The app owner creates a Dropbox app with the files.metadata.read and files.content.read permissions. Enter its public app key, never the app secret.</p>
+                </details>
+              </div>
+            </div>
+            <div id="dropboxBrowse" hidden>
+              <div class="drive-search">
+                <strong id="dropboxPath">Dropbox</strong>
+                <label class="drive-filter"><span class="sr-only">Folder or note name</span><input id="dropboxSearch" type="search" placeholder="Search names; clear to list the top level" /></label>
+                <button id="dropboxScope" type="button" class="chip" aria-pressed="false" title="Search all of Dropbox (folders and notes) instead of only this folder" hidden>All Dropbox</button>
+                <button id="dropboxFind" type="button" disabled>Search</button>
+                <div class="cloud-queue-controls">
+                  <button id="dropboxQueueMode" type="button" class="chip" title="Select files to queue for download" hidden>Queue</button>
+                  <button id="dropboxQueueDownload" type="button" class="primary chip" title="Download selected files" hidden>Download (0)</button>
+                  <button id="dropboxQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                  <button id="dropboxQueueAll" type="button" class="chip" title="Queue all files in this folder for download" hidden>Queue all</button>
+                </div>
+              </div>
+              <details class="drive-setup"><summary>Open a folder by path</summary><label>Dropbox folder path<input id="dropboxFolderPath" type="text" autocomplete="off" spellcheck="false" placeholder="/Noteful" /></label><button id="dropboxUseFolder" type="button" disabled>Open folder</button></details>
+            </div>
+            <p id="dropboxStatus" role="status" aria-live="polite"></p>
+            <progress id="dropboxProgress" class="drive-progress" max="1" value="0" hidden></progress>
+            <ul id="dropboxList" class="note-grid" aria-label="Dropbox files"></ul>
+            <button id="dropboxMore" type="button" hidden>Load more</button>
           </div>
 
           <div id="archiveSection" class="cloud-panel" role="tabpanel" aria-labelledby="cloudTabArchive" hidden>
@@ -1231,7 +1281,7 @@
 <dialog id="versionDialog" class="ocr-dialog" aria-labelledby="versionTitle">
   <h2 id="versionTitle">Newer version in Google Drive</h2>
   <p id="versionText"></p>
-  <dl class="version-facts"><dt>Your copy</dt><dd id="versionMine"></dd><dt>Google Drive</dt><dd id="versionDrive"></dd></dl>
+  <dl class="version-facts"><dt>Your copy</dt><dd id="versionMine"></dd><dt id="versionRemoteLabel">Google Drive</dt><dd id="versionDrive"></dd></dl>
   <div class="ocr-actions"><button id="versionCompare" type="button">Compare…</button><span class="spacer"></span><button id="versionOpenMine" type="button">Open my copy</button><button id="versionBoth" type="button" title="Download the Drive version and keep your copy too">Keep both</button><button id="versionOpenDrive" type="button" class="primary">Open Drive version</button></div>
 </dialog>
 <dialog id="compareDialog" class="compare-dialog" aria-labelledby="compareTitle">

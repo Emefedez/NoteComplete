@@ -50,9 +50,10 @@ The Pen, Highlighter, Eraser, Tape, Shapes, Text, Select and Grab tools share on
 
 **Find** searches typed text, PDF text, handwriting that has been recognized (Pages → Recognize text) and transcripts. Recognition runs on this device and has a **High** quality setting that reads each page several ways.
 
-On Home, notes can be filtered by type, date, source, size and tags, sorted, starred and put into folders. **Google Drive** and **Internet Archive** appear under *Cloud*: search names, queue downloads, and open or export from each file's menu.
+On Home, notes can be filtered by type, date, source, size and tags, sorted, starred and put into folders. **Google Drive**, **Dropbox** and **Internet Archive** appear under *Cloud*: search names, queue downloads, and open or export from each file's menu.
 
 - [Google Drive setup](https://github.com/Emefedez/NoteComplete/blob/main/docs/GOOGLE_DRIVE.md)
+- [Dropbox setup](https://github.com/Emefedez/NoteComplete/blob/main/docs/DROPBOX.md)
 
 <!-- page 6 -->
 ## Study

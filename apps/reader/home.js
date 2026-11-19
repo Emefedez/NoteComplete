@@ -63,7 +63,7 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
+export function homeScreen({ library, drive, dropbox = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -77,7 +77,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   try { favourites = new Set(JSON.parse(localStorage.getItem('notecomplete-favourites')) || []); } catch { /* Optional. */ }
   const saveFavourites = () => { try { localStorage.setItem('notecomplete-favourites', JSON.stringify([...favourites])); } catch { /* Optional. */ } };
   let quick = false; // Quick list view: see setView.
-  const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }) : entry.key;
+  const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
+    : entry.source === 'dropbox' ? library.coverKey(entry) : entry.key;
   // Identical copies kept before checksums existed are merged once per session.
   let merging = null;
   // Folders (groups.js): the folder open on Home shows its documents in place of Recent.
@@ -284,7 +285,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
           }
           // A notebook inside an archive (a Goodnotes pack): unpacked from the archive.
           if (entry.source === 'archive') return openArchive?.(entry);
-          if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive') {
+          if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive' && entry.source !== 'dropbox') {
             await library.touch(entry.key);
             return now.show();
           }
@@ -292,7 +293,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
           // A file listed in a folder but never opened joins Recent now.
           if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
           if (!file) {
-            status(`${entry.name} is no longer in the downloads folder. Open it again from Drive.`, true);
+            status(`${entry.name} is no longer in the downloads folder. Open it again from ${entry.source === 'dropbox' ? 'Dropbox' : 'Drive'}.`, true);
             await library.forget(entry.key);
             return renderRecent();
           }
@@ -322,14 +323,16 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // document's changes first, or (typed confirmation) move the Drive file to trash.
   const migration = migrator({ library, drive, status, refresh: () => renderRecent() });
   function confirmRemove(entry, anchor) {
-    const isDrive = entry.source === 'drive', now = current();
+    const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isCloud = isDrive || isDropbox, now = current();
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
     $('forgetTitle').textContent = entryTitle(entry);
     $('forgetTitle').title = entry.name;
     rename(entry);
     $('forgetText').textContent = isDrive
       ? 'Deletes the copy kept on this device and its cover. The file in Google Drive stays as it is.'
-      : 'Removes it from Recent. The file on your computer is not deleted.';
+      : isDropbox
+        ? 'Deletes the copy kept on this device and its cover. The file in Dropbox stays as it is.'
+        : 'Removes it from Recent. The file on your computer is not deleted.';
     $('forgetUpload').hidden = !changed;
     $('forgetDanger').hidden = !isDrive;
     $('forgetDanger').open = false;
@@ -338,8 +341,8 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     $('forgetStatus').textContent = changed ? 'This note is open with unsaved changes.' : '';
     const close = () => { $('forgetDialog').hidden = true; $('renameRow').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
     const outside = event => { if (!$('forgetDialog').contains(event.target) && event.target !== anchor) close(); };
-    const done = async (text) => { await library.forget(entry.key, { deleteFile: isDrive }); close(); status(text); renderRecent(); };
-    $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : 'Removed from Recent.');
+    const done = async (text) => { await library.forget(entry.key, { deleteFile: isCloud }); close(); status(text); renderRecent(); };
+    $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : isDropbox ? 'Removed from this device. Dropbox is unchanged.' : 'Removed from Recent.');
     $('forgetUpload').onclick = async () => {
       try {
         $('forgetStatus').textContent = 'Exporting the note…';
@@ -361,13 +364,14 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     $('moveRow').hidden = true; $('moveNewRow').hidden = true;
     $('moveOpen').hidden = !groups;
     $('moveOpen').onclick = async () => { const row = $('moveRow'); if (row.hidden) await moveRow(entry, close); row.hidden = !row.hidden; };
-    $('forgetCheck').hidden = entry.source !== 'drive' || !versions;
+    $('forgetCheck').hidden = (!isDrive && !isDropbox) || !versions;
+    $('forgetCheck').textContent = isDropbox ? 'Check Dropbox for updates' : 'Check Drive for updates';
     $('forgetCheck').onclick = async () => {
       close();
       try {
-        status(`Checking Drive for a newer ${entry.name}…`);
+        status(`Checking ${isDropbox ? 'Dropbox' : 'Drive'} for a newer ${entry.name}…`);
         const file = await library.open(entry);
-        if (!file) return status(`${entry.name} is no longer kept on this device. Open it again from Drive.`, true);
+        if (!file) return status(`${entry.name} is no longer kept on this device. Open it again from ${isDropbox ? 'Dropbox' : 'Drive'}.`, true);
         if (await versions.openRecent(entry, file, { force: true })) renderRecent();
       } catch (error) { status(error.message, true); }
     };
@@ -436,7 +440,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
   if (!Array.isArray(filters.types)) filters.types = [];
   if (!Array.isArray(filters.sources)) filters.sources = [];
-  const SOURCES = { drive: 'Google Drive', archive: 'Internet Archive' };
+  const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', archive: 'Internet Archive' };
   const chip = (label, pressed, onclick) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = label;
@@ -456,7 +460,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   const toggleIn = (key, value) => { filters[key] = filters[key].includes(value) ? filters[key].filter(x => x !== value) : [...filters[key], value]; changed(); };
   function categories() {
     const known = new Set(filters.tags);
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #archiveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #archiveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
     return [
       { id: 'types', label: 'Type', options: Object.entries(TYPES).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.types.includes(v), flip: v => toggleIn('types', v) },
       // Modified takes one value: the periods overlap (today is inside this week).
@@ -526,7 +530,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
-    for (const list of [$('recentList'), $('driveList'), $('archiveList')]) {
+    for (const list of [$('recentList'), $('driveList'), $('dropboxList'), $('archiveList')]) {
       if (!list) continue;
       const items = [...list.children], notes = items.filter(li => li.querySelector('.note-card')?.note);
       if (notes.length < 2) continue;
@@ -562,20 +566,31 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   setupCollapsible('recentToggle', 'recentContent', 'recent');
   setupCollapsible('cloudToggle', 'cloudContent', 'cloud');
 
-  // Cloud provider tabs: Google Drive vs Internet Archive
+  // Cloud provider tabs: Google Drive vs Dropbox vs Internet Archive
   let activeCloud = 'drive';
   try { activeCloud = localStorage.getItem('notecomplete-cloud-provider') || 'drive'; } catch {}
+  if (!['drive', 'dropbox', 'archive'].includes(activeCloud)) activeCloud = 'drive';
   function setCloudProvider(provider) {
+    if (!['drive', 'dropbox', 'archive'].includes(provider)) provider = 'drive';
     activeCloud = provider;
     try { localStorage.setItem('notecomplete-cloud-provider', provider); } catch {}
-    const isDrive = provider === 'drive';
-    if ($('cloudTabDrive')) $('cloudTabDrive').setAttribute('aria-selected', String(isDrive));
-    if ($('cloudTabArchive')) $('cloudTabArchive').setAttribute('aria-selected', String(!isDrive));
-    if ($('driveSection')) $('driveSection').hidden = !isDrive;
-    if ($('archiveSection')) $('archiveSection').hidden = isDrive;
-    if (isDrive) drive.show(); else archive?.show();
+    const panels = { drive: ['cloudTabDrive', 'driveSection', drive], dropbox: ['cloudTabDropbox', 'dropboxSection', dropbox], archive: ['cloudTabArchive', 'archiveSection', archive] };
+    for (const [key, [tabId, sectionId]] of Object.entries(panels)) {
+      const active = key === provider;
+      if ($(tabId)) $(tabId).setAttribute('aria-selected', String(active));
+      if ($(sectionId)) $(sectionId).hidden = !active;
+    }
+    panels[provider]?.[2]?.show?.();
+  }
+  function showCloudProvider(provider) {
+    if ($('cloudContent')) $('cloudContent').hidden = false;
+    if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
+    collapsed.cloud = false;
+    try { localStorage.setItem('notecomplete-home-collapsed', JSON.stringify(collapsed)); } catch {}
+    setCloudProvider(provider);
   }
   if ($('cloudTabDrive')) $('cloudTabDrive').onclick = () => setCloudProvider('drive');
+  if ($('cloudTabDropbox')) $('cloudTabDropbox').onclick = () => setCloudProvider('dropbox');
   if ($('cloudTabArchive')) $('cloudTabArchive').onclick = () => setCloudProvider('archive');
   setCloudProvider(activeCloud);
 
@@ -591,7 +606,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     if ($('recentSearchClear')) $('recentSearchClear').hidden = !query;
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0, recentVisible = 0, recentTotal = 0;
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #archiveList .note-card')) {
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #archiveList .note-card')) {
       const inRecent = Boolean(card.closest('#recentList'));
       if (inRecent) recentTotal++;
       let show = !active || !card.note || matches(card.note, filters);
@@ -719,6 +734,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
     for (const b of document.querySelectorAll('[data-home-view]')) b.setAttribute('aria-checked', String(b.dataset.homeView === view));
     try { localStorage.setItem('notecomplete-home-view', view); } catch { /* Optional. */ }
     drive.setQuick?.(quick);
+    dropbox?.setQuick?.(quick);
   }
   for (const b of document.querySelectorAll('[data-home-view]')) b.onclick = () => { const was = quick; setView(b.dataset.homeView); if (was && !quick) renderRecent(); };
   try { setView(localStorage.getItem('notecomplete-home-view') === 'list' ? 'list' : 'cards'); } catch { setView('cards'); }
@@ -743,6 +759,7 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
   if ($('findDuplicates')) $('findDuplicates').onclick = () => dups.open();
   return {
     showFolder,
+    showCloudProvider,
     back: leaveFolder,
     forward: reopenFolder,
     findDuplicates: () => dups.open(),
@@ -754,9 +771,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       document.body?.classList?.toggle('home-over-tab', Boolean(hasDocument));
       if ($('homeButton')) {
         $('homeButton').setAttribute('aria-pressed', 'true');
-        $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and Google Drive';
+        $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and cloud storage';
       }
-      if (!shown) { shown = true; drive.show(); archive?.show(); }
+      if (!shown) { shown = true; drive.show(); dropbox?.show(); archive?.show(); }
       renderRecent(); renderFolder();
     },
     hide() {
@@ -764,9 +781,9 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
       document.body?.classList?.remove('home-open', 'home-over-tab');
       if ($('homeButton')) {
         $('homeButton').setAttribute('aria-pressed', 'false');
-        $('homeButton').title = 'Home: recent notes and Google Drive';
+        $('homeButton').title = 'Home: recent notes and cloud storage';
       }
-      if (shown) { shown = false; drive.hide(); archive?.hide(); }
+      if (shown) { shown = false; drive.hide(); dropbox?.hide(); archive?.hide(); }
     },
     get visible() { return !$('empty').hidden; },
     rememberCover,

@@ -71,3 +71,22 @@ test('a forced check always answers, and trusts a different checksum over the da
   assert.equal(await off.openRecent(entry, local, { force: true }), true);
   assert.match(messages.at(-1), /Connect Google Drive/);
 });
+
+test('Dropbox version checks match by contentHash/rev and report offline state', async () => {
+  const messages = [];
+  const entry = { source: 'dropbox', key: 'dropbox:id:1', dropboxId: 'id:1', name: 'Tema 1.noteful', contentHash: 'h1', rev: 'r1', modifiedTime: '2026-10-27T00:00:00Z' };
+  const local = new Blob(['x']);
+  const make = newest => versionChooser({
+    library: { store: { set: async () => {} } },
+    drive: { ready: false },
+    dropbox: { ready: true, newest: async () => newest },
+    open: async () => {}, status: text => messages.push(text), fingerprint: async () => '',
+  });
+  assert.equal(await make([{ id: 'id:1', contentHash: 'h1', rev: 'r1', modifiedTime: '2026-10-27T00:00:00Z' }]).openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /matches Dropbox/);
+  assert.equal(await make([]).openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /Dropbox folder/);
+  const off = versionChooser({ library: { store: {} }, drive: { ready: false }, dropbox: { ready: false }, open() {}, status: text => messages.push(text), fingerprint: async () => '' });
+  assert.equal(await off.openRecent(entry, local, { force: true }), true);
+  assert.match(messages.at(-1), /Connect Dropbox/);
+});

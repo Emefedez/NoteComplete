@@ -64,8 +64,8 @@ export function createSourcePicker(container, {
         <div class="sp-list sp-folder-list" role="group" aria-label="Folders"></div>
       </div>
       <div class="sp-panel" data-panel="drive" hidden>
-        <p class="muted sp-hint">Google Drive notes opened or cached on this device appear here and can be combined with any other source.</p>
-        <div class="sp-list sp-drive-list" role="group" aria-label="Google Drive documents"></div>
+        <p class="muted sp-hint">Google Drive and Dropbox notes opened or cached on this device appear here and can be combined with any other source.</p>
+        <div class="sp-list sp-drive-list" role="group" aria-label="Cloud documents"></div>
       </div>
       <div class="sp-panel" data-panel="files" hidden>
         <div class="sp-actions-row">
@@ -97,7 +97,7 @@ export function createSourcePicker(container, {
   };
   setBtn(q('[data-tab="recents"]'), 'history', 'Recents');
   setBtn(q('[data-tab="folders"]'), 'folder', 'Folders');
-  setBtn(q('[data-tab="drive"]'), 'drive', 'Drive');
+  setBtn(q('[data-tab="drive"]'), 'cloud', 'Cloud');
   setBtn(q('[data-tab="files"]'), 'open', 'Local files');
   setBtn(q('[data-tab="topics"]'), 'spark', 'Topics');
   setBtn(q('.sp-pick-disk-folder'), 'folder', 'Choose folder from disk…');
@@ -205,11 +205,13 @@ export function createSourcePicker(container, {
     }
     listEl.replaceChildren(...items.map((e) => {
       const id = recentId(e);
+      const srcLabel = e.source === 'drive' ? 'Drive' : e.source === 'dropbox' ? 'Dropbox' : e.source === 'archive' ? 'Archive' : 'Local';
+      const srcIcon = e.source === 'drive' ? 'drive' : e.source === 'dropbox' ? 'cloud' : 'note';
       return renderCheckRow(
         id,
         e.title || cleanTitle(e.name),
-        `${e.source === 'drive' ? 'Drive' : 'Local'} · ${e.name}`,
-        e.source === 'drive' ? 'drive' : 'note',
+        `${srcLabel} · ${e.name}`,
+        srcIcon,
         () => ({ id, kind: 'recent', entry: e, canonicalKey: normalizeSourceKey(e), label: e.title || cleanTitle(e.name), name: e.name }),
       );
     }));
@@ -217,11 +219,11 @@ export function createSourcePicker(container, {
 
   function renderDrive() {
     const listEl = q('.sp-drive-list');
-    const items = recentEntries.filter((e) => e.source === 'drive' && isSupportedSourceName(e.name || ''));
+    const items = recentEntries.filter((e) => (e.source === 'drive' || e.source === 'dropbox') && isSupportedSourceName(e.name || ''));
     if (!items.length) {
       const empty = document.createElement('p');
       empty.className = 'muted sp-empty';
-      empty.textContent = 'No Google Drive documents in Recents yet. Open one from Home → Drive or Recents.';
+      empty.textContent = 'No Google Drive or Dropbox documents in Recents yet. Open one from Home → Cloud or Recents.';
       listEl.replaceChildren(empty);
       return;
     }
@@ -230,8 +232,8 @@ export function createSourcePicker(container, {
       return renderCheckRow(
         id,
         e.title || cleanTitle(e.name),
-        e.name,
-        'drive',
+        `${e.source === 'dropbox' ? 'Dropbox' : 'Drive'} · ${e.name}`,
+        e.source === 'dropbox' ? 'cloud' : 'drive',
         () => ({ id, kind: 'recent', entry: e, canonicalKey: normalizeSourceKey(e), label: e.title || cleanTitle(e.name), name: e.name }),
       );
     }));

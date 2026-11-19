@@ -170,7 +170,7 @@ export async function inspectDuplicateEntry(entry, { library, readFile } = {}) {
 function sourceRank(entry) {
   if (entry?.source === 'local') return 3;
   if (entry?.source === 'imported') return 2;
-  if (entry?.source === 'drive' || entry?.source === 'archive') return 1;
+  if (entry?.source === 'drive' || entry?.source === 'dropbox' || entry?.source === 'archive') return 1;
   return 0;
 }
 
@@ -293,7 +293,9 @@ export async function scanDuplicates({ library, readFile, onProgress } = {}) {
 
 const coverKeyFor = (library, entry) => (entry.source === 'drive'
   ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
-  : entry.key);
+  : entry.source === 'dropbox'
+    ? library.coverKey(entry)
+    : entry.key);
 
 export async function combineDuplicateGroup({
   group,

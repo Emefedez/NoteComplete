@@ -1,4 +1,4 @@
-// Download queue for batch downloads across Cloud providers (Google Drive & Internet Archive).
+// Download queue for batch downloads across Cloud providers (Google Drive, Dropbox & Internet Archive).
 // Runs in the background, keeps local copies in the user's library, and updates badges.
 
 export function createDownloadQueue({ library = null, onUpdate = () => {}, onItemDone = () => {} } = {}) {
@@ -10,6 +10,10 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
   const idOf = (item) => {
     if (typeof item === 'string') return item;
     if (item.source === 'archive') return `archive:${item.sourceId}:${item.path || item.doc?.path || item.name || item.doc?.name}`;
+    if (item.source === 'dropbox') {
+      const id = item.id || item.doc?.id || item.name || item.doc?.name;
+      return String(id).startsWith('dropbox:') ? id : `dropbox:${id}`;
+    }
     if (item.source === 'drive' || (!item.source && (item.id || item.doc?.id))) {
       return `drive:${item.id || item.doc?.id || item.name || item.doc?.name}`;
     }
@@ -108,7 +112,7 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
 
       if (next.source === 'archive' && next.client) {
         downloadedBlob = await next.client.download(next.sourceId, next.doc, controller.signal, onProgress);
-      } else if (next.source === 'drive' && next.client) {
+      } else if ((next.source === 'drive' || next.source === 'dropbox') && next.client) {
         downloadedBlob = await next.client.download(next.doc, controller.signal, onProgress);
       } else if (typeof next.downloadFn === 'function') {
         downloadedBlob = await next.downloadFn(controller.signal, onProgress);

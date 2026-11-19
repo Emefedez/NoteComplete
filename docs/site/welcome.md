@@ -28,7 +28,7 @@ A notebook app for **handwriting, PDFs and Markdown notes**, with study tools an
 <text x="490" y="195" font-size="20" text-anchor="middle">phone</text>
 </svg>
 !end
-- Start a **new note** or an **infinite canvas**, or open a PDF, an image, a Word, Excel or text file, or a notebook from this device, Google Drive or Internet Archive (**Home** tab).
+- Start a **new note** or an **infinite canvas**, or open a PDF, an image, a Word, Excel or text file, or a notebook from this device, Google Drive, Dropbox or Internet Archive (**Home** tab).
 
 
 \pagebreak
@@ -59,7 +59,7 @@ _Save in one of two formats; export the rest_
 ## Also opens · exports
 >> [purple] OPENS: PDFs, images ((PNG, JPEG, WebP)), HTML pages, Markdown and text files, Word, OpenDocument, Excel and CSV, and **Goodnotes** and **Notability** notebooks || [coral] EXPORTS: pages as PDF, SVG or images, the notes as Markdown, study decks for Anki
 - A PDF or an image becomes a note to write on. Word, Excel and text files open as Markdown you can **Edit**; Save writes a copy and never changes the original.
-- **Export** is in File, and the **...** menu of any note in Home, Google Drive or Internet Archive exports it without opening it first. The **?** explains each format.
+- **Export** is in File, and the **...** menu of any note in Home, Google Drive, Dropbox or Internet Archive exports it without opening it first. The **?** explains each format.
 - NoteComplete is in your system's **Open with** menus, and the default for its own files.
 
 \pagebreak
@@ -119,7 +119,7 @@ _Documents of every kind, one search_
 
 ## Your library (Home)
 - Notes you open stay on this device. **Filters** by type, date, source, size and tags, **sort**, favourites, folders, and a list or card view.
-- **Google Drive**: search folders **and** notes by name (All Drive searches everywhere), queue a batch to download, and check for a newer version.
+- **Google Drive & Dropbox**: search folders **and** notes by name (All Drive / All Dropbox searches everywhere), queue a batch to download, and check for a newer version.
 - **Internet Archive**: add any archive.org item as a repository and browse its files.
 - **Notes panel** (==N==): Markdown notes beside any document, kept with it.
 

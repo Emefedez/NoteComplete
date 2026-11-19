@@ -183,11 +183,22 @@ test('imported files (WhatsApp, file picker, QR share) appear in Recent, reopen 
   await library.forget(entry.key, { deleteFile: true });
   assert.equal(dir.files.size, 0);
 
-  // Source / folder formatting across Drive, Archive, Local folder, Web link.
+  // Source / folder formatting across Drive, Dropbox, Archive, Local folder, Web link.
   assert.equal(entrySourceLabel({ source: 'drive', folder: 'Biochemistry' }), 'Google Drive / Biochemistry');
+  assert.equal(entrySourceLabel({ source: 'dropbox', folder: 'Biochemistry' }), 'Dropbox / Biochemistry');
   assert.equal(entrySourceLabel({ source: 'archive', folder: 'MIT' }), 'Internet Archive / MIT');
   assert.equal(entrySourceLabel({ source: 'local', path: '/home/u/Documents/Linear Algebra/hw1.noteful' }), 'This device / Linear Algebra');
   assert.equal(entrySourceLabel({ source: 'web', url: 'https://www.notion.so/page' }), 'Web link · notion.so');
+
+  // Dropbox files keep rev/contentHash/path and re-download when rev changes.
+  const dbxFile = { source: 'dropbox', id: 'id:dbx1', path: '/noteful/tema.noteful', name: 'Tema.noteful', modifiedTime: '2026-11-01T00:00:00Z', rev: 'r1', contentHash: 'ch1', parents: ['/noteful'], folderName: 'Noteful' };
+  const dbxEntry = await library.keep(dbxFile, new File([new Uint8Array([1, 2, 3])], 'Tema.noteful'));
+  assert.equal(dbxEntry.key, 'dropbox:id:dbx1');
+  assert.equal(dbxEntry.source, 'dropbox');
+  assert.equal(dbxEntry.rev, 'r1');
+  assert.ok(await library.cached({ ...dbxFile, size: '3' }));
+  assert.equal(await library.cached({ ...dbxFile, size: '3', rev: 'r2' }), null);
+  await library.forget(dbxEntry.key, { deleteFile: true });
 });
 
 test('rememberImported never overwrites an existing file already present in the library folder on disk', async () => {

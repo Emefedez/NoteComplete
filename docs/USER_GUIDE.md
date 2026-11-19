@@ -207,9 +207,9 @@ While a session runs, Share reads *Sharing* and opens it again, with the people'
 
 Not yet tried on real phones, tablets or styluses: see [Collaboration](COLLABORATION.md#not-yet-verified).
 
-## Open from Google Drive
+## Open from Google Drive or Dropbox
 
-Choose **☰ → Google Drive** in the browser or an installed NoteComplete build, connect your account, find the Noteful folder and select a file to download and open. Subfolders, Refresh and paginated listings are supported. Local edits are never uploaded to Drive. Unsaved edits are checked before opening a downloaded document. See [Google Drive setup and platform support](GOOGLE_DRIVE.md).
+Choose **Home → Cloud** (or **File → Import, export and share… → Google Drive** / **Dropbox**) in the browser or desktop app, connect your account, find your folder and select a file to download and open. Subfolders, search, batch queue downloads, version checks and paginated listings are supported. Local edits are never uploaded back to Dropbox (or to Google Drive unless explicitly requested). Unsaved edits are checked before opening a downloaded document. See [Google Drive setup](GOOGLE_DRIVE.md) and [Dropbox setup](DROPBOX.md).
 
 ## Display quality
 

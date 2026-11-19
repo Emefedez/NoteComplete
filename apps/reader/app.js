@@ -20,6 +20,7 @@ import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
+import { dropboxBrowser } from "./dropbox-browser.js";
 import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { isNotebookCover } from "./note-cover.js";
@@ -5278,6 +5279,7 @@ const downloadQueue = createDownloadQueue({
   library,
   onItemDone: (item) => {
     drive?.onQueueItemDone?.(item);
+    dropbox?.onQueueItemDone?.(item);
     archive?.onQueueItemDone?.(item);
   },
   onUpdate: (stats) => queueView.update(stats),
@@ -5299,6 +5301,27 @@ const drive = driveBrowser({
       noteEntryKey = library.key(driveFile);
       rememberDocument(noteEntryKey);
       setDocMember({ key: noteEntryKey, name: driveFile.name, source: "drive" });
+      void Promise.resolve(home.rememberCover(cKey, file)).then(() => ensureDocumentCover({ skipExisting: true }));
+    }
+    return opened;
+  },
+});
+const dropbox = dropboxBrowser({
+  library,
+  queue: downloadQueue,
+  exportRequest,
+  onCards: () => home?.applyFilters(),
+  open: async (file, dropboxFile) => {
+    const opened = await openChosen(file);
+    exportRequested(`dropbox:${dropboxFile.id}`, opened).catch((error) => status(error.message, true));
+    if (opened) {
+      const cKey = library.coverKey(dropboxFile);
+      activeCoverKeyOverride = cKey;
+      home.rememberFacts(cKey, file);
+      notePath = await library.pathOf(await library.entry(dropboxFile)).catch(() => "");
+      noteEntryKey = library.key(dropboxFile);
+      rememberDocument(noteEntryKey);
+      setDocMember({ key: noteEntryKey, name: dropboxFile.name, source: "dropbox" });
       void Promise.resolve(home.rememberCover(cKey, file)).then(() => ensureDocumentCover({ skipExisting: true }));
     }
     return opened;
@@ -5411,7 +5434,9 @@ async function openFromLibrary(file, entry) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
     activeCoverKeyOverride = entry?.source === "drive"
       ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
-      : (entry?.key || "");
+      : entry?.source === "dropbox"
+        ? library.coverKey(entry)
+        : (entry?.key || "");
     setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: entry.source || "drive" } : null);
     void ensureDocumentCover({ skipExisting: true });
   }
@@ -5458,7 +5483,7 @@ async function exportStudyOf(entry) {
   status(`Exported ${groups.length} deck${groups.length === 1 ? "" : "s"} to Anki. In Anki: File → Import.`);
 }
 // Recent asks Drive for newer versions before opening a Drive note (versions.js).
-const versions = versionChooser({ library, drive, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
+const versions = versionChooser({ library, drive, dropbox, open: openFromLibrary, status, fingerprint: (file) => noteFingerprint(file).catch(() => "") });
 // Dark pages (moon, D) darken HTML documents too; pages already dark are left alone.
 let darkReader = null;
 // Dark Reader's script, fetched once (vendor/darkreader), for HTML pages and web links.
@@ -5793,6 +5818,7 @@ const archive = archiveBrowser({
 var home = homeScreen({
   library,
   drive,
+  dropbox,
   archive,
   versions,
   open: openFromLibrary,
@@ -6149,6 +6175,9 @@ function navigateHistory(direction, target = null) {
     if (target?.closest?.("#driveSection")) {
       if (direction < 0 && drive.back()) return true;
       if (direction > 0 && drive.forward()) return true;
+    } else if (target?.closest?.("#dropboxSection")) {
+      if (direction < 0 && dropbox.back()) return true;
+      if (direction > 0 && dropbox.forward()) return true;
     } else if (target?.closest?.("#archiveSection")) {
       if (direction < 0 && archive.back()) return true;
       if (direction > 0 && archive.forward()) return true;
@@ -6156,6 +6185,7 @@ function navigateHistory(direction, target = null) {
     if (direction < 0 && home.back()) return true;
     if (direction > 0 && home.forward()) return true;
     if (!$("cloudContent")?.hidden && !$("driveSection")?.hidden && (direction < 0 ? drive.back() : drive.forward())) return true;
+    if (!$("cloudContent")?.hidden && !$("dropboxSection")?.hidden && (direction < 0 ? dropbox.back() : dropbox.forward())) return true;
     if (!$("cloudContent")?.hidden && !$("archiveSection")?.hidden && (direction < 0 ? archive.back() : archive.forward())) return true;
   }
   const stop = direction < 0 ? navHistory.back(currentStop()) : navHistory.forward(currentStop());
@@ -6195,8 +6225,16 @@ for (const type of ["mousedown", "mouseup", "auxclick"]) {
   }, true);
 }
 $("driveOpen").onclick = () => {
+  if ($("exportDialog")?.open) $("exportDialog").close();
   showHome();
+  home.showCloudProvider?.("drive");
   $("driveSection").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+if ($("dropboxOpen")) $("dropboxOpen").onclick = () => {
+  if ($("exportDialog")?.open) $("exportDialog").close();
+  showHome();
+  home.showCloudProvider?.("dropbox");
+  $("dropboxSection").scrollIntoView({ behavior: "smooth", block: "start" });
 };
 function documentControls() {
   const open = !!doc;

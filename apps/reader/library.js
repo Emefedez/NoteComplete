@@ -141,6 +141,7 @@ export function entrySourceLabel(entry) {
   if (!entry) return 'This device';
   if (entry.source === 'drive') return entry.folder ? `Google Drive / ${entry.folder}` : 'Google Drive';
   if (entry.source === 'archive') return entry.folder ? `Internet Archive / ${entry.folder}` : 'Internet Archive';
+  if (entry.source === 'dropbox') return entry.folder ? `Dropbox / ${entry.folder}` : 'Dropbox';
   if (entry.source === 'web') {
     try {
       const host = new URL(entry.url).hostname.replace(/^www\./, '');
@@ -195,13 +196,15 @@ export class Library {
   key(file) {
     if (typeof file === 'string') return file;
     if (file?.source === 'archive' || file?.archiveId) return `archive:${file.archiveId}:${file.path || file.name}`;
+    // Dropbox files (dropbox-client.js) and their Recent entries (which keep the id as dropboxId).
+    if (file?.source === 'dropbox') return 'dropbox:' + (file.dropboxId || file.id);
     return 'drive:' + file.id;
   }
   entry(file) { return this.store.get('entries', this.key(file)); }
   // The kept copy of a Drive file, or null when it must be downloaded.
   async cached(file) {
     const entry = await this.entry(file);
-    if (entry && (!file.modifiedTime || entry.modifiedTime === file.modifiedTime) && (!file.size || String(entry.size) === String(file.size))) {
+    if (entry && (!file.rev || !entry.rev || entry.rev === file.rev) && (!file.modifiedTime || entry.modifiedTime === file.modifiedTime) && (!file.size || String(entry.size) === String(file.size))) {
       const blob = await (await this.location()).read(entry.filename);
       if (blob && (!entry.size || blob.size === Number(entry.size))) return new File([blob], file.name, { type: file.mimeType || '' });
     }
@@ -241,10 +244,10 @@ export class Library {
     const others = (await this.store.values('entries')).filter(e => e.key !== this.key(file));
     const filename = previous?.filename || await freeName(safeName(file.name), name => others.some(e => e.filename === name));
     await folder.write(filename, downloaded);
-    const isArchive = file.source === 'archive' || !!file.archiveId;
+    const isArchive = file.source === 'archive' || !!file.archiveId, isDropbox = file.source === 'dropbox';
     const entry = {
       key: this.key(file),
-      source: isArchive ? 'archive' : 'drive',
+      source: isArchive ? 'archive' : isDropbox ? 'dropbox' : 'drive',
       name: file.name,
       mimeType: file.mimeType || (file.name.endsWith('.pdf') ? 'application/pdf' : ''),
       modifiedTime: file.modifiedTime || null,
@@ -253,6 +256,8 @@ export class Library {
       openedAt: this.now(),
       ...(isArchive
         ? { archiveId: file.archiveId, path: file.path, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
+        : isDropbox
+        ? { dropboxId: file.id, path: file.path, rev: file.rev || null, contentHash: file.contentHash || null, parent: file.parents?.[0] ?? null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
         : { driveId: file.id, resourceKey: file.resourceKey, md5: file.md5Checksum || null, parent: file.parents?.[0] || null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }),
       ...(previous?.title ? { title: previous.title } : {})
     };
@@ -376,6 +381,7 @@ export class Library {
     await this.store.delete('entries', key);
     await this.store.delete('covers', key);
     if (entry?.source === 'drive') await this.store.delete('covers', this.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }));
+    if (entry?.source === 'dropbox') await this.store.delete('covers', this.coverKey(entry));
   }
   // Most recently opened first; copies with the same content show once (the newest in Drive).
   async recent(limit = 24) {

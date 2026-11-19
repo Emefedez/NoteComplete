@@ -49,7 +49,8 @@ test('a note whose Google thumbnail fails falls back to its own cover', async ()
   assert.equal(await thumbs.get(file('n', { thumbnailLink: 'https://lh3/thumb' })), 'data:own');
 });
 
-test('PDFs and images keep using Google thumbnails', async () => {
+test('PDFs and images keep using Google thumbnails and Dropbox thumbnails', async () => {
   const thumbs = driveThumbnails({ thumbnail: async () => 'blob:google', range: async () => { throw Error('no'); } });
   assert.equal(await thumbs.get({ id: 'p', name: 'slides.pdf', thumbnailLink: 'https://lh3/thumb' }), 'blob:google');
+  assert.equal(await thumbs.get({ source: 'dropbox', id: 'id:p', name: 'slides.pdf' }), 'blob:google');
 });

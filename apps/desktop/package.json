@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.2.45",
+  "version": "1.2.46",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -52,6 +52,7 @@
       "reader/**/*",
       "preload.cjs",
       "google-auth.js",
+      "dropbox-auth.js",
       "google-desktop-client.json"
     ],
     "fileAssociations": [
