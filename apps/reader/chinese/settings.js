@@ -60,35 +60,72 @@ function build(client) {
   d.className = 'ocr-dialog zh-settings';
   d.setAttribute('aria-labelledby', 'zhSettingsTitle');
   const opt = (v, t) => `<option value="${v}">${t}</option>`;
-  d.innerHTML = `<h2 id="zhSettingsTitle">Chinese</h2>
-  <p class="muted">Type Chinese with pinyin in text boxes, notes, Ask AI, cards and Find. <kbd>Ctrl Shift Space</kbd> switches Off → Hanzi → Pinyin; the 中 button does the same, and a right-click or long press on it shows every choice.</p>
-  <div class="zh-settings-grid">
-    <label>New notes and fields<select name="mode" data-native>${MODES.map(([v, t]) => opt(v, t)).join('')}</select></label>
-    <label>Characters<select name="script" data-native>${opt('simplified', 'Simplified 简体')}${opt('traditional', 'Traditional 繁體')}</select></label>
-    <label>Enter while typing pinyin<select name="enter" data-native>${opt('auto', 'Auto: like the text around it')}${opt('letters', 'The letters as typed')}${opt('marks', 'Pinyin with tone marks')}</select></label>
-    <label>A digit after pinyin (Hanzi)<select name="digits" data-native>${opt('tone', 'Gives the tone (ma3 → 马)')}${opt('choose', 'Chooses candidate n')}</select></label>
-    <label>Candidates per page<select name="perPage" data-native>${opt(5, '5')}${opt(9, '9')}</select></label>
+  d.innerHTML = `<div class="zh-settings-head">
+    <h2 id="zhSettingsTitle">Chinese Input &amp; Pinyin</h2>
+    <div class="expand-mode-pills" role="tablist" aria-label="Chinese settings sections">
+      <button type="button" role="tab" data-zh-tab="input" aria-selected="true">Input &amp; Keys</button>
+      <button type="button" role="tab" data-zh-tab="pinyin" aria-selected="false">Pinyin (Ruby)</button>
+      <button type="button" role="tab" data-zh-tab="packs" aria-selected="false">Dictionaries &amp; Words</button>
+    </div>
   </div>
-  <label class="ocr-skip"><input type="checkbox" name="shortcut"> <span><kbd>Ctrl Shift Space</kbd> switches the mode</span></label>
-  <label class="ocr-skip"><input type="checkbox" name="shiftLatin"> <span><kbd>Shift</kbd> pressed alone: Latin letters for a while (again to go back)</span></label>
-  <label class="ocr-skip"><input type="checkbox" name="fullWidth"> <span>Chinese punctuation in Hanzi mode (，。？！：；、)</span></label>
-  <label class="ocr-skip"><input type="checkbox" name="bothScripts"> <span>Show the other script's form beside a candidate</span></label>
-  <h3>Pinyin over characters</h3>
-  <p class="muted">Pinyin shown above Chinese in notes, text boxes and exports (Pinyin toggle in the Text format bar; a note can keep its own choice).</p>
-  <label class="ocr-skip"><input type="checkbox" name="ruby" data-ruby> <span>On in notes that have no choice of their own</span></label>
-  <div class="zh-settings-grid">
-    <label>Written as<select name="rubyFormat" data-ruby data-native>${opt('marks', 'Tone marks (nǐ hǎo)')}${opt('numbers', 'Tone numbers (ni3 hao3)')}</select></label>
-    <label>Only words above HSK level<select name="rubyLevel" data-ruby data-native>${opt(0, 'None: every word')}${[1, 2, 3, 4, 5, 6].map((n) => opt(n, `HSK ${n}`)).join('')}</select></label>
+  <div class="zh-settings-stage">
+    <section class="zh-settings-panel" data-zh-panel="input" role="tabpanel">
+      <div class="zh-settings-grid">
+        <label>Default mode (new notes)<select name="mode" data-native>${MODES.map(([v, t]) => opt(v, t)).join('')}</select></label>
+        <label>Character script<select name="script" data-native>${opt('simplified', 'Simplified 简体')}${opt('traditional', 'Traditional 繁體')}</select></label>
+        <label>Enter key in Pinyin buffer<select name="enter" data-native>${opt('auto', 'Auto (match surrounding text)')}${opt('letters', 'Keep raw Latin letters')}${opt('marks', 'Convert to tone-marked Pinyin')}</select></label>
+        <label>Number keys (1–5) in Hanzi<select name="digits" data-native>${opt('tone', 'Filter by tone (ma3 → 马)')}${opt('choose', 'Pick candidate n')}</select></label>
+        <label>Candidates per page<select name="perPage" data-native>${opt(5, '5 candidates')}${opt(9, '9 candidates')}</select></label>
+      </div>
+      <div class="zh-settings-checks">
+        <label class="ocr-skip"><input type="checkbox" name="shortcut"> <span><kbd>Ctrl Shift Space</kbd> cycles Off → Hanzi → Pinyin</span></label>
+        <label class="ocr-skip"><input type="checkbox" name="shiftLatin"> <span>Tap <kbd>Shift</kbd> alone to type temporary Latin letters</span></label>
+        <label class="ocr-skip"><input type="checkbox" name="fullWidth"> <span>Full-width Chinese punctuation in Hanzi mode (，。？！)</span></label>
+        <label class="ocr-skip"><input type="checkbox" name="bothScripts"> <span>Show Simplified / Traditional counterpart beside candidates</span></label>
+      </div>
+    </section>
+    <section class="zh-settings-panel" data-zh-panel="pinyin" role="tabpanel" hidden>
+      <div class="zh-settings-grid">
+        <label>Pinyin format<select name="rubyFormat" data-ruby data-native>${opt('marks', 'Tone marks (nǐ hǎo)')}${opt('numbers', 'Tone numbers (ni3 hao3)')}</select></label>
+        <label>Show above HSK level<select name="rubyLevel" data-ruby data-native>${opt(0, 'All words (HSK 1–9)')}${[1, 2, 3, 4, 5, 6].map((n) => opt(n, `Above HSK ${n}`)).join('')}</select></label>
+      </div>
+      <div class="zh-settings-checks">
+        <label class="ocr-skip"><input type="checkbox" name="ruby" data-ruby> <span>Enable Pinyin over characters by default in new notes</span></label>
+        <label class="ocr-skip"><input type="checkbox" name="toneColours" data-ruby> <span>Colour Pinyin syllables by tone (1st–4th &amp; neutral)</span></label>
+      </div>
+    </section>
+    <section class="zh-settings-panel" data-zh-panel="packs" role="tabpanel" hidden>
+      <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
+      <div class="zh-user-card">
+        <div class="zh-user-info">
+          <strong>Learned vocabulary &amp; frequency</strong>
+          <small class="muted">Backup or transfer your personal word choices across devices</small>
+        </div>
+        <div class="zh-user">
+          <button type="button" class="chip" data-user-export>Export…</button>
+          <button type="button" class="chip" data-user-import>Import…</button>
+          <span class="muted" data-user-status></span>
+        </div>
+      </div>
+    </section>
   </div>
-  <label class="ocr-skip"><input type="checkbox" name="toneColours" data-ruby> <span>Tone colours (pinyin over characters and over candidates)</span></label>
-  <h3>Dictionaries</h3>
-  <p class="muted">The common words and every HSK 1–3 word come with NoteComplete. Higher HSK levels are optional downloads, kept on this device; delete them any time.</p>
-  <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
-  <h3>Your words</h3>
-  <p class="muted">The characters you choose move up the list, and words you build from several choices are learnt. Move them to another device as a file.</p>
-  <div class="zh-user"><button type="button" data-user-export>Export my words…</button><button type="button" data-user-import>Import…</button><span class="muted" data-user-status></span></div>
-  <div class="ocr-actions"><span class="spacer"></span><button type="button" data-close>Close</button></div>`;
+  <div class="ocr-actions zh-settings-foot"><span class="spacer"></span><button type="button" class="primary" data-close>Done</button></div>`;
   document.body.append(d);
+  d.querySelector('[data-user-export]')?.prepend(icon('export'));
+  d.querySelector('[data-user-import]')?.prepend(icon('import'));
+  for (const tabBtn of d.querySelectorAll('[data-zh-tab]')) {
+    tabBtn.onclick = () => {
+      const target = tabBtn.dataset.zhTab;
+      for (const b of d.querySelectorAll('[data-zh-tab]')) {
+        const active = b.dataset.zhTab === target;
+        b.setAttribute('aria-selected', String(active));
+        b.setAttribute('aria-pressed', String(active));
+      }
+      for (const p of d.querySelectorAll('[data-zh-panel]')) {
+        p.hidden = p.dataset.zhPanel !== target;
+      }
+    };
+  }
   d.addEventListener('change', (e) => {
     const t = e.target;
     // Pinyin over characters: ruby.js's keys (it redraws the pinyin; toneColours is shared).

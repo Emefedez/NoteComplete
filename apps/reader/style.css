@@ -3765,9 +3765,10 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .bar-menu .menu-content .menu-export { gap: 4px; }
 .quiz-question-image { display: block; max-width: 100%; max-height: 240px; margin: 8px 0 0; border-radius: 6px; background: #fff; object-fit: contain; cursor: zoom-in; }
 
-/* Export and share: two compact columns on wide screens so sections fit at a glance. */
-.export-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; }
-.export-dialog .export-head { display: grid; gap: 10px; margin-bottom: 12px; }
+/* Export and share: fixed-geometry two-column window so switching tabs never moves or resizes the dialog. */
+.export-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); box-sizing: border-box; }
+.export-dialog[open] { height: min(640px, calc(100dvh - 32px)); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.export-dialog .export-head { display: grid; gap: 10px; margin-bottom: 12px; flex: none; }
 .export-dialog .export-head h2 { margin: 0; }
 .export-dialog .export-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); }
 .export-dialog .export-tab { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid transparent; border-radius: calc(var(--radius-box) - 3px); background: transparent; color: var(--muted); text-align: left; }
@@ -3778,7 +3779,9 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 .export-dialog .export-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 55%, transparent); }
 .export-dialog .export-tab[aria-selected="true"] { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); box-shadow: 0 1px 4px #0002; }
 .export-dialog .export-tab[aria-selected="true"] .export-tab-text b { color: var(--ink); }
+.export-dialog .export-tabpanel { min-height: 0; overflow-y: auto; align-content: start; }
 .export-dialog .export-tabpanel[hidden], .export-dialog .export-subpanel[hidden] { display: none; }
+.export-dialog > .ocr-actions { margin-top: 0; padding-top: 10px; border-top: 1px solid var(--line); }
 .export-dialog .export-subbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
 .export-dialog .export-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 680px) { .export-dialog .export-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; align-items: start; } }
@@ -4171,18 +4174,31 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .zh-host { position: relative; }
 .zh-toggle-small { position: absolute; right: 4px; top: 4px; z-index: 1; width: 22px; min-width: 0; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 12px; line-height: 20px; opacity: .8; cursor: pointer; }
 .zh-toggle-small:hover { opacity: 1; }
-.zh-settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
-.zh-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 14px; margin: 10px 0; }
-.zh-settings-grid label { display: grid; gap: 3px; font-size: 13px; }
-.zh-settings h3 { margin: 16px 0 4px; font-size: 14px; }
-.zh-packs { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.zh-pack { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
-.zh-pack-name { flex: 1; display: grid; }
-.zh-pack button { display: inline-flex; align-items: center; gap: 5px; }
-.zh-pack button svg { width: 15px; height: 15px; }
-.zh-pack progress { width: 90px; }
+.zh-settings { width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 28px); box-sizing: border-box; }
+.zh-settings[open] { height: min(440px, calc(100dvh - 28px)); display: grid; grid-template-rows: auto 1fr auto; gap: 12px; overflow: hidden; }
+.zh-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.zh-settings-head h2 { margin: 0; font-size: 16px; }
+.zh-settings-stage { min-height: 0; overflow-y: auto; align-content: start; }
+.zh-settings-panel { display: grid; gap: 12px; align-content: start; }
+.zh-settings-panel[hidden] { display: none !important; }
+.zh-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 0; }
+@media (max-width: 520px) { .zh-settings-grid { grid-template-columns: 1fr; } }
+.zh-settings-grid label { display: grid; gap: 4px; font-size: 12px; font-weight: 500; color: var(--ink); }
+.zh-settings-grid select { height: var(--control); padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 400; }
+.zh-settings-grid select:focus { outline: none; border-color: var(--accent); }
+.zh-settings-checks { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--chrome); }
+.zh-settings-checks .ocr-skip { margin: 0; font-size: 12.5px; }
+.zh-packs { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.zh-pack { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--chrome); }
+.zh-pack-name { flex: 1; display: grid; gap: 1px; font-size: 12.5px; }
+.zh-pack button { display: inline-flex; align-items: center; gap: 5px; height: var(--control); padding: 0 10px; border-radius: var(--radius); font-size: 12px; }
+.zh-pack button svg { width: 14px; height: 14px; }
+.zh-pack progress { width: 80px; }
 .zh-pack button.danger { color: #c2410c; }
-.zh-user { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.zh-user-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--chrome); }
+.zh-user-info { display: grid; gap: 2px; font-size: 12.5px; }
+.zh-user { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.zh-settings-foot { margin: 0 !important; padding-top: 10px; border-top: 1px solid var(--line); }
 /* Tool settings as a compact card instead of one long row: the tool's own choices on top,
    then the colours (a 3 × 3 grid with the custom colour last) beside the widths (two per
    row), each under a small caption. */
