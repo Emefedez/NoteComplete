@@ -1,6 +1,6 @@
 // Home screen: recent notes kept on this device, the Drive section and the
 // downloads-folder footer. The open document stays loaded while home is shown.
-import { noteCover, archiveCover, blobReader } from './note-cover.js';
+import { noteCover, archiveCover, blobReader, notebookCover, markNotebookCover } from './note-cover.js';
 import { shrink } from './drive-thumbs.js';
 import { openPdf } from './pdf-background.js';
 import { isNotePackageTar } from './archive.js';
@@ -683,6 +683,14 @@ export function homeScreen({ library, drive, open, openLink = null, status, vers
         const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
         await library.saveCover(key, url);
         return;
+      }
+      // Goodnotes and Notability notebooks (also zipped): their own picture, right away; the
+      // first page replaces it once the notebook is open (app.js, ensureDocumentCover).
+      if (/\.(goodnotes|ntb|zip)$/i.test(name)) {
+        const own = await notebookCover(blobReader(file), file.size).catch(() => null);
+        const url = own && await shrink(new Blob([own.bytes], { type: own.mime }));
+        if (url) return void await library.saveCover(key, markNotebookCover(url));
+        if (!/\.zip$/i.test(name)) return;
       }
       // Archives: a box with the format (what they hold shows when they are opened).
       if (/\.(zip|tar|tgz|gz|7z|rar)$/i.test(name) && !/\.(goodnotes|ntb)\.zip$/i.test(name)

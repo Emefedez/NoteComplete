@@ -22,6 +22,7 @@ import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
+import { isNotebookCover } from "./note-cover.js";
 import { archiveBrowser } from "./archive-browser.js";
 import { archiveView } from "./archive-view.js";
 import { resizablePanels } from "./panel-resize.js";
@@ -5296,6 +5297,22 @@ async function coverImageDimensions(url) {
   }
   return { width: img.naturalWidth || 0, height: img.naturalHeight || 0 };
 }
+// Whether a drawn page is one flat colour (nothing on it), sampled on a coarse grid.
+function blankCanvas(canvas) {
+  try {
+    const { width, height } = canvas, data = canvas.getContext("2d").getImageData(0, 0, width, height).data;
+    const at = (x, y) => (Math.floor(y) * width + Math.floor(x)) * 4;
+    const first = at(width / 2, height / 2);
+    for (let y = 0; y < height; y += Math.max(1, height / 64))
+      for (let x = 0; x < width; x += Math.max(1, width / 48)) {
+        const i = at(x, y);
+        if (Math.abs(data[i] - data[first]) + Math.abs(data[i + 1] - data[first + 1]) + Math.abs(data[i + 2] - data[first + 2]) > 24) return false;
+      }
+    return true;
+  } catch {
+    return false;
+  }
+}
 /** Screengrab page 0 as a JPEG thumbnail when a non-text document's cover is missing or a tiny placeholder. */
 async function ensureDocumentCover({ skipExisting = true } = {}) {
   try {
@@ -5304,10 +5321,14 @@ async function ensureDocumentCover({ skipExisting = true } = {}) {
     const key = activeCoverKey();
     if (!key) return;
     const token = epoch;
+    let keepIfBlank = false;
     if (skipExisting) {
       const existing = await library.cover(key).catch(() => null);
       if (token !== epoch || !doc) return;
-      if (existing) {
+      // A notebook's own picture (home.js) stands in until its first page is drawn here; so
+      // does a box drawn for a zip that turned out to be a notebook.
+      keepIfBlank = isNotebookCover(existing);
+      if (existing && !isNotebookCover(existing) && !(activeDocKind === "notebook" && existing.startsWith("data:image/svg+xml"))) {
         if (existing.startsWith("data:image/svg+xml")) return;
         const dims = await coverImageDimensions(existing);
         if (token !== epoch || !doc) return;
@@ -5316,6 +5337,8 @@ async function ensureDocumentCover({ skipExisting = true } = {}) {
     }
     const rendered = await pageCanvas(0, 320);
     if (token !== epoch || !doc || !rendered?.canvas) return;
+    // A notebook whose first page is a blank sheet keeps its own picture (its cover in Goodnotes).
+    if (keepIfBlank && blankCanvas(rendered.canvas)) return;
     const dataUrl = rendered.canvas.toDataURL("image/jpeg", 0.82);
     rendered.canvas.width = rendered.canvas.height = 0;
     if (!dataUrl) return;
@@ -5848,7 +5871,12 @@ async function openArchiveFile(file, { path = "", origin = "", key = "" } = {}) 
       notePath = noteEntryKey = "";
       await load(notebook);
       if (path) await openedLocal(path, file.name, notebook);
-      else if (key) { noteEntryKey = key; activeCoverKeyOverride = key; rememberDocument(key); await setDocMember({ key, name: file.name, source: "imported" }); }
+      else if (key) {
+        noteEntryKey = key; activeCoverKeyOverride = key; rememberDocument(key);
+        await setDocMember({ key, name: file.name, source: "imported" });
+        // Its Recent card: the notebook's own picture, then its first page.
+        void Promise.resolve(home.rememberCover(key, notebook)).then(() => ensureDocumentCover({ skipExisting: true }));
+      }
       return true;
     }
     if (listing && await openNotebookPack(listing, key || `temp:${file.name}`, file.name)) return true;
