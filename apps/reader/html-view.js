@@ -8,6 +8,8 @@
 // whose toolbar writes Markdown); leaving Edit renders the page again, and the app
 // saves the source (onChange reports every edit).
 
+import { codeEditor } from './code-highlight.js';
+
 export const isHtmlName = (name) => /\.html?$/i.test(name || '');
 const STORE = 'notecomplete-html-state:';
 // Scripts and styles inline, images and fonts embedded; nothing is fetched.
@@ -52,7 +54,7 @@ export function prepareHtml(source, seed = {}, dark = null, zoom = 1) {
 }
 
 export function htmlViewer({ root, frame, title, reload, clear, status, darkScript = null, darkColors = () => ({}), onOwnDark = () => {}, editorHost = null, edit = null, onChange = () => {} }) {
-  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0, zoom = 1, editing = false;
+  let key = '', source = '', currentTitle = '', dark = false, darkInFrame = false, renders = 0, zoom = 1, editing = false, code = null;
   const read = () => {
     try {
       return (typeof localStorage !== 'undefined' && JSON.parse(localStorage.getItem(STORE + key))) || {};
@@ -100,19 +102,19 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
     editing = true;
     edit?.setAttribute('aria-pressed', 'true');
     frame.hidden = true;
-    const area = editorHost.ownerDocument.createElement('textarea');
-    area.className = 'doc-editor-plain';
-    area.spellcheck = false;
-    area.value = source;
-    area.oninput = () => { source = area.value; onChange(source); };
-    editorHost.replaceChildren(area);
+    // The page's HTML, coloured as it is typed (code-highlight.js).
+    code?.destroy();
+    editorHost.replaceChildren();
+    code = codeEditor(editorHost, { value: source, lang: 'html', onChange: (value) => { source = value; onChange(source); }, className: 'doc-code', inputClass: 'doc-editor-plain', label: 'HTML source' });
     editorHost.hidden = false;
-    area.focus();
+    code.focus();
   }
   function stopEditing() {
     if (!editing) return;
     editing = false;
     edit?.setAttribute('aria-pressed', 'false');
+    code?.destroy();
+    code = null;
     editorHost.replaceChildren();
     editorHost.hidden = true;
     frame.hidden = false;

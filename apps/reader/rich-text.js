@@ -1,5 +1,8 @@
 // Markdown from AI answers and notes: HTML from the Rust core (raw HTML shown
-// as text), formulas typeset by KaTeX, which loads only when there is math.
+// as text), formulas typeset by KaTeX, which loads only when there is math, and
+// fenced code coloured by its language (code-highlight.js).
+import { decorateCodeBlocks } from './code-highlight.js';
+
 let katex = null;
 const aiFiles = new Map();
 
@@ -122,6 +125,7 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
       a.setAttribute('href', '#');
     }
   }
+  decorateCodeBlocks(element);
   const maths = element.querySelectorAll('.math');
   if (!maths.length) return;
   const tex = await loadKatex().catch(() => null);
