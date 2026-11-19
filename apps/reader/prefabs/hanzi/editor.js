@@ -9,7 +9,6 @@ import { meaningsOf } from '../../chinese/lookup-panel.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
-import { openContextMenu } from '../../context-menu.js';
 import { langToggle } from '../../chinese/zh-window.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
@@ -48,7 +47,7 @@ export function open(root, { spec, editing, host }) {
     onCancel: () => host.cancel(),
     undo: () => back(past, future),
     redo: () => back(future, past),
-    help: [{ title: 'Stroke order & Trace Prefab', icon: 'draw', rows: [
+    help: [{ title: 'Stroke order', icon: 'draw', rows: [
       { keys: 'Space', does: 'Play · pause main trace animation' },
       { keys: '← →', does: 'Stroke back · forward' },
       { keys: 'Home / End', does: 'No strokes · all strokes' },
@@ -62,43 +61,7 @@ export function open(root, { spec, editing, host }) {
   shell.canvas.classList.add('hz-canvas');
   shell.canvas.removeAttribute('tabindex');
 
-  // ── Header Apply split-button: Insert/Update + dropdown for character alone vs with traces ──
-  if (shell.applyBtn && shell.applyBtn.parentElement === shell.bar) {
-    const applyGroup = make('div', { className: 'hz-apply-group' });
-    shell.applyBtn.replaceWith(applyGroup);
-    const dropBtn = make('button', {
-      type: 'button',
-      className: 'pk-button primary hz-apply-drop has-caret',
-      title: 'Choose how to insert (character alone, with numbers, or with traces)',
-    }, make('span', { className: 'caret' }));
-    dropBtn.setAttribute('aria-label', `${host.applyLabel} options`);
-    dropBtn.setAttribute('aria-haspopup', 'menu');
-    dropBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      const r = applyGroup.getBoundingClientRect();
-      openContextMenu(r.left, r.bottom + 4, [
-        {
-          label: `${host.applyLabel} as character(s) alone`,
-          icon: 'text',
-          checked: model.show === 'strokes',
-          run: () => { model = normalize({ ...model, show: 'strokes' }); finish(model.step); },
-        },
-        {
-          label: `${host.applyLabel} with stroke numbers`,
-          icon: 'hash',
-          checked: model.show === 'numbers',
-          run: () => { model = normalize({ ...model, show: 'numbers' }); finish(model.step); },
-        },
-        {
-          label: `${host.applyLabel} with stroke traces (step by step)`,
-          icon: 'draw',
-          checked: model.show === 'steps',
-          run: () => { model = normalize({ ...model, show: 'steps' }); finish(model.step); },
-        },
-      ], { title: `${host.applyLabel} format`, host: root.closest('dialog') });
-    };
-    applyGroup.append(shell.applyBtn, dropBtn);
-  }
+  // What goes on the page is chosen once, in the side panel (On the page → Show); Insert just inserts it.
 
   // ── Middle: the main trace animation player, English & variants summary bar, or practice ──
   const stage = make('div', { className: 'hz-stage-host' });
@@ -172,12 +135,13 @@ export function open(root, { spec, editing, host }) {
       none.onclick = () => setPageMeanings([]);
       quick.append(few, every, none);
     }
-    defsBox.replaceChildren(
+    // replaceChildren() would write a null child as the text "null": leave it out instead.
+    defsBox.replaceChildren(...[
       make('div', { className: 'hz-defs-head' }, make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }), langSwitch),
       all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary: write it below.' : 'Looking up…' }),
-      field('On the page', glossInput, 'Click a meaning above to add or remove it, or write your own'),
+      field('Meaning under the characters', glossInput, 'Click a meaning above to add or remove it, or write your own'),
       all.length ? quick : null,
-    );
+    ].filter(Boolean));
     const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));
     if (model.variants || cleanVariants.length) {
       const varRow = make('div', { className: 'hz-variants' },

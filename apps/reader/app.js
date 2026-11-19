@@ -201,7 +201,7 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), system: $("themeSystem"), status });
+const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
 let chromeSettling = false;
 let panels = [],
@@ -3140,11 +3140,14 @@ const SNAP_HOLD_MS = 550;
 // View → Shapes from the pen: on (hold, or on lift when chosen in the Pen's settings) or off.
 function syncShapeSnapMenu() { $("shapeSnapMenu").setAttribute("aria-checked", String(shapeSnap() !== "off")); }
 $("shapeSnap").addEventListener("change", syncShapeSnapMenu);
+// Turning it back on brings the mode that was chosen before (Hold or On lift), not always Hold.
+let shapeSnapLastOn = shapeSnap() === "off" ? "hold" : shapeSnap();
+$("shapeSnap").addEventListener("change", () => { if (shapeSnap() !== "off") shapeSnapLastOn = shapeSnap(); });
 $("shapeSnapMenu").onclick = () => {
-  $("shapeSnap").value = shapeSnap() === "off" ? "hold" : "off";
+  $("shapeSnap").value = shapeSnap() === "off" ? shapeSnapLastOn : "off";
   $("shapeSnap").dispatchEvent(new Event("change"));
   syncChoices();
-  status(shapeSnap() === "off" ? "Shapes from the pen off: strokes stay as drawn." : "Shapes from the pen: hold the pen still at the end of a stroke to make it a shape.");
+  status(shapeSnap() === "off" ? "Shapes from the pen off: strokes stay as drawn." : shapeSnap() === "lift" ? "Shapes from the pen: clean shapes snap as you lift the pen." : "Shapes from the pen: hold the pen still at the end of a stroke to make it a shape.");
 };
 // The timer restarts whenever the pen moves more than a few pixels.
 function watchHold(g, e) {
@@ -4048,7 +4051,7 @@ const textModeEntries = () => {
     { key: "zh", label: `Chinese input (${$("zhModeToggle")?.dataset.zhMode || "off"})`, icon: textGlyphIcon($("zhModeToggle")?.textContent || "中", "sans-serif"), active: () => isZh, run: () => { $("zhModeToggle")?.click(); quick.redraw(); }, stay: () => true },
     ...(isZh ? [
       { key: "ruby", label: "Pinyin over Chinese characters", icon: textGlyphIcon("拼", "sans-serif"), active: () => $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click(), stay: () => true },
-      { key: "trace", label: "Trace & stroke order prefab", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
+      { key: "trace", label: "Stroke order…", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
     ] : []),
   ];
 };
@@ -4392,7 +4395,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"], ["1–9", "Pen, highlighter, shapes, tape or a selected text box: the colour with that number on its swatch (Ctrl 1–9 change tabs)"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, table, tree or node graph, or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z (or Ctrl Y)", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -4631,6 +4634,11 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     action(e.shiftKey ? "redo" : "undo");
+  }
+  // Ctrl+Y redoes too, as in most Windows and Linux apps.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    action("redo");
   }
 });
 $("open").onclick = () => openLocal();
@@ -5262,7 +5270,7 @@ function textToolFlyout(button) {
       },
       ...(isZh ? [
         { label: "Pinyin over characters (拼)", icon: "text", checked: $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click() },
-        { label: "Trace & stroke order prefab (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
+        { label: "Stroke order (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
       ] : []),
     ], { title: "Text options" });
     menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
@@ -6599,7 +6607,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -6608,9 +6616,9 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   const canViewHtml = open && !!doc?.has_exam;
   if ($("viewExamHtml")) {
@@ -7943,7 +7951,7 @@ function pageEntry(id, p, at, x, y) {
     case "tape": return p.view?.tapes?.length ? { label: "Tape", icon: "tape", submenu: tapeEntries(p, p.view.tapes[0])[1].submenu } : null;
     case "quick": return { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) };
     case "undo": return { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() };
-    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Y", disabled: $("redo").disabled, run: () => $("redo").click() };
+    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Shift Z", disabled: $("redo").disabled, run: () => $("redo").click() };
   }
   return null;
 }
@@ -8714,7 +8722,6 @@ if (window.notecompleteLog && $("logItems")) {
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
-if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "note" }); };
 if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : undefined }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
@@ -8756,7 +8763,6 @@ $("studyExportQuiz").onclick = () => study.exportQuiz();
 $("quizQr").onclick = () => study.qrQuiz(quizzes.current);
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
-$("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
 function currentDocResource() {
   if (doc && !$("editor").hidden) {
     return {
@@ -9188,7 +9194,7 @@ $("shareNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-$("receiveNoteQr").onclick = async () => {
+$("hubReceive").onclick = async () => {
   closeMenus();
   try {
     const { openReceiveNoteQr } = await (collabLoading ||= import("./collab.js"));
@@ -9198,13 +9204,7 @@ $("receiveNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-if ($("receiveStudyQr")) $("receiveStudyQr").onclick = () => $("receiveNoteQr")?.click();
-if ($("exportSavedResources")) $("exportSavedResources").onclick = () => {
-  closeMenus();
-  quizIndex.open();
-};
 $("hubOpen").onclick = () => $("open").click();
-$("hubReceive").onclick = () => $("receiveNoteQr").click();
 {
   const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
   const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];

@@ -262,9 +262,9 @@ async function hitEntries(hit, ctx = () => ({}), near = null) {
   const target = (w && [...w.text].length > 1 ? w.text : c.char);
   out.push(listenEntry(target, target === c.char ? (w?.pinyin?.[k] || '') : ''));
   if (host.openTracePrefab) {
-    out.push({ label: `Trace & stroke order prefab (${target})…`, icon: 'draw', run: () => host.openTracePrefab(target) });
+    out.push({ label: `Stroke order of ${target}…`, icon: 'draw', run: () => host.openTracePrefab(target) });
   } else if (host.insertFigure) {
-    out.push({ label: `Insert trace order prefab (${target})`, icon: 'draw', run: () => host.insertFigure({ type: 'hanzi', text: target, show: 'steps', grid: 'mi', outline: true }) });
+    out.push({ label: `Insert the stroke order of ${target}`, icon: 'draw', run: () => host.insertFigure({ type: 'hanzi', text: target, show: 'steps', grid: 'mi', outline: true }) });
   }
   return out;
 }
@@ -274,10 +274,10 @@ const selectionEntries = (text, near, replace = null, info = null) => {
   return [
     lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
     hanOnly && listenEntry(clean),
-    hanOnly && host.openTracePrefab && { label: `Trace & stroke order prefab (${hanOnly})…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
+    hanOnly && host.openTracePrefab && { label: `Stroke order of ${hanOnly}…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
     // Only in a Markdown editor (notes, documents): a plain field would get the picture's raw data.
     hanOnly && replace && near?.closest?.('.notes-editor, #textEditor') && {
-      label: `Insert trace order sheet for “${hanOnly}” here`,
+      label: `Insert the stroke order of “${hanOnly}” here`,
       icon: 'graph',
       run: async () => {
         const block = await markdownTraceBlockFor(hanOnly);

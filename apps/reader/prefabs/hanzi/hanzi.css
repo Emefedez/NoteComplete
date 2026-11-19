@@ -8,10 +8,6 @@
 /* Chosen: pale accent, as everywhere in the app (the solid accent is for small marks). */
 .hz-editor .pk-button[aria-pressed="true"],
 .hz-editor .pk-button.is-active { background: var(--k-soft); border-color: color-mix(in srgb, var(--k-accent) 45%, var(--k-line)); color: var(--k-accent); font-weight: 600; }
-.hz-apply-group { display: inline-flex; align-items: stretch; }
-.hz-apply-group > .pk-button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.hz-editor .hz-apply-drop { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, #fff 35%, var(--k-accent)); padding: 2px 7px; min-width: 24px; justify-content: center; }
-.hz-apply-drop .caret { margin: 0 0 3px; opacity: .9; }
 .hz-sheet-preview { margin-top: 4px; padding: 8px; border: 1px solid var(--k-line); border-radius: 8px; background: #fff; overflow-x: auto; text-align: center; }
 .hz-sheet-preview svg { display: inline-block; max-width: 100%; height: auto; max-height: 180px; }
 

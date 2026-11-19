@@ -286,7 +286,7 @@ export function versionChooser({ library, drive, dropbox = null, open, status, f
     }
     if ($('versionTitle')) $('versionTitle').textContent = `Newer version in ${service}`;
     if ($('versionRemoteLabel')) $('versionRemoteLabel').textContent = service;
-    if ($('versionOpenDrive')) $('versionOpenDrive').textContent = `Open ${short} version`;
+    if ($('versionOpenDrive')) $('versionOpenDrive').textContent = `Use the ${short} version`;
     if ($('compareDrive')) $('compareDrive').textContent = `Use ${short} version`;
     $('versionText').textContent = `“${entry.name.replace(/\.noteful$/i, '')}” has a newer version in ${service}.`;
     $('versionMine').textContent = `${when(entry.modifiedTime)} · ${mb(entry.size)}`;

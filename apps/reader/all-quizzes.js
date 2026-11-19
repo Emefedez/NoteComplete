@@ -154,7 +154,8 @@ export function allQuizzes({
       b.onclick = () => {
         const sec = b.closest('[data-sec]')?.dataset.sec;
         if (!sec || b.disabled) return;
-        scopes[sec] = b.dataset.sectionScope;
+        // One filter for the whole window: every section follows (each still shows its own counts).
+        for (const k of SECTIONS) scopes[k] = b.dataset.sectionScope;
         draw();
       };
     }
@@ -426,7 +427,7 @@ export function allQuizzes({
       if (empty) {
         empty.hidden = nodes.length > 0;
         empty.textContent = (current && scopes[kind] === 'note')
-          ? 'None for this note — switch this section to All or create one from Study.'
+          ? 'None for this note — switch to All or create one from Study.'
           : kind === 'decks'
             ? 'None yet: Study → Generate flashcards….'
             : 'None yet: Study → Quiz me….';

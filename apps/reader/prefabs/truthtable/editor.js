@@ -154,7 +154,7 @@ export function open(root, { spec, editing, host }) {
     if (!operands.some(([k]) => k === builderLeft)) builderLeft = operands[0]?.[0] || 'A';
     if (!operands.some(([k]) => k === builderRight)) builderRight = operands[Math.min(2, operands.length - 1)]?.[0] || builderLeft;
 
-    // 1. Conditions (variables) chips + presets
+    // 1. The variables as chips (remove one, add the next name)
     const varChips = make('div', { className: 'pk-chips', style: 'align-items:center' });
     model.variables.forEach((v) => {
       const chip = make('span', {
@@ -164,7 +164,7 @@ export function open(root, { spec, editing, host }) {
         const rm = make('button', {
           type: 'button',
           textContent: '×',
-          title: `Remove condition ${v}`,
+          title: `Remove ${v}`,
           style: 'border:0;background:none;color:inherit;cursor:pointer;padding:0 2px;font-size:13px;line-height:1',
           onclick: () => change({ variables: model.variables.filter((x) => x !== v) }, true),
         });
@@ -179,19 +179,7 @@ export function open(root, { spec, editing, host }) {
       varChips.append(addVarBtn);
     }
 
-    const presetRow = make('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px' });
-    for (const [label, vars] of [['A, B', ['A', 'B']], ['A, B, C', ['A', 'B', 'C']], ['P, Q', ['P', 'Q']], ['P, Q, R', ['P', 'Q', 'R']]]) {
-      const b = make('button', {
-        type: 'button',
-        className: 'pk-button',
-        textContent: label,
-        style: 'height:22px;padding:0 7px;font-size:11px',
-        onclick: () => change({ variables: vars }, true),
-      });
-      presetRow.append(b);
-    }
-
-    // 2. Visual Association & Relation Builder
+    // 2. A step built from two parts, folded away: the formula field below is the main way in.
     const leftSelect = selectInput(operands, builderLeft, (v) => { builderLeft = v; updatePreviewChip(); });
     const opSelect = selectInput(RELATIONS, builderOp, (v) => {
       builderOp = v;
@@ -209,10 +197,11 @@ export function open(root, { spec, editing, host }) {
       previewFormula.textContent = builtExpression();
     }
 
-    const applyMainBtn = button('check', 'Set as main output');
-    applyMainBtn.onclick = () => change({ expr: builtExpression(), output: 'values' }, true);
+    const applyMainBtn = button('check', 'Use as the formula');
+    // Only the formula: Display → Show values stays as chosen (an empty column to fill in stays empty).
+    applyMainBtn.onclick = () => change({ expr: builtExpression() }, true);
 
-    const addColBtn = button('plus', 'Add as step column');
+    const addColBtn = button('plus', 'Add as a step column');
     addColBtn.onclick = () => {
       const extra = [...(model.extraColumns || [])];
       if (extra.length >= MAX_COLUMNS - 1) return;
@@ -220,14 +209,14 @@ export function open(root, { spec, editing, host }) {
       change({ extraColumns: extra }, true);
     };
 
-    const builderBox = make('div', {
-      style: 'display:grid;gap:6px;padding:8px;border:1px solid var(--k-line);border-radius:8px',
-    },
-      field('Condition 1', leftSelect),
-      field('Relation / Operation', opSelect),
-      field('Condition 2', rightSelect),
+    const builderBox = make('details', { className: 'tt-builder' },
+      make('summary', { textContent: 'Build from two parts' }),
+      make('div', { style: 'display:grid;gap:6px;padding:8px 0 0' },
+      field('Left', leftSelect),
+      field('Operator', opSelect),
+      field('Right', rightSelect),
       previewFormula,
-      make('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, applyMainBtn, addColBtn),
+      make('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, applyMainBtn, addColBtn)),
     );
 
     // 3. Quick insert chips + Main expression
@@ -250,7 +239,7 @@ export function open(root, { spec, editing, host }) {
         const missing = detectVariables(e).filter((n) => !model.variables.includes(n));
         if (missing.length && model.variables.length + missing.length <= MAX_VARIABLES) {
           const add = button('plus', `Add ${missing.join(', ')}`);
-          add.title = 'Add the names used in the formula as conditions';
+          add.title = 'Add the names used in the formula as variables';
           add.onclick = () => change({ variables: [...model.variables, ...missing] }, true);
           errLine.append(add);
         }
@@ -312,20 +301,18 @@ export function open(root, { spec, editing, host }) {
 
     shell.panel.replaceChildren(
       field('Title', textInput(model.title, (title) => change({ title }, false))),
-      make('h4', { textContent: 'Conditions (Variables)' }),
+      make('h4', { textContent: 'Variables' }),
       varChips,
-      presetRow,
-      field('Names (comma-separated)', textInput(model.variables.join(', '), (variables) => change({ variables }, true), { placeholder: 'A, B, C' }), `Up to ${MAX_VARIABLES} conditions`),
-      make('h4', { textContent: 'Association & Relation Builder' }),
-      builderBox,
-      make('h4', { textContent: 'Main Output Expression' }),
+      field('Names (comma-separated, to rename them)', textInput(model.variables.join(', '), (variables) => change({ variables }, true), { placeholder: 'A, B, C' }), `Up to ${MAX_VARIABLES} variables`),
+      make('h4', { textContent: 'Formula' }),
       chipBar,
       field('Formula', exprInputEl, 'Words (and, or, not, implies, iff, xor) or symbols (& | ! -> <-> ^) work too'),
       preview,
       errLine,
+      builderBox,
       field('Column heading', textInput(model.label, (label) => change({ label }, false), { placeholder: 'Defaults to the formula' })),
       autoStepsBtn,
-      ...(model.extraColumns?.length ? [make('h4', { textContent: 'Intermediate Step Columns' }), extraList] : []),
+      ...(model.extraColumns?.length ? [make('h4', { textContent: 'Step columns' }), extraList] : []),
       make('h4', { textContent: 'Display' }),
       field('Show values', selectInput([['values', 'Computed values'], ['blank', 'Empty cells (for students to fill in)'], ['none', 'Hide main output column']], model.output, (output) => change({ output }, false))),
       field('Notation', selectInput([['10', '1 and 0'], ['VF', 'V and F'], ['TF', 'T and F']], model.notation, (notation) => change({ notation }, false))),
