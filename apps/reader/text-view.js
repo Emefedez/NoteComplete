@@ -1,8 +1,10 @@
 // Reader and editor for text files. Markdown (with LaTeX) is rendered by the core and KaTeX,
-// as in the Notes panel; other text is shown as written. Edit opens TinyMDE for Markdown
-// (loaded on first use, like the Notes editor) or a plain editor for other text; the app
-// saves the result (onChange reports every edit).
+// as in the Notes panel; other text is shown as written, source code (.java, .py, .sh…)
+// coloured by its language. Edit opens TinyMDE for Markdown (loaded on first use, like the
+// Notes editor), a code editor for source code (code-highlight.js) or a plain editor for other
+// text; the app saves the result (onChange reports every edit).
 import { renderMarkdown } from './rich-text.js';
+import { highlight, langFromName, codeEditor } from './code-highlight.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -14,6 +16,10 @@ export function diagramMessage(result) {
   if (result?.error) return `PlantUML found a problem: ${result.error}`;
   return '';
 }
+
+// Code bigger than this is shown uncoloured (it would still be quick, but a huge log-like
+// file gains nothing from it).
+const CODE_LIMIT = 2_000_000;
 
 const ZOOMS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5];
 const ZOOM_KEY = 'notecomplete-text-zoom';
@@ -67,7 +73,9 @@ export function headingFor(headings, fragment) {
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
 export function textViewer({ root, body, editorHost, title, format, edit, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, mde = null, code = null, mount = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
+  // The language of the open file when it is source code ('' for plain text and Markdown).
+  const codeLang = () => { const lang = langFromName(key || name); return lang === 'markdown' ? '' : lang; };
   // The UML editor showing a .puml file (diagram.mount), while it is open.
   const dropDiagramDoc = () => { diagramDoc?.destroy(); diagramDoc = null; body.classList.remove('text-diagram-editor'); dockBar(null); };
   // One bar: the editor's toolbar goes into the document bar, after the title, while it is open
@@ -161,7 +169,14 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     format.setAttribute('aria-pressed', String(markdown));
     body.classList.toggle('text-plain', !markdown);
     body.classList.toggle('text-diagram', markdown && isDiagram());
-    if (!markdown) { releaseDiagram(); body.textContent = text; return; }
+    const lang = !markdown && text.length <= CODE_LIMIT ? codeLang() : '';
+    body.classList.toggle('text-code', Boolean(lang));
+    if (lang) body.dataset.lang = lang; else delete body.dataset.lang;
+    if (!markdown) {
+      releaseDiagram();
+      if (lang) body.innerHTML = highlight(text, lang); else body.textContent = text;
+      return;
+    }
     if (isDiagram()) return renderDiagram(token);
     const scratch = body.ownerDocument.createElement('div');
     await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
@@ -174,6 +189,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     mde?.bar?.destroy?.();
     mde?.editor?.destroy?.();
     mde = null;
+    code?.destroy();
+    code = null;
     editorHost.replaceChildren();
   }
   async function startEditing() {
@@ -196,6 +213,11 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
       const bar = new TinyMDE.CommandBar({ element: commands, editor });
       editor.addEventListener('change', (event) => changed(event.content));
       mde = { editor, bar };
+    } else if (!markdown && codeLang() && text.length <= CODE_LIMIT) {
+      // Source code: coloured as it is typed; Tab indents, Enter keeps the indentation. The
+      // textarea keeps the plain editor's class, so Find in the document works the same.
+      code = codeEditor(editorHost, { value: text, lang: codeLang(), onChange: changed, className: 'doc-code', inputClass: 'doc-editor-plain', label: name || 'Code' });
+      code.focus();
     } else {
       const area = document.createElement('textarea');
       area.className = 'doc-editor-plain';
