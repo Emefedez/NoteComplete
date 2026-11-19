@@ -13,6 +13,7 @@ export const ZH_DEFAULTS = Object.freeze({
   bothScripts: false,   // the other script's form beside a candidate
   toneColours: true,    // tone colours on the pinyin over candidates
   digits: 'tone',       // a digit right after pinyin in Hanzi mode: tone (filter) | choose (candidate n)
+  lang: 'en',           // meanings and translations: en | es (the es | en toggle of the Chinese windows)
 });
 const KEY = (k) => `notecomplete-zh-${k}`;
 const store = () => { try { return globalThis.localStorage || null; } catch { return null; } };

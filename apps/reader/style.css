@@ -2317,10 +2317,10 @@ body.bar-compact .tab { height: 22px; }
 .text-format select { border: 1px solid var(--line); border-radius: 6px; background-color: var(--surface); color: var(--ink); }
 .text-format button { color: var(--ink); }
 .text-format button:hover:not([aria-pressed="true"]) { background: var(--fill); }
-#textFont { width: 112px; }
+#textFont, [data-mirror-id="textFont"] { width: 112px; }
 /* The size: typed, or stepped with the arrows inside the field on its right (text-box.js). */
 .size-field { position: relative; display: inline-flex; align-items: center; }
-#textSize { width: 64px; min-height: 28px; box-sizing: border-box; padding: 0 20px 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+#textSize, [data-mirror-id="textSize"] { width: 64px; min-height: 28px; box-sizing: border-box; padding: 0 20px 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
 .size-steps { position: absolute; right: 2px; top: 2px; bottom: 2px; display: flex; flex-direction: column; width: 16px; }
 .text-format .size-steps button { flex: 1; display: grid; place-items: center; min-height: 0; width: 16px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--muted); }
 .text-format .size-steps button:hover { background: var(--fill); color: var(--accent); }
@@ -4460,6 +4460,25 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .zh-lk-use:hover { background: var(--accent-soft); color: var(--accent); }
 .zh-lk-facts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
 .zh-lk-level { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 11px; line-height: 17px; white-space: nowrap; }
+/* es | en: an old-style two-sided switch, the chosen side pressed in (chinese/zh-window.js langToggle). */
+.zh-lang { display: inline-flex; align-items: center; gap: 0; height: 22px; padding: 0 0 0 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--muted); }
+.zh-lang > svg { width: 14px; height: 14px; margin-right: 4px; flex: none; }
+.zh-lang > button { min-height: 0; height: 20px; min-width: 26px; padding: 0 6px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; box-shadow: none; }
+.zh-lang > button:last-child { border-radius: 0 4px 4px 0; }
+.zh-lang > button:hover { background: var(--accent-hover); color: var(--ink); }
+.zh-lang > button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 1px 2px #0002; }
+/* Chinese selected: the bar beside it, and the translation window (chinese/zh-select.js). */
+.zh-select-bar { position: fixed; z-index: 60; }
+.grab-menu .zh-grab { font-size: 15px; font-weight: 600; }
+.zh-tr-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.zh-tr-from { margin: 0; font-size: 12px; }
+.zh-tr-source { margin: 2px 0 0; font-size: 22px; line-height: 1.7; }
+.zh-tr-word { all: unset; cursor: pointer; border-radius: 4px; padding: 0 1px; border-bottom: 3px solid var(--zh-c, transparent); background: color-mix(in srgb, var(--zh-c, transparent) 22%, transparent); }
+.zh-tr-word:hover { background: color-mix(in srgb, var(--zh-c, var(--accent)) 30%, transparent); }
+.zh-tr-word:focus-visible { outline: 2px solid var(--accent); }
+.zh-tr-target { margin: 4px 0 0; font-size: 16px; line-height: 1.6; user-select: text; }
+.zh-tr-part { color: inherit; border-radius: 3px; padding: 0 1px; border-bottom: 3px solid var(--zh-c); background: color-mix(in srgb, var(--zh-c) 22%, transparent); }
+.zh-tr-colours[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .zh-lk-say { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius); background: var(--fill); color: inherit; cursor: pointer; }
 .zh-lk-say svg { width: 16px; height: 16px; }
 .zh-lk-say.small { width: 22px; height: 22px; background: transparent; color: var(--muted); }

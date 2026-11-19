@@ -834,6 +834,37 @@ export function textBoxController({
 
   // A typed box's text replaced (Chinese conversion, chinese/zh-menu.js), its style and its
   // styled parts kept; one undo brings it back.
+  // The box being typed under client (x, y): its text, the UTF-16 index of the character there
+  // (lines as typed, no wrapping) and how to put other text in a range. Null elsewhere.
+  let measureContext = null;
+  function typedAt(clientX, clientY) {
+    const area = textEditor?.area;
+    if (!area || textEditor.field) return null;
+    const r = area.getBoundingClientRect(), cs = getComputedStyle(area), px = (v) => parseFloat(v) || 0;
+    const lineHeight = px(cs.lineHeight) || px(cs.fontSize) * 1.2;
+    const x = clientX - r.left - px(cs.paddingLeft) - px(cs.borderLeftWidth) + area.scrollLeft;
+    const y = clientY - r.top - px(cs.paddingTop) - px(cs.borderTopWidth) + area.scrollTop;
+    const lines = area.value.split("\n"), line = Math.floor(y / lineHeight);
+    if (x < 0 || line < 0 || line >= lines.length) return null;
+    measureContext ||= doc.createElement("canvas").getContext("2d");
+    measureContext.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    let index = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0), left = 0;
+    for (const ch of lines[line]) {
+      const w = measureContext.measureText(ch).width;
+      if (x < left + w) {
+        const value = area.value;
+        return { text: value, index, area, replace: (start, end, from, to) => {
+          if (textEditor?.area !== area || area.value.slice(start, end) !== from) throw new Error("The text changed; look it up again.");
+          area.focus();
+          area.setRangeText(to, start, end, "end");
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+        } };
+      }
+      left += w;
+      index += ch.length;
+    }
+    return null;
+  }
   async function replaceText(p, id, value) {
     const existing = (p?.view?.texts || []).find((t) => String(t.id) === String(id));
     if (!existing) throw new Error("This text box cannot be changed here.");
@@ -844,6 +875,7 @@ export function textBoxController({
   return {
     get active() { return Boolean(textEditor); },
     replaceText,
+    typedAt,
     open,
     typeAt,
     commit,

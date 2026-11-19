@@ -10,6 +10,7 @@ import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
 import { openContextMenu } from '../../context-menu.js';
+import { langToggle } from '../../chinese/zh-window.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
 const hasLatin = (s) => /[a-zA-Z]/.test(String(s || ''));
@@ -123,6 +124,8 @@ export function open(root, { spec, editing, host }) {
   // The dictionary's look-up of the characters (load()), for the list of every meaning.
   let lookup = null;
   const defsBox = make('div', { className: 'hz-defs' });
+  // es | en: the meanings again in the other language (the page's caption too while it is automatic).
+  const langSwitch = langToggle({ onChange: () => load(false) });
   const pageMeanings = () => (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
   function setPageMeanings(list) {
     glossAuto = false;
@@ -140,7 +143,7 @@ export function open(root, { spec, editing, host }) {
       model.pinyin ? make('span', { className: 'hz-dict-pinyin', textContent: model.pinyin }) : null,
       model.gloss
         ? make('span', { className: 'hz-dict-gloss', textContent: model.gloss, title: `On the page: ${model.gloss}` })
-        : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up English meaning…' }),
+        : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up the meaning…' }),
     );
     dictBar.append(headRow);
     // In the side panel: every meaning, by reading; a click puts one on the page or takes it
@@ -157,7 +160,7 @@ export function open(root, { spec, editing, host }) {
       }
       list.append(li);
     }
-    const glossInput = textInput(model.gloss, (gloss) => { glossAuto = !gloss; change({ gloss }, false); }, { placeholder: 'English shown under the characters' });
+    const glossInput = textInput(model.gloss, (gloss) => { glossAuto = !gloss; change({ gloss }, false); }, { placeholder: 'Meaning shown under the characters' });
     glossInput.addEventListener('change', () => renderDictBar());
     const quick = make('div', { className: 'pk-row hz-defs-tools' });
     if (all.length) {
@@ -170,7 +173,7 @@ export function open(root, { spec, editing, host }) {
       quick.append(few, every, none);
     }
     defsBox.replaceChildren(
-      make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }),
+      make('div', { className: 'hz-defs-head' }, make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }), langSwitch),
       all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary: write it below.' : 'Looking up…' }),
       field('On the page', glossInput, 'Click a meaning above to add or remove it, or write your own'),
       all.length ? quick : null,

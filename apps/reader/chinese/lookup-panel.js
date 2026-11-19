@@ -9,9 +9,10 @@
 // host: { status, script(), decks(), addCards(cards, { deckId, title }), insertFigure(spec) }.
 import { openContextMenu } from '../context-menu.js';
 import { icon } from '../icons.js';
-import { zhWindow, modalHost } from './zh-window.js';
+import { zhWindow, modalHost, langToggle } from './zh-window.js';
 import { levelLabel, vocabCard, HAN } from './vocab.js';
 import { speak, speakSyllable, stopSpeech, canSpeak } from './speech.js';
+import { localizeLookup, zhLang } from './translate.js';
 
 const IDC = /[⿰-⿿]/u;
 // How the parts sit (the first Ideographic Description Character of the decomposition).
@@ -125,6 +126,8 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     try {
       const { chinese } = await import('./client.js');
       result = await chinese().lookup(t, { script: script() });
+      // Meanings in Spanish with the es | en toggle (cached after the first time).
+      result = await localizeLookup(result, zhLang()).catch(() => result);
     } catch (e) {
       if (mine === token) win.body.replaceChildren(el('p', 'muted', `The dictionary could not be loaded: ${e.message}`));
       return;
@@ -185,6 +188,8 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
       facts.prepend(speakBtn);
     }
     side.append(facts);
+    // es | en: the meanings in Spanish or English (every Chinese window follows it).
+    facts.append(langToggle({ onChange: () => { if (shown?.text === t) show(t, shown.context, false); } }));
     head.append(big, side);
     body.push(head);
 

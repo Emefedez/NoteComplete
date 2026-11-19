@@ -25,7 +25,8 @@ export function packPages(pages) {
 
 // The page's SVG to save as a file, as it is in the note: the paper and the PDF inside it.
 export async function pageSvg(p, { pdfImage, backgroundPlacement, chinese = null } = {}) {
-  const svg = p.render.firstElementChild.cloneNode(true);
+  // The page's SVG: on a PDF page a raster <canvas> comes before it (it is added below).
+  const svg = p.render.querySelector(':scope > svg').cloneNode(true);
   if (p.render.dataset.paper) {
     svg.querySelector('[data-background] > rect')?.setAttribute('fill', p.render.dataset.paper);
     svg.style.isolation = 'isolate';

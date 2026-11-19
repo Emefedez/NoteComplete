@@ -77,7 +77,9 @@ export async function dictionaryFor(spec) {
       !m.pinyin ? client.annotate(m.text, { script: m.script }).catch(() => []) : Promise.resolve([]),
       client.lookup(m.text, { script: m.script }).catch(() => null),
     ]);
-    lk = found;
+    // Meanings in the language of the es | en toggle (chinese/translate.js).
+    const { localizeLookup, zhLang } = await import('../../chinese/translate.js');
+    lk = await localizeLookup(found, zhLang()).catch(() => found);
     let pinyin = m.pinyin;
     if (!pinyin && runs?.length) {
       pinyin = runs.flatMap((r) => r.pinyin || []).join(' ');

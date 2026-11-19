@@ -351,6 +351,17 @@ export async function pageZhLongPress(p, x, y) {
   return true;
 }
 
+// A character of text being typed (a page text box): its panel at once. `replace(start, end, from,
+// to)` puts another form in that place. False when there is no Chinese at `index`.
+export async function lookUpTyped(text, index, replace = null, near = null) {
+  const c = charAround(text, index);
+  if (!c || !HAN.test(c.char)) return false;
+  const runs = await annotateQuick(text);
+  const w = wordAround(runs, c.start), k = w ? [...text.slice(w.start, c.start)].length : 0;
+  lookUp(c.char, { reading: w?.pinyin?.[k] || '', ...(replace ? { replace: (to) => replace(c.start, c.end, c.char, to) } : {}) }, near);
+  return true;
+}
+
 // ---- Everywhere else: Markdown, HTML and text views, cards, chat, text fields ----
 const typing = (t) => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && /^(text|search|)$/.test(t.type));
 // A text field's or editable element's selection, with how to replace it.

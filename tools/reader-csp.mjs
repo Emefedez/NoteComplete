@@ -146,6 +146,8 @@ export const inventory = [
   { url: 'https://cdn.jsdelivr.net/gh/davinfifield/mp3-chinese-pinyin-sound@master/mp3/', directive: 'media-src', feature: 'Chinese pronunciation: a recording per syllable and tone, streamed on 🔊 (chinese/speech.js)' },
   { url: 'https://translate.google.com/translate_tts', directive: 'media-src', feature: 'Chinese pronunciation: online text-to-speech, streamed on 🔊 (chinese/speech.js)' },
   { url: 'https://dict.youdao.com/dictvoice', directive: 'media-src', feature: 'Chinese pronunciation: second online text-to-speech (chinese/speech.js)' },
+  { url: 'https://translate.googleapis.com/translate_a/single', directive: 'connect-src', feature: 'Translating selected Chinese and Spanish meanings (chinese/translate.js), when Translate or ES is pressed' },
+  { url: 'https://api.mymemory.translated.net/get', directive: 'connect-src', feature: 'Translating selected Chinese when the first service does not answer (chinese/translate.js)' },
   { url: 'https://raw.githubusercontent.com/drkameleon/complete-hsk-vocabulary/', directive: 'connect-src', feature: 'Chinese dictionary expansions by HSK level, SHA-256 pinned (chinese/packs.js)' },
   { url: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/', directive: 'connect-src', feature: 'Word frequencies for text recognition (ocr-dictionary.js)' },
   { url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/', directive: 'connect-src', feature: 'WebLLM model code (WebAssembly), fetched by WebLLM', literal: false },

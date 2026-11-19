@@ -977,3 +977,58 @@ chinese().convert(text, "s2t"|"t2s")          // → string
 chinese().packs()                             // → [{id, name, levels, bundled, installed, words, bytes}]
 chinese().installPack(id, onProgress) / removePack(id)
 ```
+
+## 16. Translating selections, es | en, overlays (2026-11-19)
+
+**Selection bar** (`chinese/zh-select.js`). Chinese selected anywhere (the PDF/OCR text layer with
+Pan, a text box being typed, Markdown and HTML views, cards, chat) shows a bar of icons beside
+the selection, styled as the grab tool's (`.grab-menu.grab-icons`): Translate, Look up (≤ 8
+characters), Stroke order (≤ 12 characters, `openTracePrefab`) and Listen (`speech.js`). It goes
+when the selection does, on Esc, a press elsewhere or a scroll. Pinyin written out is detected by
+`isPinyin` (two words or more, tone marks or numbers, ≥ 80 % of the words made of syllables) and
+turned into characters with the input method's dictionary (`pinyinToHanzi`: the best candidate
+for what is left, repeatedly). Pinyin shown over characters (`<rt>`, `<rp>`, the pages' `.zh-ruby`)
+is left out of the selected text, so the "metadata" of ruby needs no guessing. The grab tool shows
+**中** when its region's text (`find.wordsIn`: text layer, text boxes, recognised text) has Han,
+and that opens the same bar.
+
+**Translation** (`chinese/translate.js`). No key and no account: Google's public endpoint
+(`translate.googleapis.com/translate_a/single?client=gtx`, CORS-enabled, used by browser
+extensions) first, MyMemory (`api.mymemory.translated.net`, 500 bytes a request, anonymous daily
+quota) when it fails or does not answer in 8 s. Answers are cached in memory and in localStorage
+(`notecomplete-zh-translations`, the last 600). Both hosts are covered by `connect-src https:` and
+listed in `tools/reader-csp.mjs`'s inventory. A LibreTranslate instance would need a key or a
+server; WebLLM would download a model for each device, so neither is used.
+
+**Colours** (`alignWords`). Behind a button (remembered once on): the sentence is split into words
+by the local dictionary (`annotate`), every word is translated in one request (one per line), and
+in English the dictionary meanings are added. Each word's candidates are reduced to their content
+words and looked for in the translation, longest first, allowing endings (a shared start of 4+
+letters: *gustar* ~ *gusta*, *study* ~ *studying*); a place is used once. Matched pairs get the
+Okabe–Ito colours (colour-blind safe) as a soft highlight with a 3 px underline. A word that is
+not found stays plain: no guessing.
+
+**es | en** (`langToggle` in `zh-window.js`, setting `lang` in Settings → Chinese storage). A
+two-sided pressed switch with the `language` icon in the look-up panel, the translation window
+and the stroke-order editor's meanings; every toggle follows the others (`zh-settings` event).
+Spanish meanings are the dictionary's English ones translated (`localizeLookup`: entries, the
+character's definition and the first 30 "words with it" in one request, cached). The stroke
+figure's caption follows it while automatic.
+
+**Right-click in a text box being typed** never removes the box: on a character (found by
+measuring the textarea's lines, `textBox.typedAt`) or a selection made before the click, the
+panel opens at once (`lookUpTyped`, with Convert here for that place); elsewhere the browser's
+text menu. **Shift + right-click on the PDF's text layer** opens the character's panel; on an
+item it still removes it.
+
+**Exports.** The pinyin over Chinese in PDF, image and SVG exports is what the view shows when
+exporting (the Export dialog's checkbox starts there). Two bugs made it look otherwise: the SVG
+export of a page with a PDF background saved the raster `<canvas>` instead of the page's SVG, and
+the tool bar's copy of the text options kept the panel's ids, so **View → Pinyin over characters**
+clicked the copy (which does nothing). The first PNG/PDF export of a page with Chinese also lost
+its text (Chromium draws an SVG picture before its embedded fonts are ready): the picture is now
+drawn once and loaded again.
+
+Tests: `chinese/translate.test.mjs` (services, cache, batching, Spanish meanings, pinyin,
+alignment), `tools/chinese_translate_e2e.mjs` (stand-in services; bar, translation, colours,
+es | en, right-click in a box being typed, grab 中, exports, a PDF with Chinese).

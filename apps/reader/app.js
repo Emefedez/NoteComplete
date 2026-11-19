@@ -103,7 +103,8 @@ import { runAI, smallSetting } from "./small-model.js";
 import { installModalDialogs } from "./modal-dialogs.js";
 import { chineseField, imeMenuOpen, openSettings as openZhSettings } from "./chinese/ime.js";
 import { configureRuby, noteOpened as zhNoteOpened, rubySvg, rubyForExport, wireRubyControls } from "./chinese/ruby.js";
-import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan } from "./chinese/zh-menu.js";
+import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
+import { installZhSelection, showBar as showZhBar } from "./chinese/zh-select.js";
 import { embedChineseFont } from "./chinese/fonts.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
@@ -880,9 +881,28 @@ function buildPages(sizes) {
       if (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) < 8) editTextAt(p, e);
     };
     el.onpointercancel = () => { p.audioTap = null; longPress.end(); cancelGesture(); };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button === 2 && e.target.matches?.(".text-editor")) e.target.selectionBeforeRightClick = [e.target.selectionStart, e.target.selectionEnd];
+    }, true);
     el.oncontextmenu = async (event) => {
+      // Inside the text box being typed nothing is removed: right-click (Shift too) on Chinese
+      // opens its panel (the selected Chinese when there is some); elsewhere the field's own menu.
+      if (textBox.active && event.target.closest?.(".text-editor")) {
+        // The selection from before this click (the browser may have just selected the word under it).
+        const area = event.target.closest(".text-editor"), [a, b] = area.selectionBeforeRightClick || [0, 0];
+        const chosen = area.value.slice(a, b).trim();
+        area.setSelectionRange(a, b);
+        if (lookupable(chosen)) { event.preventDefault(); zhLookUp(chosen, {}, area); return; }
+        const at = textBox.typedAt(event.clientX, event.clientY);
+        if (at && hasHan(String.fromCodePoint(at.text.codePointAt(at.index)))) {
+          event.preventDefault();
+          lookUpTyped(at.text, at.index, at.replace, area);
+        }
+        return;
+      }
       // Right-click: a menu for what is under the pointer (or the page). Shift + right-click
-      // removes it at once, as right-click did before; Ctrl+Z brings it back.
+      // removes it at once, as right-click did before; Ctrl+Z brings it back. On Chinese printed
+      // in the PDF (its text layer), Shift + right-click opens that character's panel instead.
       event.preventDefault();
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
@@ -891,6 +911,8 @@ function buildPages(sizes) {
       if (chosen && hasHan(chosen)) return pageZhSelection(chosen, event.clientX, event.clientY);
       if (chosen) return status("Press Ctrl+C to copy the selected text.");
       if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
+      const zh = hasHan(p.el.textContent) && svgHit(p.el, event.clientX, event.clientY);
+      if (zh && !zh.item && await pageZhLongPress(p, event.clientX, event.clientY)) return;
       const [x, y] = point(event, p);
       try {
         const item = await call("pick", { page: p.index, x, y,
@@ -1917,6 +1939,9 @@ const toolMirror = (() => {
     copy.removeAttribute("style");
     copy.className = `tool-options inline${row ? " inline-row" : ""}`;
     copy.setAttribute("aria-hidden", "false");
+    // Its ids go (kept as data-mirror-id): the panel's own controls stay the ones found by id
+    // (the View menu's "Pinyin over characters" clicks #zhRubyToggle, which the copy was).
+    for (const n of copy.querySelectorAll("[id]")) { n.dataset.mirrorId = n.id; n.removeAttribute("id"); }
     // Values typed or picked are properties, not attributes: carried across by hand.
     const from = $("toolOptions").querySelectorAll("input, select"), to = copy.querySelectorAll("input, select");
     from.forEach((f, i) => { if (to[i]) { to[i].value = f.value; if ("checked" in f) to[i].checked = f.checked; } });
@@ -6649,6 +6674,10 @@ function showGrabMenu(p, rect, el) {
   menu.hidden = false;
   menu.style.left = `${Math.max(8, Math.min(work.width - menu.offsetWidth - 8, box.left - work.left + rect[0] * k))}px`;
   menu.style.top = `${Math.max(8, Math.min(work.height - 44, box.top - work.top + (rect[1] + rect[3]) * k + 8))}px`;
+  // 中 when the region holds Chinese (text layer, text boxes or recognized text).
+  $("grabZh").hidden = true;
+  const asked = grabbed;
+  find.wordsIn(p.index, rect).then((text) => { if (grabbed === asked && hasHan(text)) { $("grabZh").hidden = false; grabbed.text = text; } }).catch(() => {});
 }
 function clearGrab() {
   grabbed?.el.remove();
@@ -6793,6 +6822,14 @@ $("grabAsk").onclick = async () => {
   clearGrab();
 };
 $("grabCancel").onclick = clearGrab;
+// The Chinese in the region: its own bar (translate, look up, stroke order, listen).
+$("grabZh").onclick = () => {
+  if (!grabbed?.text) return;
+  const text = grabbed.text.replace(/\s+/g, hasHan(grabbed.text) ? "" : " ").trim();
+  const r = $("grabMenu").getBoundingClientRect();
+  clearGrab();
+  showZhBar(text, r);
+};
 $("grabKeep").onclick = async () => {
   if (!grabbed) return;
   try {
@@ -8336,13 +8373,21 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
   const height = Math.round(h * scale);
   // Chinese: pinyin over it in exports when chosen, and the font, which a picture cannot fetch.
   if (exporting && rubyForExport()) await rubySvg(svg, { force: true }).catch(() => {});
-  await embedChineseFont(svg);
+  const fonts = await embedChineseFont(svg);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
   try {
-    const image = new Image();
+    let image = new Image();
     await imageReady(image, url);
+    // An SVG picture is ready before the fonts inside it the first time (Chromium): its text
+    // would be missing. Drawn once to start them, then loaded again once they are there.
+    if (fonts) {
+      document.createElement("canvas").getContext("2d").drawImage(image, 0, 0, 1, 1);
+      await new Promise((r) => setTimeout(r, 150));
+      image = new Image();
+      await imageReady(image, url);
+    }
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -8513,6 +8558,20 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
+// The stroke order editor for `target`, put on the page (or in the Markdown being edited).
+async function openTracePrefab(target) {
+  const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
+  if (!chosen) return;
+  if (textView.visible && textView.editing && textView.insertTraceSpec) {
+    await textView.insertTraceSpec(chosen);
+    status(`${prefabName(chosen)} inserted into Markdown.`);
+    return;
+  }
+  let p = panels[page];
+  if (!doc) p = await openBlankNoteForPrefab(prefabName(chosen) || "Stroke order");
+  if (!p || !ensureEditableLayer()) return;
+  if (await placePrefab(p, chosen)) status(`${prefabName(chosen)} inserted. Double-click or right-click it to edit; one undo removes it.`);
+}
 // Chinese: the character panel, conversion and vocabulary cards (chinese/zh-menu.js).
 configureZh({
   status,
@@ -8529,21 +8588,11 @@ configureZh({
     const full = await prepareWithDict(spec);
     if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Double-click or right-click it to edit; one undo removes it.`);
   },
-  openTracePrefab: async (target) => {
-    const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
-    if (!chosen) return;
-    if (textView.visible && textView.editing && textView.insertTraceSpec) {
-      await textView.insertTraceSpec(chosen);
-      status(`${prefabName(chosen)} inserted into Markdown.`);
-      return;
-    }
-    let p = panels[page];
-    if (!doc) p = await openBlankNoteForPrefab(prefabName(chosen) || "Stroke order");
-    if (!p || !ensureEditableLayer()) return;
-    if (await placePrefab(p, chosen)) status(`${prefabName(chosen)} inserted. Double-click or right-click it to edit; one undo removes it.`);
-  },
+  openTracePrefab,
 });
 installZhContext();
+// Chinese selected anywhere: Translate, Look up, Stroke order and Listen beside it (chinese/zh-select.js).
+installZhSelection({ pageText: (sel) => selectedText(sel), openTracePrefab, status });
 const openGeneratedFile = async (file, entry) => {
   if (entry) return openFromLibrary(file, entry);
   if (!canReplace()) return false;
