@@ -76,8 +76,12 @@ export function imeReduce(state, k) {
   // Hanzi mode, pinyin typed: Space chooses when released, and a digit pressed while it is held
   // chooses candidate n of the page (Space+2, then Space+1… within one hold).
   if (k.type === 'spaceDown') {
-    if (s.mode !== 'hanzi' || s.latin || s.composing || (!s.buffer && !s.chosen.length)) return { state: s.spaceHeld ? { ...s, spaceHeld: false, chord: false } : s };
-    if (s.spaceHeld) return { state: s, handled: true }; // key repeat: nothing twice
+    if (s.spaceHeld) {
+      return (s.mode === 'hanzi' && !s.latin && !s.composing)
+        ? { state: s, handled: true }
+        : { state: { ...s, spaceHeld: false, chord: false } };
+    }
+    if (s.mode !== 'hanzi' || s.latin || s.composing || (!s.buffer && !s.chosen.length)) return { state: s };
     return { state: { ...s, spaceHeld: true, chord: false }, handled: true };
   }
   if (k.type === 'spaceUp') {
@@ -128,7 +132,7 @@ export function imeReduce(state, k) {
   }
   if (/^[0-9]$/.test(key)) {
     const d = +key, afterLetter = /[a-zü]$/i.test(s.buffer);
-    if (!s.buffer) return { state: clear(s), handled: true, commit: typed(s) + key };
+    if (!s.buffer) return s.spaceHeld ? { state: s, handled: true } : { state: clear(s), handled: true, commit: typed(s) + key };
     if (s.spaceHeld && d >= 1) {
       if (!fresh(s)) return { state: s, handled: true, wait: true };
       const out = choose(s, s.page * s.opts.perPage + d - 1);

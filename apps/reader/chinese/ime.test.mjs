@@ -237,3 +237,18 @@ test('partial pick + Backspace emptying buffer never stalls Space or punctuation
   assert.equal(up.state.spaceHeld, false);
   assert.equal(up.state.chord, false);
 });
+
+test('holding Space after a chord choice never leaks Space repeat or digits until Space is lifted', () => {
+  // Type nihao, hold Space, press 1 (commits 你好), then Space key-repeats and another digit is pressed before Space is lifted
+  const r = chord([...seq('nihao'), 'v', '1', { type: 'spaceDown', repeat: true }, '2', '3', '^'], { dict: MANY });
+  assert.equal(r.text, '你好');
+  assert.equal(r.state.spaceHeld, false);
+  assert.equal(r.state.chord, false);
+  // Every event after Space was held down must be handled (no leaked space or digit)
+  assert.equal(r.results[6].handled, true); // spaceDown repeat
+  assert.equal(r.results[7].handled, true); // '2' while spaceHeld
+  assert.equal(r.results[8].handled, true); // '3' while spaceHeld
+  // Once Space is lifted, digits are read normally again
+  const afterLift = imeReduce(r.state, { key: '4' });
+  assert.equal(afterLift.handled, undefined);
+});
