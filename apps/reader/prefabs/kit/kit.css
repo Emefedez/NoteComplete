@@ -87,6 +87,7 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 .pk-window-foot:empty { display: none; }
 .pk-window.moving, .pk-window.sizing { user-select: none; -webkit-user-select: none; }
 .pk-window.in-tray { display: none !important; }
+.pk-window.pushed { min-width: 0; min-height: 0; }
 /* On a phone (window.js isPhone, phone: 'full'): the whole screen under the tab strip, not moved. */
 .pk-window.pk-phone { border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; box-shadow: none; }
 .pk-window.pk-phone .pk-window-head { cursor: default; }

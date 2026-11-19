@@ -1,10 +1,11 @@
 // The kit's movable window (docs/PREFAB-MODULES.md, "window" modules): an editor over the page
 // that is not modal, so the page stays in sight and scrolls behind it. Dragged by its title bar,
-// resized from its right and bottom edges or its corner (mouse, finger or pen), always kept
-// inside the window under the tab strip, and its place and size remembered by `key`. Esc or ×
+// resized from every edge and corner (mouse, finger or pen), free on the whole screen (over the
+// top bar too), pushed against an edge it gets smaller from that edge, as floating.js windows
+// do (a strip always stays to grab it back); its place and size remembered by `key`. Esc or ×
 // closes it (`onClose`), Ctrl Enter applies (`onApply`); keys typed in it stay in it, so the
 // page's tool shortcuts do not fire behind it.
-import { clampRect, resizeRect, largeRect, trayPut, trayDrop } from '../../floating.js';
+import { clampRect, shownRect, resizeRect, largeRect, overBar, trayPut, trayDrop } from '../../floating.js';
 import { icon } from '../../icons.js';
 import { loadKitStyles, make } from './shell.js';
 
@@ -12,12 +13,13 @@ const STORE = 'pk-window:';
 // A phone (narrow, or a short landscape screen): windows fill the screen under the tab strip
 // (a big editor) or sit at the bottom as a sheet (Chinese mode's small panels, zh-window.js).
 export const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 600px), (max-height: 500px) and (orientation: landscape)').matches;
-const MARGIN = 8;
+// How much of a window stays on the screen when it is pushed out (floating.js uses the same).
+const GRAB = 56;
+const modalTop = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--modal-top')) || 0;
 
-// Where a window may be: the browser window under the tab strip (--modal-top), less a margin.
+// Where a window may be: the whole browser window (it may cover the top bar when moved there).
 export function windowArea() {
-  const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--modal-top')) || 0;
-  return { left: MARGIN, top: top + MARGIN, width: Math.max(0, innerWidth - 2 * MARGIN), height: Math.max(0, innerHeight - top - 2 * MARGIN) };
+  return { left: 0, top: 0, width: Math.max(0, innerWidth), height: Math.max(0, innerHeight) };
 }
 // A rect ({ left, top, width, height }, page pixels) kept whole inside `area` and no smaller
 // than `min`: what a drag, a resize or a smaller browser window leaves.
@@ -81,7 +83,7 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     if (large) {
       beforeLarge = { rect: { ...rect }, fixedHeight };
       const area = windowArea();
-      const big = largeRect(area, { ratio: 0.88, maxWidth: 1080, maxHeight: 860, min });
+      const big = largeRect(area, { min });
       fixedHeight = big.height;
       apply({ left: big.left + area.left, top: big.top + area.top, width: big.width, height: big.height });
     } else if (beforeLarge) {
@@ -97,19 +99,35 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     el.classList.add('in-tray');
     trayPut(el, titleEl.textContent || 'Editor', () => { el.classList.remove('in-tray'); apply(rect); });
   };
+  // `rect`: where it is (screen pixels), whole even while pushed over an edge; what is drawn is
+  // the part on the screen (smaller), so the content keeps the most room it can.
+  let pushed = false;
   const apply = (r, store = false) => {
     const area = windowArea();
     el.classList.toggle('pk-phone', full());
     if (full()) {
       // The whole screen under the tab strip; its desktop place stays remembered.
-      Object.assign(el.style, { left: '0px', top: `${area.top - MARGIN}px`, width: '100%', height: `${area.height + 2 * MARGIN}px`, maxHeight: '' });
+      const top = modalTop();
+      Object.assign(el.style, { left: '0px', top: `${top}px`, width: '100%', height: `${innerHeight - top}px`, maxHeight: '', zIndex: '35' });
       return;
     }
-    const h = fixedHeight ?? Math.min(el.offsetHeight || r.height || minHeight, area.height);
-    const k = keepInside({ ...r, height: h }, area, min);
-    rect = { left: k.left, top: k.top, width: k.width, height: fixedHeight == null ? null : k.height };
-    Object.assign(el.style, { left: `${k.left}px`, top: `${k.top}px`, width: `${k.width}px`, height: fixedHeight == null ? '' : `${k.height}px`, maxHeight: `${area.height}px` });
-    if (store) remember(key, rect);
+    // An auto height follows the content (measured while not squashed), up to the screen.
+    const natural = pushed && rect.naturalHeight ? rect.naturalHeight : el.offsetHeight;
+    const h = fixedHeight ?? Math.min(natural || r.height || minHeight, area.height);
+    const c = clampRect({ left: r.left - area.left, top: r.top - area.top, width: r.width, height: h }, area, min, GRAB);
+    const v = shownRect(c, area);
+    pushed = v.left !== c.left || v.top !== c.top || v.width !== c.width || v.height !== c.height;
+    rect = { left: Math.round(c.left + area.left), top: Math.round(c.top + area.top), width: Math.round(c.width), height: fixedHeight == null ? null : Math.round(c.height), ...(fixedHeight == null && pushed ? { naturalHeight: Math.round(c.height) } : {}) };
+    el.classList.toggle('pushed', pushed);
+    const over = overBar(v.top + area.top);
+    el.classList.toggle('over-bar', over);
+    Object.assign(el.style, {
+      left: `${Math.round(v.left + area.left)}px`, top: `${Math.round(v.top + area.top)}px`, width: `${Math.round(v.width)}px`,
+      height: fixedHeight == null && !pushed ? '' : `${Math.round(v.height)}px`, maxHeight: `${area.height}px`,
+      zIndex: over ? '41' : '35',
+    });
+    el.classList.toggle('sized', fixedHeight != null);
+    if (store) { const { naturalHeight, ...keep } = rect; remember(key, keep); }
   };
   document.body.append(el);
   apply(rect);
@@ -131,8 +149,12 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     e.preventDefault();
     const target = e.currentTarget, id = e.pointerId;
     try { target.setPointerCapture(id); } catch { /* Synthetic pointer. */ }
+    // Moving starts from where it is (whole, even while pushed); resizing from what is drawn.
     const box = el.getBoundingClientRect();
-    const start = { left: box.left, top: box.top, width: box.width, height: box.height }, x0 = e.clientX, y0 = e.clientY;
+    const start = mode === 'move'
+      ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height ?? rect.naturalHeight ?? box.height }
+      : { left: box.left, top: box.top, width: box.width, height: box.height };
+    const x0 = e.clientX, y0 = e.clientY;
     el.classList.add(mode === 'move' ? 'moving' : 'sizing');
     const move = (m) => {
       if (m.pointerId !== id) return;

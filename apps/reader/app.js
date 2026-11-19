@@ -5393,7 +5393,8 @@ $("speechSettingsToggle").onclick = () => {
 try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } catch { /* Optional. */ }
 $("audioToggle").onclick = () => toggleAudio();
 // Floating windows may cover the whole screen below the top bar (menus stay reachable).
-const screenArea = () => { const top = Math.round(document.querySelector("header.chrome")?.getBoundingClientRect().bottom || 0); return { left: 0, top, width: innerWidth, height: innerHeight - top }; };
+// Floating windows may go anywhere on the screen, over the top bar too (floating.js `.over-bar`).
+const screenArea = () => ({ left: 0, top: 0, width: innerWidth, height: innerHeight });
 floatingWindow($("audioBar"), { screen: screenArea, key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
 floatingWindow($("chatPanel"), { screen: screenArea, key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
 $("audioClose").onclick = () => toggleAudio(false);

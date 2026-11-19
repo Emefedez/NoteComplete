@@ -4317,6 +4317,8 @@ body.menubar-autohide header.chrome.command-bar:is(:hover, :has(:focus-visible),
 .float-head button { width: 28px; padding: 0; }
 /* Pushed over an edge, a window is drawn smaller; its head gets shorter at the top, like the menu bar while scrolling. */
 .screen-window.pushed { min-width: 0 !important; min-height: 0 !important; }
+/* Moved over the top bar: above it (floating.js restack, kit window.js). */
+.screen-window.over-bar, .pk-window.over-bar { --window-floor: 41; }
 .window-head { max-height: 96px; transition: min-height .16s ease, max-height .16s ease, padding .16s ease; }
 .screen-window.tucked > .window-head { min-height: 0 !important; max-height: 20px; padding-block: 0 !important; margin: 0 !important; }
 .screen-window.tucked > .window-head > :is(select, input, .muted, .quiz-bar) { display: none; }
@@ -4438,7 +4440,8 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
    writing practice; a bottom sheet on phones (chinese/zh-window.js). */
 .zh-cjk { font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif; }
 .zh-window .pk-window-body { gap: 6px; }
-.zh-window:not(.zh-sheet) { max-height: var(--zh-max, 100vh) !important; }
+/* Grows with its content up to --zh-max; resized by hand (.sized), as large as wanted. */
+.zh-window:not(.zh-sheet):not(.sized) { max-height: var(--zh-max, 100vh) !important; }
 .pk-window-foot.zh-lk-actions { flex-wrap: wrap; justify-content: flex-start; }
 .zh-window.zh-sheet { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; height: auto !important; max-height: 78vh !important; border-radius: 14px 14px 0 0; border-bottom: 0; }
 .zh-window.zh-sheet .pk-window-head { cursor: default; }
