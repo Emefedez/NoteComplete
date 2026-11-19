@@ -1,0 +1,4 @@
+opencc.bin contains the STCharacters, STPhrases, TSCharacters and TSPhrases tables of OpenCC
+(https://github.com/BYVoid/OpenCC, tag ver.1.4.2), Copyright (c) Carbo Kuo and contributors,
+licensed under the Apache License 2.0 (LICENSE-opencc.txt). Re-encoded for NoteComplete; the
+mappings are unchanged.

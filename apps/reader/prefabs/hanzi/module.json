@@ -1,0 +1,72 @@
+{
+  "id": "hanzi",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 80,
+  "label": "Chinese stroke order",
+  "kind": "window",
+  "output": "picture",
+  "types": [
+    "hanzi"
+  ],
+  "names": {
+    "hanzi": "Stroke order"
+  },
+  "editor": "editor.js",
+  "window": {
+    "width": 860,
+    "height": 620
+  },
+  "groups": {
+    "languages": "Languages"
+  },
+  "capabilities": [
+    "player"
+  ],
+  "menu": [
+    {
+      "label": "Play…",
+      "icon": "play",
+      "mode": "play"
+    },
+    {
+      "label": "Practise…",
+      "icon": "draw",
+      "mode": "practice"
+    }
+  ],
+  "prefabs": [
+    {
+      "id": "hanzi",
+      "group": "languages",
+      "label": "Stroke order",
+      "hint": "Chinese characters stroke by stroke, with pinyin, on a 米字格 grid; play, step and practise them",
+      "icon": "draw",
+      "spec": {
+        "type": "hanzi",
+        "text": "你好",
+        "pinyin": "nǐ hǎo",
+        "show": "strokes",
+        "step": null,
+        "grid": "mi",
+        "outline": true
+      }
+    },
+    {
+      "id": "hanzi-steps",
+      "group": "languages",
+      "label": "Stroke sequence",
+      "hint": "Each character with its strokes in order beside it: 1, 1–2, 1–3…",
+      "icon": "draw",
+      "spec": {
+        "type": "hanzi",
+        "text": "你好",
+        "pinyin": "nǐ hǎo",
+        "show": "steps",
+        "step": null,
+        "grid": "mi",
+        "outline": true
+      }
+    }
+  ]
+}

@@ -122,7 +122,7 @@ test('every address named in the reader\'s code is in the inventory and allowed'
     for (const origin of ORIGINS) assert.ok(allows(policy[entry.directive], entry.url, origin), `${entry.directive} does not allow ${entry.url} (${entry.feature}) at ${origin}`);
     assert.ok(allows(strictPolicy[entry.directive], entry.url), `the strict policy does not allow ${entry.url}`);
   }
-  const files = [...readdirSync(reader).filter((name) => name.endsWith('.js') && !name.includes('.test.')), ...PAGES];
+  const files = [...readdirSync(reader).filter((name) => name.endsWith('.js') && !name.includes('.test.')), ...readdirSync(new URL('chinese/', reader)).filter((name) => name.endsWith('.js')).map((name) => `chinese/${name}`), ...PAGES];
   const literal = inventory.filter((entry) => entry.literal !== false);
   const unknown = [], seen = new Set();
   for (const name of files) {

@@ -1,0 +1,9 @@
+Chinese dictionary data from CC-CEDICT (https://cc-cedict.org/wiki/), © MDBG and
+contributors, licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+Word frequencies from FrequencyWords by Hermit Dave (OpenSubtitles 2018), CC BY-SA 4.0
+(https://github.com/hermitdave/FrequencyWords).
+HSK levels and the glosses of words CC-CEDICT lacks from complete-hsk-vocabulary by drkameleon
+(https://github.com/drkameleon/complete-hsk-vocabulary), MIT.
+Converted and reduced for NoteComplete (fields removed, re-encoded); the converted pack
+(ime-*.bin, layout in docs/CHINESE-INPUT.md §4.3) is available under the same licence, CC BY-SA 4.0.
+CC-CEDICT release: 2026-11-18T03:25:44Z.

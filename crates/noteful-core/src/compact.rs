@@ -294,7 +294,9 @@ impl Editor {
                 .map_err(|e| Error::new(0, e.to_string()))?;
         project["cursor"] = cursor.into();
         project["floor"] = floor.into();
-        project["version"] = if project.get("exam").is_some() {
+        project["version"] = if project.get("chinese").is_some() {
+            14
+        } else if project.get("exam").is_some() {
             12
         } else if project.get("added_audio").is_some() {
             11

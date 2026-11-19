@@ -63,6 +63,9 @@ def main():
         for style in ['normal','italic']:
             shutil.copy2(comic/'files'/f'comic-neue-latin-{weight}-{style}.woff2',fonts/f'comic-neue-{weight}-{style}.woff2')
     shutil.copy2(comic/'LICENSE',fonts/'LICENSE-comic-neue')
+    chinese_fonts()
+    subprocess.run(['node',str(ROOT/'tools/build_chinese_strokes.mjs')],check=True)  # stroke order: vendor/chinese/strokes/ (Arphic PL)
+    subprocess.run(['node',str(ROOT/'tools/build_chinese_data.mjs')],check=True)  # dictionary packs: vendor/chinese/*.bin (CC BY-SA, Unicode, Apache, LGPL)
     # Bundle the local speech engine; model weights are fetched only on user request.
     speech=ROOT/'apps/reader/vendor/transformers'
     if speech.exists(): shutil.rmtree(speech)
@@ -126,6 +129,20 @@ def main():
     write_manifest()
     print('Built apps/reader/. Serve with any static HTTP server. No Python/Rust server required at runtime.')
 
+def chinese_fonts():
+    """Noto Sans SC (SIL OFL 1.1) for Chinese text where the system has no such font, in the 101
+    unicode-range slices Fontsource cuts it into: vendor/fonts/noto-sans-sc.css declares them
+    (chinese/fonts.js loads it only for notes with Chinese), and a slice downloads only when a
+    character in it is drawn. Exports embed the slices a page needs (docs/CHINESE-INPUT.md §6)."""
+    package=ROOT/'apps/reader/node_modules/@fontsource-variable/noto-sans-sc'
+    out=ROOT/'apps/reader/vendor/fonts/noto-sans-sc'
+    if out.exists(): shutil.rmtree(out)
+    out.mkdir(parents=True)
+    for f in (package/'files').glob('*.woff2'): shutil.copy2(f,out/f.name)
+    shutil.copy2(package/'LICENSE',out/'LICENSE')
+    css=(package/'index.css').read_text().replace("'Noto Sans SC Variable'","'Noto Sans SC'").replace('url(./files/','url(./noto-sans-sc/').replace("format('woff2-variations')","format('woff2')")
+    (out.parent/'noto-sans-sc.css').write_text(css)
+
 def check_webllm():
     """The model in this app (local-ai.js) downloads WebLLM from jsDelivr on first use instead of
     shipping it: the desktop stage copies every vendored file into the installers. It runs the file
@@ -143,7 +160,7 @@ def check_webllm():
 # instead of at install, so a first visit (a tablet joining a session) downloads the app and
 # not 40 MB of engines. Speech, text recognition, Word and spreadsheet readers, math, Dark
 # Reader, and the fonts, character maps and image decoders only some PDFs use.
-LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/mathlive/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/')
+LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/mathlive/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/','vendor/chinese/','vendor/fonts/noto-sans-sc')
 def write_manifest():
     """precache.json: every file the app ships, with a hash of its contents (the service worker
     downloads a file again only when its hash changes; the desktop and Android apps ship
@@ -152,6 +169,8 @@ def write_manifest():
     names=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
     names+=sorted(p.relative_to(reader).as_posix() for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
     # The prefab modules (docs/PREFAB-MODULES.md): manifests, code, help and AI notes; not their tests.
+    # Chinese mode's modules (docs/CHINESE-INPUT.md); not their tests.
+    names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'chinese').glob('*.js'))
     names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'prefabs').rglob('*') if p.is_file() and '/test/' not in p.as_posix() and not p.name.endswith('.test.mjs'))
     files={name:hashlib.sha256((reader/name).read_bytes()).hexdigest()[:16] for name in names}
     shell=[name for name in names if not name.startswith(LAZY) and 'LICENSE' not in name and name!='sw.js']

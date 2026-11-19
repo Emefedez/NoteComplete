@@ -45,7 +45,7 @@ jobs:
         run: |
           cargo install wasm-bindgen-cli --version 0.2.128 --locked --root work/wasm-tools
           python tools/build_web.py
-          node --test apps/reader/*.test.mjs
+          node --test apps/reader/*.test.mjs apps/reader/chinese/*.test.mjs
           node apps/reader/test.mjs
           node apps/desktop/stage.mjs
       - name: Validate optional hosted reader

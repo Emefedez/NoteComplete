@@ -4,7 +4,7 @@
 // are drawn by exam-html.js, as in generated exams, and placed as a picture with a frame that
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { imageReady } from './image-ready.js';
-import { cards, groups, onModules, nameOf, renderSpec, stamp } from './prefab-registry.js';
+import { cards, groups, onModules, nameOf, renderSpec, stamp, moduleOf } from './prefab-registry.js';
 import { icon } from './icons.js';
 import { jsonErrorAt, codeBox } from './json-code.js';
 import { CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
@@ -41,6 +41,9 @@ export const prefabName = (spec) => nameOf(spec);
 // The figure as SVG text with its size, or null when the spec draws nothing (or its module
 // is missing).
 export const prefabSvg = (spec) => renderSpec(spec);
+// The spec with what its module fetches before drawing (a module's async `prepare`, e.g. the
+// hanzi module's stroke data); used by MCP add_prefab, which writes no data into its specs.
+export const prefabPrepare = async (spec) => (await moduleOf(spec)?.code.prepare?.(spec)) || spec;
 
 const make = (tag, props = {}, ...children) => {
   const el = Object.assign(document.createElement(tag), props);

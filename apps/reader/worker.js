@@ -40,7 +40,7 @@ ready
 // (engine.js) never passes for one of this worker's.
 let state = Math.floor(Math.random() * 2 ** 40);
 // Operations that leave the note as it is. Any other, also one that fails, moves the state on.
-const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "saveFile", "pdfBlocks", "pdfWithout", "pdfIsolate", "pdfFont", "pdfFontMissing", "pdfEditClose"]);
+const READS = new Set(["view", "copyItems", "save", "projectBreakdown", "exportFilteredProject", "pick", "pickLock", "pickTimed", "selection", "getMarkdown", "exportMarkdown", "exportNotecomplete", "export", "contentDigest", "audio", "pdf", "pdfResources", "digest", "historyMark", "prefixDigest", "compactPreview", "markdownHtml", "dialect", "composePreview", "md5", "jpegPagesPdf", "composeNoteFile", "createPdfNoteWithTapes", "extractNoteSummary", "extractNotePdf", "getExam", "setExam", "getChinese", "setChinese", "saveFile", "pdfBlocks", "pdfWithout", "pdfIsolate", "pdfFont", "pdfFontMissing", "pdfEditClose"]);
 
 // The page as it now is: what `view` and every edit but a drawn line answer with.
 const view = (page) => Object.assign(JSON.parse(session.view(page)), { engine_state: state });
@@ -213,6 +213,12 @@ const onDocument = {
   getStudy: () => JSON.parse(session.study()),
   study(args) {
     session.set_study(JSON.stringify(args.study || {}));
+    return true;
+  },
+  // Chinese mode settings kept in the note (chinese/ruby.js; docs/CHINESE-INPUT.md §9).
+  getChinese: () => JSON.parse(session.chinese()),
+  setChinese(args) {
+    session.set_chinese(JSON.stringify(args.chinese || {}));
     return true;
   },
   getExam: () => JSON.parse(session.exam()),

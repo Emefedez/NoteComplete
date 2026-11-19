@@ -1,6 +1,6 @@
 # Chinese mode: pinyin input, character look-up, pinyin over characters, stroke order
 
-Status: **plan** (2026-11-19). Nothing here is implemented yet. Owner's requests:
+Status: **being implemented** (2026-11-19, branch `feat/chinese-mode`); the owner's answers are in §15. Owner's requests:
 
 > Plan out a Chinese mode, where you can easily type pinyin, get the automatic versions with the
 > proper accents and their respective characters in an easy to choose and input manner, using a
@@ -192,11 +192,10 @@ source is; do not compile it into the app.
 | Pack (*new*) | Content | Size (br) | Shipped how |
 |---|---|---|---|
 | `vendor/chinese/pinyin.js` (code, no data) | syllable table (423 + `r` forms), tone placement, segmentation | ≈ 10 KB | in the app shell |
-| `vendor/chinese/ime-core.bin` | the common IME pack: 36 k entries, simplified + traditional + reading + frequency | ≈ 0.3 MB | **in installers**, lazy (in `LAZY`) |
-| `vendor/chinese/ime-full.bin` | all 123 k entries | ≈ 1.1 MB | in installers, lazy (recommended), or a download pack |
-| `vendor/chinese/chars.bin` | Unihan subset + Make Me a Hanzi decomposition for ≈ 44 k characters | ≈ 0.55 MB | in installers, lazy |
-| `vendor/chinese/gloss.bin` | English glosses for the look-up panel (CC-CEDICT definitions, full) | ≈ 1.6–2.0 MB (est.: full gloss text minus pinyin columns) | **download pack** on first panel use |
-| `vendor/chinese/opencc.bin` | ST/TS characters + phrases | ≈ 0.35 MB | in installers, lazy |
+| `vendor/chinese/ime-core.bin` | the common IME pack (built 2026-11-19 from CC-CEDICT 2026-11-18): 38 248 entries = words in FrequencyWords zh_cn/zh_tw + every single character (12 799) + every HSK 1–3 word (2 526), simplified + traditional + reading + 2 frequencies + HSK level + first English gloss ≤ 40 chars | **576 KB** (1 473 KB raw; budget 600 KB, checked by the build) | **in installers**, lazy (in `LAZY`) |
+| HSK 4, 5, 6, 7–9 expansions | the words of that level from `complete-hsk-vocabulary` (≈ 970 / 1 060 / 1 120 / 5 600 words), cut on the device from the pinned list (2.9 MB raw, fetched once, SHA-256 checked) | not shipped | **download** (Settings → Chinese → Dictionaries), IndexedDB store `packs`, deletable (`packs.js`) |
+| `vendor/chinese/chars.bin` | Unihan 17 subset + Make Me a Hanzi decomposition/etymology for 44 394 characters | **515 KB** (2 471 KB raw) | in installers, lazy |
+| `vendor/chinese/opencc.bin` | ST/TS characters + phrases (OpenCC ver.1.4.2) | **320 KB** (1 176 KB raw) | in installers, lazy |
 | `vendor/chinese/strokes/<shard>.bin` | stroke data, top 3 000 characters, 64 shards of ≈ 40 KB | ≈ 2.6 MB | in installers, lazy per shard |
 | strokes for the rest (≈ 6 500 chars) | per-character JSON from jsDelivr `hanzi-writer-data@2.0.1/<char>.json` | ≈ 1 KB each | download on first use, cached |
 | `vendor/fonts/noto-sans-sc/*.woff2` + `noto-sans-tc` | 101 unicode-range slices each | ≈ 4.5 MB per script | **decision needed** (§8): ship SC, fetch TC; or system fonts only |
@@ -301,24 +300,43 @@ tone (`ma3` → 马 码 蚂; 妈 ma1 and 吗 ma5 are filtered out). In tone-mark
 
 ### 4.3 Pack format (`ime-*.bin`)
 
-One file, little-endian, read with `DataView` without copying strings until needed:
+As built (`chinese/pack.js`, `tools/build_chinese_data.mjs`). Every pack is one little-endian
+container of columns; one per field instead of one record per entry, because columns compress
+far better (brotli) and need no padding:
 
 ```
-header  "NCZH" u8 version, u8 flags, u16 reserved, u32 counts…, u32 offsets of each section
-strings  UTF-8 blob of all Hanzi words (simplified, then traditional when different),
-         each referenced by (u32 offset, u8 length in code units)
-syll     the syllable table: 512 × u16 ids → name (shared with pinyin.js; checksum in header)
-entries  sorted by key; each: key = syllable ids (u16 each, toneless) + tones packed 3 bits each,
-         simp ref, trad ref (or same), u16 log-frequency (simplified corpus), u16 (traditional corpus),
-         u8 flags (surname, classifier, variant, rare reading)
-keyIndex  per first syllable id: [start, end) into entries; within it entries are ordered by
-          (syllable count, key), so "all words starting with ni hao…" is a contiguous range found
-          by binary search on the next syllable ids.
+header   "NCZH", u8 version (1), u8 0, u16 section count n, then n × (u32 offset, u32 length);
+         every section starts on a 4-byte boundary
+section 0  UTF-8 JSON meta: kind ("ime" | "chars" | "opencc"), rows, the syllable table
+           (meta.syllables = pinyin.js SYLLABLE_LIST at build time: ids are its indexes),
+           freqScale, logTotal {s, t} (log2 of the corpus sizes, for the sentence costs), CEDICT date
+string column = a lengths section (u8, or u16 when any string is longer than 255; UTF-16 code
+           units) + a UTF-8 blob section; the reader decodes each blob once and slices it
 ```
 
-The worker builds no per-entry objects: a lookup binary-searches `keyIndex`, walks the range,
-scores in place into a small top-k heap (k = 60), then decodes only those 60 strings. Memory ≈
-size of the file + the 60 results (vs 107 MB in the object prototype).
+`ime-*.bin` sections, one value per entry: 1 `nsyl` u8; 2 `keys` u16 per syllable, `id << 3 |
+tone` (tone 1–5, 5 = neutral); 3 `fs`, 4 `ft` u16 = log2(count + 1) × 32 from zh_cn / zh_tw
+(a form missing from its own list is looked up in the other; single characters use max(own count,
+corpus character count / 8) × their reading's kHanyuPinlu share; "variant of" forms / 256; words
+without a count are estimated below the lists' minimum and flagged); 5 HSK level u8 (1–6, 7 =
+7–9, 0 none); 6 flags u8 (1 proper noun, 2 only "variant of", 4 estimated frequency, 8 HSK word
+CC-CEDICT lacks); 7–8 simplified, 9–10 traditional ("" = same), 11–12 first gloss (string
+columns); 13 index u32: first entry per first-syllable *rank*. Entries are sorted by the
+alphabetical rank of their syllables (then tones, then frequency), so "words whose syllables
+start ni, h…" is one contiguous range: the index gives the first syllable, a binary search per
+further syllable narrows it, and an unfinished last syllable ("h") is a rank range.
+
+`chars.bin`: 1 code points u32 (sorted, binary search), 2 total strokes u8, then string columns
+`readings` ("xíng:2943 háng:218 xìng", kHanyuPinlu counts first, then kMandarin, kTGHZ2013),
+`radical` (kRSUnicode "144.0"), `definition` (≤ 80), `simplified`, `traditional`, `variants`
+(semantic, specialized semantic, Z), `decomposition`, `etymology` ("type|hint|phonetic|semantic").
+`opencc.bin`: per table (STPhrases, STCharacters, TSPhrases, TSCharacters) keys and values as
+string columns (alternatives separated by spaces, OpenCC's default first).
+
+The engine builds no object per entry for typing: it walks the range in the typed arrays and
+decodes only the strings of matching rows. Measured on the M1 Max (Node 26): pack decode 6–13 ms,
+a 21-letter sentence input ≈ 0.8 ms per keystroke, ≈ 30 MB heap with the pack loaded. The maps
+for `annotate`/`lookup` (written form → entries, character → words) are built on first use.
 
 ### 4.4 Ranking
 
@@ -406,8 +424,9 @@ while `buffer` is non-empty or the key starts one:
 | a–z (no modifiers) | append to buffer (Hanzi / Pinyin modes); the field itself is not changed until commit |
 | `'` | syllable boundary |
 | 1–5 directly after a syllable | tone (Pinyin mode: mark; Hanzi: filter) |
-| 1–9 (after a complete buffer / tone already given) | choose candidate n of the page |
-| Space | choose the selected (first) candidate |
+| 1–9 (after a tone, after paging or moving the highlight, or 6–9 at any time; Settings: "digits choose") | choose candidate n of the page |
+| Space (Hanzi mode, pinyin typed) | held, not typed: on **release** it chooses the highlighted (first) candidate; key repeat does nothing |
+| **Space held + 1–9** (owner's request, 2026-11-19) | choose candidate n of the page at once; the release then writes nothing more; several digits in one hold make successive partial choices (Space+2, Space+1 → 你 then 好). A letter pressed before Space is released (rolled keys) first takes Space's choice. Losing the focus while Space is held drops the hold. Pinyin mode: Space is typed as before |
 | Enter | commit the raw text: Hanzi mode → the pinyin with marks (`nǐhǎo`); Shift+Enter → the letters as typed |
 | Esc | clear the buffer (does **not** commit/close the text box; `text-box.js`'s Esc acts only when the buffer is empty) |
 | Backspace | delete the last letter of the buffer; after a partial choice, undo that choice back into the buffer |
@@ -613,6 +632,18 @@ dictionary at display time, with per-occurrence overrides for polyphones.
   cached in Cache Storage `notecomplete-chinese`. Traditional characters are in the same data
   (Make Me a Hanzi covers ≈ 9 500 simplified+traditional); a character with no data says
   "No stroke order for 𠀀".
+- **As built** (`tools/build_chinese_strokes.mjs`, run by `build_web.py`): shards are **compact
+  JSON**, `strokes/NN.json` (`{"你": {"s": [path…], "m": [[x,y,x,y…]…], "r": [i…]?}}`; paths without
+  the spaces around commands, medians flattened), not `.bin`: the web host compresses JSON but not
+  `.bin`, installers compress anyway, and the data stays plain under its licence. Shards are cut
+  in **frequency order** (shard 0 = the 47 most frequent characters; frequency = FrequencyWords
+  zh_cn + zh_tw word counts summed per character, SHA-256 pinned), so a sentence needs one or two.
+  `index.json`: `{shards: ["<chars of shard 0>", …], remote: "<chars>", hashes: "<12 hex of
+  SHA-256 per remote char>"}`. Sizes: 3 000 characters, 7.35 MB raw (3.3 MB gzip, 2.67 MB br),
+  largest shard 137 KB; index 108 KB (69 KB gzip); 6 574 characters on demand. `vendor/chinese/
+  strokes/` is in `LAZY`. The hanzi prefab's cards carry no stroke data (it would be inlined into
+  `prefabs/index.js`, app code); its editor and MCP `add_prefab` (`prefabPrepare` in prefabs.js →
+  the module's `prepare(spec)`) add it to the spec.
 
 ### 7.2 Player and practice
 
@@ -875,3 +906,62 @@ asks.
     server's `write_anki_deck` and `add_prefab` learn the Chinese fields?
 11. **Learning features order**: after Phase 2, which first — ruby (3), the look-up panel (4) or
     stroke order (5)?
+
+## 15. Owner's answers (2026-11-19) and the module contract
+
+**Answers.**
+1. Font: **bundle** Noto Sans SC (the 101 unicode-range slices, lazy on the web, shipped in
+   installers). Traditional text uses the same face's coverage plus system fonts.
+2. Dictionary: bundle the **common** pack (frequent words + every single character + all HSK 1–3
+   words, with short English glosses) and offer **downloadable, deletable expansions by HSK
+   level**: HSK 4, HSK 5, HSK 6, HSK 7–9 (Settings → Chinese → Dictionaries). Source of the
+   expansions: `drkameleon/complete-hsk-vocabulary` (MIT) `complete.min.json` at commit
+   `7ac65bf1a6387d35f1ade478906172a19311c7f9` from `raw.githubusercontent.com` (already allowed by
+   the CSP), SHA-256 pinned; each level's words are extracted on the device and kept in IndexedDB.
+3. Default script: **simplified** (traditional selectable).
+4. Shortcut: **Ctrl+Shift+Space** cycles Off → Hanzi → Pinyin → Off while typing; the `中` button
+   does the same; **Shift alone** (press and release) switches to Latin letters temporarily while a
+   Chinese mode is on. Both can be turned off in Settings → Chinese.
+5. Enter with a buffer follows the **mode and the text around the caret**: Pinyin mode → the
+   pinyin with tone marks; Hanzi mode → the pinyin with tone marks when the text before the caret
+   on that line already has tone-marked pinyin, otherwise the letters as typed (as system IMEs do,
+   so English words can be typed without switching off). Shift+Enter always writes the letters as
+   typed. Setting: Auto (default) / Letters / Pinyin with marks.
+6. Pinyin over characters: as proposed (a display layer; the per-note on/off is saved in the note;
+   exports keep it when it is on, with a checkbox in the Export dialog).
+7. Licence: **MIT** for the app (`LICENSE`); data packs keep their own licences beside them.
+8. Stroke player: our own (pure `render(spec)` for the prefab), hanzi-writer's technique.
+9. HSK: levels are shown on candidates and in the character panel; the bundled pack is the
+   beginner set (HSK 1–3), the expansions take it up to HSK 7–9. Ruby can be limited to words
+   above a chosen level.
+10. After phase 2: all of phases 3–6.
+
+**Module contract** (`apps/reader/chinese/`):
+
+| File | Owner area | Exports |
+|---|---|---|
+| `pinyin.js` | input | `SYLLABLES`, `normalise`, `markTone`, `numbersToMarks`, `marksToNumbers`, `segment`, `splitInput` (§4.2); pure, main + worker + Node |
+| `engine.js` | data | pure pack decoding and search, used by the worker and Node tests |
+| `engine-worker.js`, `client.js` | data | `chinese()` singleton (below) |
+| `convert.js` | data | `convertText(text, "s2t"\|"t2s", tables)` pure |
+| `user-dict.js`, `packs.js` | data | user dictionary; expansion download/delete |
+| `caret.js`, `ime.js`, `ime-menu.js`, `settings.js` | input | `attachIme(el, opts)`, `chineseField(el)`, `zhSettings()` |
+| `ruby.js`, `fonts.js` | reading | ruby layers; CJK font loading and export embedding |
+| `strokes.js`, `stroke-player.js`, `practice.js`, `prefabs/hanzi/` | strokes | stroke data, player, practice, prefab |
+| `lookup-panel.js` | panel | the character panel |
+
+`client.js` (`import {chinese} from "./chinese/client.js"`; every method is async and starts the
+worker on first use):
+
+```js
+chinese().candidates(input, {script, limit=60})
+  // → {reading: "nǐ hǎo", rest: "", items: [{text, pinyin /*marked, spaced*/, consumed /*input chars used*/,
+  //     level /*1–7 or 0*/, gloss /*short or ""*/, sentence /*bool*/}]}
+chinese().choose(input, item, script)          // learn (user dictionary)
+chinese().annotate(text, {script})            // → [{start, end, text, pinyin: ["nǐ","hǎo"], level}] for Han runs
+chinese().lookup(textOrChar, {script})        // → {entries:[{simp, trad, pinyin, gloss:[], level}], char?:{readings,
+  //     strokes, radical, variants:{simp,trad}, decomposition}, words:[{text,pinyin,gloss,level}]}
+chinese().convert(text, "s2t"|"t2s")          // → string
+chinese().packs()                             // → [{id, name, levels, bundled, installed, words, bytes}]
+chinese().installPack(id, onProgress) / removePack(id)
+```

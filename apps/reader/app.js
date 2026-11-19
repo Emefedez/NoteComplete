@@ -79,7 +79,7 @@ import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
-import { textBoxController, holdInk, letGo, keepHeld, rgbaOf } from "./text-box.js";
+import { textBoxController, holdInk, letGo, keepHeld, rgbaOf, boxText } from "./text-box.js";
 import { pdfEditController } from "./pdf-edit.js";
 import { graphItems } from "./graph.js";
 import { tableItems } from "./table.js";
@@ -99,6 +99,10 @@ import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFIL
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
 import { installModalDialogs } from "./modal-dialogs.js";
+import { chineseField, imeMenuOpen, openSettings as openZhSettings } from "./chinese/ime.js";
+import { configureRuby, noteOpened as zhNoteOpened, rubySvg, rubyForExport, wireRubyControls } from "./chinese/ruby.js";
+import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan } from "./chinese/zh-menu.js";
+import { embedChineseFont } from "./chinese/fonts.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -718,6 +722,7 @@ async function load(file, preparedDocument = null) {
         await library.store.set("settings", key, mergeStudy(kind, existing, items)).catch(() => {});
       }
     }
+    await zhNoteOpened();
     rememberDocument();
     await renderPage(panels[0], result);
     void ensureDocumentCover({ skipExisting: true });
@@ -877,7 +882,10 @@ function buildPages(sizes) {
       event.preventDefault();
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
-      if (selectedText(window.getSelection())) return status("Press Ctrl+C to copy the selected text.");
+      const chosen = selectedText(window.getSelection());
+      // Chinese selected in the text layer: look it up, make cards (chinese/zh-menu.js).
+      if (chosen && hasHan(chosen)) return pageZhSelection(chosen, event.clientX, event.clientY);
+      if (chosen) return status("Press Ctrl+C to copy the selected text.");
       if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
       const [x, y] = point(event, p);
       try {
@@ -1129,8 +1137,12 @@ const textBox = textBoxController({
   isBusy: () => busy(),
   toolOptions: () => toolOptions(),
   insertCompound: (...a) => insertCompound(...a),
+  noteKey: () => { try { return find.fingerprint || ""; } catch { return ""; } },
   $,
 });
+// Chinese input (chinese/ime.js) in the other places text is typed; Settings → Chinese in View.
+for (const id of ["chatInput", "findInput", "quizCheckText", "practiceFixFront", "practiceFixBack", "practiceExplainedArea", "practiceAskInput"]) if ($(id)) chineseField($(id));
+if ($("zhSettingsOpen")) $("zhSettingsOpen").onclick = openZhSettings;
 // Edit PDF (pdf-edit.js): a PDF's printed text turned into text boxes, block by block.
 const pdfEdit = pdfEditController({
   call,
@@ -1685,6 +1697,8 @@ async function renderPage(p, provided) {
     // Text boxes made from a PDF are drawn in its own font (pdf-edit.js), also in a later session.
     pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
+    // Pinyin over the Chinese in text boxes, when on (chinese/ruby.js).
+    if (/[\u3400-\u9fff]/.test(result.svg)) rubySvg(render.querySelector(":scope > svg")).catch(() => {});
     find.paint(p);
     find.selectable(p);
     p.pdfReady = !result.pdf_background || !!kept;
@@ -4193,7 +4207,7 @@ document.addEventListener("keydown", (e) => {
   penMenu({ clientX: at.x, clientY: at.y });
 }, true);
 let quickKeyAt = 0;
-const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !typingIn(e.target) && !document.querySelector("dialog[open]");
+const quickKeyAllowed = (e) => doc && !$("editor").hidden && !e.metaKey && !e.ctrlKey && !e.altKey && !typingIn(e.target) && !document.querySelector("dialog[open]") && !imeMenuOpen();
 document.addEventListener("keydown", (e) => {
   if (quick.isOpen && quick.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
   // Shift pressed while a pen hovers over the pages: the menu at the pen.
@@ -4826,6 +4840,7 @@ const { exportRequest, exportRequested } = pageExporter({
   currentPanel: () => panels[page],
   pdfImage,
   backgroundPlacement,
+  chinese: { ruby: rubyForExport, rubySvg, embedFont: embedChineseFont },
   filename,
   download,
   jobs: { start: (...a) => jobs.start(...a) },
@@ -4835,6 +4850,14 @@ const { exportRequest, exportRequested } = pageExporter({
   closeMenus,
   $,
 });
+// Chinese settings kept in the note, and pinyin over characters (chinese/ruby.js).
+configureRuby({
+  getNote: () => (doc ? call("getChinese") : Promise.resolve({})),
+  setNote: (chinese) => doc && call("setChinese", { chinese }),
+  changed: () => { if (doc && collab?.role !== "tablet") { dirty = changed = true; savedState(); } },
+  roots: () => panels.map((p) => p.render).filter(Boolean),
+});
+wireRubyControls();
 // Notes panel: Markdown beside the pages (notes.js, loaded on first use).
 let notes = null, notesLoading = null;
 function notesApi() {
@@ -7383,7 +7406,7 @@ async function sendPictureByQr(name, file, make) {
     status,
   });
 }
-function itemMenu(item, x, y, { tape = null } = {}) {
+function itemMenu(item, x, y, { tape = null, zh = [] } = {}) {
   if (!doc || !item) return;
   const p = panels[item.page];
   // The tape itself, or something under (or over) it.
@@ -7397,6 +7420,7 @@ function itemMenu(item, x, y, { tape = null } = {}) {
   // (an algorithm, "Greedy: Dijkstra") is kept as it is.
   const lower = name.includes(": ") ? name : name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
+    ...zh,
     ...tapeEntries(p, tape),
     tape && "-",
     solvable && { label: `${exercise ? "Fill in" : "Solve"} ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
@@ -7470,9 +7494,11 @@ async function pageMenu(p, at, x, y) {
   if (!doc || !p?.view) return;
   const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
   const tape = tapeAt(p, at);
+  // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js).
+  const zh = await pageZhEntries(p, x, y).catch(() => []);
   try {
     const item = await pickWhole(args);
-    if (item) { selection.show(item); return itemMenu(item, x, y, { tape }); }
+    if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh }); }
     const locked = await call("pickLock", args);
     if (locked?.locked) {
       return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
@@ -7483,6 +7509,7 @@ async function pageMenu(p, at, x, y) {
   const canPastePage = Boolean(clip || sharedUml);
   const runPagePaste = () => (clip && (!sharedUml || (clip.at || 0) >= (sharedUml.at || 0)) ? pasteClip(p, at) : pasteUmlIntoPage(sharedUml, p, at));
   openContextMenu(x, y, [
+    ...zh,
     ...tapeEntries(p, tape),
     tape && "-",
     canPastePage && { label: "Paste here", icon: "copy", key: "Ctrl V", run: runPagePaste },
@@ -7512,7 +7539,8 @@ const longPress = (() => {
         cancelGesture();
         selection.cancel?.();
         navigator.vibrate?.(12);
-        pageMenu(a.p, point({ clientX: a.x, clientY: a.y }, a.p), a.x, a.y);
+        // On a Chinese character: its panel at once (chinese/zh-menu.js); else the menu.
+        pageZhLongPress(a.p, a.x, a.y).catch(() => false).then((opened) => opened || pageMenu(a.p, point({ clientX: a.x, clientY: a.y }, a.p), a.x, a.y));
       }, 550);
     },
     move(e) {
@@ -7850,7 +7878,7 @@ $("pageBgApply").onclick = async () => {
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
-async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false } = {}, source = null) {
+async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = false, bold = false, exporting = false } = {}, source = null) {
   const view = source ? await source.view(index) : await call("view", { page: index });
   const holder = document.createElement("div");
   holder.innerHTML = view.svg;
@@ -7879,6 +7907,9 @@ async function pageCanvas(index, width = 2200, { liftTape = false, inkOnly = fal
     svg.querySelector("[data-background]").append(pdfImage(href, place));
   }
   const height = Math.round(h * scale);
+  // Chinese: pinyin over it in exports when chosen, and the font, which a picture cannot fetch.
+  if (exporting && rubyForExport()) await rubySvg(svg, { force: true }).catch(() => {});
+  await embedChineseFont(svg);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
   const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
@@ -8055,6 +8086,23 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
+// Chinese: the character panel, conversion and vocabulary cards (chinese/zh-menu.js).
+configureZh({
+  status,
+  decks: () => study.decks(),
+  addCards: (cards, opts) => study.addCards(cards, opts),
+  openDeck: (d) => study.showDeck(d),
+  boxText: (p, id) => { const t = (p?.view?.texts || []).find((x) => String(x.id) === String(id)); return t ? boxText(t) : ""; },
+  editBox: (p, id, value) => textBox.replaceText(p, id, value),
+  insertFigure: async (spec) => {
+    const p = panels[page];
+    if (!doc || !p || !ensureEditableLayer()) throw new Error("Open a note to insert the stroke order.");
+    const { prepare } = await import("./prefabs/hanzi/render.js");
+    const full = await prepare(spec);
+    if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Right-click it, hold it, or tap its ⋯ to edit it; one undo removes it.`);
+  },
+});
+installZhContext();
 const openGeneratedFile = async (file, entry) => {
   if (entry) return openFromLibrary(file, entry);
   if (!canReplace()) return false;

@@ -126,6 +126,8 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
     }
   }
   decorateCodeBlocks(element);
+  // Pinyin over the Chinese, when on (chinese/ruby.js); loaded only for text with Chinese.
+  if (/[\u3400-\u9fff]/.test(element.textContent)) import('./chinese/ruby.js').then(m => m.rubyElement(element)).catch(() => {});
   const maths = element.querySelectorAll('.math');
   if (!maths.length) return;
   const tex = await loadKatex().catch(() => null);

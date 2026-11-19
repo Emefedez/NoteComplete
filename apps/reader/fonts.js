@@ -5,13 +5,17 @@
 // in its font-family, draws the box in it. Where a font is not registered (another device,
 // Noteful on the iPad), the same kind of face is used instead (fontStack).
 
+// Faces for Chinese characters after the Latin ones, so Latin text keeps its font: the bundled
+// Noto Sans SC (chinese/fonts.js) first, then the systems'. Mirrored in text.rs (a test checks).
+export const CJK_SANS = "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC'";
+export const CJK_SERIF = `'Noto Serif CJK SC', 'Songti SC', SimSun, ${CJK_SANS}`;
 // A family stack for any font name, mirroring the core's fallback (text.rs text_svg).
 export function genericFor(font = "") {
   const lower = font.toLowerCase();
-  if (lower.includes("courier") || lower.includes("mono")) return "'Courier New', monospace";
-  if ((lower.includes("times") || lower.includes("georgia") || lower.includes("serif") || lower.includes("roman")) && !lower.includes("sans")) return "'Times New Roman', serif";
-  if (["noteworthy", "marker", "chalk", "comic"].some((w) => lower.includes(w))) return "'Comic Neue', 'Comic Sans MS', cursive";
-  return "Arial, sans-serif";
+  if (lower.includes("courier") || lower.includes("mono")) return `'Courier New', monospace, ${CJK_SANS}`;
+  if ((lower.includes("times") || lower.includes("georgia") || lower.includes("serif") || lower.includes("roman")) && !lower.includes("sans")) return `'Times New Roman', serif, ${CJK_SERIF}`;
+  if (["noteworthy", "marker", "chalk", "comic"].some((w) => lower.includes(w))) return `'Comic Neue', 'Comic Sans MS', cursive, ${CJK_SANS}`;
+  return `Arial, sans-serif, ${CJK_SANS}`;
 }
 const quoted = (name) => `'${String(name).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 export const fontStack = (font) => `${quoted(font)}, ${genericFor(font)}`;

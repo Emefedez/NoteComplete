@@ -492,6 +492,19 @@ impl EditorSession {
         let parsed: noteful_core::ProjectStudy = serde_json::from_str(study)?;
         Ok(self.inner.set_study(parsed)?)
     }
+    /// Chinese mode settings kept with the note (`{mode, script, ruby, rubyMinLevel, readings}`).
+    pub fn chinese(&self) -> Result<String, Failure> {
+        Ok(serde_json::to_string(self.inner.chinese())?)
+    }
+    /// Sets them; an empty string or `{}` clears them.
+    pub fn set_chinese(&mut self, chinese: &str) -> Result<(), Failure> {
+        let parsed: noteful_core::ProjectChinese = if chinese.trim().is_empty() {
+            Default::default()
+        } else {
+            serde_json::from_str(chinese)?
+        };
+        Ok(self.inner.set_chinese(parsed)?)
+    }
     /// Interactive exam HTML and optional structured data kept inside a `.nfedit` project.
     pub fn exam(&self) -> Result<String, Failure> {
         Ok(serde_json::to_string(self.inner.exam())?)

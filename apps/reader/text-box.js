@@ -8,15 +8,19 @@ import { mathSize, previewMath } from "./math-boxes.js";
 import { matrix as itemMatrix, point as mapPoint } from "./selection-geometry.js";
 import { mathKeypad } from "./math-keypad.js";
 import { mathField, styleField, mounted, focusField } from "./math-field.js";
-import { fontStack, importFont, loadImportedFonts, pdfFontHash } from "./fonts.js";
+import { fontStack, importFont, loadImportedFonts, pdfFontHash, CJK_SANS, CJK_SERIF } from "./fonts.js";
 import { fromRuns, remapSpans, withoutKeys, spansFor } from "./rich-spans.js";
+import { attachIme, zhButton } from "./chinese/ime.js";
+import { imeMenuPressedAt } from "./chinese/ime-menu.js";
+import { fieldMode, setFieldMode } from "./chinese/settings.js";
+import { noteMode, setNoteMode } from "./chinese/ruby.js";
 
 export const FONT_STACKS = {
-  Helvetica: "Helvetica, Arial, sans-serif",
-  "Times New Roman": "'Times New Roman', Times, serif",
-  "Courier New": "'Courier New', monospace",
-  Noteworthy: "Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive",
-  "Comic Sans MS": "'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive",
+  Helvetica: `Helvetica, Arial, sans-serif, ${CJK_SANS}`,
+  "Times New Roman": `'Times New Roman', Times, serif, ${CJK_SERIF}`,
+  "Courier New": `'Courier New', monospace, ${CJK_SANS}`,
+  Noteworthy: `Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive, ${CJK_SANS}`,
+  "Comic Sans MS": `'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive, ${CJK_SANS}`,
 };
 export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 // Text sizes the core takes (imports.rs TextBox::valid), and how the size field shows one.
@@ -53,12 +57,30 @@ export function wrapText(text, style, width, measure = null) {
     const out = [];
     let current = "";
     for (const word of line.split(" ")) {
-      const next = current ? `${current} ${word}` : word;
-      if (current && widthOf(next) > width) { out.push(current); current = word; }
-      else current = next;
+      // Chinese has no spaces: a word may also break between its characters (wrapPieces).
+      wrapPieces(word).forEach((piece, i) => {
+        const next = !current ? piece : i ? current + piece : `${current} ${piece}`;
+        if (current && widthOf(next) > width) { out.push(current); current = piece; }
+        else current = next;
+      });
     }
     return [...out, current].join("\n");
   }).join("\n");
+}
+// CJK characters, kana and full-width punctuation; a line may break before or after one, except
+// before closing punctuation and after opening punctuation (basic kinsoku).
+const CJK = /[\u2e80-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]|[\ud840-\ud87f][\udc00-\udfff]/u;
+const NO_START = "，。、．,.!?！？：；:;）)」』》〉】〕｝’”…‥・ー々〜%％";
+const NO_END = "（(「『《〈【〔｛‘“";
+export function wrapPieces(word) {
+  const chars = [...word], pieces = [];
+  let piece = "";
+  chars.forEach((c, i) => {
+    const before = chars[i - 1];
+    if (piece && (CJK.test(c) || CJK.test(before)) && !NO_START.includes(c) && !NO_END.includes(before)) { pieces.push(piece); piece = ""; }
+    piece += c;
+  });
+  return piece ? [...pieces, piece] : pieces.length ? pieces : [""];
 }
 
 export const hexColor = (rgba) => "#" + rgba.slice(0, 3).map((c) => Math.round(c * 255).toString(16).padStart(2, "0")).join("");
@@ -129,6 +151,8 @@ export function textBoxController({
   isBusy = () => false,
   toolOptions = () => {},
   insertCompound = async () => {},
+  // The open note's id: its text boxes share one Chinese input mode (docs/CHINESE-INPUT.md §5.1).
+  noteKey = () => "",
   $ = (id) => document.getElementById(id),
   doc = document,
 }) {
@@ -153,6 +177,10 @@ export function textBoxController({
     $("textSwatches")?.append(b);
   }
   const textFormatBar = $("textFormat");
+  // 中: Chinese input for the box being typed (click cycles the mode; right-click: the mode menu).
+  const zhToggle = zhButton(() => textEditor?.area, { doc });
+  textFormatBar.append(zhToggle);
+  const zhKey = () => `note-${noteKey() || "none"}`;
   // Which box the bar formats: the one being typed, or a selected one.
   let textFormatTarget = null;
   let textEditor = null;
@@ -511,7 +539,12 @@ export function textBoxController({
     selection.clear();
     textEditor = { p, area, discard, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, layer: activeLayer, fit: refit, after };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); }, area);
+    // Chinese input (its keys come first, in the capture phase: Esc with pinyin typed only clears it).
+    textEditor.ime = attachIme(area, { kind: "pagebox", getMode: () => noteMode(fieldMode(zhKey())), setMode: (m) => { setFieldMode(zhKey(), m); setNoteMode(m); } });
+    textEditor.ime.addButton(zhToggle);
     area.addEventListener("keydown", (e) => {
+      // A system input method composing: its Esc and Enter are its own.
+      if (e.isComposing || e.keyCode === 229) return e.stopPropagation();
       // Esc keeps what was typed (as clicking away does); Shift + Esc, or the ×, throws it away.
       if (e.key === "Escape") { e.preventDefault(); if (e.shiftKey) close(); else commit(); }
       else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); }
@@ -522,7 +555,7 @@ export function textBoxController({
     // Leaving the box finishes it, unless the focus went to its format bar (or came back,
     // as when the page is redrawn under it: renderPage).
     area.addEventListener("blur", () => setTimeout(() => {
-      if (textEditor?.area !== area || doc.activeElement === area || (textEditor.field && doc.activeElement === textEditor.field) || textFormatBar.contains(doc.activeElement) || Date.now() - textFormatPressed < 1000) return;
+      if (textEditor?.area !== area || doc.activeElement === area || (textEditor.field && doc.activeElement === textEditor.field) || textFormatBar.contains(doc.activeElement) || Date.now() - textFormatPressed < 1000 || Date.now() - imeMenuPressedAt() < 1000) return;
       commit();
     }, 0));
     requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
@@ -531,6 +564,7 @@ export function textBoxController({
 
   function endText() {
     const t = textEditor;
+    t?.ime?.detach();
     textEditor = null;
     t?.discard.remove();
     t?.mathPreview.remove();
@@ -651,8 +685,18 @@ export function textBoxController({
     if (textFormatTarget?.p === p && !textFormatDocked()) p.el.append(textFormatBar);
   }
 
+  // A typed box's text replaced (Chinese conversion, chinese/zh-menu.js), its style and its
+  // styled parts kept; one undo brings it back.
+  async function replaceText(p, id, value) {
+    const existing = (p?.view?.texts || []).find((t) => String(t.id) === String(id));
+    if (!existing) throw new Error("This text box cannot be changed here.");
+    const style = boxStyleOf(existing), [w, h] = await boxSize(value, style);
+    return action("editText", { page: p.index, itemId: existing.id, text: textPayload(value, style, remapSpans(boxText(existing), value, boxSpansOf(existing))), width: w, height: h });
+  }
+
   return {
     get active() { return Boolean(textEditor); },
+    replaceText,
     open,
     typeAt,
     commit,

@@ -110,6 +110,7 @@
           </div>
           <button id="textFormatDock" data-icon="text" role="menuitemcheckbox" aria-checked="false" data-palette="Text format bar in the tool bar" title="Font, size, bold, italic and colour of text boxes in the tool bar's settings row, instead of a bar floating over the box">Text format bar in the tool bar</button>
           <button id="penSetupOpen" data-icon="draw" title="Teach NoteComplete your pen's side button, or choose another way to open the quick menu">Pen button…</button>
+          <button id="zhSettingsOpen" data-icon="text" data-palette="Chinese input settings" title="Typing Chinese with pinyin: modes, keys, punctuation, and the HSK dictionaries to download or delete">Chinese input…</button>
           <hr />
           <button data-proxy="zoomIn" data-icon="plus">Zoom in<kbd>Ctrl +</kbd></button>
           <button data-proxy="zoomOut" data-icon="minus">Zoom out<kbd>Ctrl −</kbd></button>
@@ -126,6 +127,7 @@
           <button id="tapeNote" data-icon="tape" disabled>Tape as saved</button>
           <hr />
           <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
+          <button id="zhRubyToggle" data-icon="text" role="menuitemcheckbox" aria-checked="false" data-palette="Pinyin over characters: on or off" title="Pinyin over Chinese characters in text boxes, Markdown notes and cards (a display aid: the text stays as it is). Saved in a note with Chinese; exports keep it when it is on">Pinyin over characters</button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
           <button id="lagLogOpen" data-icon="clock">Lag log…</button>
         </div>
@@ -247,6 +249,7 @@
                 <button id="exportImage" disabled class="export-item has-caret" data-icon="image" aria-haspopup="menu" aria-expanded="false" data-palette="Export page as image…" title="This page as an image: choose the format"><b>Image</b><small>This page; choose the format</small><span class="caret"></span></button>
                 <div id="imageTypes" class="menu-sub" role="menu" aria-label="Image format" hidden></div>
                 <button id="svg" disabled class="export-item" data-icon="crop" data-palette="Export page as SVG" title="This page as SVG (vector)"><b>SVG</b><small>This page, as vector drawing</small></button>
+                <label class="export-check" hidden title="Pinyin over the Chinese in text boxes in PDF, image and SVG exports (starts as the view shows it)"><input id="exportRuby" type="checkbox" /> Pinyin over Chinese</label>
               </section>
               <section aria-labelledby="exportFiles">
                 <h3 id="exportFiles">Note as a file <button type="button" class="format-help" data-format-help aria-label="What do the formats keep?" title="What do the formats keep?">?</button></h3>

@@ -189,6 +189,12 @@ pub(crate) fn xml(s: &str) -> String {
 fn family(s: &str) -> String {
     s.replace('\\', "\\\\").replace('\'', "\\'")
 }
+/// Faces for Chinese characters, after a text box's own: the bundled Noto Sans SC first, then
+/// those of iPadOS/macOS, Windows and Linux. Mirrored in the reader's fonts.js.
+const CJK_SANS: &str =
+    "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC'";
+const CJK_SERIF: &str = "'Noto Serif CJK SC', 'Songti SC', SimSun, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC'";
+
 pub fn text_svg(text: &RichText, width: f64) -> String {
     let mut lines: Vec<Vec<(&TextRun, String)>> = vec![vec![]];
     for run in &text.runs {
@@ -249,8 +255,15 @@ pub fn text_svg(text: &RichText, width: f64) -> String {
             } else {
                 "Arial, sans-serif"
             };
+            // Chinese after the Latin face, so Latin text keeps its font (mirrored in the
+            // reader's fonts.js CJK_SANS / CJK_SERIF; docs/CHINESE-INPUT.md §6.1).
+            let cjk = if generic.ends_with("serif") && !generic.ends_with("sans-serif") {
+                CJK_SERIF
+            } else {
+                CJK_SANS
+            };
             let fonts = format!(
-                "'{}', '{}', {generic}",
+                "'{}', '{}', {generic}, {cjk}",
                 family(&run.font_family),
                 family(&run.font_name)
             );

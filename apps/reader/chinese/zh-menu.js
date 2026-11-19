@@ -1,0 +1,283 @@
+// Where the character panel opens from (docs/CHINESE-INPUT.md §8): "Look up 你好" on top of the
+// page and item menus (text boxes through the browser's own layout of their SVG <text>, the
+// PDF/OCR text layer likewise), and a menu of its own for Chinese in the Markdown preview, HTML
+// and text views, study cards and chat (the caret at the pointer), and for a selection of Chinese
+// in a text field or the notes (convert, vocabulary cards). A long press of a finger on a
+// character opens the panel straight away. app.js: configureZh(host), pageZhEntries(…) in its
+// page menu, pageZhLongPress(…) in its long press, installZhContext() once.
+import { openContextMenu } from '../context-menu.js';
+
+export const HAN = /\p{Script=Han}/u;
+export const hasHan = (s) => HAN.test(String(s ?? ''));
+let host = {};
+// { status, decks(), addCards(cards, opts), insertFigure(spec), boxText(p, id), editBox(p, id, value) }
+export function configureZh(h) { host = { ...host, ...h }; }
+
+// ---- Pure parts ----
+// The character at UTF-16 `index` of `text` (a surrogate pair whole): { char, start, end } or null.
+export function charAround(text, index) {
+  const s = String(text ?? '');
+  if (index < 0 || index >= s.length) return null;
+  let start = index;
+  if (/[\udc00-\udfff]/.test(s[start]) && start > 0 && /[\ud800-\udbff]/.test(s[start - 1])) start--;
+  const char = String.fromCodePoint(s.codePointAt(start));
+  return { char, start, end: start + char.length };
+}
+// The annotate() run (a word) that holds UTF-16 `index`.
+export const wordAround = (runs, index) => (runs || []).find((r) => r.start <= index && index < r.end) || null;
+// A box's lines as drawn (wrapped, one <text> each) back to its text: the index in the box of
+// character `index` of line `line`, or -1.
+export function boxIndex(box, lines, line, index) {
+  let cursor = 0;
+  for (let k = 0; k < line; k++) { const at = box.indexOf(lines[k], cursor); if (at >= 0) cursor = at + lines[k].length; }
+  const at = box.indexOf(lines[line] ?? '\u0000', cursor);
+  return at < 0 ? -1 : at + index;
+}
+// The place of a reading chosen for a text box, as chinese/ruby.js counts it: lines joined by one character.
+export const rubyIndex = (lines, line, index) => lines.slice(0, line).reduce((n, t) => n + t.length + 1, 0) + index;
+export const lookupLabel = (t) => { const c = [...String(t)]; return `Look up ${c.length > 8 ? `${c.slice(0, 8).join('')}…` : c.join('')}`; };
+// A selection worth a look-up of its own (a word, not a paragraph).
+export const lookupable = (t) => { const s = String(t ?? '').trim(); return hasHan(s) && [...s].length <= 8 && !/\s/.test(s); };
+
+// ---- Finding the character at a point ----
+const svgTexts = (root) => [...root.querySelectorAll('[data-item] text, .text-layer text')].filter((t) => !t.closest('.zh-ruby'));
+const inside = (r, x, y, pad = 2) => x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+// The SVG <text> line and character index at client (x, y) in `root`: page text boxes and the text
+// layer. { text, index, el, item?, lines?, line? } or null.
+export function svgHit(root, x, y) {
+  for (const el of svgTexts(root)) {
+    if (!HAN.test(el.textContent) || !inside(el.getBoundingClientRect(), x, y)) continue;
+    let index = -1;
+    try {
+      const m = el.getScreenCTM?.();
+      if (m) { const pt = new DOMPoint(x, y).matrixTransform(m.inverse()); index = el.getCharNumAtPosition(pt); }
+    } catch { /* Not laid out. */ }
+    if (index < 0) {
+      // Between characters: the nearest one on the row.
+      let best = Infinity;
+      for (let i = 0, n = el.getNumberOfChars?.() || 0; i < n; i++) {
+        let r;
+        try { r = el.getExtentOfChar(i); } catch { continue; }
+        const m = el.getScreenCTM(), a = new DOMPoint(r.x, r.y).matrixTransform(m), b = new DOMPoint(r.x + r.width, r.y + r.height).matrixTransform(m);
+        if (y < Math.min(a.y, b.y) - 2 || y > Math.max(a.y, b.y) + 2) continue;
+        const d = Math.abs((a.x + b.x) / 2 - x);
+        if (d < best) { best = d; index = i; }
+      }
+    }
+    if (index < 0) continue;
+    const item = el.closest('[data-item]');
+    const out = { text: el.textContent, index, el };
+    if (item) {
+      const lines = [...item.querySelectorAll('text')].filter((t) => !t.closest('.zh-ruby'));
+      Object.assign(out, { item: item.getAttribute('data-item'), lines: lines.map((t) => t.textContent), line: lines.indexOf(el) });
+    }
+    return out;
+  }
+  return null;
+}
+const BLOCK = 'p, li, td, th, dt, dd, h1, h2, h3, h4, h5, h6, blockquote, pre, figcaption, .deck-card-front, .deck-card-back, .practice-front, .practice-back, div';
+// The text node and offset of the character under client (x, y) in HTML, with the text of its
+// block (pinyin over characters left out) for finding the word: { text, index, node, offset }.
+export function htmlHit(x, y, doc = document) {
+  let node = null, offset = 0;
+  const pos = doc.caretPositionFromPoint?.(x, y);
+  if (pos) { node = pos.offsetNode; offset = pos.offset; } else { const r = doc.caretRangeFromPoint?.(x, y); if (r) { node = r.startContainer; offset = r.startOffset; } }
+  if (!node || node.nodeType !== 3) return null;
+  // Pinyin over a character: its character.
+  const rt = node.parentElement?.closest('rt');
+  if (rt) { const base = rt.parentElement?.firstChild; if (!base || base.nodeType !== 3) return null; node = base; offset = 0; }
+  const range = doc.createRange();
+  const hitAt = (i) => {
+    const c = charAround(node.data, i);
+    if (!c || !HAN.test(c.char)) return null;
+    range.setStart(node, c.start); range.setEnd(node, c.end);
+    return [...range.getClientRects()].some((r) => inside(r, x, y, 1)) ? c : null;
+  };
+  const c = hitAt(offset) || hitAt(offset - 1) || hitAt(offset - 2);
+  if (!c) return null;
+  const block = node.parentElement?.closest(BLOCK) || node.parentElement;
+  let text = '', index = -1;
+  const walker = doc.createTreeWalker(block, 4);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.parentElement?.closest('rt, rp')) continue;
+    if (n === node) index = text.length + c.start;
+    text += n.data;
+    if (text.length > 4000 && index >= 0) break;
+  }
+  return index < 0 ? { text: node.data, index: c.start, node, offset: c.start } : { text, index, node, offset: c.start };
+}
+
+// ---- Menus ----
+const loadPanel = () => import('./lookup-panel.js');
+async function scriptNow() {
+  try {
+    const [{ noteChinese }, { zhSettings }] = await Promise.all([import('./ruby.js'), import('./settings.js')]);
+    return noteChinese().script || zhSettings().script || 'simplified';
+  } catch { return 'simplified'; }
+}
+const panelHost = () => ({ ...host, script: () => host.scriptValue || 'simplified' });
+export async function lookUp(text, context = {}, near = null) {
+  host.scriptValue = await scriptNow();
+  const { openLookup } = await loadPanel();
+  return openLookup(text, { host: panelHost(), context, near });
+}
+async function annotateQuick(text, ms = 700) {
+  try {
+    const { chinese } = await import('./client.js');
+    const script = await scriptNow();
+    return await Promise.race([chinese().annotate(text, { script }), new Promise((r) => setTimeout(() => r(null), ms))]) || [];
+  } catch { return []; }
+}
+export async function vocabFrom(text, near = null) {
+  const { vocabDialog } = await import('./vocab-dialog.js');
+  return vocabDialog(text, { host: panelHost(), near });
+}
+export async function convertFrom(text, near = null) {
+  const { convertDialog } = await import('./convert-dialog.js');
+  return convertDialog(text, { near });
+}
+// The entries for the character (and its word) of `hit` ({ text, index }); `ctx(start, end,
+// reading)` gives the panel's context for that place (replace, setReading).
+async function hitEntries(hit, ctx = () => ({}), near = null) {
+  const c = charAround(hit.text, hit.index);
+  if (!c || !HAN.test(c.char)) return [];
+  const runs = await annotateQuick(hit.text);
+  const w = wordAround(runs, c.start);
+  const k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
+  const out = [];
+  if (w && [...w.text].length > 1) out.push({ label: lookupLabel(w.text), icon: 'search', run: () => lookUp(w.text, ctx(w.start, w.end, w.pinyin.join(' ')), near) });
+  out.push({ label: lookupLabel(c.char), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
+  return out;
+}
+const selectionEntries = (text, near, replace = null) => [
+  lookupable(text) && { label: lookupLabel(text.trim()), icon: 'search', run: () => lookUp(text.trim(), replace ? { replace } : {}, near) },
+  replace && { label: 'Convert simplified ↔ traditional…', icon: 'swap', run: async () => { const out = await convertFrom(text, near); if (out != null && out !== text) await replace(out); } },
+  host.addCards && { label: 'Make vocabulary cards…', icon: 'cards', run: () => vocabFrom(text, near) },
+].filter(Boolean);
+
+// The page menu's entries for Chinese under (x, y) on page `p` (its element `p.el`): a text box
+// or the text layer. Empty when there is none.
+export async function pageZhEntries(p, x, y) {
+  const root = p?.el;
+  if (!root || !hasHan(root.textContent)) return [];
+  const hit = svgHit(root, x, y);
+  if (!hit) return [];
+  const entries = await hitEntries(hit, (start, end, reading) => pageContext(p, hit, start, end, reading), root);
+  if (hit.item && host.boxText) {
+    const box = host.boxText(p, hit.item);
+    if (hasHan(box)) {
+      if (host.editBox) entries.push({ label: 'Convert this text box (simplified ↔ traditional)…', icon: 'swap', run: async () => {
+        const out = await convertFrom(box, root);
+        if (out != null && out !== box) await host.editBox(p, hit.item, out);
+      } });
+      if (host.addCards) entries.push({ label: 'Make vocabulary cards…', icon: 'cards', run: () => vocabFrom(box, root) });
+    }
+  }
+  return entries.length ? [...entries, '-'] : [];
+}
+// The panel's context for a place in a page text box: convert that occurrence; the reading
+// used there (chinese/ruby.js note readings, by item and index).
+function pageContext(p, hit, start, end, reading) {
+  const ctx = { reading };
+  if (!hit.item) return ctx;
+  const from = hit.text.slice(start, end);
+  if (host.boxText && host.editBox) {
+    ctx.replace = async (to) => {
+      const box = host.boxText(p, hit.item), i = boxIndex(box, hit.lines, hit.line, start);
+      if (i < 0 || box.slice(i, i + from.length) !== from) throw new Error('The text box changed; look it up again.');
+      await host.editBox(p, hit.item, box.slice(0, i) + to + box.slice(i + from.length));
+    };
+  }
+  // A reading for one character (a word's characters each keep theirs).
+  if ([...from].length === 1) {
+    ctx.setReading = async (pinyin) => {
+      const { noteChinese, setNoteChinese } = await import('./ruby.js');
+      const index = rubyIndex(hit.lines, hit.line, start);
+      const readings = (noteChinese().readings || []).filter((r) => !(r.item === hit.item && r.index === index));
+      await setNoteChinese({ readings: [...readings, { item: hit.item, index, pinyin }] });
+    };
+  }
+  return ctx;
+}
+// A selection of Chinese on a page (the PDF/OCR text layer): its menu.
+export function pageZhSelection(text, x, y) {
+  openContextMenu(x, y, [...selectionEntries(text, null), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Chinese' });
+}
+// A finger held on a character of a page: the panel at once. True when it opened.
+export async function pageZhLongPress(p, x, y) {
+  const root = p?.el;
+  if (!root || !hasHan(root.textContent)) return false;
+  const hit = svgHit(root, x, y);
+  const c = hit && charAround(hit.text, hit.index);
+  if (!c || !HAN.test(c.char)) return false;
+  const runs = await annotateQuick(hit.text);
+  const w = wordAround(runs, c.start), k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
+  lookUp(c.char, pageContext(p, hit, c.start, c.end, w?.pinyin?.[k] || ''), root);
+  return true;
+}
+
+// ---- Everywhere else: Markdown, HTML and text views, cards, chat, text fields ----
+const typing = (t) => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && /^(text|search|)$/.test(t.type));
+// A text field's or editable element's selection, with how to replace it.
+function fieldSelection(target) {
+  if (typing(target)) {
+    const { selectionStart: a, selectionEnd: b } = target;
+    if (a == null || a === b) return null;
+    const text = target.value.slice(a, b);
+    return { text, replace: async (to) => { target.focus(); target.setSelectionRange(a, b); if (!document.execCommand('insertText', false, to)) target.setRangeText(to, a, b, 'end'); target.dispatchEvent(new Event('input', { bubbles: true })); } };
+  }
+  const editable = target.closest?.('[contenteditable="true"], [contenteditable=""]');
+  const sel = getSelection();
+  if (!sel?.rangeCount || sel.isCollapsed) return null;
+  const range = sel.getRangeAt(0).cloneRange();
+  const text = sel.toString();
+  if (!editable || !editable.contains(range.commonAncestorContainer)) return { text, replace: null };
+  return { text, replace: async (to) => { editable.focus(); const s = getSelection(); s.removeAllRanges(); s.addRange(range); document.execCommand('insertText', false, to); } };
+}
+const SKIP = '.sheet, .context-menu, .zh-ime, .pk-window-head, .hz-player, .hz-practice, svg';
+export function installZhContext(doc = document) {
+  doc.addEventListener('contextmenu', async (e) => {
+    const t = e.target;
+    if (e.defaultPrevented || e.shiftKey || !(t instanceof Element) || t.closest(SKIP)) return;
+    const near = t;
+    const sel = fieldSelection(t);
+    if (sel && hasHan(sel.text)) {
+      e.preventDefault();
+      const field = typing(t) || t.closest('[contenteditable="true"], [contenteditable=""]');
+      openContextMenu(e.clientX, e.clientY, [
+        ...selectionEntries(sel.text, near, sel.replace), '-',
+        field && sel.replace && { label: 'Cut', icon: 'scissors', key: 'Ctrl X', run: () => { navigator.clipboard?.writeText(sel.text); sel.replace(''); } },
+        { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(sel.text) },
+      ].filter(Boolean), { title: 'Chinese', host: near.closest('dialog[open]') });
+      return;
+    }
+    if (typing(t)) return;
+    const hit = htmlHit(e.clientX, e.clientY, doc);
+    if (!hit) return;
+    e.preventDefault();
+    const { clientX: x, clientY: y } = e;
+    const editable = t.closest('[contenteditable="true"], [contenteditable=""]');
+    // In editable text (the notes): that occurrence can be converted.
+    const ctx = (start, end, reading) => {
+      if (!editable) return { reading };
+      const base = hit.offset - (hit.index - start), node = hit.node;
+      return { reading, replace: async (to) => {
+        if (!node.isConnected || base < 0 || base + (end - start) > node.data.length) throw new Error('The text changed; look it up again.');
+        const r = doc.createRange(); r.setStart(node, base); r.setEnd(node, base + (end - start));
+        editable.focus(); const s = getSelection(); s.removeAllRanges(); s.addRange(r); doc.execCommand('insertText', false, to);
+      } };
+    };
+    // A long press of a finger: the panel straight away.
+    if (e.pointerType === 'touch') {
+      const c = charAround(hit.text, hit.index), runs = await annotateQuick(hit.text), w = wordAround(runs, c.start);
+      return lookUp(c.char, ctx(c.start, c.end, (w && w.pinyin?.[[...hit.text.slice(w.start, c.start)].length]) || ''), near);
+    }
+    const entries = await hitEntries(hit, ctx, near);
+    if (!entries.length) return;
+    openContextMenu(x, y, [
+      ...entries,
+      hasHan(hit.text) && host.addCards && [...hit.text].length > 1 && { label: 'Make vocabulary cards from this paragraph…', icon: 'cards', run: () => vocabFrom(hit.text, near) },
+      sel?.text && '-', sel?.text && { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(sel.text) },
+    ].filter(Boolean), { title: 'Chinese', host: near.closest('dialog[open]') });
+  });
+}
