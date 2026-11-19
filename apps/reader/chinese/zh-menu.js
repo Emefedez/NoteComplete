@@ -128,6 +128,44 @@ async function annotateQuick(text, ms = 700) {
     return await Promise.race([chinese().annotate(text, { script }), new Promise((r) => setTimeout(() => r(null), ms))]) || [];
   } catch { return []; }
 }
+async function lookupQuick(text, ms = 650) {
+  try {
+    const { chinese } = await import('./client.js');
+    const script = await scriptNow();
+    const res = await Promise.race([chinese().lookup(text, { script }), new Promise((r) => setTimeout(() => r(null), ms))]);
+    if (!res?.entries?.length) return null;
+    const pinyin = res.entries[0].pinyin || '';
+    const gloss = [...new Set(res.entries.flatMap((e) => e.gloss || []).filter(Boolean))].slice(0, 3).join('; ');
+    const vars = new Set();
+    for (const e of res.entries) {
+      if (e.simp && e.simp !== text) vars.add(e.simp);
+      if (e.trad && e.trad !== text) vars.add(e.trad);
+    }
+    const v = res.char?.variants || {};
+    for (const c of [...(v.simp || ''), ...(v.trad || ''), ...(v.other || '')]) if (c && c !== text) vars.add(c);
+    return { pinyin, gloss, variants: [...vars].slice(0, 4) };
+  } catch { return null; }
+}
+function richLookupLabel(t, info) {
+  const base = lookupLabel(t);
+  if (!info || (!info.gloss && !info.variants?.length)) return base;
+  const parts = [];
+  if (info.pinyin) parts.push(info.pinyin);
+  if (info.gloss) parts.push(info.gloss.length > 36 ? `${info.gloss.slice(0, 36)}…` : info.gloss);
+  if (info.variants?.length) parts.push(`Variants: ${info.variants.join(' ')}`);
+  return `${base} (${parts.join(' · ')})`;
+}
+export async function markdownTraceBlockFor(rawText) {
+  const han = ([...String(rawText || '')].filter((c) => HAN.test(c))).slice(0, 12).join('');
+  if (!han) return '';
+  const { prepareWithDict, render } = await import('../prefabs/hanzi/render.js');
+  const spec = await prepareWithDict({ type: 'hanzi', text: han, show: 'steps', grid: 'mi', outline: true });
+  const out = render(spec);
+  if (!out?.svg) return '';
+  const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(out.svg)}`;
+  const caption = [han, spec.pinyin, spec.gloss, spec.variants].filter(Boolean).join(' · ');
+  return `\n\n![Stroke order ${caption}](${dataUri})\n`;
+}
 export async function vocabFrom(text, near = null) {
   const { vocabDialog } = await import('./vocab-dialog.js');
   return vocabDialog(text, { host: panelHost(), near });
@@ -144,16 +182,41 @@ async function hitEntries(hit, ctx = () => ({}), near = null) {
   const runs = await annotateQuick(hit.text);
   const w = wordAround(runs, c.start);
   const k = w ? [...hit.text.slice(w.start, c.start)].length : 0;
+  const [wordInfo, charInfo] = await Promise.all([
+    w && [...w.text].length > 1 ? lookupQuick(w.text) : Promise.resolve(null),
+    lookupQuick(c.char),
+  ]);
   const out = [];
-  if (w && [...w.text].length > 1) out.push({ label: lookupLabel(w.text), icon: 'search', run: () => lookUp(w.text, ctx(w.start, w.end, w.pinyin.join(' ')), near) });
-  out.push({ label: lookupLabel(c.char), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
+  if (w && [...w.text].length > 1) {
+    out.push({ label: richLookupLabel(w.text, wordInfo), icon: 'search', run: () => lookUp(w.text, ctx(w.start, w.end, w.pinyin.join(' ')), near) });
+  }
+  out.push({ label: richLookupLabel(c.char, charInfo), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
+  const target = (w && [...w.text].length > 1 ? w.text : c.char);
+  if (host.openTracePrefab) {
+    out.push({ label: `Trace & stroke order prefab (${target})…`, icon: 'draw', run: () => host.openTracePrefab(target) });
+  } else if (host.insertFigure) {
+    out.push({ label: `Insert trace order prefab (${target})`, icon: 'draw', run: () => host.insertFigure({ type: 'hanzi', text: target, show: 'steps', grid: 'mi', outline: true }) });
+  }
   return out;
 }
-const selectionEntries = (text, near, replace = null) => [
-  lookupable(text) && { label: lookupLabel(text.trim()), icon: 'search', run: () => lookUp(text.trim(), replace ? { replace } : {}, near) },
-  replace && { label: 'Convert simplified ↔ traditional…', icon: 'swap', run: async () => { const out = await convertFrom(text, near); if (out != null && out !== text) await replace(out); } },
-  host.addCards && { label: 'Make vocabulary cards…', icon: 'cards', run: () => vocabFrom(text, near) },
-].filter(Boolean);
+const selectionEntries = (text, near, replace = null, info = null) => {
+  const clean = String(text ?? '').trim();
+  const hanOnly = ([...clean].filter((c) => HAN.test(c))).slice(0, 12).join('');
+  return [
+    lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
+    hanOnly && host.openTracePrefab && { label: `Trace & stroke order prefab (${hanOnly})…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
+    hanOnly && replace && {
+      label: `Insert trace order sheet for “${hanOnly}” here`,
+      icon: 'graph',
+      run: async () => {
+        const block = await markdownTraceBlockFor(hanOnly);
+        if (block) await replace(`${text}${block}`);
+      },
+    },
+    replace && { label: 'Convert simplified ↔ traditional…', icon: 'swap', run: async () => { const out = await convertFrom(text, near); if (out != null && out !== text) await replace(out); } },
+    host.addCards && { label: 'Make vocabulary cards…', icon: 'cards', run: () => vocabFrom(text, near) },
+  ].filter(Boolean);
+};
 
 // The page menu's entries for Chinese under (x, y) on page `p` (its element `p.el`): a text box
 // or the text layer. Empty when there is none.
@@ -200,8 +263,9 @@ function pageContext(p, hit, start, end, reading) {
   return ctx;
 }
 // A selection of Chinese on a page (the PDF/OCR text layer): its menu.
-export function pageZhSelection(text, x, y) {
-  openContextMenu(x, y, [...selectionEntries(text, null), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Chinese' });
+export async function pageZhSelection(text, x, y) {
+  const info = lookupable(text) ? await lookupQuick(text.trim()) : null;
+  openContextMenu(x, y, [...selectionEntries(text, null, null, info), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Chinese' });
 }
 // A finger held on a character of a page: the panel at once. True when it opened.
 export async function pageZhLongPress(p, x, y) {
@@ -243,9 +307,11 @@ export function installZhContext(doc = document) {
     const sel = fieldSelection(t);
     if (sel && hasHan(sel.text)) {
       e.preventDefault();
+      const { clientX: cx, clientY: cy } = e;
       const field = typing(t) || t.closest('[contenteditable="true"], [contenteditable=""]');
-      openContextMenu(e.clientX, e.clientY, [
-        ...selectionEntries(sel.text, near, sel.replace), '-',
+      const info = lookupable(sel.text) ? await lookupQuick(sel.text.trim()) : null;
+      openContextMenu(cx, cy, [
+        ...selectionEntries(sel.text, near, sel.replace, info), '-',
         field && sel.replace && { label: 'Cut', icon: 'scissors', key: 'Ctrl X', run: () => { navigator.clipboard?.writeText(sel.text); sel.replace(''); } },
         { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(sel.text) },
       ].filter(Boolean), { title: 'Chinese', host: near.closest('dialog[open]') });

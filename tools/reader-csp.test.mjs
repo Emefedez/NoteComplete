@@ -116,6 +116,14 @@ const NOT_REQUESTED = [
   ['https://${value}', 'web-view.js completes a typed link, opened in <webview> or the browser, never fetched by the page'],
   ['http://schema.omg.org/spec/', 'XMI and UML namespaces and type references written into exported files (uml-xml.js)'],
   ['https://notecomplete.app/xmi/layout', 'the XML namespace of the layout NoteComplete keeps in XMI files (uml-xml.js)'],
+  ['https://cloud.example.com/s/', 'example Nextcloud share link placeholder (index.html, cloud-collab.js)'],
+  ['https://cloud.example.edu/s/', 'example Nextcloud share link placeholder (cloud-collab.js)'],
+  ['https://cloud.university.edu/s/', 'example Nextcloud share link placeholder (cloud-collab.js)'],
+  ['https://host/[index.php/]s/', 'comment describing Nextcloud share link pattern (chunked-note.js)'],
+  ['http://127.0.0.1:53691/callback', 'desktop loopback OAuth callback shown in guided setup (cloud-collab.js)'],
+  ['https://console.cloud.google.com/', 'external link to Google Cloud Console opened in a new tab (cloud-collab.js)'],
+  ['https://www.dropbox.com/developers/apps', 'external link to Dropbox App Console opened in a new tab (cloud-collab.js)'],
+  ['https://archive.org/upload', 'external link to Internet Archive uploader opened in a new tab (cloud-collab.js)'],
 ];
 
 test('every address named in the reader\'s code is in the inventory and allowed', () => {

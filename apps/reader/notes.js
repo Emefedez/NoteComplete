@@ -70,7 +70,53 @@ export function notesController({ call, jump, currentPage, store, status }) {
   // 中: Chinese input in the notes (chinese/ime.js), its mode kept per note.
   const mdEl = () => $('notesEditor').querySelector('.TinyMDE');
   const zhNotes = zhButton(mdEl);
-  $('notesMarker').before(zhNotes);
+  const traceBtn = $('notesTraceBtn');
+  const helpBtn = $('notesHelpBtn');
+  let helpSheet = null;
+  if (traceBtn) traceBtn.before(zhNotes);
+  else $('notesMarker').before(zhNotes);
+  const zhMode = () => `notes-${key || 'none'}`;
+  const syncNotesZh = () => {
+    const mode = mdEl()?.__zhIme?.mode || noteMode(fieldMode(zhMode())) || 'off';
+    if (traceBtn) traceBtn.hidden = mode === 'off';
+  };
+  if (traceBtn) {
+    traceBtn.onclick = async () => {
+      const selText = globalThis.getSelection?.()?.toString?.() || '';
+      const han = ([...selText].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('') || (text.match(/\p{Script=Han}+/gu)?.at(-1)?.slice(0, 6)) || '你好';
+      const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
+      const block = await markdownTraceBlockFor(han);
+      if (block && editor) {
+        const sel = globalThis.getSelection?.();
+        if (sel?.rangeCount && !sel.isCollapsed && $('notesEditor')?.contains(sel.anchorNode)) sel.collapseToEnd();
+        editor.paste(block);
+      }
+    };
+  }
+  if (helpBtn && panel) {
+    helpBtn.onclick = async () => {
+      if (!helpSheet) {
+        const { cheatSheet } = await import('./cheat-sheet.js');
+        helpSheet = cheatSheet(panel, {
+          key: 'notes-markdown',
+          title: 'Notes & Chinese Cheat Sheet',
+          sections: [
+            { title: 'Markdown notes', icon: 'note', rows: [
+              { keys: '+ Page', does: 'Insert a <!-- page N --> marker tying the section below to the current page' },
+              { keys: '#  **bold**  *italic*', does: 'Headings, bold and italic text' },
+              { keys: '$x^2$  $$...$$', does: 'Inline and block LaTeX math' },
+            ] },
+            { title: 'Chinese input & Trace Prefabs', icon: 'draw', rows: [
+              { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show the 笔 trace button' },
+              { keys: '笔', does: 'Highlight Chinese characters and click 笔 to insert their stroke order trace sheet (with English meaning & variants)' },
+              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the animated Trace Prefab Editor' },
+            ] },
+          ],
+        });
+      }
+      helpSheet.toggle();
+    };
+  }
   const save = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flush, 600);
@@ -105,8 +151,8 @@ export function notesController({ call, jump, currentPage, store, status }) {
     });
     $('notesEditor').querySelector('.TinyMDE')?.setAttribute('contenteditable', String(!shared || shared.canEdit));
     // Chinese typed here goes in through the editor (one change, so sharing sees it).
-    const zhMode = () => `notes-${key || 'none'}`;
-    if (mdEl()) attachIme(mdEl(), { kind: 'contenteditable', insert: (t) => editor?.paste(t), getMode: () => noteMode(fieldMode(zhMode())), setMode: (m) => { setFieldMode(zhMode(), m); setNoteMode(m); } }).addButton(zhNotes);
+    if (mdEl()) attachIme(mdEl(), { kind: 'contenteditable', insert: (t) => editor?.paste(t), getMode: () => noteMode(fieldMode(zhMode())), setMode: (m) => { setFieldMode(zhMode(), m); setNoteMode(m); syncNotesZh(); } }).addButton(zhNotes);
+    syncNotesZh();
     markLines();
     follow(currentPage());
     shared?.mounted?.();

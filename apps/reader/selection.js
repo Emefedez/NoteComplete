@@ -14,8 +14,8 @@ function scaledWidth(item,before,scale){
  return Math.min(100,Math.max(.1,(before.width??item.base_width)*f));
 }
 export class SelectionController {
- constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo=null}){
-  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo});this.token=0;this.item=null;this.active=null;
+ constructor({call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo=null,edit=null}){
+  Object.assign(this,{call,patch,remove,removeWhole,panel,editable,changed,status,menu,redraw,dropTo,edit});this.token=0;this.item=null;this.active=null;
   for(const id of ['selectedColor','selectedWidth','selectedW','selectedH','selectedAngle']){
    $(id).onchange=()=>this.properties();$(id).onblur=()=>this.properties();$(id).onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();this.properties();}};
   }
@@ -181,9 +181,12 @@ export class SelectionController {
  coords(event,p){const r=p.el.getBoundingClientRect();return [(event.clientX-r.left)/r.width*p.size[0],(event.clientY-r.top)/r.height*p.size[1]];}
  down(event,p,tool){
   if(this.cropping)return true;
-  // Double-click a selected image to crop it.
+  // Double-click a selected prefab/graph/table to edit it, or a selected image to crop it.
   const last=this.lastDown;this.lastDown={time:event.timeStamp,x:event.clientX,y:event.clientY};
-  if(last&&event.timeStamp-last.time<450&&Math.hypot(event.clientX-last.x,event.clientY-last.y)<8&&tool==='select'&&this.item?.kind==='image'&&this.item.page===p.index&&!event.target.closest('[data-selection-handle]')){event.preventDefault();this.lastDown=null;this.startCrop();return true;}
+  if(last&&event.timeStamp-last.time<450&&Math.hypot(event.clientX-last.x,event.clientY-last.y)<8&&this.item?.page===p.index){
+   if(this.item?.compound&&this.edit){event.preventDefault();this.lastDown=null;this.edit(this.item);return true;}
+   if(tool==='select'&&this.item?.kind==='image'&&!event.target.closest('[data-selection-handle]')){event.preventDefault();this.lastDown=null;this.startCrop();return true;}
+  }
   const handle=event.target.closest('[data-selection-handle]');
   if(handle?.dataset.selectionHandle==='menu'){event.preventDefault();event.stopPropagation();if(this.item)this.menu?.(this.item,event.clientX,event.clientY);return true;}
   // Another tool: a tap away from the selection lets go of it (and then draws, pans…).

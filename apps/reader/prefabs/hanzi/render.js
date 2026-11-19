@@ -27,6 +27,8 @@ export function normalize(spec) {
     type: 'hanzi',
     text,
     pinyin: numbersToMarks(String(s.pinyin ?? '').slice(0, 200)).trim(),
+    gloss: String(s.gloss ?? '').slice(0, 240).trim(),
+    variants: String(s.variants ?? '').slice(0, 160).trim(),
     script: s.script === 'traditional' ? 'traditional' : 'simplified',
     show: SHOWS.includes(s.show) ? s.show : 'strokes',
     step,
@@ -54,6 +56,56 @@ export async function prepare(spec) {
   if (!missing.length) return m;
   const { strokesFor } = await import('../../chinese/strokes.js');
   return { ...m, data: { ...m.data, ...(await strokesFor(missing.join('')).catch(() => ({}))) } };
+}
+
+// Enriches a hanzi spec with stroke data, pinyin, English equivalents (gloss) and variants from the dictionary.
+export async function prepareWithDict(spec) {
+  let m = await prepare(spec);
+  if (!m.text) return m;
+  try {
+    const { chinese } = await import('../../chinese/client.js');
+    const client = chinese();
+    const [runs, lk] = await Promise.all([
+      !m.pinyin ? client.annotate(m.text, { script: m.script }).catch(() => []) : Promise.resolve([]),
+      client.lookup(m.text, { script: m.script }).catch(() => null),
+    ]);
+    let pinyin = m.pinyin;
+    if (!pinyin && runs?.length) {
+      pinyin = runs.flatMap((r) => r.pinyin || []).join(' ');
+    }
+    if (!pinyin && lk?.entries?.length) {
+      pinyin = lk.entries[0].pinyin || '';
+    }
+    let gloss = m.gloss;
+    let variants = m.variants;
+    if (lk?.entries?.length) {
+      if (!gloss) {
+        const glosses = [...new Set(lk.entries.flatMap((e) => e.gloss || []).filter(Boolean))].slice(0, 4);
+        gloss = glosses.join('; ');
+      }
+      if (!variants) {
+        const simp = new Set(), trad = new Set(), other = new Set();
+        for (const e of lk.entries) {
+          if (e.simp && e.simp !== m.text) simp.add(e.simp);
+          if (e.trad && e.trad !== m.text) trad.add(e.trad);
+        }
+        const v = lk.char?.variants || {};
+        for (const c of [...(v.simp || '')]) if (c !== m.text) simp.add(c);
+        for (const c of [...(v.trad || '')]) if (c !== m.text) trad.add(c);
+        for (const c of [...(v.other || '')]) if (c !== m.text && !simp.has(c) && !trad.has(c)) other.add(c);
+        const parts = [];
+        if (simp.size) parts.push(`简体: ${[...simp].join(' ')}`);
+        if (trad.size) parts.push(`繁體: ${[...trad].join(' ')}`);
+        if (other.size) parts.push(`異體: ${[...other].join(' ')}`);
+        variants = parts.join(' · ');
+      }
+    } else if (!gloss && runs?.length) {
+      const glosses = runs.map((r) => r.gloss?.[0]).filter(Boolean);
+      if (glosses.length) gloss = glosses.join(' · ');
+    }
+    m = normalize({ ...m, pinyin, gloss, variants });
+  } catch { /* Dictionary worker unavailable in headless/offline fallback */ }
+  return m;
 }
 
 export function render(spec, { size: cellSize } = {}) {
@@ -105,6 +157,15 @@ export function render(spec, { size: cellSize } = {}) {
       y = top + Math.max(S, rows * (s + sg) - sg) + gap;
     });
     height = y - gap + pad;
+  }
+  if (m.gloss || m.variants) {
+    const captionLine = [m.gloss, m.variants].filter(Boolean).join('   ·   ');
+    const fontSize = Math.max(12, Math.round(S * 0.14));
+    const capH = fontSize + Math.round(pad * 1.1);
+    const minW = Math.min(680, Math.round(captionLine.length * fontSize * 0.56 + pad * 2));
+    if (width < minW) width = minW;
+    parts.push(`<text x="${pad}" y="${height + Math.round(fontSize * 0.85)}" font-size="${fontSize}" fill="#3d444d" font-family="Arial, 'Noto Sans', 'Noto Sans SC', sans-serif">${escapeHtml(captionLine)}</text>`);
+    height += capH;
   }
   width = Math.round(width); height = Math.round(height);
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#fff"/>${parts.join('')}</svg>`, width, height };

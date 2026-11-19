@@ -142,6 +142,8 @@ export function entrySourceLabel(entry) {
   if (entry.source === 'drive') return entry.folder ? `Google Drive / ${entry.folder}` : 'Google Drive';
   if (entry.source === 'archive') return entry.folder ? `Internet Archive / ${entry.folder}` : 'Internet Archive';
   if (entry.source === 'dropbox') return entry.folder ? `Dropbox / ${entry.folder}` : 'Dropbox';
+  if (entry.source === 'github') return entry.folder ? `GitHub / ${entry.folder}` : 'GitHub';
+  if (entry.source === 'webdav') return entry.folder ? `WebDAV / ${entry.folder}` : 'Nextcloud / WebDAV';
   if (entry.source === 'web') {
     try {
       const host = new URL(entry.url).hostname.replace(/^www\./, '');
@@ -198,6 +200,8 @@ export class Library {
     if (file?.source === 'archive' || file?.archiveId) return `archive:${file.archiveId}:${file.path || file.name}`;
     // Dropbox files (dropbox-client.js) and their Recent entries (which keep the id as dropboxId).
     if (file?.source === 'dropbox') return 'dropbox:' + (file.dropboxId || file.id);
+    if (file?.source === 'github') return 'github:' + (file.githubId || file.id || `${file.repo}:${file.path || file.name}`);
+    if (file?.source === 'webdav') return 'webdav:' + (file.webdavId || file.id || file.path || file.name);
     return 'drive:' + file.id;
   }
   entry(file) { return this.store.get('entries', this.key(file)); }
@@ -245,9 +249,10 @@ export class Library {
     const filename = previous?.filename || await freeName(safeName(file.name), name => others.some(e => e.filename === name));
     await folder.write(filename, downloaded);
     const isArchive = file.source === 'archive' || !!file.archiveId, isDropbox = file.source === 'dropbox';
+    const isGithub = file.source === 'github', isWebdav = file.source === 'webdav';
     const entry = {
       key: this.key(file),
-      source: isArchive ? 'archive' : isDropbox ? 'dropbox' : 'drive',
+      source: isArchive ? 'archive' : isDropbox ? 'dropbox' : isGithub ? 'github' : isWebdav ? 'webdav' : 'drive',
       name: file.name,
       mimeType: file.mimeType || (file.name.endsWith('.pdf') ? 'application/pdf' : ''),
       modifiedTime: file.modifiedTime || null,
@@ -258,6 +263,10 @@ export class Library {
         ? { archiveId: file.archiveId, path: file.path, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
         : isDropbox
         ? { dropboxId: file.id, path: file.path, rev: file.rev || null, contentHash: file.contentHash || null, parent: file.parents?.[0] ?? null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
+        : isGithub
+        ? { githubId: file.id, repo: file.repo, branch: file.branch || 'main', path: file.path, sha: file.sha || null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
+        : isWebdav
+        ? { webdavId: file.id, path: file.path, etag: file.etag || null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }
         : { driveId: file.id, resourceKey: file.resourceKey, md5: file.md5Checksum || null, parent: file.parents?.[0] || null, ...(file.folderName || previous?.folder ? { folder: file.folderName || previous.folder } : {}) }),
       ...(previous?.title ? { title: previous.title } : {})
     };
@@ -381,7 +390,7 @@ export class Library {
     await this.store.delete('entries', key);
     await this.store.delete('covers', key);
     if (entry?.source === 'drive') await this.store.delete('covers', this.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime }));
-    if (entry?.source === 'dropbox') await this.store.delete('covers', this.coverKey(entry));
+    if (['dropbox', 'github', 'webdav'].includes(entry?.source)) await this.store.delete('covers', this.coverKey(entry));
   }
   // Most recently opened first; copies with the same content show once (the newest in Drive).
   async recent(limit = 24) {

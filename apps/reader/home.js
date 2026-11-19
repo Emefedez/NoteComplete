@@ -11,6 +11,7 @@ import { isTextName } from './text-types.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
+import { CLOUD_PROVIDERS } from './cloud-collab.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
 // The cover of a text or Markdown file: its first lines drawn like a page, each wrapped to
@@ -63,7 +64,7 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, dropbox = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
+export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null }) {
   const $ = id => document.getElementById(id);
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
@@ -78,7 +79,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   const saveFavourites = () => { try { localStorage.setItem('notecomplete-favourites', JSON.stringify([...favourites])); } catch { /* Optional. */ } };
   let quick = false; // Quick list view: see setView.
   const coverKey = entry => entry.source === 'drive' ? library.coverKey({ id: entry.driveId, modifiedTime: entry.modifiedTime })
-    : entry.source === 'dropbox' ? library.coverKey(entry) : entry.key;
+    : (entry.source === 'dropbox' || entry.source === 'github' || entry.source === 'webdav') ? library.coverKey(entry) : entry.key;
   // Identical copies kept before checksums existed are merged once per session.
   let merging = null;
   // Folders (groups.js): the folder open on Home shows its documents in place of Recent.
@@ -323,7 +324,8 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   // document's changes first, or (typed confirmation) move the Drive file to trash.
   const migration = migrator({ library, drive, status, refresh: () => renderRecent() });
   function confirmRemove(entry, anchor) {
-    const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isCloud = isDrive || isDropbox, now = current();
+    const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isGithub = entry.source === 'github', isWebdav = entry.source === 'webdav';
+    const isCloud = isDrive || isDropbox || isGithub || isWebdav, now = current();
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
     $('forgetTitle').textContent = entryTitle(entry);
     $('forgetTitle').title = entry.name;
@@ -332,7 +334,11 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
       ? 'Deletes the copy kept on this device and its cover. The file in Google Drive stays as it is.'
       : isDropbox
         ? 'Deletes the copy kept on this device and its cover. The file in Dropbox stays as it is.'
-        : 'Removes it from Recent. The file on your computer is not deleted.';
+        : isGithub
+          ? 'Deletes the copy kept on this device and its cover. The repository on GitHub stays as it is.'
+          : isWebdav
+            ? 'Deletes the copy kept on this device and its cover. The file in Nextcloud / WebDAV stays as it is.'
+            : 'Removes it from Recent. The file on your computer is not deleted.';
     $('forgetUpload').hidden = !changed;
     $('forgetDanger').hidden = !isDrive;
     $('forgetDanger').open = false;
@@ -440,7 +446,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
   if (!Array.isArray(filters.types)) filters.types = [];
   if (!Array.isArray(filters.sources)) filters.sources = [];
-  const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', archive: 'Internet Archive' };
+  const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', github: 'GitHub', webdav: 'Nextcloud / WebDAV', archive: 'Internet Archive' };
   const chip = (label, pressed, onclick) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = label;
@@ -460,7 +466,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   const toggleIn = (key, value) => { filters[key] = filters[key].includes(value) ? filters[key].filter(x => x !== value) : [...filters[key], value]; changed(); };
   function categories() {
     const known = new Set(filters.tags);
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #archiveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #githubList .note-card, #webdavList .note-card, #archiveList .note-card')) for (const t of card.note?.facts?.tags || []) known.add(t);
     return [
       { id: 'types', label: 'Type', options: Object.entries(TYPES).map(([k, [name]]) => ({ value: k, label: name })), on: v => filters.types.includes(v), flip: v => toggleIn('types', v) },
       // Modified takes one value: the periods overlap (today is inside this week).
@@ -530,7 +536,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
-    for (const list of [$('recentList'), $('driveList'), $('dropboxList'), $('archiveList')]) {
+    for (const list of [$('recentList'), $('driveList'), $('dropboxList'), $('githubList'), $('webdavList'), $('archiveList')]) {
       if (!list) continue;
       const items = [...list.children], notes = items.filter(li => li.querySelector('.note-card')?.note);
       if (notes.length < 2) continue;
@@ -566,53 +572,229 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
   setupCollapsible('recentToggle', 'recentContent', 'recent');
   setupCollapsible('cloudToggle', 'cloudContent', 'cloud');
 
-  // Cloud provider tabs: Google Drive vs Dropbox vs Internet Archive
-  let activeCloud = 'drive';
-  try { activeCloud = localStorage.getItem('notecomplete-cloud-provider') || 'drive'; } catch {}
-  if (!['drive', 'dropbox', 'archive'].includes(activeCloud)) activeCloud = 'drive';
-  function setCloudProvider(provider) {
-    if (!['drive', 'dropbox', 'archive'].includes(provider)) provider = 'drive';
-    activeCloud = provider;
-    try { localStorage.setItem('notecomplete-cloud-provider', provider); } catch {}
-    const panels = { drive: ['cloudTabDrive', 'driveSection', drive], dropbox: ['cloudTabDropbox', 'dropboxSection', dropbox], archive: ['cloudTabArchive', 'archiveSection', archive] };
-    for (const [key, [tabId, sectionId]] of Object.entries(panels)) {
-      const active = key === provider;
-      if ($(tabId)) $(tabId).setAttribute('aria-selected', String(active));
-      if ($(sectionId)) $(sectionId).hidden = !active;
+  // Cloud providers multi-select checkbox dropdown & simultaneous cross-cloud search
+  const ALL_CLOUD_IDS = CLOUD_PROVIDERS.map(p => p.id);
+  const cloudPanels = {
+    drive: ['driveSection', drive],
+    dropbox: ['dropboxSection', dropbox],
+    github: ['githubSection', github],
+    webdav: ['webdavSection', webdav],
+    archive: ['archiveSection', archive],
+  };
+  let selectedClouds = ['drive'];
+  try {
+    const savedMulti = JSON.parse(localStorage.getItem('notecomplete-cloud-providers') || 'null');
+    const savedSingle = localStorage.getItem('notecomplete-cloud-provider');
+    if (Array.isArray(savedMulti) && savedMulti.length) {
+      selectedClouds = savedMulti.filter(id => ALL_CLOUD_IDS.includes(id));
+    } else if (savedSingle && ALL_CLOUD_IDS.includes(savedSingle)) {
+      selectedClouds = [savedSingle];
     }
-    panels[provider]?.[2]?.show?.();
+  } catch {}
+  if (!selectedClouds.length) selectedClouds = ['drive'];
+
+  function saveSelectedClouds() {
+    try {
+      localStorage.setItem('notecomplete-cloud-providers', JSON.stringify(selectedClouds));
+      localStorage.setItem('notecomplete-cloud-provider', selectedClouds[0] || 'drive');
+    } catch {}
   }
+
+  let cloudMenuOpen = false;
+  function renderCloudProviderDrop() {
+    const drop = $('cloudProviderDrop');
+    if (!drop) return;
+    const picked = CLOUD_PROVIDERS.filter(p => selectedClouds.includes(p.id));
+    const single = picked.length === 1 ? picked[0] : null;
+    drop.setAttribute('aria-expanded', String(cloudMenuOpen));
+    drop.innerHTML = single
+      ? `${single.svg}<span>${single.label}</span><span class="filter-caret" aria-hidden="true"></span>`
+      : `${icon('cloud')?.outerHTML || ''}<span>Services</span><span class="filter-value">${picked.length}</span><span class="filter-caret" aria-hidden="true"></span>`;
+  }
+
+  function applySelectedCloudPanels() {
+    for (const id of ALL_CLOUD_IDS) {
+      const [sectionId, controller] = cloudPanels[id] || [];
+      const active = selectedClouds.includes(id);
+      if ($(sectionId)) $(sectionId).hidden = !active;
+      if (active) controller?.show?.();
+    }
+    renderCloudProviderDrop();
+    if (cloudMenuOpen) renderCloudProviderMenu();
+  }
+
+  function setCloudProvider(provider) {
+    if (!ALL_CLOUD_IDS.includes(provider)) provider = 'drive';
+    selectedClouds = [provider];
+    saveSelectedClouds();
+    applySelectedCloudPanels();
+  }
+
+  function toggleCloudProvider(provider) {
+    if (!ALL_CLOUD_IDS.includes(provider)) return;
+    if (selectedClouds.includes(provider)) {
+      if (selectedClouds.length === 1) return; // keep at least one selected
+      selectedClouds = selectedClouds.filter(id => id !== provider);
+    } else {
+      selectedClouds = ALL_CLOUD_IDS.filter(id => selectedClouds.includes(id) || id === provider);
+    }
+    saveSelectedClouds();
+    applySelectedCloudPanels();
+    if ($('cloudMultiSearch')?.value.trim()) runMultiCloudSearch($('cloudMultiSearch').value);
+  }
+
+  function renderCloudProviderMenu() {
+    const menu = $('cloudProviderMenu');
+    if (!menu) return;
+    menu.replaceChildren(...CLOUD_PROVIDERS.map(p => {
+      const on = selectedClouds.includes(p.id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitemcheckbox');
+      b.setAttribute('aria-checked', String(on));
+      b.className = `filter-option cloud-provider-option${on ? ' on' : ''}`;
+      b.dataset.cloudOption = p.id;
+      const check = Object.assign(document.createElement('span'), { className: 'filter-check' });
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'cloud-option-icon';
+      iconWrap.innerHTML = p.svg;
+      const label = Object.assign(document.createElement('span'), { className: 'cloud-option-label', textContent: p.label });
+      b.append(check, iconWrap, label);
+      b.onclick = (event) => {
+        if (event.altKey || event.metaKey) setCloudProvider(p.id);
+        else toggleCloudProvider(p.id);
+      };
+      return b;
+    }));
+  }
+
+  function openCloudProviderMenu() {
+    const drop = $('cloudProviderDrop'), menu = $('cloudProviderMenu');
+    if (!drop || !menu) return;
+    cloudMenuOpen = true;
+    renderCloudProviderDrop();
+    renderCloudProviderMenu();
+    menu.hidden = false;
+    const r = drop.getBoundingClientRect();
+    menu.style.minWidth = `${Math.max(210, Math.round(r.width))}px`;
+    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth))}px`;
+    menu.style.top = `${r.bottom + 6}px`;
+    document.addEventListener('pointerdown', outsideCloudMenu, true);
+    document.addEventListener('keydown', escapeCloudMenu, true);
+  }
+
+  function closeCloudProviderMenu() {
+    if (!cloudMenuOpen) return;
+    cloudMenuOpen = false;
+    if ($('cloudProviderMenu')) $('cloudProviderMenu').hidden = true;
+    renderCloudProviderDrop();
+    document.removeEventListener('pointerdown', outsideCloudMenu, true);
+    document.removeEventListener('keydown', escapeCloudMenu, true);
+  }
+
+  const outsideCloudMenu = event => {
+    if (!$('cloudProviderMenu')?.contains(event.target) && !$('cloudProviderDrop')?.contains(event.target)) {
+      closeCloudProviderMenu();
+    }
+  };
+  const escapeCloudMenu = event => {
+    if (event.key === 'Escape') { event.stopPropagation(); closeCloudProviderMenu(); }
+  };
+
+  if ($('cloudProviderDrop')) {
+    $('cloudProviderDrop').onclick = () => (cloudMenuOpen ? closeCloudProviderMenu() : openCloudProviderMenu());
+  }
+
   function showCloudProvider(provider) {
     if ($('cloudContent')) $('cloudContent').hidden = false;
     if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
     collapsed.cloud = false;
     try { localStorage.setItem('notecomplete-home-collapsed', JSON.stringify(collapsed)); } catch {}
-    setCloudProvider(provider);
+    if (ALL_CLOUD_IDS.includes(provider) && !selectedClouds.includes(provider)) {
+      selectedClouds = [...selectedClouds, provider];
+      saveSelectedClouds();
+    }
+    applySelectedCloudPanels();
   }
-  if ($('cloudTabDrive')) $('cloudTabDrive').onclick = () => setCloudProvider('drive');
-  if ($('cloudTabDropbox')) $('cloudTabDropbox').onclick = () => setCloudProvider('dropbox');
-  if ($('cloudTabArchive')) $('cloudTabArchive').onclick = () => setCloudProvider('archive');
-  setCloudProvider(activeCloud);
+
+  // Multi-cloud search bar: searches across all currently checked cloud services simultaneously
+  let multiSearchTimer = 0;
+  function runMultiCloudSearch(rawQuery, triggerRemote = false) {
+    const q = String(rawQuery || '').trim();
+    const map = {
+      drive: ['driveSearch', 'driveFind'],
+      dropbox: ['dropboxSearch', 'dropboxFind'],
+      github: ['githubSearch', 'githubFind'],
+      webdav: ['webdavSearch', 'webdavFind'],
+      archive: ['archiveSearch', null],
+    };
+    for (const id of selectedClouds) {
+      const [inputId, btnId] = map[id] || [];
+      const input = inputId ? $(inputId) : null;
+      if (input && input.value !== q) {
+        input.value = q;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (triggerRemote && btnId && $(btnId) && !$(btnId).disabled) {
+        $(btnId).click();
+      }
+    }
+    applyFilters();
+  }
+
+  if ($('cloudMultiSearch')) {
+    $('cloudMultiSearch').oninput = () => {
+      const val = $('cloudMultiSearch').value;
+      runMultiCloudSearch(val, false);
+      clearTimeout(multiSearchTimer);
+      multiSearchTimer = setTimeout(() => runMultiCloudSearch(val, true), 320);
+    };
+    $('cloudMultiSearch').onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(multiSearchTimer);
+        runMultiCloudSearch($('cloudMultiSearch').value, true);
+      } else if (event.key === 'Escape' && $('cloudMultiSearch').value) {
+        event.preventDefault();
+        event.stopPropagation();
+        $('cloudMultiSearch').value = '';
+        runMultiCloudSearch('', true);
+      }
+    };
+  }
+
+  applySelectedCloudPanels();
 
   function applyFilters() {
     sortCards();
-    if (filters.sources.length === 1) {
+    if (filters.sources.length >= 1) {
       if ($('cloudContent')) $('cloudContent').hidden = false;
       if ($('cloudToggle')) $('cloudToggle').setAttribute('aria-expanded', 'true');
-      setCloudProvider(filters.sources[0]);
+      const nextClouds = filters.sources.filter(id => ALL_CLOUD_IDS.includes(id));
+      if (nextClouds.length) {
+        selectedClouds = nextClouds;
+        saveSelectedClouds();
+        applySelectedCloudPanels();
+      }
     }
     const query = ($('recentSearch')?.value || '').trim().toLowerCase();
     const terms = query ? query.split(/\s+/).filter(Boolean) : [];
+    const cloudQuery = ($('cloudMultiSearch')?.value || '').trim().toLowerCase();
+    const cloudTerms = cloudQuery ? cloudQuery.split(/\s+/).filter(Boolean) : [];
     if ($('recentSearchClear')) $('recentSearchClear').hidden = !query;
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0, recentVisible = 0, recentTotal = 0;
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #archiveList .note-card')) {
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #githubList .note-card, #webdavList .note-card, #archiveList .note-card')) {
       const inRecent = Boolean(card.closest('#recentList'));
       if (inRecent) recentTotal++;
       let show = !active || !card.note || matches(card.note, filters);
       if (show && inRecent && terms.length) {
         const hay = `${card.note?.title || ''} ${card.note?.name || ''} ${card.textContent || ''}`.toLowerCase();
         show = terms.every((t) => hay.includes(t));
+      }
+      if (show && !inRecent && cloudTerms.length) {
+        const hay = `${card.note?.title || ''} ${card.note?.name || ''} ${card.textContent || ''}`.toLowerCase();
+        show = cloudTerms.every((t) => hay.includes(t));
       }
       card.closest('li').hidden = !show;
       if (inRecent && show) recentVisible++;
@@ -639,10 +821,13 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
       applyFilters();
     };
   }
-  // Internet Archive listings are drawn by their own browser: filter them when they change.
-  if ($('archiveList') && typeof MutationObserver === 'function') {
+  // Cloud listings drawn by their own browsers: filter them when they change.
+  if (typeof MutationObserver === 'function') {
     let frame = 0;
-    new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(applyFilters); }).observe($('archiveList'), { childList: true });
+    const obs = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(applyFilters); });
+    for (const id of ['archiveList', 'githubList', 'webdavList']) {
+      if ($(id)) obs.observe($(id), { childList: true });
+    }
   }
   let filterFrame = 0;
   // New tags can appear as facts arrive; refresh the chips at most once per frame.
@@ -735,6 +920,8 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
     try { localStorage.setItem('notecomplete-home-view', view); } catch { /* Optional. */ }
     drive.setQuick?.(quick);
     dropbox?.setQuick?.(quick);
+    github?.setQuick?.(quick);
+    webdav?.setQuick?.(quick);
   }
   for (const b of document.querySelectorAll('[data-home-view]')) b.onclick = () => { const was = quick; setView(b.dataset.homeView); if (was && !quick) renderRecent(); };
   try { setView(localStorage.getItem('notecomplete-home-view') === 'list' ? 'list' : 'cards'); } catch { setView('cards'); }
@@ -773,7 +960,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
         $('homeButton').setAttribute('aria-pressed', 'true');
         $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and cloud storage';
       }
-      if (!shown) { shown = true; drive.show(); dropbox?.show(); archive?.show(); }
+      if (!shown) { shown = true; drive.show(); dropbox?.show(); github?.show(); webdav?.show(); archive?.show(); }
       renderRecent(); renderFolder();
     },
     hide() {
@@ -783,7 +970,7 @@ export function homeScreen({ library, drive, dropbox = null, open, openLink = nu
         $('homeButton').setAttribute('aria-pressed', 'false');
         $('homeButton').title = 'Home: recent notes and cloud storage';
       }
-      if (shown) { shown = false; drive.hide(); dropbox?.hide(); archive?.hide(); }
+      if (shown) { shown = false; drive.hide(); dropbox?.hide(); github?.hide(); webdav?.hide(); archive?.hide(); }
     },
     get visible() { return !$('empty').hidden; },
     rememberCover,

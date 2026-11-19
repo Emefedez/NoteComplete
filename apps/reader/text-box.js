@@ -158,6 +158,7 @@ export function textBoxController({
   isBusy = () => false,
   toolOptions = () => {},
   insertCompound = async () => {},
+  onTrace = null,
   // The open note's id: its text boxes share one Chinese input mode (docs/CHINESE-INPUT.md §5.1).
   noteKey = () => "",
   $ = (id) => document.getElementById(id),
@@ -184,13 +185,49 @@ export function textBoxController({
     $("textSwatches")?.append(b);
   }
   const textFormatBar = $("textFormat");
-  // 中: Chinese input for the box being typed (click cycles the mode; right-click: the mode menu).
-  const zhToggle = zhButton(() => textEditor?.area, { doc });
-  textFormatBar.append(zhToggle);
-  const zhKey = () => `note-${noteKey() || "none"}`;
   // Which box the bar formats: the one being typed, or a selected one.
   let textFormatTarget = null;
   let textEditor = null;
+  const zhKey = () => `note-${noteKey() || "none"}`;
+  const currentZhMode = () => textEditor?.ime?.mode || noteMode(fieldMode(zhKey())) || "off";
+  // 中: Chinese input for the box being typed (click cycles the mode; right-click: the mode menu).
+  const zhToggle = zhButton(() => textEditor?.area, { doc });
+  zhToggle.id = "zhModeToggle";
+  const zhSubOptions = $("zhTextSubOptions");
+  if (zhSubOptions && zhSubOptions.parentElement === textFormatBar) {
+    textFormatBar.insertBefore(zhToggle, zhSubOptions);
+  } else if ($("textSwatches") && $("textSwatches").parentElement === textFormatBar) {
+    textFormatBar.insertBefore(zhToggle, $("textSwatches"));
+  } else {
+    textFormatBar.append(zhToggle);
+  }
+  function syncZhSubOptions() {
+    const mode = currentZhMode();
+    const isZh = mode !== "off";
+    zhToggle.textContent = mode === "pinyin" ? "ā" : "中";
+    zhToggle.setAttribute("aria-pressed", String(isZh));
+    zhToggle.dataset.zhMode = mode;
+    if (zhSubOptions) zhSubOptions.hidden = !isZh;
+  }
+  zhToggle.addEventListener("click", () => {
+    if (!textEditor?.area) {
+      const cur = currentZhMode();
+      const next = cur === "off" ? "hanzi" : cur === "hanzi" ? "pinyin" : "off";
+      setFieldMode(zhKey(), next);
+      setNoteMode(next);
+    }
+    syncZhSubOptions();
+    if (placing) placeTextFormat();
+  });
+  if ($("zhTraceToggle")) {
+    $("zhTraceToggle").onclick = () => {
+      const area = textEditor?.area;
+      const sel = area && area.selectionStart !== area.selectionEnd ? area.value.slice(area.selectionStart, area.selectionEnd) : area?.value || "";
+      const han = (sel.match(/\p{Script=Han}/gu) || []).join("") || "你好";
+      onTrace?.(han);
+    };
+  }
+  syncZhSubOptions();
 
   const textFormatDocked = () => doc.body.classList.contains("text-format-docked");
 
@@ -204,6 +241,7 @@ export function textBoxController({
     const hex = hexColor(style.rgba);
     $("textColor").value = hex;
     for (const b of $("textSwatches").children) b.setAttribute("aria-checked", String(b.dataset.color.toLowerCase() === hex));
+    syncZhSubOptions();
   }
 
   // `box`: the element being typed in (its size follows the text), else the selected box's
@@ -242,7 +280,7 @@ export function textBoxController({
     bar.classList.remove("below");
     bar.hidden = false;
     if (wasDocked) toolOptions();
-    const view = $("viewport").getBoundingClientRect(), gap = 8;
+    const view = $("viewport").getBoundingClientRect(), gapAbove = 24, gapBelow = 10;
     // Across first: kept inside the window (a box near its right edge, or a phone, moves the
     // bar left; it wraps onto a second row when even that is not enough, style.css). Its
     // height is measured where it will be, since wrapping changes it.
@@ -252,7 +290,7 @@ export function textBoxController({
     const left = Math.max(view.left + 8, Math.min(r.left, view.right - 8 - width));
     bar.style.left = `${left - page.left}px`;
     const height = bar.getBoundingClientRect().height;
-    const above = r.top - gap - height, below = r.bottom + gap;
+    const above = r.top - gapAbove - height, below = r.bottom + gapBelow;
     let top;
     if (above >= view.top + 4) top = above;
     else if (below + height <= view.bottom - 4) { top = below; bar.classList.add("below"); }
@@ -480,7 +518,7 @@ export function textBoxController({
     area.setAttribute("aria-label", "Text box");
     const fit = () => {
       const s = p.el.clientWidth / p.size[0], [w, h] = textBoxSize(area.value || " ", style);
-      const minW = area.value ? 56 : 112;
+      const minW = area.value ? Math.max(56, Math.ceil(style.size * 1.5)) : Math.max(112, Math.ceil(style.size * 5.6));
       const lightInk = isLightInk(style.rgba);
       area.classList.toggle("light-ink", lightInk);
       Object.assign(area.style, {
@@ -621,8 +659,9 @@ export function textBoxController({
     textEditor = { p, area, drag, discard, rubyPreview, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, origBx, origBy, layer: activeLayer, fit: refit, after, cleanup: () => globalThis.removeEventListener?.("zh-ruby-refresh", onRubyChange) };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); }, area);
     // Chinese input (its keys come first, in the capture phase: Esc with pinyin typed only clears it).
-    textEditor.ime = attachIme(area, { kind: "pagebox", getMode: () => noteMode(fieldMode(zhKey())), setMode: (m) => { setFieldMode(zhKey(), m); setNoteMode(m); } });
+    textEditor.ime = attachIme(area, { kind: "pagebox", getMode: () => noteMode(fieldMode(zhKey())), setMode: (m) => { setFieldMode(zhKey(), m); setNoteMode(m); syncZhSubOptions(); placeTextFormat(); } });
     textEditor.ime.addButton(zhToggle);
+    syncZhSubOptions();
     area.addEventListener("keydown", (e) => {
       // A system input method composing: its Esc and Enter are its own.
       if (e.isComposing || e.keyCode === 229) return e.stopPropagation();

@@ -21,6 +21,7 @@ import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { dropboxBrowser } from "./dropbox-browser.js";
+import { githubBrowser, webdavBrowser, setupCloudGuideDialog } from "./cloud-collab.js";
 import { Library, entrySourceLabel, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { isNotebookCover } from "./note-cover.js";
@@ -276,6 +277,8 @@ const selection = new SelectionController({
   redraw: (item, adjustment) => redrawResized(item, adjustment),
   // Let go over another page: moved there.
   dropTo: (item, target, start, client) => moveToPage(item, target, start, client),
+  // Double-clicking a selected prefab, graph or table opens its editor.
+  edit: (item) => editCompound(item),
 });
 // Status is a transient toast, not a permanent strip; errors stay up longer.
 let statusTimer = 0;
@@ -1138,6 +1141,12 @@ const textBox = textBoxController({
   isBusy: () => busy(),
   toolOptions: () => toolOptions(),
   insertCompound: (...a) => insertCompound(...a),
+  onTrace: async (chars) => {
+    const p = panels[page] || (await openBlankNoteForPrefab(`Stroke order ${chars}`));
+    if (!p || !ensureEditableLayer()) return;
+    const spec = await figureEditor({ type: "hanzi", text: chars || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
+    if (spec) await placePrefab(p, spec);
+  },
   noteKey: () => { try { return find.fingerprint || ""; } catch { return ""; } },
   $,
 });
@@ -3956,6 +3965,68 @@ const snapEntry = {
 const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
 const smoothEntry = { key: "smoothing", label: "Pen smoothing", icon: icon("smooth"), active: () => smoothingOn, stay: () => true, run: () => $("penSmoothToggle").click() };
 const hoverEntry = { key: "hoverPreview", label: "Pen hover preview", icon: icon("draw"), active: () => penHoverOn, stay: () => true, run: () => $("penHoverToggle").click() };
+const textGlyphIcon = (label, font = "Georgia, serif") => {
+  const s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  const t = document.createElementNS(ns, "text");
+  t.setAttribute("x", "12");
+  t.setAttribute("y", "16.5");
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("fill", "currentColor");
+  t.setAttribute("font-family", font);
+  t.setAttribute("font-size", label.length > 2 ? "10" : "13");
+  t.setAttribute("font-weight", "600");
+  t.textContent = label;
+  s.append(t);
+  return s;
+};
+const setTextColor = (value) => {
+  if (!$("textColor")) return setColor(value);
+  $("textColor").value = value;
+  $("textColor").dispatchEvent(new Event("input", { bubbles: true }));
+};
+const textPaletteEntries = () => [...palettes.text.map((value, i) => ({
+  key: String(i),
+  label: `Text colour ${value} (hold or right-click to change it)`,
+  swatch: value,
+  active: () => ($("textColor")?.value || $("color").value).toLowerCase() === value.toLowerCase(),
+  run: () => setTextColor(value),
+  edit: () => pickColor(palettes.text[i], (val) => {
+    palettes.text = palettes.text.map((c, idx) => (idx === i ? val : c));
+    remember("notecomplete-palettes", palettes);
+    setTextColor(val);
+    quick.redraw();
+  }),
+  stay: () => true,
+})), {
+  key: "custom",
+  label: "Any text colour…",
+  swatch: "conic-gradient(#d13b2f, #ffdf38, #2a9d63, #246bce, #8a4fd0, #d13b2f)",
+  active: () => !palettes.text.some((c) => c.toLowerCase() === ($("textColor")?.value || "").toLowerCase()),
+  run: () => pickColor($("textColor")?.value || "#1f2328", (val) => { setTextColor(val); quick.redraw(); }),
+  stay: () => true,
+}];
+const textSizeEntries = () => [14, 18, 24, 36].map((sz) => ({
+  key: `sz${sz}`,
+  label: `Text size ${sz}`,
+  icon: textGlyphIcon(String(sz), "system-ui, sans-serif"),
+  active: () => Number($("textSize")?.value) === sz,
+  run: () => { if ($("textSize")) { $("textSize").value = String(sz); $("textSize").dispatchEvent(new Event("change", { bubbles: true })); } },
+  stay: () => true,
+}));
+const textModeEntries = () => {
+  const isZh = $("zhModeToggle")?.getAttribute("aria-pressed") === "true";
+  return [
+    { key: "bold", label: "Bold", icon: textGlyphIcon("B"), active: () => $("textBold")?.getAttribute("aria-pressed") === "true", run: () => $("textBold")?.click(), stay: () => true },
+    { key: "italic", label: "Italic", icon: textGlyphIcon("I"), active: () => $("textItalic")?.getAttribute("aria-pressed") === "true", run: () => $("textItalic")?.click(), stay: () => true },
+    { key: "math", label: "Math (LaTeX ∑)", icon: textGlyphIcon("∑"), active: () => $("textMath")?.getAttribute("aria-pressed") === "true", run: () => $("textMath")?.click(), stay: () => true },
+    { key: "zh", label: `Chinese input (${$("zhModeToggle")?.dataset.zhMode || "off"})`, icon: textGlyphIcon($("zhModeToggle")?.textContent || "中", "sans-serif"), active: () => isZh, run: () => { $("zhModeToggle")?.click(); quick.redraw(); }, stay: () => true },
+    ...(isZh ? [
+      { key: "ruby", label: "Pinyin over Chinese characters", icon: textGlyphIcon("拼", "sans-serif"), active: () => $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click(), stay: () => true },
+      { key: "trace", label: "Trace & stroke order prefab", icon: textGlyphIcon("笔", "sans-serif"), active: () => false, run: () => $("zhTraceToggle")?.click(), stay: () => false },
+    ] : []),
+  ];
+};
 // Every tool's settings in the same places: colours on top, sizes along the bottom (small
 // to large, left to right), modes on the left, undo and redo on the right.
 const QUICK_SETTINGS = {
@@ -3965,7 +4036,7 @@ const QUICK_SETTINGS = {
   // The shapes' widths beside undo and redo, as the bottom holds the kinds of shape.
   shape: () => ({ top: paletteEntries("shape"), bottom: fromButtons("#shapePicker [data-shape]", "shape"), left: fromButtons("#shapeFill [data-fill]", "fill"), right: widthEntries("shape") }),
   tape: () => ({ top: paletteEntries("tape"), bottom: widthEntries("tape"), left: fromRow("tapeMode") }),
-  text: () => ({ top: paletteEntries("text") }),
+  text: () => ({ top: textPaletteEntries(), bottom: textSizeEntries(), left: textModeEntries() }),
 };
 // Items hidden from the quick menu (held, or right-clicked: Hide from this menu), per ring:
 // 'inner' for the tools, '<tool>:<section>' for a tool's settings. Graph and Table start
@@ -5063,6 +5134,62 @@ function prefabFlyout(button, panel) {
   });
   button.addEventListener("pointerleave", () => { clearTimeout(timer); if (menu) timer = setTimeout(close, 350); });
 }
+textToolFlyout(document.querySelector('#toolbar [data-tool="text"]'));
+function textToolFlyout(button) {
+  if (!button) return;
+  let timer = 0, menu = null;
+  const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
+  const openMenu = () => {
+    if (!doc || editing) return;
+    const r = button.getBoundingClientRect();
+    const isZh = $("zhModeToggle")?.getAttribute("aria-pressed") === "true";
+    const zhMode = $("zhModeToggle")?.dataset.zhMode || "off";
+    const fonts = [...($("textFont")?.options || [])].filter((o) => o.value !== "__import__");
+    menu = openContextMenu(r.left, r.bottom + 4, [
+      {
+        label: `Font: ${$("textFont")?.selectedOptions?.[0]?.textContent || "Sans"}`,
+        icon: "text",
+        submenu: () => fonts.map((o) => ({
+          label: o.textContent,
+          checked: $("textFont")?.value === o.value,
+          run: () => { if ($("textFont")) { $("textFont").value = o.value; $("textFont").dispatchEvent(new Event("change", { bubbles: true })); } },
+        })),
+      },
+      {
+        label: `Size: ${$("textSize")?.value || "16"}`,
+        icon: "text",
+        submenu: () => [12, 14, 16, 18, 22, 28, 36, 48].map((sz) => ({
+          label: `${sz} pt`,
+          checked: Number($("textSize")?.value) === sz,
+          run: () => { if ($("textSize")) { $("textSize").value = String(sz); $("textSize").dispatchEvent(new Event("change", { bubbles: true })); } },
+        })),
+      },
+      "-",
+      { label: "Bold", icon: "text", checked: $("textBold")?.getAttribute("aria-pressed") === "true", run: () => $("textBold")?.click() },
+      { label: "Italic", icon: "text", checked: $("textItalic")?.getAttribute("aria-pressed") === "true", run: () => $("textItalic")?.click() },
+      { label: "Math (LaTeX ∑)", icon: "graph", checked: $("textMath")?.getAttribute("aria-pressed") === "true", run: () => $("textMath")?.click() },
+      "-",
+      {
+        label: isZh ? `Chinese input (${zhMode === "pinyin" ? "Pinyin tones" : "Hanzi"})` : "Chinese input (中)",
+        icon: "text",
+        checked: isZh,
+        run: () => { $("zhModeToggle")?.click(); setTimeout(openMenu, 0); },
+      },
+      ...(isZh ? [
+        { label: "Pinyin over characters (拼)", icon: "text", checked: $("zhRubyToggle")?.getAttribute("aria-pressed") === "true", run: () => $("zhRubyToggle")?.click() },
+        { label: "Trace & stroke order prefab (笔)…", icon: "draw", run: () => { close(); $("zhTraceToggle")?.click(); } },
+      ] : []),
+    ], { title: "Text options" });
+    menu?.addEventListener("pointerleave", () => { timer = setTimeout(close, 350); });
+    menu?.addEventListener("pointerenter", () => clearTimeout(timer));
+  };
+  button.addEventListener("pointerenter", (e) => {
+    if (e.pointerType === "touch" || !doc) return;
+    clearTimeout(timer);
+    timer = setTimeout(openMenu, 300);
+  });
+  button.addEventListener("pointerleave", () => { clearTimeout(timer); if (menu) timer = setTimeout(close, 350); });
+}
 $("insertShape").onclick = () => {
   if (!doc || editing) return;
   if ($("shape").value === "graph") return insertPrefab(panels[page]);
@@ -5899,10 +6026,37 @@ const archive = archiveBrowser({
     return opened;
   },
 });
+async function exportOpenNoteFile() {
+  if (doc) {
+    const bytes = await call("export_nfedit");
+    const rawTitle = ($("title")?.textContent || "Note").trim().replace(/[^\w.\- ]+/g, "_") || "Note";
+    const fileName = /\.(nfedit|noteful)$/i.test(rawTitle) ? rawTitle : `${rawTitle}.nfedit`;
+    return new File([bytes], fileName, { type: "application/octet-stream" });
+  }
+  if (textView.hasDocument) {
+    const rawName = textView.name || `${($("title")?.textContent || "Note").trim() || "Note"}.md`;
+    return new File([textView.text || ""], rawName, { type: "text/markdown" });
+  }
+  return null;
+}
+const github = githubBrowser({
+  library,
+  open: openFromLibrary,
+  status,
+  exportOpenNote: exportOpenNoteFile,
+});
+const webdav = webdavBrowser({
+  library,
+  open: openFromLibrary,
+  status,
+  exportOpenNote: exportOpenNoteFile,
+});
 var home = homeScreen({
   library,
   drive,
   dropbox,
+  github,
+  webdav,
   archive,
   versions,
   open: openFromLibrary,
@@ -5920,6 +6074,18 @@ var home = homeScreen({
     show: () => (doc || sideView()) && showDocument(),
     exportBlob: async () => new Blob([await call("export")], { type: "application/octet-stream" }),
   }),
+});
+setupCloudGuideDialog({
+  drive,
+  dropbox,
+  github,
+  webdav,
+  archive,
+  status,
+  onSelectProvider: (provider) => {
+    showHome();
+    home.showCloudProvider?.(provider);
+  },
 });
 // The desktop bridge opens files itself so Recent can reopen them by path.
 async function openLocal() {
@@ -6262,6 +6428,12 @@ function navigateHistory(direction, target = null) {
     } else if (target?.closest?.("#dropboxSection")) {
       if (direction < 0 && dropbox.back()) return true;
       if (direction > 0 && dropbox.forward()) return true;
+    } else if (target?.closest?.("#githubSection")) {
+      if (direction < 0 && github.back()) return true;
+      if (direction > 0 && github.forward()) return true;
+    } else if (target?.closest?.("#webdavSection")) {
+      if (direction < 0 && webdav.back()) return true;
+      if (direction > 0 && webdav.forward()) return true;
     } else if (target?.closest?.("#archiveSection")) {
       if (direction < 0 && archive.back()) return true;
       if (direction > 0 && archive.forward()) return true;
@@ -6270,6 +6442,8 @@ function navigateHistory(direction, target = null) {
     if (direction > 0 && home.forward()) return true;
     if (!$("cloudContent")?.hidden && !$("driveSection")?.hidden && (direction < 0 ? drive.back() : drive.forward())) return true;
     if (!$("cloudContent")?.hidden && !$("dropboxSection")?.hidden && (direction < 0 ? dropbox.back() : dropbox.forward())) return true;
+    if (!$("cloudContent")?.hidden && !$("githubSection")?.hidden && (direction < 0 ? github.back() : github.forward())) return true;
+    if (!$("cloudContent")?.hidden && !$("webdavSection")?.hidden && (direction < 0 ? webdav.back() : webdav.forward())) return true;
     if (!$("cloudContent")?.hidden && !$("archiveSection")?.hidden && (direction < 0 ? archive.back() : archive.forward())) return true;
   }
   const stop = direction < 0 ? navHistory.back(currentStop()) : navHistory.forward(currentStop());
@@ -6319,6 +6493,18 @@ if ($("dropboxOpen")) $("dropboxOpen").onclick = () => {
   showHome();
   home.showCloudProvider?.("dropbox");
   $("dropboxSection").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+if ($("githubOpen")) $("githubOpen").onclick = () => {
+  if ($("exportDialog")?.open) $("exportDialog").close();
+  showHome();
+  home.showCloudProvider?.("github");
+  $("githubSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+if ($("webdavOpen")) $("webdavOpen").onclick = () => {
+  if ($("exportDialog")?.open) $("exportDialog").close();
+  showHome();
+  home.showCloudProvider?.("webdav");
+  $("webdavSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 function documentControls() {
   const open = !!doc;
@@ -7104,7 +7290,14 @@ async function redrawResized(item, adjustment) {
   try {
     const [fx, fy, fw, fh] = await compoundFrame(item), [bx, by, bw, bh] = item.bounds;
     const cx = bx + bw / 2, cy = by + bh / 2, [sx, sy] = adjustment.scale, [tx, ty] = adjustment.translation;
-    const box = [cx + (fx - cx) * sx + tx, cy + (fy - cy) * sy + ty, Math.max(20, fw * sx), Math.max(12, fh * sy)];
+    let targetW = Math.max(20, fw * sx), targetH = Math.max(12, fh * sy);
+    if (c.kind === "prefab") {
+      const aspect = prefabAspect(spec) || (fh / Math.max(1, fw));
+      const scale = Math.abs(sy - 1) > Math.abs(sx - 1) ? sy : sx;
+      targetW = Math.max(40, fw * scale);
+      targetH = Math.max(20, targetW * aspect);
+    }
+    const box = [cx - targetW / 2 + tx, cy - targetH / 2 + ty, targetW, targetH];
     selection.clear();
     if (c.kind === "prefab") {
       if (!(await placePrefab(p, spec, box, c.items, c.id))) return false;
@@ -7124,8 +7317,23 @@ async function redrawResized(item, adjustment) {
 // Any part picked selects the whole graph or table: a group of its parts, with what it is.
 async function pickWhole(args) {
   const item = await call("pick", args);
-  const parts = item && panels[args.page]?.view?.parts;
-  const part = parts?.find((q) => q.item === item.id);
+  const parts = panels[args.page]?.view?.parts;
+  let part = item && parts?.find((q) => q.item === item.id);
+  if (!part && parts?.length && Number.isFinite(args.x) && Number.isFinite(args.y)) {
+    const frames = parts.filter((q) => q.spec);
+    for (let i = frames.length - 1; i >= 0; i--) {
+      const f = frames[i];
+      const info = await call("selection", { page: args.page, itemId: f.item }).catch(() => null);
+      if (!info?.bounds) continue;
+      const [bx, by, bw, bh] = info.bounds, a = info.adjustment || { translation: [0, 0], scale: [1, 1] };
+      const cx = bx + bw / 2 + a.translation[0], cy = by + bh / 2 + a.translation[1];
+      const hw = (bw * Math.abs(a.scale[0])) / 2, hh = (bh * Math.abs(a.scale[1])) / 2;
+      if (args.x >= cx - hw && args.x <= cx + hw && args.y >= cy - hh && args.y <= cy + hh) {
+        part = f;
+        break;
+      }
+    }
+  }
   if (!part) return item;
   const own = parts.filter((q) => q.id === part.id), frame = own.find((q) => q.spec);
   const members = (await Promise.all(own.map((q) => call("selection", { page: args.page, itemId: q.item }).catch(() => null)))).filter(Boolean);
@@ -7150,14 +7358,21 @@ function compoundLabel(c) {
   if (c.kind === "prefab") { try { return prefabName(JSON.parse(c.spec || "{}")); } catch { return "Prefab"; } }
   return c.kind === "graph" ? "Graph" : "Table";
 }
-// Double-clicking a typed text box (with Select or Pan) types into it, where it is now;
-// finishing it goes back to the tool it came from.
+// Double-clicking a prefab, graph or table edits it; double-clicking a typed text box (with
+// Select or Pan) types into it, where it is now, and finishing it goes back to the tool it came from.
 let lastPress = null;
 async function editTextAt(p, event) {
-  if (!["select", "pan", "pdfedit"].includes(tool) || !doc || editing || !p.view) return;
+  if (!["select", "pan", "pdfedit", "shape", "text"].includes(tool) || !doc || editing || !p.view) return;
   const at = point(event, p);
-  const item = await pickWhole({ page: p.index, x: at[0], y: at[1], tolerance: 6 * p.size[0] / p.el.getBoundingClientRect().width }).catch(() => null);
-  if (item?.kind === "text") editTextItem(item, at);
+  if (selection.item?.compound && selection.item.page === p.index) {
+    const [bx, by, bw, bh] = selection.item.bounds || [0, 0, 0, 0];
+    if (at[0] >= bx - 8 && at[0] <= bx + bw + 8 && at[1] >= by - 8 && at[1] <= by + bh + 8) {
+      return editCompound(selection.item);
+    }
+  }
+  const item = await pickWhole({ page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width }).catch(() => null);
+  if (item?.compound) return editCompound(item);
+  if (item?.kind === "text" && ["select", "pan", "pdfedit"].includes(tool)) editTextItem(item, at);
 }
 function editTextItem(item, at = null) {
   const p = panels[item.page], existing = (p?.view?.texts || []).find((t) => t.id === item.id);
@@ -8240,11 +8455,24 @@ configureZh({
   editBox: (p, id, value) => textBox.replaceText(p, id, value),
   insertFigure: async (spec) => {
     let p = panels[page];
-    if (!doc) p = await openBlankNoteForPrefab(spec?.char ? `Stroke order ${spec.char}` : "Stroke order");
+    if (!doc) p = await openBlankNoteForPrefab(spec?.text || spec?.char ? `Stroke order ${spec.text || spec.char}` : "Stroke order");
     if (!p || !ensureEditableLayer()) throw new Error("Open a note to insert the stroke order.");
-    const { prepare } = await import("./prefabs/hanzi/render.js");
-    const full = await prepare(spec);
-    if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Right-click it, hold it, or tap its ⋯ to edit it; one undo removes it.`);
+    const { prepareWithDict } = await import("./prefabs/hanzi/render.js");
+    const full = await prepareWithDict(spec);
+    if (await placePrefab(p, full)) status(`${prefabName(full)} inserted. Double-click or right-click it to edit; one undo removes it.`);
+  },
+  openTracePrefab: async (target) => {
+    const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
+    if (!chosen) return;
+    if (textView.visible && textView.editing && textView.insertTraceSpec) {
+      await textView.insertTraceSpec(chosen);
+      status(`${prefabName(chosen)} inserted into Markdown.`);
+      return;
+    }
+    let p = panels[page];
+    if (!doc) p = await openBlankNoteForPrefab(prefabName(chosen) || "Stroke order");
+    if (!p || !ensureEditableLayer()) return;
+    if (await placePrefab(p, chosen)) status(`${prefabName(chosen)} inserted. Double-click or right-click it to edit; one undo removes it.`);
   },
 });
 installZhContext();

@@ -316,16 +316,35 @@ export function editPrefab({ spec, editing = false } = {}) {
 export async function prefabPng(spec, size, scale = 3) {
   const out = prefabSvg(spec);
   if (!out) throw Error('Nothing to draw.');
+  const targetW = Math.max(1, Math.round(size[0] * scale));
+  const targetH = Math.max(1, Math.round(size[1] * scale));
   const img = new Image();
   // As a picture it has no page styles: its text takes a sans font, as in the exam pages.
-  // (Not twice: a module that names its own font keeps it; a repeated attribute breaks the SVG.)
-  const root = out.svg.match(/<svg\b[^>]*>/)?.[0] || '';
-  const svg = /\sfont-family=/.test(root) ? out.svg : out.svg.replace('<svg ', '<svg font-family="Helvetica, Arial, sans-serif" ');
+  // Explicitly set the SVG's raster width/height to targetW x targetH (keeping viewBox) so
+  // the browser rasterizes vector curves and text at full HiDPI resolution instead of
+  // rasterizing at the SVG's base pixel dimensions and upscaling a bitmap.
+  let svg = out.svg;
+  const rootMatch = svg.match(/<svg\b[^>]*>/);
+  if (rootMatch) {
+    let root = rootMatch[0];
+    if (!/\sfont-family=/.test(root)) {
+      root = root.replace('<svg', '<svg font-family="Helvetica, Arial, sans-serif"');
+    }
+    if (!/\sviewBox=/i.test(root) && out.width && out.height) {
+      root = root.replace('<svg', `<svg viewBox="0 0 ${out.width} ${out.height}"`);
+    }
+    if (!/\spreserveAspectRatio=/i.test(root)) {
+      root = root.replace('<svg', '<svg preserveAspectRatio="xMidYMid meet"');
+    }
+    root = root.replace(/\swidth="[^"]*"/i, '').replace(/\sheight="[^"]*"/i, '');
+    root = root.replace('<svg', `<svg width="${targetW}" height="${targetH}"`);
+    svg = svg.replace(rootMatch[0], root);
+  }
   await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   const canvas = document.createElement('canvas');
   try {
-    canvas.width = Math.max(1, Math.round(size[0] * scale));
-    canvas.height = Math.max(1, Math.round(size[1] * scale));
+    canvas.width = targetW;
+    canvas.height = targetH;
     const context = canvas.getContext('2d');
     if (!context) throw Error('Could not draw the prefab.');
     context.fillStyle = '#ffffff';

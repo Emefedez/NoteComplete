@@ -76,14 +76,122 @@ export function headingFor(headings, fragment) {
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
 export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null }) {
-  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null;
+  let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null, helpSheet = null;
   const rubyBtn = ruby || root?.querySelector?.('#textRubyToggle') || null;
   const splitBtn = split || root?.querySelector?.('#textSplitToggle') || null;
+  const zhOptionsEl = root?.querySelector?.('#textZhOptions') || null;
+  const traceBtn = root?.querySelector?.('#textTraceBtn') || null;
+  const helpBtn = root?.querySelector?.('#textHelpBtn') || null;
+  const zhKey = () => `zh-md-${key || 'draft'}`;
+  const currentZhMode = () => ime?.mode || fieldMode(zhKey()) || 'off';
   const syncRubyBtn = () => { if (rubyBtn) rubyBtn.setAttribute('aria-pressed', String(rubyOn())); };
   if (rubyBtn) rubyBtn.onclick = () => { setRuby(!rubyOn()); syncRubyBtn(); };
   globalThis.addEventListener?.('zh-ruby-refresh', syncRubyBtn);
   const zhToggle = edit?.parentElement ? zhButton(() => mde?.editor ? editorHost?.querySelector('.TinyMDE') : editorHost?.querySelector('textarea.doc-editor-plain')) : null;
-  if (zhToggle) { zhToggle.hidden = true; edit.before(zhToggle); }
+  if (zhToggle) {
+    if (zhOptionsEl && zhOptionsEl.parentElement === edit.parentElement) zhOptionsEl.before(zhToggle);
+    else edit.before(zhToggle);
+  }
+  const syncZhBar = () => {
+    const mode = currentZhMode();
+    const isZh = mode !== 'off';
+    if (zhToggle) {
+      zhToggle.hidden = false;
+      zhToggle.textContent = mode === 'pinyin' ? 'ā' : '中';
+      zhToggle.setAttribute('aria-pressed', String(isZh));
+      zhToggle.dataset.zhMode = mode;
+    }
+    if (zhOptionsEl) zhOptionsEl.hidden = !isZh;
+  };
+  if (zhToggle) {
+    zhToggle.addEventListener('click', () => {
+      if (!ime) {
+        const cur = currentZhMode();
+        const next = cur === 'off' ? 'hanzi' : cur === 'hanzi' ? 'pinyin' : 'off';
+        setFieldMode(zhKey(), next);
+      }
+      syncZhBar();
+    });
+  }
+  async function insertMarkdownSnippet(snippet) {
+    if (!snippet) return;
+    if (!editing) await startEditing();
+    const area = editorHost?.querySelector('textarea.doc-editor-plain');
+    if (mde?.editor) {
+      const sel = globalThis.getSelection?.();
+      if (sel?.rangeCount && !sel.isCollapsed && editorHost?.contains(sel.anchorNode)) {
+        sel.collapseToEnd();
+      }
+      mde.editor.paste(snippet);
+    } else if (area) {
+      const pos = Math.max(area.selectionStart ?? area.value.length, area.selectionEnd ?? area.value.length);
+      area.setRangeText(snippet, pos, pos, 'end');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      changed(`${text}${snippet}`);
+    }
+  }
+  async function insertTraceForSelected() {
+    let selected = '';
+    const area = editorHost?.querySelector('textarea.doc-editor-plain');
+    if (area && area.selectionStart !== area.selectionEnd) {
+      selected = area.value.slice(area.selectionStart, area.selectionEnd);
+    } else {
+      selected = globalThis.getSelection?.()?.toString?.() || '';
+    }
+    let han = ([...selected].filter((c) => /\p{Script=Han}/u.test(c))).slice(0, 12).join('');
+    if (!han) {
+      // Fallback: last Chinese characters in the document
+      const allHan = text.match(/\p{Script=Han}+/gu);
+      han = allHan?.at(-1)?.slice(0, 6) || '你好';
+    }
+    const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
+    const block = await markdownTraceBlockFor(han);
+    if (block) await insertMarkdownSnippet(block);
+  }
+  async function insertTraceSpec(spec) {
+    const { prepareWithDict, render: renderHanzi } = await import('./prefabs/hanzi/render.js');
+    const full = await prepareWithDict({ ...spec, show: spec?.show || 'steps' });
+    const out = renderHanzi(full);
+    if (!out?.svg) return;
+    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(out.svg)}`;
+    const caption = [full.text, full.pinyin, full.gloss, full.variants].filter(Boolean).join(' · ');
+    await insertMarkdownSnippet(`\n\n![Stroke order ${caption}](${dataUri})\n`);
+  }
+  if (traceBtn) {
+    traceBtn.onclick = () => { insertTraceForSelected().catch((e) => console.warn(e)); };
+  }
+  if (helpBtn && root) {
+    helpBtn.onclick = async () => {
+      if (!helpSheet) {
+        const { cheatSheet } = await import('./cheat-sheet.js');
+        helpSheet = cheatSheet(root, {
+          key: 'markdown-editor',
+          title: 'Markdown & Chinese Cheat Sheet',
+          sections: [
+            { title: 'Markdown formatting', icon: 'note', rows: [
+              { keys: '#  ##  ###', does: 'Headings (level 1, 2, 3)' },
+              { keys: '**bold**  *italic*', does: 'Bold and italic text' },
+              { keys: '$x^2$  $$\\int f(x)dx$$', does: 'Inline and display LaTeX math formulas' },
+              { keys: '- item  1. item', does: 'Bullet and numbered lists' },
+              { keys: '`code`  ```lang', does: 'Inline code and fenced code blocks' },
+            ] },
+            { title: 'Chinese input, Pinyin & Trace Prefabs', icon: 'draw', rows: [
+              { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show Pinyin & Trace tools' },
+              { keys: '拼', does: 'Show or hide Pinyin ruby annotations above Chinese characters' },
+              { keys: '笔 Trace', does: 'Highlight Chinese characters and click 笔 Trace to automatically generate & insert their stroke order trace sheet (with English meaning & variants)' },
+              { keys: 'Right-click character', does: 'See English equivalent, Simplified/Traditional variants, and open the animated Trace Prefab Editor' },
+            ] },
+            { title: 'Document shortcuts', icon: 'keyboard', rows: [
+              { keys: 'Ctrl S', does: 'Save changes' },
+              { keys: 'Ctrl F', does: 'Find in document' },
+            ] },
+          ],
+        });
+      }
+      helpSheet.toggle();
+    };
+  }
   const syncSplitLayout = () => {
     const canSplit = Boolean(editing && markdown && !isDiagram());
     if (splitBtn) {
@@ -226,7 +334,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     clearTimeout(splitTimer);
     ime?.detach?.();
     ime = null;
-    if (zhToggle) zhToggle.hidden = true;
+    syncZhBar();
     mde?.bar?.destroy?.();
     mde?.editor?.destroy?.();
     mde = null;
@@ -242,7 +350,6 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     syncSplitLayout();
     unmount();
     const mine = mount;
-    const zhKey = () => `zh-md-${key || 'draft'}`;
     const wireIme = (target, insert = null) => {
       if (!target || !zhToggle) return;
       zhToggle.hidden = false;
@@ -250,9 +357,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
         kind: insert ? 'contenteditable' : 'textarea',
         ...(insert ? { insert } : {}),
         getMode: () => fieldMode(zhKey()),
-        setMode: (m) => setFieldMode(zhKey(), m),
+        setMode: (m) => { setFieldMode(zhKey(), m); syncZhBar(); },
       });
       ime.addButton(zhToggle);
+      syncZhBar();
     };
     if (markdown && loadEditor && !isDiagram()) {
       const TinyMDE = await loadEditor();
@@ -262,7 +370,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       commands.className = 'notes-commands';
       area.className = 'notes-editor';
       editorHost.append(commands, area);
-      const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown or Chinese here (Ctrl+Shift+Space switches Chinese input)…' });
+      const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, $math$, - list)…' });
       const bar = new TinyMDE.CommandBar({ element: commands, editor });
       editor.addEventListener('change', (event) => changed(event.content));
       mde = { editor, bar };
@@ -314,11 +422,13 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       splitPreview = Boolean(openSplit);
       labelFormat();
       syncRubyBtn();
+      syncZhBar();
       if (title) title.textContent = shown;
       root.hidden = false;
       body.scrollTop = 0;
       return openEdit ? startEditing() : render();
     },
+    insertTraceSpec,
     // New text for the open document (a shared one following its host), keeping the place read.
     async setText(content) {
       if (editing || !name) return;
@@ -334,7 +444,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     rerender() { return editing ? undefined : render(); },
     show() { root.hidden = false; },
     hide() { root.hidden = true; },
-    close() { stopEditing(); renders++; dropDiagramDoc(); releaseDiagram(); root.hidden = true; body.replaceChildren(); text = ''; name = ''; },
+    close() { stopEditing(); helpSheet?.destroy?.(); helpSheet = null; renders++; dropDiagramDoc(); releaseDiagram(); root.hidden = true; body.replaceChildren(); text = ''; name = ''; },
     get diagram() { return isDiagram(); },
     diagramModel: () => diagramDoc?.model?.() || null,
     diagramPlantuml: () => diagramDoc?.plantuml?.() || text,

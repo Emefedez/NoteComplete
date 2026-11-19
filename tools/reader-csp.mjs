@@ -143,6 +143,7 @@ export const inventory = [
   { url: 'https://raw.githubusercontent.com/drkameleon/complete-hsk-vocabulary/', directive: 'connect-src', feature: 'Chinese dictionary expansions by HSK level, SHA-256 pinned (chinese/packs.js)' },
   { url: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/', directive: 'connect-src', feature: 'Word frequencies for text recognition (ocr-dictionary.js)' },
   { url: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/', directive: 'connect-src', feature: 'WebLLM model code (WebAssembly), fetched by WebLLM', literal: false },
+  { url: 'https://raw.githubusercontent.com/', directive: 'connect-src', feature: 'GitHub auto-chunked shared note manifests and chunks (chunked-note.js)' },
   { url: 'https://huggingface.co/', directive: 'connect-src', feature: 'Whisper models (Transformers.js in transcript-worker.js) and WebLLM model weights', literal: false },
   { url: 'https://cas-bridge.xethub.hf.co/', directive: 'connect-src', feature: 'Hugging Face storage: where huggingface.co redirects to (also cdn-lfs*.huggingface.co, cdn-lfs*.hf.co)', literal: false },
   { url: 'https://api.github.com/repos/', directive: 'connect-src', feature: 'Update check in the Android app (android-updates.js); the desktop app checks from its main process' },
