@@ -1,9 +1,11 @@
 // The hanzi module's editor, in the kit's movable window: the stroke-order player in the middle
 // (play/pause Space, ← →, Home/End, speed, timeline), live English equivalents & Simplified/
-// Traditional variants card, the characters (with built-in Chinese IME mode remembered via icon),
+// Traditional variants card (every meaning, grouped by reading, each one put on the page or
+// taken off with a click), the characters (with built-in Chinese IME mode remembered via icon),
 // pinyin and look on the right; Practise traces each character with the pen or a finger.
 import { editorShell, make, button, field, textInput, selectInput, checkInput } from '../kit/index.js';
-import { normalize, prepareWithDict, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
+import { normalize, dictionaryFor, pageGloss, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
+import { meaningsOf } from '../../chinese/lookup-panel.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
@@ -65,10 +67,9 @@ export function open(root, { spec, editing, host }) {
     shell.applyBtn.replaceWith(applyGroup);
     const dropBtn = make('button', {
       type: 'button',
-      className: 'pk-button primary hz-apply-drop',
+      className: 'pk-button primary hz-apply-drop has-caret',
       title: 'Choose how to insert (character alone, with numbers, or with traces)',
-      textContent: '▾',
-    });
+    }, make('span', { className: 'caret' }));
     dropBtn.setAttribute('aria-label', `${host.applyLabel} options`);
     dropBtn.setAttribute('aria-haspopup', 'menu');
     dropBtn.onclick = (ev) => {
@@ -109,44 +110,74 @@ export function open(root, { spec, editing, host }) {
     sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
     renderSheetPreview();
   };
-  const dictBar = make('div', {
-    className: 'hz-dict-bar',
-    style: 'display:grid;gap:4px;padding:8px 12px;border-top:1px solid var(--pk-line, #d0d7de);background:var(--pk-surface, rgba(127,127,127,0.06));font-size:12.5px',
-  });
+  const dictBar = make('div', { className: 'hz-dict-bar' });
   const pageBtn = button('check', 'Show this step on the page');
   pageBtn.onclick = () => finish(player.index >= player.steps ? null : player.index);
   const practiseBtn = button('draw', 'Practise');
-  const ybWrap = make('span', { className: 'hz-yb-wrap', style: 'display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center' });
+  const ybWrap = make('span', { className: 'hz-yb-wrap' });
   const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
   shell.canvas.append(stage, sheetPreview, dictBar, actions);
   let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
   const size = () => Math.max(120, Math.min(240, Math.floor((shell.canvas.clientWidth || 520) / Math.max(1, [...model.text].length) - 24)));
 
-  function renderDictBar(variantChars = []) {
+  // The dictionary's look-up of the characters (load()), for the list of every meaning.
+  let lookup = null;
+  const defsBox = make('div', { className: 'hz-defs' });
+  const pageMeanings = () => (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
+  function setPageMeanings(list) {
+    glossAuto = false;
+    change({ gloss: list.join('; ') }, false);
+    renderDictBar();
+  }
+  function renderDictBar() {
+    const variantChars = [...new Set((model.variants.match(/\p{Script=Han}/gu) || []))];
     dictBar.replaceChildren();
-    const allParts = (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
-    const isLong = (model.gloss || '').length > 54 || allParts.length > 2;
-    const shortGloss = isLong
-      ? (allParts.slice(0, 2).join('; ').slice(0, 54) + '…')
-      : model.gloss;
-    const headRow = make('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:baseline' },
-      make('strong', { style: 'font-size:16px', textContent: model.text || '—' }),
-      model.pinyin ? make('span', { style: 'color:var(--accent, #2563eb);font-weight:600', textContent: model.pinyin }) : null,
-      shortGloss ? make('span', { style: 'color:var(--pk-ink, inherit)', textContent: `— ${shortGloss}` }) : make('span', { className: 'muted', textContent: 'Looking up English meaning…' }),
+    const meanings = meaningsOf(lookup, model.text);
+    const all = [...new Set(meanings.flatMap((m) => m.gloss))];
+    const onPage = pageMeanings();
+    const headRow = make('div', { className: 'hz-dict-head' },
+      make('strong', { className: 'hz-dict-chars', textContent: model.text || '—' }),
+      model.pinyin ? make('span', { className: 'hz-dict-pinyin', textContent: model.pinyin }) : null,
+      model.gloss
+        ? make('span', { className: 'hz-dict-gloss', textContent: model.gloss, title: `On the page: ${model.gloss}` })
+        : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up English meaning…' }),
     );
     dictBar.append(headRow);
-    if (isLong) {
-      const expand = make('details', { className: 'hz-defs-expand', style: 'font-size:12px;margin-top:2px;width:100%' },
-        make('summary', { style: 'cursor:pointer;color:var(--accent, #2563eb);font-weight:600', textContent: `Show all definitions (${allParts.length})` }),
-        make('div', { className: 'hz-defs-full', style: 'display:grid;gap:4px;margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--pk-surface, rgba(127,127,127,0.08));max-height:140px;overflow-y:auto;white-space:normal;word-break:break-word' },
-          ...allParts.map((part) => make('div', { style: 'white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35', textContent: `• ${part}` })),
-        ),
-      );
-      dictBar.append(expand);
+    // In the side panel: every meaning, by reading; a click puts one on the page or takes it
+    // off. The field under them edits the page's text directly (any wording).
+    const list = make('ol', { className: 'zh-lk-meanings hz-defs-list' });
+    for (const m of meanings) {
+      const li = make('li', {}, make('span', { className: 'hz-defs-reading', textContent: m.pinyin }));
+      for (const g of m.gloss) {
+        const on = onPage.includes(g);
+        const chip = make('button', { type: 'button', className: 'hz-def', textContent: g, title: on ? 'On the page: click to take it off' : 'Click to put it on the page' });
+        chip.setAttribute('aria-pressed', String(on));
+        chip.onclick = () => setPageMeanings(on ? pageMeanings().filter((x) => x !== g) : [...pageMeanings(), g]);
+        li.append(chip);
+      }
+      list.append(li);
     }
+    const glossInput = textInput(model.gloss, (gloss) => { glossAuto = !gloss; change({ gloss }, false); }, { placeholder: 'English shown under the characters' });
+    glossInput.addEventListener('change', () => renderDictBar());
+    const quick = make('div', { className: 'pk-row hz-defs-tools' });
+    if (all.length) {
+      const few = button(null, `First ${Math.min(3, all.length)}`, { title: 'Put the first meanings on the page, as when it was inserted' });
+      few.onclick = () => setPageMeanings(pageGloss(all).split('; '));
+      const every = button(null, 'All', { title: 'Put every meaning on the page (long ones wrap to three lines)' });
+      every.onclick = () => setPageMeanings(all);
+      const none = button(null, 'None', { title: 'No meaning under the characters' });
+      none.onclick = () => setPageMeanings([]);
+      quick.append(few, every, none);
+    }
+    defsBox.replaceChildren(
+      make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }),
+      all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary: write it below.' : 'Looking up…' }),
+      field('On the page', glossInput, 'Click a meaning above to add or remove it, or write your own'),
+      all.length ? quick : null,
+    );
     const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));
     if (model.variants || cleanVariants.length) {
-      const varRow = make('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px' },
+      const varRow = make('div', { className: 'hz-variants' },
         make('span', { className: 'muted', textContent: model.variants || 'Variants (click to trace):' }),
       );
       for (const vc of cleanVariants) {
@@ -157,7 +188,6 @@ export function open(root, { spec, editing, host }) {
           className: `pk-button${active ? ' is-active' : ''}`,
           textContent: `Trace ${vc}`,
           title: `Show stroke trace for variant ${vc}`,
-          style: 'height:22px;min-width:26px;padding:0 7px;font-size:12.5px;font-weight:600',
           onclick: () => {
             compareBase = '';
             pinyinAuto = true; glossAuto = true; variantsAuto = true;
@@ -178,7 +208,6 @@ export function open(root, { spec, editing, host }) {
           className: `pk-button${comparing ? ' is-active' : ''}`,
           textContent: `Compare ${baseFirst}/${altFirst}`,
           title: comparing ? `Stop comparing and return to ${baseFirst}` : `Compare stroke traces for ${baseFirst} and ${altFirst} side-by-side`,
-          style: 'height:22px;padding:0 8px;font-size:11.5px',
           onclick: () => {
             if (comparing) {
               const restore = compareBase || baseFirst;
@@ -207,7 +236,6 @@ export function open(root, { spec, editing, host }) {
           className: 'pk-button hz-yb-btn',
           textContent: `Look up ${ch} on YellowBridge ↗`,
           title: `No local stroke order for ${ch} — look up stroke order on YellowBridge`,
-          style: 'height:26px;padding:0 9px;font-size:12px;color:var(--accent, #2563eb);border-color:var(--accent, #2563eb)',
           onclick: () => window.open(yellowBridgeUrl(ch), '_blank', 'noopener,noreferrer'),
         });
         ybWrap.append(ybBtn);
@@ -308,18 +336,19 @@ export function open(root, { spec, editing, host }) {
       }
     });
     const imeBtn = zhButton(() => charInput);
-    imeBtn.style.cssText = 'height:28px;min-width:30px;padding:0 6px;border:1px solid var(--pk-line, #d0d7de);border-radius:6px;cursor:pointer;flex:none';
+    imeBtn.classList.add('pk-button', 'hz-ime-btn');
     charIme = attachIme(charInput, {
       kind: 'input',
       getMode: () => getHanziImeMode(),
       setMode: (m) => setHanziImeMode(m),
     });
     charIme.addButton(imeBtn);
-    const charRow = make('div', { style: 'display:flex;gap:6px;align-items:center' }, charInput, imeBtn);
+    const charRow = make('div', { className: 'hz-char-row' }, charInput, imeBtn);
     charInput.style.flex = '1';
 
     shell.panel.replaceChildren(
       field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/ā/A icon to switch input mode (remembered)`),
+      defsBox,
       make('h4', { textContent: 'On the page' }),
       field('Show', selectInput([['strokes', 'The characters'], ['numbers', 'With stroke numbers'], ['steps', 'With the stroke sequence (traces)']], model.show, (show) => { if (show !== 'strokes') showSheet = true; change({ show }, false); renderSheetPreview(); })),
       field('Grid', selectInput([['mi', '米字格 (cross and diagonals)'], ['tian', '田字格 (cross)'], ['none', 'None']], model.grid, (grid) => change({ grid }, false))),
@@ -331,14 +360,16 @@ export function open(root, { spec, editing, host }) {
   let loading = 0;
   async function load(show = true, autoplay = false) {
     const ticket = ++loading;
+    lookup = null;
     renderDictBar();
-    const next = await prepareWithDict({
+    const { spec: next, lookup: found } = await dictionaryFor({
       ...model,
       pinyin: pinyinAuto ? '' : model.pinyin,
       gloss: glossAuto ? '' : model.gloss,
       variants: variantsAuto ? '' : model.variants,
     });
     if (ticket !== loading) return;
+    lookup = found;
     model = normalize({
       ...model,
       data: next.data,
@@ -346,8 +377,7 @@ export function open(root, { spec, editing, host }) {
       gloss: glossAuto && next.gloss ? next.gloss : model.gloss,
       variants: variantsAuto && next.variants ? next.variants : model.variants,
     });
-    const varChars = [...new Set((model.variants.match(/\p{Script=Han}/gu) || []))];
-    renderDictBar(varChars);
+    renderDictBar();
     if (show) showPlayer(autoplay);
   }
 
@@ -367,9 +397,12 @@ export function open(root, { spec, editing, host }) {
   function back(from, to) {
     if (!from.length) return;
     to.push(JSON.stringify(model));
+    const before = model.text;
     model = JSON.parse(from.pop());
     shell.history(past.length > 0, future.length > 0);
     panel();
+    // Other characters: their own look-up (the list of meanings) and strokes.
+    if (model.text !== before) { pinyinAuto = glossAuto = variantsAuto = false; load(true); return; }
     renderDictBar();
     showPlayer();
   }

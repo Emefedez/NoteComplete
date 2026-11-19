@@ -58,17 +58,26 @@ export async function prepare(spec) {
   return { ...m, data: { ...m.data, ...(await strokesFor(missing.join('')).catch(() => ({}))) } };
 }
 
-// Enriches a hanzi spec with stroke data, pinyin, English equivalents (gloss) and variants from the dictionary.
-export async function prepareWithDict(spec) {
+// How many meanings go on the page by default (all of them are in the editor's "All meanings").
+export const PAGE_GLOSSES = 3;
+// The meanings a page shows: the first few, without repeats ("hello; hi; how are you").
+export const pageGloss = (glosses, n = PAGE_GLOSSES) => [...new Set(glosses.filter(Boolean))].slice(0, n).join('; ');
+
+// Enriches a hanzi spec with stroke data, pinyin, English equivalents (gloss) and variants from
+// the dictionary. `dictionaryFor` also gives back the look-up itself ({ entries, char }), for the
+// editor's list of every meaning; `prepareWithDict` only the spec.
+export async function dictionaryFor(spec) {
   let m = await prepare(spec);
-  if (!m.text) return m;
+  if (!m.text) return { spec: m, lookup: null };
+  let lk = null;
   try {
     const { chinese } = await import('../../chinese/client.js');
     const client = chinese();
-    const [runs, lk] = await Promise.all([
+    const [runs, found] = await Promise.all([
       !m.pinyin ? client.annotate(m.text, { script: m.script }).catch(() => []) : Promise.resolve([]),
       client.lookup(m.text, { script: m.script }).catch(() => null),
     ]);
+    lk = found;
     let pinyin = m.pinyin;
     if (!pinyin && runs?.length) {
       pinyin = runs.flatMap((r) => r.pinyin || []).join(' ');
@@ -79,10 +88,7 @@ export async function prepareWithDict(spec) {
     let gloss = m.gloss;
     let variants = m.variants;
     if (lk?.entries?.length) {
-      if (!gloss) {
-        const glosses = [...new Set(lk.entries.flatMap((e) => e.gloss || []).filter(Boolean))];
-        gloss = glosses.join('; ');
-      }
+      if (!gloss) gloss = pageGloss(lk.entries.flatMap((e) => e.gloss || []));
       if (!variants) {
         const simp = new Set(), trad = new Set(), other = new Set();
         for (const e of lk.entries) {
@@ -105,7 +111,28 @@ export async function prepareWithDict(spec) {
     }
     m = normalize({ ...m, pinyin, gloss, variants });
   } catch { /* Dictionary worker unavailable in headless/offline fallback */ }
-  return m;
+  return { spec: m, lookup: lk };
+}
+export async function prepareWithDict(spec) {
+  return (await dictionaryFor(spec)).spec;
+}
+
+// The caption under the characters as lines of at most `chars` characters, broken between
+// words, at most `max` lines (the last one ends in … when there was more).
+export function wrapCaption(text, chars, max = 3) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    if (line && (line + ' ' + w).length > chars) { lines.push(line); line = w; }
+    else line = line ? `${line} ${w}` : w;
+  }
+  if (line) lines.push(line);
+  if (lines.length <= max) return lines;
+  const kept = lines.slice(0, max);
+  const last = kept[max - 1], cut = last.length < chars ? last.length : last.lastIndexOf(' ') > 0 ? last.lastIndexOf(' ') : chars - 1;
+  kept[max - 1] = `${last.slice(0, cut).replace(/[\s;,·]+$/, '')}…`;
+  return kept;
 }
 
 export function render(spec, { size: cellSize } = {}) {
@@ -159,13 +186,16 @@ export function render(spec, { size: cellSize } = {}) {
     height = y - gap + pad;
   }
   if (m.gloss || m.variants) {
-    const captionLine = [m.gloss, m.variants].filter(Boolean).join('   ·   ');
-    const fontSize = Math.max(12, Math.round(S * 0.14));
-    const capH = fontSize + Math.round(pad * 1.1);
-    const minW = Math.min(680, Math.round(captionLine.length * fontSize * 0.56 + pad * 2));
-    if (width < minW) width = minW;
-    parts.push(`<text x="${pad}" y="${height + Math.round(fontSize * 0.85)}" font-size="${fontSize}" fill="#3d444d" font-family="Arial, 'Noto Sans', 'Noto Sans SC', sans-serif">${escapeHtml(captionLine)}</text>`);
-    height += capH;
+    // The meanings, then the other forms, wrapped to the picture's width (widened up to 680 for
+    // a short picture) in at most three lines each, so a long definition is never cut off.
+    const fontSize = Math.max(12, Math.round(S * 0.14)), charW = fontSize * 0.56, lineH = Math.round(fontSize * 1.3);
+    const longest = Math.max(m.gloss.length, m.variants.length);
+    width = Math.max(width, Math.min(680, Math.round(longest * charW + pad * 2)));
+    const perLine = Math.max(8, Math.floor((width - pad * 2) / charW));
+    const lines = [...(m.gloss ? wrapCaption(m.gloss, perLine) : []), ...(m.variants ? wrapCaption(m.variants, perLine, 1) : [])];
+    const font = `font-size="${fontSize}" fill="#3d444d" font-family="Arial, 'Noto Sans', 'Noto Sans SC', sans-serif"`;
+    lines.forEach((line, i) => parts.push(`<text x="${pad}" y="${height + Math.round(fontSize * 0.85) + i * lineH}" ${font}>${escapeHtml(line)}</text>`));
+    height += fontSize + (lines.length - 1) * lineH + Math.round(pad * 1.1);
   }
   width = Math.round(width); height = Math.round(height);
   return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#fff"/>${parts.join('')}</svg>`, width, height };

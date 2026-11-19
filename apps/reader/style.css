@@ -3767,7 +3767,7 @@ button.nav-arrow svg { width: 16px; height: 16px; }
 
 /* Export and share: fixed-geometry two-column window so switching tabs never moves or resizes the dialog. */
 .export-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); box-sizing: border-box; }
-.export-dialog[open] { height: min(640px, calc(100dvh - 32px)); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.export-dialog[open] { height: min(680px, calc(100dvh - 32px)); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
 .export-dialog .export-head { display: grid; gap: 10px; margin-bottom: 12px; flex: none; }
 .export-dialog .export-head h2 { margin: 0; }
 .export-dialog .export-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); }
@@ -4610,48 +4610,9 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   z-index: 65;
   min-width: 240px;
 }
-.new-note-menu-dialog[open] {
-  width: min(480px, calc(100vw - 24px));
-  height: min(440px, calc(100dvh - 24px));
-  max-height: calc(100dvh - 24px);
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-.new-note-menu-dialog .export-grid {
-  display: grid;
-  gap: 6px;
-  flex: 1;
-  align-content: start;
-  overflow-y: auto;
-}
-.new-note-menu-dialog .export-grid button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  width: 100%;
-  min-height: 38px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-}
-.new-note-menu-dialog .export-grid button:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.new-note-menu-dialog .export-grid button kbd {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
-}
+/* The New note hub: the export dialog's two columns, as tall as its content (nothing to scroll
+   on a wide screen; a phone scrolls the columns, stacked). */
+.new-note-menu-dialog[open] { height: fit-content; }
 
 /* Batch transcribe in Recents */
 .recent-batch-actions {

@@ -42,10 +42,20 @@
 /* A module editor over a note: the whole window under the tab strip. */
 .pk-dialog { position: fixed; inset: var(--modal-top, 0px) 0 0 0; width: 100vw; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--chrome, #f7f8fa); }
 .pk-dialog > .pk-host { height: 100%; }
-@media (max-width: 760px) {
-  .pk-main, .pk-main.with-palette, .pk-main.with-panel, .pk-main.with-palette.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(220px, 1fr) minmax(0, 40%); }
+/* Narrow (a phone, or a narrow movable window): palette as a row on top, the canvas, the panel
+   under it. Measured on the editor itself, so a small window on a wide screen stacks too. */
+.pk-editor { container-type: inline-size; container-name: pk-editor; }
+@container pk-editor (max-width: 640px) {
+  .pk-main, .pk-main.with-palette, .pk-main.with-panel, .pk-main.with-palette.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(200px, 1fr); grid-auto-rows: auto; }
+  .pk-main.with-palette, .pk-main.with-palette.with-panel { grid-template-rows: auto minmax(200px, 1fr); }
+  .pk-main.with-panel { grid-auto-rows: minmax(0, 42%); }
   .pk-palette { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--k-line); }
   .pk-panel { border-left: 0; border-top: 1px solid var(--k-line); }
+  .pk-main > .panel-grip { display: none; }
+  .pk-bar { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  .pk-editor .pk-button, .pk-editor select, .pk-editor input[type="text"], .pk-editor input[type="number"] { min-height: 36px; }
 }
 
 /* Shared by every editor: the grip on a side panel's inner edge (panel-resize.js) … */
@@ -77,8 +87,10 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 .pk-window-foot:empty { display: none; }
 .pk-window.moving, .pk-window.sizing { user-select: none; -webkit-user-select: none; }
 .pk-window.in-tray { display: none !important; }
-.pk-window-tray-pill { position: fixed; left: 12px; bottom: 12px; z-index: 63; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 12px; border: 1px solid var(--line, #dce0e5); border-radius: 99px; background: var(--menu, var(--surface, #fff)); color: var(--ink, #242830); box-shadow: var(--shadow-pop, 0 6px 20px #0003); font: 600 12px/1.3 system-ui, sans-serif; cursor: pointer; }
-.pk-window-tray-pill:hover { border-color: var(--accent, #245dc4); color: var(--accent, #245dc4); }
+/* On a phone (window.js isPhone, phone: 'full'): the whole screen under the tab strip, not moved. */
+.pk-window.pk-phone { border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; box-shadow: none; }
+.pk-window.pk-phone .pk-window-head { cursor: default; }
+.pk-window.pk-phone :is(.pk-window-grip, .pk-window-btn) { display: none; }
 .pk-window-grip { position: absolute; touch-action: none; z-index: 2; }
 .pk-grip-l { top: 14px; left: 0; bottom: 14px; width: 7px; cursor: ew-resize; }
 .pk-grip-r { top: 14px; right: 0; bottom: 14px; width: 8px; cursor: ew-resize; }

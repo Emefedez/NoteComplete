@@ -4,11 +4,14 @@
 // inside the window under the tab strip, and its place and size remembered by `key`. Esc or ×
 // closes it (`onClose`), Ctrl Enter applies (`onApply`); keys typed in it stay in it, so the
 // page's tool shortcuts do not fire behind it.
-import { clampRect, resizeRect, largeRect } from '../../floating.js';
+import { clampRect, resizeRect, largeRect, trayPut, trayDrop } from '../../floating.js';
 import { icon } from '../../icons.js';
 import { loadKitStyles, make } from './shell.js';
 
 const STORE = 'pk-window:';
+// A phone (narrow, or a short landscape screen): windows fill the screen under the tab strip
+// (a big editor) or sit at the bottom as a sheet (Chinese mode's small panels, zh-window.js).
+export const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 600px), (max-height: 500px) and (orientation: landscape)').matches;
 const MARGIN = 8;
 
 // Where a window may be: the browser window under the tab strip (--modal-top), less a margin.
@@ -29,12 +32,14 @@ const remember = (key, rect) => { try { localStorage.setItem(STORE + key, JSON.s
 
 // `key`: names the remembered place. `title`. `width`/`height`: the first size (height null:
 // as tall as its content, up to the window). `className`: extra classes on the window.
+// `phone`: on a phone, 'full' fills the screen under the tab strip (not moved or resized);
+// anything else leaves it to the caller's CSS (Chinese mode's bottom sheets).
 // Returns { el, head, body, foot, setTitle(text), rect(), destroy() }: fill `body` and `foot`.
-export function movableWindow({ key = 'module', title = '', width = 560, height = null, minWidth = 300, minHeight = 180, className = '', onClose = null, onApply = null } = {}) {
+export function movableWindow({ key = 'module', title = '', width = 560, height = null, minWidth = 300, minHeight = 180, className = '', onClose = null, onApply = null, phone = 'full' } = {}) {
   loadKitStyles();
   const min = { width: minWidth, height: minHeight };
   const titleEl = make('strong', { className: 'pk-window-title', textContent: title });
-  const away = make('button', { type: 'button', className: 'pk-window-btn', title: 'Put away (bring back from bottom left)' }, icon('minimize'));
+  const away = make('button', { type: 'button', className: 'pk-window-btn', title: 'Put away (bring it back from the tray at the bottom left)' }, icon('minimize'));
   away.setAttribute('aria-label', `Put ${title || 'window'} away`);
   const sizeBtn = make('button', { type: 'button', className: 'pk-window-btn', title: 'Make it large' }, icon('maximize'));
   sizeBtn.setAttribute('aria-label', 'Make it large');
@@ -48,6 +53,8 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'false');
   el.setAttribute('aria-label', title);
+  const full = () => phone === 'full' && isPhone();
+  el.classList.toggle('pk-phone', full());
   // Placed before its stylesheet arrives, so it never shows for a moment at the page's foot.
   Object.assign(el.style, { position: 'fixed', zIndex: '35', boxSizing: 'border-box' });
 
@@ -62,7 +69,7 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   const saved = remembered(key);
   let rect = saved || firstRect();
   let fixedHeight = saved ? saved.height ?? null : height;
-  let large = false, beforeLarge = null, trayPill = null;
+  let large = false, beforeLarge = null;
   const syncSizeIcon = () => {
     sizeBtn.replaceChildren(icon(large ? 'restore' : 'maximize'));
     const label = large ? 'Restore size' : 'Make it large';
@@ -85,23 +92,19 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     syncSizeIcon();
   };
   sizeBtn.onclick = () => setLarge(!large);
-  const restoreFromTray = () => {
-    el.classList.remove('in-tray');
-    trayPill?.remove();
-    trayPill = null;
-    apply(rect);
-  };
+  // _ puts it in the app's one tray (floating.js), with the other windows put away.
   away.onclick = () => {
     el.classList.add('in-tray');
-    if (!trayPill) {
-      trayPill = make('button', { type: 'button', className: 'pk-window-tray-pill', textContent: titleEl.textContent || 'Editor' });
-      trayPill.title = 'Restore editor window';
-      trayPill.onclick = restoreFromTray;
-      document.body.append(trayPill);
-    }
+    trayPut(el, titleEl.textContent || 'Editor', () => { el.classList.remove('in-tray'); apply(rect); });
   };
   const apply = (r, store = false) => {
     const area = windowArea();
+    el.classList.toggle('pk-phone', full());
+    if (full()) {
+      // The whole screen under the tab strip; its desktop place stays remembered.
+      Object.assign(el.style, { left: '0px', top: `${area.top - MARGIN}px`, width: '100%', height: `${area.height + 2 * MARGIN}px`, maxHeight: '' });
+      return;
+    }
     const h = fixedHeight ?? Math.min(el.offsetHeight || r.height || minHeight, area.height);
     const k = keepInside({ ...r, height: h }, area, min);
     rect = { left: k.left, top: k.top, width: k.width, height: fixedHeight == null ? null : k.height };
@@ -122,8 +125,9 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   requestAnimationFrame(() => el.isConnected && apply(rect));
 
   // Drag by the title bar; resize by the grips. Pointer events: mouse, finger and pen alike.
-  const drag = (e, mode) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
+  const drag = (e, mode, anyButton = false) => {
+    if (el.classList.contains('pk-phone')) return;
+    if (!anyButton && e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
     const target = e.currentTarget, id = e.pointerId;
     try { target.setPointerCapture(id); } catch { /* Synthetic pointer. */ }
@@ -135,10 +139,11 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
       const dx = m.clientX - x0, dy = m.clientY - y0;
       if (mode === 'move') apply({ ...start, left: start.left + dx, top: start.top + dy });
       else {
-        if (mode.includes('b')) fixedHeight = start.height;
+        const vertical = /[tb]/.test(mode);
+        if (vertical) fixedHeight = start.height;
         const area = windowArea();
         const r = resizeRect({ ...start, left: start.left - area.left, top: start.top - area.top }, dx, dy, mode, min, area);
-        if (mode.includes('b')) fixedHeight = r.height;
+        if (vertical) fixedHeight = r.height;
         apply({ ...r, left: r.left + area.left, top: r.top + area.top });
       }
     };
@@ -149,6 +154,12 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
       target.removeEventListener('pointercancel', up);
       el.classList.remove('moving', 'sizing');
       apply(rect, true);
+      if (anyButton) {
+        // The click that ends a Ctrl + drag does not press the button it started on.
+        const swallow = (c) => { c.stopPropagation(); c.preventDefault(); };
+        el.addEventListener('click', swallow, { capture: true, once: true });
+        setTimeout(() => el.removeEventListener('click', swallow, { capture: true }), 0);
+      }
     };
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', up);
@@ -158,17 +169,22 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   for (const g of grips) g.addEventListener('pointerdown', (e) => drag(e, g.dataset.edges));
   // Ctrl/⌘+drag anywhere moves; Ctrl/⌘+right-drag resizes from the nearest corner.
   el.addEventListener('pointerdown', (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.target.closest('button, input, select, textarea, a, [contenteditable="true"]')) return;
-    if (e.button === 0) return drag(e, 'move');
+    if (!(e.ctrlKey || e.metaKey) || e.target.closest('input, select, textarea, [contenteditable="true"]')) return;
+    e.stopPropagation();
+    if (e.button === 0) return drag(e, 'move', true);
     if (e.button === 2) {
       const box = el.getBoundingClientRect();
       const edges = (e.clientX < box.left + box.width / 2 ? 'l' : 'r') + (e.clientY < box.top + box.height / 2 ? 't' : 'b');
-      return drag(e, edges);
+      return drag(e, edges, true);
     }
+  }, true);
+  // Ctrl + right button is a resize here, not a context menu.
+  el.addEventListener('contextmenu', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.target.closest('input, select, textarea, [contenteditable="true"]')) e.preventDefault();
   }, true);
   // Double-click on the title bar: toggle large / normal size.
   head.addEventListener('dblclick', (e) => {
-    if (e.target.closest('button')) return;
+    if (e.target.closest('button') || el.classList.contains('pk-phone')) return;
     setLarge(!large);
   });
   close.onclick = () => onClose?.();
@@ -182,8 +198,8 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   addEventListener('resize', resized);
   return {
     el, head, body, foot,
-    setTitle(text) { titleEl.textContent = text; el.setAttribute('aria-label', text); if (trayPill) trayPill.textContent = text; },
+    setTitle(text) { titleEl.textContent = text; el.setAttribute('aria-label', text); },
     rect: () => ({ ...rect }),
-    destroy() { trayPill?.remove(); trayPill = null; grown?.disconnect(); removeEventListener('resize', resized); el.remove(); },
+    destroy() { trayDrop(el); grown?.disconnect(); removeEventListener('resize', resized); el.remove(); },
   };
 }

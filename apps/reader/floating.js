@@ -109,6 +109,12 @@ function renderTray() {
   }));
   if (!trayed.size) el.show(false);
 }
+// For other movable windows (the prefab kit's): the same tray. `restore` brings it back.
+export function trayPut(el, label, restore) {
+  trayed.set(el, { label, restore: () => { trayed.delete(el); renderTray(); restore(); } });
+  renderTray();
+}
+export function trayDrop(el) { if (trayed.delete(el)) renderTray(); }
 
 // Windows are free on the whole screen below the top bar (`screen`), over the toolbars
 // and side panels. They start where their CSS places them in the work area.
