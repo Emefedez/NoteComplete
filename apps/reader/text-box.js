@@ -453,6 +453,7 @@ export function textBoxController({
       keyboardPrimer = Object.assign(doc.createElement("textarea"), { className: "keyboard-primer", tabIndex: -1 });
       keyboardPrimer.setAttribute("aria-hidden", "true");
     }
+    keyboardPrimer.value = "";
     doc.body.append(keyboardPrimer);
     keyboardPrimer.focus({ preventScroll: true });
   }
@@ -465,8 +466,21 @@ export function textBoxController({
   // A tap with Text (finger or stylus, pointerUp): finish the open box, or start one there.
   async function typeAt(p, at) {
     if (textEditor) return commit();
-    primeKeyboard();
-    try { await open(p, at); } finally { if (!textEditor) unprime(); }
+    return open(p, at);
+  }
+  // Keys typed while the box was opening went to the primer: typed again in the box, through
+  // its Chinese input ("Ni" typed at once after the click is pinyin, not a lost or stray "N").
+  function handOn(area) {
+    const typed = keyboardPrimer?.isConnected ? keyboardPrimer.value : "";
+    if (keyboardPrimer) keyboardPrimer.value = "";
+    for (const key of typed) {
+      const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      area.dispatchEvent(e);
+      if (!e.defaultPrevented) {
+        area.setRangeText(key, area.selectionStart, area.selectionEnd, "end");
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
   }
 
   // The on-screen keyboard covers the bottom of the screen (the visual viewport shrinks): the
@@ -489,8 +503,14 @@ export function textBoxController({
   if (typeof window !== "undefined") window.visualViewport?.addEventListener("resize", keepTextVisible);
 
   // `after`: called once the box is finished or thrown away (a double-click's way back).
-  async function open(p, [x, y], known = null, { after = null } = {}) {
+  // A box opens after an await (what is under the pointer): a hidden field takes the keys and,
+  // on phones, the on-screen keyboard meanwhile (primeKeyboard).
+  async function open(p, at, known = null, options = {}) {
     if (textEditor) return commit();
+    primeKeyboard();
+    try { await openBox(p, at, known, options); } finally { if (!textEditor) unprime(); }
+  }
+  async function openBox(p, [x, y], known = null, { after = null } = {}) {
     const currentDoc = getDoc(), activeLayer = getActiveLayer();
     if (!currentDoc || isEditing() || isBusy() || !p.view) return;
     const layer = currentDoc.layers.find((l) => l.id === activeLayer);
@@ -694,7 +714,7 @@ export function textBoxController({
       if (textEditor?.area !== area || doc.activeElement === area || (textEditor.field && doc.activeElement === textEditor.field) || textFormatBar.contains(doc.activeElement) || Date.now() - textFormatPressed < 1000 || Date.now() - imeMenuPressedAt() < 1000) return;
       commit();
     }, 0));
-    requestAnimationFrame(() => { area.focus(); unprime(); keepTextVisible(); });
+    requestAnimationFrame(() => { area.focus(); handOn(area); unprime(); keepTextVisible(); });
     status(existing ? "Editing text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards." : "Type your text. Esc, Ctrl+Enter or a click outside finishes; Shift+Esc or × discards.");
   }
 
