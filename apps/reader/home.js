@@ -14,6 +14,8 @@ import { icon } from './icons.js';
 import { CLOUD_PROVIDERS } from './cloud-collab.js';
 import { selectionCheck } from './queue-controls.js';
 import { setupBatchTranscribe } from './batch-transcribe.js';
+import { setupBatchOcr, indexNotes } from './batch-ocr.js';
+import { contentSearcher } from './content-search.js';
 const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes: 'storage', tags: 'hash' };
 /** Return true when a document is text/Markdown and should skip raster page-0 cover screengrabs. */
 // The cover of a text or Markdown file: its first lines drawn like a page, each wrapped to
@@ -66,9 +68,16 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null }) {
+export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null, pageCanvas = null, findIn = null, onContentKept = () => {} }) {
   const $ = id => document.getElementById(id);
-  const batchTranscriber = setupBatchTranscribe({ library, status, jobs });
+  // Batch actions over Recent: one selection mode at a time.
+  const contents = contentSearcher(library);
+  const kept = (fingerprint, data) => { contents.forget(fingerprint); onContentKept(fingerprint, data); };
+  const batchTranscriber = setupBatchTranscribe({ library, status, jobs, onEnter: () => batchOcr?.exit() });
+  const batchOcr = setupBatchOcr({ library, status, jobs, pageCanvas, onKept: kept, onEnter: () => batchTranscriber.exit() });
+  const batches = [batchTranscriber, batchOcr];
+  // Search inside notes (set further down): declared first, Recent may draw before.
+  let contentMode = false, contentMatches = null, contentRun = 0, contentTimer = 0;
   const ago = time => {
     const minutes = Math.round((Date.now() - time) / 60000);
     if (minutes < 1) return 'just now';
@@ -203,6 +212,39 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       row.append(out);
     }
   }
+  // Opens a Recent entry as a click on its card does. Resolves once it is shown.
+  async function openEntry(entry) {
+    try {
+      const now = current();
+      if (entry.source === 'web') {
+        await library.touch(entry.key);
+        if (((now.entryKey && now.entryKey === entry.key) || (now.webUrl && now.webUrl === entry.url)) && now.show) return now.show();
+        return openLink?.(entry);
+      }
+      // A notebook inside an archive (a Goodnotes pack): unpacked from the archive.
+      if (entry.source === 'archive') return openArchive?.(entry);
+      if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive' && entry.source !== 'dropbox') {
+        await library.touch(entry.key);
+        return now.show();
+      }
+      const file = await library.open(entry);
+      // A file listed in a folder but never opened joins Recent now.
+      if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
+      if (!file) {
+        status(`${entry.name} is no longer in the downloads folder. Open it again from ${entry.source === 'dropbox' ? 'Dropbox' : 'Drive'}.`, true);
+        await library.forget(entry.key);
+        return renderRecent();
+      }
+      // A Drive note may have a newer version there: the user picks first.
+      if (await versions?.openRecent(entry, file)) return renderRecent();
+      if (now.entryKey && now.entryKey === entry.key && now.show) {
+        await library.touch(entry.key);
+        return now.show();
+      }
+      await library.touch(entry.key);
+      await open(file, entry);
+    } catch (error) { status(error.message, true); }
+  }
   async function renderRecent() {
     merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch((e) => console.warn('Merge duplicates:', e));
     renderFolders();
@@ -224,7 +266,8 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     for (const entry of entries) fragment.append(...recentCard(entry));
     $('recentList').replaceChildren(fragment);
     applyFilters();
-    batchTranscriber.onRecentRendered();
+    for (const batch of batches) batch.onRecentRendered();
+    if (contentMode && contentQuery()) runContentSearch();
   }
   // One Recent card; an entry that cannot be shown is skipped instead of emptying the list.
   function recentCard(entry) {
@@ -282,38 +325,9 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         });
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
-      button.onclick = async () => {
-        if (batchTranscriber.handleCardClick(button, entry)) return;
-        try {
-          const now = current();
-          if (entry.source === 'web') {
-            await library.touch(entry.key);
-            if (((now.entryKey && now.entryKey === entry.key) || (now.webUrl && now.webUrl === entry.url)) && now.show) return now.show();
-            return openLink?.(entry);
-          }
-          // A notebook inside an archive (a Goodnotes pack): unpacked from the archive.
-          if (entry.source === 'archive') return openArchive?.(entry);
-          if (now.entryKey && now.entryKey === entry.key && now.show && entry.source !== 'drive' && entry.source !== 'dropbox') {
-            await library.touch(entry.key);
-            return now.show();
-          }
-          const file = await library.open(entry);
-          // A file listed in a folder but never opened joins Recent now.
-          if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
-          if (!file) {
-            status(`${entry.name} is no longer in the downloads folder. Open it again from ${entry.source === 'dropbox' ? 'Dropbox' : 'Drive'}.`, true);
-            await library.forget(entry.key);
-            return renderRecent();
-          }
-          // A Drive note may have a newer version there: the user picks first.
-          if (await versions?.openRecent(entry, file)) return renderRecent();
-          if (now.entryKey && now.entryKey === entry.key && now.show) {
-            await library.touch(entry.key);
-            return now.show();
-          }
-          await library.touch(entry.key);
-          await open(file, entry);
-        } catch (error) { status(error.message, true); }
+      button.onclick = () => {
+        if (batches.some((batch) => batch.handleCardClick(button, entry))) return;
+        void openEntry(entry);
       };
       item.append(button, remove);
       // In a folder: a star keeps the document at the top of it.
@@ -811,7 +825,9 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       const inRecent = Boolean(card.closest('#recentList'));
       if (inRecent) recentTotal++;
       let show = !active || !card.note || matches(card.note, filters);
-      if (show && inRecent && terms.length) {
+      if (show && inRecent && contentMode) {
+        if (contentMatches) show = contentMatches.has(card.noteEntry?.key);
+      } else if (show && inRecent && terms.length) {
         const hay = `${card.note?.title || ''} ${card.note?.name || ''} ${card.textContent || ''}`.toLowerCase();
         show = terms.every((t) => hay.includes(t));
       }
@@ -823,17 +839,125 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       if (inRecent && show) recentVisible++;
       if (!show) { hidden++; if (filters.tags.length && card.note && card.note.facts?.tags == null) unknown++; }
     }
-    if ($('recentSearchEmpty')) $('recentSearchEmpty').hidden = !query || recentTotal === 0 || recentVisible > 0;
+    if ($('recentSearchEmpty')) {
+      $('recentSearchEmpty').hidden = !query || recentTotal === 0 || recentVisible > 0 || (contentMode && !contentMatches);
+      $('recentSearchEmpty').textContent = contentMode ? 'No note has these words inside.' : 'No notes match your search.';
+    }
     const needsFacts = quick && (filters.audio || filters.tags.length);
     $('filterSummary').textContent = active ? `${hidden} hidden by filters${needsFacts ? ' · the quick list does not read recordings or tags; switch to cards for those filters' : unknown ? ` · ${unknown} not yet read for tags (open them once)` : ''}` : '';
     renderFiltersSoon();
   }
+  // Search inside notes (the second magnifier): the same box searches the text of Recent's
+  // documents instead of their names (content-search.js). Cards without a match are hidden and
+  // the matches are listed under the heading; a match opens the note with Find on the words.
+  const contentQuery = () => ($('recentSearch')?.value || '').trim();
+  const recentEntries = () => [...document.querySelectorAll('#recentList .note-card')].map((card) => card.noteEntry).filter(Boolean);
+  const SOURCE_LABELS = { text: 'Text', pdf: 'PDF', ocr: 'Handwriting', audio: 'Audio' };
+  function setContentMode(on) {
+    contentMode = on;
+    contentRun++;
+    contentMatches = null;
+    $('recentContentSearch')?.setAttribute('aria-pressed', String(on));
+    $('recentSearch').placeholder = on ? 'Search inside notes: PDF, handwriting, OCR, audio…' : 'Search recent notes…';
+    $('recentSearch').setAttribute('aria-label', on ? 'Search inside recent notes' : 'Search recent notes');
+    $('recentContentSearch')?.closest('.recent-heading')?.classList.toggle('content-mode', on);
+    if (!on) $('contentResults').hidden = true;
+    if (on && contentQuery()) runContentSearch();
+    applyFilters();
+  }
+  async function runContentSearch() {
+    const query = contentQuery(), run = ++contentRun;
+    if (!query) { contentMatches = null; $('contentResults').hidden = true; applyFilters(); return; }
+    $('contentResults').hidden = false;
+    $('contentSummary').textContent = 'Searching inside notes…';
+    const { results, unindexed } = await contents.search(recentEntries(), query, {
+      cancelled: () => run !== contentRun,
+      progress: (done, total) => { if (run === contentRun && total > 8) $('contentSummary').textContent = `Searching inside notes… ${done} of ${total}`; },
+    });
+    if (run !== contentRun) return;
+    contentMatches = new Set(results.map((r) => r.entry.key));
+    renderContentResults(query, results, unindexed);
+    applyFilters();
+  }
+  function renderContentResults(query, results, unindexed) {
+    const total = results.reduce((n, r) => n + r.hits.length, 0);
+    $('contentSummary').textContent = results.length
+      ? `${total} ${total === 1 ? 'match' : 'matches'} in ${results.length} ${results.length === 1 ? 'note' : 'notes'}${unindexed.length ? ` · ${unindexed.length} not searched yet` : ''}`
+      : unindexed.length ? `No matches · ${unindexed.length} ${unindexed.length === 1 ? 'note was' : 'notes were'} not searched yet` : 'No matches inside these notes.';
+    const index = $('contentIndex');
+    index.hidden = !unindexed.length || !pageCanvas;
+    index.lastChild.textContent = `Index ${unindexed.length} ${unindexed.length === 1 ? 'note' : 'notes'}…`;
+    index.title = 'Read the text of the notes not searched yet (PDF text, typed text, handwriting it knows, saved transcripts) in the background. Batch OCR also recognizes handwriting and scans.';
+    index.onclick = async () => {
+      index.disabled = true;
+      try { await indexNotes(unindexed, { library, pageCanvas, jobs, onKept: kept }); }
+      finally { index.disabled = false; }
+      if (contentMode) runContentSearch();
+    };
+    const fragment = document.createDocumentFragment();
+    for (const { entry, hits, counts } of results.slice(0, 40)) {
+      const li = document.createElement('li'), head = document.createElement('div'), name = document.createElement('strong');
+      head.className = 'content-note';
+      name.textContent = entryTitle(entry);
+      head.append(name);
+      for (const [source, count] of Object.entries(counts)) {
+        const badge = document.createElement('span');
+        badge.className = `find-badge ${source}`;
+        badge.textContent = `${SOURCE_LABELS[source] || source} ${count}`;
+        head.append(badge);
+      }
+      li.append(head);
+      for (const hit of hits.slice(0, 3)) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'content-hit';
+        row.title = 'Open the note and find these words in it';
+        const where = document.createElement('span');
+        where.className = 'find-where';
+        where.textContent = hit.source === 'audio' ? (hit.label || 'Audio') : `p. ${Math.floor(hit.page) + 1}`;
+        const snippet = document.createElement('span');
+        snippet.className = 'find-snippet';
+        const marks = new Set(hit.matched);
+        for (const [n, word] of hit.snippet.split(' ').entries()) {
+          if (n) snippet.append(' ');
+          if (marks.has(word)) { const m = document.createElement('mark'); m.textContent = word; snippet.append(m); } else snippet.append(word);
+        }
+        row.append(where, snippet);
+        row.onclick = async () => { await openEntry(entry); findIn?.(query); };
+        li.append(row);
+      }
+      if (hits.length > 3) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'content-more';
+        more.textContent = `${hits.length - 3} more in this note`;
+        more.onclick = async () => { await openEntry(entry); findIn?.(query); };
+        li.append(more);
+      }
+      fragment.append(li);
+    }
+    $('contentList').replaceChildren(fragment);
+  }
+  if ($('recentContentSearch')) $('recentContentSearch').onclick = () => { setContentMode(!contentMode); $('recentSearch')?.focus(); };
   if ($('recentSearch')) {
-    $('recentSearch').oninput = () => applyFilters();
+    $('recentSearch').oninput = () => {
+      if (!contentMode) return applyFilters();
+      clearTimeout(contentTimer);
+      if ($('recentSearchClear')) $('recentSearchClear').hidden = !contentQuery();
+      contentTimer = setTimeout(runContentSearch, 280);
+    };
     $('recentSearch').onkeydown = (event) => {
-      if (event.key === 'Escape' && $('recentSearch').value) {
+      // Shift Enter: search inside the notes; Enter, in that mode, searches at once.
+      if (event.key === 'Enter' && (event.shiftKey || contentMode)) {
+        event.preventDefault();
+        if (!contentMode) setContentMode(true);
+        else { clearTimeout(contentTimer); runContentSearch(); }
+        return;
+      }
+      if (event.key === 'Escape' && ($('recentSearch').value || contentMode)) {
         event.preventDefault(); event.stopPropagation();
-        $('recentSearch').value = '';
+        if ($('recentSearch').value) { $('recentSearch').value = ''; if (contentMode) runContentSearch(); }
+        else setContentMode(false);
         applyFilters();
       }
     };
@@ -841,6 +965,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   if ($('recentSearchClear')) {
     $('recentSearchClear').onclick = () => {
       if ($('recentSearch')) { $('recentSearch').value = ''; $('recentSearch').focus(); }
+      if (contentMode) runContentSearch();
       applyFilters();
     };
   }

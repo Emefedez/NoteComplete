@@ -5,4 +5,10 @@
 - **Chinese Markdown editor & create prefabs first.** Start a new Markdown / Chinese note directly from **Home → New Markdown** or **File → New Markdown note…** with `中`, **拼**, and a live split preview—no existing file needed. Create prefabs (**Home → Create prefab…**, **Edit → Insert prefab… / table / UML diagram…**) directly before opening a document, and edit `tree`, `graph_nodes`, and `custom_svg` charts in the visual chart editor instead of raw JSON.
 - **Web full screen & updater reliability.** Added **View → Full screen** (`F11`) targeting the web host cleanly, hid un-wired updater menu rows properly on Web (`display: contents` vs `[hidden]`), and added a GitHub Releases Atom/asset fallback when `api.github.com` is rate-limited. Also documented an R math/statistics prefabs bridge plan in [R-PREFABS-PLAN.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/R-PREFABS-PLAN.md).
 
+### Unreleased
+
+- **Batch OCR and search inside notes.** **Home → Recent → Batch OCR** recognizes the handwriting and scanned pages of many notes, PDFs and pictures in the background, like Batch transcribe. A second magnifier beside the Recent search box searches the text inside every document (PDF, handwriting, OCR, transcripts, Markdown), lists the matches with their page and opens the note with Find on them.
+- **Classroom noise in transcripts.** **Revise with AI** can flag side conversations and fragments, underlined in red, to remove or keep one by one or all at once. Every AI request that includes a transcript is told that some of it may be irrelevant classroom noise.
+- **Polish.** The batch dialog's ticks now show which notes and recordings are chosen, and its × closes it.
+
 Earlier versions: [changelog](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; SHA256SUMS.txt has the checksums. Not signed or notarized; see docs/BUILDS.md.

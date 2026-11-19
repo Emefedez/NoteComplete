@@ -34,6 +34,8 @@ export const paths = {
  qr:'M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h2v2h-2zm4 0h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2zm4 0h2v2h-2z',
  home:'M3 11 12 3l9 8M5 9v12h5v-6h4v6h5V9',
  search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm9 16-4-4',
+ // Search inside documents: a page of lines with a magnifier over its corner.
+ searchText:'M12 21H5V3h10l4 4v3M8 8h5M8 12h3M16 12a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm5 9-2.5-2.5',
  settings:'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
  cloud:'M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8H7Z',
  cards:'M7 4h12v14H7zM4 7v13h12',

@@ -3,7 +3,7 @@
 // Decks are kept per note, reviewed and edited here, practised as flip cards
 // and exported to Anki's text import.
 import { factCheckPrompt, cleanFindings, findingsMarkdown, referenceText } from './fact-check.js';
-import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages, canvasImage } from './ai-context.js';
+import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages, canvasImage, labelledText } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, isRight, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
 import { scratchButton, newId } from './scratchpad.js';
@@ -233,7 +233,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
         for (const p of pages) {
           if (cancelled) break;
           const parts = await pageText(p).catch(() => ({}));
-          texts.push({ page: p, label: `${unit === 'section' ? 'Section' : 'Page'} ${p + 1}`, text: Object.values(parts || {}).filter(v => typeof v === 'string').join('\n') });
+          texts.push({ page: p, label: `${unit === 'section' ? 'Section' : 'Page'} ${p + 1}`, text: labelledText(parts) });
         }
       }
       const lane = async () => {
@@ -275,7 +275,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
             drawn.canvas.width = drawn.canvas.height = 0;
             return image;
           },
-          pageText: async p => Object.values((await pageText(p, { recognize: true }).catch(() => ({}))) || {}).filter(v => typeof v === 'string').join('\n'),
+          pageText: async p => labelledText(await pageText(p, { recognize: true }).catch(() => ({}))),
           pageWords,
           clean: (k, value, batch) => (k === 'cards' ? cleanCards(value, batch) : k === 'check' ? cleanFindings(value, batch) : prepareQuestions(value, batch)),
           onProgress: ({ phase, fraction }) => job.set(fraction, phase),

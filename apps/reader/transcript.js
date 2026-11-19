@@ -2,7 +2,8 @@ import { timedWords, wordAt } from './transcript-timing.js';
 import { download } from './download.js';
 import { prepareSpeech, speechSettings } from './audio-processing.js';
 import { RATE, sliceSamples, wavBytes, shiftWords, wordsInRange } from './audio-trim.js';
-import { reviseWords } from './transcript-revise.js';
+import { reviseWords, noiseRun, noiseRuns } from './transcript-revise.js';
+import { openContextMenu } from './context-menu.js';
 import { jsonFrom } from './ai-context.js';
 import { sharedAI } from './local-ai.js';
 import { smallSetting } from './small-model.js';
@@ -85,7 +86,7 @@ export class TranscriptController {
     $('transcriptFollow').onchange = () => this.update();
     $('transcribeAudio').onclick = event => this.start({ again: event?.shiftKey });
     $('cancelTranscript').onclick = () => this.cancel();
-    $('transcriptRevise').onclick = () => this.revise();
+    $('transcriptRevise').onclick = () => this.reviseMenu();
     $('transcriptRestore').onclick = () => this.restore();
     $('downloadTranscript').onclick = async () => {
       const format = $('transcriptFormat').value || 'txt';
@@ -229,8 +230,51 @@ export class TranscriptController {
     this.render(original);
     this.status('Revision undone: the automatic transcript is back.');
   }
+  // Revise with AI offers, besides correcting words, to flag what was likely not part of the
+  // lesson (side talk, fragments). Flagged words are underlined in red: nothing is removed
+  // until the user says so, phrase by phrase or all at once.
+  reviseMenu() {
+    const r = $('transcriptRevise').getBoundingClientRect(), flagged = noiseRuns(this.words);
+    openContextMenu(r.left, r.bottom + 4, [
+      { label: 'Correct misheard words', icon: 'spark', run: () => this.revise() },
+      { label: 'Correct and flag likely noise (side talk, fragments)…', icon: 'warn', run: () => this.revise({ flagNoise: true }) },
+      flagged && '-',
+      flagged && { label: `Remove all ${flagged} flagged ${flagged === 1 ? 'phrase' : 'phrases'}`, icon: 'trash', run: () => this.dropNoise() },
+      flagged && { label: 'Keep all flagged phrases (clear the flags)', icon: 'check', run: () => this.keepNoise() },
+    ], { title: 'Revise with AI' });
+  }
+  // A flagged phrase clicked: remove it, keep it, or listen to it first.
+  noiseMenu(index, button) {
+    const run = noiseRun(this.words, index);
+    if (!run) return;
+    const [from, to] = run, r = button.getBoundingClientRect(), word = this.words[from];
+    const preview = this.words.slice(from, to).map(w => w.text).join(' ');
+    openContextMenu(r.left, r.bottom + 4, [
+      { label: 'Remove this phrase', icon: 'trash', run: () => this.dropNoise(run) },
+      { label: 'Keep it: it is part of the lesson', icon: 'check', run: () => this.keepNoise(run) },
+      Number.isFinite(word.start) && { label: 'Listen from here', icon: 'play', run: () => this.audio.seek(word.start) },
+    ], { title: preview.length > 60 ? `${preview.slice(0, 57)}…` : preview });
+  }
+  // Flagged words removed: one run, or all of them.
+  dropNoise(run = null) {
+    const before = this.words.length;
+    this.words = run ? [...this.words.slice(0, run[0]), ...this.words.slice(run[1])] : this.words.filter(w => !w.noise);
+    this.saveEdits();
+    this.offset = Math.min(this.offset, Math.max(0, Math.floor((this.words.length - 1) / 100) * 100));
+    this.renderWindow();
+    const removed = before - this.words.length, left = noiseRuns(this.words);
+    this.status(`${removed} ${removed === 1 ? 'word' : 'words'} removed.${left ? ` ${left} flagged ${left === 1 ? 'phrase is' : 'phrases are'} left.` : ''} Undo revision brings back the automatic text.`);
+  }
+  keepNoise(run = null) {
+    const [from, to] = run || [0, this.words.length];
+    this.words = this.words.map((w, i) => (i >= from && i < to && w.noise ? (({ noise, ...rest }) => rest)(w) : w));
+    this.saveEdits();
+    this.renderWindow();
+    const left = noiseRuns(this.words);
+    this.status(left ? `Kept. ${left} flagged ${left === 1 ? 'phrase is' : 'phrases are'} left.` : 'Kept: no phrases are flagged now.');
+  }
   // Clean up the transcript with the user's AI tool; timings are kept per word.
-  async revise() {
+  async revise({ flagNoise = false } = {}) {
     const ai = this.ai || sharedAI(), asset = this.asset, words = this.words;
     if (!ai || !asset || !words.length || this.revising) return;
     let provider = '';
@@ -247,15 +291,16 @@ export class TranscriptController {
       const language = $('transcriptLanguage').selectedOptions?.[0]?.textContent || '';
       const result = await reviseWords(words, {
         ask: async prompt => (await ai.run({ provider, prompt, images: [], tag: 'revise' })).text,
-        parse: jsonFrom, title: this.context?.().title, language, perCall: smallSetting(provider, { ai }) ? 3 : 25, cancelled: () => stopped,
+        parse: jsonFrom, title: this.context?.().title, language, flagNoise, perCall: smallSetting(provider, { ai }) ? 3 : 25, cancelled: () => stopped,
         onProgress: (done, total) => chip?.set(done / total, `${done} of ${total} parts`),
       });
       const key = this.keys.get(asset.id);
       if (key && !(await this.originalOf(asset))) await storedTranscript(`${key}:original`, words).catch((e) => console.warn('Save transcript:', e));
       if (this.asset?.id === asset.id) { this.words = result.words; this.saveEdits(); this.render(result.words); }
       else { this.results.set(asset.id, result.words); this.onwords?.(asset, result.words); if (key) storedTranscript(key, result.words).catch((e) => console.warn('Save transcript:', e)); }
-      chip?.finish(`Transcript revised: ${result.changed} of ${result.segments} parts changed.`);
-      if (this.asset?.id === asset.id) this.status(`Revised by AI: ${result.changed} of ${result.segments} parts changed. Undo revision brings back the automatic text.`);
+      const flags = flagNoise ? ` ${noiseRuns(result.words) || 'No'} ${noiseRuns(result.words) === 1 ? 'phrase' : 'phrases'} flagged as likely noise${noiseRuns(result.words) ? ', underlined in red: click one to remove or keep it' : ''}.` : '';
+      chip?.finish(`Transcript revised: ${result.changed} of ${result.segments} parts changed.${flags}`);
+      if (this.asset?.id === asset.id) this.status(`Revised by AI: ${result.changed} of ${result.segments} parts changed.${flags} Undo revision brings back the automatic text.`);
     } catch (error) {
       chip?.fail(stopped ? 'Revision stopped.' : `Could not revise: ${error.message}`);
       if (this.asset?.id === asset.id) this.status(stopped ? 'Revision stopped; the transcript is unchanged.' : `Could not revise: ${error.message}`);
@@ -284,12 +329,13 @@ export class TranscriptController {
   renderWindow() {
     this.active = -1;
     const fragment = document.createDocumentFragment();
-    this.buttons = this.words.slice(this.offset, this.offset + 100).map(word => {
+    this.buttons = this.words.slice(this.offset, this.offset + 100).map((word, n) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = word.text;
-      button.title = this.editing ? 'Click to correct this word' : Number.isFinite(word.start) ? `Seek to ${word.start.toFixed(1)} seconds` : '';
-      button.onclick = () => (this.editing ? this.editWord(word, button) : Number.isFinite(word.start) && this.audio.seek(word.start));
+      if (word.noise) button.classList.add('noise');
+      button.title = this.editing ? 'Click to correct this word' : word.noise ? 'Likely not part of the lesson (side talk or a fragment): click to remove or keep it' : Number.isFinite(word.start) ? `Seek to ${word.start.toFixed(1)} seconds` : '';
+      button.onclick = () => (this.editing ? this.editWord(word, button) : word.noise ? this.noiseMenu(this.offset + n, button) : Number.isFinite(word.start) && this.audio.seek(word.start));
       fragment.append(button, document.createTextNode(' '));
       return button;
     });
