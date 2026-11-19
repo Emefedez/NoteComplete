@@ -1,6 +1,6 @@
 # Chinese mode: pinyin input, character look-up, pinyin over characters, stroke order
 
-Status: **plan** (2026-11-19). Nothing here is implemented yet. Owner's requests:
+Status: **being implemented** (2026-11-19, branch `feat/chinese-mode`); the owner's answers are in §15. Owner's requests:
 
 > Plan out a Chinese mode, where you can easily type pinyin, get the automatic versions with the
 > proper accents and their respective characters in an easy to choose and input manner, using a
@@ -875,3 +875,62 @@ asks.
     server's `write_anki_deck` and `add_prefab` learn the Chinese fields?
 11. **Learning features order**: after Phase 2, which first — ruby (3), the look-up panel (4) or
     stroke order (5)?
+
+## 15. Owner's answers (2026-11-19) and the module contract
+
+**Answers.**
+1. Font: **bundle** Noto Sans SC (the 101 unicode-range slices, lazy on the web, shipped in
+   installers). Traditional text uses the same face's coverage plus system fonts.
+2. Dictionary: bundle the **common** pack (frequent words + every single character + all HSK 1–3
+   words, with short English glosses) and offer **downloadable, deletable expansions by HSK
+   level**: HSK 4, HSK 5, HSK 6, HSK 7–9 (Settings → Chinese → Dictionaries). Source of the
+   expansions: `drkameleon/complete-hsk-vocabulary` (MIT) `complete.min.json` at commit
+   `7ac65bf1a6387d35f1ade478906172a19311c7f9` from `raw.githubusercontent.com` (already allowed by
+   the CSP), SHA-256 pinned; each level's words are extracted on the device and kept in IndexedDB.
+3. Default script: **simplified** (traditional selectable).
+4. Shortcut: **Ctrl+Shift+Space** cycles Off → Hanzi → Pinyin → Off while typing; the `中` button
+   does the same; **Shift alone** (press and release) switches to Latin letters temporarily while a
+   Chinese mode is on. Both can be turned off in Settings → Chinese.
+5. Enter with a buffer follows the **mode and the text around the caret**: Pinyin mode → the
+   pinyin with tone marks; Hanzi mode → the pinyin with tone marks when the text before the caret
+   on that line already has tone-marked pinyin, otherwise the letters as typed (as system IMEs do,
+   so English words can be typed without switching off). Shift+Enter always writes the letters as
+   typed. Setting: Auto (default) / Letters / Pinyin with marks.
+6. Pinyin over characters: as proposed (a display layer; the per-note on/off is saved in the note;
+   exports keep it when it is on, with a checkbox in the Export dialog).
+7. Licence: **MIT** for the app (`LICENSE`); data packs keep their own licences beside them.
+8. Stroke player: our own (pure `render(spec)` for the prefab), hanzi-writer's technique.
+9. HSK: levels are shown on candidates and in the character panel; the bundled pack is the
+   beginner set (HSK 1–3), the expansions take it up to HSK 7–9. Ruby can be limited to words
+   above a chosen level.
+10. After phase 2: all of phases 3–6.
+
+**Module contract** (`apps/reader/chinese/`):
+
+| File | Owner area | Exports |
+|---|---|---|
+| `pinyin.js` | input | `SYLLABLES`, `normalise`, `markTone`, `numbersToMarks`, `marksToNumbers`, `segment`, `splitInput` (§4.2); pure, main + worker + Node |
+| `engine.js` | data | pure pack decoding and search, used by the worker and Node tests |
+| `engine-worker.js`, `client.js` | data | `chinese()` singleton (below) |
+| `convert.js` | data | `convertText(text, "s2t"\|"t2s", tables)` pure |
+| `user-dict.js`, `packs.js` | data | user dictionary; expansion download/delete |
+| `caret.js`, `ime.js`, `ime-menu.js`, `settings.js` | input | `attachIme(el, opts)`, `chineseField(el)`, `zhSettings()` |
+| `ruby.js`, `fonts.js` | reading | ruby layers; CJK font loading and export embedding |
+| `strokes.js`, `stroke-player.js`, `practice.js`, `prefabs/hanzi/` | strokes | stroke data, player, practice, prefab |
+| `lookup-panel.js` | panel | the character panel |
+
+`client.js` (`import {chinese} from "./chinese/client.js"`; every method is async and starts the
+worker on first use):
+
+```js
+chinese().candidates(input, {script, limit=60})
+  // → {reading: "nǐ hǎo", rest: "", items: [{text, pinyin /*marked, spaced*/, consumed /*input chars used*/,
+  //     level /*1–7 or 0*/, gloss /*short or ""*/, sentence /*bool*/}]}
+chinese().choose(input, item, script)          // learn (user dictionary)
+chinese().annotate(text, {script})            // → [{start, end, text, pinyin: ["nǐ","hǎo"], level}] for Han runs
+chinese().lookup(textOrChar, {script})        // → {entries:[{simp, trad, pinyin, gloss:[], level}], char?:{readings,
+  //     strokes, radical, variants:{simp,trad}, decomposition}, words:[{text,pinyin,gloss,level}]}
+chinese().convert(text, "s2t"|"t2s")          // → string
+chinese().packs()                             // → [{id, name, levels, bundled, installed, words, bytes}]
+chinese().installPack(id, onProgress) / removePack(id)
+```
