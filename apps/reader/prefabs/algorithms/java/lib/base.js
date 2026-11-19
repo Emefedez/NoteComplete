@@ -7,7 +7,7 @@
 // Java program binds it to a variable or field, the interpreter gives it a structure id (`_sid`)
 // and then `_mut(...)` reports each change to the trace.
 
-import { newIdentity, jstr, JLambda } from '../values.js';
+import { newIdentity, jstr } from '../values.js';
 
 export class LibObject {
   constructor(rt) {
@@ -71,8 +71,6 @@ export function callFn(rt, f, method, args) {
   if (f === null || f === undefined) rt.throwJava('NullPointerException', null);
   return rt.callFn(f, method, args);
 }
-
-export function isLambda(v) { return v instanceof JLambda; }
 
 export function listString(rt, items) {
   return '[' + items.map((x) => rt.str(x)).join(', ') + ']';

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SearchIndex, normalize, words, withinOneEdit, matchWord } from './search-index.js';
+import { ocrWords, mergeWords, ocrPasses, OCR_LANGUAGES, readingOrder } from './ocr.js';
 
 const unit = (page, source, text, extra = {}) => ({
   page, source, ...extra,
@@ -57,7 +58,6 @@ test('results order by page, then source, and repeat per occurrence', () => {
   assert.equal(index.search('cache').length, 2);
   assert.deepEqual(index.search('  '), []);
 });
-import { ocrWords } from './ocr.js';
 test('OCR words come back in page units without low-confidence noise', () => {
   const data = { blocks: [{ paragraphs: [{ lines: [{ words: [
     { text: 'Memoria', confidence: 91, bbox: { x0: 200, y0: 100, x1: 400, y1: 140 } },
@@ -67,7 +67,6 @@ test('OCR words come back in page units without low-confidence noise', () => {
   assert.deepEqual(ocrWords(null, 1), []);
 });
 
-import { mergeWords } from './ocr.js';
 test('two OCR readings of one handwritten word are one hit, found by either', () => {
   const words = mergeWords(
     [{ text: 'Sectov', box: [10, 10, 60, 20], confidence: 70 }, { text: '600B', box: [80, 10, 40, 20], confidence: 60 }],
@@ -108,7 +107,6 @@ test('OCR readings agreed by several passes win over one confident guess', () =>
   assert.deepEqual(words.map(w => [w.text, w.alts || []]), [['cabeza', ['cabaza']], ['otra', []]]);
 });
 
-import { ocrPasses, OCR_LANGUAGES, readingOrder } from './ocr.js';
 test('high-quality OCR reads more, at more sizes, in more ways; the normal passes are part of it', () => {
   assert.ok(OCR_LANGUAGES.chi_sim && OCR_LANGUAGES.chi_tra, 'Chinese is offered');
   const normal = ocrPasses('normal'), high = ocrPasses('high'), extra = ocrPasses('high', { extra: true });

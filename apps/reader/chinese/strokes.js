@@ -7,12 +7,9 @@
 // Coordinates: the 1024 box of Make Me a Hanzi, y up (drawn with y' = 900 − y).
 export const REMOTE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/';
 export const CACHE = 'notecomplete-chinese';
-let base = new URL('../vendor/chinese/strokes/', import.meta.url).href;
+const base = new URL('../vendor/chinese/strokes/', import.meta.url).href;
 const shards = new Map(), chars = new Map();
 let indexing = null;
-
-// Where the shards are (tests, a desktop folder); clears what was loaded.
-export function setStrokeBase(url) { base = String(url).replace(/\/?$/, '/'); shards.clear(); chars.clear(); indexing = null; }
 
 async function readText(url) {
   if (url.startsWith('file:')) {

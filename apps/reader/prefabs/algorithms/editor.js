@@ -116,14 +116,14 @@ export function open(root, { spec, editing, host }) {
   const editBtn = button('draw', 'Edit the code');
   editBtn.classList.add('alg-edit-code');
   editBtn.hidden = true;
-  let editor = null, codeEditing = false, stale = false;
+  let editor = null, codeEditing = false;
   editBtn.onclick = () => setEditing(true);
   shell.panel.append(make('div', { className: 'alg-code-head' }, make('h4', { textContent: 'Code (Java)' }), wrapBox, editBtn), codeNote, errorBox, editHost, code, make('h4', { textContent: 'Variables' }), vars, make('h4', { textContent: 'Call stack' }), calls, make('h4', { textContent: 'Changes in this step' }), changes, legend);
   let codeFor = '';
   function setEditing(on) {
     codeEditing = on && isJava();
     if (codeEditing && !editor) {
-      editor = codeEditor(editHost, { value: model.source, lang: 'java', label: 'Java code', onChange: (text) => { model = { ...model, source: text }; stale = true; shell.say('Run (in the Input tab) to see the steps of the code as it is now'); } });
+      editor = codeEditor(editHost, { value: model.source, lang: 'java', label: 'Java code', onChange: (text) => { model = { ...model, source: text }; shell.say('Run (in the Input tab) to see the steps of the code as it is now'); } });
     } else if (editor && editor.value !== model.source) editor.value = model.source;
     editHost.hidden = !codeEditing;
     code.hidden = codeEditing;
@@ -324,7 +324,6 @@ export function open(root, { spec, editing, host }) {
       finishRun();
       rememberTrace(spec, data.trace);
       ran.add(runKey(spec));
-      stale = false;
       run = traceOf(spec);
       index = 0;
       const err = data.trace.error;
@@ -448,7 +447,7 @@ export function open(root, { spec, editing, host }) {
     cancelBtn.hidden = !worker;
     cancelBtn.onclick = () => cancelRun();
     if (worker) runBtn.disabled = true;
-    const keepJava = (k, v) => { model = { ...model, [k]: v }; stale = true; };
+    const keepJava = (k, v) => { model = { ...model, [k]: v }; };
     return [
       make('h4', { textContent: 'Your Java code' }),
       make('p', { className: 'alg-hint', textContent: 'Write it on the right; Run plays its steps. The course\'s TADs are there (Graph, Vertex, Edge, Map/HashMap, Set, List, Queue, Stack, BinaryTree, Tree, BinaryMaxHeap) and java.util.' }),

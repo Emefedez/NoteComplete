@@ -3,8 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { runJava } from '../java/index.js';
-import { traceProblem } from '../trace/recorder.js';
+import { traceProblem, record } from '../trace/recorder.js';
 import { drawStep } from '../structures/index.js';
+import { algorithmById } from '../catalog/index.js';
+import { JAVA_VERSIONS, javaProgram, javaProgramForEditing } from '../catalog/java-versions.js';
+import { traceOf, codeOf, render, name, normalize } from '../render.js';
 
 const here = new URL('../java/test/fixtures/', import.meta.url);
 const sources = (dir) => readdirSync(new URL(dir + '/', here)).filter((f) => f.endsWith('.java')).map((f) => ({ name: f, text: readFileSync(new URL(dir + '/' + f, here), 'utf8') }));
@@ -21,10 +24,6 @@ for (const dir of ['activity1', 'activity4', 'activity6', 'activity7', 'activity
 
 // "Run the Java version": each built-in's shown source runs through the Java layer, on its
 // presets, with the JS implementation's result, and its steps point at the shown code.
-import { algorithmById } from '../catalog/index.js';
-import { JAVA_VERSIONS, javaProgram, javaProgramForEditing } from '../catalog/java-versions.js';
-import { record } from '../trace/recorder.js';
-import { traceOf, codeOf, render, name, normalize } from '../render.js';
 
 const plain = (v) => JSON.parse(JSON.stringify(v ?? null));
 test('the built-ins’ Java versions give the JS results, at the shown lines', () => {

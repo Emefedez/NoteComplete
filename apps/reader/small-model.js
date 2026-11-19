@@ -42,7 +42,7 @@ const parseJson = text => {
   if (start < 0 || end <= start) throw Error('The AI did not return the expected JSON.');
   return JSON.parse(s.slice(start, end + 1));
 };
-// A region as fractions of the page: inside it, and not a sliver (as quiz.js accepts).
+// A region as fractions of the page: inside it, and not a sliver (quiz.js uses it too).
 export const validBox = b => Array.isArray(b) && b.length === 4 && b.every(v => Number.isFinite(v) && v >= 0 && v <= 1) && b[2] - b[0] > 0.02 && b[3] - b[1] > 0.01;
 
 export const READ_SCHEMA = {

@@ -5,7 +5,6 @@ import {
   sanitizeSvg,
   normalizeVisualSpec,
   renderVisualSvg,
-  renderVisualHtml,
   renderVisualMcpMarkdown,
   examPrompt,
   cleanExamData,

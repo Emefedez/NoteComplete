@@ -10,7 +10,7 @@ import {
 import { Library, memoryStore } from './library.js';
 import { groupStore } from './groups.js';
 import { noteFingerprint } from './find.js';
-import initWasm, { EditorSession } from './pkg/noteful_wasm.js';
+import initWasm from './pkg/noteful_wasm.js';
 
 await initWasm({ module_or_path: readFileSync(new URL('./pkg/noteful_wasm_bg.wasm', import.meta.url)) });
 

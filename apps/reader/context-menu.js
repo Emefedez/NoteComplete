@@ -24,10 +24,6 @@ export function closeContextMenu() {
   onClose?.();
 }
 
-export function contextMenuOpen() {
-  return !!open;
-}
-
 // One menu panel (the menu itself, or a submenu of it).
 function panel(list, title, root, depth) {
   const el = document.createElement('div');

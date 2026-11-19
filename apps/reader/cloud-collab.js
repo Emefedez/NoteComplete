@@ -9,7 +9,6 @@ import {
   decryptInvite,
 } from './chunked-note.js';
 import { addExportMenu, exportable } from './download-queue.js';
-import { icon } from './icons.js';
 
 // Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
 // Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.

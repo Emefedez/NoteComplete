@@ -14,7 +14,6 @@ function icon(name) {
   return svg;
 }
 
-const $ = id => document.getElementById(id);
 const EDGES = { left: 'l', right: 'r', top: 't', bottom: 'b', 'bottom-left': 'bl', 'bottom-right': 'br', 'top-left': 'tl', 'top-right': 'tr' };
 
 // Keep a rect inside the area: no wider or taller than it, and fully on it.

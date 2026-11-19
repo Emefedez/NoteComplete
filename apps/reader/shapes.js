@@ -19,8 +19,3 @@ export function shapePoints(kind,a,b){
  }
  return [a,b];
 }
-export function resizedShape(kind,fixed,moving){
- return CLOSED_SHAPES.has(kind)
- ?{kind,start:[Math.min(fixed[0],moving[0]),Math.min(fixed[1],moving[1])],end:[Math.max(fixed[0],moving[0]),Math.max(fixed[1],moving[1])]}
- :{kind,start:fixed,end:moving};
-}

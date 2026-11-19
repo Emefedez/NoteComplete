@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { archiveCorsUrl, archiveId, archiveListing, archiveUrl, supportedArchiveFile, PRELOADED_ARCHIVE, ArchiveClient } from './archive-client.js';
+import { archiveId, archiveListing, archiveUrl, supportedArchiveFile, PRELOADED_ARCHIVE, ArchiveClient } from './archive-client.js';
 
 test('item links and identifiers are recognised', () => {
   assert.equal(archiveId('https://archive.org/details/1GREIUvigo'), '1GREIUvigo');

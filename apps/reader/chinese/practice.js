@@ -69,9 +69,8 @@ export function scoreStroke(points, medians, index, { from = index } = {}) {
   return { ok: fits(own) && closest === index, ...own, closest };
 }
 
-// Practice results: stored, and read back for a character (newest first) or all.
+// Practice results, stored.
 export const recordPractice = (result) => withStore('practice', 'readwrite', (s) => s.add({ char: result.char, at: result.at || Date.now(), mistakes: result.mistakes, strokes: result.strokes }));
-export const practiceLog = (char = null) => withStore('practice', 'readonly', (s) => (char ? s.index('char').getAll(char) : s.getAll())).then((rows) => (rows || []).sort((a, b) => b.at - a.at));
 
 // `char`, `data` (loaded when missing), `size`, `grid`, `outline` (grey character to trace),
 // `record` (store the result), `onStroke(score, index)`, `onDone(result)`, `hintAfter` (misses).

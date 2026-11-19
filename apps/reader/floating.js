@@ -6,7 +6,6 @@
 // large) next to ×. Place and size are remembered per window.
 import { icon } from './icons.js';
 
-const $ = id => document.getElementById(id);
 // How much of a window must stay on screen when it is dragged out of bounds.
 const GRAB = 56;
 const EDGES = { left: 'l', right: 'r', top: 't', bottom: 'b', 'bottom-left': 'bl', 'bottom-right': 'br', 'top-left': 'tl', 'top-right': 'tr' };

@@ -3,8 +3,8 @@
 //   antigravity  Gemini through the user's Antigravity CLI (audio leaves the device)
 // ffmpeg splits the recording so each piece gets its start time and the
 // reader can show text while the rest is still being transcribed.
-import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { terminateProcess } from './terminate-process.js';

@@ -5,7 +5,7 @@
 // characters.
 //   node tools/ocr_quality_e2e.mjs
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';

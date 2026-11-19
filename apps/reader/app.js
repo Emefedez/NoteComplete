@@ -1,6 +1,6 @@
 import { touchGestures, palmPointer } from "./touch.js";
 import { followPoint, smoothStroke, pressureRadii } from "./stroke-smoothing.js";
-import { textLines } from "./text-layer.js";
+import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
 import {
@@ -47,7 +47,6 @@ import { themeController } from "./theme.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
-import { selectedText } from "./text-layer.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter, packPages } from "./page-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
@@ -203,9 +202,8 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
+themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
-let chromeSettling = false;
 let panels = [],
   observer = null,
   thumbnailObserver = null,
@@ -2095,11 +2093,9 @@ function setCompact(compact) {
   chromeState.compact = compact;
   toolOptions();
   if (changed) {
-    chromeSettling = true;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         chromeState.anchor = $("viewport").scrollTop;
-        chromeSettling = false;
       }),
     );
   }
@@ -7102,7 +7098,7 @@ async function insertCompound(p, kind, box = null, spec = {}) {
 // The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
 // over the page, compound-dialogs.js), or the editor.js of a module put in their place.
 async function compoundEditor(kind, spec = {}, editing = false) {
-  const { editor, module } = editorOf({ module: kind });
+  const { editor } = editorOf({ module: kind });
   if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
   return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
 }
@@ -8453,8 +8449,7 @@ async function reloadNoteFromDisk(targetPath) {
   const diskFile = new File([opened.bytes], opened.name);
   if (dirty || busy()) {
     try {
-      const current = await call(opened.name.endsWith(".nfedit") ? "saveFile" : "export", { note: await notesPayload() });
-      const localBytes = current?.bytes || (typeof current === "string" ? new TextEncoder().encode(current) : current);
+      const { bytes: localBytes } = await exportNoteBytes(opened.name.endsWith(".nfedit") ? "project" : "noteful");
       if (localBytes) {
         const localFile = new File([localBytes], opened.name);
         const choice = await versions.compareFiles({
@@ -8500,7 +8495,7 @@ const chat = chatController({ ...studyDeps, selection, selectedText: () => textS
 audio.transcript.jobs = jobs;
 audio.transcript.ai = ai;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
-const trim = audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
+audioTrim({ audio, status, toNotes: async (text) => (await notesApi()).append(text), toTextBox: (text) => textBox.answerToTextBox(text) });
 audio.transcript.context = () => ({ title: doc?.title || "" });
 // Briefly outline the region of a page that answers a quiz question.
 function highlightRegion(index, box) {
@@ -8683,7 +8678,6 @@ const expandMaker = expandController({
       await action("drawMany", { page: targetPage, lines: pageLines });
     }
   },
-  call,
   // The merged exam lives in the note: mark it unsaved so it is written, and refresh an open HTML exam view.
   markEmbeddedExamUpdated: async () => {
     if (!doc) return;

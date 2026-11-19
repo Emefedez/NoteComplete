@@ -28,15 +28,15 @@
 import { CompileError } from './lexer.js';
 import { Interpreter, JavaThrow, RunLimit } from './interpreter.js';
 import { createRecorder as newRecorder } from '../trace/recorder.js';
-
-// The one recorder of the module, as the interpreter uses it: step() returns false at the
-// cap (the trace is then `truncated`) and mark() marks the next step only.
-export const createRecorder = (options = {}) => newRecorder({ stopAtCap: true, stepMarks: true, ...options });
 import { JArray, JObject, JDouble, JChar, jchar, dbl, isStr, sv, resetIdentities } from './values.js';
 import { LibObject } from './lib/base.js';
 import { JList, JSet, JMap, JPriorityQueue, JStack, JArrayDeque } from './lib/util.js';
 import { AedList, LinkedQueue, LinkedStack, Vertex, Edge, AdjacencyList, MapOfMap, CourseHashMap, CoursePair } from './lib/aed.js';
 import { simpleOf } from './library.js';
+
+// The one recorder of the module, as the interpreter uses it: step() returns false at the
+// cap (the trace is then `truncated`) and mark() marks the next step only.
+export const createRecorder = (options = {}) => newRecorder({ stopAtCap: true, stepMarks: true, ...options });
 
 export { CompileError };
 

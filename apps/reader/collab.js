@@ -19,8 +19,6 @@ const SIDE_KEY = 'notecomplete-tablet-dock';
 let onlineHooked = false;
 const DRAWING = new Set(['draw', 'highlight', 'erase', 'tape', 'shape']);
 let session = null;
-// The open session, for checks in the browser (tools/collab_e2e.mjs).
-export const currentSession = () => session;
 let yjsLoading = null;
 
 // Yjs, its sync and awareness protocols, vendored by tools/build_web.py.

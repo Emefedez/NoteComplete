@@ -5,7 +5,6 @@
 import { mergeStudy } from './versions.js';
 
 export const PACK_FORMAT = 'notecomplete-study', PACK_VERSION = 1;
-export const MAX_PACK_BYTES = 20 * 1024 * 1024;
 export const KINDS = [['decks', 'Flashcard decks'], ['quizzes', 'Quizzes'], ['notes', 'Markdown notes']];
 
 // A document's study material, as kept on this device: { decks, quizzes, notes } (empty ones left out).

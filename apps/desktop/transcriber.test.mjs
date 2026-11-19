@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { voxtypeText, geminiSegments } from './transcriber.js';
+import { voxtypeText, geminiSegments, transcriber, voicedSpans, voicedSegments } from './transcriber.js';
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 test('voxtype output keeps only the transcript lines', () => {
   const out = 'Loading audio file: "/t/piece-0001.wav"\nAudio format: 16000 Hz, 1 channel(s), Int\nProcessing 479317 samples (29.96s)...\n\nEste software sirve para usar el ordenador.\n';
@@ -12,11 +16,6 @@ test('Gemini segments are shifted by the piece offset', () => {
   assert.deepEqual(geminiSegments(reply, 600), [{ start: 606.72, end: 611.73, text: 'Este software sirve' }]);
 });
 
-import { transcriber } from './transcriber.js';
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 const ffmpeg = (() => { try { return execFileSync('sh', ['-c', 'command -v ffmpeg']).toString().trim(); } catch { return ''; } })();
 test('a Voxtype piece with invalid UTF-8 is cut in two and retried; the language is passed', { skip: !ffmpeg }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'vox-test-')), log = path.join(dir, 'calls');
@@ -34,7 +33,6 @@ test('a Voxtype piece with invalid UTF-8 is cut in two and retried; the language
   assert.equal(updates.at(-1)[3], 0);
 });
 
-import { voicedSpans, voicedSegments } from './transcriber.js';
 test('Voxtype words go to the voiced stretches of a piece, not across its pauses', () => {
   const log = 'silence_start: 0\nsilence_end: 4.2 | silence_duration: 4.2\nsilence_start: 12.5\nsilence_end: 14 | silence_duration: 1.5\nsilence_start: 27.5\n';
   const spans = voicedSpans(log, 30);

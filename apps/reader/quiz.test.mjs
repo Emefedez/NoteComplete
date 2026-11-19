@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards, barStates } from './quiz.js';
+import { prepareQuestions, score, wrongQuestions, quizPrompt, DEFAULT_QUIZ_PROMPT, correctOf, quizCards, barStates, isMulti, isRight, correctSet, reorderQuizQuestions } from './quiz.js';
 import { progressAt, createAiMonitor } from './jobs.js';
 
 const reply = { questions: [
@@ -79,7 +79,6 @@ test('the progress bar shows right, right with the hint, wrong and disputed', ()
   assert.deepEqual(barStates(quiz), ['right', 'hinted', 'wrong', 'disputed', 'right', '']);
 });
 
-import { isMulti, isRight, correctSet, reorderQuizQuestions } from './quiz.js';
 test('choose-all-that-apply: only the exact set is right, scored like any question', () => {
   const q = { question: 'q', options: ['a', 'b', 'c', 'd'], answer: 0, answers: [0, 2], multi: true };
   assert.ok(isMulti(q));

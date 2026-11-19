@@ -29,7 +29,6 @@ export const FONT_STACKS = {
   Noteworthy: `Noteworthy, 'Comic Neue', 'Comic Sans MS', cursive, ${CJK_SANS}`,
   "Comic Sans MS": `'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive, ${CJK_SANS}`,
 };
-export const TEXT_SIZES = [10, 12, 14, 16, 18, 22, 28, 36, 48, 64, 96];
 // Text sizes the core takes (imports.rs TextBox::valid), and how the size field shows one.
 export const clampSize = (n) => Math.min(4000, Math.max(0.5, n));
 export const sizeText = (n) => String(Math.round(n * 100) / 100);
