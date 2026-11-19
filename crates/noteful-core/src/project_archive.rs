@@ -40,7 +40,12 @@ fn pack(
     audio: &[&[u8]],
 ) -> Result<Vec<u8>> {
     project.format = FORMAT.to_owned();
-    project.version = VERSION;
+    // With Chinese settings 14, so an app that cannot keep them says so instead of failing.
+    project.version = if project.chinese.is_empty() {
+        VERSION
+    } else {
+        14
+    };
     let manifest = serde_json::to_vec(&project).map_err(|e| Error::new(0, e.to_string()))?;
     let mut builder = tar::Builder::new(Vec::new());
     crate::markdown::add(&mut builder, MANIFEST, &manifest)?;
@@ -120,7 +125,7 @@ impl Editor {
             }
         }
         let project = project
-            .filter(|p| p.format == FORMAT && p.version == VERSION)
+            .filter(|p| p.format == FORMAT && matches!(p.version, VERSION | 14))
             .ok_or_else(|| Error::new(0, "Unsupported or invalid project"))?;
         let source = source.ok_or_else(|| Error::new(0, "The project has no note"))?;
         let origin = match (&project.origin, origin) {

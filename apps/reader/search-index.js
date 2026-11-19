@@ -14,6 +14,7 @@ export function normalize(text) {
 // characters is a word of its own: a query of several characters then matches them in a
 // row, wherever OCR or the PDF happened to break the line into "words".
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const HAN = /\p{Script=Han}/u;
 const pieces = token => (CJK.test(token) ? token.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+/gu) : [token]);
 export function words(text) {
   return (normalize(text).match(/[\p{L}\p{N}]+/gu) || []).flatMap(pieces);
@@ -55,6 +56,21 @@ function split(word) {
   return parts.map((text, i) => ({ ...rest, text, ...(word.box ? { box: [word.box[0] + (word.box[2] * i) / parts.length, word.box[1], word.box[2] / parts.length, word.box[3]] } : {}) }));
 }
 
+// [score, last word] of `term` at word j: the word itself, or Chinese characters from j on
+// whose readings (`py`, toneless, from addPinyin) spell it: "nihao" and "ni hao" find 你好.
+function scoreAt(term, list, j, fuzzy) {
+  const m = wordScore(term, list[j], fuzzy);
+  if (m || !list[j].py) return [m, j];
+  let spelled = '';
+  for (let k = j; k < list.length && list[k].py; k++) {
+    spelled += list[k].py;
+    if (spelled === term) return [3, k];
+    if (!term.startsWith(spelled)) break;
+  }
+  return [0, j];
+}
+const span = (from, to) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
+
 export class SearchIndex {
   constructor() { this.units = []; }
   // unit: { page, source, words: [{ text, box?, time? }], label?, recordingId? }
@@ -63,6 +79,26 @@ export class SearchIndex {
     if (prepared.words.length) this.units.push(prepared);
   }
   remove(predicate) { this.units = this.units.filter(u => !predicate(u)); }
+  // Units with Chinese characters whose readings are not known yet.
+  needsPinyin() { return this.units.some(u => !u.pinyin && u.words.some(w => HAN.test(w.text))); }
+  // Readings for the Chinese characters: `annotate(text)` → [{start, end, text, pinyin: [...]}]
+  // (chinese/client.js), over each unit's words joined.
+  async addPinyin(annotate) {
+    for (const unit of this.units) {
+      if (unit.pinyin || !unit.words.some(w => HAN.test(w.text))) continue;
+      unit.pinyin = true;
+      const text = unit.words.map(w => w.text).join(''), at = [];
+      unit.words.forEach((w, i) => { for (let k = 0; k < w.text.length; k++) at.push(i); });
+      for (const a of await annotate(text).catch(() => [])) {
+        let index = a.start;
+        [...(a.text ?? text.slice(a.start, a.end))].forEach((char, k) => {
+          const word = unit.words[at[index]];
+          if (a.pinyin?.[k] && word && word.text === char) word.py = clean(a.pinyin[k]);
+          index += char.length;
+        });
+      }
+    }
+  }
   has(predicate) { return this.units.some(predicate); }
   // Hits where every query word appears within a short window, best matches first
   // inside each unit; results are ordered by page, then source, then position.
@@ -75,20 +111,21 @@ export class SearchIndex {
       const window = Math.max(terms.length * 4, 6);
       const used = new Set();
       for (let i = 0; i < list.length; i++) {
-        const first = wordScore(terms[0], list[i], fuzzy);
+        const [first, firstEnd] = scoreAt(terms[0], list, i, fuzzy);
         if (!first || used.has(i)) continue;
-        const matched = [i];
-        let score = first, at = i;
+        const matched = span(i, firstEnd);
+        let score = first, at = firstEnd, extra = firstEnd - i;
         for (const term of terms.slice(1)) {
-          let found = -1, best = 0;
-          for (let j = at + 1; j < Math.min(list.length, i + window); j++) {
-            const m = wordScore(term, list[j], fuzzy);
-            if (m > best) { best = m; found = j; if (m === 3) break; }
+          let found = -1, end = -1, best = 0;
+          for (let j = at + 1; j < Math.min(list.length, i + window + extra); j++) {
+            const [m, last] = scoreAt(term, list, j, fuzzy);
+            if (m > best) { best = m; found = j; end = last; if (m === 3) break; }
           }
           if (found < 0) { score = 0; break; }
           score += best + (found === at + 1 ? 1 : 0);
-          matched.push(found);
-          at = found;
+          matched.push(...span(found, end));
+          extra += end - found;
+          at = end;
         }
         if (!score) continue;
         for (const k of matched) used.add(k);

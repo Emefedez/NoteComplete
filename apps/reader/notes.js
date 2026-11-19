@@ -5,6 +5,9 @@
 // the current page's section. Loaded on first use; the editor is destroyed
 // when the panel closes, so nothing of it runs while it is hidden.
 import { renderMarkdown } from './rich-text.js';
+import { attachIme, zhButton } from './chinese/ime.js';
+import { fieldMode, setFieldMode } from './chinese/settings.js';
+import { noteMode, setNoteMode } from './chinese/ruby.js';
 
 const $ = id => document.getElementById(id);
 let library = null;
@@ -64,6 +67,10 @@ export function notesController({ call, jump, currentPage, store, status }) {
   // A sharing session's notes (collab.js): a Y.Text everyone edits, with cursors.
   let shared = null;
   const panel = $('notesPanel');
+  // 中: Chinese input in the notes (chinese/ime.js), its mode kept per note.
+  const mdEl = () => $('notesEditor').querySelector('.TinyMDE');
+  const zhNotes = zhButton(mdEl);
+  $('notesMarker').before(zhNotes);
   const save = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flush, 600);
@@ -97,11 +104,15 @@ export function notesController({ call, jump, currentPage, store, status }) {
       requestAnimationFrame(markLines);
     });
     $('notesEditor').querySelector('.TinyMDE')?.setAttribute('contenteditable', String(!shared || shared.canEdit));
+    // Chinese typed here goes in through the editor (one change, so sharing sees it).
+    const zhMode = () => `notes-${key || 'none'}`;
+    if (mdEl()) attachIme(mdEl(), { kind: 'contenteditable', insert: (t) => editor?.paste(t), getMode: () => noteMode(fieldMode(zhMode())), setMode: (m) => { setFieldMode(zhMode(), m); setNoteMode(m); } }).addButton(zhNotes);
     markLines();
     follow(currentPage());
     shared?.mounted?.();
   }
   function unmount() {
+    mdEl()?.__zhIme?.detach();
     bar?.destroy?.();
     editor?.destroy?.();
     bar = editor = null;
@@ -153,6 +164,7 @@ export function notesController({ call, jump, currentPage, store, status }) {
       const placeholderChanged = core !== inCore;
       core = inCore;
       key = fingerprint ? `notes:${fingerprint}` : '';
+      mdEl()?.__zhIme?.refresh();
       $('notesMarker').hidden = previewing || !core;
       panel.querySelector('.notes-follow').hidden = !core;
       const inFile = core ? await call('getMarkdown').catch(() => '') : '';

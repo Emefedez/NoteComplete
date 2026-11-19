@@ -8,9 +8,9 @@ import { keepInside } from './prefabs/kit/window.js';
 test('the shipped modules give the picker every prefab it had, in its groups', () => {
   const ids = cards().map((c) => c.id);
   for (const id of ['graph', 'table', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'numberline', 'truthtable']) assert.ok(ids.includes(id), id);
-  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths', 'algorithms']);
+  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths', 'algorithms', 'languages']);
   assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml' });
-  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline', 'truthtable', 'algorithms']);
+  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline', 'truthtable', 'algorithms', 'hanzi']);
   assert.ok(cards().some((c) => c.id === 'algorithm-dijkstra' && c.label === 'Greedy: Dijkstra' && c.group === 'algorithms' && c.kind === 'prefab'));
 });
 

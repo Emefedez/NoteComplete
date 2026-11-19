@@ -362,3 +362,47 @@ fn copied_items_are_lines_and_pictures_where_they_are_drawn_now() {
     e.add_lines(1, copied.lines).unwrap();
     assert!(e.view(1).unwrap()["svg"].as_str().unwrap().len() > before);
 }
+
+#[test]
+fn project_keeps_chinese_settings_in_every_form() {
+    let mut e = exam();
+    let baseline: Value = serde_json::from_str(&e.save_project().unwrap()).unwrap();
+    assert!(baseline.get("chinese").is_none() && baseline["version"].as_u64().unwrap() < 14);
+    let chinese: noteful_core::ProjectChinese = serde_json::from_value(serde_json::json!({
+        "mode": "hanzi", "script": "simplified", "ruby": "on", "rubyMinLevel": 3,
+        "readings": [{"item": "text:a1", "index": 1, "pinyin": "háng"}, {"md": 12, "index": 0, "pinyin": "le"}]
+    }))
+    .unwrap();
+    e.set_chinese(chinese.clone()).unwrap();
+    let saved = e.save_project().unwrap();
+    let raw: Value = serde_json::from_str(&saved).unwrap();
+    assert_eq!(raw["version"], 14);
+    assert_eq!(raw["chinese"]["rubyMinLevel"], 3);
+    assert_eq!(Editor::open_project(&saved).unwrap().chinese(), &chinese);
+    // The archive (.nfedit) and .notecomp carry them too.
+    let archive = e.save_project_archive().unwrap();
+    assert_eq!(
+        Editor::open_project_bytes(&archive).unwrap().chinese(),
+        &chinese
+    );
+    let comp = e.export_notecomplete().unwrap();
+    assert_eq!(
+        Editor::open_notecomplete(&comp).unwrap().chinese(),
+        &chinese
+    );
+    // Clearing them writes no field and the version they would have had.
+    e.set_chinese(Default::default()).unwrap();
+    let cleared: Value = serde_json::from_str(&e.save_project().unwrap()).unwrap();
+    assert!(cleared.get("chinese").is_none() && cleared["version"] == baseline["version"]);
+    // Unknown values and keys are refused.
+    for bad in [
+        serde_json::json!({"mode": "klingon"}),
+        serde_json::json!({"rubyMinLevel": 12}),
+        serde_json::json!({"readings": [{"index": 0, "pinyin": "a"}]}),
+        serde_json::json!({"colour": true}),
+    ] {
+        let mut project = raw.clone();
+        project["chinese"] = bad;
+        assert!(Editor::open_project(&project.to_string()).is_err());
+    }
+}

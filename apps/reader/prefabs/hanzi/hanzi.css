@@ -1,0 +1,7 @@
+/* The hanzi module's editor (editor.js): the stroke player or practice in the middle. */
+.hz-editor .hz-canvas { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; touch-action: auto; }
+.hz-stage-host { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.hz-player { display: grid; gap: 10px; }
+.hz-stage svg, .hz-practice svg { background: #fff; border-radius: 6px; }
+.hz-practice-status { margin: 6px 0 0; text-align: center; }
+.hz-actions { display: flex; align-items: center; gap: 6px; }

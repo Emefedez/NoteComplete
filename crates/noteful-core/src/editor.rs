@@ -240,6 +240,9 @@ pub(crate) struct Project {
     /// Embedded interactive exam HTML and structured metadata kept with the project (project version 12).
     #[serde(default, skip_serializing_if = "ProjectExam::is_empty")]
     pub(crate) exam: ProjectExam,
+    /// Chinese mode settings for this note (project version 14).
+    #[serde(default, skip_serializing_if = "ProjectChinese::is_empty")]
+    pub(crate) chinese: ProjectChinese,
 }
 
 /// The file a note was imported from when it was not a Noteful note (Goodnotes, Notability…),
@@ -304,6 +307,54 @@ impl ProjectExam {
 fn is_zero(n: &usize) -> bool {
     *n == 0
 }
+
+/// Chinese mode for one note (version 14, docs/CHINESE-INPUT.md §9): the input mode and script
+/// it was last typed in, pinyin over characters on/off (empty: the global setting), the lowest
+/// HSK level that still gets pinyin, and readings chosen for single occurrences.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectChinese {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub mode: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub script: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub ruby: String,
+    #[serde(rename = "rubyMinLevel", skip_serializing_if = "is_zero")]
+    pub ruby_min_level: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub readings: Vec<ChineseReading>,
+}
+/// A reading chosen for one character: in a text box (`item`) or the Markdown notes (`md`,
+/// the character offset where its run starts), `index` characters into that run.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ChineseReading {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub item: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub md: Option<usize>,
+    pub index: usize,
+    pub pinyin: String,
+}
+impl ProjectChinese {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+    fn valid(&self) -> bool {
+        ["", "off", "hanzi", "pinyin"].contains(&self.mode.as_str())
+            && ["", "simplified", "traditional"].contains(&self.script.as_str())
+            && ["", "on", "off"].contains(&self.ruby.as_str())
+            && self.ruby_min_level <= 9
+            && self.readings.len() <= 100_000
+            && self.readings.iter().all(|r| {
+                (r.item.is_empty() != r.md.is_none())
+                    && r.item.len() <= 200
+                    && !r.pinyin.is_empty()
+                    && r.pinyin.len() <= 64
+            })
+    }
+}
 pub(crate) fn apply_layer_edit(
     layers: &mut Vec<crate::Layer>,
     layer: &crate::Layer,
@@ -361,6 +412,8 @@ pub struct Editor {
     pub(crate) added_audio: Vec<(crate::AddedAudio, Vec<u8>)>,
     /// Embedded interactive exam HTML and structured metadata; not part of edit history.
     pub(crate) exam: ProjectExam,
+    /// Chinese mode settings kept with the note; not part of edit history.
+    pub(crate) chinese: ProjectChinese,
     /// The SVG of added lines, by the place of their `Add` edit in the history, so a view
     /// does not format every line again (view.rs). Emptied from the cursor on by `commit`.
     pub(crate) added_svg: std::cell::RefCell<Vec<Option<Box<str>>>>,
@@ -441,6 +494,7 @@ impl Editor {
             study: ProjectStudy::default(),
             added_audio: Vec::new(),
             exam: ProjectExam::default(),
+            chinese: ProjectChinese::default(),
             added_svg: Default::default(),
             layers_at: Default::default(),
             origin: None,
@@ -794,7 +848,9 @@ impl Editor {
     }
     fn serialize_project(mut project: Project) -> Result<String> {
         project.format = "noteful-re-project".to_owned();
-        project.version = if project.origin.is_some() {
+        project.version = if !project.chinese.is_empty() {
+            14
+        } else if project.origin.is_some() {
             13
         } else if !project.exam.is_empty() {
             12
@@ -887,6 +943,7 @@ impl Editor {
             study: self.study.clone(),
             added_audio: Self::encode_added_audio(&self.added_audio, inline),
             exam: self.exam.clone(),
+            chinese: self.chinese.clone(),
         }
     }
     pub(crate) fn project_origin(&self, inline: bool) -> Option<ProjectOrigin> {
@@ -1015,6 +1072,7 @@ impl Editor {
             study,
             added_audio,
             exam,
+            chinese: self.chinese.clone(),
         };
         Ok((project, source_bytes))
     }
@@ -1227,6 +1285,17 @@ impl Editor {
     pub fn set_origin(&mut self, origin: Option<Origin>) {
         self.origin = origin;
     }
+    /// Chinese mode settings kept with the note (§9 of docs/CHINESE-INPUT.md).
+    pub fn chinese(&self) -> &ProjectChinese {
+        &self.chinese
+    }
+    pub fn set_chinese(&mut self, chinese: ProjectChinese) -> Result<()> {
+        if !chinese.valid() {
+            return Err(Error::new(0, "Invalid Chinese settings"));
+        }
+        self.chinese = chinese;
+        Ok(())
+    }
     pub fn exam(&self) -> &ProjectExam {
         &self.exam
     }
@@ -1323,7 +1392,7 @@ impl Editor {
         origin: Option<Origin>,
         audio: Vec<Vec<u8>>,
     ) -> Result<Self> {
-        if !matches!(project.version, 1..=13)
+        if !matches!(project.version, 1..=14)
             || audio.len() != project.added_audio.len()
             || project
                 .ink_text
@@ -1487,6 +1556,7 @@ impl Editor {
         }
         editor.set_added_audio(decoded_audio)?;
         editor.set_exam(project.exam)?;
+        editor.set_chinese(project.chinese)?;
         Ok(editor)
     }
 }

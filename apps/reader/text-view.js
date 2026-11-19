@@ -180,7 +180,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, zoom, 
     if (isDiagram()) return renderDiagram(token);
     const scratch = body.ownerDocument.createElement('div');
     await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
-    if (token === renders) body.replaceChildren(...scratch.childNodes);
+    if (token !== renders) return;
+    body.replaceChildren(...scratch.childNodes);
+    // Pinyin over the Chinese where it now is (chinese/ruby.js).
+    if (/[\u3400-\u9fff]/.test(text)) import('./chinese/ruby.js').then(m => m.rubyElement(body)).catch(() => {});
   }
   function changed(next) { text = next; onChange(text); }
   // The editor follows MD: with it, TinyMDE (formatting toolbar) for any text file; without, plain.

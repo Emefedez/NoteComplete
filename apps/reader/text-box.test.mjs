@@ -192,3 +192,10 @@ test('textBoxController opens, formats, commits and discards a text box', async 
   assert.equal(actions[0].args.image.text.text, 'Hello note');
   assert.equal(actions[0].args.image.text.bold, true);
 });
+
+test('Chinese wraps between characters, never before closing punctuation', async () => {
+  const { wrapText, wrapPieces } = await import('./text-box.js');
+  assert.deepEqual(wrapPieces('我不知道。'), ['我', '不', '知', '道。']);
+  assert.deepEqual(wrapPieces('「你好」'), ['「你', '好」']);
+  assert.equal(wrapText('我不知道银行在哪里，你呢？ hello', { size: 16 }, 40, (l) => [...l].length * 10), '我不知道\n银行在哪\n里，你\n呢？\nhello');
+});

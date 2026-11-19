@@ -131,3 +131,18 @@ test('words of one pass never merge, and read line by line', () => {
   ]);
   assert.deepEqual(order.map(w => w.text), ['a', 'b', 'c', 'd']);
 });
+
+test('letters find Chinese by its pinyin, once the readings are added', async () => {
+  const index = new SearchIndex();
+  index.add({ page: 0, source: 'text', words: [{ text: '我说你好世界' }] });
+  index.add({ page: 1, source: 'text', words: [{ text: 'nihao' }] });
+  assert.equal(index.needsPinyin(), true);
+  assert.deepEqual(index.search('nihao').map(h => h.page), [1]);
+  await index.addPinyin(async text => [{ start: 0, end: 6, text, pinyin: ['wǒ', 'shuō', 'nǐ', 'hǎo', 'shì', 'jiè'], level: 1 }]);
+  assert.equal(index.needsPinyin(), false);
+  const hits = index.search('nihao');
+  assert.deepEqual(hits.map(h => h.page), [0, 1]);
+  assert.deepEqual(hits[0].matched, ['你', '好']);
+  assert.deepEqual(index.search('ni hao shijie')[0].matched, ['你', '好', '世', '界']);
+  assert.equal(index.search('nihaox').length, 0);
+});

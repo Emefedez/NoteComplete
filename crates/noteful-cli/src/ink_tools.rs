@@ -333,6 +333,7 @@ const SHIPPED_PREFAB_NOTES: &str = concat!(
     include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
     include_str!("../../../apps/reader/prefabs/truthtable/ai.md"),
     include_str!("../../../apps/reader/prefabs/algorithms/ai.md"),
+    include_str!("../../../apps/reader/prefabs/hanzi/ai.md"),
 );
 fn module_ai_notes(dir: &Path) -> String {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -582,11 +583,12 @@ impl Server {
         let script = r#"
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
-const { prefabSvg } = await import(pathToFileURL(process.argv[1]).href);
-const spec = JSON.parse(fs.readFileSync(0, 'utf8'));
+const { prefabSvg, prefabPrepare } = await import(pathToFileURL(process.argv[1]).href);
+const given = JSON.parse(fs.readFileSync(0, 'utf8'));
+const spec = prefabPrepare ? await prefabPrepare(given) : given;
 const out = prefabSvg(spec);
 if (!out?.svg) throw new Error('Spec produced no prefab SVG');
-process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg }));
+process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg, spec: spec === given ? undefined : spec }));
 "#;
         let mut node = Command::new("node")
             .args([
@@ -615,6 +617,12 @@ process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.heigh
         let svg = rendered["svg"].as_str().ok_or("Missing prefab SVG")?;
         let svg_w = rendered["width"].as_f64().unwrap_or(540.0).max(1.0);
         let svg_h = rendered["height"].as_f64().unwrap_or(300.0).max(1.0);
+        // A module that fetches before drawing (the hanzi module's stroke data) gives back its
+        // whole spec, so the figure redraws and edits without fetching again.
+        let spec_json = match rendered.get("spec").filter(|s| s.is_object()) {
+            Some(prepared) => serde_json::to_string(prepared)?,
+            None => spec_json,
+        };
 
         let [x, y, w, h] = if let Some(arr) = args["box"].as_array() {
             if arr.len() != 4 {

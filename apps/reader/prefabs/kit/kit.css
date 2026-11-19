@@ -84,3 +84,17 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 /* A "window" module's own editor (prefab-host.js) fills its movable window. */
 .pk-module-window .pk-window-body { padding: 0; }
 .pk-module-window .pk-host { flex: 1; min-height: 0; }
+/* The step player (step-player.js): caption, timeline, controls; usable inside an editor or alone
+   (the Chinese look-up panel), so its buttons carry their own look. */
+.pk-step-player { --k-line: var(--line, #dce0e5); --k-accent: var(--accent, #245dc4); --k-soft: var(--accent-soft, #eaf0fc); --k-surface: var(--surface, #fff); display: grid; gap: 4px; outline: none; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.pk-step-player:focus-visible { box-shadow: 0 0 0 2px var(--k-accent); border-radius: 6px; }
+.pk-step-caption { margin: 0; min-height: 1.45em; text-align: center; }
+.pk-step-timeline { width: 100%; margin: 0; accent-color: var(--k-accent); }
+.pk-step-controls { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; }
+.pk-step-count { min-width: 4.5em; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted, #626b76); font-size: 12px; }
+.pk-step-player .pk-button, .pk-step-player select { min-height: 30px; padding: 2px 8px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pk-step-player .pk-button:hover:not(:disabled) { background: var(--k-soft); }
+.pk-step-player .pk-button:disabled { opacity: .45; cursor: default; }
+.pk-step-player .pk-button.primary { background: var(--k-accent); border-color: var(--k-accent); color: #fff; }
+.pk-step-player .pk-button svg { width: 16px; height: 16px; flex: none; }
+@media (pointer: coarse) { .pk-step-player .pk-button, .pk-step-player select { min-height: 40px; min-width: 40px; justify-content: center; } }

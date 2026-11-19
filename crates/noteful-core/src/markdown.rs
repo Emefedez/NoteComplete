@@ -2,7 +2,7 @@
 //! page markers that tie a section to a page, the plain Markdown export, and
 //! the `.notecomp` archive (a tar holding the note and its notes).
 use crate::{Editor, Error, Result};
-use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
+use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag, TagEnd};
 use std::io::Read;
 
 /// Upper bound for the notes text (bytes).
@@ -64,7 +64,7 @@ pub fn markdown_html(src: &str) -> String {
         | Options::ENABLE_TASKLISTS
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_MATH;
-    let events = Parser::new_ext(src, options).map(|event| match event {
+    let safe = |event| match event {
         Event::Html(raw) | Event::InlineHtml(raw) => match page_marker(&raw) {
             Some(n) => Event::Html(
                 format!("<div class=\"md-page\" data-page=\"{n}\">Page {n}</div>\n").into(),
@@ -94,9 +94,199 @@ pub fn markdown_html(src: &str) -> String {
             id,
         }),
         other => other,
-    });
+    };
+    let mut code = 0;
+    let mut texts: Vec<(CowStr, std::ops::Range<usize>)> = Vec::new();
+    let mut events = Vec::new();
+    for (event, range) in Parser::new_ext(src, options).into_offset_iter() {
+        // Raw HTML is shown as text, and not read for ruby either.
+        match event {
+            Event::Html(_) | Event::InlineHtml(_) => {}
+            Event::Text(text) if code == 0 => {
+                texts.push((text, range));
+                continue;
+            }
+            Event::Start(Tag::CodeBlock(_)) => code += 1,
+            Event::End(TagEnd::CodeBlock) => code -= 1,
+            _ => {}
+        }
+        ruby_events(src, &mut texts, &mut events);
+        events.push(safe(event));
+    }
+    ruby_events(src, &mut texts, &mut events);
     let mut out = String::new();
-    html::push_html(&mut out, events);
+    html::push_html(&mut out, events.into_iter());
+    out
+}
+
+/// Pinyin over characters typed in the notes (docs/CHINESE-INPUT.md §6.3): `{漢字|hàn zì}`
+/// becomes `<ruby>漢<rt>hàn</rt>字<rt>zì</rt></ruby>`, one `<rt>` per character when there are
+/// as many syllables as characters, else one for the group; tone numbers (`ni3`) become marks.
+/// Only groups with Chinese or Japanese characters, so `{x | x > 0}` stays text; `\{` too.
+fn ruby_events<'a>(
+    src: &str,
+    texts: &mut Vec<(CowStr<'a>, std::ops::Range<usize>)>,
+    out: &mut Vec<Event<'a>>,
+) {
+    if texts.is_empty() {
+        return;
+    }
+    // One run of text (pulldown-cmark splits it at escapes), with the `{` that were escaped.
+    let (mut text, mut escaped) = (String::new(), Vec::new());
+    for (part, range) in texts.iter() {
+        let source = src.get(range.clone()).unwrap_or("");
+        for (i, _) in part.match_indices('{') {
+            let before = &src[..range.start + i.min(source.len())];
+            if if source == part.as_ref() {
+                before.ends_with('\\')
+            } else {
+                source.contains("\\{")
+            } {
+                escaped.push(text.len() + i);
+            }
+        }
+        text.push_str(part);
+    }
+    if !text.contains('{') {
+        out.extend(texts.drain(..).map(|(t, _)| Event::Text(t)));
+        return;
+    }
+    texts.clear();
+    let mut start = 0;
+    let mut at = 0;
+    while let Some(open) = text[at..].find('{').map(|i| at + i) {
+        at = open + 1;
+        if escaped.contains(&open) {
+            continue;
+        }
+        let Some(close) = text[open..].find('}').map(|i| open + i) else {
+            break;
+        };
+        let Some((base, reading)) = text[open + 1..close].split_once('|') else {
+            continue;
+        };
+        if base.is_empty() || base.contains(['{', '\n']) || reading.trim().is_empty() || base.chars().count() > 64 || reading.len() > 256
+            || !base.chars().any(|c| matches!(c as u32, 0x3040..=0x30ff | 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff | 0x20000..=0x3134f))
+        {
+            continue;
+        }
+        if open > start {
+            out.push(Event::Text(text[start..open].to_owned().into()));
+        }
+        out.push(Event::InlineHtml(ruby_html(base, reading).into()));
+        start = close + 1;
+        at = start;
+    }
+    if start < text.len() {
+        out.push(Event::Text(text[start..].to_owned().into()));
+    }
+}
+
+fn ruby_html(base: &str, reading: &str) -> String {
+    let escape = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
+    // Syllables: by spaces, and after each tone number (`ni3hao3`).
+    let mut syllables = Vec::new();
+    for word in reading.split_whitespace() {
+        let mut from = 0;
+        for (i, c) in word.char_indices() {
+            if c.is_ascii_digit() {
+                syllables.push(mark_tone(&word[from..=i]));
+                from = i + 1;
+            }
+        }
+        if from < word.len() {
+            syllables.push(word[from..].to_owned());
+        }
+    }
+    let chars: Vec<char> = base.chars().collect();
+    let mut html = String::from("<ruby>");
+    if syllables.len() == chars.len() {
+        for (c, s) in chars.iter().zip(&syllables) {
+            html.push_str(&format!("{}<rt>{}</rt>", escape(&c.to_string()), escape(s)));
+        }
+    } else {
+        html.push_str(&format!(
+            "{}<rt>{}</rt>",
+            escape(base),
+            escape(&syllables.join(" "))
+        ));
+    }
+    html + "</ruby>"
+}
+
+/// A pinyin syllable with a tone number (`hao3`, `lv4`, `Ni3`) with its tone mark instead
+/// (`hǎo`, `lǜ`, `Nǐ`); the same rules as the reader's `chinese/pinyin.js` `markTone`: on `a`
+/// or `e`, on the `o` of `ou`, else on the last vowel; `ng`, `n`, `m` alone take it themselves.
+/// Anything else is returned as it is.
+pub fn mark_tone(syllable: &str) -> String {
+    let Some(tone) = syllable
+        .chars()
+        .last()
+        .and_then(|c| c.to_digit(10))
+        .filter(|&t| t <= 5)
+    else {
+        return syllable.to_owned();
+    };
+    let letters = syllable[..syllable.len() - 1]
+        .replace("u:", "ü")
+        .replace("U:", "Ü")
+        .replace('v', "ü")
+        .replace('V', "Ü");
+    if letters.is_empty()
+        || !letters
+            .chars()
+            .all(|c| c.is_ascii_alphabetic() || c == 'ü' || c == 'Ü')
+    {
+        return syllable.to_owned();
+    }
+    if tone == 0 || tone == 5 {
+        return letters;
+    }
+    let chars: Vec<char> = letters.chars().collect();
+    let lower: String = letters.to_lowercase();
+    let vowel = |c: char| "aeiouüAEIOUÜ".contains(c);
+    let at = lower
+        .find('a')
+        .or_else(|| lower.find('e'))
+        .or_else(|| lower.find("ou"))
+        .map(|byte| lower[..byte].chars().count())
+        .or_else(|| chars.iter().rposition(|&c| vowel(c)))
+        .or_else(|| {
+            (matches!(lower.as_str(), "ng" | "n" | "m" | "hng" | "hm"))
+                .then(|| chars.iter().position(|&c| "nmNM".contains(c)).unwrap_or(0))
+        });
+    let Some(at) = at else {
+        return syllable.to_owned();
+    };
+    const MARKED: [(&str, [&str; 4]); 16] = [
+        ("a", ["ā", "á", "ǎ", "à"]),
+        ("e", ["ē", "é", "ě", "è"]),
+        ("i", ["ī", "í", "ǐ", "ì"]),
+        ("o", ["ō", "ó", "ǒ", "ò"]),
+        ("u", ["ū", "ú", "ǔ", "ù"]),
+        ("ü", ["ǖ", "ǘ", "ǚ", "ǜ"]),
+        ("A", ["Ā", "Á", "Ǎ", "À"]),
+        ("E", ["Ē", "É", "Ě", "È"]),
+        ("I", ["Ī", "Í", "Ǐ", "Ì"]),
+        ("O", ["Ō", "Ó", "Ǒ", "Ò"]),
+        ("U", ["Ū", "Ú", "Ǔ", "Ù"]),
+        ("Ü", ["Ǖ", "Ǘ", "Ǚ", "Ǜ"]),
+        ("n", ["n\u{304}", "ń", "ň", "ǹ"]),
+        ("m", ["m\u{304}", "ḿ", "m\u{30c}", "m\u{300}"]),
+        ("N", ["N\u{304}", "Ń", "Ň", "Ǹ"]),
+        ("M", ["M\u{304}", "Ḿ", "M\u{30c}", "M\u{300}"]),
+    ];
+    let c = chars[at].to_string();
+    let Some((_, marks)) = MARKED.iter().find(|(k, _)| *k == c) else {
+        return syllable.to_owned();
+    };
+    let mut out: String = chars[..at].iter().collect();
+    out.push_str(marks[tone as usize - 1]);
+    out.extend(&chars[at + 1..]);
     out
 }
 
@@ -192,11 +382,21 @@ pub fn pack_notecomplete_with(
     title: &str,
     audio: &[(AddedAudio, &[u8])],
 ) -> Result<Vec<u8>> {
-    pack_notecomplete_text(note, markdown, title, audio, &[], false, &[])
+    pack_notecomplete_text(
+        note,
+        markdown,
+        title,
+        audio,
+        &[],
+        false,
+        &[],
+        &Default::default(),
+    )
 }
 
 /// With the words of handwriting written from Markdown, by page in the note's
 /// order (`ink-text.json`), so the text stays searchable without recognition.
+#[allow(clippy::too_many_arguments)]
 pub fn pack_notecomplete_text(
     note: &[u8],
     markdown: &str,
@@ -205,6 +405,7 @@ pub fn pack_notecomplete_text(
     ink_text: &[&[crate::InkWord]],
     canvas: bool,
     recognized: &[&[crate::InkWord]],
+    chinese: &crate::ProjectChinese,
 ) -> Result<Vec<u8>> {
     if audio.len() > AUDIO_LIMIT {
         return Err(Error::new(0, "Too many recordings"));
@@ -243,6 +444,11 @@ pub fn pack_notecomplete_text(
     // An infinite canvas (canvas.rs): one page that grows; NoteComplete reopens it as one.
     if canvas {
         manifest["canvas"] = true.into();
+    }
+    // Chinese mode settings of the note (docs/CHINESE-INPUT.md §9), as in the project JSON.
+    if !chinese.is_empty() {
+        manifest["chinese"] =
+            serde_json::to_value(chinese).map_err(|e| Error::new(0, e.to_string()))?;
     }
     let mut builder = tar::Builder::new(Vec::new());
     add(&mut builder, MANIFEST, manifest.to_string().as_bytes())?;
@@ -360,6 +566,20 @@ fn page_words(data: &[u8], name: &str) -> Result<Vec<Vec<crate::InkWord>>> {
     Ok(Vec::new())
 }
 
+/// The Chinese mode settings in a `.notecomp` manifest, when it has valid ones.
+fn notecomplete_chinese(data: &[u8]) -> Option<crate::ProjectChinese> {
+    let mut archive = tar::Archive::new(data);
+    for mut entry in archive.entries().ok()?.flatten() {
+        if entry.path().is_ok_and(|p| p.to_string_lossy() == MANIFEST) {
+            let mut bytes = Vec::new();
+            (&mut entry).take(8 << 20).read_to_end(&mut bytes).ok()?;
+            let mut manifest: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+            return serde_json::from_value(manifest.get_mut("chinese")?.take()).ok();
+        }
+    }
+    None
+}
+
 /// Whether a `.notecomp` file is an infinite canvas (its manifest says so).
 pub fn notecomplete_is_canvas(data: &[u8]) -> bool {
     let mut archive = tar::Archive::new(data);
@@ -437,6 +657,10 @@ impl Editor {
         let (note, notes) = unpack_notecomplete(data)?;
         let mut editor = Self::open(&note)?;
         editor.markdown = notes;
+        // Settings this version cannot keep are dropped, not a reason to refuse the note.
+        if let Some(chinese) = notecomplete_chinese(data) {
+            editor.set_chinese(chinese).ok();
+        }
         if notecomplete_is_canvas(data) && editor.scene.pages.len() == 1 {
             editor.canvas = true;
         }
@@ -470,6 +694,7 @@ impl Editor {
             &text,
             self.canvas,
             &recognized,
+            &self.chinese,
         )
     }
 }
@@ -518,6 +743,76 @@ mod tests {
             "{math}"
         );
         assert!(math.contains("math-display"));
+    }
+    #[test]
+    fn ruby_groups() {
+        let html = markdown_html("说{漢字|hàn zì}了 {你好|nǐhǎo} {x | x > 0}");
+        assert!(
+            html.contains("说<ruby>漢<rt>hàn</rt>字<rt>zì</rt></ruby>了"),
+            "{html}"
+        );
+        assert!(html.contains("<ruby>你好<rt>nǐhǎo</rt></ruby>"), "{html}");
+        assert!(html.contains("{x | x &gt; 0}"), "{html}");
+        // In a heading, a link and a table cell too; markup in the reading is shown as text.
+        let html = markdown_html("# {中|zhōng<b}\n\n[{好|hǎo}](a.md)");
+        assert!(
+            html.contains("<ruby>中<rt>zhōng&lt;b</rt></ruby>"),
+            "{html}"
+        );
+        assert!(html.contains("<ruby>好<rt>hǎo</rt></ruby></a>"), "{html}");
+    }
+    #[test]
+    fn ruby_tone_numbers() {
+        let html = markdown_html("{你好|ni3 hao3} {中国|Zhong1guo2} {吗|ma5}");
+        assert!(
+            html.contains("<ruby>你<rt>nǐ</rt>好<rt>hǎo</rt></ruby>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<ruby>中<rt>Zhōng</rt>国<rt>guó</rt></ruby>"),
+            "{html}"
+        );
+        assert!(html.contains("<ruby>吗<rt>ma</rt></ruby>"), "{html}");
+        for (from, to) in [
+            ("hao3", "hǎo"),
+            ("mei2", "méi"),
+            ("xue3", "xuě"),
+            ("dou3", "dǒu"),
+            ("zhou1", "zhōu"),
+            ("liu4", "liù"),
+            ("jiu3", "jiǔ"),
+            ("dui4", "duì"),
+            ("hui2", "huí"),
+            ("lv4", "lǜ"),
+            ("lu:4", "lǜ"),
+            ("lü4", "lǜ"),
+            ("nve4", "nüè"),
+            ("ju2", "jú"),
+            ("er2", "ér"),
+            ("ma5", "ma"),
+            ("ma0", "ma"),
+            ("ng2", "ńg"),
+            ("Ni3", "Nǐ"),
+            ("hao", "hao"),
+            ("x9", "x9"),
+        ] {
+            assert_eq!(mark_tone(from), to, "{from}");
+        }
+    }
+    #[test]
+    fn ruby_escaped() {
+        let html = markdown_html("\\{你|nǐ} {好|hǎo}");
+        assert!(
+            html.contains("{你|nǐ}") && !html.contains("<ruby>你"),
+            "{html}"
+        );
+        assert!(html.contains("<ruby>好<rt>hǎo</rt></ruby>"), "{html}");
+    }
+    #[test]
+    fn ruby_not_in_code() {
+        let html = markdown_html("`{你|nǐ}`\n\n```\n{好|hǎo}\n```\n\n$\\{x|y\\}$");
+        assert!(!html.contains("<ruby>"), "{html}");
+        assert!(html.contains("<code>{你|nǐ}</code>"), "{html}");
     }
     #[test]
     fn archives_round_trip_and_reject_other_files() {

@@ -24,11 +24,18 @@ export function packPages(pages) {
 }
 
 // The page's SVG to save as a file, as it is in the note: the paper and the PDF inside it.
-export async function pageSvg(p, { pdfImage, backgroundPlacement } = {}) {
+export async function pageSvg(p, { pdfImage, backgroundPlacement, chinese = null } = {}) {
   const svg = p.render.firstElementChild.cloneNode(true);
   if (p.render.dataset.paper) {
     svg.querySelector('[data-background] > rect')?.setAttribute('fill', p.render.dataset.paper);
     svg.style.isolation = 'isolate';
+  }
+  // Pinyin over Chinese as the Export dialog says, and the font for it (chinese/).
+  if (chinese) {
+    const ruby = chinese.ruby();
+    if (ruby && !svg.querySelector('.zh-ruby')) await chinese.rubySvg(svg, { force: true }).catch(() => {});
+    if (!ruby) for (const g of svg.querySelectorAll('.zh-ruby')) g.remove();
+    await chinese.embedFont(svg);
   }
   // Fast zoom sharpening's on-screen part is for the window, not the file.
   for (const detail of svg.querySelectorAll('.pdf-detail')) detail.remove();
@@ -58,6 +65,7 @@ export function pageExporter({
   currentPanel = () => null,
   pdfImage,
   backgroundPlacement,
+  chinese = null,
   filename,
   download,
   jobs,
@@ -70,7 +78,7 @@ export function pageExporter({
 }) {
   // One page drawn as shown (tape included), with its size in points.
   async function draw(index) {
-    const { canvas, scale } = await pageCanvas(index, PAGE_WIDTH);
+    const { canvas, scale } = await pageCanvas(index, PAGE_WIDTH, { exporting: true });
     const widthPt = canvas.width / scale / UNITS_PER_POINT, heightPt = canvas.height / scale / UNITS_PER_POINT;
     return { canvas, widthPt, heightPt };
   }
@@ -113,7 +121,7 @@ export function pageExporter({
     const p = currentPanel();
     if (p?.pdfReady && !busy()) {
       try {
-        const el = await pageSvg(p, { pdfImage, backgroundPlacement });
+        const el = await pageSvg(p, { pdfImage, backgroundPlacement, chinese });
         await download(new XMLSerializer().serializeToString(el), `${filename()}-p${currentPage() + 1}.svg`, 'image/svg+xml');
       } catch (e) {
         status(e.message, true);

@@ -12,6 +12,9 @@ import { renderAnswer } from './chat.js';
 import { runAI, smallStudy } from './small-model.js';
 import { buildPack } from './study-pack.js';
 import { icon } from './icons.js';
+import { chineseField } from './chinese/ime.js';
+import { ankiChinese, cardZh, ANKI_FORMATS } from './chinese/vocab.js';
+import { openContextMenu } from './context-menu.js';
 
 const $ = id => document.getElementById(id);
 const BATCH = 6, PARALLEL = 3;
@@ -337,7 +340,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     $('deckTitle').value = deck.title;
     $('deckSaved').textContent = unsaved ? 'Not saved yet' : (activeDeckKey ? 'Saved study deck' : 'Saved with this note');
     renderCards();
-    $('deckList').hidden = false; $('deckPractice').hidden = true;
+    $('deckList').hidden = false; $('deckPractice').hidden = true; zhWritingBox.hidden = true;
     if ($('deckDialog').classList.contains('floating')) { $('deckDialog').close(); $('deckDialog').classList.remove('floating', 'minimized'); for (const p of ['left', 'top', 'width', 'height', 'right', 'bottom', 'margin']) $('deckDialog').style[p] = ''; }
     if (!$('deckDialog').open) $('deckDialog').showModal();
   }
@@ -346,6 +349,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   const grow = area => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight + 2}px`; };
   function renderCards(editing = -1) {
     $('deckCount').textContent = `${deck.cards.length} cards`;
+    zhWriting.hidden = !deck.cards.some(c => cardZh(c));
     const fragment = document.createDocumentFragment();
     deck.cards.forEach((card, i) => {
       const item = document.createElement('li');
@@ -361,6 +365,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
           area.oninput = () => { card[field] = area.value; grow(area); $('deckSaved').textContent = 'Unsaved changes'; };
           area.onkeydown = e => { if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); e.stopPropagation(); renderCards(); } };
           body.append(area);
+          chineseField(area, 'deck-card');
           requestAnimationFrame(() => grow(area));
         }
       } else {
@@ -395,6 +400,17 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     $('deckCards').replaceChildren(fragment);
     if (editing >= 0) requestAnimationFrame(() => $('deckCards').children[editing]?.querySelector('textarea')?.focus());
   }
+  // Chinese decks: writing practice over their characters (chinese/writing.js), in the dialog.
+  const zhWriting = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Writing practice', title: 'Write the characters of this deck stroke by stroke', hidden: true });
+  const zhWritingBox = Object.assign(document.createElement('div'), { className: 'deck-writing', hidden: true });
+  $('deckPracticeStart').before(zhWriting);
+  $('deckList').after(zhWritingBox);
+  zhWriting.onclick = async () => {
+    const { writingPractice } = await import('./chinese/writing.js');
+    $('deckList').hidden = true; zhWritingBox.hidden = false;
+    writingPractice(zhWritingBox, { cards: deck.cards, onExit: () => { zhWritingBox.hidden = true; $('deckList').hidden = false; } });
+  };
+  $('deckDialog').addEventListener('close', () => { zhWritingBox.hidden = true; zhWritingBox.replaceChildren(); });
   $('deckAdd').onclick = () => { deck.cards.push({ front: '', back: '' }); renderCards(deck.cards.length - 1); $('deckCards').lastElementChild?.scrollIntoView({ block: 'nearest' }); };
   $('deckSave').onclick = async () => {
     deck.title = $('deckTitle').value.trim() || deck.title;
@@ -420,11 +436,18 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
       status(error?.message || 'Could not share via QR.', true);
     }
   };
-  $('deckExport').onclick = async () => {
-    const name = fileName($('deckTitle').value);
-    await download(ankiText(name, deck.cards.filter(c => c.front.trim() && c.back.trim())), `${name}.txt`, 'text/plain');
-    status('Anki deck exported. In Anki: File → Import, then choose the file.');
+  // A deck with Chinese words: its Anki layout chosen first (chinese/vocab.js ankiChinese).
+  const ankiExport = async (title, cards, format = null) => {
+    const name = fileName(title), kept = cards.filter(c => c.front?.trim() && c.back?.trim());
+    await download(format ? ankiChinese(name, kept, format) : ankiText(name, kept), `${name}.txt`, 'text/plain');
+    status(format === 'fields' ? 'Chinese vocabulary exported: Hanzi, Pinyin and Meaning fields. In Anki: File → Import, then match the fields.' : 'Anki deck exported. In Anki: File → Import, then choose the file.');
   };
+  function chooseAnki(anchor, title, cards) {
+    if (!cards.some(c => cardZh(c))) return ankiExport(title, cards);
+    const r = anchor.getBoundingClientRect();
+    openContextMenu(r.left, r.bottom + 4, ANKI_FORMATS.map(([id, label]) => ({ label, icon: 'export', run: () => ankiExport(title, cards, id === 'plain' ? null : id) })), { title: 'Export to Anki', host: anchor.closest('dialog') });
+  }
+  $('deckExport').onclick = () => chooseAnki($('deckExport'), $('deckTitle').value, deck.cards);
   async function qrDeck(targetDeck, onDownloadFallback = null) {
     const cleanTitle = String(targetDeck?.title || 'Flashcards').trim() || 'Flashcards';
     const cards = (targetDeck?.cards || []).filter(c => c.front?.trim() && c.back?.trim());
@@ -898,7 +921,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
           const anki = document.createElement('button');
           anki.type = 'button'; anki.className = 'saved-export'; anki.textContent = 'Anki';
           anki.title = `Export this ${kind} to Anki`; anki.setAttribute('aria-label', `Export ${kind} ${title} to Anki`);
-          anki.onclick = exportTo;
+          anki.onclick = () => exportTo(anki);
           extra.push(anki);
         }
         item.replaceChildren(open, ...extra, del);
@@ -922,7 +945,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     $('deckPicker').replaceChildren(...decks.map((d, i) => row({
       kind: 'deck',
       shareQr: () => qrDeck(d),
-      exportTo: () => exportDeck(d), title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
+      exportTo: (anchor) => exportDeck(d, anchor), title: d.title, detail: `${d.cards.length} cards${d.created ? ` · ${new Date(d.created).toLocaleDateString()}` : ''}`,
       run: () => showDeck(d),
       remove: async () => library.store.set('settings', key(), (await savedDecks()).filter(x => x.id !== d.id)),
       restore: async () => { const now = (await savedDecks()).filter(x => x.id !== d.id); now.splice(Math.min(i, now.length), 0, d); await library.store.set('settings', key(), now); },
@@ -988,10 +1011,23 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     if (!d) return status('That deck is no longer saved on this device.', true);
     showDeck(d, false, customKey);
   }
-  async function exportDeck(d) {
-    const name = fileName(d.title || 'Flashcards');
-    await download(ankiText(name, (d.cards || []).filter(c => c.front?.trim() && c.back?.trim())), `${name}.txt`, 'text/plain');
-    status('Anki deck exported. In Anki: File → Import, then choose the file.');
+  async function exportDeck(d, anchor = null) {
+    if (anchor instanceof Element) return chooseAnki(anchor, d.title || 'Flashcards', d.cards || []);
+    return ankiExport(d.title || 'Flashcards', d.cards || []);
   }
-  return { cards: () => open('cards'), quiz: () => open('quiz'), check: () => open('check'), saved: openSaved, exportQuiz, exportAll, qrAll, qrDeck, qrQuiz, openDeck, exportDeck, fillProviders, key: onKey };
+  // Cards from elsewhere (Chinese vocabulary, the character panel): into a deck of this note,
+  // or a new one. Cards whose front the deck has already are left out. Returns the deck.
+  async function addCards(cards, { deckId = null, title = 'Flashcards' } = {}) {
+    const decks = await savedDecks(key());
+    let d = deckId && decks.find(x => x.id === deckId);
+    if (d) {
+      const have = new Set(d.cards.map(c => String(c.front).trim()));
+      d.cards.push(...cards.filter(c => !have.has(String(c.front).trim())));
+    } else decks.unshift(d = { id: String(Date.now()), title, created: Date.now(), cards: [...cards] });
+    await library.store.set('settings', key(), decks);
+    if (deck?.id === d.id && $('deckDialog').open) { deck = structuredClone(d); renderCards(); }
+    return d;
+  }
+  const deckList = async () => (await savedDecks(key())).map(d => ({ id: d.id, title: d.title || 'Flashcards', count: d.cards?.length || 0 }));
+  return { addCards, decks: deckList, showDeck: (d) => showDeck(d), cards: () => open('cards'), quiz: () => open('quiz'), check: () => open('check'), saved: openSaved, exportQuiz, exportAll, qrAll, qrDeck, qrQuiz, openDeck, exportDeck, fillProviders, key: onKey };
 }

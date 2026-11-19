@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toPage, rectOnPage, assignText, nearestFamily, textBoxFor } from "./pdf-edit.js";
-import { fontName, pdfFontName, pdfFontHash, genericFor, fontStack, familyInFont } from "./fonts.js";
+import { fontName, pdfFontName, pdfFontHash, genericFor, fontStack, familyInFont, CJK_SANS, CJK_SERIF } from "./fonts.js";
 
 // An A4 page at scale 1 (pdf.js: y flipped), drawn on a page twice its size at 100, 50.
 const viewport = { width: 595, height: 842, transform: [1, 0, 0, -1, 0, 842] };
@@ -51,10 +51,10 @@ test("font names fit the core's rules and PDF fonts carry their program's hash",
   assert.equal(name, "ABCDEF-Weird-Name pdf1a2b3c4d");
   assert.equal(pdfFontHash(name), "1a2b3c4d");
   assert.equal(pdfFontHash("Helvetica"), null);
-  assert.equal(genericFor("LiberationSerif"), "'Times New Roman', serif");
-  assert.equal(genericFor("LiberationSans"), "Arial, sans-serif");
-  assert.equal(genericFor("JetBrainsMonoNF-Regular"), "'Courier New', monospace");
-  assert.equal(fontStack("O'Neil"), "'O\\'Neil', Arial, sans-serif");
+  assert.equal(genericFor("LiberationSerif"), `'Times New Roman', serif, ${CJK_SERIF}`);
+  assert.equal(genericFor("LiberationSans"), `Arial, sans-serif, ${CJK_SANS}`);
+  assert.equal(genericFor("JetBrainsMonoNF-Regular"), `'Courier New', monospace, ${CJK_SANS}`);
+  assert.equal(fontStack("O'Neil"), `'O\\'Neil', Arial, sans-serif, ${CJK_SANS}`);
 });
 
 test("a font file's family comes from its name table", () => {

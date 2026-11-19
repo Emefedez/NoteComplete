@@ -156,7 +156,13 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       return b;
     }));
   }
+  let readings = null;
   function run() {
+    // Letters in a note with Chinese also find it by pinyin: readings come on first need.
+    if (/[a-z]/i.test($('findInput').value) && !readings && index.needsPinyin()) {
+      const of = index;
+      readings = import('./chinese/ruby.js').then(m => of.addPinyin(m.annotate)).then(() => { readings = null; if (of === index) run(); }, () => { readings = null; });
+    }
     const all = index.search($('findInput').value);
     renderSources(all);
     hits = all.filter(h => sources.has(h.source));

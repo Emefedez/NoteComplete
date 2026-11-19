@@ -1,4 +1,4 @@
-# Noteful RE Project (.nfedit), versions 1–13
+# Noteful RE Project (.nfedit), versions 1–14
 
 Our non-destructive project format, not an official Noteful format. Since version 13 a `.nfedit` file is a tar archive (see [the version 13 archive](#version-13-archive)) whose `manifest.json` is the project JSON described here; versions 1–12 are the JSON alone, and every version keeps opening. The JSON form is also what automatic saves and shared sessions keep. Required fields; unknown keys are rejected:
 
@@ -133,6 +133,10 @@ A project may include `"added_audio": [ { "id": "…", "name": "…", "mime": "�
 
 A project may include `"exam": { "html": "…", "source": { … } }` keeping an AI-generated or solved exam's self-contained interactive HTML source (and optional structured exam JSON used when expanding or editing the exam) directly inside `.nfedit` (`EXAM_LIMIT` 16 MiB; omitted when empty so earlier versions remain valid). Opening the `.nfedit` shows its paginated PDF and tape pages as usual, while **View → Interactive exam HTML** lets users view, manually edit, export, or expand the embedded HTML alongside the note.
 
+## Chinese mode settings (project version 14)
+
+A project may include `"chinese": {"mode", "script", "ruby", "rubyMinLevel", "readings"}` (docs/CHINESE-INPUT.md §9), every key optional and the field omitted when empty, so earlier versions remain valid: `mode` the input mode the note was last typed in (`off`, `hanzi`, `pinyin`), `script` (`simplified`, `traditional`), `ruby` pinyin over characters for this note (`on`, `off`; absent: the reader's global setting), `rubyMinLevel` 0–9 (words of a lower HSK level get no pinyin; 0 all), `readings` up to 100 000 readings chosen for one place: `{"item": "<item id>", "index", "pinyin"}` for a text box (`index` in its text) or `{"md": <offset>, "index", "pinyin"}` for the Markdown notes, exactly one of `item` and `md`, `pinyin` 1–64 bytes. Unknown keys and values are rejected. It is not part of the edit history. A project with it is version 14, also as an archive (`"version":14` in its manifest, otherwise the same as version 13), so a reader that cannot keep it refuses the file instead of losing it. `.notecomp` files carry the same object as `"chinese"` in their manifest (ignored when invalid).
+
 ## Version 13 archive
 
 A version 13 `.nfedit` is a ustar archive, the same container as `.notecomp`, told apart by its first member:
@@ -169,7 +173,7 @@ A shape (`line.shape`) may have `fill`: an RGBA (0–1) inside colour, for recta
 
 A `.notecomp` file (readers also accept the longer `.notecomplete`; `.notepart` is currently written the same way) is a POSIX ustar archive with:
 
-- `manifest.json`: `{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`, plus `"audio":[…]` and `"ink_text":"ink-text.json"` when present, and `"canvas":true` for an infinite canvas;
+- `manifest.json`: `{"format":"notecomplete","version":1,"title":…,"note":"note.noteful","notes":"notes.md"}`, plus `"audio":[…]` and `"ink_text":"ink-text.json"` when present, `"canvas":true` for an infinite canvas, and `"chinese":{…}` (as in the project) when the note has Chinese mode settings;
 - `note.noteful`: the native export of the note (inserted pages flattened into place);
 - `notes.md`: the Markdown notes, page markers kept;
 - `audio/N.ext`: recordings added in NoteComplete, listed in the manifest with `id`, `name`, `mime` and `created`;
