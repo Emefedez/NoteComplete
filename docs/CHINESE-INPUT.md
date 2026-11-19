@@ -761,9 +761,21 @@ the `中` toolbar's "Look up" opens it too.
   layout (Hanzi / Pinyin / Meaning) as a separate "Chinese vocabulary" export, keeping the
   existing two-field layout for other decks. The MCP `write_anki_deck` gets the same fields only
   if asked (open question).
-- Audio: no bundled TTS. `speechSynthesis` with a `zh-CN` / `zh-TW` voice is used **if the OS has
-  one** (a 🔊 in the panel and menu, hidden when `speechSynthesis.getVoices()` has no zh voice).
-  Noted only; no audio data shipped.
+- Audio (`chinese/speech.js`): no audio data shipped or stored; each 🔊 streams a short clip on
+  demand (only the browser's HTTP cache may keep it). Sources, tried in order until one plays:
+  1. one character read a known way (the reading used here, a reading in the header, a syllable
+     clicked anywhere in the panel): a human recording of that syllable and tone from jsDelivr
+     (`davinfifield/mp3-chinese-pinyin-sound`, `hao4.mp3`, ü as v), so polyphones and tones are
+     heard exactly; neutral-tone syllables have none and fall through;
+  2. words and sentences: the system's `zh-CN` / `zh-TW` `speechSynthesis` voice when the OS has
+     one (instant, offline);
+  3. otherwise online TTS (Google Translate `translate_tts`, zh-CN or zh-TW by the note's script;
+     Youdao `dictvoice` when that fails), up to 180 characters.
+  A source that has not started within 6 s is skipped. The panel's 🔊 (`S`, Shift = 70 % speed)
+  is shown whenever the app is online or the OS has a Chinese voice; every pinyin syllable in the
+  panel plays its own tone on click, each "Words with" row has a small 🔊, and the Chinese menus
+  (right-click / long press, a selection) have **Listen to …**. The three hosts are in the CSP's
+  `media-src` (`tools/reader-csp.mjs`).
 
 ---
 
@@ -856,7 +868,7 @@ candidate menu ▶ popover; practice log.
 **Phase 6 — Polish and learning extras (≈ 5 d, pick and choose).** Writing-practice study mode
 over a deck; tone sandhi option for ruby; tone colours on characters; HSK-level filter for ruby
 (if a licensable list is found); Chinese OCR corrections via the word list; TW/HK variants;
-stroke type names; `speechSynthesis` 🔊 where a zh voice exists.
+stroke type names; 🔊 pronunciation streamed on demand (§10, `chinese/speech.js`).
 
 Total ≈ 36 days; Phases 1–2 (≈ 11 d) already deliver the owner's request; 3–5 add the later
 asks.

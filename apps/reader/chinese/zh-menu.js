@@ -121,7 +121,14 @@ export async function lookUp(text, context = {}, near = null) {
   const { openLookup } = await loadPanel();
   return openLookup(text, { host: panelHost(), context, near });
 }
-async function annotateQuick(text, ms = 400) {
+// Says `text` (a character read `reading`, a word or a sentence), streamed (speech.js).
+export async function listen(text, reading = '') {
+  const [{ speak }, script] = await Promise.all([import('./speech.js'), scriptNow()]);
+  const ok = await speak(text, { reading: [...text].length === 1 ? reading : '', script });
+  if (!ok) host.status?.(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true);
+}
+const listenEntry = (text, reading = '') => ({ label: `Listen to ${[...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text}`, icon: 'speaker', run: () => listen(text, reading) });
+async function annotateQuick(text, ms = 700) {
   try {
     const { chinese } = await import('./client.js');
     const script = await scriptNow();
@@ -253,6 +260,7 @@ async function hitEntries(hit, ctx = () => ({}), near = null) {
   }
   out.push({ label: richLookupLabel(c.char, charInfo), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
   const target = (w && [...w.text].length > 1 ? w.text : c.char);
+  out.push(listenEntry(target, target === c.char ? (w?.pinyin?.[k] || '') : ''));
   if (host.openTracePrefab) {
     out.push({ label: `Trace & stroke order prefab (${target})…`, icon: 'draw', run: () => host.openTracePrefab(target) });
   } else if (host.insertFigure) {
@@ -265,6 +273,7 @@ const selectionEntries = (text, near, replace = null, info = null) => {
   const hanOnly = ([...clean].filter((c) => HAN.test(c))).slice(0, 12).join('');
   return [
     lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
+    hanOnly && listenEntry(clean),
     hanOnly && host.openTracePrefab && { label: `Trace & stroke order prefab (${hanOnly})…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
     // Only in a Markdown editor (notes, documents): a plain field would get the picture's raw data.
     hanOnly && replace && near?.closest?.('.notes-editor, #textEditor') && {
