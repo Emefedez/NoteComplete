@@ -154,7 +154,8 @@ export function allQuizzes({
       b.onclick = () => {
         const sec = b.closest('[data-sec]')?.dataset.sec;
         if (!sec || b.disabled) return;
-        scopes[sec] = b.dataset.sectionScope;
+        // One filter for the whole window: every section follows (each still shows its own counts).
+        for (const k of SECTIONS) scopes[k] = b.dataset.sectionScope;
         draw();
       };
     }

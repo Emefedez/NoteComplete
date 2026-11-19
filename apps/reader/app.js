@@ -6582,7 +6582,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {
@@ -6591,9 +6591,9 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "pagesExpandAi", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
   // Study works on notes and on text documents.
-  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "exportStudyQr", "chatOpen", "chatToggle"])
+  for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
   const canViewHtml = open && !!doc?.has_exam;
   if ($("viewExamHtml")) {
@@ -8673,7 +8673,6 @@ if (window.notecompleteLog && $("logItems")) {
 $("takeNotesAi").onclick = () => { closeMenus(); batchNotes.open({ preselectOpen: !!doc || studyText() }); };
 $("studyCreateExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "create" }); };
 $("studySolveExam").onclick = () => { closeMenus(); examMaker.open({ preselectOpen: !!doc || studyText(), mode: "solve" }); };
-if ($("pagesExpandAi")) $("pagesExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : "note" }); };
 if ($("studyExpandAi")) $("studyExpandAi").onclick = () => { closeMenus(); expandMaker.open({ mode: panels.some((p) => (p.view?.tapes || []).length > 0) ? "exam" : undefined }); };
 // The quiz and the flashcard practice are floating windows too.
 quizWindow = floatingWindow($("quizPanel"), { screen: screenArea, key: "notecomplete-quiz-window", head: $("quizPanel").querySelector(".quiz-panel-head"), close: $("quizPanelClose"), label: "Quiz", compact: { cls: "minimized", button: $("quizMinimize") }, minWidth: 300, minHeight: 200 });
@@ -8715,7 +8714,6 @@ $("studyExportQuiz").onclick = () => study.exportQuiz();
 $("quizQr").onclick = () => study.qrQuiz(quizzes.current);
 $("quizAnki").onclick = () => study.exportQuiz(quizzes.current);
 $("exportStudy").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.exportAll(); };
-$("exportStudyQr").onclick = () => { for (const m of document.querySelectorAll("details.menu")) m.open = false; study.qrAll(); };
 function currentDocResource() {
   if (doc && !$("editor").hidden) {
     return {
@@ -9147,7 +9145,7 @@ $("shareNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-$("receiveNoteQr").onclick = async () => {
+$("hubReceive").onclick = async () => {
   closeMenus();
   try {
     const { openReceiveNoteQr } = await (collabLoading ||= import("./collab.js"));
@@ -9157,13 +9155,7 @@ $("receiveNoteQr").onclick = async () => {
     status(e.message, true);
   }
 };
-if ($("receiveStudyQr")) $("receiveStudyQr").onclick = () => $("receiveNoteQr")?.click();
-if ($("exportSavedResources")) $("exportSavedResources").onclick = () => {
-  closeMenus();
-  quizIndex.open();
-};
 $("hubOpen").onclick = () => $("open").click();
-$("hubReceive").onclick = () => $("receiveNoteQr").click();
 {
   const tabs = [...document.querySelectorAll("#exportDialog [data-export-tab]")];
   const panels = [...document.querySelectorAll("#exportDialog [data-export-panel]")];

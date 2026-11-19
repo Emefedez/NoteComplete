@@ -153,7 +153,7 @@ try {
     // A prefab on the imported page.
     await p.evaluate(() => document.getElementById('insertGraph').click());
     await p.waitForSelector('.prefab-grid');
-    await p.click('.prefab-card:has-text("Process states")');
+    await p.click('.prefab-card:has(strong:text-is("Process states"))');
     await p.waitForSelector('.chart-dialog button.primary');
     await p.click('.chart-dialog button.primary');
     await p.waitForFunction(() => !document.querySelector('.chart-dialog'));

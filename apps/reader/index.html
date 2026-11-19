@@ -63,11 +63,11 @@
           <button data-proxy-tool="pdfedit" data-icon="pdfedit" role="menuitemradio">Edit PDF: its text and objects<kbd>E</kbd></button>
           <hr />
           <button data-proxy="importImage" data-icon="image">Insert image…<kbd>Shift I</kbd></button>
-          <button id="insertGraph" data-icon="graph" data-palette="Insert prefab (graph, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
+          <button id="insertGraph" data-icon="graph" data-palette="Insert prefab (graph, table, UML diagram, histogram, CPU chart…)" title="Ready-made figures, as exams draw them: a function graph, histogram, bar chart, process states, CPU timeline, tree, table or UML diagram. They stay editable: right-click one, hold it, or tap its ⋯">Insert prefab…<kbd>Shift X</kbd></button>
           <button id="insertTable" data-icon="table" data-palette="Insert table" title="Rows and columns of typed cells; select it later to edit it, add rows or columns">Insert table<kbd>Shift Y</kbd></button>
-          <button id="insertUml" data-icon="uml" data-palette="Insert UML diagram (use case, class, state machine, activity, sequence)" title="A UML diagram drawn in the diagram editor, as in Visual Paradigm; it imports and exports Visual Paradigm XML and XMI. It stays editable: right-click it, hold it, or tap its ⋯">Insert UML diagram…</button>
+          <button id="insertUml" data-icon="uml" hidden data-palette="Insert UML diagram (use case, class, state machine, activity, sequence)" title="A UML diagram drawn in the diagram editor, as in Visual Paradigm; it imports and exports Visual Paradigm XML and XMI. It stays editable: right-click it, hold it, or tap its ⋯">Insert UML diagram…</button>
           <button id="openUmlPage" data-icon="uml" data-palette="UML diagram editor (own page)" title="The UML diagram editor on a page of its own, outside any note">UML diagram editor…</button>
-          <button id="openChartsPage" data-icon="clock" data-palette="Chart and timeline editor (own page): process states, CPU timelines, bar charts" title="The chart editor on a page of its own: process states, CPU timelines, bar charts, histograms and exam plots, painted and dragged instead of typed">Chart and timeline editor…</button>
+          <button id="openChartsPage" data-icon="graph" data-palette="Chart and timeline editor (own page): process states, CPU timelines, bar charts" title="The chart editor on a page of its own: process states, CPU timelines, bar charts, histograms and exam plots, painted and dragged instead of typed">Chart and timeline editor…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="viewMenu">
@@ -143,7 +143,6 @@
           <button id="insertBlank" data-icon="plus" disabled>Insert blank page…<kbd>Shift B</kbd></button>
           <button id="insertPdf" data-icon="note" disabled>Insert PDF pages…</button>
           <button id="insertHandwritten" data-icon="draw" disabled data-palette="Insert handwritten pages from Markdown…" title="Write Markdown as real handwriting ink on new pages">Insert handwritten pages…</button>
-          <button id="pagesExpandAi" data-icon="spark" disabled data-palette="Pages: Expand with AI…" title="Generate and append new handwritten pages or exam problems from selected Recents, folders or files">Expand with AI…</button>
           <hr />
           <button id="resizePage" data-icon="fit" disabled>Page size…</button>
           <button id="resizeDrag" data-icon="maximize" disabled>Resize by dragging the borders</button>
@@ -155,7 +154,7 @@
         <summary role="menuitem">Study</summary>
         <div class="menu-content" role="menu">
           <button id="chatOpen" data-icon="spark" disabled>Ask AI about this note…<kbd>Ctrl J</kbd></button>
-          <button id="studyExpandAi" data-icon="batchNotes" disabled data-palette="Study: Expand note or exam with AI…" title="Expand the current note or exam with new pages generated from selected source files">Expand with AI…</button>
+          <button id="studyExpandAi" data-icon="batchNotes" disabled data-palette="Study: Expand note or exam with AI…" title="Add handwritten pages or exam problems to this note, written from it or from other notes, folders or files">Expand with AI…</button>
           <button id="studyCards" data-icon="cards" disabled>Generate flashcards…<kbd>Shift C</kbd></button>
           <button id="studyQuiz" data-icon="help" disabled>Quiz me…<kbd>Shift Q</kbd></button>
           <button id="studyCreateExam" data-icon="exam" data-palette="Study: Create exam (AI)…" title="Generate a multi-format exam PDF with pre-applied Noteful answer tape from Recents, folders, notes or topics">Create exam (AI)…</button>
@@ -201,11 +200,11 @@
         <div class="export-head">
           <h2 id="exportTitle">Import, export and share</h2>
           <div class="export-tabs" role="tablist" aria-label="Import, export and share sections">
-            <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="open" aria-selected="true" aria-controls="exportPanelOpen">
+            <button id="exportTabOpen" type="button" class="export-tab" role="tab" data-export-tab="open" data-icon="import" aria-selected="true" aria-controls="exportPanelOpen">
               <span class="export-tab-text"><b>Open &amp; Import</b><small>Folders, links, Drive, files &amp; study packs</small></span>
             </button>
             <button id="exportTabExport" type="button" class="export-tab" role="tab" data-export-tab="export" data-icon="export" aria-selected="false" aria-controls="exportPanelExport">
-              <span class="export-tab-text"><b>Export</b><small>Notes, pages, study resources, QR &amp; sharing</small></span>
+              <span class="export-tab-text"><b>Export</b><small>Notes, pages, study material, sharing</small></span>
             </button>
           </div>
         </div>
@@ -219,7 +218,7 @@
                 <button id="openLink" class="export-item" data-icon="link"><b>Open link…</b><small>A web page, such as a Notion page, like a document</small></button>
                 <button id="driveOpen" class="export-item" data-icon="cloud"><b>Google Drive</b><small>Open a note from your Drive library</small></button>
                 <button id="dropboxOpen" class="export-item" data-icon="cloud"><b>Dropbox</b><small>Open a note from your Dropbox</small></button>
-                <button id="githubOpen" class="export-item" data-icon="cloud"><b>GitHub (Auto-Chunked)</b><small>Open or publish auto-chunked notes on GitHub</small></button>
+                <button id="githubOpen" class="export-item" data-icon="cloud"><b>GitHub</b><small>Open or publish auto-chunked notes on GitHub</small></button>
                 <button id="webdavOpen" class="export-item" data-icon="cloud"><b>Nextcloud / WebDAV</b><small>Open or save notes in a shared WebDAV folder</small></button>
                 <button id="addDocuments" hidden disabled class="export-item" data-icon="plus"><b>Add documents…</b><small>Add files to the open document’s group</small></button>
                 <button data-proxy="libraryChoose" class="export-item" data-icon="folder"><b>Downloads folder…</b><small>Where downloaded notes are kept</small></button>
@@ -229,7 +228,7 @@
               <section aria-labelledby="exportImportHead">
                 <h3 id="exportImportHead">Import</h3>
                 <button id="importAny" class="export-item" data-icon="import"><b>Import…</b><small>Study material, quizzes (Markdown), flashcard decks, notes or any document</small></button>
-                <button id="hubReceive" type="button" class="export-item" data-icon="qr"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
+                <button id="hubReceive" type="button" class="export-item" data-icon="qr" data-palette="Receive notes or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file: notes, quizzes and flashcards are recognised on their own"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
               </section>
             </div>
           </div>
@@ -262,9 +261,8 @@
             </div>
             <div class="export-column">
               <section aria-labelledby="exportShareHead">
-                <h3 id="exportShareHead">Share &amp; receive notes</h3>
+                <h3 id="exportShareHead">Share notes</h3>
                 <button id="shareNoteQr" disabled class="export-item" data-icon="qr" data-palette="Share note via QR…" title="Make this note (.nfedit or .noteful) available via a QR download link on this network, peer-to-peer WebRTC, or offline QR"><b>Share note via QR…</b><small>Download link, Web / iOS P2P QR, or offline QR</small></button>
-                <button id="receiveNoteQr" class="export-item" data-icon="qr" data-palette="Receive note or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes, quizzes &amp; flashcards"><b>Receive notes or study…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
               </section>
               <section aria-labelledby="exportCollabHead">
                 <h3 id="exportCollabHead">Live collaboration</h3>
@@ -279,17 +277,14 @@
           <div class="export-columns">
             <div class="export-column">
               <section aria-labelledby="exportResOutHead">
-                <h3 id="exportResOutHead">Export &amp; manage</h3>
+                <h3 id="exportResOutHead">Export</h3>
                 <button id="exportStudy" disabled class="export-item" data-icon="cards" data-palette="Export flashcards and quizzes to Anki" title="Every flashcard deck and quiz of this note, as Anki decks named Note::Deck"><b>Export all to Anki</b><small>All flashcards and quizzes of this note (.txt)</small></button>
-                <button id="exportSavedResources" class="export-item" data-icon="storage" title="Open all saved quizzes, flashcard decks, exams, and AI scratchpad conversations"><b>Browse saved resources…</b><small>Manage, export or share quizzes, decks, exams &amp; scratchpad</small></button>
               </section>
             </div>
             <div class="export-column">
               <section aria-labelledby="exportResShareHead">
-                <h3 id="exportResShareHead">Share &amp; receive study material</h3>
-                <button id="exportStudyQr" disabled class="export-item" data-icon="qr" data-palette="Share quizzes &amp; decks via progressive QR…" title="Stream this note's quizzes and flashcard decks directly inside QR codes with live transfer progress (works offline, no network required)."><b>Share quizzes &amp; decks via QR…</b><small>Offline animated QR stream with progress</small></button>
-                <button id="studyShare" class="export-item" data-icon="share" data-palette="Send or receive study material…" title="Send flashcards, quizzes and notes to another NoteComplete, or save a .ncstudy file (QR code and PIN, link, or file)"><b>Send or receive study pack…</b><small>Another NoteComplete (Wi-Fi PIN, QR, link) or .ncstudy file</small></button>
-                <button id="receiveStudyQr" class="export-item" data-icon="qr" title="Scan any NoteComplete QR code, connect with a P2P / Wi-Fi code, or import a file — auto-detects notes &amp; study packs"><b>Receive via QR, code or file…</b><small>Auto-detect QR, P2P, Wi-Fi PIN or file</small></button>
+                <h3 id="exportResShareHead">Share study material</h3>
+                <button id="studyShare" class="export-item" data-icon="share" data-palette="Send study material…" title="Send flashcards, quizzes and notes to another NoteComplete (Wi-Fi PIN, link or an offline QR stream), or save a .ncstudy file"><b>Send study material…</b><small>Wi-Fi PIN, link, offline QR stream or .ncstudy file</small></button>
               </section>
             </div>
           </div>
@@ -1122,7 +1117,7 @@
             <label><input id="chatPage" type="checkbox" checked /> <span id="chatPageLabel">This page</span></label>
             <label><input id="chatSelection" type="checkbox" checked /> Selection</label>
             <label title="Your Markdown notes for this document" data-material="notes"><input id="chatNotes" type="checkbox" /> My notes</label>
-            <label id="chatNoteLabel"><input id="chatNote" type="checkbox" checked /> Whole note (MCP)</label>
+            <label id="chatNoteLabel" title="The AI tool may open any other page of the note when it needs to (slower)"><input id="chatNote" type="checkbox" checked /> Other pages when needed</label>
           </div>
           <ol id="chatMessages" class="chat-messages" aria-live="polite"></ol>
           <div id="chatAttachments" class="chat-attachments" hidden></div>

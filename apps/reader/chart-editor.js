@@ -1060,13 +1060,15 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     if (canBeExercise(base)) {
       out.push(check1('Exercise: filled in here, then checked', base.exercise, edit('exercise', (v) => {
         base.exercise = v;
+        // An exercise and an empty figure would contradict each other: one or the other.
+        if (v) base.blank = false;
         if (v) { ans = grid ? answerGrid({ ...current(), answer: emptyAnswer(current()) }) : barsOf(emptyAnswer(current())); }
         else ans = null;
       }, { palette: true }), 'The page shows the student\'s answer (empty to start); what you draw here is the solution it is checked against'));
       if (base.exercise) out.push(check1('Show the solution on the page', base.reveal, edit('reveal', (v) => { base.reveal = v; })));
     }
-    if (kind !== 'nodes' && kind !== 'svg') {
-      out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only'));
+    if (kind !== 'nodes' && kind !== 'svg' && !base.exercise) {
+      out.push(check1('Empty, to fill in by hand on the page', base.blank, edit('blank', (v) => { base.blank = v; }), 'The page shows the axes and rows only (not an exercise: nothing is checked)'));
     }
     if (grid) out.push(...gridPanel());
     else if (bars) out.push(...barsPanel());

@@ -9,7 +9,6 @@ import { meaningsOf } from '../../chinese/lookup-panel.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
-import { openContextMenu } from '../../context-menu.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
 const hasLatin = (s) => /[a-zA-Z]/.test(String(s || ''));
@@ -61,43 +60,7 @@ export function open(root, { spec, editing, host }) {
   shell.canvas.classList.add('hz-canvas');
   shell.canvas.removeAttribute('tabindex');
 
-  // ── Header Apply split-button: Insert/Update + dropdown for character alone vs with traces ──
-  if (shell.applyBtn && shell.applyBtn.parentElement === shell.bar) {
-    const applyGroup = make('div', { className: 'hz-apply-group' });
-    shell.applyBtn.replaceWith(applyGroup);
-    const dropBtn = make('button', {
-      type: 'button',
-      className: 'pk-button primary hz-apply-drop has-caret',
-      title: 'Choose how to insert (character alone, with numbers, or with traces)',
-    }, make('span', { className: 'caret' }));
-    dropBtn.setAttribute('aria-label', `${host.applyLabel} options`);
-    dropBtn.setAttribute('aria-haspopup', 'menu');
-    dropBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      const r = applyGroup.getBoundingClientRect();
-      openContextMenu(r.left, r.bottom + 4, [
-        {
-          label: `${host.applyLabel} as character(s) alone`,
-          icon: 'text',
-          checked: model.show === 'strokes',
-          run: () => { model = normalize({ ...model, show: 'strokes' }); finish(model.step); },
-        },
-        {
-          label: `${host.applyLabel} with stroke numbers`,
-          icon: 'hash',
-          checked: model.show === 'numbers',
-          run: () => { model = normalize({ ...model, show: 'numbers' }); finish(model.step); },
-        },
-        {
-          label: `${host.applyLabel} with stroke traces (step by step)`,
-          icon: 'draw',
-          checked: model.show === 'steps',
-          run: () => { model = normalize({ ...model, show: 'steps' }); finish(model.step); },
-        },
-      ], { title: `${host.applyLabel} format`, host: root.closest('dialog') });
-    };
-    applyGroup.append(shell.applyBtn, dropBtn);
-  }
+  // What goes on the page is chosen once, in the side panel (On the page → Show); Insert just inserts it.
 
   // ── Middle: the main trace animation player, English & variants summary bar, or practice ──
   const stage = make('div', { className: 'hz-stage-host' });
