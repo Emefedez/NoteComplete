@@ -78,7 +78,7 @@ export function windowOf(el) { return el ? windows.get(el) || null : null; }
 function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(max(var(--window-z, 26), var(--window-floor, 0)) + ${i})`; }); }
 // Whether a rect drawn on the screen covers part of the top bar (header.chrome).
 export function overBar(top) {
-  const bar = typeof document !== 'undefined' ? document.querySelector('header.chrome')?.getBoundingClientRect() : null;
+  const bar = typeof document !== 'undefined' && typeof document.querySelector === 'function' ? document.querySelector('header.chrome')?.getBoundingClientRect?.() : null;
   return !!bar && bar.height > 0 && top < bar.bottom;
 }
 function raise(el) {

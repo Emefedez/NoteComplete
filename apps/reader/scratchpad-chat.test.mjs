@@ -207,18 +207,18 @@ async function withFakeGlobals(ids, fn) {
   }
 }
 
-test('largeRect centers a comfortable reading rect inside screen bounds and clamps safely', () => {
+test('largeRect fills most of the screen, centred, with no upper limit, and clamps safely', () => {
   assert.deepEqual(
     largeRect({ width: 1440, height: 900 }, { min: { width: 280, height: 220 } }),
-    { left: 200, top: 54, width: 1040, height: 820 - 28 }, // 900 * 0.88 = 792
+    { left: 43, top: 27, width: 1354, height: 846 }, // 94 % of 1440 × 900
   );
   assert.deepEqual(
     largeRect({ width: 1600, height: 1000 }, { min: { width: 280, height: 220 } }),
-    { left: 280, top: 90, width: 1040, height: 820 },
+    { left: 48, top: 30, width: 1504, height: 940 },
   );
   assert.deepEqual(
     largeRect({ width: 700, height: 500 }, { min: { width: 280, height: 220 } }),
-    { left: 42, top: 30, width: 616, height: 440 },
+    { left: 21, top: 15, width: 658, height: 470 },
   );
   // Smaller than min: area still wins.
   assert.deepEqual(
@@ -252,10 +252,10 @@ test('floatingWindow openLarge expands inside screen() without overwriting saved
     assert.equal(panel.hidden, false);
     assert.equal(win.large, true);
     assert.equal(panel.classList.contains('window-large'), true);
-    assert.equal(panel.style.width, '1040px');
-    assert.equal(panel.style.height, '750px'); // round(852 * 0.88) = 750
-    assert.equal(panel.style.left, '200px');
-    assert.equal(panel.style.top, '99px'); // 48 + round((852 - 750) / 2) = 48 + 51
+    assert.equal(panel.style.width, '1354px'); // round(1440 * 0.94)
+    assert.equal(panel.style.height, '801px'); // round(852 * 0.94) = 801
+    assert.equal(panel.style.left, '43px');
+    assert.equal(panel.style.top, '74px'); // 48 + round((852 - 801) / 2) = 48 + 26
 
     // Saved small rect in localStorage was not overwritten.
     assert.deepEqual(JSON.parse(store.get('notecomplete-chat-window:screen')), { left: 980, top: 20, width: 390, height: 520 });
