@@ -99,6 +99,7 @@ Checked when the module is added (`prefab-registry.js` `manifestProblem`; a modu
 | `prefabs` | yes | The picker's cards: an array, or `"code"` for cards made by `render.js` `prefabs()` (the uml module does that). |
 | `editor` | no | `"editor.js"` (any path ending in `.js`, relative to the module's folder): the module's own editor. `"chart-editor"`, `"uml-editor"`, `"graph"`, `"table"`, `"data"`: those app editors (`editorOf` in prefab-registry.js). Nothing: the app's editors by type (`uml` → diagram editor; `states`, `timeline`, `histogram`, `bar`, `plot` … → chart editor), else the **JSON editor** (title, *Empty, for students to fill in*, the spec as JSON and a preview). |
 | `base` | no | For `kind: "type"`: which base editor (`grid-paint`, `bars`, `plot`, `diagram`, `data`). Not read by the app yet. |
+| `menu` | no | `[{ "label": "Play…", "icon": "play", "mode": "play" }]`: entries added to its figures' menu, before *Edit …*; each opens the module's `editor.js` with `host.mode` set to its `mode` (the algorithms module: Play…, Edit input…, Edit code…). |
 | `capabilities` | no | What the module's editor can do (`exercise`, `notes`, `json`, …), written by the shipped charts and uml modules. Not read by the app yet. |
 
 A card in `prefabs`:
@@ -162,6 +163,7 @@ export function open(root, { spec, editing, host }) {
   - `host.render(spec)`: the module's own `render` (`null` when it has none).
   - `host.applyLabel`: `"Apply"` when editing, else `"Insert"`: give it to `editorShell`.
   - `host.editing`: as above.
+  - `host.mode`: `"author"`, or the `mode` of the manifest's `menu` entry it was opened from.
   - `host.kit`: the kit's exports (`kit/index.js`), the same as importing them.
 - Returns `{ destroy }`: called once, when it closes. `editorShell(...).destroy()` undoes everything the shell did.
 - Keys: the dialog stops key events from reaching the note, and the browser's Esc on the dialog is turned off, so Esc is yours; `editorShell` maps it to `onCancel`, and Ctrl Enter to `onApply`.

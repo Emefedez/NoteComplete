@@ -1,0 +1,44 @@
+{
+  "id": "algorithms",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 70,
+  "label": "Algorithms",
+  "kind": "window",
+  "output": "picture",
+  "types": [
+    "algorithm"
+  ],
+  "names": {
+    "algorithm": "Algorithm"
+  },
+  "editor": "editor.js",
+  "window": {
+    "width": 1120,
+    "height": 700
+  },
+  "groups": {
+    "algorithms": "Algorithms"
+  },
+  "capabilities": [
+    "player"
+  ],
+  "prefabs": "code",
+  "menu": [
+    {
+      "label": "Play…",
+      "icon": "play",
+      "mode": "play"
+    },
+    {
+      "label": "Edit input…",
+      "icon": "settings",
+      "mode": "input"
+    },
+    {
+      "label": "Edit code…",
+      "icon": "code",
+      "mode": "code"
+    }
+  ]
+}

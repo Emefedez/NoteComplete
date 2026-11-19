@@ -1,0 +1,16 @@
+predecessors(empty)=true
+predecessors(OU)=[ Corunha,  Lugo]
+isRegular(empty)=true isRegular(cities)=false
+connected(empty,CO)=false
+connected(cities,CO)=true
+connected(topo2,B)=false
+connected(topo2,C)=true
+path(CO,OU)=true
+path(OU,CO)=true
+path(C,D)=true
+path(D,C)=false
+isACycle=true alphy=true
+components(topo2)=3 alphy=3
+bfs(cities,CO)=[ Corunha,  Ourense,  Pontevedra,  Lugo]
+bfsSlow(cities,CO)=[ Corunha,  Ourense,  Pontevedra,  Lugo]
+shortest(cities,CO)=2

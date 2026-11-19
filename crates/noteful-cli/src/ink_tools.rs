@@ -332,6 +332,7 @@ const SHIPPED_PREFAB_NOTES: &str = concat!(
     include_str!("../../../apps/reader/prefabs/uml/ai.md"),
     include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
     include_str!("../../../apps/reader/prefabs/truthtable/ai.md"),
+    include_str!("../../../apps/reader/prefabs/algorithms/ai.md"),
 );
 fn module_ai_notes(dir: &Path) -> String {
     let Ok(entries) = std::fs::read_dir(dir) else {

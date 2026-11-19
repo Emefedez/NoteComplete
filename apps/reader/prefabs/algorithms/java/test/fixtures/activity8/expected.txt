@@ -1,0 +1,3 @@
+dijkstra ONE=0 TWO=3 THREE=10 FOUR=7 FIVE=11 SIX=5
+prim vertices=6 edges=5
+prim has the expected edges=true

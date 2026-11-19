@@ -8,9 +8,10 @@ import { keepInside } from './prefabs/kit/window.js';
 test('the shipped modules give the picker every prefab it had, in its groups', () => {
   const ids = cards().map((c) => c.id);
   for (const id of ['graph', 'table', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'numberline', 'truthtable']) assert.ok(ids.includes(id), id);
-  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths']);
+  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths', 'algorithms']);
   assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml' });
-  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline', 'truthtable']);
+  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline', 'truthtable', 'algorithms']);
+  assert.ok(cards().some((c) => c.id === 'algorithm-dijkstra' && c.label === 'Greedy: Dijkstra' && c.group === 'algorithms' && c.kind === 'prefab'));
 });
 
 test('specs find their module by name or by type; old notes name none', () => {
@@ -31,7 +32,7 @@ test('added modules are checked, join the cards, and replace a shipped one by id
   assert.throws(() => addModule({ id: 'bad', api: 1, kind: 'other', prefabs: [] }), /kind/);
   addModule({ id: 'numberline', api: 1, kind: 'custom', types: ['numberline'], prefabs: [{ id: 'numberline', group: 'maths', label: 'Number line', hint: 'h', icon: 'graph', spec: { type: 'numberline' } }], groups: { maths: 'Maths' } }, { render: () => ({ svg: '<svg/>', width: 10, height: 10 }), name: () => 'Number line' });
   assert.ok(cards().some((c) => c.id === 'numberline' && c.kind === 'prefab' && c.module === 'numberline'));
-  assert.deepEqual(groups().at(-1), ['maths', 'Maths']);
+  assert.ok(groups().some(([g, label]) => g === 'maths' && label === 'Maths'));
   assert.equal(nameOf({ type: 'numberline' }), 'Number line');
 });
 

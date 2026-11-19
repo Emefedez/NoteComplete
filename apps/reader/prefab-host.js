@@ -5,7 +5,9 @@
 import * as kit from './prefabs/kit/index.js';
 import { moduleBase } from './prefab-registry.js';
 
-export async function openModuleEditor(module, spec, { editing = false } = {}) {
+// `mode`: how it opens, "author" (the usual) or one of the entries its manifest's "menu"
+// adds to the figure's menu (host.mode).
+export async function openModuleEditor(module, spec, { editing = false, mode = 'author' } = {}) {
   const base = moduleBase(module);
   const editor = await import(new URL(module.manifest.editor, base).href);
   if (typeof editor.open !== 'function') throw Error(`Prefab module ${module.manifest.id}: its editor has no open()`);
@@ -38,6 +40,7 @@ export async function openModuleEditor(module, spec, { editing = false } = {}) {
     const host = {
       kit,
       editing,
+      mode,
       applyLabel: editing ? 'Apply' : 'Insert',
       // The finished figure's spec, or null to leave without changing anything.
       done: (next) => finish(next),

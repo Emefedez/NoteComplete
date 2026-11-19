@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.43
+
+- **Colours by number.** With the Pen, Highlighter, Shapes or Tape, keys **1–9** pick the colour with that number (written inside each colour circle); with a text box selected they pick its colour. Digits still type in text boxes and fields, and they do nothing while a quiz or flashcards are in front.
+- **Import, export and share by keyboard.** Export opens on **Notes**; **Tab** and **Shift Tab** move between Open & Import, Export: Notes and Export: Resources; **1–9** choose an item (its number is shown), arrows and Enter work too, Esc closes.
+- **Coloured code.** Code blocks in Markdown (notes, documents, chat answers, study) are coloured by their language, with its name and a copy button; code files (.java, .c, .py, .sh, .js…) open coloured, and editing them indents for you (Tab, Shift Tab, Enter, closing brackets). About 35 languages, offline. The figure editors' JSON and the UML editor's PlantUML text are coloured too.
+- **Goodnotes notebooks.** Ink is drawn over pictures, as in Goodnotes (handwriting over a pasted photo shows again), and strokes keep the order they were written in. Goodnotes and Notability notebooks get a cover in Recent: the notebook's own picture at once, then its first page.
+
 ## 1.2.42
 
 - **Prefab modules.** Every prefab now comes from a module (a folder with `module.json`, a drawing and, if it wants, its own editor). On the desktop, **Insert prefab → Modules…** copies the app's modules to a folder of yours, uses a folder, or reloads it: add or change prefabs without a new version. They run with the app's rights, so add only modules you trust. How to write one: [PREFAB-MODULES-GUIDE.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/PREFAB-MODULES-GUIDE.md).

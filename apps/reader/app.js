@@ -6753,7 +6753,7 @@ async function openFigureEditor(spec, { editing = false, mode = "author", refere
   if (editor === "module") {
     try {
       const { openModuleEditor } = await loading(import("./prefab-host.js"));
-      return keepModule(await openModuleEditor(owner, spec, { editing }));
+      return keepModule(await openModuleEditor(owner, spec, { editing, mode }));
     } catch (e) {
       status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
       return null;
@@ -7393,12 +7393,16 @@ function itemMenu(item, x, y, { tape = null } = {}) {
   if (c?.kind === "prefab") { try { figure = JSON.parse(c.spec || "{}"); } catch { /* Not one. */ } }
   const chart = Boolean(editorKind(figure)), solvable = chart && canBeExercise(figure), exercise = solvable && Boolean(figure.exercise);
   const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
-  // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so.
-  const lower = name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
+  // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so; a "Topic: Name"
+  // (an algorithm, "Greedy: Dijkstra") is kept as it is.
+  const lower = name.includes(": ") ? name : name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
   openContextMenu(x, y, [
     ...tapeEntries(p, tape),
     tape && "-",
     solvable && { label: `${exercise ? "Fill in" : "Solve"} ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
+    // A module's own entries (module.json "menu": [{ label, icon, mode }]): its editor opens
+    // in that mode (host.mode), as "Play…" for an algorithm.
+    ...((figure && moduleOf(figure)?.manifest.menu) || []).filter((m) => m?.label && m.mode).map((m) => ({ label: String(m.label), icon: m.icon || "graph", run: () => editCompound(item, String(m.mode)) })),
     c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
     chart && { label: "Edit its data as JSON…", icon: "note", run: () => editCompound(item, "json") },
     item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },

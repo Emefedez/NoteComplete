@@ -1,0 +1,8 @@
+isEmpty=false max=50
+removeMax=50 then max=47
+drain=[50, 47, 44, 37, 32, 22, 16, 19, 3, 12]
+empty remove: HeapEmptyException
+add null: NullPointerException
+after 9 removes max=12
+heapSort single threw IndexOutOfBoundsException: Index 2 out of bounds for length 2
+heapSort threw IndexOutOfBoundsException: Index 12 out of bounds for length 12
