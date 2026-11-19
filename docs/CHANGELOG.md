@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.44
+
+- **Animated algorithms.** **Insert prefab → Algorithms**: 69 algorithms, step by step, grouped by topic and named like "Greedy: Dijkstra" (recursion, trees and AVL, general trees, heaps, maps and hashing, graphs, greedy, backtracking, divide and conquer, dynamic programming, sorting), including every algorithm of the AED II activities. The player shows the structures as they change (graph, heap as tree and array, queue, priority queue, hash table with its buckets, map, set, tables, boards), the Java code with the current line, the variables, the call stack and what changed in each step; play, step, drag the timeline, change the speed. Give your own input (arrays, edge lists or a graph you draw, presets, random), and put any step on the page: its menu has Play…, Edit input… and Edit code….
+- **Your own Java.** **New from Java…** runs a class you write, with the course's structures (Graph, Vertex, Map, Set, List, Queue, Stack, BinaryTree, Tree, BinaryMaxHeap) and java.util, step by step in the same player; errors show with their line when you press Run. Many built-in algorithms can also run their Java version, or open as Java code to change.
+
 ## 1.2.43
 
 - **Colours by number.** With the Pen, Highlighter, Shapes or Tape, keys **1–9** pick the colour with that number (written inside each colour circle); with a text box selected they pick its colour. Digits still type in text boxes and fields, and they do nothing while a quiz or flashcards are in front.
