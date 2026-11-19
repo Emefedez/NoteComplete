@@ -19,6 +19,7 @@ import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
 import { editorTouch } from './editor-touch.js';
 import { loadKitStyles } from './prefabs/kit/shell.js';
+import { colorTextarea } from './code-highlight.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -140,6 +141,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const code = make('textarea', { className: 'uml-code', spellcheck: false, ariaLabel: 'PlantUML' });
   const codeNote = make('p', { className: 'uml-code-note' });
   const codePane = make('div', { className: 'uml-code-pane' }, code, codeNote);
+  // Coloured as PlantUML (code-highlight.js); the textarea stays the one typed in.
+  const codeColor = colorTextarea(code, 'plantuml');
   const renderPane = make('div', { className: 'uml-render-pane' });
   const work = make('div', { className: 'uml-work' }, canvas, codePane, renderPane);
   const main = make('div', { className: 'uml-main' }, palette, work, notes.pane, panel);
@@ -226,6 +229,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (!['code', 'split'].includes(currentView) || (!force && document.activeElement === code)) return;
     try { code.value = toPlantUml(model, { preamble: docPreamble }); codeNote.textContent = ''; codeNote.classList.remove('error'); }
     catch (e) { code.value = ''; codeNote.textContent = e.message; codeNote.classList.add('error'); }
+    codeColor.paint();
   }
   // Typed PlantUML redraws the diagram after a pause; boxes that were there keep their place.
   code.addEventListener('input', () => {

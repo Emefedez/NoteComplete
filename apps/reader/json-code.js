@@ -1,5 +1,6 @@
 // JSON text boxes in the figure editors: where a JSON error is, and a box with line numbers
 // that marks the line of an error behind its text.
+import { highlightLines } from './code-highlight.js';
 
 // Where JSON.parse stopped: { line, column, index, message } (1-based line and column), from
 // the error's own words ("at position 42", or "line 3 column 5"). Safari says neither
@@ -113,23 +114,32 @@ const make = (tag, props = {}, ...children) => {
   return node;
 };
 
-// A JSON text box with line numbers, and the line of an error marked behind its text.
+// A JSON text box with line numbers, coloured (code-highlight.js), and the line of an error
+// marked behind its text. The coloured copy sits behind the textarea, whose own letters are
+// transparent (its caret, selection and editing stay native).
 export function codeBox(textarea) {
   const gutter = make('pre', { className: 'json-gutter' });
   gutter.setAttribute('aria-hidden', 'true');
-  const back = make('pre', { className: 'json-back' });
+  const lines = make('div', { className: 'json-lines' });
+  const back = make('pre', { className: 'json-back json-tokens' }, lines);
   back.setAttribute('aria-hidden', 'true');
+  textarea.classList.add('json-input');
   const box = make('div', { className: 'json-code' }, gutter, make('div', { className: 'json-edit' }, back, textarea));
   let bad = null;
+  const follow = () => {
+    gutter.scrollTop = textarea.scrollTop;
+    // Moved rather than scrolled: the copy behind cannot always scroll as far as the textarea.
+    lines.style.transform = `translate(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px)`;
+  };
   const paint = () => {
-    const lines = textarea.value.split('\n');
-    gutter.textContent = lines.map((_, i) => i + 1).join('\n');
-    back.replaceChildren(...lines.map((l, i) => make('span', { className: i + 1 === bad ? 'json-bad' : '', textContent: `${l}\n` })));
-    gutter.scrollTop = back.scrollTop = textarea.scrollTop;
-    back.scrollLeft = textarea.scrollLeft;
+    const text = textarea.value;
+    const coloured = highlightLines(text, 'json');
+    gutter.textContent = coloured.map((_, i) => i + 1).join('\n');
+    lines.innerHTML = coloured.map((html, i) => `<span${i + 1 === bad ? ' class="json-bad"' : ''}>${html}\n</span>`).join('');
+    follow();
   };
   textarea.addEventListener('input', paint);
-  textarea.addEventListener('scroll', () => { gutter.scrollTop = back.scrollTop = textarea.scrollTop; back.scrollLeft = textarea.scrollLeft; });
+  textarea.addEventListener('scroll', follow);
   paint();
   return {
     box,
