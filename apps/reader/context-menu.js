@@ -12,8 +12,12 @@ let open = null;
 
 export function closeContextMenu() {
   if (!open) return;
-  const { el, cleanup, onClose } = open;
+  const { el, state, cleanup, onClose } = open;
   open = null;
+  if (state) {
+    state.__closed = true;
+    for (const id of state.__timers || []) clearTimeout(id);
+  }
   cleanup();
   for (const sub of el.__subs || []) sub.remove();
   el.remove();
@@ -75,9 +79,14 @@ function panel(list, title, root, depth) {
     // Resting on an entry: its submenu slides out, or the one open goes.
     b.addEventListener('pointerenter', () => {
       clearTimeout(timer);
-      timer = setTimeout(() => (sub ? showSub() : closeSubs(root, depth + 1)), sub ? 180 : 250);
+      timer = setTimeout(() => {
+        if (root.__closed || !el.isConnected) return;
+        if (sub) showSub();
+        else closeSubs(root, depth + 1);
+      }, sub ? 180 : 250);
+      (root.__timers ||= new Set()).add(timer);
     });
-    b.addEventListener('pointerleave', () => clearTimeout(timer));
+    b.addEventListener('pointerleave', () => { clearTimeout(timer); root.__timers?.delete(timer); });
     b.addEventListener('keydown', (e) => {
       if (sub && e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); showSub(); root.__subs?.at(-1)?.querySelector('button:not(:disabled)')?.focus(); }
       else if (depth && e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); const owner = el.__owner; closeSubs(root, depth); owner?.focus(); }
@@ -93,8 +102,10 @@ function panel(list, title, root, depth) {
 // Inside the window: flipped to the left or up when it would run past an edge.
 function place(el, x, y, flipX = null) {
   const r = el.getBoundingClientRect(), vw = innerWidth, vh = innerHeight, m = 8;
-  const left = x + r.width + m > vw ? Math.max(m, (flipX ?? x) - r.width) : x;
-  const top = y + r.height + m > vh ? Math.max(m, vh - r.height - m) : y;
+  const rawLeft = x + r.width + m > vw ? (flipX ?? x) - r.width : x;
+  const rawTop = y + r.height + m > vh ? vh - r.height - m : y;
+  const left = Math.max(m, Math.min(vw - r.width - m, rawLeft));
+  const top = Math.max(m, Math.min(vh - r.height - m, rawTop));
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
 }
@@ -105,6 +116,9 @@ function closeSubs(root, depth) {
 }
 
 function openSub(root, parent, button, items, title, depth) {
+  if (root.__closed || !parent?.isConnected || !button?.isConnected) return;
+  const r = button.getBoundingClientRect();
+  if (!r.width && !r.height) return;
   if (root.__subs?.[depth - 1]?.__owner === button) return;
   closeSubs(root, depth);
   if (!items.some((e) => e !== '-')) return;
@@ -112,7 +126,6 @@ function openSub(root, parent, button, items, title, depth) {
   el.__owner = button;
   button.setAttribute('aria-expanded', 'true');
   (root.__host || document.body).append(el);
-  const r = button.getBoundingClientRect();
   place(el, r.right - 2, r.top - 5, r.left + 2);
   (root.__subs ||= []).push(el);
 }
@@ -123,7 +136,7 @@ export function openContextMenu(x, y, entries, { title = '', host = null, onClos
   const list = entries.filter(Boolean);
   if (!list.some((e) => e !== '-')) return null;
   // `state`: the host and the submenus open (deepest last), shared by every panel.
-  const state = { __host: host || document.body, __subs: [] };
+  const state = { __host: host || document.body, __subs: [], __timers: new Set(), __closed: false };
   const el = panel(list, title, state, 0);
   el.__subs = state.__subs;
   // Inside an open modal dialog when asked (the rest of the page is inert under one).
@@ -156,6 +169,7 @@ export function openContextMenu(x, y, entries, { title = '', host = null, onClos
   addEventListener('blur', gone);
   open = {
     el,
+    state,
     onClose,
     cleanup: () => {
       clearTimeout(timer);

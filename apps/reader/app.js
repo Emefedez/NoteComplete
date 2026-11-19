@@ -5167,8 +5167,9 @@ function prefabFlyout(button, panel) {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const recent = recentPrefabs(6);
-      if (!recent.length || editing) return;
+      if (!recent.length || editing || figureOpen || document.querySelector("dialog[open], .pk-window")) return;
       const r = button.getBoundingClientRect();
+      if (!r.width && !r.height) return;
       menu = openContextMenu(r.left, r.bottom + 4, [
         ...recent.map((choice) => ({ label: choice.label, icon: choice.icon, run: () => insertPrefab(panel(), null, choice) })),
         "-",
@@ -5187,8 +5188,9 @@ function textToolFlyout(button) {
   let timer = 0, menu = null;
   const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
   const openMenu = () => {
-    if (!doc || editing) return;
+    if (!doc || editing || figureOpen || document.querySelector("dialog[open], .pk-window")) return;
     const r = button.getBoundingClientRect();
+    if (!r.width && !r.height) return;
     const isZh = $("zhModeToggle")?.getAttribute("aria-pressed") === "true";
     const zhMode = $("zhModeToggle")?.dataset.zhMode || "off";
     const fonts = [...($("textFont")?.options || [])].filter((o) => o.value !== "__import__");
