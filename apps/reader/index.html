@@ -1257,20 +1257,18 @@
   <div class="batch-transcribe-form">
     <div class="ocr-header">
       <div>
-        <p class="eyebrow">Audio &amp; AI</p>
         <h2 id="batchTranscribeTitle">Batch transcribe recordings</h2>
       </div>
-      <button id="btCloseBtn" class="ghost icon-close" type="button" title="Close" aria-label="Close">×</button>
+      <button id="btCloseBtn" class="icon-button" data-icon="close" type="button" title="Close (Esc)" aria-label="Close"></button>
     </div>
 
-    <p class="ocr-hint">Choose the transcription engine, output actions, and which recordings from your selected notes to transcribe.</p>
+    <p class="muted">Choose the transcription engine, output actions, and which recordings from your selected notes to transcribe.</p>
 
     <div class="bt-grid">
       <label class="ocr-field">
         <span>Engine</span>
         <select id="btBackend" data-native>
           <option value="whisper" selected>Local Whisper (offline in browser)</option>
-          <option value="gemini">Gemini Audio (cloud API key)</option>
         </select>
       </label>
       <label id="btModelField" class="ocr-field">
@@ -1328,13 +1326,13 @@
     <div class="bt-recordings-section">
       <div class="bt-recordings-header">
         <span id="btSummary" class="bt-summary">0 recordings selected</span>
-        <button id="btModalSelectAll" class="ghost small" type="button">Select all</button>
+        <button id="btModalSelectAll" class="chip" type="button">Select all</button>
       </div>
       <div id="btNotesList" class="bt-notes-list"></div>
     </div>
 
     <div class="ocr-actions">
-      <button id="btCancelBtn" class="ghost" type="button">Cancel</button>
+      <button id="btCancelBtn" type="button">Cancel</button>
       <button id="btConfirmBtn" class="primary" type="button">Transcribe</button>
     </div>
   </div>

@@ -149,6 +149,16 @@ export async function discoverNoteRecordings(entry, library) {
   return readNotefulRecordings(reader, file.size).catch(() => []);
 }
 
+// The note's fingerprint, the key of its Markdown notes (find.js noteFingerprint), once per note.
+async function noteKeyOf(info) {
+  if (info.fingerprint === undefined) {
+    const file = await info.library?.open(info.entry).catch(() => null);
+    const { noteFingerprint } = await import('./find.js');
+    info.fingerprint = file ? await noteFingerprint(file).catch(() => '') : '';
+  }
+  return info.fingerprint;
+}
+
 async function storedTranscript(key, value) {
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open('notecomplete-transcripts', 1);
@@ -334,8 +344,14 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
   async function inspectRecentCards() {
     const token = ++inspectToken;
     const cards = [...doc.querySelectorAll('#recentList .note-card')];
-    await Promise.all(cards.map(async (card) => {
+    // A few notes at a time (each is read whole to find its recordings), not every Recent at once.
+    const queue = [...cards];
+    const inspect = async (card) => {
       const entry = card.noteEntry;
+      if (card.note?.facts?.audio && !card.note.facts.audio.count) {
+        card.classList.add('no-audio');
+        return;
+      }
       if (!entry) {
         card.classList.add('no-audio');
         return;
@@ -347,6 +363,7 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
         if (token !== inspectToken) return;
         info = {
           entry,
+          library,
           title: entryTitle(entry),
           recordings,
           // By default, all recordings in the note are selected for transcription
@@ -364,6 +381,9 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
         };
       }
       syncCardVisual(card);
+    };
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+      while (queue.length && token === inspectToken) await inspect(queue.shift());
     }));
     if (token === inspectToken) updateToolbar();
   }
@@ -455,6 +475,7 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
       if ($('btModelField')) $('btModelField').hidden = ($('btBackend')?.value || 'whisper') !== 'whisper';
     };
     if (backendSel) backendSel.onchange = syncModelRow;
+    if ($('btCloseBtn')) $('btCloseBtn').onclick = () => dlg.close();
     syncModelRow();
 
     const listEl = $('btNotesList');
@@ -462,9 +483,11 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
     const confirmBtn = $('btConfirmBtn');
     const selectAllModalBtn = $('btModalSelectAll');
 
+    // The notes chosen when the dialog opened stay listed while their recordings are ticked
+    // on and off (a note emptied here can be chosen again).
+    const activeInfos = [...noteMap.values()].filter((info) => info.recordings.length > 0 && selectedNotes.has(info.entry.key) && info.selectedIds.size > 0);
     function renderModalChecklist() {
       listEl.replaceChildren();
-      const activeInfos = [...noteMap.values()].filter((info) => info.recordings.length > 0 && (selectedNotes.has(info.entry.key) || info.selectedIds.size > 0));
       for (const info of activeInfos) {
         const noteLi = doc.createElement('div');
         noteLi.className = 'bt-note-group';
@@ -472,6 +495,10 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
 
         const head = doc.createElement('div');
         head.className = `bt-note-head${noteSelected ? ' is-selected' : ''}`;
+        head.setAttribute('role', 'button');
+        head.tabIndex = 0;
+        head.setAttribute('aria-pressed', String(noteSelected));
+        head.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.click(); } };
         head.innerHTML = `<span class="note-select-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
           <strong class="bt-note-title"></strong>
           <span class="muted bt-note-count"></span>`;
@@ -500,6 +527,7 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
             const row = doc.createElement('button');
             row.type = 'button';
             row.className = `bt-rec-row${on ? ' is-selected' : ''}`;
+            row.setAttribute('aria-pressed', String(on));
             row.innerHTML = `<span class="note-select-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
               <span class="bt-rec-name"></span>
               <span class="muted bt-rec-dur"></span>`;
@@ -510,6 +538,8 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
                 info.selectedIds.delete(rec.id);
                 if (info.selectedIds.size === 0) selectedNotes.delete(info.entry.key);
               } else {
+                // In a note not chosen yet, a click chooses that recording alone.
+                if (!noteSelected) info.selectedIds.clear();
                 info.selectedIds.add(rec.id);
                 selectedNotes.add(info.entry.key);
               }
@@ -617,6 +647,7 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
               chip?.set((i + share) / tasks.length, `${prefix}: ${label}`);
             });
           } else {
+            if (!globalThis.notecompleteTranscribe?.run) throw Error('This engine needs the desktop app.');
             jobState.external = true;
             const segments = await globalThis.notecompleteTranscribe.run(
               { backend, bytes: new Uint8Array(buffer), language },
@@ -636,10 +667,15 @@ export function setupBatchTranscribe({ library, status = () => {}, jobs = null, 
           completed++;
           const plain = transcriptExport(words, 'txt').trim();
           if (appendNotes && plain) {
-            const noteKey = `notes:${info.entry.key}`;
-            const existing = (await library.store.get('settings', noteKey).catch(() => '')) || '';
-            const block = `\n\n## Transcript — ${rec.name}\n\n${plain}\n`;
-            await library.store.set('settings', noteKey, `${existing.trimEnd()}${block}`).catch(() => {});
+            // Kept for the note's Markdown notes (notes.js), which take it in the next time
+            // the note opens, whether its notes live in the file or beside it.
+            const fingerprint = await noteKeyOf(info);
+            if (fingerprint) {
+              const pendingKey = `notes-pending:${fingerprint}`;
+              const existing = (await library.store.get('settings', pendingKey).catch(() => '')) || '';
+              const block = `\n\n## Transcript — ${rec.name}\n\n${plain}\n`;
+              await library.store.set('settings', pendingKey, `${existing}${block}`).catch(() => {});
+            }
           }
           if (downloadFile) {
             combinedOutputs.push({

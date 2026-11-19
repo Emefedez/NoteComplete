@@ -6079,7 +6079,8 @@ const archive = archiveBrowser({
 });
 async function exportOpenNoteFile() {
   if (doc) {
-    const bytes = await call("export_nfedit");
+    // The .nfedit archive, as File → Save writes it.
+    const { bytes } = await exportNoteBytes("project");
     const rawTitle = ($("title")?.textContent || "Note").trim().replace(/[^\w.\- ]+/g, "_") || "Note";
     const fileName = /\.(nfedit|noteful)$/i.test(rawTitle) ? rawTitle : `${rawTitle}.nfedit`;
     return new File([bytes], fileName, { type: "application/octet-stream" });

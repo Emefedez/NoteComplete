@@ -105,7 +105,7 @@ export function githubBrowser({
     }
     if ($('githubRefresh')) $('githubRefresh').disabled = !config.connected || loading;
     if ($('githubBack')) $('githubBack').disabled = !config.connected || loading || !history.length;
-    if ($('githubPublishBtn')) $('githubPublishBtn').disabled = !config.connected || !config.token || loading;
+    if ($('githubPublishBtn')) { $('githubPublishBtn').hidden = !config.connected || !config.token; $('githubPublishBtn').disabled = loading; }
     if ($('githubPath')) $('githubPath').textContent = config.connected ? `${client.slug}${currentPath ? '/' + currentPath : ''}` : 'GitHub';
   }
 
@@ -344,7 +344,7 @@ export function webdavBrowser({
     }
     if ($('webdavRefresh')) $('webdavRefresh').disabled = !config.connected || loading;
     if ($('webdavBack')) $('webdavBack').disabled = !config.connected || loading || !history.length;
-    if ($('webdavPublishBtn')) $('webdavPublishBtn').disabled = !config.connected || loading;
+    if ($('webdavPublishBtn')) { $('webdavPublishBtn').hidden = !config.connected; $('webdavPublishBtn').disabled = loading; }
     if ($('webdavPath')) {
       const host = client.target?.host || 'Nextcloud / WebDAV';
       $('webdavPath').textContent = `${host}${currentPath ? '/' + currentPath : ''}`;

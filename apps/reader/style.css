@@ -4648,8 +4648,8 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
 }
 .batch-transcribe-dialog[open] {
-  width: min(600px, calc(100vw - 24px));
-  height: min(620px, calc(100dvh - 24px));
+  width: min(760px, calc(100vw - 24px));
+  height: min(720px, calc(100dvh - 24px));
   max-height: calc(100dvh - 24px);
   display: flex;
   flex-direction: column;
@@ -4754,7 +4754,7 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   gap: 8px;
   font-size: 12.5px;
 }
-.bt-rec-items {
+.bt-rec-list {
   display: grid;
   gap: 3px;
 }
@@ -4764,27 +4764,29 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   gap: 8px;
   padding: 3px 6px;
   border-radius: calc(var(--radius) - 2px);
+  width: 100%;
+  border: 0;
   background: var(--surface);
+  color: var(--ink);
   font-size: 12px;
+  text-align: left;
   cursor: pointer;
 }
+.bt-note-head { cursor: pointer; border-radius: calc(var(--radius) - 2px); padding: 2px 4px; }
+.bt-notes-list .note-select-check { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; border: 1.5px solid var(--line); border-radius: 50%; background: var(--surface); color: transparent; }
+.bt-notes-list .is-selected > .note-select-check { border-color: var(--accent); background: var(--accent); color: #fff; }
+.bt-note-head.is-selected, .bt-rec-row.is-selected { color: var(--accent); }
+.bt-rec-row.is-selected { background: var(--accent-soft); }
+.bt-note-head:hover { background: var(--accent-soft); }
 .bt-rec-row:hover {
   background: var(--accent-soft);
 }
-.bt-rec-title {
+.bt-rec-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.bt-cached-badge {
-  padding: 1px 6px;
-  border-radius: 99px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 600;
 }
 
 /* A prefab picture's line in the Markdown editors (notes and documents, both .notes-editor):

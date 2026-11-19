@@ -432,6 +432,15 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       const inFile = core ? await call('getMarkdown').catch(() => '') : '';
       const kept = key ? await store.get('settings', key).catch(() => '') : '';
       text = inFile || kept || '';
+      // Transcripts appended from Recent (batch-transcribe.js) while the note was closed.
+      const pending = key ? await store.get('settings', `notes-pending:${fingerprint}`).catch(() => '') : '';
+      if (pending) {
+        text = `${text.trimEnd()}${pending}`;
+        await store.set('settings', `notes-pending:${fingerprint}`, '').catch(() => {});
+        if (core) await call('setMarkdown', { text }).catch((e) => console.warn('Set markdown:', e));
+        await store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
+        status?.('Transcripts from Recent added to the Markdown notes.');
+      }
       if (core && text && !inFile) await call('setMarkdown', { text }).catch((e) => console.warn('Set markdown:', e));
       if (text && inFile && key && kept !== inFile) store.set('settings', key, text).catch((e) => console.warn('Save notes:', e));
       // The placeholder differs between notes and pages: the editor is made again for it.
