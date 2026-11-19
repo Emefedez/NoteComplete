@@ -1,0 +1,131 @@
+/* Code colours (code-highlight.js): tokens as CSS variables, light and dark. This sheet loads
+   after the theme switch has read the app's stylesheets, so the dark colours follow both the
+   system (unless View → Dark theme is off: data-theme="light") and a chosen dark theme. */
+:root {
+  --tk-plain: var(--ink, #242830);
+  --tk-kw: #a626a4;
+  --tk-type: #9a5b00;
+  --tk-str: #3a7d34;
+  --tk-num: #b5520b;
+  --tk-com: #6e7781;
+  --tk-fn: #2f62d6;
+  --tk-op: #0b7a9e;
+  --tk-anno: #c4373a;
+  --code-bg: var(--chrome, #f7f8fa);
+  --code-label: var(--muted, #626b76);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tk-kw: #d197e8;
+    --tk-type: #e5c07b;
+    --tk-str: #98c379;
+    --tk-num: #e0a36e;
+    --tk-com: #8b929c;
+    --tk-fn: #79b8ff;
+    --tk-op: #6cc7d2;
+    --tk-anno: #f08c8f;
+  }
+}
+:root[data-theme="dark"] {
+  --tk-kw: #d197e8;
+  --tk-type: #e5c07b;
+  --tk-str: #98c379;
+  --tk-num: #e0a36e;
+  --tk-com: #8b929c;
+  --tk-fn: #79b8ff;
+  --tk-op: #6cc7d2;
+  --tk-anno: #f08c8f;
+}
+
+.tk-kw { color: var(--tk-kw); }
+.tk-type { color: var(--tk-type); }
+.tk-str { color: var(--tk-str); }
+.tk-num { color: var(--tk-num); }
+.tk-com { color: var(--tk-com); font-style: italic; }
+.tk-fn { color: var(--tk-fn); }
+.tk-op { color: var(--tk-op); }
+.tk-anno { color: var(--tk-anno); }
+
+/* Fenced code in rendered Markdown: the language on the left of a thin header, copy on the right. */
+pre.code-block { position: relative; }
+pre.code-block[data-lang], pre.code-block:has(> .code-copy) { padding-top: 30px; }
+pre.code-block[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute; top: 7px; left: 10px;
+  font: 600 11px/16px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.02em; color: var(--code-label);
+  pointer-events: none; user-select: none;
+}
+pre.code-block > .code-copy {
+  position: absolute; top: 4px; right: 4px;
+  display: inline-grid; place-items: center; width: 24px; height: 22px; min-height: 0; padding: 0; margin: 0;
+  border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--code-label);
+  cursor: pointer; opacity: 0.75;
+}
+pre.code-block > .code-copy:hover, pre.code-block > .code-copy:focus-visible { opacity: 1; background: var(--fill, #eef0f3); border-color: var(--line, #dce0e5); }
+pre.code-block > .code-copy.copied { opacity: 1; color: var(--ok, #1d7a4a); }
+pre.code-block code.code-highlighted { color: var(--tk-plain); }
+
+/* Plain text documents that are code (text-view.js). */
+.text-plain.text-code { color: var(--tk-plain); tab-size: 4; }
+
+/* The editor: a transparent textarea over its highlighted text, same metrics for both. */
+.code-editor {
+  --code-pad: 8px 10px;
+  position: relative; overflow: hidden; min-height: 0;
+  font: 13px/1.5 "JetBrains Mono", "DejaVu Sans Mono", "Liberation Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--surface, #fff); color: var(--tk-plain);
+}
+.code-editor > .code-editor-back, .code-editor > .code-editor-input {
+  position: absolute; inset: 0; box-sizing: border-box; margin: 0; padding: var(--code-pad);
+  border: 0; border-radius: 0;
+  font: inherit; letter-spacing: inherit; word-spacing: normal; tab-size: 4; -moz-tab-size: 4;
+  white-space: pre; overflow-wrap: normal; word-break: normal; text-align: left;
+  font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+}
+.code-editor > .code-editor-back { overflow: hidden; pointer-events: none; background: none; color: var(--tk-plain); }
+.code-editor > .code-editor-back > .code-editor-text { display: block; font: inherit; padding: 0; background: none; will-change: transform; }
+.code-editor > .code-editor-input {
+  width: 100%; height: 100%; overflow: auto; resize: none; outline: none;
+  background: transparent; color: transparent; -webkit-text-fill-color: transparent;
+  caret-color: var(--ink, #242830);
+}
+.code-editor > .code-editor-input::selection { background: color-mix(in srgb, var(--accent, #245dc4) 30%, transparent); }
+.code-editor > .code-editor-input::placeholder { -webkit-text-fill-color: var(--muted, #626b76); color: var(--muted, #626b76); }
+.code-editor:focus-within { outline: 2px solid color-mix(in srgb, var(--accent, #245dc4) 45%, transparent); outline-offset: -2px; }
+.code-editor.doc-code, .code-editor.bare:focus-within { outline: none; }
+/* A text document's editor: the plain editor's place and metrics (style.css .doc-editor-plain). */
+.code-editor.doc-code {
+  flex: 1; width: 100%;
+  --code-pad: 20px max(24px, calc((100% - 760px) / 2)) 30vh;
+  font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace;
+}
+
+/* Printing: the light colours on paper, whatever the screen theme. */
+@media print {
+  :root, :root[data-theme] {
+    --tk-plain: #24292f; --tk-kw: #a626a4; --tk-type: #9a5b00; --tk-str: #3a7d34; --tk-num: #b5520b;
+    --tk-com: #6e7781; --tk-fn: #2f62d6; --tk-op: #0b7a9e; --tk-anno: #c4373a; --code-label: #57606a;
+  }
+  pre.code-block > .code-copy { display: none; }
+  pre.code-block { padding-top: 26px; }
+  .tk-kw, .tk-type, .tk-str, .tk-num, .tk-com, .tk-fn, .tk-op, .tk-anno { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* JSON boxes in the figure editors (json-code.js codeBox): the coloured copy behind shows
+   through the textarea's transparent letters. Its plain text keeps the box's own ink. */
+.json-edit > .json-back.json-tokens { color: inherit; }
+.json-back.json-tokens > .json-lines { display: block; will-change: transform; }
+.json-edit > textarea.json-input { -webkit-text-fill-color: transparent; }
+.json-edit > textarea.json-input::placeholder { -webkit-text-fill-color: currentColor; opacity: 0.5; }
+
+/* A textarea coloured in place (colorTextarea): it keeps its own look, its letters show from behind. */
+.code-color { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.code-color > .code-color-back {
+  position: absolute; inset: 0; margin: 0; box-sizing: border-box; overflow: hidden; pointer-events: none;
+  white-space: pre; background: none; color: inherit; text-align: left; font-variant-ligatures: none;
+}
+.code-color > .code-color-back > code { display: block; font: inherit; padding: 0; background: none; will-change: transform; }
+.code-color > textarea.code-color-input { position: relative; flex: 1; width: 100%; -webkit-text-fill-color: transparent; font-variant-ligatures: none; }
+/* Behind a textarea, comments stay upright: the letters on top must land on the same places. */
+.code-editor .tk-com, .code-color .tk-com { font-style: normal; }
