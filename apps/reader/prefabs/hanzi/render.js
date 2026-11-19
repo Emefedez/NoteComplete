@@ -27,7 +27,7 @@ export function normalize(spec) {
     type: 'hanzi',
     text,
     pinyin: numbersToMarks(String(s.pinyin ?? '').slice(0, 200)).trim(),
-    gloss: String(s.gloss ?? '').slice(0, 240).trim(),
+    gloss: String(s.gloss ?? '').slice(0, 1200).trim(),
     variants: String(s.variants ?? '').slice(0, 160).trim(),
     script: s.script === 'traditional' ? 'traditional' : 'simplified',
     show: SHOWS.includes(s.show) ? s.show : 'strokes',
@@ -80,7 +80,7 @@ export async function prepareWithDict(spec) {
     let variants = m.variants;
     if (lk?.entries?.length) {
       if (!gloss) {
-        const glosses = [...new Set(lk.entries.flatMap((e) => e.gloss || []).filter(Boolean))].slice(0, 4);
+        const glosses = [...new Set(lk.entries.flatMap((e) => e.gloss || []).filter(Boolean))];
         gloss = glosses.join('; ');
       }
       if (!variants) {

@@ -12,3 +12,8 @@
   color: #fff;
   font-weight: 600;
 }
+.hz-apply-group { display: inline-flex; align-items: stretch; }
+.hz-apply-group > .pk-button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.hz-apply-drop { border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; border-left: 1px solid rgba(255, 255, 255, 0.28) !important; padding: 2px 6px !important; min-width: 24px; justify-content: center; }
+.hz-sheet-preview { margin-top: 4px; padding: 8px; border: 1px solid var(--pk-line, #d0d7de); border-radius: 8px; background: #fff; overflow-x: auto; text-align: center; }
+.hz-sheet-preview svg { display: inline-block; max-width: 100%; height: auto; max-height: 180px; }

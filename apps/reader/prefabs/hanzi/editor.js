@@ -3,10 +3,11 @@
 // Traditional variants card, the characters (with built-in Chinese IME mode remembered via icon),
 // pinyin and look on the right; Practise traces each character with the pen or a finger.
 import { editorShell, make, button, field, textInput, selectInput, checkInput } from '../kit/index.js';
-import { normalize, prepareWithDict, name, MAX_CHARS } from './render.js';
+import { normalize, prepareWithDict, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
+import { openContextMenu } from '../../context-menu.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
 const hasLatin = (s) => /[a-zA-Z]/.test(String(s || ''));
@@ -58,8 +59,56 @@ export function open(root, { spec, editing, host }) {
   shell.canvas.classList.add('hz-canvas');
   shell.canvas.removeAttribute('tabindex');
 
+  // ── Header Apply split-button: Insert/Update + dropdown for character alone vs with traces ──
+  if (shell.applyBtn && shell.applyBtn.parentElement === shell.bar) {
+    const applyGroup = make('div', { className: 'hz-apply-group' });
+    shell.applyBtn.replaceWith(applyGroup);
+    const dropBtn = make('button', {
+      type: 'button',
+      className: 'pk-button primary hz-apply-drop',
+      title: 'Choose how to insert (character alone, with numbers, or with traces)',
+      textContent: '▾',
+    });
+    dropBtn.setAttribute('aria-label', `${host.applyLabel} options`);
+    dropBtn.setAttribute('aria-haspopup', 'menu');
+    dropBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const r = applyGroup.getBoundingClientRect();
+      openContextMenu(r.left, r.bottom + 4, [
+        {
+          label: `${host.applyLabel} as character(s) alone`,
+          icon: 'text',
+          checked: model.show === 'strokes',
+          run: () => { model = normalize({ ...model, show: 'strokes' }); finish(model.step); },
+        },
+        {
+          label: `${host.applyLabel} with stroke numbers`,
+          icon: 'hash',
+          checked: model.show === 'numbers',
+          run: () => { model = normalize({ ...model, show: 'numbers' }); finish(model.step); },
+        },
+        {
+          label: `${host.applyLabel} with stroke traces (step by step)`,
+          icon: 'draw',
+          checked: model.show === 'steps',
+          run: () => { model = normalize({ ...model, show: 'steps' }); finish(model.step); },
+        },
+      ], { title: `${host.applyLabel} format`, host: root.closest('dialog') });
+    };
+    applyGroup.append(shell.applyBtn, dropBtn);
+  }
+
   // ── Middle: the main trace animation player, English & variants summary bar, or practice ──
   const stage = make('div', { className: 'hz-stage-host' });
+  const sheetPreview = make('div', { className: 'hz-sheet-preview' });
+  let showSheet = model.show !== 'strokes';
+  const sheetToggleBtn = button('graph', 'Show sheet', { title: 'Visualize the pre-drawn black character alongside the colored-in stroke sequence' });
+  sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
+  sheetToggleBtn.onclick = () => {
+    showSheet = !showSheet;
+    sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
+    renderSheetPreview();
+  };
   const dictBar = make('div', {
     className: 'hz-dict-bar',
     style: 'display:grid;gap:4px;padding:8px 12px;border-top:1px solid var(--pk-line, #d0d7de);background:var(--pk-surface, rgba(127,127,127,0.06));font-size:12.5px',
@@ -68,8 +117,8 @@ export function open(root, { spec, editing, host }) {
   pageBtn.onclick = () => finish(player.index >= player.steps ? null : player.index);
   const practiseBtn = button('draw', 'Practise');
   const ybWrap = make('span', { className: 'hz-yb-wrap', style: 'display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center' });
-  const actions = make('div', { className: 'hz-actions' }, practiseBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
-  shell.canvas.append(stage, dictBar, actions);
+  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
+  shell.canvas.append(stage, sheetPreview, dictBar, actions);
   let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
   const size = () => Math.max(120, Math.min(240, Math.floor((shell.canvas.clientWidth || 520) / Math.max(1, [...model.text].length) - 24)));
 
@@ -87,10 +136,10 @@ export function open(root, { spec, editing, host }) {
     );
     dictBar.append(headRow);
     if (isLong) {
-      const expand = make('details', { className: 'hz-defs-expand', style: 'font-size:12px;margin-top:2px' },
+      const expand = make('details', { className: 'hz-defs-expand', style: 'font-size:12px;margin-top:2px;width:100%' },
         make('summary', { style: 'cursor:pointer;color:var(--accent, #2563eb);font-weight:600', textContent: `Show all definitions (${allParts.length})` }),
-        make('div', { className: 'hz-defs-full', style: 'display:grid;gap:2px;margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--pk-surface, rgba(127,127,127,0.08))' },
-          ...allParts.map((part) => make('div', { textContent: `• ${part}` })),
+        make('div', { className: 'hz-defs-full', style: 'display:grid;gap:4px;margin-top:4px;padding:6px 8px;border-radius:6px;background:var(--pk-surface, rgba(127,127,127,0.08));max-height:140px;overflow-y:auto;white-space:normal;word-break:break-word' },
+          ...allParts.map((part) => make('div', { style: 'white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35', textContent: `• ${part}` })),
         ),
       );
       dictBar.append(expand);
@@ -166,12 +215,21 @@ export function open(root, { spec, editing, host }) {
     }
   }
 
+  function renderSheetPreview() {
+    sheetPreview.hidden = !showSheet;
+    sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
+    if (!showSheet) { sheetPreview.replaceChildren(); return; }
+    const out = renderHanziSheet({ ...model, show: model.show === 'strokes' ? 'steps' : model.show }, { size: 96 });
+    sheetPreview.innerHTML = out?.svg || '';
+  }
+
   function showPlayer(autoplay = false) {
     drill?.destroy(); drill = null;
     player?.destroy();
     practiseBtn.replaceChildren(...button('draw', 'Practise').childNodes);
     pageBtn.hidden = false;
-    player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, colour: model.colour, start: model.step === null ? 'all' : model.step, autoplay });
+    renderSheetPreview();
+    player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, colour: model.colour, start: model.step === null ? (autoplay ? 0 : 'all') : model.step, autoplay });
     player.ready.then(() => {
       say();
       const active = document.activeElement;
@@ -199,11 +257,7 @@ export function open(root, { spec, editing, host }) {
     shell.say(missing.length ? `No stroke order for ${missing.join(' ')}` : '', !!missing.length);
   };
 
-  // ── Right: characters (with remembered Chinese IME icon), pinyin, English meaning, variants, look ──
-  const pinyinInput = textInput(model.pinyin, (pinyin) => { pinyinAuto = !pinyin; change({ pinyin }, false); renderDictBar(); }, { placeholder: 'nǐ hǎo (or ni3 hao3)' });
-  const glossInput = textInput(model.gloss, (gloss) => { glossAuto = !gloss; change({ gloss }, false); renderDictBar(); }, { placeholder: 'English equivalent (e.g. hello; hi)' });
-  const variantsInput = textInput(model.variants, (variants) => { variantsAuto = !variants; change({ variants }, false); renderDictBar(); }, { placeholder: 'Simplified / Traditional variants' });
-
+  // ── Right: characters (with remembered Chinese IME icon) & page appearance ──
   function panel() {
     charIme?.detach?.();
     const charInput = textInput(model.text, (text) => {
@@ -264,16 +318,10 @@ export function open(root, { spec, editing, host }) {
     const charRow = make('div', { style: 'display:flex;gap:6px;align-items:center' }, charInput, imeBtn);
     charInput.style.flex = '1';
 
-    pinyinInput.value = model.pinyin;
-    glossInput.value = model.gloss;
-    variantsInput.value = model.variants;
     shell.panel.replaceChildren(
       field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/ā/A icon to switch input mode (remembered)`),
-      field('Pinyin', pinyinInput, 'Above the characters; tone numbers become marks'),
-      field('English equivalent', glossInput, 'Shown below the characters on the prefab'),
-      field('Variants (繁/简)', variantsInput, 'Simplified, traditional or variant forms'),
       make('h4', { textContent: 'On the page' }),
-      field('Show', selectInput([['strokes', 'The characters'], ['numbers', 'With stroke numbers'], ['steps', 'With the stroke sequence (traces)']], model.show, (show) => change({ show }, false))),
+      field('Show', selectInput([['strokes', 'The characters'], ['numbers', 'With stroke numbers'], ['steps', 'With the stroke sequence (traces)']], model.show, (show) => { if (show !== 'strokes') showSheet = true; change({ show }, false); renderSheetPreview(); })),
       field('Grid', selectInput([['mi', '米字格 (cross and diagonals)'], ['tian', '田字格 (cross)'], ['none', 'None']], model.grid, (grid) => change({ grid }, false))),
       checkInput('Grey outline of the strokes still to come', model.outline, (outline) => change({ outline }, false)),
       field('Colour', selectInput([['#1f2328', 'Black'], ['#245dc4', 'Blue'], ['#7a3db8', 'Purple'], ['#1c7c54', 'Green']], model.colour, (colour) => change({ colour }, false))),
@@ -298,9 +346,6 @@ export function open(root, { spec, editing, host }) {
       gloss: glossAuto && next.gloss ? next.gloss : model.gloss,
       variants: variantsAuto && next.variants ? next.variants : model.variants,
     });
-    pinyinInput.value = model.pinyin;
-    glossInput.value = model.gloss;
-    variantsInput.value = model.variants;
     const varChars = [...new Set((model.variants.match(/\p{Script=Han}/gu) || []))];
     renderDictBar(varChars);
     if (show) showPlayer(autoplay);
@@ -314,7 +359,10 @@ export function open(root, { spec, editing, host }) {
     shell.history(true, false);
     root.querySelector('.pk-title').textContent = name(model);
     if (text) { clearTimeout(timer); timer = setTimeout(() => load(true, true), 250); }
-    else if (player && ('grid' in next || 'outline' in next || 'colour' in next)) player.set({ grid: model.grid, outline: model.outline, colour: model.colour });
+    else {
+      renderSheetPreview();
+      if (player && ('grid' in next || 'outline' in next || 'colour' in next)) player.set({ grid: model.grid, outline: model.outline, colour: model.colour });
+    }
   }
   function back(from, to) {
     if (!from.length) return;

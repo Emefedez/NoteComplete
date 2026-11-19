@@ -85,7 +85,7 @@ export function editorShell(root, { id = 'module', title = '', applyLabel = 'Ins
   requestAnimationFrame(() => canvas.focus({ preventScroll: true }));
   let sayTimer = 0;
   return {
-    bar, palette: paletteEl, canvas, panel: panelEl, status,
+    bar, palette: paletteEl, canvas, panel: panelEl, status, applyBtn,
     // A message in the status line; an error stays until the next one.
     say(text, error = false) {
       clearTimeout(sayTimer);
