@@ -1160,6 +1160,7 @@ $("pageList").addEventListener("pointerdown", (down) => {
 const textBox = textBoxController({
   call,
   action: (...a) => action(...a),
+  patch: (...a) => patchItem(...a),
   status,
   selection,
   swatches: SWATCHES,
@@ -1822,9 +1823,11 @@ function updateTools(result) {
   $("pageLabel").textContent = `of ${doc.pages}`;
   // The box fits the longest page number (no clipped digits in narrow and compact bars).
   $("pageNumber").style.setProperty("--digits", String(Math.max(2, String(doc.pages).length)));
-  $("counts").textContent =
-    `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
-  $("warnings").textContent = result.warnings.join(" ");
+  if (result && result.visible_imported != null) {
+    $("counts").textContent =
+      `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
+  }
+  if (Array.isArray(result?.warnings)) $("warnings").textContent = result.warnings.join(" ");
   $("svg").disabled = !panels[page]?.pdfReady;
 }
 function setPage(index) {
@@ -2175,6 +2178,19 @@ function edited(op, args, result) {
   // A tablet's copy is the computer's note: the computer saves it, not the tablet.
   if (collab?.role !== "tablet") dirty = changed = true;
   revision++;
+  // Item-level patches (adjust/crop) only carry delta metadata, not a full document summary.
+  if (!Array.isArray(result?.page_sizes)) {
+    if (prevDoc && result) {
+      Object.assign(prevDoc, {
+        can_undo: result.can_undo ?? prevDoc.can_undo,
+        can_redo: result.can_redo ?? prevDoc.can_redo,
+        edit_count: result.edit_count ?? prevDoc.edit_count,
+      });
+    }
+    doc = prevDoc;
+    savedState();
+    return false;
+  }
   doc = result;
   savedState();
   const audioStateKey = (d) => `${d?.audio?.length || 0}:${(d?.recordings || []).map((r) => `${r.id}${r.animation ? "a" : ""}`).join(",")}`;
@@ -2211,9 +2227,10 @@ function edited(op, args, result) {
 }
 function showEdit(op, args, result) {
   updateTools(result);
-  layerPanel(result.layers);
+  if (Array.isArray(result.layers)) layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
   const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  const fullView = Boolean(result?.size && Array.isArray(result?.layers));
   const newBackground = op === "setPageBackgrounds" || op === "replacePdfText";
   const affected = newBackground && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
   const bgDirty = newBackground || op === "undo" || op === "redo";
@@ -2235,7 +2252,7 @@ function showEdit(op, args, result) {
     // for the whole page to be rebuilt.
     if (op === "draw" && p.index === result.page && addDrawn(p, result)) continue;
     if (op === "draw" && !args.line?.shape && p.index === result.page) laterRender(p, result);
-    else renderPage(p, p.index === result.page ? result : undefined);
+    else renderPage(p, fullView && p.index === result.page ? result : undefined);
   }
   if (op === "setPageBackgrounds" && Array.isArray(args.pages))
     status(`Updated background on ${args.pages.length} page${args.pages.length === 1 ? "" : "s"}. One undo restores it.`);
@@ -2910,7 +2927,67 @@ function pointerDown(e, p) {
   }
   if (tool === "text") {
     e.preventDefault();
-    textBox.open(p, point(e, p));
+    const at = point(e, p);
+    if (textBox.active || e.button !== 0 || e.pointerType !== "mouse") {
+      textBox.open(p, at);
+      return;
+    }
+    // In Text mode: holding left click (≥ 220ms) or dragging (> 5px) on an existing text box moves
+    // it directly without switching to Select or entering edit mode; a quick click edits it.
+    const startX = e.clientX, startY = e.clientY, pointerId = e.pointerId, noteToken = epoch;
+    let lastEv = e, finished = false, picked = null, startedDrag = false, holdTimer = 0;
+    const cleanup = () => {
+      clearTimeout(holdTimer);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
+    };
+    const startDrag = () => {
+      if (finished || startedDrag || !picked || noteToken !== epoch || tool !== "text") return;
+      startedDrag = true;
+      finished = true;
+      cleanup();
+      selection.dragItem(lastEv, p, picked, { keepTool: true });
+    };
+    const onMove = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      lastEv = ev;
+      if (picked && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) startDrag();
+    };
+    const onUp = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      finished = true;
+      cleanup();
+      if (noteToken === epoch && tool === "text") textBox.open(p, at);
+    };
+    const onCancel = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      finished = true;
+      cleanup();
+    };
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onCancel, true);
+    call("pick", { page: p.index, x: at[0], y: at[1], tolerance: 4 }).then((item) => {
+      if (finished || noteToken !== epoch || tool !== "text") return;
+      if (item?.kind !== "text") {
+        finished = true;
+        cleanup();
+        textBox.open(p, at);
+        return;
+      }
+      picked = item;
+      if (Math.hypot(lastEv.clientX - startX, lastEv.clientY - startY) > 5) {
+        startDrag();
+      } else {
+        holdTimer = setTimeout(startDrag, 220);
+      }
+    }).catch(() => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      if (noteToken === epoch && tool === "text") textBox.open(p, at);
+    });
     return;
   }
   if (tool === "lock") {

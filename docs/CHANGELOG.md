@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.61
+
+- **Enter commits Chinese characters by default.** Pressing **Enter** while composing in Hanzi mode now picks and inserts the highlighted Chinese candidate (matching **Space**), while **Shift + Enter** writes the raw Latin letters. You can still customize the Enter key behavior in **Settings → Chinese → Enter key in Pinyin buffer**.
+
 ## 1.2.60
 
 - **Universal right-click translation, favorites, language search & Replace.** Right-clicking any highlighted text (in Markdown editor/preview, notes, PDF/OCR text layer, cards, chat, or text fields) now offers **Translate** with a favorite-languages submenu (**Español**, **English**, and **中文 (简体)** by default) plus **More languages…** to search 33+ languages and ★ star/unstar favorites. Inside the Translator, a **Replace** button replaces the selected editable text with the active translation. The Chinese Look up panel remains untouched for quick lookup and adds a **Translate** icon button plus default **radical & component meanings** in **Structure**.
