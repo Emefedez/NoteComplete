@@ -63,8 +63,8 @@ export function markTone(syl, tone) {
 }
 
 // Move mid-syllable tone digits to the end of their syllable: "zho1ngwén" → "zhong1wen2",
-// "zhongwe2n" → "zhongwen2", "zho1ngwe2n" → "zhong1wen2", "zh1ong" → "zhong1", "ha3o" → "hao3",
-// while keeping "ni3hao" and "ma1ne" intact.
+// "zhongwe2n" → "zhongwen2", "q1in" → "qin1", "qin1g" → "qing1", "qi1an" → "qian1",
+// "zh1ong" → "zhong1", "ha3o" → "hao3", while keeping "ni3hao", "ma1ne", and "xi1nan" intact.
 export function normalizeToneDigits(text) {
   const s = marksToNumbers(String(text ?? '').normalize('NFC'));
   // Tokenize into alternating runs of letters, digits, and separators so adjacent digits never mask each other.
@@ -75,39 +75,48 @@ export function normalizeToneDigits(text) {
   for (let i = 1; i < toks.length - 1; i++) {
     if (!isDigit(toks[i]) || !isWord(toks[i - 1]) || !isWord(toks[i + 1])) continue;
     const left = toks[i - 1], right = toks[i + 1];
-    const leftSeg = segment(left, { partial: false, limit: 1 });
-    const leftOk = Boolean(leftSeg);
+    const leftFull = segment(left, { partial: false, limit: 1 });
+    const leftPartial = leftFull || segment(left, { partial: true, limit: 1 });
+    if (!leftPartial) continue;
+    const leftLast = leftFull ? leftFull[0].at(-1).toLowerCase() : '';
+    const leftOk = Boolean(leftFull) && !RARE.has(leftLast);
+    const maxSyls = leftPartial[0].length;
+    const rightLow = fixU(right).toLowerCase();
     const rightSeg = segment(right, { partial: true, limit: 1 });
-    const rightStartsRare = !rightSeg || RARE.has(rightSeg[0][0].toLowerCase());
-    // Find the shortest coda completing the syllable before the digit (preferring "ng" over "n" when valid).
-    let pick = 0;
+    const rightFirst = rightSeg ? rightSeg[0][0].toLowerCase() : '';
+    const rightStartsIncomplete = !rightSeg || !SYLLABLES.has(rightFirst) || RARE.has(rightFirst);
+    const rightStartsVowel = /^[aeiouüê]/.test(rightLow);
+    const nextIsDigit = i + 2 < toks.length && isDigit(toks[i + 2]);
+    // Pick the best coda completing the syllable before the digit: prefer completing the full
+    // single syllable (e.g. "q1in" → "qin1", "q1ing" → "qing1", "qin1g" → "qing1", "qi1an" → "qian1")
+    // while avoiding splits that strand a vowel-initial remainder when a clean consonant-initial
+    // split exists (e.g. "qi2ngan" → "qin2gan" for 情感 rather than "qing2an").
+    let bestPick = 0, bestScore = -Infinity;
     const maxTake = Math.min(5, right.length);
     for (let take = 1; take <= maxTake; take++) {
       const coda = right.slice(0, take), codaLow = fixU(coda).toLowerCase();
       const rest = right.slice(take);
-      if (leftOk && codaLow !== 'ng' && !rightStartsRare) continue;
-      // Ensure `coda` completes ONE syllable (not a second whole syllable): check tail of left + coda.
+      if (leftOk && codaLow !== 'ng' && !rightStartsIncomplete && !rightStartsVowel) continue;
       const combined = segment(left + coda, { partial: false, limit: 1 });
-      if (!combined) continue;
-      if (leftSeg && combined[0].length > leftSeg[0].length) continue;
-      // If `rest` is non-empty and the next token isn't a mid-syllable digit of `rest`, check `rest` can start a syllable.
-      const nextIsDigit = i + 2 < toks.length && isDigit(toks[i + 2]);
-      if (rest && !nextIsDigit && !segment(rest, { partial: true, limit: 1 })) continue;
-      pick = take;
-      // If `coda` ended in "n" and next char is "g" forming "-ng" (e.g. "zho1ng"), extend to "ng".
-      if (codaLow.endsWith('n') && right[take]?.toLowerCase() === 'g') {
-        const ngCombined = segment(left + right.slice(0, take + 1), { partial: false, limit: 1 });
-        const ngRest = right.slice(take + 1);
-        if (ngCombined && (!leftSeg || ngCombined[0].length <= leftSeg[0].length)
-          && (!ngRest || nextIsDigit || segment(ngRest, { partial: true, limit: 1 }))) {
-          pick = take + 1;
-        }
+      if (!combined || combined[0].length > maxSyls) continue;
+      const combLast = combined[0].at(-1).toLowerCase();
+      if (RARE.has(combLast)) continue;
+      const restSeg = rest ? segment(rest, { partial: true, limit: 1 }) : null;
+      if (rest && !nextIsDigit && !restSeg) continue;
+      let score = take * 10;
+      if (!rest) {
+        score += 40;
+      } else {
+        const restLow = fixU(rest).toLowerCase();
+        const restFirst = restSeg ? restSeg[0][0].toLowerCase() : '';
+        if (/^[aeiouüê]/.test(restLow)) score -= 35;
+        if (!nextIsDigit && (!restSeg || !SYLLABLES.has(restFirst) || RARE.has(restFirst))) score -= 25;
       }
-      break;
+      if (score > bestScore) { bestScore = score; bestPick = take; }
     }
-    if (pick > 0) {
-      toks[i - 1] = left + right.slice(0, pick);
-      toks[i + 1] = right.slice(pick);
+    if (bestPick > 0) {
+      toks[i - 1] = left + right.slice(0, bestPick);
+      toks[i + 1] = right.slice(bestPick);
     }
   }
   return toks.join('');

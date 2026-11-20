@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.64
+
+- **Editor note audio docks to the global bar on close.** Closing the floating Audio window while a note recording is active now docks playback straight onto the top global audio bar (keeping playback and timed ink sync running; click the title on the top bar to re-open the full Audio window). To stop and close completely, click `×` on the top audio bar or press `Shift + click ×` / `Shift + X` inside the Audio window.
+- **Refreshed README, badges & screenshots.** Added platform, release, and GitHub stars badges plus a supported-formats bar directly under the banner, removed outdated Open TODOs, simplified the Get it section, and captured fresh screenshots covering the moon Dark pages toggle, global MP3 player, open Cloud provider dropdown, Prefabs menu, UML & Process states editors, and Markdown + Chinese Look up.
+
 ## 1.2.63
 
 - **Built-in global-bar MP3 player & external MP4 handoff.** Opening an `.mp3` file (from an opened folder, `File → Open…`, drag-and-drop, archive, or cloud storage) now reveals a compact, accent-colored audio player right on the global bar without closing your current note—complete with headset icon (click to mute), track title, backwards (−10s), primary accent Play/Pause, forwards (+10s), scrubbable progress bar, time readout, speed toggle (`0.5×`–`2×`), and `×` close button. `.mp4` videos in folders or file dialogs redirect straight to your computer's default media player.

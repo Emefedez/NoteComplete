@@ -521,6 +521,31 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     { id: 'audio', label: 'With audio', icon: 'headphones', title: 'Only notes with recordings' },
   ];
   const isActive = () => filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
+  function syncSortButton() {
+    const activeSort = SORTS[filters.sort] ? filters.sort : 'name';
+    if ($('homeSort') && $('homeSort').value !== activeSort) $('homeSort').value = activeSort;
+    if ($('homeSortLabel')) $('homeSortLabel').textContent = SORTS[activeSort];
+    if ($('homeSortBtn')) {
+      $('homeSortBtn').setAttribute('aria-expanded', String(openCategory === 'sort'));
+      $('homeSortBtn').setAttribute('aria-label', `Sort notes: ${SORTS[activeSort]}`);
+    }
+  }
+  function sortCategory() {
+    const activeSort = SORTS[filters.sort] ? filters.sort : 'name';
+    return {
+      id: 'sort',
+      label: 'Sort notes',
+      single: true,
+      options: Object.entries(SORTS).map(([k, name]) => ({ value: k, label: name })),
+      on: v => activeSort === v,
+      flip: v => {
+        filters.sort = v;
+        syncSortButton();
+        closeFilterMenu();
+        changed();
+      },
+    };
+  }
   function renderFilters() {
     const nodes = categories().map(c => {
       const picked = c.options.filter(o => c.on(o.value));
@@ -536,24 +561,33 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('filterBar').replaceChildren(...nodes);
     for (const [i, t] of TOGGLES.entries()) nodes[nodes.length - TOGGLES.length + i].title = t.title;
     $('filtersClear').hidden = !isActive();
+    syncSortButton();
     if (openCategory) showFilterMenu(openCategory);
   }
-  // The open dropdown: a checkbox per value, under its button.
+  // The open dropdown: a checkbox or radio option per value, under its button.
   function showFilterMenu(id) {
-    const category = categories().find(c => c.id === id), anchor = $('filterBar').querySelector(`[data-category="${id}"]`), menu = $('filterMenu');
+    const category = id === 'sort' ? sortCategory() : categories().find(c => c.id === id);
+    const anchor = id === 'sort' ? $('homeSortBtn') : $('filterBar').querySelector(`[data-category="${id}"]`);
+    const menu = $('filterMenu');
     if (!category || !anchor) return closeFilterMenu();
+    const prev = openCategory;
+    if (prev && prev !== id) {
+      const prevAnchor = prev === 'sort' ? $('homeSortBtn') : $('filterBar').querySelector(`[data-category="${prev}"]`);
+      prevAnchor?.setAttribute('aria-expanded', 'false');
+    }
     const keep = menu.hidden ? 0 : menu.scrollTop;
     openCategory = id;
+    anchor.setAttribute('aria-expanded', 'true');
     menu.setAttribute('aria-label', category.label);
     menu.replaceChildren(...category.options.map(o => {
       const on = category.on(o.value), b = document.createElement('button');
-      b.type = 'button'; b.setAttribute('role', 'menuitemcheckbox'); b.setAttribute('aria-checked', String(on));
+      b.type = 'button'; b.setAttribute('role', category.single ? 'menuitemradio' : 'menuitemcheckbox'); b.setAttribute('aria-checked', String(on));
       b.className = `filter-option${on ? ' on' : ''}${category.single ? ' radio' : ''}`;
       b.append(Object.assign(document.createElement('span'), { className: 'filter-check' }), o.label);
       b.onclick = () => category.flip(o.value);
       return b;
     }));
-    placeMenu(menu, anchor, { align: 'left', minWidth: 160 });
+    placeMenu(menu, anchor, { align: 'left', minWidth: 168 });
     menu.scrollTop = keep;
     document.addEventListener('pointerdown', outsideFilter, true);
     document.addEventListener('keydown', escapeFilter, true);
@@ -564,10 +598,30 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('filterMenu').hidden = true;
     document.removeEventListener('pointerdown', outsideFilter, true);
     document.removeEventListener('keydown', escapeFilter, true);
-    if (was) $('filterBar').querySelector(`[data-category="${was}"]`)?.setAttribute('aria-expanded', 'false');
+    if (was === 'sort') $('homeSortBtn')?.setAttribute('aria-expanded', 'false');
+    else if (was) $('filterBar').querySelector(`[data-category="${was}"]`)?.setAttribute('aria-expanded', 'false');
   }
   const outsideFilter = event => { if (!$('filterMenu').contains(event.target) && !event.target.closest?.('.filter-drop')) closeFilterMenu(); };
-  const escapeFilter = event => { if (event.key === 'Escape') { event.stopPropagation(); closeFilterMenu(); } };
+  const escapeFilter = event => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      const was = openCategory;
+      closeFilterMenu();
+      if (was === 'sort') $('homeSortBtn')?.focus();
+      return;
+    }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      const rows = [...$('filterMenu').querySelectorAll('.filter-option')];
+      if (!rows.length) return;
+      event.preventDefault();
+      const idx = rows.indexOf(document.activeElement);
+      const next = event.key === 'Home' ? 0
+        : event.key === 'End' ? rows.length - 1
+        : event.key === 'ArrowDown' ? (idx + 1 + rows.length) % rows.length
+        : (idx <= 0 ? rows.length - 1 : idx - 1);
+      rows[next]?.focus();
+    }
+  };
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
@@ -1001,7 +1055,18 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [] }; changed(); };
   for (const [value, label] of Object.entries(SORTS)) $('homeSort').add(new Option(label, value));
   $('homeSort').value = SORTS[filters.sort] ? filters.sort : 'name';
-  $('homeSort').onchange = () => { filters.sort = $('homeSort').value; changed(); };
+  $('homeSort').onchange = () => { filters.sort = $('homeSort').value; syncSortButton(); changed(); };
+  if ($('homeSortBtn')) {
+    $('homeSortBtn').onclick = () => (openCategory === 'sort' ? closeFilterMenu() : showFilterMenu('sort'));
+    $('homeSortBtn').onkeydown = (event) => {
+      if (['ArrowDown', 'ArrowUp'].includes(event.key) && openCategory !== 'sort') {
+        event.preventDefault();
+        showFilterMenu('sort');
+        ($('filterMenu').querySelector('.filter-option.on') || $('filterMenu').querySelector('.filter-option'))?.focus();
+      }
+    };
+  }
+  syncSortButton();
   filters.since = filters.period ? Date.now() - (PERIODS[filters.period]?.[1] || 0) : 0;
   renderFilters();
   // Facts of a note that was just opened, for Recent filtering (local files and kept copies).
