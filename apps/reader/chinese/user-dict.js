@@ -42,12 +42,31 @@ export function userDict({ chosen = idbStore('chosen'), words = idbStore('words'
       if (map.size > MAX_ROWS) await prune(map, t);
       return row;
     },
-    async addWord(hanzi, pinyin) {
-      const row = { key: `${hanzi}\t${numbered(pinyin)}`, hanzi, pinyin: numbered(pinyin), added: now() };
+    async addWord(hanzi, pinyin = '', gloss = '') {
+      const py = numbered(pinyin);
+      const row = { key: `${hanzi}\t${py}`, hanzi, pinyin: py, ...(gloss ? { gloss: String(gloss).trim() } : {}), added: now() };
       await words.put(row);
       return row;
     },
     removeWord: key => words.delete(key),
+    async listWords() {
+      const list = await words.all().catch(() => []);
+      return list.sort((a, b) => (b.added || 0) - (a.added || 0));
+    },
+    async findWord(hanzi, pinyin = '') {
+      const list = await words.all().catch(() => []);
+      const py = pinyin ? numbered(pinyin) : '';
+      return (py && list.find(w => w.hanzi === hanzi && w.pinyin === py)) || list.find(w => w.hanzi === hanzi) || null;
+    },
+    async toggleWord(hanzi, pinyin = '', gloss = '') {
+      const existing = await this.findWord(hanzi, pinyin);
+      if (existing) {
+        await words.delete(existing.key);
+        return { starred: false, key: existing.key };
+      }
+      const row = await this.addWord(hanzi, pinyin, gloss);
+      return { starred: true, row };
+    },
     // Settings → Chinese export / import (moving devices).
     async export() { return { chosen: [...(await load()).values()], words: await words.all() }; },
     async import(data) {

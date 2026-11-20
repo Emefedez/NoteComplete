@@ -13,6 +13,7 @@ import { zhWindow, modalHost, langToggle } from './zh-window.js';
 import { levelLabel, vocabCard, HAN } from './vocab.js';
 import { speak, speakSyllable, stopSpeech, canSpeak } from './speech.js';
 import { localizeLookup, zhLang } from './translate.js';
+import { numbersToMarks } from './pinyin.js';
 
 const IDC = /[⿰-⿿]/u;
 // How the parts sit (the first Ideographic Description Character of the decomposition).
@@ -37,9 +38,19 @@ export function meaningsOf(result, text) {
     const other = e.simp === text ? e.trad : e.simp;
     let row = out.find((r) => r.pinyin === e.pinyin);
     if (!row) out.push(row = { pinyin: e.pinyin, gloss: [], level: e.level || 0, forms: [] });
-    for (const g of e.gloss || []) if (!row.gloss.includes(g)) row.gloss.push(g);
+    const seen = new Set(row.gloss.map((x) => x.toLowerCase()));
+    for (const raw of e.gloss || []) {
+      for (const part of String(raw || '').split(/\s*;\s*/)) {
+        const g = part.trim();
+        if (g && !seen.has(g.toLowerCase())) { seen.add(g.toLowerCase()); row.gloss.push(g); }
+      }
+    }
     if (other && other !== text && !row.forms.includes(other)) row.forms.push(other);
     if (e.level && (!row.level || e.level < row.level)) row.level = e.level;
+  }
+  if (!out.length && result?.char?.definition) {
+    const gloss = String(result.char.definition).split(/\s*[;,]\s*/).map((s) => s.trim()).filter(Boolean);
+    if (gloss.length) out.push({ pinyin: result.char.readings?.[0]?.pinyin || '', gloss, level: 0, forms: [] });
   }
   return out;
 }
@@ -66,9 +77,46 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   const win = zhWindow({ key: 'zh-lookup', title: `Look up ${text}`, width: 400, tall: 680, near, onClose: () => { players.forEach((p) => p.destroy?.()); stopSpeech(); current = null; } });
   win.el.classList.add('zh-lookup');
   const history = [];
-  let players = [], shown = null, token = 0;
+  let players = [], shown = null, token = 0, favList = [], favSet = new Set(), favFootBtn = null;
   const status = (msg, bad = false) => host.status?.(msg, bad);
   const script = () => host.script?.() || 'simplified';
+  const syncFavFoot = () => {
+    if (!favFootBtn) return;
+    const span = favFootBtn.querySelector('span');
+    if (span) span.textContent = favList.length ? `Favourites (${favList.length})` : 'Favourites';
+  };
+  const refreshFavorites = async () => {
+    try {
+      const { chinese } = await import('./client.js');
+      favList = await chinese().favorites();
+      favSet = new Set(favList.map((w) => w.hanzi));
+    } catch { favList = []; favSet = new Set(); }
+    syncFavFoot();
+  };
+  const starButton = (hanzi, pinyin, gloss = '', { small = false, onToggle = null } = {}) => {
+    const b = el('button', `star-toggle zh-lk-star${small ? ' small' : ''}`);
+    b.type = 'button';
+    b.append(icon('star'));
+    const sync = () => {
+      const on = favSet.has(hanzi);
+      b.setAttribute('aria-pressed', String(on));
+      b.title = on ? `Remove ${hanzi} from favourites` : `Add ${hanzi} to favourites`;
+      b.setAttribute('aria-label', b.title);
+    };
+    sync();
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        const { chinese } = await import('./client.js');
+        const res = await chinese().toggleFavorite(hanzi, pinyin, gloss);
+        await refreshFavorites();
+        sync();
+        status(res.starred ? `${hanzi} added to favourites.` : `${hanzi} removed from favourites.`);
+        onToggle?.(res.starred);
+      } catch (err) { status(err.message, true); }
+    };
+    return b;
+  };
   // Plays `t` (its reading when one character), lighting `button` while it plays.
   const say = (t, { reading = '', button = null, slow = false, syllable = false } = {}) => {
     const onState = (on) => button?.classList.toggle('playing', on);
@@ -125,7 +173,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     let result;
     try {
       const { chinese } = await import('./client.js');
-      result = await chinese().lookup(t, { script: script() });
+      [result] = await Promise.all([chinese().lookup(t, { script: script() }), refreshFavorites()]);
       // Meanings in Spanish with the es | en toggle (cached after the first time).
       result = await localizeLookup(result, zhLang()).catch(() => result);
     } catch (e) {
@@ -142,7 +190,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const reading = readings[0]?.pinyin || '';
     const meanings = meaningsOf(result, t);
     const level = lowestLevel(result) || result.words?.find((w) => w.text === t)?.level || 0;
-    const gloss = meanings.find((m) => m.pinyin === reading)?.gloss[0] || meanings[0]?.gloss[0] || '';
+    const gloss = (meanings.find((m) => m.pinyin === reading)?.gloss || meanings[0]?.gloss || []).slice(0, 3).join('; ');
     const body = [];
 
     // ── Header ──
@@ -178,6 +226,8 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const facts = el('div', 'zh-lk-facts');
     if (level) facts.append(el('span', 'zh-lk-level', levelLabel(level)));
     if (result.char?.strokes) facts.append(el('span', 'muted', `${result.char.strokes} strokes`));
+    const headStar = starButton(t, reading, gloss);
+    facts.prepend(headStar);
     if (canSpeak(script())) {
       const speakBtn = el('button', 'zh-lk-say');
       speakBtn.type = 'button';
@@ -321,6 +371,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
           hear.onclick = (e) => say(w.text, { button: hear, slow: e.shiftKey });
           li.append(link(w.text), hear, syllables(w.pinyin, w.text), el('span', 'zh-lk-gloss', w.gloss || ''));
           if (w.level) li.append(el('span', 'zh-lk-level', levelLabel(w.level)));
+          li.append(starButton(w.text, w.pinyin, w.gloss || '', { small: true }));
           ul.append(li);
         }
         s.append(ul);
@@ -344,13 +395,70 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
       host.addCards && btn('Flashcard', 'cards', (e) => addCard(e.currentTarget, { hanzi: t, pinyin: reading, gloss, level })),
     ];
     if (ctx.replace) actions.push(convertHere(t, ctx));
-    if (host.insertFigure && han.length && han.length <= 12) actions.push(btn('Stroke figure', 'graph', async () => {
-      try { await host.insertFigure({ type: 'hanzi', module: 'hanzi', text: han.join(''), pinyin: reading, show: 'strokes', grid: 'mi' }); } catch (e) { status(e.message, true); }
+    if ((host.openTracePrefab || host.insertFigure) && han.length && han.length <= 12) actions.push(btn('Stroke order', 'draw', async () => {
+      try {
+        if (host.openTracePrefab) await host.openTracePrefab(han.join(''));
+        else await host.insertFigure({ type: 'hanzi', module: 'hanzi', text: han.join(''), pinyin: reading, show: 'strokes', grid: 'mi' });
+      } catch (e) { status(e.message, true); }
     }));
-    if (reading) actions.push(btn('My words', 'plus', async () => {
-      try { const { chinese } = await import('./client.js'); await chinese().addWord(t, reading); status(`${t} (${reading}) added to your words: Chinese input offers it first.`); } catch (e) { status(e.message, true); }
-    }));
+    favFootBtn = btn(favList.length ? `Favourites (${favList.length})` : 'Favourites', 'star', () => showFavorites(), 'zh-lk-favs-btn');
+    actions.push(favFootBtn);
     win.foot.replaceChildren(...actions.filter(Boolean));
+    win.foot.classList.add('zh-lk-actions');
+  }
+  async function showFavorites() {
+    players.forEach((p) => p.destroy?.());
+    players = [];
+    await refreshFavorites();
+    win.setTitle('Chinese favourites');
+    const head = el('div', 'zh-lk-favs-head');
+    if (shown) {
+      const back = el('button', 'zh-lk-back');
+      back.type = 'button';
+      back.title = `Back to ${shown.text}`;
+      back.setAttribute('aria-label', back.title);
+      back.append(icon('back'));
+      back.onclick = () => show(shown.text, shown.context, false);
+      head.append(back);
+    }
+    head.append(el('strong', '', favList.length ? `Favourites (${favList.length})` : 'Favourites'));
+    const body = [head];
+    if (!favList.length) {
+      body.push(el('p', 'muted zh-lk-favs-empty', 'No favourites yet. Click the star on any character or word to save it here.'));
+    } else {
+      const ul = el('ul', 'zh-lk-words zh-lk-favs');
+      for (const w of favList) {
+        const li = el('li');
+        const py = numbersToMarks(w.pinyin || '');
+        const hear = el('button', 'zh-lk-say small');
+        hear.type = 'button'; hear.title = `Listen to ${w.hanzi} · Shift: slower`; hear.setAttribute('aria-label', hear.title);
+        hear.append(icon('speaker'));
+        hear.onclick = (e) => say(w.hanzi, { reading: [...w.hanzi].length === 1 ? py : '', button: hear, slow: e.shiftKey });
+        const unstar = starButton(w.hanzi, py, w.gloss || '', { small: true, onToggle: () => showFavorites() });
+        li.append(link(w.hanzi), hear, py ? syllables(py, w.hanzi) : el('span', 'muted', ''), el('span', 'zh-lk-gloss', w.gloss || ''), unstar);
+        ul.append(li);
+      }
+      body.push(ul);
+    }
+    win.body.replaceChildren(...body);
+    const footActions = [];
+    if (shown) footActions.push(btn(`Back to ${shown.text}`, 'back', () => show(shown.text, shown.context, false)));
+    if (host.addCards && favList.length) {
+      footActions.push(btn('Add all to flashcards', 'cards', async (e) => {
+        const cards = favList.map((w) => vocabCard({ hanzi: w.hanzi, pinyin: numbersToMarks(w.pinyin || ''), gloss: w.gloss || '', level: 0 }));
+        const decks = await host.decks?.().catch(() => []) || [];
+        const add = async (opts) => {
+          try { const d = await host.addCards(cards, opts); status(`${cards.length} favourite${cards.length === 1 ? '' : 's'} added to “${d.title}”.`); } catch (err) { status(err.message, true); }
+        };
+        const r = e.currentTarget.getBoundingClientRect();
+        openContextMenu(r.left, r.top - 4, [
+          { label: 'New deck “Chinese favourites”', icon: 'plus', run: () => add({ title: 'Chinese favourites' }) },
+          decks.length && '-',
+          ...decks.slice(0, 12).map((d) => ({ label: `${d.title} (${d.count})`, icon: 'cards', run: () => add({ deckId: d.id }) })),
+        ].filter(Boolean), { title: 'Add favourites to flashcards', host: win.el.closest('dialog') });
+      }));
+    }
+    win.foot.replaceChildren(...footActions);
     win.foot.classList.add('zh-lk-actions');
   }
   // Convert here: the occurrence to its other form, when it has one.

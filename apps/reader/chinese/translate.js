@@ -130,9 +130,14 @@ export async function localizeLookup(result, lang = zhLang(), opts = {}) {
   const tr = await translateMany(glosses, { ...opts, from: 'en', to: lang }).catch(() => glosses);
   const map = new Map(glosses.map((g, i) => [g, tr[i] || g]));
   const t = (g) => map.get(g) || g;
+  const dedup = (arr) => {
+    const seen = new Set(), out = [];
+    for (const x of arr) { const s = String(x || '').trim(), k = s.toLowerCase(); if (s && !seen.has(k)) { seen.add(k); out.push(s); } }
+    return out;
+  };
   return {
     ...result,
-    entries: (result.entries || []).map((e) => ({ ...e, gloss: (e.gloss || []).map(t) })),
+    entries: (result.entries || []).map((e) => ({ ...e, gloss: dedup((e.gloss || []).map(t)) })),
     words: (result.words || []).map((w, i) => ({ ...w, gloss: w.gloss && i < LOCALIZED_WORDS ? t(w.gloss) : w.gloss })),
     ...(result.char ? { char: { ...result.char, definition: result.char.definition ? t(result.char.definition) : result.char.definition } } : {}),
   };

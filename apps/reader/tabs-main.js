@@ -19,7 +19,8 @@ host.install = async () => {
 // unless Help → "Open the welcome note at start" was turned off in this browser.
 const site = welcomeWanted() ? await fetch('./site.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
 if (site?.welcome) {
-  host.open({ title: site.title || 'Welcome', open: site.welcome, notes: site.notes ? 1 : null });
+  const showNotes = site.notes && window.innerWidth > 700;
+  host.open({ title: site.title || 'Welcome', open: site.welcome, notes: showNotes ? 1 : null });
   host.open({}, { activate: false });
 } else host.open();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => { /* Optional. */ });

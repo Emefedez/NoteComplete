@@ -16,8 +16,8 @@ const SRC = new URL('work/zh-src/', ROOT), OUT = new URL('apps/reader/vendor/chi
 const FIXTURES = new URL('apps/reader/chinese/test-fixtures/', ROOT);
 const LOCK = new URL('tools/chinese-data.lock.json', ROOT);
 const args = new Set(process.argv.slice(2));
-const CORE_BUDGET = 600 * 1024; // brotli bytes (§15: frequent words + every character + HSK 1–3)
-const GLOSS_MAX = 40, FREQ_SCALE = 32;
+const CORE_BUDGET = 900 * 1024; // brotli bytes (§15: frequent words + every character + HSK 1–3, with multi-sense definitions)
+const GLOSS_MAX = 96, FREQ_SCALE = 32;
 
 // ---- sources -------------------------------------------------------------------------------
 const lock = JSON.parse(readFileSync(LOCK, 'utf8'));
@@ -140,12 +140,72 @@ const entries = [...merged.values()];
 const bySimp = new Map();
 for (const e of entries) { if (!bySimp.has(e.simp)) bySimp.set(e.simp, []); bySimp.get(e.simp).push(e); }
 
-// A short first gloss: skips surname / classifier / "variant of" / "see" lines when others exist.
+// Clean multi-sense gloss: skips classifier-only lines, strips verbose parenthetical notes and
+// pinyin brackets, and keeps multiple senses separated by "; " without chopping mid-word.
 const WEAK = /^(surname |CL:|(old |archaic |Japanese )?variant of |see |used in |also written |abbr\. for |\(Tw\)|\(old\))/i;
-function shortGloss(glosses) {
-  const g = glosses.find(g => g && !WEAK.test(g)) ?? glosses.find(Boolean) ?? '';
-  const s = g.replace(/\s*\[[^\]]*\]/g, '').replace(/\|\S+/g, '').trim();
-  return s.length > GLOSS_MAX ? s.slice(0, GLOSS_MAX - 1).trimEnd() + '…' : s;
+function cleanSense(raw) {
+  let s = String(raw || '')
+    .replace(/\s*\(CL:[^)]*\)/gi, '')
+    .replace(/\s*\(Note:[^)]*\)/gi, '')
+    .replace(/\s*\[[^\]]*\]/g, '')
+    .replace(/[\p{Script=Han}]+\|([\p{Script=Han}]+)/gu, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s || /^CL:/i.test(s)) return '';
+  // Drop verbose parenthetical commentary (> 24 chars) when real meaning remains outside it.
+  const trimmed = s.replace(/\s*\([^)]{24,}\)/g, '').replace(/\s+/g, ' ').trim();
+  if (trimmed && /[a-zA-Z]/.test(trimmed)) s = trimmed;
+  // Drop leading grammatical labels like "(third-person singular)" or "(bound form)" when meaning follows.
+  const noLead = s.replace(/^(?:\((?:third-person[^)]*|bound form|before a [^)]*|after a [^)]*|of two [^)]*|verb complement[^)]*)\)\s*)+/i, '').trim();
+  if (noLead && /[a-zA-Z]/.test(noLead)) s = noLead;
+  return s.replace(/^[;,\s]+|[;,\s]+$/g, '');
+}
+function truncateClean(s, max) {
+  if (s.length <= max) return s;
+  let cut = s.slice(0, max - 1);
+  const sp = cut.lastIndexOf(' ');
+  if (sp > max * 0.45) cut = cut.slice(0, sp);
+  // Never leave an unclosed parenthesis.
+  const open = cut.lastIndexOf('('), close = cut.lastIndexOf(')');
+  if (open > close) cut = cut.slice(0, open);
+  return cut.replace(/[\s;,(-]+$/, '') + '…';
+}
+function shortGloss(glosses, syls = []) {
+  const cleaned = [];
+  const seen = new Set();
+  const strong = glosses.filter(g => g && !WEAK.test(g));
+  const pool = strong.length ? strong : glosses.filter(Boolean);
+  for (const raw of pool) {
+    const c = cleanSense(raw);
+    if (!c) continue;
+    for (const part of c.split(/\s*;\s*/)) {
+      const p = part.trim();
+      const k = p.toLowerCase();
+      if (!p || seen.has(k)) continue;
+      seen.add(k);
+      cleaned.push(p);
+    }
+  }
+  if (!cleaned.length) return '';
+  // If a sense is just the bare pinyin spelling itself (e.g. "ma" for 妈 ma1) and real translations
+  // exist, put the real meanings first so single-gloss previews and translations are meaningful.
+  const barePy = syls.join('').toLowerCase();
+  if (barePy && cleaned.length > 1) {
+    const bare = [], real = [];
+    for (const p of cleaned) (p.toLowerCase().replace(/\s+/g, '') === barePy ? bare : real).push(p);
+    if (real.length) cleaned.splice(0, cleaned.length, ...real, ...bare);
+  }
+  const kept = [];
+  let len = 0;
+  for (const p of cleaned) {
+    const add = (kept.length ? 2 : 0) + p.length;
+    if (kept.length && len + add > GLOSS_MAX) break;
+    if (!kept.length && p.length > GLOSS_MAX) { kept.push(truncateClean(p, GLOSS_MAX)); break; }
+    kept.push(p);
+    len += add;
+    if (kept.length >= 6) break;
+  }
+  return kept.join('; ');
 }
 
 // Reading share of one character's reading: kHanyuPinlu counts, else the kMandarin reading
@@ -218,7 +278,7 @@ for (const e of entries) {
   const s = logFreq(e, 's'), t = logFreq(e, 't');
   e.fs = s.lf; e.ft = t.lf; e.listed = s.listed || t.listed; e.estimated = s.estimated && t.estimated;
   e.level = hskExact.get(`${e.simp}\t${e.py}`) || 0;
-  e.gloss = shortGloss(e.glosses);
+  e.gloss = shortGloss(e.glosses, e.syl);
   e.variant = e.glosses.every(g => !g || WEAK.test(g)) && e.glosses.some(g => /variant of/i.test(g));
 }
 // HSK words whose reading differs from CC-CEDICT's: the level goes to that word's most frequent
@@ -292,7 +352,7 @@ function charsPack(set) {
     strokes[i] = Math.min(255, parseInt(u.kTotalStrokes) || 0);
     cols.radical.push((u.kRSUnicode || '').split(' ')[0]);
     const def = u.kDefinition || m?.definition || '';
-    cols.definition.push(def.length > 80 ? def.slice(0, 79).trimEnd() + '…' : def);
+    cols.definition.push(def.length > 160 ? truncateClean(def, 160) : def);
     cols.simplified.push(variantChars(u.kSimplifiedVariant).replace(ch, ''));
     cols.traditional.push(variantChars(u.kTraditionalVariant).replace(ch, ''));
     cols.variants.push(variantChars([u.kSemanticVariant, u.kSpecializedSemanticVariant, u.kZVariant].filter(Boolean).join(' ')).replace(ch, ''));

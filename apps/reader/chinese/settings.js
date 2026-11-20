@@ -99,8 +99,8 @@ function build(client) {
       <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
       <div class="zh-user-card">
         <div class="zh-user-info">
-          <strong>Learned vocabulary &amp; frequency</strong>
-          <small class="muted">Backup or transfer your personal word choices across devices</small>
+          <strong>Favourites &amp; learned vocabulary</strong>
+          <small class="muted">Backup or transfer your starred words and personal choices across devices</small>
         </div>
         <div class="zh-user">
           <button type="button" class="chip" data-user-export>Export…</button>

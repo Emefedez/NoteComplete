@@ -87,8 +87,8 @@ export function open(root, { spec, editing, host }) {
   // The dictionary's look-up of the characters (load()), for the list of every meaning.
   let lookup = null;
   const defsBox = make('div', { className: 'hz-defs' });
-  // es | en: the meanings again in the other language (the page's caption too while it is automatic).
-  const langSwitch = langToggle({ onChange: () => load(false) });
+  // es | en: the meanings again in the other language (updating the caption too).
+  const langSwitch = langToggle({ onChange: () => { glossAuto = true; load(false); } });
   const pageMeanings = () => (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
   function setPageMeanings(list) {
     glossAuto = false;
@@ -109,11 +109,11 @@ export function open(root, { spec, editing, host }) {
         : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up the meaning…' }),
     );
     dictBar.append(headRow);
-    // In the side panel: every meaning, by reading; a click puts one on the page or takes it
-    // off. The field under them edits the page's text directly (any wording).
+    // In the side panel: non-editable, scrollable definitions box grouped by reading;
+    // clicking a meaning toggles whether it appears on the page.
     const list = make('ol', { className: 'zh-lk-meanings hz-defs-list' });
     for (const m of meanings) {
-      const li = make('li', {}, make('span', { className: 'hz-defs-reading', textContent: m.pinyin }));
+      const li = make('li', {}, m.pinyin ? make('span', { className: 'hz-defs-reading', textContent: m.pinyin }) : null);
       for (const g of m.gloss) {
         const on = onPage.includes(g);
         const chip = make('button', { type: 'button', className: 'hz-def', textContent: g, title: on ? 'On the page: click to take it off' : 'Click to put it on the page' });
@@ -123,8 +123,9 @@ export function open(root, { spec, editing, host }) {
       }
       list.append(li);
     }
-    const glossInput = textInput(model.gloss, (gloss) => { glossAuto = !gloss; change({ gloss }, false); }, { placeholder: 'Meaning shown under the characters' });
-    glossInput.addEventListener('change', () => renderDictBar());
+    const defsScroll = make('div', { className: 'hz-defs-box', role: 'region', ariaLabel: 'Dictionary definitions' },
+      all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'No dictionary definitions found.' : 'Looking up…' }),
+    );
     const quick = make('div', { className: 'pk-row hz-defs-tools' });
     if (all.length) {
       const few = button(null, `First ${Math.min(3, all.length)}`, { title: 'Put the first meanings on the page, as when it was inserted' });
@@ -137,9 +138,9 @@ export function open(root, { spec, editing, host }) {
     }
     // replaceChildren() would write a null child as the text "null": leave it out instead.
     defsBox.replaceChildren(...[
-      make('div', { className: 'hz-defs-head' }, make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meaning on the page' }), langSwitch),
-      all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary: write it below.' : 'Looking up…' }),
-      field('Meaning under the characters', glossInput, 'Click a meaning above to add or remove it, or write your own'),
+      make('div', { className: 'hz-defs-head' }, make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meanings' }), langSwitch),
+      defsScroll,
+      all.length ? make('small', { className: 'muted', textContent: 'Click a meaning above to show or hide it on the page' }) : null,
       all.length ? quick : null,
     ].filter(Boolean));
     const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));

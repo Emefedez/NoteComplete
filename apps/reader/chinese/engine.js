@@ -286,7 +286,7 @@ export function createEngine({ ime, chars = null }) {
     script = sc(script);
     text = String(text).trim();
     const entries = (forms().get(text) || []).map(view).sort((a, b) => lfView(b, script) - lfView(a, script))
-      .map(v => ({ simp: v.simp, trad: v.trad, pinyin: pinyinOf(v.keys), gloss: v.gloss ? [v.gloss] : [], level: v.level || 0 }));
+      .map(v => ({ simp: v.simp, trad: v.trad, pinyin: pinyinOf(v.keys), gloss: v.gloss ? v.gloss.split(/\s*;\s*/).filter(Boolean) : [], level: v.level || 0 }));
     const out = { entries, words: text ? wordsWith(text, script) : [] };
     if ([...text].length === 1 && isHan(text)) out.char = charInfo(text);
     return out;

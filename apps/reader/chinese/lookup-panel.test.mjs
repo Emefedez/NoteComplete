@@ -41,6 +41,11 @@ test('meanings by reading, forms and level', () => {
   assert.deepEqual(formsOf({ entries: [{ simp: '发', trad: '發' }, { simp: '发', trad: '髮' }] }, '发'), [{ label: 'Traditional', chars: ['發', '髮'] }]);
   assert.deepEqual(formsOf(HAO, '好'), []);
   assert.equal(lowestLevel({ entries: [{ level: 0 }, { level: 3 }, { level: 2 }] }), 2);
+  // Semicolon-separated glosses split into individual deduplicated senses; char.definition fallback works.
+  const split = meaningsOf({ entries: [{ simp: '妈', trad: '媽', pinyin: 'mā', gloss: ['mom; mother; Mom'], level: 1 }] }, '妈');
+  assert.deepEqual(split[0].gloss, ['mom', 'mother']);
+  const charOnly = meaningsOf({ entries: [], char: { readings: [{ pinyin: 'mā' }], definition: 'mother, mama' } }, '妈');
+  assert.deepEqual(charOnly[0].gloss, ['mother', 'mama']);
 });
 
 test('the character and word at a place', () => {

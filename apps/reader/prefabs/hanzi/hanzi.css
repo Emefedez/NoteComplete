@@ -15,13 +15,14 @@
    page. Every meaning is in the side panel (.hz-defs), each one a toggle (pale accent: on the
    page). */
 .hz-dict-bar { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-chrome); font-size: 12.5px; }
-.hz-dict-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.hz-dict-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
 .hz-dict-chars { font-size: 16px; flex: none; }
 .hz-dict-pinyin { color: var(--k-accent); font-weight: 600; flex: none; }
-.hz-dict-gloss { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hz-defs { display: grid; gap: 6px; }
+.hz-dict-gloss { flex: 1 1 160px; min-width: 0; max-height: 58px; overflow-y: auto; white-space: normal; word-break: break-word; line-height: 1.4; }
+.hz-defs { display: grid; gap: 6px; min-width: 0; }
 .hz-defs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hz-defs-head h4 { margin: 0; }
+.hz-defs-box { max-height: 150px; overflow-y: auto; padding: 6px 8px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); user-select: text; -webkit-user-select: text; }
 .hz-defs-list { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
 .hz-defs-list > li { line-height: 1.55; }
 .hz-defs-reading { margin-right: 4px; color: var(--k-accent); font-weight: 600; }
@@ -32,6 +33,11 @@
 /* Narrow (a phone, a small window): the actions wrap, the player shrinks with the width. */
 .hz-actions { flex-wrap: wrap; }
 .hz-stage-host svg { max-width: 100%; height: auto; }
+@container pk-editor (max-width: 640px) {
+  .hz-editor .hz-canvas { gap: 8px; }
+  .hz-stage-host { flex: 0 0 auto; }
+  .hz-defs-box { max-height: 120px; }
+}
 @media (pointer: coarse) { .hz-editor .hz-def { padding: 4px 8px; } }
 .hz-ime-btn { min-width: 30px; justify-content: center; flex: none; }
 .hz-yb-wrap, .hz-variants { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }

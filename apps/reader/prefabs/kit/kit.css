@@ -46,14 +46,20 @@
    under it. Measured on the editor itself, so a small window on a wide screen stacks too. */
 .pk-editor { container-type: inline-size; container-name: pk-editor; }
 @container pk-editor (max-width: 640px) {
-  .pk-main, .pk-main.with-palette, .pk-main.with-panel, .pk-main.with-palette.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(200px, 1fr); grid-auto-rows: auto; }
-  .pk-main.with-palette, .pk-main.with-palette.with-panel { grid-template-rows: auto minmax(200px, 1fr); }
-  .pk-main.with-panel { grid-auto-rows: minmax(0, 42%); }
+  .pk-main, .pk-main.with-palette, .pk-main.with-panel, .pk-main.with-palette.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-auto-rows: auto; }
+  .pk-main.with-panel:not(.with-palette) { grid-template-rows: minmax(240px, 1.35fr) minmax(0, 1fr); }
+  .pk-main.with-palette:not(.with-panel) { grid-template-rows: auto minmax(0, 1fr); }
+  .pk-main.with-palette.with-panel { grid-template-rows: auto minmax(180px, 1fr) minmax(0, 40%); }
   .pk-palette { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--k-line); }
   .pk-panel { border-left: 0; border-top: 1px solid var(--k-line); }
   .pk-main > .panel-grip { display: none; }
-  .pk-bar { flex-wrap: wrap; }
+  .pk-bar { flex-wrap: nowrap; gap: 3px; padding: 4px 6px; min-width: 0; }
+  .pk-bar .pk-title { flex: 1 1 auto; min-width: 0; margin: 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pk-bar .pk-spacer { display: none; }
+  .pk-bar .pk-button { padding: 2px 7px; gap: 4px; flex: none; }
+  .pk-canvas { padding: 8px; }
 }
+.pk-window.pk-phone { padding-bottom: env(safe-area-inset-bottom); }
 @media (pointer: coarse) {
   .pk-editor .pk-button, .pk-editor select, .pk-editor input[type="text"], .pk-editor input[type="number"] { min-height: 36px; }
 }

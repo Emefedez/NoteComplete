@@ -90,7 +90,10 @@ export async function dictionaryFor(spec) {
     let gloss = m.gloss;
     let variants = m.variants;
     if (lk?.entries?.length) {
-      if (!gloss) gloss = pageGloss(lk.entries.flatMap((e) => e.gloss || []));
+      if (!gloss) {
+        const entryGlosses = lk.entries.flatMap((e) => (e.gloss || []).flatMap((g) => String(g).split(/\s*;\s*/))).filter(Boolean);
+        gloss = pageGloss(entryGlosses.length ? entryGlosses : String(lk.char?.definition || '').split(/\s*[;,]\s*/).filter(Boolean));
+      }
       if (!variants) {
         const simp = new Set(), trad = new Set(), other = new Set();
         for (const e of lk.entries) {
@@ -107,6 +110,8 @@ export async function dictionaryFor(spec) {
         if (other.size) parts.push(`異體: ${[...other].join(' ')}`);
         variants = parts.join(' · ');
       }
+    } else if (!gloss && lk?.char?.definition) {
+      gloss = pageGloss(String(lk.char.definition).split(/\s*[;,]\s*/).filter(Boolean));
     } else if (!gloss && runs?.length) {
       const glosses = runs.map((r) => r.gloss?.[0]).filter(Boolean);
       if (glosses.length) gloss = glosses.join(' · ');
