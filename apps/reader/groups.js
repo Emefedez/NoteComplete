@@ -28,7 +28,7 @@ export function mergeMembers(listed = [], added = []) {
 }
 
 // The chip before a document's name: its real format, short.
-const CHIPS = { pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', goodnotes: 'Goodnotes', ntb: 'Notability', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart', md: 'Markdown', markdown: 'Markdown', txt: 'TXT', html: 'HTML', htm: 'HTML', docx: 'DOCX', odt: 'ODT', xlsx: 'XLSX', ods: 'ODS', csv: 'CSV', tsv: 'TSV', json: 'JSON', zip: 'ZIP', tar: 'TAR', gz: 'GZ', tgz: 'TGZ', puml: 'PlantUML', plantuml: 'PlantUML' };
+const CHIPS = { pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', mp3: 'MP3', mp4: 'MP4', goodnotes: 'Goodnotes', ntb: 'Notability', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart', md: 'Markdown', markdown: 'Markdown', txt: 'TXT', html: 'HTML', htm: 'HTML', docx: 'DOCX', odt: 'ODT', xlsx: 'XLSX', ods: 'ODS', csv: 'CSV', tsv: 'TSV', json: 'JSON', zip: 'ZIP', tar: 'TAR', gz: 'GZ', tgz: 'TGZ', puml: 'PlantUML', plantuml: 'PlantUML' };
 export function formatChip(member) {
   if (member?.source === 'web') return 'Web';
   if (member?.folder || member?.kind === 'dir') return 'Folder';

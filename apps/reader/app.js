@@ -92,6 +92,7 @@ import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
+import { globalAudioController } from "./global-audio.js";
 import { androidUpdates } from "./android-updates.js";
 import { tabStrip, tabForDigit } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
@@ -113,6 +114,45 @@ const $ = (id) => document.getElementById(id),
 const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
 enhanceSelects();
 decorateIcons();
+const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
+const isMp3Name = (name, type = "") => /\.mp3$/i.test(String(name || "")) || String(type || "").toLowerCase() === "audio/mpeg";
+const isMp4Name = (name, type = "") => /\.mp4$/i.test(String(name || "")) || String(type || "").toLowerCase() === "video/mp4";
+async function openExternalVideo(path, name = "video.mp4", file = null) {
+  if (path && window.notecompleteFiles?.openExternalPath) {
+    await window.notecompleteFiles.openExternalPath(path);
+    status(`Opened ${name} in your system player.`);
+    return true;
+  }
+  if (file) {
+    const blobUrl = URL.createObjectURL(file.type ? file : new Blob([file], { type: "video/mp4" }));
+    const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = name;
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    status(`Opened ${name} in an external player.`);
+    return true;
+  }
+  status(`Could not open ${name} in an external player.`, true);
+  return true;
+}
+async function openMediaFile(file, { path = "" } = {}) {
+  if (!file) return false;
+  if (isMp3Name(file.name, file.type)) {
+    await globalAudio.playFile(file);
+    return true;
+  }
+  if (isMp4Name(file.name, file.type)) {
+    return openExternalVideo(path, file.name, file);
+  }
+  return false;
+}
+if ($("helpGithub")) {
+  $("helpGithub").onclick = () => window.open("https://github.com/Emefedez", "_blank", "noopener,noreferrer");
+}
 // Command bar menus close on outside clicks and after choosing an item.
 document.addEventListener("click", (event) => {
   for (const menu of document.querySelectorAll("details.menu[open]"))
@@ -455,7 +495,9 @@ async function openLaunched() {
   try {
     const desktop = await window.notecompleteFiles?.launched?.();
     if (desktop) {
+      if (isMp4Name(desktop.name)) return await openExternalVideo(desktop.path, desktop.name);
       const file = new File([desktop.bytes], desktop.name);
+      if (await openMediaFile(file, { path: desktop.path })) return;
       if (await openArchiveFile(file, { path: desktop.path })) return;
       await load(file);
       return await openedLocal(desktop.path, desktop.name, file);
@@ -463,6 +505,7 @@ async function openLaunched() {
     if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
     const [file, ...rest] = launchedFiles.splice(0);
     if (!file || busy()) return;
+    if (await openMediaFile(file)) return;
     if (await openArchiveFile(file, { origin: "Opened file" })) return;
     if (!canReplace()) return;
     await load(file);
@@ -5584,6 +5627,7 @@ $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
 async function openChosen(file) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
+  if (await openMediaFile(file)) return false;
   if (await openArchiveFile(file)) return false;
   if (!canReplace()) return false;
   await load(file);
@@ -6345,7 +6389,12 @@ async function openLocal() {
   try {
     const chosen = await bridge.openFile();
     if (!chosen) return;
+    if (chosen.external || isMp4Name(chosen.name)) {
+      await openExternalVideo(chosen.path, chosen.name);
+      return;
+    }
     const file = new File([chosen.bytes], chosen.name);
+    if (await openMediaFile(file, { path: chosen.path })) return;
     if (busy()) return;
     if (await openArchiveFile(file, { path: chosen.path })) return;
     if (!canReplace()) return;
@@ -6380,6 +6429,7 @@ function showArchiveTitle(title) {
 }
 async function openFromArchive(file, title, member = null) {
   if (!ready || busy()) { status("Wait for the current operation to finish.", true); return false; }
+  if (await openMediaFile(file)) return true;
   if (!canReplace()) return false;
   notePath = noteEntryKey = "";
   await load(file);
@@ -6569,6 +6619,14 @@ function setDocMember(member) {
   return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch((e) => console.warn("Group panel:", e));
 }
 async function openMember(member) {
+  if (member.source === "local" && isMp4Name(member.name)) {
+    return openExternalVideo(member.path, member.name);
+  }
+  if (member.source === "local" && isMp3Name(member.name)) {
+    const bytes = await window.notecompleteFiles?.readRecent(member.path);
+    if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
+    return openMediaFile(new File([bytes], member.name, { type: "audio/mpeg" }), { path: member.path });
+  }
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
     navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
   if (member.source === "web") return openWeb(member);
@@ -6578,6 +6636,7 @@ async function openMember(member) {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
     if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
     const file = new File([bytes], member.name);
+    if (await openMediaFile(file, { path: member.path })) return;
     if (await openArchiveFile(file, { path: member.path })) return;
     if (!canReplace()) return;
     await load(file);
@@ -6586,6 +6645,7 @@ async function openMember(member) {
   const entry = await library.store.get("entries", member.key).catch(() => null);
   const file = entry && await library.open(entry);
   if (!file) throw Error(`${member.name} is not kept on this device any more. Open it again from Drive.`);
+  if (await openMediaFile(file)) return;
   await openFromLibrary(file, entry);
 }
 if (window.notecompleteFiles?.openFolder) {
@@ -6596,8 +6656,9 @@ if (window.notecompleteFiles?.openFolder) {
       const chosen = await window.notecompleteFiles.openFolder();
       if (!chosen) return;
       await groups.openFolder(chosen);
-      if (!chosen.files.length) return status(`${chosen.name} has no notes, PDFs, HTML, text or images.`, true);
-      await openMember(localMember(chosen.files[0].path, chosen.files[0].name));
+      if (!chosen.files.length) return status(`${chosen.name} has no notes, PDFs, HTML, text, media or images.`, true);
+      const firstDoc = chosen.files.find((f) => !isMp3Name(f.name) && !isMp4Name(f.name)) || chosen.files[0];
+      await openMember(localMember(firstDoc.path, firstDoc.name));
     } catch (error) { status(error.message, true); }
   };
   $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
@@ -9717,7 +9778,9 @@ async function importStudyFile(file, kindHint = null) {
 }
 
 async function openImportedFile(file, meta = {}) {
-  if (!file || busy()) return;
+  if (!file) return;
+  if (await openMediaFile(file)) return;
+  if (busy()) return;
   try {
     const { classifyImport } = await import("./import-route.js");
     const kind = await classifyImport(file);

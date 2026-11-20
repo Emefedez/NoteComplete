@@ -351,8 +351,10 @@ main {
 .web-fallback { flex: 1; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); }
 .web-fallback[hidden] { display: none; }
 .link-error { color: var(--danger); }
-#textView .html-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
-#textView .html-bar .spacer { flex: 1; }
+#textView .html-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; overflow-x: auto; scrollbar-width: none; }
+#textView .html-bar > * { flex-shrink: 0; }
+#textView .html-bar #textTitle { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#textView .html-bar .spacer { flex: 1 1 8px; min-width: 4px; }
 /* In Markdown editor mode, Chinese input controls replace #textDark on the left and expand cleanly. */
 #textView.text-markdown-edit #textDark { display: none; }
 .text-zh-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
@@ -2227,8 +2229,8 @@ body.home-list .note-more { top: 50%; transform: translateY(-50%); }
    whose widths differ (more so in the compact bar). */
 @media (min-width: 901px) {
   header.command-bar .brand { position: absolute; left: 50%; transform: translateX(-50%); max-width: 34vw; margin: 0; pointer-events: none; }
-  header.command-bar:has(.job-chip, .job-ready) .brand { position: static; transform: none; flex: 1 1 auto; max-width: none; min-width: 0; margin: 0 8px; }
-  header.command-bar:has(.job-chip, .job-ready) .brand p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header.command-bar:is(:has(.job-chip, .job-ready), .has-global-audio) .brand { position: static; transform: none; flex: 1 1 auto; max-width: none; min-width: 0; margin: 0 8px; }
+  header.command-bar:is(:has(.job-chip, .job-ready), .has-global-audio) .brand p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* The disk hangs off the title's right edge so the title itself stays centred. */
   header.command-bar .brand .save-state { position: absolute; left: calc(100% + 2px); top: 50%; transform: translateY(-50%); pointer-events: auto; }
   header.command-bar #jobArea { margin-left: auto; }
@@ -5082,3 +5084,215 @@ html.nc-native-app .math-keypad { padding-bottom: 6px; }
 .zh-tr-lang-pick:hover { background: var(--surface); }
 .zh-tr-lang-pick[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .zh-tr-lang-star { width: 26px; height: 26px; min-height: 0; padding: 0; flex: none; }
+
+/* Help menu inline tiny subtitle (e.g. My Github / Emefedez) without growing row height */
+#helpGithub {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  min-height: 0;
+}
+.menu-inline-sub {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.02;
+  gap: 0;
+}
+.menu-sub-tiny {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+  font-weight: 400;
+  opacity: .85;
+}
+
+/* Global bar end utility buttons (Ask AI + Commands) — smoothly squash & stack when audio/job bars need space */
+.bar-end-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  transition: gap .22s cubic-bezier(.22, 1, .36, 1);
+}
+.bar-end-actions .bar-ai,
+.bar-end-actions .palette-trigger {
+  transition: width .24s cubic-bezier(.22, 1, .36, 1),
+              height .24s cubic-bezier(.22, 1, .36, 1),
+              min-height .24s cubic-bezier(.22, 1, .36, 1),
+              padding .24s cubic-bezier(.22, 1, .36, 1),
+              gap .22s cubic-bezier(.22, 1, .36, 1),
+              border-radius .22s ease,
+              background .16s ease,
+              border-color .16s ease;
+}
+.bar-end-actions .bar-ai span,
+.bar-end-actions .palette-trigger span,
+.bar-end-actions .palette-trigger kbd {
+  display: inline-block;
+  max-width: 110px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-width .24s cubic-bezier(.22, 1, .36, 1), opacity .16s ease, margin .2s ease, padding .2s ease;
+}
+header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-ready:not([hidden]))) .bar-end-actions {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-ready:not([hidden]))) .bar-end-actions :is(.bar-ai, .palette-trigger) {
+  width: 28px;
+  min-width: 28px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  gap: 0;
+  border-radius: 5px;
+  justify-content: center;
+}
+header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-ready:not([hidden]))) .bar-end-actions :is(.bar-ai, .palette-trigger) svg {
+  width: 12px;
+  height: 12px;
+}
+header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-ready:not([hidden]))) .bar-end-actions :is(.bar-ai span, .palette-trigger span, .palette-trigger kbd) {
+  max-width: 0;
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+/* Global bar MP3 player (accent-colored controls, headset icon, seek bar, speed, close) */
+.global-audio-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 430px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px 0 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+  opacity: 0;
+  transform: translateY(-2px) scaleX(.96);
+  transform-origin: right center;
+  transition: opacity .2s ease, transform .24s cubic-bezier(.22, 1, .36, 1), border-color .2s ease, background .2s ease;
+  overflow: hidden;
+}
+.global-audio-bar.is-open {
+  opacity: 1;
+  transform: none;
+}
+.global-audio-bar.is-playing {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.global-audio-bar[hidden] {
+  display: none !important;
+}
+.global-audio-bar .ga-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.global-audio-bar .ga-btn svg { width: 14px; height: 14px; display: block; }
+.global-audio-bar .ga-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.global-audio-bar .ga-headset { color: var(--accent); }
+.global-audio-bar.is-muted .ga-headset { color: var(--muted); opacity: .65; }
+.global-audio-bar .ga-play {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  background: var(--accent);
+  color: #fff;
+}
+.global-audio-bar .ga-play:hover {
+  background: color-mix(in srgb, var(--accent) 86%, #000);
+  color: #fff;
+}
+.global-audio-bar .ga-play svg { width: 13px; height: 13px; }
+.global-audio-bar .ga-title {
+  flex: 0 1 110px;
+  min-width: 0;
+  max-width: 120px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 2px;
+}
+.global-audio-bar .ga-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 90px;
+  min-width: 48px;
+  height: 4px;
+  margin: 0 3px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--ga-pct, 0%), color-mix(in srgb, var(--ink) 16%, transparent) var(--ga-pct, 0%), color-mix(in srgb, var(--ink) 16%, transparent) 100%);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.global-audio-bar .ga-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.global-audio-bar .ga-seek::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+}
+.global-audio-bar .ga-time {
+  flex: none;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.global-audio-bar .ga-speed {
+  width: auto;
+  min-width: 30px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.global-audio-bar .ga-speed.is-custom {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.global-audio-bar .ga-close { color: var(--muted); }
+.global-audio-bar .ga-close:hover { background: var(--danger-soft, color-mix(in srgb, #d13b2f 14%, transparent)); color: #d13b2f; }
+
+@media (max-width: 1080px) {
+  .global-audio-bar .ga-title { display: none; }
+}
+@media (max-width: 700px) {
+  .global-audio-bar { flex: 1 1 180px; gap: 2px; padding: 0 4px; }
+  .global-audio-bar .ga-time { display: none; }
+}

@@ -132,7 +132,7 @@
           <button id="tapeCover" data-icon="tape" disabled title="Shift U lifts all tape, and again covers it">Cover with all tape</button>
           <button id="tapeNote" data-icon="tape" disabled>Tape as saved</button>
           <hr />
-          <button data-proxy="pagesDark" data-icon="invertPage">Dark pages<kbd>D</kbd></button>
+          <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
         </div>
       </details>
@@ -197,6 +197,8 @@
             <button id="updateOnOpen" data-icon="clock" role="menuitemcheckbox" aria-checked="true" title="Look for a new version when NoteComplete opens (at most every 6 hours); it always asks before installing">Check for updates on open</button>
             <p id="updateVersion" class="menu-note muted"></p>
           </div>
+          <hr />
+          <button id="helpGithub" data-icon="link" data-palette="Help: My Github (Emefedez)" title="Open https://github.com/Emefedez"><span class="menu-inline-sub"><span>My Github</span><small class="menu-sub-tiny">Emefedez</small></span></button>
         </div>
       </details>
           <input id="importAnyFile" type="file" hidden />
@@ -332,13 +334,16 @@
     <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
     <div id="collabSlot" class="collab-slot"></div>
     <button id="keptRefsPill" type="button" class="kept-refs-pill" data-icon="star" title="Kept for exercises: view saved snippets beside the page or editor" hidden><span id="keptRefsCount">Kept (0)</span></button>
-    <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
-    <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
+    <div id="globalAudioBar" class="global-audio-bar" role="region" aria-label="MP3 audio player" hidden></div>
+    <div id="barEndActions" class="bar-end-actions">
+      <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
+      <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
+    </div>
     <div hidden>
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,.mp3,.mp4,audio/mpeg,video/mp4,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
         hidden
       /><input
         id="imageFile"
@@ -977,7 +982,7 @@
           aria-label="Dark pages"
           title="Dark pages: invert the document's contrast (D)"
           aria-pressed="false"
-          data-icon="invertPage"
+          data-icon="moon"
         ></button
         ><button
           data-tool="pdfedit"

@@ -7,7 +7,7 @@ import path from 'node:path';
 // Notes, PDFs, HTML, images, Word/OpenDocument/Excel files, text formats (as in the
 // reader's text-types.js), and names without an extension, which open as text when their content is.
 const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch|puml|plantuml|pu|iuml|wsd';
-const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf|png|jpe?g|webp|docx|odt|xlsx|ods|${TEXT})$)|^[^.]+$`, 'i');
+const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf|png|jpe?g|webp|mp3|mp4|docx|odt|xlsx|ods|${TEXT})$)|^[^.]+$`, 'i');
 // A file without an extension is listed only when its start has no NUL bytes (text).
 async function textStart(file) {
   const handle = await openFile(file, 'r');
@@ -125,6 +125,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     if (!inFolder) throw Error('That file was not opened from this device.');
   };
   return {
+    async assertOpened(file) { await opened(file); },
     // Saves an edited text document over its file: written beside it, then renamed, keeping its mode.
     async writeOpened(file, bytes) {
       await opened(file);
