@@ -103,10 +103,12 @@ test('Esc clears the buffer and never reaches the text box', () => {
   assert.ok(run('hanzi', ['Escape']).passed.includes('Escape'));
 });
 
-test('Enter: Auto follows the text before the caret; Shift+Enter writes the letters', () => {
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT }).text, 'nihao');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, lineBefore: 'Wǒ shì ' }).text, 'nǐhǎo');
+test('Enter picks the highlighted Chinese character by default; Shift+Enter writes raw letters; other modes still work', () => {
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT }).text, '你好');
+  assert.equal(run('hanzi', [...keys('ni'), 'ArrowRight', 'Enter'], { dict: DICT }).text, '呢');
   assert.equal(run('hanzi', [...keys('nihao'), { key: 'Enter', shift: true }], { dict: DICT, lineBefore: 'Wǒ shì ' }).text, 'nihao');
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'auto' } }).text, 'nihao');
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'auto' }, lineBefore: 'Wǒ shì ' }).text, 'nǐhǎo');
   assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'marks' } }).text, 'nǐhǎo');
   assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'letters' }, lineBefore: 'nǐ' }).text, 'nihao');
 });

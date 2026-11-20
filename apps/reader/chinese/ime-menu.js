@@ -15,7 +15,7 @@ function build(doc) {
   m.setAttribute('role', 'listbox');
   m.setAttribute('aria-label', 'Chinese candidates');
   m.innerHTML = '<div class="zh-ime-reading" aria-live="polite"></div><ol class="zh-ime-list"></ol>'
-    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Hold Space or Shift and press 1–9 to pick that candidate; Space alone writes the highlighted one">Space / Shift+1–9 picks</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
+    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Space or Enter picks the highlighted character; Shift+Enter writes raw letters; Space/Shift+1–9 picks that candidate">Space / Enter / Shift+1–9</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
     + '<button type="button" class="zh-ime-page" data-page="1" aria-label="More candidates">›</button>'
     + '<button type="button" class="zh-ime-expand" aria-label="Show more candidates" title="More candidates">▾</button>'
     + '<button type="button" class="zh-ime-script" title="Simplified / traditional"></button></div>';

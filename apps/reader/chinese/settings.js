@@ -7,7 +7,7 @@ export const ZH_DEFAULTS = Object.freeze({
   script: 'simplified', // simplified | traditional
   shortcut: true,       // Ctrl+Shift+Space cycles Off → Hanzi → Pinyin
   shiftLatin: true,     // Shift alone: Latin letters for a while
-  enter: 'auto',        // Enter with a buffer in Hanzi mode: auto | letters | marks
+  enter: 'choose',      // Enter with a buffer in Hanzi mode: choose | auto | letters | marks
   fullWidth: false,     // ， 。 ？ ！ in Hanzi mode (opt-in; normal ASCII punctuation by default)
   perPage: 9,           // 5 | 9 candidates
   bothScripts: false,   // the other script's form beside a candidate
@@ -78,7 +78,7 @@ function build(client) {
       <div class="zh-settings-grid">
         <label>Default mode (new notes)<select name="mode" data-native>${MODES.map(([v, t]) => opt(v, t)).join('')}</select></label>
         <label>Character script<select name="script" data-native>${opt('simplified', 'Simplified 简体')}${opt('traditional', 'Traditional 繁體')}</select></label>
-        <label>Enter key in Pinyin buffer<select name="enter" data-native>${opt('auto', 'Auto (match surrounding text)')}${opt('letters', 'Keep raw Latin letters')}${opt('marks', 'Convert to tone-marked Pinyin')}</select></label>
+        <label>Enter key in Pinyin buffer<select name="enter" data-native>${opt('choose', 'Pick Chinese character (default)')}${opt('auto', 'Auto (match surrounding text)')}${opt('letters', 'Keep raw Latin letters')}${opt('marks', 'Convert to tone-marked Pinyin')}</select></label>
         <label>Number keys (1–5) in Hanzi<select name="digits" data-native>${opt('tone', 'Filter by tone (ma3 → 马)')}${opt('choose', 'Pick candidate n')}</select></label>
         <label>Candidates per page<select name="perPage" data-native>${opt(5, '5 candidates')}${opt(9, '9 candidates')}</select></label>
       </div>

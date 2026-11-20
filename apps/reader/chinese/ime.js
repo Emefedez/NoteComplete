@@ -18,7 +18,7 @@ export const imeInitial = (mode = 'off', opts = {}) => ({
   mode, latin: false, composing: false, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false,
   // Space held in Hanzi mode (it chooses on release); chord: a digit or letter was pressed while held.
   spaceHeld: false, chord: false, hadInput: false,
-  opts: { perPage: 9, fullWidth: false, enter: 'auto', digits: 'tone', ...opts },
+  opts: { perPage: 9, fullWidth: false, enter: 'choose', digits: 'tone', ...opts },
 });
 
 const clear = (s) => ({ ...s, buffer: '', chosen: [], cands: null, page: 0, sel: s.mode === 'hanzi' ? 0 : -1, justChose: false });
@@ -228,7 +228,17 @@ export function imeReduce(state, k) {
     if (!items(s).length) return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
     return choose(s, Math.max(0, s.sel));
   }
-  if (key === 'Enter') return { state: clear(s), handled: true, commit: enterText(s, k) };
+  if (key === 'Enter') {
+    if (s.mode === 'hanzi' && !k.shift && s.opts.enter === 'choose') {
+      if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
+      if (!items(s).length) return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
+      return choose(s, Math.max(0, s.sel));
+    }
+    if (s.mode === 'pinyin' && !k.shift && s.sel >= 0 && fresh(s) && items(s).length) {
+      return choose(s, s.sel);
+    }
+    return { state: clear(s), handled: true, commit: enterText(s, k) };
+  }
   if (key === 'Escape') return { state: clear(s), handled: true };
   if (key === 'Backspace') {
     if ((s.justChose || !s.buffer) && s.chosen.length) {
