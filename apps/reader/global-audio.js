@@ -30,6 +30,7 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
 
   let url = '';
   let currentName = '';
+  let external = null;
   let rate = 1;
   let raf = 0;
   let seeking = false;
@@ -48,7 +49,8 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
   headsetBtn.setAttribute('aria-label', 'Mute or unmute audio');
   headsetBtn.append(icon('headphones'));
 
-  const titleEl = doc.createElement('span');
+  const titleEl = doc.createElement('button');
+  titleEl.type = 'button';
   titleEl.className = 'ga-title';
 
   const backBtn = doc.createElement('button');
@@ -93,62 +95,88 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
   const closeBtn = doc.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'ga-btn ga-close';
-  closeBtn.title = 'Close audio player';
-  closeBtn.setAttribute('aria-label', 'Close audio player');
+  closeBtn.title = 'Stop and close audio player';
+  closeBtn.setAttribute('aria-label', 'Stop and close audio player');
   closeBtn.append(icon('close'));
 
   bar.append(headsetBtn, titleEl, backBtn, playBtn, fwdBtn, seek, timeEl, speedBtn, closeBtn);
 
   function syncSpeed() {
-    audio.playbackRate = audio.defaultPlaybackRate = rate;
-    if ('preservesPitch' in audio) audio.preservesPitch = true;
-    speedBtn.textContent = `${rate}×`;
-    speedBtn.classList.toggle('is-custom', rate !== 1);
-    speedBtn.setAttribute('aria-label', `Playback speed ${rate}×`);
+    const curRate = external ? (external.getRate?.() || 1) : rate;
+    if (!external) {
+      audio.playbackRate = audio.defaultPlaybackRate = rate;
+      if ('preservesPitch' in audio) audio.preservesPitch = true;
+    }
+    const labelRate = Number(curRate.toFixed(2));
+    speedBtn.textContent = `${labelRate}×`;
+    speedBtn.classList.toggle('is-custom', Math.abs(curRate - 1) > 0.001);
+    speedBtn.setAttribute('aria-label', `Playback speed ${labelRate}×`);
   }
   syncSpeed();
 
   function syncPlayState() {
-    const playing = !audio.paused && !audio.ended;
+    const playing = external ? !external.isPaused() : (!audio.paused && !audio.ended);
+    const muted = external ? Boolean(external.isMuted?.()) : audio.muted;
     bar.classList.toggle('is-playing', playing);
-    bar.classList.toggle('is-muted', audio.muted);
+    bar.classList.toggle('is-muted', muted);
     playBtn.replaceChildren(icon(playing ? 'pause' : 'play'));
     playBtn.title = playing ? 'Pause' : 'Play';
     playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    headsetBtn.setAttribute('aria-pressed', String(audio.muted));
-    headsetBtn.title = audio.muted ? 'Unmute audio' : 'Mute audio';
+    headsetBtn.setAttribute('aria-pressed', String(muted));
+    headsetBtn.title = muted ? 'Unmute audio' : 'Mute audio';
+    if (external) {
+      const t = external.getTitle?.() || 'Note audio';
+      if (titleEl.textContent !== t) { titleEl.textContent = t; titleEl.title = `${t} — click to open Audio panel`; }
+      syncSpeed();
+    }
   }
 
-  function paintProgress(cur = audio.currentTime || 0, dur = Number.isFinite(audio.duration) ? audio.duration : 0) {
-    const pct = dur > 0 ? Math.max(0, Math.min(100, (cur / dur) * 100)) : 0;
+  function paintProgress(cur = null, dur = null) {
+    const c = cur ?? (external ? external.getTime() : (audio.currentTime || 0));
+    const d = dur ?? (external ? external.getDuration() : (Number.isFinite(audio.duration) ? audio.duration : 0));
+    const pct = d > 0 ? Math.max(0, Math.min(100, (c / d) * 100)) : 0;
     if (!seeking) {
-      seek.max = String(dur > 0 ? dur : 100);
-      seek.value = String(dur > 0 ? Math.min(dur, cur) : 0);
+      seek.max = String(d > 0 ? d : 100);
+      seek.value = String(d > 0 ? Math.min(d, c) : 0);
     }
     seek.style.setProperty('--ga-pct', `${pct.toFixed(2)}%`);
-    timeEl.textContent = `${formatAudioClock(cur)} / ${formatAudioClock(dur)}`;
+    timeEl.textContent = `${formatAudioClock(c)} / ${formatAudioClock(d)}`;
   }
 
   function tick() {
+    if (external) {
+      syncPlayState();
+      paintProgress();
+      raf = requestAnimationFrame(tick);
+      return;
+    }
     paintProgress();
     if (!audio.paused && !audio.ended) raf = requestAnimationFrame(tick);
     else raf = 0;
   }
 
   function jumpBy(delta) {
+    if (external) {
+      external.skip?.(delta);
+      paintProgress();
+      return;
+    }
     const dur = Number.isFinite(audio.duration) ? audio.duration : Infinity;
     const next = Math.max(0, Math.min(dur, (audio.currentTime || 0) + delta));
     audio.currentTime = next;
     paintProgress(next, Number.isFinite(audio.duration) ? audio.duration : 0);
   }
 
+  titleEl.onclick = () => { if (external?.onOpen) external.onOpen(); };
   headsetBtn.onclick = () => {
+    if (external) { external.toggleMute?.(); syncPlayState(); return; }
     audio.muted = !audio.muted;
     syncPlayState();
   };
   backBtn.onclick = () => jumpBy(-SKIP_SEC);
   fwdBtn.onclick = () => jumpBy(SKIP_SEC);
   playBtn.onclick = async () => {
+    if (external) { await external.togglePlay?.(); syncPlayState(); paintProgress(); return; }
     if (!url) return;
     if (audio.paused || audio.ended) {
       try { await audio.play(); } catch (e) { status(e.message || 'Could not play audio.', true); }
@@ -157,6 +185,7 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
     }
   };
   speedBtn.onclick = (e) => {
+    if (external) { external.stepRate?.(e.shiftKey ? -1 : 1); syncSpeed(); return; }
     const i = SPEEDS.indexOf(rate);
     const step = e.shiftKey ? -1 : 1;
     rate = SPEEDS[((i < 0 ? 2 : i) + step + SPEEDS.length) % SPEEDS.length];
@@ -165,6 +194,7 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
   };
   speedBtn.onwheel = (e) => {
     e.preventDefault();
+    if (external) { external.stepRate?.(e.deltaY < 0 ? 1 : -1); syncSpeed(); return; }
     const i = SPEEDS.indexOf(rate);
     const step = e.deltaY < 0 ? 1 : -1;
     rate = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i < 0 ? 2 : i) + step))];
@@ -173,38 +203,79 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
   };
   seek.oninput = () => {
     seeking = true;
-    const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const dur = external ? external.getDuration() : (Number.isFinite(audio.duration) ? audio.duration : 0);
     const val = Number(seek.value) || 0;
     paintProgress(val, dur);
   };
   seek.onchange = () => {
     seeking = false;
     const val = Number(seek.value) || 0;
+    if (external) { external.seek?.(val); paintProgress(); return; }
     if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Math.max(0, Math.min(audio.duration, val));
     paintProgress();
   };
   closeBtn.onclick = () => close();
 
-  audio.addEventListener('loadedmetadata', () => paintProgress());
-  audio.addEventListener('durationchange', () => paintProgress());
-  audio.addEventListener('timeupdate', () => { if (audio.paused) paintProgress(); });
-  audio.addEventListener('seeked', () => paintProgress());
-  audio.addEventListener('play', () => { syncPlayState(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
-  audio.addEventListener('pause', () => { cancelAnimationFrame(raf); raf = 0; syncPlayState(); paintProgress(); });
-  audio.addEventListener('ended', () => { cancelAnimationFrame(raf); raf = 0; syncPlayState(); paintProgress(); });
-  audio.addEventListener('error', () => { status(`Could not play ${currentName || 'this MP3 file'}.`, true); syncPlayState(); });
+  audio.addEventListener('loadedmetadata', () => { if (!external) paintProgress(); });
+  audio.addEventListener('durationchange', () => { if (!external) paintProgress(); });
+  audio.addEventListener('timeupdate', () => { if (!external && audio.paused) paintProgress(); });
+  audio.addEventListener('seeked', () => { if (!external) paintProgress(); });
+  audio.addEventListener('play', () => { if (!external) { syncPlayState(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); } });
+  audio.addEventListener('pause', () => { if (!external) { cancelAnimationFrame(raf); raf = 0; syncPlayState(); paintProgress(); } });
+  audio.addEventListener('ended', () => { if (!external) { cancelAnimationFrame(raf); raf = 0; syncPlayState(); paintProgress(); } });
+  audio.addEventListener('error', () => { if (!external) { status(`Could not play ${currentName || 'this MP3 file'}.`, true); syncPlayState(); } });
 
   function showBar() {
     clearTimeout(hideTimer);
     bar.hidden = false;
-    // Let layout observe `hidden = false` before toggling `.is-open` for the smooth entrance.
     requestAnimationFrame(() => {
       bar.classList.add('is-open');
       header?.classList.add('has-global-audio');
     });
   }
 
+  function hideBar() {
+    bar.classList.remove('is-open', 'is-playing', 'is-external');
+    header?.classList.remove('has-global-audio');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => { if (!url && !external) bar.hidden = true; }, 220);
+  }
+
+  function detachExternal({ stop = false } = {}) {
+    if (!external) return;
+    const prev = external;
+    external = null;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    if (stop) prev.onStop?.();
+    if (!url) hideBar();
+  }
+
+  function attachExternal(adapter) {
+    if (!adapter) return;
+    // Pause any standalone MP3 if we are docking note audio to the top bar.
+    if (url) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      URL.revokeObjectURL(url);
+      url = '';
+      currentName = '';
+    }
+    cancelAnimationFrame(raf);
+    external = adapter;
+    bar.classList.add('is-external');
+    syncPlayState();
+    paintProgress();
+    showBar();
+    raf = requestAnimationFrame(tick);
+  }
+
   function close() {
+    if (external) {
+      detachExternal({ stop: true });
+      return;
+    }
     cancelAnimationFrame(raf);
     raf = 0;
     audio.pause();
@@ -212,14 +283,12 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
     audio.load();
     if (url) { URL.revokeObjectURL(url); url = ''; }
     currentName = '';
-    bar.classList.remove('is-open', 'is-playing');
-    header?.classList.remove('has-global-audio');
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => { if (!url) bar.hidden = true; }, 220);
+    hideBar();
   }
 
   async function playFile(file) {
     if (!file) return;
+    if (external) detachExternal({ stop: true });
     cancelAnimationFrame(raf);
     raf = 0;
     audio.pause();
@@ -230,6 +299,7 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
     const label = cleanTrackTitle(currentName);
     titleEl.textContent = label;
     titleEl.title = currentName;
+    bar.classList.remove('is-external');
     audio.src = url;
     syncSpeed();
     paintProgress(0, 0);
@@ -246,9 +316,12 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
 
   return {
     playFile,
+    attachExternal,
+    detachExternal,
     close,
-    get isOpen() { return Boolean(url); },
-    get currentName() { return currentName; },
+    get isOpen() { return Boolean(url || external); },
+    get isExternal() { return Boolean(external); },
+    get currentName() { return external ? (external.getTitle?.() || '') : currentName; },
     audio,
   };
 }

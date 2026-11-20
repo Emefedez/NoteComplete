@@ -91,10 +91,10 @@ _Documents, unified search and built-in media playback_
 
 ## Find & Library
 - **Find** (==Ctrl F==): searches typed text, PDF text, on-device handwriting OCR and audio transcripts, plus full-content search across your library on Home.
-- **Library & Cloud**: open local folders as sidebar groups, connect **Google Drive**, **Dropbox**, **Internet Archive** or **GitHub**, compare newer versions, and filter by type, date, source, size, audio or tags.
+- **Library & Cloud**: open local folders as sidebar groups, connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive** or **GitHub**, compare newer versions, and filter by type, date, source, size, audio or tags.
 
 ## Audio & Media
-- **Global MP3 player**: open any `.mp3` from a folder, file picker or cloud to play it directly from the top bar ((headset mute, back/play/forward, seek bar, speed)) without closing your note; `.mp4` videos open in your computer's player.
+- **Global audio bar**: open any `.mp3` from a folder, file picker or cloud—or close an active note Audio window—to keep playback docked on the top bar ((headset mute, back/play/forward, seek bar, speed)); click `×` on the bar or `Shift+×` on the Audio window to stop completely. `.mp4` videos open in your computer's player.
 - **Synced recordings**: record or import audio into a note so ink replays as it was written; transcribe locally with Whisper or Voxtype, click any word to seek, and revise with AI while keeping timings.
 
 !stat 30 seconds back or forward in note audio: ==J== and ==L==, ==K== to play

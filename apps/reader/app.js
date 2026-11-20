@@ -603,6 +603,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   thumbsDue.clear();
   backgrounds?.close();
   stopRecording();
+  if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
   audio.reset();
   panels = [];
   doc = null;
@@ -5498,12 +5499,46 @@ function stepZoom(direction) {
 
 receiveNativeFiles({ open: openImportedFile, canReplace, isBusy: busy, status });
 
-// Audio and transcript live in a side panel opened from the toolbar (A).
-function toggleAudio(open = $("audioBar").hidden) {
+// Audio and transcript live in a floating panel opened from the toolbar (A).
+// Closing it docks active note audio to the top global audio bar; Shift+click × (or Shift+X inside
+// the Audio window, or clicking × on the top bar) stops and closes it completely.
+function dockNoteAudioToGlobalBar() {
+  const hasAudio = audio.entries?.length > 0 && (!audio.paused || audio.time > 0);
+  if (!hasAudio) return;
+  const sel = $("recording");
+  globalAudio.attachExternal({
+    getTitle: () => sel?.options?.[sel.selectedIndex]?.textContent?.trim() || "Note audio",
+    getTime: () => audio.time,
+    getDuration: () => audio.duration,
+    isPaused: () => audio.paused,
+    isMuted: () => Boolean(audio.muted),
+    getRate: () => audio.rate,
+    togglePlay: () => $("playAudio")?.click(),
+    skip: (delta) => audio.seek(Math.max(0, Math.min(audio.duration || Infinity, audio.time + delta))),
+    seek: (t) => audio.seek(t),
+    toggleMute: () => { if (typeof audio.setMuted === "function") audio.setMuted(!audio.muted); else audio.audio.muted = !audio.audio.muted; },
+    stepRate: (dir) => audio.stepRate(dir),
+    onOpen: () => toggleAudio(true),
+    onStop: () => {
+      if (audio.virtual) { audio.virtual.paused = true; audio.update?.(); }
+      else audio.audio?.pause();
+    },
+  });
+}
+function toggleAudio(open = $("audioBar").hidden, { forceStop = false } = {}) {
   if ($("audioToggle").hidden) return;
   $("audioBar").hidden = !open;
   $("audioToggle").setAttribute("aria-expanded", String(open));
-  if (open) audio.transcript.lookup();
+  if (open) {
+    if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
+    audio.transcript.lookup();
+  } else if (forceStop) {
+    if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
+    if (audio.virtual) { audio.virtual.paused = true; audio.update?.(); }
+    else audio.audio?.pause();
+  } else {
+    dockNoteAudioToGlobalBar();
+  }
 }
 // Dark pages: inverts the document and its page previews (presentation only, never exported).
 // HTML documents follow the same switch (Dark Reader inside the page, see htmlDarkApply).
@@ -5621,7 +5656,15 @@ $("audioToggle").onclick = () => toggleAudio();
 const screenArea = () => { const z = uiZoom(); return { left: 0, top: 0, width: Math.round(innerWidth / z), height: Math.round(innerHeight / z) }; };
 floatingWindow($("audioBar"), { screen: screenArea, key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
 floatingWindow($("chatPanel"), { screen: screenArea, key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
-$("audioClose").onclick = () => toggleAudio(false);
+$("audioClose").title = "Close panel (keeps audio in top bar; Shift+click or Shift+X to stop & close)";
+$("audioClose").onclick = (e) => toggleAudio(false, { forceStop: Boolean(e?.shiftKey) });
+$("audioBar").addEventListener("keydown", (e) => {
+  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "x" && !e.target.closest?.("input, textarea, [contenteditable]")) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleAudio(false, { forceStop: true });
+  }
+});
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.

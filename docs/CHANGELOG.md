@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.63
+
+- **Built-in global-bar MP3 player & external MP4 handoff.** Opening an `.mp3` file (from an opened folder, `File → Open…`, drag-and-drop, archive, or cloud storage) now reveals a compact, accent-colored audio player right on the global bar without closing your current note—complete with headset icon (click to mute), track title, backwards (−10s), primary accent Play/Pause, forwards (+10s), scrubbable progress bar, time readout, speed toggle (`0.5×`–`2×`), and `×` close button. `.mp4` videos in folders or file dialogs redirect straight to your computer's default media player.
+- **Smoothly stacked Ask AI & Commands buttons when bar space is tight.** When the global MP3 player (or a background job/update chip) appears on the command bar, **Ask AI** and **Commands** smoothly squash into two compact icon buttons stacked one above the other, expanding back seamlessly when the bar closes.
+- **Help → My Github & UI polish.** Added a **My Github** entry in the Help menu with a tiny gray `Emefedez` subtitle (without increasing row height) linking directly to `https://github.com/Emefedez`, restored the **moon** icon for Dark pages (`D`), fixed Markdown split toolbar overflow, and refreshed `README.md`, `docs/site/welcome.md`, and `docs/REVERSE_ENGINEERING.md`.
+
 ## 1.2.62
 
 - **View → Pinyin over characters (拼) restored.** Added the Pinyin overlay toggle back to the **View** menu (`#viewRubyToggle`), synced live with the Text format bar and Markdown Pinyin controls.
