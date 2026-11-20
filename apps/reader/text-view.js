@@ -116,7 +116,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     const isZh = mode !== 'off';
     if (zhToggle) {
       zhToggle.hidden = false;
-      zhToggle.textContent = mode === 'pinyin' ? 'ā' : '中';
+      zhToggle.textContent = '中';
       zhToggle.setAttribute('aria-pressed', String(isZh));
       zhToggle.dataset.zhMode = mode;
     }
@@ -128,8 +128,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
   if (zhToggle) {
     zhToggle.addEventListener('click', () => {
       if (!ime) {
-        const cur = currentZhMode();
-        const next = cur === 'off' ? 'hanzi' : cur === 'hanzi' ? 'pinyin' : 'off';
+        const next = currentZhMode() === 'hanzi' ? 'off' : 'hanzi';
         setFieldMode(zhKey(), next);
       }
       syncZhBar();

@@ -341,5 +341,3 @@ export function splitInput(buffer) {
 export function readingOf(buffer) {
   return splitInput(buffer).map(s => markTone(s.syl, s.tone)).join(' ');
 }
-// Does this text contain pinyin with tone marks (for Enter = "Auto")?
-export const hasMarkedPinyin = text => /[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/i.test(String(text).normalize('NFC'));

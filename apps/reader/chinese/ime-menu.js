@@ -132,34 +132,29 @@ function render() {
     li.setAttribute('aria-selected', String(i === v.sel));
     const n = Object.assign(document.createElement('span'), { className: 'n', textContent: String(k + 1) });
     li.append(n);
-    if (v.mode === 'pinyin') {
-      li.append(Object.assign(document.createElement('span'), { className: 'zh-ime-py', textContent: item.text }));
-      if (item.hanzi) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: item.hanzi }));
-    } else {
-      const ruby = document.createElement('ruby');
-      ruby.className = 'zh-ime-han';
-      ruby.append(item.text);
-      if (item.pinyin) ruby.append(rubyText(item.pinyin, v.toneColours));
-      li.append(ruby);
-      const other = v.script === 'traditional' ? item.simp : item.trad;
-      if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
-    }
+    const ruby = document.createElement('ruby');
+    ruby.className = 'zh-ime-han';
+    ruby.append(item.text);
+    if (item.pinyin) ruby.append(rubyText(item.pinyin, v.toneColours));
+    li.append(ruby);
+    const other = v.script === 'traditional' ? item.simp : item.trad;
+    if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
     if (item.level > 0) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: item.level >= 7 ? 'HSK 7–9' : `HSK ${item.level}`, title: `HSK level ${item.level >= 7 ? '7–9' : item.level}` }));
     if (item.fuzzy) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: '≈', title: 'Similar word suggestion' }));
     if (item.sentence) li.classList.add('zh-ime-sentence');
     if (item.gloss) li.title = item.gloss;
     list.append(li);
   });
-  if (!v.items.length && !v.loading && v.mode === 'hanzi') list.append(Object.assign(document.createElement('li'), { className: 'zh-ime-none', textContent: 'No characters for this; Space or Enter writes the letters' }));
+  if (!v.items.length && !v.loading) list.append(Object.assign(document.createElement('li'), { className: 'zh-ime-none', textContent: 'No characters for this; Space or Enter writes the letters' }));
   const prev = el.querySelector('[data-page="-1"]'), next = el.querySelector('[data-page="1"]');
   prev.disabled = v.page <= 0;
   next.disabled = v.page >= v.pages - 1;
   el.querySelector('.zh-ime-pages').textContent = v.pages > 1 ? `${v.page + 1}/${v.pages}` : '';
-  el.querySelector('.zh-ime-foot').hidden = v.pages <= 1 && v.mode !== 'hanzi';
-  el.querySelector('.zh-ime-keys').hidden = v.mode !== 'hanzi' || !v.items.length;
+  el.querySelector('.zh-ime-foot').hidden = false;
+  el.querySelector('.zh-ime-keys').hidden = !v.items.length;
   const script = el.querySelector('.zh-ime-script');
   script.textContent = v.script === 'traditional' ? '繁' : '简';
-  script.hidden = v.mode !== 'hanzi';
+  script.hidden = false;
   el.classList.toggle('zh-ime-expanded', expanded);
   const k = v.sel - v.offset;
   if (k >= 0 && k < v.items.length) owner?.setAttribute('aria-activedescendant', `zh-c-${k}`);

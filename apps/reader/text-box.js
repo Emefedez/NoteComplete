@@ -204,7 +204,7 @@ export function textBoxController({
   function syncZhSubOptions() {
     const mode = currentZhMode();
     const isZh = mode !== "off";
-    zhToggle.textContent = mode === "pinyin" ? "ā" : "中";
+    zhToggle.textContent = "中";
     zhToggle.setAttribute("aria-pressed", String(isZh));
     zhToggle.dataset.zhMode = mode;
     // 拼 stays for a box with Chinese in it (to read it), 笔 only while typing Chinese.
@@ -213,8 +213,7 @@ export function textBoxController({
   }
   zhToggle.addEventListener("click", () => {
     if (!textEditor?.area) {
-      const cur = currentZhMode();
-      const next = cur === "off" ? "hanzi" : cur === "hanzi" ? "pinyin" : "off";
+      const next = currentZhMode() === "hanzi" ? "off" : "hanzi";
       setFieldMode(zhKey(), next);
       setNoteMode(next);
     }

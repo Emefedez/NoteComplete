@@ -2,12 +2,13 @@
 // imeReduce is pure (tested in Node): keys in, the new state and what to do out.
 // attachIme wires it to a textarea, input or contenteditable; chineseField does that for the
 // app's other fields, with the remembered mode and a small 中 button.
-import { numbersToMarks, readingOf, hasMarkedPinyin, normalizeToneDigits, segment } from './pinyin.js';
+import { readingOf } from './pinyin.js';
 import { zhSettings, fieldMode, setFieldMode, zhEverUsed } from './settings.js';
 
-export const IME_MODES = ['off', 'hanzi', 'pinyin'];
-// Ctrl+Shift+Space and the 中 button: Off → Hanzi → Pinyin → Off.
-export const nextMode = (mode) => IME_MODES[(IME_MODES.indexOf(mode) + 1) % IME_MODES.length];
+export const IME_MODES = ['off', 'hanzi'];
+// Ctrl+Shift+Space and the 中 button: Off ↔ Hanzi.
+export const nextMode = (mode) => (mode === 'hanzi' ? 'off' : 'hanzi');
+const normalizeMode = (mode) => (mode === 'hanzi' ? 'hanzi' : 'off');
 
 const FULL = { ',': '，', '.': '。', '?': '？', '!': '！', ':': '：', ';': '；', '\\': '、', '(': '（', ')': '）', '<': '《', '>': '》', '[': '【', ']': '】' };
 const MODS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph', 'Fn', 'Dead', 'Process'];
@@ -15,28 +16,16 @@ const LETTER = /^[a-zA-ZüÜāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]$/u
 const PAGE_KEYS = { PageUp: -1, PageDown: 1, '-': -1, '=': 1 };
 
 export const imeInitial = (mode = 'off', opts = {}) => ({
-  mode, latin: false, composing: false, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false,
+  mode: normalizeMode(mode), latin: false, composing: false, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false,
   // Space held in Hanzi mode (it chooses on release); chord: a digit or letter was pressed while held.
   spaceHeld: false, chord: false, hadInput: false,
   opts: { perPage: 9, fullWidth: false, enter: 'choose', digits: 'tone', ...opts },
 });
 
-const clear = (s) => ({ ...s, buffer: '', chosen: [], cands: null, page: 0, sel: s.mode === 'hanzi' ? 0 : -1, justChose: false });
+const clear = (s) => ({ ...s, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false });
 const typed = (s) => s.chosen.map((c) => c.text).join('');
 const fresh = (s) => !!s.cands && s.cands.input === s.buffer && !s.cands.loading;
 const items = (s) => (fresh(s) ? s.cands.items || [] : []);
-// What Enter writes: the pinyin with marks (the top candidate's reading when it covers the
-// whole input, else the digits turned into marks), or the letters as typed.
-function marked(s) {
-  const top = items(s)[0];
-  if (s.mode === 'hanzi' && top && top.consumed >= s.buffer.length && top.pinyin && !/\d/.test(s.buffer)) return top.pinyin.replace(/\s+/g, '');
-  return numbersToMarks(s.buffer);
-}
-function enterText(s, k) {
-  if (k.shift) return typed(s) + s.buffer;
-  const how = s.mode === 'pinyin' ? 'marks' : s.opts.enter === 'auto' ? (hasMarkedPinyin(k.lineBefore || '') ? 'marks' : 'letters') : s.opts.enter;
-  return typed(s) + (how === 'marks' ? marked(s) : s.buffer);
-}
 
 // Choosing candidate `i` (index in the whole list): all of the input → commit; part of it →
 // kept with the rest still to choose (Backspace undoes it).
@@ -48,7 +37,7 @@ function choose(s, i) {
   // Several choices for one input (小 + 明): learnt as one word too (learnSeq).
   if (used >= s.buffer.length) return { state: clear(s), handled: true, commit: typed(s) + item.text, learn, ...(s.chosen.length ? { learnSeq: [...s.chosen.map((c) => c.item), item] } : {}) };
   const buffer = s.buffer.slice(used);
-  return { state: { ...s, buffer, chosen: [...s.chosen, { text: item.text, input: s.buffer.slice(0, used), item }], cands: null, page: 0, sel: s.mode === 'hanzi' ? 0 : -1, justChose: true }, handled: true, query: buffer, learn };
+  return { state: { ...s, buffer, chosen: [...s.chosen, { text: item.text, input: s.buffer.slice(0, used), item }], cands: null, page: 0, sel: 0, justChose: true }, handled: true, query: buffer, learn };
 }
 function move(s, delta) {
   const n = items(s).length;
@@ -72,10 +61,10 @@ function page(s, delta) {
   if (!n) return { state: s, handled: true };
   const pages = Math.max(1, Math.ceil(n / per));
   const p = ((s.page + delta) % pages + pages) % pages;
-  return { state: { ...s, page: p, sel: s.sel < 0 && s.mode === 'pinyin' ? -1 : p * per }, handled: true };
+  return { state: { ...s, page: p, sel: p * per }, handled: true };
 }
 
-// state: from imeInitial; k: {key, shift, ctrl, alt, meta, composing, lineBefore} for a key, or
+// state: from imeInitial; k: {key, shift, ctrl, alt, meta, composing} for a key, or
 // {type: 'cands', input, items, loading}, {type: 'composition', active}, {type: 'latin'}, {type: 'mode', mode}.
 // → {state, handled (the key is ours: preventDefault), commit (text to insert), pass (insert, then let the key through),
 //    query (ask for candidates of this input), learn ({input, item}), wait (run this key again when candidates arrive)}.
@@ -83,12 +72,11 @@ export function imeReduce(state, k) {
   const s = { ...imeInitial(), ...state };
   if (k.type === 'cands') {
     if (k.input !== s.buffer) return { state: s };
-    return { state: { ...s, cands: { input: k.input, items: k.items || [], loading: !!k.loading, reading: k.reading || '' }, page: 0, sel: s.mode === 'hanzi' ? 0 : -1 } };
+    return { state: { ...s, cands: { input: k.input, items: k.items || [], loading: !!k.loading, reading: k.reading || '' }, page: 0, sel: 0 } };
   }
   if (k.type === 'composition') return { state: { ...clear(s), composing: !!k.active, spaceHeld: false, chord: false, hadInput: false } };
-  // Hanzi & Pinyin modes: holding Space never spams spaces. With empty buffer, releasing without
-  // typing a digit or letter inserts one space; with pinyin typed, Space chooses on release (or
-  // Space+digit picks in Hanzi mode).
+  // Hanzi mode: holding Space never spams spaces. With empty buffer, releasing without typing a
+  // digit or letter inserts one space; with pinyin typed, Space chooses on release (or Space+digit picks).
   if (k.type === 'spaceDown') {
     if (s.spaceHeld) {
       return (s.mode !== 'off' && !s.latin && !s.composing)
@@ -107,13 +95,6 @@ export function imeReduce(state, k) {
       return s.hadInput
         ? { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true }
         : { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true, commit: ' ' };
-    }
-    if (s.mode === 'pinyin') {
-      if (s.sel >= 0 && fresh(s) && items(s).length) {
-        const out = choose(s, s.sel);
-        return { ...out, state: { ...out.state, spaceHeld: false, chord: false, hadInput: false }, handled: true };
-      }
-      return { state: { ...clear(s), spaceHeld: false, chord: false, hadInput: false }, handled: true, commit: typed(s) + numbersToMarks(s.buffer) + ' ' };
     }
     if (!fresh(s) && s.buffer) return { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true, wait: true };
     const out = imeReduce({ ...s, spaceHeld: false, hadInput: false }, { key: ' ' });
@@ -136,7 +117,7 @@ export function imeReduce(state, k) {
   if (k.type === 'digit') return imeReduce(s, { key: String(k.d) });
   if (k.type === 'mode') {
     const pending = typed(s) + s.buffer;
-    return { state: { ...clear({ ...s, mode: k.mode }), latin: false, spaceHeld: false, chord: false, hadInput: false }, commit: pending || undefined };
+    return { state: { ...clear({ ...s, mode: normalizeMode(k.mode) }), latin: false, spaceHeld: false, chord: false, hadInput: false }, commit: pending || undefined };
   }
   if (k.type === 'latin') {
     if (s.mode === 'off') return { state: s };
@@ -159,7 +140,7 @@ export function imeReduce(state, k) {
   }
   const empty = !s.buffer && !s.chosen.length;
   // Shortcuts keep working; what was being typed is written first (Ctrl+Enter finishes a text box with it).
-  if (k.ctrl || k.alt || k.meta) return empty ? { state: s } : { state: clear(s), commit: enterText(s, { lineBefore: k.lineBefore }) };
+  if (k.ctrl || k.alt || k.meta) return empty ? { state: s } : { state: clear(s), commit: typed(s) + s.buffer };
   if (LETTER.test(key.normalize('NFC'))) {
     // A capital (the start of a sentence: "Ni") or toned vowel (é, ā) is pinyin too; letters with
     // no characters (names, acronyms) are written as typed with Space or Enter.
@@ -168,7 +149,7 @@ export function imeReduce(state, k) {
   }
   if (empty) {
     if (s.spaceHeld && /^[0-9]$/.test(key)) return { state: { ...s, chord: true }, handled: true };
-    if (s.mode === 'hanzi' && s.opts.fullWidth && FULL[key] && !k.shiftDigit) return { state: s, handled: true, commit: FULL[key] };
+    if (s.opts.fullWidth && FULL[key] && !k.shiftDigit) return { state: s, handled: true, commit: FULL[key] };
     return { state: s };
   }
   if (key === "'") {
@@ -184,21 +165,6 @@ export function imeReduce(state, k) {
       if (!fresh(s)) return { state: s, handled: true, wait: true };
       const out = choose(s, s.page * s.opts.perPage + d - 1);
       return { ...out, state: { ...out.state, spaceHeld: true, chord: true } };
-    }
-    if (s.mode === 'pinyin') {
-      if (afterLetter && d <= 5) {
-        const nextBuf = s.buffer + key;
-        const norm = normalizeToneDigits(nextBuf);
-        const tail = norm.split(/[0-5']/).filter(Boolean).at(-1) || '';
-        // If the letters before the tone digit are not yet a complete syllable (e.g. "zh1", "zho1",
-        // "we2"), keep buffering so the rest of the syllable ("ong", "ng", "n") can follow.
-        if (!segment(tail, { partial: false, limit: 1 })) {
-          return { state: { ...s, buffer: nextBuf, justChose: false }, handled: true, query: nextBuf };
-        }
-        return { state: clear(s), handled: true, commit: typed(s) + numbersToMarks(nextBuf) };
-      }
-      if (d >= 1 && s.cands) return fresh(s) ? choose(s, s.page * s.opts.perPage + d - 1) : { state: s, handled: true, wait: true };
-      return { state: clear(s), handled: true, commit: typed(s) + s.buffer + key };
     }
     // Once the list was paged or a candidate highlighted, digits choose.
     if (d >= 1 && d <= 5 && s.opts.digits === 'tone' && s.page === 0 && s.sel <= 0) {
@@ -220,24 +186,17 @@ export function imeReduce(state, k) {
     return choose(s, s.page * s.opts.perPage + d - 1);
   }
   if (key === ' ') {
-    if (s.mode === 'pinyin') {
-      if (s.sel >= 0 && fresh(s) && items(s).length) return choose(s, s.sel);
-      return { state: clear(s), pass: true, commit: typed(s) + numbersToMarks(s.buffer) };
-    }
     if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
     if (!items(s).length) return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
     return choose(s, Math.max(0, s.sel));
   }
   if (key === 'Enter') {
-    if (s.mode === 'hanzi' && !k.shift && s.opts.enter === 'choose') {
+    if (!k.shift && s.opts.enter !== 'letters') {
       if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
       if (!items(s).length) return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
       return choose(s, Math.max(0, s.sel));
     }
-    if (s.mode === 'pinyin' && !k.shift && s.sel >= 0 && fresh(s) && items(s).length) {
-      return choose(s, s.sel);
-    }
-    return { state: clear(s), handled: true, commit: enterText(s, k) };
+    return { state: clear(s), handled: true, commit: typed(s) + s.buffer };
   }
   if (key === 'Escape') return { state: clear(s), handled: true };
   if (key === 'Backspace') {
@@ -255,15 +214,12 @@ export function imeReduce(state, k) {
   if (key === 'ArrowUp') return moveVertical(s, -1);
   if (key in PAGE_KEYS) return page(s, PAGE_KEYS[key]);
   if (key.length === 1) {
-    // Other punctuation: Hanzi mode writes the highlighted candidate then the mark; Pinyin mode the pinyin.
-    if (s.mode === 'hanzi') {
-      if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
-      const c = items(s)[Math.max(0, s.sel)];
-      const mark = s.opts.fullWidth && FULL[key] ? FULL[key] : key;
-      if (!c || c.consumed < s.buffer.length) return { state: clear(s), handled: true, commit: typed(s) + (c ? '' : s.buffer) + (c ? c.text + numbersToMarks(s.buffer.slice(c.consumed)) : '') + mark };
-      return { state: clear(s), handled: true, commit: typed(s) + c.text + mark, learn: { input: s.buffer, item: c } };
-    }
-    return { state: clear(s), pass: true, commit: typed(s) + numbersToMarks(s.buffer) };
+    // Other punctuation: writes the highlighted candidate then the mark.
+    if (!fresh(s) && s.buffer) return { state: s, handled: true, wait: true };
+    const c = items(s)[Math.max(0, s.sel)];
+    const mark = s.opts.fullWidth && FULL[key] ? FULL[key] : key;
+    if (!c || c.consumed < s.buffer.length) return { state: clear(s), handled: true, commit: typed(s) + (c ? c.text + s.buffer.slice(c.consumed) : s.buffer) + mark };
+    return { state: clear(s), handled: true, commit: typed(s) + c.text + mark, learn: { input: s.buffer, item: c } };
   }
   if (MODS.includes(key)) return { state: s };
   // Home, End, Delete…: the caret must not move under a composition.
@@ -330,7 +286,6 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
 
   async function query(input, retry = 0) {
     const id = ++seq;
-    if (st.mode === 'pinyin' && /\d/.test(input)) return;
     const zh = await zhClient();
     if (id !== seq || input !== st.buffer) return;
     if (!zh) { apply({ type: 'cands', input, items: [] }); return; }
@@ -345,14 +300,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       if (retry < 1) { Promise.resolve().then(() => { if (id === seq && input === st.buffer) query(input, retry + 1); }); return; }
       res = { items: [] };
     }
-    let list = res?.items || [];
-    if (st.mode === 'pinyin') {
-      // Pinyin mode: the readings of words for these letters (nǐhǎo, níhǎo…).
-      const seen = new Set();
-      list = list.filter((it) => it.consumed >= input.length && it.pinyin).map((it) => ({ ...it, text: it.pinyin.replace(/\s+/g, ''), hanzi: it.text }))
-        .filter((it) => !seen.has(it.text) && seen.add(it.text));
-    }
-    apply({ type: 'cands', input, items: list, reading: res?.reading || '' });
+    apply({ type: 'cands', input, items: res?.items || [], reading: res?.reading || '' });
   }
 
   function apply(k) {
@@ -360,7 +308,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     const out = k.type === 'pick' ? choose(st, k.index) : imeReduce(st, k);
     st = out.state;
     if (out.commit) write(out.commit);
-    if (out.learn && !out.learn.item.hanzi) {
+    if (out.learn) {
       const { script } = st.opts;
       zhClient().then((zh) => { zh?.choose?.(out.learn.input, out.learn.item, script); if (out.learnSeq) zh?.chooseSequence?.(out.learnSeq, script); }).catch(() => {});
     }
@@ -380,15 +328,15 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       const all = fresh(st) ? st.cands.items : [];
       const per = st.opts.perPage;
       m.showImeMenu(el, {
-        reading: st.chosen.map((c) => c.text).join('') + ' ' + (st.mode === 'hanzi' && fresh(st) && st.cands.reading && !/\d/.test(st.buffer) ? st.cands.reading : readingOf(st.buffer)),
+        reading: st.chosen.map((c) => c.text).join('') + ' ' + (fresh(st) && st.cands.reading && !/\d/.test(st.buffer) ? st.cands.reading : readingOf(st.buffer)),
         chosen: st.chosen.map((c) => c.text).join(''),
         buffer: st.buffer,
         items: all.slice(st.page * per, st.page * per + per),
         offset: st.page * per,
         sel: st.sel,
         page: st.page, pages: Math.max(1, Math.ceil(all.length / per)),
-        loading: !!st.cands?.loading || (st.mode === 'hanzi' && !fresh(st) && !!st.buffer),
-        mode: st.mode, script: st.opts.script, toneColours: st.opts.toneColours, bothScripts: st.opts.bothScripts,
+        loading: !!st.cands?.loading || (!fresh(st) && !!st.buffer),
+        script: st.opts.script, toneColours: st.opts.toneColours, bothScripts: st.opts.bothScripts,
         onChoose: (i) => apply({ type: 'pick', index: i }),
         onPage: (d) => { st = page(st, d).state; paint(); },
         onScript: () => { zhSettings({ script: st.opts.script === 'simplified' ? 'traditional' : 'simplified' }); sync(); if (st.buffer) query(st.buffer); },
@@ -397,15 +345,14 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   }
 
   function setModeTo(mode) {
-    apply({ type: 'mode', mode });
-    setMode(mode);
-    if (mode !== 'off') zhUsedNow();
-    onMode?.(mode);
+    const next = normalizeMode(mode);
+    apply({ type: 'mode', mode: next });
+    setMode(next);
+    if (next !== 'off') zhUsedNow();
+    onMode?.(next);
     syncButtons();
   }
-  const keyOf = (e) => ({ key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, composing: e.isComposing || e.keyCode === 229, lineBefore: lineBeforeOf() });
-  let lineBeforeOf = () => '';
-  import('./caret.js').then((c) => { lineBeforeOf = () => c.lineBefore(el); });
+  const keyOf = (e) => ({ key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, composing: e.isComposing || e.keyCode === 229 });
 
   function onKeyDown(e) {
     // A key the keyboard named: its beforeinput (if any) is not ours to read again.
@@ -416,13 +363,13 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     if (e.key === 'Dead') { deadPending = true; return; }
     if (e.isComposing || e.keyCode === 229) return;
     deadPending = false;
-    // Ctrl+Shift+Space: Off → Hanzi → Pinyin → Off.
+    // Ctrl+Shift+Space: Off ↔ Hanzi.
     if (e.code === 'Space' && e.ctrlKey && e.shiftKey && !e.altKey && zhSettings().shortcut) {
       e.preventDefault(); e.stopImmediatePropagation();
       setModeTo(nextMode(st.mode));
       return;
     }
-    // Space in Hanzi or Pinyin mode: held (absorbs repeats; with empty buffer inserts one space on
+    // Space in Hanzi mode: held (absorbs repeats; with empty buffer inserts one space on
     // release unless a digit/letter was pressed; with pinyin typed chooses on release / Space+digit).
     if ((e.key === ' ' || e.code === 'Space') && !e.ctrlKey && !e.altKey && !e.metaKey && (st.spaceHeld || (st.mode !== 'off' && !st.latin && !st.composing))) {
       const out = apply({ type: 'spaceDown', repeat: e.repeat });
@@ -462,7 +409,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     else if (e.inputType === 'deleteContentBackward' && busy()) key = 'Backspace';
     else if ((e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') && busy()) key = 'Enter';
     if (!key) return;
-    const out = apply({ key, lineBefore: lineBeforeOf() });
+    const out = apply({ key });
     // pass: the committed text is in, the key's own character follows.
     if (out.handled) e.preventDefault();
   }
@@ -499,7 +446,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       if (d && LETTER.test(d) && st.mode !== 'off' && !st.latin) {
         // Remove the dead-key composed vowel the browser inserted, and feed it into our IME buffer.
         removeInserted(String(e.data || '').length);
-        apply({ key: d, lineBefore: lineBeforeOf() });
+        apply({ key: d });
       }
       return;
     }
@@ -538,7 +485,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     get latin() { return st.latin; },
     setMode: setModeTo,
     cycle: () => setModeTo(nextMode(st.mode)),
-    refresh() { const m = getMode(); if (m !== st.mode) { st = { ...clear(st), mode: m }; } syncButtons(); },
+    refresh() { const m = normalizeMode(getMode()); if (m !== st.mode) { st = { ...clear(st), mode: m }; } syncButtons(); },
     addButton(b) { buttons.add(b); paintButton(b, st.mode, st.latin); },
     detach() {
       if (busy()) { const text = typed(st) + st.buffer; st = clear(st); write(text, true); }
@@ -560,16 +507,15 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   return api;
 }
 
-const LABEL = { off: '中', hanzi: '中', pinyin: 'ā' };
 function paintButton(b, mode, latin) {
-  b.textContent = latin ? 'A' : LABEL[mode] || '中';
+  b.textContent = latin ? 'A' : '中';
   b.setAttribute('aria-pressed', String(mode !== 'off'));
   b.dataset.zhMode = latin ? 'latin' : mode;
-  const name = mode === 'off' ? 'off' : mode === 'hanzi' ? (latin ? 'Hanzi, Latin letters for now (Shift)' : 'Hanzi') : latin ? 'Pinyin, Latin letters for now (Shift)' : 'Pinyin with tone marks';
+  const name = mode === 'off' ? 'off' : latin ? 'Hanzi, Latin letters for now (Shift)' : 'Hanzi';
   b.title = `Chinese input: ${name}. Click: ${nextModeName(mode)} (Ctrl+Shift+Space). Right-click or long press: more`;
   b.setAttribute('aria-label', `Chinese input: ${name}`);
 }
-const nextModeName = (m) => ({ off: 'Hanzi', hanzi: 'Pinyin', pinyin: 'off' })[m];
+const nextModeName = (m) => (m === 'hanzi' ? 'off' : 'Hanzi');
 
 // The 中 button: click cycles; right-click / long press opens the mode menu.
 // `field()`: the element whose IME it drives (the text box changes; the bar stays).
@@ -606,7 +552,6 @@ async function modeMenu(b, el) {
   openContextMenu(r.left, r.bottom + 4, [
     { label: 'Off', icon: 'close', checked: ime.mode === 'off', run: () => ime.setMode('off') },
     { label: 'Hanzi (characters)', icon: 'text', checked: ime.mode === 'hanzi', run: () => ime.setMode('hanzi') },
-    { label: 'Pinyin with tone marks', icon: 'text', checked: ime.mode === 'pinyin', run: () => ime.setMode('pinyin') },
     '-',
     { label: 'Simplified 简体', checked: s.script === 'simplified', run: () => zhSettings({ script: 'simplified' }) },
     { label: 'Traditional 繁體', checked: s.script === 'traditional', run: () => zhSettings({ script: 'traditional' }) },

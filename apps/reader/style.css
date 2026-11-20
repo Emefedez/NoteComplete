@@ -4228,7 +4228,6 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .zh-ime-list .n { align-self: center; min-width: 1ch; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .zh-ime-han { font-family: var(--zh-cjk); font-size: 1.35em; line-height: 1.15; ruby-position: over; }
 .zh-ime-han rt { font-family: system-ui, sans-serif; font-size: 10.5px; color: var(--muted); letter-spacing: 0; }
-.zh-ime-py { font-size: 1.1em; padding-bottom: 1px; }
 .zh-ime-alt { font-family: var(--zh-cjk); color: var(--muted); font-size: 12px; }
 .zh-ime-level { align-self: flex-start; padding: 0 4px; border-radius: 4px; background: var(--line); color: var(--muted); font-size: 9.5px; line-height: 14px; white-space: nowrap; }
 .zh-ime-sentence .zh-ime-han { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }

@@ -78,7 +78,7 @@ _Handwriting, rich text boxes and split-view Markdown_
 # CHINESE // AND TRANSLATE
 _Built-in Pinyin IME, stroke order, lookup and universal translation_
 
->> [amber] CHINESE IME: type Hanzi or tone-marked Pinyin with mid-syllable tone digits, dead-key accents, fuzzy typo suggestions, 2D arrows and Space / Enter / Shift+1–9 || [sky] PINYIN OVERLAY: toggle live tone-coloured Pinyin over characters from View or the toolbar
+>> [amber] CHINESE IME: type Hanzi with mid-syllable tone digits, dead-key accents, fuzzy typo suggestions, 2D arrows and Space / Enter / Shift+1–9 || [sky] PINYIN OVERLAY: toggle live tone-coloured Pinyin over characters from View or the toolbar
 >> [teal] LOOK UP &amp; STROKES: right-click any character for meanings ((ES | EN)), radical &amp; part meanings, audio, animated stroke order &amp; practice, Favorites and HSK / CC-CEDICT dictionaries || [purple] UNIVERSAL TRANSLATE: right-click any highlighted text to translate into favorite languages ((Español, English, 中文 + 33 more)) and **Replace** in place
 
 - Right-click any Chinese character or selection in pages or Markdown to look up, listen, translate or open its Stroke order editor.

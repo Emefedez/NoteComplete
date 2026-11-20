@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { SYLLABLES, SYLLABLE_LIST, normalise, markTone, numbersToMarks, marksToNumbers, normalizeToneDigits, fuzzySegment, segment, splitInput, readingOf, hasMarkedPinyin } from './pinyin.js';
+import { SYLLABLES, SYLLABLE_LIST, normalise, markTone, numbersToMarks, marksToNumbers, normalizeToneDigits, fuzzySegment, segment, splitInput, readingOf } from './pinyin.js';
 
 test('the syllable table', () => {
   assert.equal(new Set(SYLLABLE_LIST).size, SYLLABLE_LIST.length);
@@ -70,8 +70,6 @@ test('splitInput', () => {
   assert.deepEqual(splitInput("xi'an1"), [{ syl: 'xi', tone: null }, { syl: 'an', tone: 1 }]);
   assert.equal(splitInput('qqq')[0].invalid, true);
   assert.equal(readingOf('ni3hao3'), 'nǐ hǎo');
-  assert.ok(hasMarkedPinyin('wǒ shì'));
-  assert.ok(!hasMarkedPinyin('cafe'));
 });
 
 test('normalizeToneDigits and fuzzySegment handle mid-syllable tones and typos', () => {

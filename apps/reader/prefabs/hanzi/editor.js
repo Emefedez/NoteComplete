@@ -18,7 +18,7 @@ const yellowBridgeUrl = (c) => `https://www.yellowbridge.com/chinese/character-s
 function getHanziImeMode() {
   try {
     const v = localStorage.getItem(HANZI_IME_KEY);
-    if (v === 'hanzi' || v === 'pinyin' || v === 'off') return v;
+    if (v === 'hanzi' || v === 'off') return v;
   } catch { /* Optional */ }
   return 'hanzi';
 }
@@ -52,7 +52,7 @@ export function open(root, { spec, editing, host }) {
       { keys: 'Space', does: 'Play · pause main trace animation' },
       { keys: '← →', does: 'Stroke back · forward' },
       { keys: 'Home / End', does: 'No strokes · all strokes' },
-      { does: '中 / ā / A icon next to Characters: switch Chinese Hanzi, Pinyin or Latin typing (remembered)' },
+      { does: '中 / A icon next to Characters: toggle Chinese Hanzi or Latin typing (remembered)' },
       { does: 'Practise: write each stroke over the grey character; after 2 misses the stroke is shown' },
       { keys: 'Ctrl Enter', does: `${host.applyLabel} on the page` },
       { keys: 'Esc', does: 'Close without changes' },
@@ -330,7 +330,7 @@ export function open(root, { spec, editing, host }) {
     charInput.style.flex = '1';
 
     shell.panel.replaceChildren(
-      field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/ā/A icon to switch input mode (remembered)`),
+      field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/A icon to toggle Chinese input (remembered)`),
       defsBox,
       make('h4', { textContent: 'On the page' }),
       field('Show', selectInput([['strokes', 'The characters'], ['numbers', 'With stroke numbers'], ['steps', 'With the stroke sequence (traces)']], model.show, (show) => { if (show !== 'strokes') showSheet = true; change({ show }, false); renderSheetPreview(); })),

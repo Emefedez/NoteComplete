@@ -5420,7 +5420,7 @@ function textToolFlyout(button) {
       { label: "Math (LaTeX ∑)", icon: "graph", checked: $("textMath")?.getAttribute("aria-pressed") === "true", run: () => $("textMath")?.click() },
       "-",
       {
-        label: isZh ? `Chinese input (${zhMode === "pinyin" ? "Pinyin tones" : "Hanzi"})` : "Chinese input (中)",
+        label: isZh ? "Chinese input (Hanzi)" : "Chinese input (中)",
         icon: "text",
         checked: isZh,
         run: () => { $("zhModeToggle")?.click(); setTimeout(openMenu, 0); },

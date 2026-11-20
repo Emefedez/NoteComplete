@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { imeReduce, imeInitial, nextMode } from './ime.js';
 
 // Feeds keys; candidates for an input come from `dict` as soon as they are asked for.
-function run(mode, keys, { dict = {}, opts = {}, lineBefore = '' } = {}) {
+function run(mode, keys, { dict = {}, opts = {} } = {}) {
   let s = imeInitial(mode, opts);
   const out = { text: '', handled: [], passed: [], learned: [] };
   const step = (k) => {
@@ -21,7 +21,7 @@ function run(mode, keys, { dict = {}, opts = {}, lineBefore = '' } = {}) {
     if (r.wait) { const items = dict[s.buffer] || []; step({ type: 'cands', input: s.buffer, items }); step(k); }
     return r;
   };
-  for (const k of keys) step(typeof k === 'string' ? { key: k, lineBefore } : { lineBefore, ...k });
+  for (const k of keys) step(typeof k === 'string' ? { key: k } : k);
   return { ...out, state: s };
 }
 const keys = (str) => [...str];
@@ -35,25 +35,6 @@ const DICT = {
   hao: [it('好', 'hǎo', 3), it('号', 'hào', 3)],
   ma3: [it('马', 'mǎ', 3), it('码', 'mǎ', 3)],
 };
-
-test('pinyin mode: tone digits give marks as you type', () => {
-  assert.equal(run('pinyin', keys('ni3hao3')).text, 'nǐhǎo');
-  assert.equal(run('pinyin', keys('Zhong1guo2')).text, 'Zhōngguó');
-  assert.equal(run('pinyin', keys('lv4')).text, 'lǜ');
-  assert.equal(run('pinyin', keys('ni3 hao3')).text, 'nǐ hǎo');
-  // No tone: the letters as typed, and the space stays.
-  assert.equal(run('pinyin', keys('nihao ')).text, 'nihao ');
-  // Enter writes what is in the buffer without a new line.
-  const r = run('pinyin', [...keys('hao'), 'Enter']);
-  assert.equal(r.text, 'hao');
-  assert.ok(r.handled.includes('Enter'));
-});
-
-test('pinyin mode works with no dictionary at all', () => {
-  const r = run('pinyin', keys('ma1ma'));
-  assert.equal(r.state.buffer, 'ma');
-  assert.equal(r.text, 'mā');
-});
 
 test('hanzi mode: Space chooses the first candidate; numbers choose', () => {
   assert.equal(run('hanzi', keys('nihao ' ), { dict: DICT }).text, '你好');
@@ -103,14 +84,11 @@ test('Esc clears the buffer and never reaches the text box', () => {
   assert.ok(run('hanzi', ['Escape']).passed.includes('Escape'));
 });
 
-test('Enter picks the highlighted Chinese character by default; Shift+Enter writes raw letters; other modes still work', () => {
+test('Enter picks the highlighted Chinese character by default; Shift+Enter and enter=letters write raw letters', () => {
   assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT }).text, '你好');
   assert.equal(run('hanzi', [...keys('ni'), 'ArrowRight', 'Enter'], { dict: DICT }).text, '呢');
-  assert.equal(run('hanzi', [...keys('nihao'), { key: 'Enter', shift: true }], { dict: DICT, lineBefore: 'Wǒ shì ' }).text, 'nihao');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'auto' } }).text, 'nihao');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'auto' }, lineBefore: 'Wǒ shì ' }).text, 'nǐhǎo');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'marks' } }).text, 'nǐhǎo');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'letters' }, lineBefore: 'nǐ' }).text, 'nihao');
+  assert.equal(run('hanzi', [...keys('nihao'), { key: 'Enter', shift: true }], { dict: DICT }).text, 'nihao');
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'letters' } }).text, 'nihao');
 });
 
 test('full-width punctuation in Hanzi mode', () => {
@@ -150,14 +128,14 @@ test('shortcuts pass; composition and Latin stand down', () => {
   assert.equal(imeReduce(cap.state, { key: 'i' }).state.buffer, 'Ni');
 });
 
-test('the mode cycles Off → Hanzi → Pinyin → Off and writes what was typed', () => {
+test('the mode toggles Off ↔ Hanzi and writes what was typed', () => {
   assert.equal(nextMode('off'), 'hanzi');
-  assert.equal(nextMode('hanzi'), 'pinyin');
-  assert.equal(nextMode('pinyin'), 'off');
+  assert.equal(nextMode('hanzi'), 'off');
   let s = imeReduce(imeInitial('hanzi'), { key: 'n' }).state;
-  const r = imeReduce(s, { type: 'mode', mode: 'pinyin' });
+  const r = imeReduce(s, { type: 'mode', mode: 'off' });
   assert.equal(r.commit, 'n');
   assert.equal(r.state.buffer, '');
+  assert.equal(r.state.mode, 'off');
 });
 
 // Space held in Hanzi mode: it chooses on release; Space+digit picks candidate n.
@@ -231,11 +209,6 @@ test('a repeated Space keydown does not commit twice', () => {
   const rolled = imeReduce(hold, { key: 'n' });
   assert.equal(rolled.state.buffer, 'n');
   assert.equal(imeReduce(rolled.state, { type: 'spaceUp' }).commit, undefined);
-  // Pinyin mode also holds Space without spamming repeats and commits on release.
-  const pDown = imeReduce(imeInitial('pinyin'), { type: 'spaceDown' });
-  assert.equal(pDown.handled, true);
-  assert.equal(imeReduce(pDown.state, { type: 'spaceDown', repeat: true }).commit, undefined);
-  assert.equal(imeReduce(pDown.state, { type: 'spaceUp' }).commit, ' ');
 });
 
 test('arrow keys navigate candidates with coherent wrap and vertical page stepping', () => {
@@ -274,7 +247,7 @@ test('arrow keys navigate candidates with coherent wrap and vertical page steppi
   assert.equal(imeReduce(imeInitial('hanzi'), { type: 'pickSlot', d: 1 }).handled, undefined);
 });
 
-test('mid-syllable tone digits, accented vowels, and digits before vowels wait cleanly without spacing', () => {
+test('mid-syllable tone digits and accented vowels wait cleanly without spacing', () => {
   // Dead key passes through so Spanish/European keyboards can compose accented vowels like é.
   const mid = imeReduce(imeInitial('hanzi'), { key: 'z' }).state;
   assert.equal(imeReduce(mid, { key: 'Dead' }).handled, undefined);
@@ -287,18 +260,6 @@ test('mid-syllable tone digits, accented vowels, and digits before vowels wait c
     s = out.state;
   }
   assert.equal(s.buffer, 'zho1ngwén');
-  // In Pinyin mode, pressing 1 after "zh" or "zho" waits for the rest of the syllable instead of committing "zh1".
-  let ps = imeInitial('pinyin');
-  for (const ch of 'zho1n') {
-    const out = imeReduce(ps, { key: ch });
-    assert.equal(out.commit, undefined);
-    ps = out.state;
-  }
-  assert.equal(ps.buffer, 'zho1n');
-  const done = imeReduce(ps, { key: 'g' });
-  assert.equal(done.state.buffer, 'zho1ng');
-  const fin = imeReduce(done.state, { key: ' ' });
-  assert.equal(fin.commit, 'zhōng');
 });
 
 test('a letter rolled over a held Space takes Space\'s choice first', () => {

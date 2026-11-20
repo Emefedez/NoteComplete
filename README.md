@@ -48,7 +48,7 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Chinese &amp; Translation</b></summary>
 
-- **Built-in Chinese IME (`中` / `ā`):** Hanzi and tone-marked Pinyin modes with mid-syllable tone digits (`zho1ngwen`), dead-key accents (`xué`), fuzzy typo suggestions (`≈`), 2D arrow-key candidate navigation, `Space` / `Enter` / `Shift+1–9` selection, and opt-in full-width punctuation.
+- **Built-in Chinese IME (`中`):** Hanzi input with mid-syllable tone digits (`zho1ngwen`, `qi1n`), dead-key accents (`xué`), fuzzy typo suggestions (`≈`), 2D arrow-key candidate navigation, `Space` / `Enter` / `Shift+1–9` selection, and opt-in full-width punctuation.
 - **Pinyin over characters (`拼` / `View → Pinyin over characters`):** Live tone-colored ruby annotations on page text boxes, Markdown, and exports, with per-character reading overrides.
 - **Look up & Stroke order:** Right-click any Chinese character/word for meanings (`ES | EN`), radical & component meanings in **Structure**, audio pronunciation, animated stroke order & practice (with synced per-character/all repeat toggles), Favorites, and downloadable HSK or local CC-CEDICT/JSON/TSV dictionaries.
 - **Universal right-click Translate:** Highlight any text anywhere → right-click **Translate** with favorite target languages (**Español**, **English**, **中文 (简体)** by default), searchable 33+ language picker with ★ favorites, and one-click **Replace** in editable fields.
