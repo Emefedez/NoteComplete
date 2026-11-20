@@ -167,12 +167,29 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     status(`Folder ${name} made. Put notes in it with ⋯ → Move to folder.`);
     renderFolders();
   }
-  function placeMenu(menu, anchor) {
+  function placeMenu(menu, anchor, { align = 'right', minWidth = 0 } = {}) {
+    if (menu.parentElement !== document.body) document.body.append(menu);
     menu.hidden = false;
     anchor.setAttribute('aria-expanded', 'true');
-    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const vw = innerWidth / z, vh = innerHeight / z;
+    const r = anchor.getBoundingClientRect();
+    const leftEdge = r.left / z, rightEdge = r.right / z, topEdge = r.top / z, bottomEdge = r.bottom / z;
+    if (minWidth) menu.style.minWidth = `${Math.min(Math.max(minWidth, Math.round(r.width / z)), Math.round(vw - 16))}px`;
+    menu.style.maxWidth = `${Math.max(160, Math.round(vw - 16))}px`;
+    const w = menu.offsetWidth || minWidth || 200;
+    const x = align === 'left' ? leftEdge : rightEdge - w;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(vw - w - 8, x)))}px`;
+    const below = vh - bottomEdge - 10, above = topEdge - 10;
+    const h = menu.offsetHeight || 200;
+    if (below >= h || below >= above) {
+      menu.style.maxHeight = `${Math.max(120, Math.round(below))}px`;
+      menu.style.top = `${Math.round(bottomEdge + 6)}px`;
+    } else {
+      const mh = Math.max(120, Math.round(above));
+      menu.style.maxHeight = `${mh}px`;
+      menu.style.top = `${Math.round(Math.max(8, topEdge - Math.min(h, mh) - 6))}px`;
+    }
   }
   function folderMenu(group, anchor) {
     const menu = $('folderMenu');
@@ -338,7 +355,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       if (folder) item.append(starButton(!!entry.starred, entryTitle(entry), async on => { await groups.star(folder, entry.key, on); renderRecent(); }));
       else {
         const fav = starButton(favourites.has(entry.key), entryTitle(entry), on => { if (on) favourites.add(entry.key); else favourites.delete(entry.key); saveFavourites(); button.note.favourite = on; renderRecent(); });
-        fav.title = favourites.has(entry.key) ? 'Favourite (click to remove)' : 'Add to favourites';
+        fav.title = favourites.has(entry.key) ? 'Favorite (click to remove)' : 'Add to favorites';
         item.append(fav);
       }
       return [item];
@@ -415,13 +432,12 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
     // Drop down under the ⋯ button, or up when there is no room below.
     const menu = $('forgetDialog');
-    menu.hidden = false;
-    anchor.setAttribute('aria-expanded', 'true');
-    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    placeMenu(menu, anchor, { align: 'right' });
     setTimeout(() => document.addEventListener('pointerdown', outside, true));
-    $('forgetDanger').ontoggle = () => { if (menu.getBoundingClientRect().bottom > innerHeight - 8) menu.style.top = `${Math.max(8, innerHeight - menu.offsetHeight - 8)}px`; };
+    $('forgetDanger').ontoggle = () => {
+      const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      if (menu.getBoundingClientRect().bottom / z > innerHeight / z - 8) menu.style.top = `${Math.round(Math.max(8, innerHeight / z - menu.offsetHeight - 8))}px`;
+    };
   }
   // ⋯ → Rename…: only the title Recent shows changes; the file keeps its name.
   function rename(entry) {
@@ -501,7 +517,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     ];
   }
   const TOGGLES = [
-    { id: 'favourites', label: 'Favourites', icon: 'star', title: 'Only notes you starred' },
+    { id: 'favourites', label: 'Favorites', icon: 'star', title: 'Only notes you starred' },
     { id: 'audio', label: 'With audio', icon: 'headphones', title: 'Only notes with recordings' },
   ];
   const isActive = () => filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
@@ -537,12 +553,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       b.onclick = () => category.flip(o.value);
       return b;
     }));
-    anchor.setAttribute('aria-expanded', 'true');
-    menu.hidden = false;
-    const r = anchor.getBoundingClientRect();
-    menu.style.minWidth = `${Math.max(160, Math.round(r.width))}px`;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.left))}px`;
-    menu.style.top = `${r.bottom + 6}px`;
+    placeMenu(menu, anchor, { align: 'left', minWidth: 160 });
     menu.scrollTop = keep;
     document.addEventListener('pointerdown', outsideFilter, true);
     document.addEventListener('keydown', escapeFilter, true);
@@ -715,11 +726,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     cloudMenuOpen = true;
     renderCloudProviderDrop();
     renderCloudProviderMenu();
-    menu.hidden = false;
-    const r = drop.getBoundingClientRect();
-    menu.style.minWidth = `${Math.max(210, Math.round(r.width))}px`;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth))}px`;
-    menu.style.top = `${r.bottom + 6}px`;
+    placeMenu(menu, drop, { align: 'right', minWidth: 210 });
     document.addEventListener('pointerdown', outsideCloudMenu, true);
     document.addEventListener('keydown', escapeCloudMenu, true);
   }

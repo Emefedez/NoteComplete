@@ -12,6 +12,16 @@ import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextM
 
 export { PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu };
 
+// Logical toolbar grouping for TinyMDE: History | Headings | Inline | Lists | Blocks | Media
+export const MARKDOWN_COMMANDS = [
+  'undo', 'redo', '|',
+  'h1', 'h2', '|',
+  'bold', 'italic', 'strikethrough', 'code', '|',
+  'ul', 'ol', 'tasklist', '|',
+  'blockquote', 'hr', '|',
+  'insertLink', 'insertImage',
+];
+
 const $ = id => document.getElementById(id);
 let library = null;
 export function loadEditor() {
@@ -149,7 +159,7 @@ export function notesController({ call, jump, currentPage, store, status, editPr
     const TinyMDE = await loadEditor();
     if (editor || panel.hidden) return;
     editor = new TinyMDE.Editor({ element: $('notesEditor'), content: text, placeholder: core ? 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.' : 'Notes for this page. Markdown: # heading, **bold**, - list…', });
-    bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor });
+    bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor, commands: MARKDOWN_COMMANDS });
     editor.addEventListener('change', event => {
       if (shared?.applying) return;
       if (shared && !shared.canEdit) { if (event.content !== text) queueMicrotask(() => editor?.setContent(text)); return; }

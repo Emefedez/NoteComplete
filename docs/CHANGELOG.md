@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.57
+
+- **Complete Chinese dictionary definitions.** Rebuilt the bundled Chinese dictionary packs to preserve multiple clean English senses per entry without mid-word truncation or classifier noise (for example, `妈` now shows `mom; mother; ma` instead of just `ma`, and `他` shows `he; him; his`), with clean sense splitting and Spanish translation deduplication.
+- **Chinese favorites (stars) & Stroke order shortcut in Look up.** Replaced **+ My words** with ★ star toggles in the Look up header and compound-word rows plus a **Favorites** list (with listening, one-click lookup, unstarring, and batch export to flashcards). Renamed **Stroke figure** to **Stroke order** with a pencil icon that opens the Stroke order editor directly.
+- **Non-editable scrollable definitions in Stroke order.** Replaced the stray editable text box under Meanings in the Stroke order editor with a clean, read-only scrollable definitions box.
+- **Web & mobile layout fixes.** Fixed desktop-site / narrow-desktop global bar overflow (tabs, `+`, Ask AI, and Commands stay visible without clipping), dynamic viewport (`100dvh`) and safe-area insets on mobile web, compact mobile navigation/toolbars, wrapped prefab picker tabs, and mobile Stroke order header/canvas sizing.
+
 ## 1.2.56
 
 - **Hear Chinese.** A 🔊 in the look-up panel (key **S**, **Shift S** for slow) plays the word or character; each pinyin syllable plays its own tone, and Chinese right-click menus have **Listen to …**. Uses the system Chinese voice when there is one, otherwise a short online clip.

@@ -45,12 +45,15 @@ export function enhanceSelects() {
         menu.append(row);
       }
       document.body.append(menu);
-      const rect = button.getBoundingClientRect(), margin = 12;
-      menu.style.width = `${Math.min(Math.max(rect.width, select.id === 'recording' ? 330 : compact ? 140 : 210), innerWidth - margin * 2)}px`;
-      const below = innerHeight - rect.bottom - margin, above = rect.top - margin;
-      menu.style.maxHeight = `${Math.min(380, Math.max(below, above))}px`;
-      menu.style.left = `${Math.max(margin, Math.min(rect.left, innerWidth - menu.offsetWidth - margin))}px`;
-      menu.style.top = `${below >= menu.offsetHeight || below >= above ? rect.bottom + 6 : rect.top - menu.offsetHeight - 6}px`;
+      const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      const vw = innerWidth / z, vh = innerHeight / z;
+      const raw = button.getBoundingClientRect(), margin = 12;
+      const rect = { left: raw.left / z, right: raw.right / z, top: raw.top / z, bottom: raw.bottom / z, width: raw.width / z };
+      menu.style.width = `${Math.round(Math.min(Math.max(rect.width, select.id === 'recording' ? 330 : compact ? 140 : 210), vw - margin * 2))}px`;
+      const below = vh - rect.bottom - margin, above = rect.top - margin;
+      menu.style.maxHeight = `${Math.round(Math.min(380, Math.max(120, below, above)))}px`;
+      menu.style.left = `${Math.round(Math.max(margin, Math.min(rect.left, vw - menu.offsetWidth - margin)))}px`;
+      menu.style.top = `${Math.round(below >= menu.offsetHeight || below >= above ? rect.bottom + 6 : Math.max(margin, rect.top - menu.offsetHeight - 6))}px`;
       active = {button, close, openedAt: performance.now()};
       const rows = [...menu.querySelectorAll('[role=option]:not(:disabled)')];
       (rows.find(row => row.getAttribute('aria-selected') === 'true') || (last ? rows.at(-1) : rows[0]))?.focus();

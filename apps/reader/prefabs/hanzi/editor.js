@@ -10,6 +10,7 @@ import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
 import { langToggle } from '../../chinese/zh-window.js';
+import { zhLang, setZhLang } from '../../chinese/translate.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
 const hasLatin = (s) => /[a-zA-Z]/.test(String(s || ''));
@@ -78,17 +79,31 @@ export function open(root, { spec, editing, host }) {
   const pageBtn = button('check', 'Show this step on the page');
   pageBtn.onclick = () => finish(player.index >= player.steps ? null : player.index);
   const practiseBtn = button('draw', 'Practise');
+  const dictsBtn = button('import', 'Dictionaries', { title: 'Download more HSK dictionaries or import a local dictionary (CC-CEDICT, JSON, TSV/CSV)' });
+  dictsBtn.onclick = async () => {
+    try {
+      const [{ openZhSettings }, { chinese }] = await Promise.all([import('../../chinese/settings.js'), import('../../chinese/client.js')]);
+      openZhSettings({ client: () => Promise.resolve(chinese()), tab: 'packs', onClose: () => load(false) });
+    } catch (e) { shell.say(e.message, true); }
+  };
   const ybWrap = make('span', { className: 'hz-yb-wrap' });
-  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
+  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, dictsBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
   shell.canvas.append(stage, sheetPreview, dictBar, actions);
   let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
-  const size = () => Math.max(120, Math.min(240, Math.floor((shell.canvas.clientWidth || 520) / Math.max(1, [...model.text].length) - 24)));
+  const size = () => {
+    const cw = shell.canvas.clientWidth || 520;
+    const narrow = cw < 500;
+    const cap = narrow ? 136 : 240;
+    const floor = narrow ? 88 : 120;
+    return Math.max(floor, Math.min(cap, Math.floor(cw / Math.max(1, [...model.text].length) - 24)));
+  };
 
   // The dictionary's look-up of the characters (load()), for the list of every meaning.
   let lookup = null;
   const defsBox = make('div', { className: 'hz-defs' });
-  // es | en: the meanings again in the other language (updating the caption too).
-  const langSwitch = langToggle({ onChange: () => { glossAuto = true; load(false); } });
+  if (editing && (model.lang === 'es' || model.lang === 'en') && model.lang !== zhLang()) setZhLang(model.lang);
+  // es | en: the meanings again in the other language (updating the caption & trace SVG preview too).
+  const langSwitch = langToggle({ onChange: (lang) => { glossAuto = true; model = normalize({ ...model, lang }); load(false); } });
   const pageMeanings = () => (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
   function setPageMeanings(list) {
     glossAuto = false;
@@ -275,7 +290,7 @@ export function open(root, { spec, editing, host }) {
       const raw = charInput.value.trim();
       if (!raw) return;
       const hanOnly = [...raw].filter(isHan).join('');
-      const latinMatches = raw.match(/[a-zA-ZüÜvV]+[1-5]?/g);
+      const latinMatches = raw.match(/[a-zA-ZüÜvVāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ0-5']+/gu);
       if (hanOnly && !latinMatches) {
         charInput.value = hanOnly;
         pinyinAuto = true; glossAuto = true; variantsAuto = true;
@@ -286,8 +301,8 @@ export function open(root, { spec, editing, host }) {
         const key = latinMatches.join('').toLowerCase().replace(/v/g, 'ü');
         try {
           const { chinese } = await import('../../chinese/client.js');
-          const list = await chinese().candidates(key, { script: model.script, limit: 5 });
-          const top = list?.[0]?.text || '';
+          const res = await chinese().candidates(key, { script: model.script, limit: 5 });
+          const top = res?.items?.[0]?.text || '';
           const combined = (hanOnly + top).slice(0, MAX_CHARS);
           if (combined) {
             charInput.value = combined;
@@ -328,10 +343,12 @@ export function open(root, { spec, editing, host }) {
   let loading = 0;
   async function load(show = true, autoplay = false) {
     const ticket = ++loading;
+    const activeLang = zhLang();
     lookup = null;
     renderDictBar();
     const { spec: next, lookup: found } = await dictionaryFor({
       ...model,
+      lang: activeLang,
       pinyin: pinyinAuto ? '' : model.pinyin,
       gloss: glossAuto ? '' : model.gloss,
       variants: variantsAuto ? '' : model.variants,
@@ -340,12 +357,14 @@ export function open(root, { spec, editing, host }) {
     lookup = found;
     model = normalize({
       ...model,
+      lang: activeLang,
       data: next.data,
       pinyin: pinyinAuto && next.pinyin ? next.pinyin : model.pinyin,
       gloss: glossAuto && next.gloss ? next.gloss : model.gloss,
       variants: variantsAuto && next.variants ? next.variants : model.variants,
     });
     renderDictBar();
+    renderSheetPreview();
     if (show) showPlayer(autoplay);
   }
 

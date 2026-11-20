@@ -123,6 +123,11 @@ document.addEventListener("toggle", (event) => {
   if (!event.target.matches?.("details.bar-menu") || !event.target.open) return;
   for (const menu of document.querySelectorAll("details.bar-menu[open]"))
     if (menu !== event.target) menu.open = false;
+  const bar = $("commandBar");
+  if (bar) {
+    const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    document.documentElement.style.setProperty("--bar-bottom", `${Math.max(36, Math.round(bar.getBoundingClientRect().bottom / z))}px`);
+  }
 }, true);
 document.addEventListener("pointerdown", (event) => {
   if (event.target.closest("#toolbar,.select-menu")) return;
@@ -4645,6 +4650,30 @@ function closeHomeFileMenu() {
   if ($("homeFileMenu")) $("homeFileMenu").hidden = true;
   if ($("emptyOpen")) $("emptyOpen").setAttribute("aria-expanded", "false");
 }
+function placeHomeFileMenu() {
+  const btn = $("emptyOpen"), menu = $("homeFileMenu");
+  if (!btn || !menu || menu.hidden) return;
+  const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+  const vw = innerWidth / z, vh = innerHeight / z;
+  const r = btn.getBoundingClientRect();
+  const leftEdge = r.left / z, rightEdge = r.right / z, topEdge = r.top / z, bottomEdge = r.bottom / z;
+  const w = Math.min(menu.offsetWidth || 260, vw - 16);
+  const preferRight = rightEdge > vw * 0.55;
+  const x = preferRight ? rightEdge - w : leftEdge;
+  menu.style.maxWidth = `${Math.max(180, Math.round(vw - 16))}px`;
+  menu.style.left = `${Math.round(Math.max(8, Math.min(vw - w - 8, x)))}px`;
+  menu.style.right = "auto";
+  const h = menu.offsetHeight || 260;
+  const below = vh - bottomEdge - 10, above = topEdge - 10;
+  if (below >= h || below >= above) {
+    menu.style.top = `${Math.round(bottomEdge + 6)}px`;
+    menu.style.maxHeight = `${Math.max(140, Math.round(below))}px`;
+  } else {
+    const mh = Math.max(140, Math.round(above));
+    menu.style.maxHeight = `${mh}px`;
+    menu.style.top = `${Math.round(Math.max(8, topEdge - Math.min(h, mh) - 6))}px`;
+  }
+}
 if ($("emptyOpen")) {
   $("emptyOpen").onclick = (e) => {
     const menu = $("homeFileMenu");
@@ -4653,7 +4682,10 @@ if ($("emptyOpen")) {
     const next = menu.hidden;
     menu.hidden = !next;
     $("emptyOpen").setAttribute("aria-expanded", String(next));
-    if (next && e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
+    if (next) {
+      placeHomeFileMenu();
+      if (e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
+    }
   };
   // Esc closes it (back on the File button), ↑ ↓ move between its items.
   $("homeFileMenu")?.addEventListener("keydown", (e) => {
@@ -6856,7 +6888,8 @@ $("grabKeep").onclick = async () => {
   if (!grabbed) return;
   try {
     exerciseRefs.push({ name: `Snippet, page ${grabbed.page + 1}`, src: await grabImage(), kind: "image" });
-    status("Kept: it shows beside the canvas when you fill in or solve a figure (right-click it → Fill in / Solve).");
+    syncKeptRefsUi();
+    status(`Kept for exercises (${exerciseRefs.length}) — open from ★ Kept in the top bar or Study → Kept for exercises…`);
     clearGrab();
   } catch (e) { status(e.message, true); }
 };
@@ -7198,6 +7231,101 @@ async function insertPrefab(p, box = null, choice = null) {
 // Snippets kept from the Grab tool (Keep for exercises), shown while filling a figure in; for
 // this session only.
 const exerciseRefs = [];
+let keptRefsWin = null;
+function syncKeptRefsUi() {
+  const n = exerciseRefs.length;
+  const pill = $("keptRefsPill");
+  const count = $("keptRefsCount");
+  if (pill) pill.hidden = !n;
+  if (count) count.textContent = `Kept (${n})`;
+  const menuBtn = $("keptRefsOpen");
+  if (menuBtn) {
+    const label = n ? `Kept for exercises (${n})…` : "Kept for exercises…";
+    const textNode = [...menuBtn.childNodes].find((c) => c.nodeType === 3 && c.textContent.trim());
+    if (textNode) textNode.textContent = label;
+    else menuBtn.append(document.createTextNode(label));
+  }
+  keptRefsWin?.render?.();
+}
+async function openExerciseRefsWindow() {
+  if (keptRefsWin) { keptRefsWin.show(); keptRefsWin.render(); return; }
+  const { movableWindow } = await import("./prefabs/kit/window.js");
+  const win = movableWindow({
+    key: "kept-refs",
+    title: "Kept for exercises",
+    width: 420,
+    height: 520,
+    minWidth: 280,
+    minHeight: 240,
+    onClose: () => { win.destroy(); keptRefsWin = null; },
+  });
+  const host = document.createElement("div");
+  host.className = "kept-refs-window";
+  const bar = document.createElement("div");
+  bar.className = "kept-refs-bar";
+  const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/*", multiple: true, hidden: true });
+  const addBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip" });
+  addBtn.append(icon("image"), document.createTextNode("Add picture…"));
+  addBtn.onclick = () => fileIn.click();
+  fileIn.onchange = () => {
+    for (const f of fileIn.files || []) {
+      exerciseRefs.push({ name: f.name, src: URL.createObjectURL(f), kind: "image" });
+    }
+    fileIn.value = "";
+    syncKeptRefsUi();
+  };
+  const clearBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip danger" });
+  clearBtn.append(icon("trash"), document.createTextNode("Clear all"));
+  clearBtn.onclick = () => { exerciseRefs.length = 0; syncKeptRefsUi(); };
+  bar.append(addBtn, fileIn, Object.assign(document.createElement("span"), { className: "spacer" }), clearBtn);
+  const list = document.createElement("div");
+  list.className = "kept-refs-list";
+  host.append(bar, list);
+  win.body.append(host);
+  const render = () => {
+    clearBtn.hidden = !exerciseRefs.length;
+    if (!exerciseRefs.length) {
+      list.replaceChildren(Object.assign(document.createElement("p"), {
+        className: "muted",
+        textContent: "No snippets kept yet. Use the Grab tool on any page and tap ★ Keep for exercises, or add a picture above. Kept snippets also appear inside figure/chart editors.",
+      }));
+      return;
+    }
+    list.replaceChildren(...exerciseRefs.map((ref, i) => {
+      const fig = document.createElement("figure");
+      fig.className = "kept-ref-card";
+      const cap = document.createElement("figcaption");
+      const nameSpan = Object.assign(document.createElement("span"), { textContent: ref.name || `Snippet ${i + 1}` });
+      const copyBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Copy image", ariaLabel: "Copy image" });
+      copyBtn.append(icon("copy"));
+      copyBtn.onclick = async () => {
+        try {
+          const blob = await (await fetch(ref.src)).blob();
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+          status("Copied snippet image.");
+        } catch { status("Could not copy image on this browser.", true); }
+      };
+      const rmBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Remove", ariaLabel: `Remove ${ref.name || "snippet"}` });
+      rmBtn.append(icon("close"));
+      rmBtn.onclick = () => { exerciseRefs.splice(i, 1); syncKeptRefsUi(); };
+      cap.append(nameSpan, copyBtn, rmBtn);
+      fig.append(cap);
+      if (ref.src && ref.kind === "image") {
+        const img = Object.assign(document.createElement("img"), { src: ref.src, alt: ref.name || "Kept snippet" });
+        img.onclick = () => {
+          const viewer = $("imageViewer"), vImg = $("imageViewerImg");
+          if (viewer && vImg) { vImg.src = ref.src; vImg.alt = ref.name || ""; viewer.showModal(); }
+        };
+        fig.append(img);
+      }
+      return fig;
+    }));
+  };
+  keptRefsWin = { show: () => { win.el.classList.remove("in-tray"); win.el.style.zIndex = "44"; }, render };
+  render();
+}
+if ($("keptRefsOpen")) $("keptRefsOpen").onclick = () => { closeMenus(); openExerciseRefsWindow(); };
+if ($("keptRefsPill")) $("keptRefsPill").onclick = () => openExerciseRefsWindow();
 // The menu bar stays usable over the editors: if another note was opened (or this one closed)
 // meanwhile, what the editor returns is not put on it.
 function sameNote(note, startedEmpty = false) {
@@ -7236,7 +7364,7 @@ async function openFigureEditor(spec, { editing = false, mode = "author", refere
   if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
+      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) { exerciseRefs.push(ref); syncKeptRefsUi(); } }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
@@ -9031,14 +9159,19 @@ try {
   const savedUiZoom = Number(localStorage.getItem("notecomplete-ui-zoom"));
   if (Number.isFinite(savedUiZoom) && savedUiZoom >= 0.7 && savedUiZoom <= 1.6) webUiZoom = savedUiZoom;
 } catch { /* Optional. */ }
-if (!windows?.zoom && webUiZoom !== 1) document.documentElement.style.zoom = String(webUiZoom);
+function syncWebUiZoom(z) {
+  document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  if (z === 1) document.documentElement.style.removeProperty("--ui-zoom");
+  else document.documentElement.style.setProperty("--ui-zoom", String(z));
+}
+if (!windows?.zoom && webUiZoom !== 1) syncWebUiZoom(webUiZoom);
 function applyUiSize(step) {
   if (windows?.zoom) {
     windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch((e) => status(e.message, true));
     return;
   }
   webUiZoom = step === 0 ? 1 : Math.round(Math.min(1.6, Math.max(0.7, webUiZoom + step * 0.1)) * 100) / 100;
-  document.documentElement.style.zoom = webUiZoom === 1 ? "" : String(webUiZoom);
+  syncWebUiZoom(webUiZoom);
   try { localStorage.setItem("notecomplete-ui-zoom", String(webUiZoom)); } catch { /* Optional. */ }
   status(`Interface size ${Math.round(webUiZoom * 100)}%`);
 }

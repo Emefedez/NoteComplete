@@ -149,12 +149,18 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   const checkBtn = button('check', 'Check', 'Mark what is wrong in the answer');
   const solBtn = button('eye', 'Solution', 'Draw the solution under the answer');
   const clearBtn = button('trash', 'Clear all', 'Clear all: start the answer again');
+  const refsJumpBtn = button('star', 'Kept', 'Jump to kept snippets & references ("To look at")');
+  refsJumpBtn.hidden = true;
+  refsJumpBtn.onclick = () => {
+    const heading = [...panel.querySelectorAll('h4')].find((h) => h.textContent === 'To look at');
+    (heading || refList).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const helpBtn = button('help', 'Cheat sheet', 'Cheat sheet: what the mouse and the keys do (?)', { iconOnly: true });
   helpBtn.classList.add('ch-help');
   const spacer = make('span', { className: 'ch-spacer' });
   const cancelBtn = onCancel && button('close', 'Cancel', 'Close without changing the note (Esc)');
   const applyBtn = onApply && button('check', applyLabel, `${applyLabel} on the note`, { className: 'primary' });
-  const bar = make('div', { className: 'ch-bar' }, ...extraBar, undoBtn, redoBtn, modeBox, checkBtn, solBtn, clearBtn, helpBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'ch-bar' }, ...extraBar, undoBtn, redoBtn, modeBox, checkBtn, solBtn, clearBtn, refsJumpBtn, helpBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'ch-palette', role: 'toolbar' });
   palette.setAttribute('aria-label', 'Brushes');
   const canvas = make('div', { className: 'ch-canvas', tabIndex: 0 });
@@ -331,6 +337,9 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     return r.pages ? zoomable(r, box) : box;
   }
   function buildRefs() {
+    refsJumpBtn.hidden = !refs.length;
+    const span = refsJumpBtn.querySelector('span');
+    if (span) span.textContent = `Kept (${refs.length})`;
     refList.replaceChildren(...refs.map((r, i) => {
       const remove = button('close', 'Remove', `Take ${r.name} away`, { iconOnly: true, className: 'ch-mini' });
       remove.onclick = () => { refs.splice(i, 1); buildRefs(); };

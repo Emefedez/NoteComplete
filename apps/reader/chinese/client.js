@@ -90,6 +90,7 @@ export function createClient({
     convertParts: (text, direction) => call('convertParts', text, direction),
     packs: () => pm.packs(),
     async installPack(id, onProgress) { await pm.installPack(id, onProgress); await refreshExpansions(); },
+    async installLocalPack(name, text) { const row = await pm.installLocalPack(name, text); await refreshExpansions(); return row; },
     async removePack(id) { await pm.removePack(id); await refreshExpansions(); },
     // The user dictionary for Settings → Chinese export / import.
     exportUser: () => dict.export(),

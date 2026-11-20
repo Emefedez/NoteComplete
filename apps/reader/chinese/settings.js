@@ -49,11 +49,15 @@ const fmtBytes = (n) => (!n ? '' : n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))
 
 let dialog = null;
 // The Settings → Chinese window. `client`: () => Promise of chinese() (packs, installPack, removePack).
-export function openZhSettings({ client = null } = {}) {
+export function openZhSettings({ client = null, tab = 'input', onClose = null } = {}) {
   if (!dialog) dialog = build(client);
+  else if (client) dialog.__client = client;
+  dialog.__onClose = onClose;
   fill();
-  dialog.showModal();
-  listPacks(client);
+  const tabBtn = dialog.querySelector(`[data-zh-tab="${tab}"]`) || dialog.querySelector('[data-zh-tab="input"]');
+  tabBtn?.click();
+  if (!dialog.open) dialog.showModal();
+  listPacks(dialog.__client);
 }
 
 function build(client) {
@@ -99,7 +103,17 @@ function build(client) {
       <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
       <div class="zh-user-card">
         <div class="zh-user-info">
-          <strong>Favourites &amp; learned vocabulary</strong>
+          <strong>Import local dictionary</strong>
+          <small class="muted">Load CC-CEDICT (<code>.u8</code>/<code>.txt</code>), JSON, TSV, or CSV vocabulary files</small>
+        </div>
+        <div class="zh-user">
+          <button type="button" class="chip" data-pack-import>Import file…</button>
+          <span class="muted" data-pack-status></span>
+        </div>
+      </div>
+      <div class="zh-user-card">
+        <div class="zh-user-info">
+          <strong>Favorites &amp; learned vocabulary</strong>
           <small class="muted">Backup or transfer your starred words and personal choices across devices</small>
         </div>
         <div class="zh-user">
@@ -112,6 +126,7 @@ function build(client) {
   </div>
   <div class="ocr-actions zh-settings-foot"><span class="spacer"></span><button type="button" class="primary" data-close>Done</button></div>`;
   document.body.append(d);
+  d.querySelector('[data-pack-import]')?.prepend(icon('import'));
   d.querySelector('[data-user-export]')?.prepend(icon('export'));
   d.querySelector('[data-user-import]')?.prepend(icon('import'));
   for (const tabBtn of d.querySelectorAll('[data-zh-tab]')) {
@@ -135,10 +150,28 @@ function build(client) {
     zhSettings({ [t.name]: t.type === 'checkbox' ? t.checked : t.name === 'perPage' ? Number(t.value) : t.value });
   });
   d.querySelector('[data-close]').onclick = () => d.close();
+  d.addEventListener('close', () => { const fn = d.__onClose; d.__onClose = null; fn?.(); });
+  const sayPack = (t) => { const el = d.querySelector('[data-pack-status]'); if (el) el.textContent = t; };
+  d.querySelector('[data-pack-import]').onclick = () => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.u8,.txt,.cedict,.json,.tsv,.csv,text/plain,application/json' });
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      sayPack('Importing…');
+      try {
+        const zh = await d.__client?.();
+        if (!zh?.installLocalPack) throw new Error('Dictionary engine unavailable.');
+        const row = await zh.installLocalPack(file.name, await file.text());
+        sayPack(`Imported ${row.words.length.toLocaleString()} words.`);
+        listPacks(d.__client);
+      } catch (e) { sayPack(`Import failed: ${e.message}`); }
+    };
+    input.click();
+  };
   const say = (t) => { d.querySelector('[data-user-status]').textContent = t; };
   d.querySelector('[data-user-export]').onclick = async () => {
     try {
-      const data = await (await client?.())?.exportUser?.();
+      const data = await (await d.__client?.())?.exportUser?.();
       if (!data) return say('Nothing to export.');
       const a = Object.assign(document.createElement('a'), { download: 'notecomplete-chinese-words.json', href: URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' })) });
       a.click();
@@ -151,7 +184,7 @@ function build(client) {
     input.onchange = async () => {
       try {
         const data = JSON.parse(await input.files[0].text());
-        await (await client?.())?.importUser?.(data);
+        await (await d.__client?.())?.importUser?.(data);
         say('Imported.');
       } catch (e) { say(`Import failed: ${e.message}`); }
     };

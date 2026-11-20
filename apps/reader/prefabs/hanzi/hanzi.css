@@ -2,7 +2,15 @@
 .hz-editor .hz-canvas { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; touch-action: auto; }
 .hz-stage-host { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .hz-player { display: grid; gap: 10px; }
+.hz-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.hz-cell { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
 .hz-stage svg, .hz-practice svg { background: #fff; border-radius: 6px; }
+.hz-cell-loop { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; min-height: 0; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; border: 1px solid color-mix(in srgb, var(--k-line) 85%, #0002); background: rgba(255, 255, 255, 0.9); color: #57606a; cursor: pointer; z-index: 2; }
+.hz-cell-loop:hover { border-color: var(--k-accent); color: var(--k-accent); }
+.hz-cell-loop svg { width: 14px; height: 14px; display: block; background: transparent; border-radius: 0; }
+.hz-cell-loop[aria-pressed="true"] { background: var(--k-accent); border-color: var(--k-accent); color: #fff; }
+.hz-loop-all[aria-pressed="true"] { background: var(--k-accent) !important; border-color: var(--k-accent) !important; color: #fff !important; }
+.hz-loop-all.is-partial { background: var(--k-soft) !important; border-color: var(--k-accent) !important; color: var(--k-accent) !important; }
 .hz-practice-status { margin: 6px 0 0; text-align: center; }
 .hz-actions { display: flex; align-items: center; gap: 6px; }
 /* Chosen: pale accent, as everywhere in the app (the solid accent is for small marks). */

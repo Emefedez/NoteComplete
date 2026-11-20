@@ -46,7 +46,7 @@
 }
 body {
   margin: 0;
-  height: 100dvh;
+  height: calc(100dvh / var(--ui-zoom, 1));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2067,8 +2067,9 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
   /* Phones: the menubar stays text and scrolls sideways if needed; menus open full width. */
   header .brand { display: none; }
   .bar-actions { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .bar-actions:has(details[open]) { overflow: visible; -webkit-mask-image: none; mask-image: none; }
   .bar-menu > summary { padding: 3px 7px; }
-  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: 40px; width: auto; max-height: calc(100dvh - 48px); }
+  .bar-menu .menu-content { position: fixed; left: 8px; right: 8px; top: calc(var(--bar-bottom, 40px) + 2px); z-index: 95; width: auto; max-height: calc(100dvh / var(--ui-zoom, 1) - var(--bar-bottom, 40px) - 10px); }
   .bar-menu .menu-content button { min-height: 38px; }
   .palette { margin-top: 8px; }
   .note-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
@@ -4166,7 +4167,7 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 @media (pointer: coarse) { .context-menu button { min-height: 42px; } }
 /* Chinese input (chinese/ime-menu.js): the candidate menu at the caret, docked above the
    keyboard on phones; the 中 toggles; Settings → Chinese. */
-.zh-ime { --zh-cjk: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif; position: fixed; z-index: 92; max-width: min(560px, calc(100vw - 16px)); padding: 4px 4px 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; -webkit-user-select: none; user-select: none; touch-action: none; font-size: 13.5px; }
+.zh-ime { --zh-cjk: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif; position: fixed; z-index: 200; max-width: min(560px, calc(100vw - 16px)); padding: 4px 4px 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; -webkit-user-select: none; user-select: none; touch-action: none; font-size: 13.5px; }
 .zh-ime[hidden] { display: none; }
 .zh-ime-reading { padding: 2px 8px 3px; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zh-ime-chosen { color: var(--ink); font-family: var(--zh-cjk); margin-right: 4px; }
@@ -4578,7 +4579,7 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .cloud-multi-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 #cloudProviderDrop { display: inline-flex; align-items: center; gap: 6px; height: var(--control); padding: 0 10px; font-weight: 500; }
 #cloudProviderDrop .provider-icon, #cloudProviderDrop .ui-icon { width: 14px; height: 14px; flex: none; }
-.cloud-provider-menu { min-width: 220px; z-index: 60; }
+.cloud-provider-menu { min-width: 220px; z-index: 90; }
 .cloud-provider-option { display: flex; align-items: center; gap: 8px; width: 100%; }
 .cloud-option-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--muted); flex: none; }
 .cloud-provider-option.on .cloud-option-icon { color: var(--accent); }
@@ -4682,12 +4683,10 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   display: inline-flex;
 }
 .home-file-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 65;
+  position: fixed;
+  z-index: 90;
   min-width: 260px;
-  max-width: 320px;
+  max-width: min(320px, calc(100vw - 16px));
 }
 .home-file-menu .filter-option kbd { margin-left: auto; }
 /* The New note hub: the export dialog's two columns, as tall as its content (nothing to scroll
@@ -4919,3 +4918,100 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
    the user removes or keeps them (transcript.js). */
 #transcriptWords button.noise { text-decoration: underline wavy #d23b3b; text-decoration-thickness: 1.5px; text-underline-offset: 3px; color: color-mix(in srgb, var(--ink) 70%, #d23b3b); }
 #transcriptWords button.noise:hover { background: color-mix(in srgb, #d23b3b 14%, transparent); }
+
+/* Native mobile WebView wrapper already sits inside SafeAreaView; avoid doubling top/bottom insets. */
+html.nc-native-app header.chrome { padding: 2px 8px; }
+html.nc-native-app body.bar-compact header.chrome { padding: 0 6px; }
+html.nc-native-app .toolbar { padding: 4px 6px 6px; }
+html.nc-native-app .navigation { padding: 2px 6px; }
+html.nc-native-app #status { bottom: calc(var(--above-bars, 0px) + 12px); }
+html.nc-native-app .zh-window.zh-sheet,
+html.nc-native-app .pk-window.pk-phone { padding-bottom: 0; }
+html.nc-native-app .math-keypad { padding-bottom: 6px; }
+
+/* Stroke player: per-character circular dotted loop toggle in top-right + toggle-all button */
+.hz-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.hz-cell { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.hz-cell > svg { display: block; background: #fff; border-radius: 6px; max-width: 100%; height: auto; }
+.hz-cell-loop {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, #0002);
+  background: rgba(255, 255, 255, 0.9);
+  color: #57606a;
+  cursor: pointer;
+  z-index: 2;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.hz-cell-loop:hover { border-color: var(--accent); color: var(--accent); }
+.hz-cell-loop svg { width: 14px; height: 14px; display: block; background: transparent; border-radius: 0; }
+.hz-cell-loop[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.hz-loop-all {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+.hz-loop-all svg { width: 15px; height: 15px; display: block; }
+.hz-loop-all[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.hz-loop-all.is-partial {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Kept for exercises floating viewer + accessible badge */
+.kept-refs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  min-height: 0;
+  padding: 0 8px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  flex: none;
+}
+.kept-refs-pill svg { width: 13px; height: 13px; }
+.kept-refs-window { display: flex; flex-direction: column; gap: 10px; padding: 12px; height: 100%; overflow: hidden; box-sizing: border-box; }
+.kept-refs-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kept-refs-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 10px; align-content: start; }
+.kept-ref-card { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); overflow: hidden; }
+.kept-ref-card figcaption { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; border-bottom: 1px solid var(--line); background: var(--surface); }
+.kept-ref-card figcaption span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kept-ref-card img { display: block; width: 100%; max-height: 280px; object-fit: contain; background: #fff; cursor: zoom-in; }
+
+/* Multi-platform setup tabs & copyable command blocks in Cloud Guide */
+.cg-os-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.cg-os-tab { height: 26px; min-height: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted); font-size: 11.5px; font-weight: 500; cursor: pointer; }
+.cg-os-tab[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.cg-code-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.cg-code-row code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
+.cg-code-row button { flex: none; height: 24px; min-height: 0; padding: 0 8px; font-size: 11px; }
+.cg-checklist { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.cg-checklist li code { font-size: 11.5px; padding: 1px 4px; border-radius: 4px; background: var(--surface); border: 1px solid var(--line); }
+.cg-actions-inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cg-actions-inline button, .cg-actions-inline a { height: 28px; min-height: 0; padding: 0 10px; font-size: 12px; }
+.cloud-guide-dialog[open] { height: min(560px, calc(100dvh / var(--ui-zoom, 1) - 24px)); max-height: calc(100dvh / var(--ui-zoom, 1) - 24px); }

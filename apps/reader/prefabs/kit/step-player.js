@@ -106,7 +106,7 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
   paint();
   return {
     el, controls, caption: captionEl, timeline,
-    get index() { return at; }, get steps() { return n; }, get playing() { return playing; },
+    get index() { return at; }, get steps() { return n; }, get playing() { return playing; }, get speed() { return speed; },
     play, pause, go, forward, replay: () => { go(0); play(); },
     setSteps(count, startAt = 0) { halt(); playing = false; n = Math.max(0, count | 0); at = Math.max(0, Math.min(n, startAt)); paint(); },
     redraw: () => paint(),

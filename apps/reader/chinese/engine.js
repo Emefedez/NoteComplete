@@ -17,7 +17,7 @@
 //   meta.fields order (u16 lengths + blob): readings "xíng:2943 háng:218 xìng", radical "144.0",
 //   definition, simplified, traditional, variants, decomposition "⿰彳亍", etymology "type|hint|phonetic|semantic".
 import { readContainer } from './pack.js';
-import { segment, markTone, SYLLABLES } from './pinyin.js';
+import { segment, fuzzySegment, normalizeToneDigits, markTone, SYLLABLES } from './pinyin.js';
 
 const W_USER = 3, W_SPLIT = 6, WORD_PENALTY = 2, MAX_WORD = 8, UNKNOWN_COST = 30, HALF_LIFE = 30 * 864e5;
 const sc = s => String(s || 's')[0] === 't' ? 't' : 's'; // 's' | 't' | 'simplified' | 'traditional'
@@ -56,8 +56,10 @@ function rankRange(pack, syl, partial) {
 
 // The input as syllables, in up to 4 ways ("xian" → xian | xi'an), each syllable with its rank range,
 // tone and the input length it ends at. rest: trailing letters that fit no syllable.
-export function parseInput(pack, input) {
-  const chunks = [...String(input).matchAll(/[^0-5'\s]+[0-5]?|['\s]+/g)];
+export function parseInput(pack, rawInput) {
+  const raw = String(rawInput ?? '');
+  const input = normalizeToneDigits(raw);
+  const chunks = [...input.matchAll(/[^0-5'\s]+[0-5]?|['\s]+/g)];
   let ways = [{ syls: [], penalty: 0 }], rest = '';
   for (let k = 0; k < chunks.length; k++) {
     const c = chunks[k], text = c[0];
@@ -90,7 +92,28 @@ export function parseInput(pack, input) {
     ways = next.sort((a, b) => a.penalty - b.penalty).slice(0, 4);
     if (rest) break;
   }
-  return { ways: ways.filter(w => w.syls.length), rest };
+  const out = ways.filter(w => w.syls.length);
+  // If tone normalization changed string length (e.g. accented é → e2), map full-input end back to raw.length.
+  if (!rest && input.length !== raw.length) {
+    for (const w of out) if (w.syls.length && w.syls.at(-1).end === input.length) w.syls.at(-1).end = raw.length;
+  }
+  return { ways: out, rest };
+}
+
+function parseFuzzyWays(pack, rawInput) {
+  const raw = String(rawInput ?? '');
+  const norm = normalizeToneDigits(raw).replace(/[0-5]/g, '').replace(/\s+/g, "'").trim();
+  const splits = fuzzySegment(norm, { limit: 4, maxEdits: 2 });
+  if (!splits?.length) return [];
+  const ways = [];
+  for (const parts of splits) {
+    const syls = parts.map((s, i) => {
+      const range = rankRange(pack, s, false);
+      return range && { syl: s, range, partial: false, tone: null, end: i === parts.length - 1 ? raw.length : Math.min(raw.length, Math.round(((i + 1) / parts.length) * raw.length)) };
+    });
+    if (syls.every(Boolean)) ways.push({ syls, penalty: 0 });
+  }
+  return ways;
 }
 
 export function createEngine({ ime, chars = null }) {
@@ -161,37 +184,53 @@ export function createEngine({ ime, chars = null }) {
 
   function candidates(input, { script = 's', limit = 60, now = Date.now() } = {}) {
     script = sc(script);
+    const rawLen = String(input ?? '').length;
     const { ways, rest } = parseInput(pack, input);
-    if (!ways.length) return { reading: '', rest: String(input), items: [] };
     // One item per written form and coverage: the best-scoring reading of it (的 de5 over di1).
     const found = new Map();
-    ways.forEach((way, wi) => {
-      for (let k = way.syls.length; k >= 1; k--) {
-        const consumed = way.syls[k - 1].end;
-        matches(way.syls.slice(0, k), k, v => {
-          const score = lfView(v, script) + userBoost(v, script, now) - wi * W_SPLIT;
-          const it = item(v, script, consumed), key = it.text + '\t' + consumed;
-          const old = found.get(key);
-          if (!old || old.score < score) found.set(key, { ...it, score, level: Math.max(it.level, old?.level || 0) });
-        });
-      }
-    });
-    let items = [...found.values()].sort((a, b) => b.consumed - a.consumed || b.score - a.score);
+    const collect = (list, penaltyOffset = 0, extra = {}) => {
+      list.forEach((way, wi) => {
+        for (let k = way.syls.length; k >= 1; k--) {
+          if (extra.fuzzy && k !== way.syls.length) continue;
+          const consumed = way.syls[k - 1].end;
+          matches(way.syls.slice(0, k), k, v => {
+            const score = lfView(v, script) + userBoost(v, script, now) - wi * W_SPLIT - penaltyOffset;
+            const it = item(v, script, consumed, extra), key = it.text + '\t' + consumed;
+            const old = found.get(key);
+            if (!old || old.score < score) found.set(key, { ...it, score, level: Math.max(it.level, old?.level || 0) });
+          });
+        }
+      });
+    };
+    collect(ways);
+    // Typo-tolerant fallback when exact parsing failed, left trailing letters, or found no full-input match.
+    const hasExactFull = !rest && ways.length > 0 && [...found.values()].some((it) => it.consumed >= rawLen);
+    let fuzzyWays = [];
+    if (!hasExactFull && rawLen >= 2) {
+      fuzzyWays = parseFuzzyWays(pack, input);
+      if (fuzzyWays.length) collect(fuzzyWays, 12, { fuzzy: true });
+    }
+    if (!ways.length && !fuzzyWays.length) return { reading: '', rest: String(input), items: [] };
+    let items = [...found.values()].sort((a, b) => b.consumed - a.consumed || (a.fuzzy ? 1 : 0) - (b.fuzzy ? 1 : 0) || b.score - a.score);
     // The sentence: the cheapest path over the whole input (any way of splitting it), shown
     // when it has several words.
     let best = null;
-    ways.forEach((way, wi) => {
+    const sentenceWays = (!rest && ways.length) ? ways : fuzzyWays;
+    sentenceWays.forEach((way, wi) => {
       const path = viterbi(way.syls, script, now);
-      if (path && (!best || path.cost + wi * W_SPLIT < best.cost)) best = { cost: path.cost + wi * W_SPLIT, words: path.words, end: way.syls.at(-1).end };
+      if (path && (!best || path.cost + wi * W_SPLIT < best.cost)) best = { cost: path.cost + wi * W_SPLIT, words: path.words, end: way.syls.at(-1).end, fuzzy: sentenceWays === fuzzyWays };
     });
     if (best?.words.length > 1) {
       const text = best.words.map(v => display(v, script)).join('');
-      items = items.filter(it => !(it.text === text && it.consumed === best.end));
-      items.unshift({ text, pinyin: best.words.map(v => pinyinOf(v.keys)).join(' '), consumed: best.end, level: Math.max(...best.words.map(v => v.level || 0)), gloss: '', sentence: true });
+      const hasFullWord = items.some((it) => it.consumed >= best.end && !it.sentence);
+      if (!best.fuzzy || !hasFullWord) {
+        items = items.filter(it => !(it.text === text && it.consumed === best.end));
+        items.unshift({ text, pinyin: best.words.map(v => pinyinOf(v.keys)).join(' '), consumed: best.end, level: Math.max(...best.words.map(v => v.level || 0)), gloss: '', sentence: true, ...(best.fuzzy ? { fuzzy: true } : {}) });
+      }
     }
-    const first = ways[0].syls;
+    const first = (ways[0] || fuzzyWays[0]).syls;
     return {
-      reading: first.map(s => markTone(s.syl, s.tone === 5 ? 0 : s.tone)).join(' '), rest,
+      reading: first.map(s => markTone(s.syl, s.tone === 5 ? 0 : s.tone)).join(' '), rest: fuzzyWays.length && !ways.length ? '' : rest,
       items: items.slice(0, limit).map(({ score, ...it }) => it),
     };
   }

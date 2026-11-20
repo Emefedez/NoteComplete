@@ -15,11 +15,17 @@ const STORE = 'pk-window:';
 export const isPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 600px), (max-height: 500px) and (orientation: landscape)').matches;
 // How much of a window stays on the screen when it is pushed out (floating.js uses the same).
 const GRAB = 56;
+const uiZoom = () => (typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(document.documentElement).zoom) || 1 : 1);
 const modalTop = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--modal-top')) || 0;
+const barBottom = () => {
+  const bar = document.getElementById('commandBar');
+  return bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom / uiZoom())) : 0;
+};
 
 // Where a window may be: the whole browser window (it may cover the top bar when moved there).
 export function windowArea() {
-  return { left: 0, top: 0, width: Math.max(0, innerWidth), height: Math.max(0, innerHeight) };
+  const z = uiZoom();
+  return { left: 0, top: 0, width: Math.max(0, Math.round(innerWidth / z)), height: Math.max(0, Math.round(innerHeight / z)) };
 }
 // A rect ({ left, top, width, height }, page pixels) kept whole inside `area` and no smaller
 // than `min`: what a drag, a resize or a smaller browser window leaves.
@@ -106,9 +112,9 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     const area = windowArea();
     el.classList.toggle('pk-phone', full());
     if (full()) {
-      // The whole screen under the tab strip; its desktop place stays remembered.
-      const top = modalTop();
-      Object.assign(el.style, { left: '0px', top: `${top}px`, width: '100%', height: `${innerHeight - top}px`, maxHeight: '', zIndex: '35' });
+      // The whole screen right under the command/tab bar; its desktop place stays remembered.
+      const top = Math.max(modalTop(), barBottom());
+      Object.assign(el.style, { left: '0px', top: `${top}px`, width: '100%', height: `${Math.max(200, area.height - top)}px`, maxHeight: '', zIndex: '42' });
       return;
     }
     // An auto height follows the content (measured while not squashed), up to the screen.

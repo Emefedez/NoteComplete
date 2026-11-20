@@ -62,9 +62,166 @@ export function markTone(syl, tone) {
   return (s.slice(0, i + 1) + MARKS[t] + s.slice(i + 1)).normalize('NFC');
 }
 
+// Move mid-syllable tone digits to the end of their syllable: "zho1ngwén" → "zhong1wen2",
+// "zhongwe2n" → "zhongwen2", "zho1ngwe2n" → "zhong1wen2", "zh1ong" → "zhong1", "ha3o" → "hao3",
+// while keeping "ni3hao" and "ma1ne" intact.
+export function normalizeToneDigits(text) {
+  const s = marksToNumbers(String(text ?? '').normalize('NFC'));
+  // Tokenize into alternating runs of letters, digits, and separators so adjacent digits never mask each other.
+  const toks = s.match(/[A-Za-zÜüÊê:]+|[0-5]|[^A-Za-zÜüÊê:0-5]+/g);
+  if (!toks || toks.length < 3) return s;
+  const isWord = (t) => /^[A-Za-zÜüÊê:]+$/.test(t);
+  const isDigit = (t) => /^[0-5]$/.test(t);
+  for (let i = 1; i < toks.length - 1; i++) {
+    if (!isDigit(toks[i]) || !isWord(toks[i - 1]) || !isWord(toks[i + 1])) continue;
+    const left = toks[i - 1], right = toks[i + 1];
+    const leftSeg = segment(left, { partial: false, limit: 1 });
+    const leftOk = Boolean(leftSeg);
+    const rightSeg = segment(right, { partial: true, limit: 1 });
+    const rightStartsRare = !rightSeg || RARE.has(rightSeg[0][0].toLowerCase());
+    // Find the shortest coda completing the syllable before the digit (preferring "ng" over "n" when valid).
+    let pick = 0;
+    const maxTake = Math.min(5, right.length);
+    for (let take = 1; take <= maxTake; take++) {
+      const coda = right.slice(0, take), codaLow = fixU(coda).toLowerCase();
+      const rest = right.slice(take);
+      if (leftOk && codaLow !== 'ng' && !rightStartsRare) continue;
+      // Ensure `coda` completes ONE syllable (not a second whole syllable): check tail of left + coda.
+      const combined = segment(left + coda, { partial: false, limit: 1 });
+      if (!combined) continue;
+      if (leftSeg && combined[0].length > leftSeg[0].length) continue;
+      // If `rest` is non-empty and the next token isn't a mid-syllable digit of `rest`, check `rest` can start a syllable.
+      const nextIsDigit = i + 2 < toks.length && isDigit(toks[i + 2]);
+      if (rest && !nextIsDigit && !segment(rest, { partial: true, limit: 1 })) continue;
+      pick = take;
+      // If `coda` ended in "n" and next char is "g" forming "-ng" (e.g. "zho1ng"), extend to "ng".
+      if (codaLow.endsWith('n') && right[take]?.toLowerCase() === 'g') {
+        const ngCombined = segment(left + right.slice(0, take + 1), { partial: false, limit: 1 });
+        const ngRest = right.slice(take + 1);
+        if (ngCombined && (!leftSeg || ngCombined[0].length <= leftSeg[0].length)
+          && (!ngRest || nextIsDigit || segment(ngRest, { partial: true, limit: 1 }))) {
+          pick = take + 1;
+        }
+      }
+      break;
+    }
+    if (pick > 0) {
+      toks[i - 1] = left + right.slice(0, pick);
+      toks[i + 1] = right.slice(pick);
+    }
+  }
+  return toks.join('');
+}
+
+// Fast edit-distance <= 1 check (returns 'transpose' | 'sub' | 'insdel' | false).
+function editDist1(a, b) {
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  if (la === lb) {
+    let i = 0;
+    while (i < la && a[i] === b[i]) i++;
+    if (i === la) return false;
+    // Substitution
+    if (a.slice(i + 1) === b.slice(i + 1)) return 'sub';
+    // Adjacent transposition
+    return (i + 1 < la && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2)) ? 'transpose' : false;
+  }
+  const [short, long] = la < lb ? [a, b] : [b, a];
+  let i = 0, j = 0, diff = false;
+  while (i < short.length && j < long.length) {
+    if (short[i] === long[j]) { i++; j++; }
+    else { if (diff) return false; diff = true; j++; }
+  }
+  return 'insdel';
+}
+
+const SYL_BY_LEN = new Map();
+for (const s of SYLLABLE_LIST) {
+  if (RARE.has(s)) continue;
+  const arr = SYL_BY_LEN.get(s.length) || [];
+  arr.push(s);
+  SYL_BY_LEN.set(s.length, arr);
+}
+const FUZZY_CACHE = new Map();
+function nearSyllables(piece) {
+  let hit = FUZZY_CACHE.get(piece);
+  if (hit) return hit;
+  const out = [];
+  const len = piece.length;
+  if (len >= 2 && len <= 7) {
+    for (let l = Math.max(1, len - 1); l <= Math.min(6, len + 1); l++) {
+      for (const cand of SYL_BY_LEN.get(l) || []) {
+        const kind = editDist1(piece, cand);
+        if (!kind) continue;
+        // Prefer transpositions (xei→xie, hoa→hao, zhnog→zhong), missing g in -on→-ong, or same initial.
+        let bonus = 0;
+        if (kind === 'transpose') bonus = -6;
+        else if (piece + 'g' === cand) bonus = -5;
+        else if (cand[0] === piece[0] && cand.at(-1) === piece.at(-1)) bonus = -3;
+        else if (cand[0] === piece[0]) bonus = -2;
+        out.push({ syl: cand, extra: 18 + bonus });
+      }
+    }
+  }
+  out.sort((a, b) => a.extra - b.extra || a.syl.localeCompare(b.syl));
+  hit = out.slice(0, 6);
+  if (FUZZY_CACHE.size > 500) FUZZY_CACHE.clear();
+  FUZZY_CACHE.set(piece, hit);
+  return hit;
+}
+
+// Typo-tolerant segmentation: finds up to `limit` valid syllable sequences within `maxEdits`
+// single-character typos (e.g. "zhonwen" → [["zhong","wen"]], "nihoa" → [["ni","hao"]]).
+export function fuzzySegment(letters, { limit = 4, maxEdits = 2 } = {}) {
+  const src = fixU(String(letters ?? '').normalize('NFC'));
+  const low = src.toLowerCase();
+  if (!low || low.length > 24 || /[^a-zü']/.test(low)) return null;
+  const n = low.length;
+  const best = Array.from({ length: n + 1 }, () => []);
+  best[0] = [{ parts: [], cost: 0, edits: 0 }];
+  const keep = (list, item) => {
+    const key = item.parts.join("'");
+    const idx = list.findIndex((x) => x.parts.join("'") === key);
+    if (idx >= 0) { if (item.cost < list[idx].cost) list[idx] = item; else return; }
+    else list.push(item);
+    list.sort((a, b) => a.cost - b.cost || a.edits - b.edits);
+    if (list.length > 8) list.length = 8;
+  };
+  for (let i = 0; i < n; i++) {
+    if (!best[i].length) continue;
+    if (low[i] === "'") {
+      for (const b of best[i]) keep(best[i + 1], { ...b, apos: true });
+      continue;
+    }
+    for (let j = i + 1; j <= Math.min(n, i + 7); j++) {
+      const piece = low.slice(i, j);
+      if (piece.includes("'")) break;
+      if (SYLLABLES.has(piece)) {
+        for (const b of best[i]) {
+          let cost = b.cost + 10 + (RARE.has(piece) ? 25 : 0);
+          if (b.parts.length && !b.apos && /^[aeoê]/.test(piece)) cost += 12;
+          keep(best[j], { parts: [...b.parts, piece], cost, edits: b.edits });
+        }
+      } else if (piece.length >= 2) {
+        const nears = nearSyllables(piece);
+        for (const { syl, extra } of nears) {
+          for (const b of best[i]) {
+            if (b.edits >= maxEdits) continue;
+            let cost = b.cost + 10 + extra;
+            if (b.parts.length && !b.apos && /^[aeoê]/.test(syl)) cost += 12;
+            keep(best[j], { parts: [...b.parts, syl], cost, edits: b.edits + 1 });
+          }
+        }
+      }
+    }
+  }
+  const out = best[n].filter((b) => b.parts.length && b.edits > 0);
+  return out.length ? out.slice(0, limit).map((b) => b.parts) : null;
+}
+
 // A syllable (any case, v / u: allowed) followed by a tone digit: "ni3 hao3, Zhong1guo2" → "nǐ hǎo, Zhōngguó".
 export function numbersToMarks(text) {
-  return String(text).replace(/([A-Za-zÜüÊê:]+)([0-5])/g, (all, letters, d) => {
+  return normalizeToneDigits(text).replace(/([A-Za-zÜüÊê:]+)([0-5])/g, (all, letters, d) => {
     const n = fixU(letters).toLowerCase();
     if (SYLLABLES.has(n)) return markTone(letters, +d);
     const split = segment(letters, { partial: false });
@@ -152,7 +309,8 @@ function push(list, item, limit) {
 // A part that is only the start of a syllable gets partial:true; letters that fit nothing get invalid:true.
 export function splitInput(buffer) {
   const out = [];
-  const chunks = String(buffer ?? '').match(/[^0-5']+[0-5]?|'/g) || [];
+  const norm = normalizeToneDigits(buffer);
+  const chunks = norm.match(/[^0-5']+[0-5]?|'/g) || [];
   chunks.forEach((chunk, k) => {
     if (chunk === "'") return;
     const m = /^(.*?)([0-5])?$/.exec(chunk);

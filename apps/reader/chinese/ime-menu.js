@@ -110,6 +110,7 @@ function render() {
       if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
     }
     if (item.level > 0) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: item.level >= 7 ? 'HSK 7–9' : `HSK ${item.level}`, title: `HSK level ${item.level >= 7 ? '7–9' : item.level}` }));
+    if (item.fuzzy) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: '≈', title: 'Similar word suggestion' }));
     if (item.sentence) li.classList.add('zh-ime-sentence');
     if (item.gloss) li.title = item.gloss;
     list.append(li);
@@ -140,22 +141,47 @@ function docked(win) {
 
 function position() {
   if (!el || el.hidden || !owner) return;
-  const win = el.ownerDocument.defaultView;
+  const doc = el.ownerDocument;
+  const win = doc.defaultView;
+  const zRaw = parseFloat(doc.documentElement.style.zoom);
+  const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
   const dock = docked(win);
   el.classList.toggle('zh-ime-docked', dock);
-  const vp = viewportBox(win);
+  const vpRaw = viewportBox(win);
+  const vp = { left: vpRaw.left / z, top: vpRaw.top / z, width: vpRaw.width / z, height: vpRaw.height / z };
   if (dock) {
-    Object.assign(el.style, { left: '0px', top: '', bottom: `${dockOffset(win.innerHeight, vp)}px` });
+    Object.assign(el.style, { left: '0px', top: '', bottom: `${dockOffset(win.innerHeight / z, vp)}px` });
     return;
   }
-  const caret = caretRect(owner);
-  const keypad = el.ownerDocument.querySelector('.math-keypad:not([hidden])');
-  const kTop = keypad ? keypad.getBoundingClientRect().top : null;
+  const cRaw = caretRect(owner);
+  const caret = { left: cRaw.left / z, right: cRaw.right / z, top: cRaw.top / z, bottom: cRaw.bottom / z };
+  const keypad = doc.querySelector('.math-keypad:not([hidden])');
+  const kTop = keypad ? keypad.getBoundingClientRect().top / z : null;
   el.style.bottom = '';
-  const r = placeMenu(caret, { width: el.offsetWidth, height: el.offsetHeight }, vp, kTop);
+  const size = { width: el.offsetWidth, height: el.offsetHeight };
+  const r = placeMenu(caret, size, vp, kTop);
+  let top = r.top;
+  // Avoid overlapping the floating text-format bar (font/size/colour controls) when space permits.
+  const fmt = doc.querySelector('.text-format:not([hidden])');
+  if (fmt) {
+    const fr = fmt.getBoundingClientRect();
+    if (fr.width > 0 && fr.height > 0) {
+      const fTop = fr.top / z, fBot = fr.bottom / z, fLeft = fr.left / z, fRight = fr.right / z;
+      const horizOverlap = r.left < fRight && (r.left + size.width) > fLeft;
+      const vertOverlap = top < fBot && (top + size.height) > fTop;
+      if (horizOverlap && vertOverlap) {
+        const bottomLimit = Math.min(vp.top + vp.height, kTop ?? Infinity) - 8;
+        const belowFmt = fBot + 6;
+        const aboveFmt = fTop - size.height - 6;
+        if (belowFmt + size.height <= bottomLimit && belowFmt >= caret.bottom) top = belowFmt;
+        else if (aboveFmt >= vp.top + 8) top = aboveFmt;
+        else if (belowFmt + size.height <= bottomLimit) top = belowFmt;
+      }
+    }
+  }
   el.style.left = `${r.left}px`;
-  el.style.top = `${r.top}px`;
-  el.classList.toggle('zh-ime-above', r.above);
+  el.style.top = `${top}px`;
+  el.classList.toggle('zh-ime-above', top < caret.top);
 }
 const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(position); };
 let listening = false;

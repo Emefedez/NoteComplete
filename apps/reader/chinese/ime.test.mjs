@@ -206,10 +206,54 @@ test('a repeated Space keydown does not commit twice', () => {
   const r = chord([...seq('nihao'), 'v', { type: 'spaceDown', repeat: true }, 'v', '^', '^'], { dict: MANY });
   assert.equal(r.text, '你好');
   assert.equal(r.results.filter((x) => x.commit).length, 1);
-  // With nothing typed, Space is an ordinary space.
-  assert.equal(imeReduce(imeInitial('hanzi'), { type: 'spaceDown' }).handled, undefined);
+  // With nothing typed in Hanzi mode, holding Space absorbs repeats and inserts one space only on release.
+  let s = imeInitial('hanzi');
+  const d1 = imeReduce(s, { type: 'spaceDown' });
+  assert.equal(d1.handled, true);
+  assert.equal(d1.commit, undefined);
+  const dRep = imeReduce(d1.state, { type: 'spaceDown', repeat: true });
+  assert.equal(dRep.handled, true);
+  assert.equal(dRep.commit, undefined);
+  const up = imeReduce(dRep.state, { type: 'spaceUp' });
+  assert.equal(up.handled, true);
+  assert.equal(up.commit, ' ');
+  // Holding Space with empty buffer + pressing a digit or letter inserts no space and fills buffer.
+  const hold = imeReduce(imeInitial('hanzi'), { type: 'spaceDown' }).state;
+  const digitHeld = imeReduce(hold, { key: '2' });
+  assert.equal(digitHeld.handled, true);
+  assert.equal(imeReduce(digitHeld.state, { type: 'spaceUp' }).commit, undefined);
+  const rolled = imeReduce(hold, { key: 'n' });
+  assert.equal(rolled.state.buffer, 'n');
+  assert.equal(imeReduce(rolled.state, { type: 'spaceUp' }).commit, undefined);
   // Pinyin mode keeps Space as it was.
   assert.equal(imeReduce(imeInitial('pinyin'), { type: 'spaceDown' }).handled, undefined);
+});
+
+test('mid-syllable tone digits, accented vowels, and digits before vowels wait cleanly without spacing', () => {
+  // Dead key passes through so Spanish/European keyboards can compose accented vowels like é.
+  const mid = imeReduce(imeInitial('hanzi'), { key: 'z' }).state;
+  assert.equal(imeReduce(mid, { key: 'Dead' }).handled, undefined);
+  // Typing zho1ngwén keeps all characters in the buffer without prematurely committing.
+  let s = imeInitial('hanzi');
+  for (const ch of 'zho1ngwén') {
+    const out = imeReduce(s, { key: ch });
+    assert.equal(out.handled, true);
+    assert.equal(out.commit, undefined);
+    s = out.state;
+  }
+  assert.equal(s.buffer, 'zho1ngwén');
+  // In Pinyin mode, pressing 1 after "zh" or "zho" waits for the rest of the syllable instead of committing "zh1".
+  let ps = imeInitial('pinyin');
+  for (const ch of 'zho1n') {
+    const out = imeReduce(ps, { key: ch });
+    assert.equal(out.commit, undefined);
+    ps = out.state;
+  }
+  assert.equal(ps.buffer, 'zho1n');
+  const done = imeReduce(ps, { key: 'g' });
+  assert.equal(done.state.buffer, 'zho1ng');
+  const fin = imeReduce(done.state, { key: ' ' });
+  assert.equal(fin.commit, 'zhōng');
 });
 
 test('a letter rolled over a held Space takes Space\'s choice first', () => {

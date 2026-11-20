@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { SYLLABLES, SYLLABLE_LIST, normalise, markTone, numbersToMarks, marksToNumbers, segment, splitInput, readingOf, hasMarkedPinyin } from './pinyin.js';
+import { SYLLABLES, SYLLABLE_LIST, normalise, markTone, numbersToMarks, marksToNumbers, normalizeToneDigits, fuzzySegment, segment, splitInput, readingOf, hasMarkedPinyin } from './pinyin.js';
 
 test('the syllable table', () => {
   assert.equal(new Set(SYLLABLE_LIST).size, SYLLABLE_LIST.length);
@@ -72,4 +72,17 @@ test('splitInput', () => {
   assert.equal(readingOf('ni3hao3'), 'nǐ hǎo');
   assert.ok(hasMarkedPinyin('wǒ shì'));
   assert.ok(!hasMarkedPinyin('cafe'));
+});
+
+test('normalizeToneDigits and fuzzySegment handle mid-syllable tones and typos', () => {
+  assert.equal(normalizeToneDigits('zho1ngwén'), 'zhong1wen2');
+  assert.equal(normalizeToneDigits('zhongwe2n'), 'zhongwen2');
+  assert.equal(normalizeToneDigits('zho1ngwe2n'), 'zhong1wen2');
+  assert.equal(normalizeToneDigits('zh1ongwen'), 'zhong1wen');
+  assert.equal(normalizeToneDigits('ni3hao3'), 'ni3hao3');
+  assert.equal(normalizeToneDigits('ma1ne'), 'ma1ne');
+  assert.equal(numbersToMarks('zho1ngwén'), 'zhōngwén');
+  assert.deepEqual(fuzzySegment('zhonwen')[0], ['zhong', 'wen']);
+  assert.deepEqual(fuzzySegment('nihoa')[0], ['ni', 'hao']);
+  assert.deepEqual(fuzzySegment('xiexei')[0], ['xie', 'xie']);
 });
