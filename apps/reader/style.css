@@ -359,13 +359,24 @@ main {
 #textRubyToggle { min-width: 30px; min-height: 28px; padding: 2px 6px 0; border-radius: 6px; font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 #textRubyToggle ruby { ruby-position: over; }
 #textRubyToggle rt { font-size: 8px; line-height: 1; font-weight: 500; }
+.text-body-pane { flex: 1; min-width: 0; display: flex; container-type: inline-size; }
+.text-body-pane:has(> #textBody[hidden]) { display: none; }
 #textView.split-preview #textEditor { order: 1; flex: 1 1 50%; min-width: 0; border-right: 1px solid var(--line); }
-#textView.split-preview #textBody { order: 2; flex: 1 1 50%; min-width: 0; padding: 22px 24px 30vh; }
+#textView.split-preview .text-body-pane { order: 2; flex: 1 1 50%; min-width: 0; }
+#textView.split-preview #textBody { padding-top: 22px; padding-bottom: 30vh; }
 @media (max-width: 720px) {
   #textView.split-preview .side-body { flex-direction: column; }
   #textView.split-preview #textEditor { border-right: 0; border-bottom: 1px solid var(--line); }
 }
-.notes-render.text-doc { flex: 1; min-height: 0; overflow: auto; padding: 28px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); line-height: 1.65; background: var(--surface); }
+/* Markdown / text viewer & editor side spacing + snap alignment (left / center / right). */
+.text-layout-controls { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.text-width-select { height: 26px; min-height: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--fill); color: var(--ink); font-size: 11.5px; font-weight: 500; cursor: pointer; }
+.text-width-select:hover, .text-width-select:focus { border-color: var(--accent); outline: none; }
+#textView .page-align { background: var(--surface); }
+#textView .page-align button { min-width: 26px; width: 26px; height: 24px; min-height: 24px; padding: 0; border: 0; background: transparent; }
+#textView .page-align button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+#textView.diagram-editing .html-bar > .text-layout-controls { display: none; }
+.notes-render.text-doc { flex: 1; min-height: 0; width: 100%; overflow: auto; padding: 28px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); line-height: 1.65; background: var(--surface); }
 .text-doc:focus { outline: none; }
 .notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
 /* A .puml file in the UML editor (diagram-doc.js): the editor fills the document view. */
@@ -393,11 +404,35 @@ main {
 body.pages-dark .text-diagram .diagram-view img { filter: invert(0.88) hue-rotate(180deg); }
 .text-diagram .diagram-note { max-width: 760px; margin: 0 auto 16px; padding: 10px 14px; border-radius: var(--radius-box, 8px); background: var(--fill); color: var(--ink); font-size: calc(14px * var(--text-zoom, 1)); }
 .text-diagram .diagram-source { max-width: 760px; margin: 0 auto; white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
-.side-body > .doc-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
+.side-body > .doc-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); container-type: inline-size; }
 .doc-editor[hidden] { display: none; }
-.doc-editor .notes-commands .TMCommandBar { padding-inline: max(16px, calc((100% - 760px) / 2)); }
-.doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
-.doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100% - 760px) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
+.doc-editor .notes-commands .TMCommandBar { padding-inline: max(16px, calc((100cqi - var(--text-width, 760px)) / 2)); }
+.doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
+.doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
+#textView[data-text-align="left"] :is(.notes-render.text-doc:not(.text-diagram-editor), .doc-editor .notes-editor .TinyMDE, .doc-editor-plain) {
+  padding-left: 24px;
+  padding-right: max(24px, calc(100cqi - var(--text-width, 760px) - 24px));
+}
+#textView[data-text-align="left"] .doc-editor .notes-commands .TMCommandBar {
+  padding-left: 16px;
+  padding-right: max(16px, calc(100cqi - var(--text-width, 760px) - 16px));
+}
+#textView[data-text-align="right"] :is(.notes-render.text-doc:not(.text-diagram-editor), .doc-editor .notes-editor .TinyMDE, .doc-editor-plain) {
+  padding-left: max(24px, calc(100cqi - var(--text-width, 760px) - 24px));
+  padding-right: 24px;
+}
+#textView[data-text-align="right"] .doc-editor .notes-commands .TMCommandBar {
+  padding-left: max(16px, calc(100cqi - var(--text-width, 760px) - 16px));
+  padding-right: 16px;
+}
+#textView[data-text-width="full"] :is(.notes-render.text-doc:not(.text-diagram-editor), .doc-editor .notes-editor .TinyMDE, .doc-editor-plain) {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+#textView[data-text-width="full"] .doc-editor .notes-commands .TMCommandBar {
+  padding-left: 16px;
+  padding-right: 16px;
+}
 .doc-editor-plain:focus, .doc-editor-plain:focus-visible { outline: none; }
 #textEdit[aria-pressed="true"], #htmlEdit[aria-pressed="true"], #htmlNotes[aria-expanded="true"], #textNotes[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
 .html-bar .zoom-controls { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; }

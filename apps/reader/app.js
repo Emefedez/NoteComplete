@@ -5404,6 +5404,30 @@ for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick 
 $("pageAlignFree").onclick = () => setPageAlign($("pages").dataset.align === "free" ? "center" : "free");
 for (const b of document.querySelectorAll("[data-align-menu]")) b.onclick = () => { setPageAlign(b.dataset.alignMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
 try { setPageAlign(["left", "right", "free"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
+// Markdown / text viewer & editor side spacing (width) and snap alignment (left, center, right); remembered.
+const TEXT_WIDTHS = new Set(["480", "640", "760", "1000", "1280", "full"]);
+function setTextAlign(align) {
+  const next = ["left", "right"].includes(align) ? align : "center";
+  const view = $("textView");
+  if (view) view.dataset.textAlign = next;
+  for (const b of document.querySelectorAll("#textAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === next));
+  try { localStorage.setItem("notecomplete-text-align", next); } catch { /* Optional. */ }
+}
+function setTextWidth(width) {
+  const next = TEXT_WIDTHS.has(String(width)) ? String(width) : "760";
+  const view = $("textView");
+  if (view) {
+    view.dataset.textWidth = next;
+    view.style.setProperty("--text-width", next === "full" ? "100%" : `${next}px`);
+  }
+  const sel = $("textWidth");
+  if (sel) sel.value = next;
+  try { localStorage.setItem("notecomplete-text-width", next); } catch { /* Optional. */ }
+}
+for (const b of document.querySelectorAll("#textAlign [data-align]")) b.onclick = () => setTextAlign(b.dataset.align);
+if ($("textWidth")) $("textWidth").onchange = (e) => setTextWidth(e.target.value);
+try { setTextAlign(localStorage.getItem("notecomplete-text-align") || "center"); } catch { setTextAlign("center"); }
+try { setTextWidth(localStorage.getItem("notecomplete-text-width") || "760"); } catch { setTextWidth("760"); }
 // Side-by-side 2-up page spread toggle; remembered on this device.
 function setPageSpread(value) {
   const next = Number(value) === 2 ? 2 : 1;
