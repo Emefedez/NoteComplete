@@ -19,6 +19,104 @@ const IDC = /[⿰-⿿]/u;
 // How the parts sit (the first Ideographic Description Character of the decomposition).
 const IDC_NAMES = { '⿰': 'left and right', '⿱': 'top and bottom', '⿲': 'left, middle and right', '⿳': 'top, middle and bottom', '⿴': 'enclosed', '⿵': 'open at the bottom', '⿶': 'open at the top', '⿷': 'open at the right', '⿸': 'from the top left', '⿹': 'from the top right', '⿺': 'from the bottom left', '⿻': 'overlaid' };
 const ETYMOLOGY = { ideographic: 'Ideographic', pictographic: 'Pictographic', pictophonetic: 'Sound and meaning' };
+// Crisp bilingual (en / es) meanings for common Kangxi radicals & component variants.
+const COMPONENT_MEANINGS = {
+  一: ['one', 'uno'], 二: ['two', 'dos'], 十: ['ten', 'diez'], 八: ['eight', 'ocho'],
+  人: ['person', 'persona'], 亻: ['person', 'persona'], 儿: ['legs · child', 'piernas · niño'],
+  入: ['enter', 'entrar'], 几: ['small table', 'mesa baja'], 冫: ['ice', 'hielo'],
+  刀: ['knife', 'cuchillo'], 刂: ['knife', 'cuchillo'], 力: ['strength', 'fuerza'],
+  勹: ['wrap', 'envolver'], '𠂊': ['wrap', 'envolver'], 匕: ['spoon', 'cuchara'],
+  匚: ['box', 'caja'], 冂: ['border', 'límite'], 冖: ['cover', 'cubierta'],
+  凵: ['container', 'recipiente'], 卜: ['divine', 'adivinar'], 卩: ['seal', 'sello'],
+  厂: ['cliff', 'acantilado'], 厶: ['private', 'privado'], 又: ['right hand · again', 'mano · otra vez'],
+  口: ['mouth', 'boca'], 囗: ['enclosure', 'recinto'], 土: ['earth', 'tierra'],
+  士: ['scholar', 'erudito'], 夂: ['go', 'ir'], 夕: ['evening', 'tarde'],
+  大: ['big', 'grande'], 女: ['woman', 'mujer'], 子: ['child', 'niño · hijo'],
+  宀: ['roof', 'techo'], 寸: ['inch · hand', 'pulgada · mano'], 小: ['small', 'pequeño'],
+  '⺍': ['little', 'pequeño'], 尸: ['body', 'cuerpo'], 山: ['mountain', 'montaña'],
+  巛: ['river', 'río'], 工: ['work', 'trabajo'], 己: ['self', 'uno mismo'],
+  巾: ['cloth', 'tela'], 干: ['dry · shield', 'seco · escudo'], 幺: ['tiny', 'diminuto'],
+  广: ['shelter', 'refugio'], 廴: ['stride', 'zancada'], 廾: ['two hands', 'dos manos'],
+  弓: ['bow', 'arco'], 彐: ['snout', 'hocico'], 彡: ['bristle', 'pelo'],
+  彳: ['step', 'paso'], 心: ['heart', 'corazón'], 忄: ['heart', 'corazón'],
+  戈: ['halberd', 'alabarda'], 户: ['door', 'puerta'], 手: ['hand', 'mano'],
+  扌: ['hand', 'mano'], 支: ['branch', 'rama'], 攵: ['strike · tap', 'golpear'],
+  文: ['writing', 'escritura'], 斗: ['dipper', 'cucharón'], 斤: ['axe', 'hacha'],
+  方: ['square', 'cuadrado'], 日: ['sun · day', 'sol · día'], 曰: ['say', 'decir'],
+  月: ['moon · flesh', 'luna · carne'], 木: ['tree · wood', 'árbol · madera'],
+  欠: ['yawn · owe', 'bostezar · deber'], 止: ['stop · foot', 'parar · pie'],
+  歹: ['death · bad', 'muerte · malo'], 殳: ['weapon', 'arma'], 毋: ['do not', 'no'],
+  母: ['mother', 'madre'], 比: ['compare', 'comparar'], 毛: ['hair · fur', 'pelo'],
+  氏: ['clan', 'clan'], 气: ['air · breath', 'aire · aliento'],
+  水: ['water', 'agua'], 氵: ['water', 'agua'], 火: ['fire', 'fuego'], 灬: ['fire', 'fuego'],
+  爪: ['claw', 'garra'], 爫: ['claw', 'garra'], 父: ['father', 'padre'],
+  牛: ['ox · cow', 'buey · vaca'], 牜: ['ox · cow', 'buey · vaca'],
+  犬: ['dog', 'perro'], 犭: ['animal · dog', 'animal · perro'],
+  玉: ['jade', 'jade'], 王: ['king · jade', 'rey · jade'], 田: ['field', 'campo'],
+  疒: ['sickness', 'enfermedad'], 白: ['white', 'blanco'], 皮: ['skin', 'piel'],
+  皿: ['dish', 'plato'], 目: ['eye', 'ojo'], 矢: ['arrow', 'flecha'],
+  石: ['stone', 'piedra'], 示: ['spirit · show', 'espíritu · mostrar'], 礻: ['spirit · altar', 'espíritu · altar'],
+  禾: ['grain', 'grano'], 穴: ['cave', 'cueva'], 立: ['stand', 'estar de pie'],
+  竹: ['bamboo', 'bambú'], '⺮': ['bamboo', 'bambú'], 米: ['rice', 'arroz'],
+  糸: ['silk', 'seda'], 纟: ['silk', 'seda'], 网: ['net', 'red'], 罒: ['net', 'red'],
+  羊: ['sheep', 'oveja'], 羽: ['feather', 'pluma'], 老: ['old', 'viejo'], 耂: ['old', 'viejo'],
+  耳: ['ear', 'oído'], 肉: ['flesh · meat', 'carne'], 臣: ['minister', 'ministro'],
+  自: ['self', 'uno mismo'], 至: ['arrive', 'llegar'], 舌: ['tongue', 'lengua'],
+  舟: ['boat', 'barco'], 色: ['colour', 'color'], 艹: ['grass · plant', 'hierba · planta'],
+  虫: ['insect', 'insecto'], 血: ['blood', 'sangre'], 行: ['walk · go', 'caminar · ir'],
+  衣: ['clothes', 'ropa'], 衤: ['clothes', 'ropa'], 西: ['west', 'oeste'], 覀: ['cover · west', 'cubrir · oeste'],
+  见: ['see', 'ver'], 見: ['see', 'ver'], 角: ['horn · corner', 'cuerno · esquina'],
+  言: ['speech', 'habla'], 讠: ['speech', 'habla'], 谷: ['valley', 'valle'],
+  豆: ['bean', 'frijol'], 豕: ['pig', 'cerdo'], 贝: ['shell · money', 'concha · dinero'], 貝: ['shell · money', 'concha · dinero'],
+  赤: ['red', 'rojo'], 走: ['walk · run', 'caminar · correr'], 足: ['foot', 'pie'],
+  身: ['body', 'cuerpo'], 车: ['vehicle', 'vehículo'], 車: ['vehicle', 'vehículo'],
+  辛: ['bitter', 'amargo'], 辰: ['morning', 'mañana'], 辶: ['walk · road', 'caminar · camino'],
+  邑: ['city', 'ciudad'], 阝: ['mound · city', 'colina · ciudad'], 酉: ['wine', 'vino'],
+  里: ['village · mile', 'aldea'], 金: ['metal · gold', 'metal · oro'], 钅: ['metal · gold', 'metal · oro'],
+  长: ['long', 'largo'], 長: ['long', 'largo'], 门: ['gate · door', 'puerta'], 門: ['gate · door', 'puerta'],
+  阜: ['mound', 'colina'], 隹: ['bird', 'ave'], 雨: ['rain', 'lluvia'],
+  青: ['green · blue', 'verde · azul'], 非: ['not', 'no'], 面: ['face', 'cara'],
+  革: ['leather', 'cuero'], 音: ['sound', 'sonido'], 页: ['page · head', 'página · cabeza'], 頁: ['page · head', 'página · cabeza'],
+  风: ['wind', 'viento'], 風: ['wind', 'viento'], 飞: ['fly', 'volar'], 飛: ['fly', 'volar'],
+  食: ['food', 'comida'], 饣: ['food', 'comida'], 首: ['head', 'cabeza'],
+  香: ['fragrant', 'fragante'], 马: ['horse', 'caballo'], 馬: ['horse', 'caballo'],
+  骨: ['bone', 'hueso'], 高: ['tall', 'alto'], 鬼: ['ghost', 'fantasma'],
+  鱼: ['fish', 'pez'], 魚: ['fish', 'pez'], 鸟: ['bird', 'pájaro'], 鳥: ['bird', 'pájaro'],
+  鹿: ['deer', 'ciervo'], 麦: ['wheat', 'trigo'], 麥: ['wheat', 'trigo'],
+  黄: ['yellow', 'amarillo'], 黃: ['yellow', 'amarillo'], 黑: ['black', 'negro'],
+  龙: ['dragon', 'dragón'], 龍: ['dragon', 'dragón'],
+};
+function shortGloss(res) {
+  const raw = res?.entries?.[0]?.gloss?.[0] || res?.char?.definition || '';
+  const clean = String(raw).split(/\s*[;,]\s*/)[0].replace(/\s*\([^)]*\)/g, '').trim();
+  return clean.length > 26 ? `${clean.slice(0, 25).trimEnd()}…` : clean;
+}
+async function resolveComponentMeanings(c, lang, scriptValue, client) {
+  const out = {};
+  if (!c) return out;
+  const parts = new Set();
+  if (c.radical?.char) parts.add(c.radical.char);
+  if (c.decomposition) for (const p of [...c.decomposition]) if (!IDC.test(p) && HAN.test(p)) parts.add(p);
+  if (c.etymology?.semantic && HAN.test(c.etymology.semantic)) parts.add(c.etymology.semantic);
+  if (c.etymology?.phonetic && HAN.test(c.etymology.phonetic)) parts.add(c.etymology.phonetic);
+  const missing = [];
+  for (const p of parts) {
+    const known = COMPONENT_MEANINGS[p];
+    if (known) out[p] = lang === 'es' ? known[1] : known[0];
+    else missing.push(p);
+  }
+  if (missing.length && client) {
+    await Promise.all(missing.map(async (p) => {
+      try {
+        let res = await client.lookup(p, { script: scriptValue });
+        if (lang === 'es' && res) res = await localizeLookup(res, lang).catch(() => res);
+        const g = shortGloss(res);
+        if (g) out[p] = g;
+      } catch { /* Optional */ }
+    }));
+  }
+  return out;
+}
 export const toneOf = (syllable) => {
   const s = String(syllable).normalize('NFD');
   return /̄/.test(s) ? 1 : /́/.test(s) ? 2 : /̌/.test(s) ? 3 : /̀/.test(s) ? 4 : 5;
@@ -170,21 +268,26 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     players = [];
     win.body.replaceChildren(el('p', 'muted', 'Looking up…'));
     win.foot.replaceChildren();
-    let result;
+    let result, partMeanings = {};
     try {
       const { chinese } = await import('./client.js');
-      [result] = await Promise.all([chinese().lookup(t, { script: script() }), refreshFavorites()]);
+      const client = chinese();
+      const lang = zhLang();
+      [result] = await Promise.all([client.lookup(t, { script: script() }), refreshFavorites()]);
       // Meanings in Spanish with the es | en toggle (cached after the first time).
-      result = await localizeLookup(result, zhLang()).catch(() => result);
+      [result, partMeanings] = await Promise.all([
+        localizeLookup(result, lang).catch(() => result),
+        resolveComponentMeanings(result?.char, lang, script(), client).catch(() => ({})),
+      ]);
     } catch (e) {
       if (mine === token) win.body.replaceChildren(el('p', 'muted', `The dictionary could not be loaded: ${e.message}`));
       return;
     }
     if (mine !== token) return;
-    render(t, ctx, result);
+    render(t, ctx, result, partMeanings);
   }
 
-  function render(t, ctx, result) {
+  function render(t, ctx, result, partMeanings = {}) {
     const single = [...t].length === 1 && HAN.test(t);
     const readings = readingsFor(result, ctx.reading);
     const reading = readings[0]?.pinyin || '';
@@ -228,6 +331,13 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     if (result.char?.strokes) facts.append(el('span', 'muted', `${result.char.strokes} strokes`));
     const headStar = starButton(t, reading, gloss);
     facts.prepend(headStar);
+    const trBtn = el('button', 'zh-lk-say zh-lk-tr');
+    trBtn.type = 'button';
+    trBtn.title = `Translate ${t}`;
+    trBtn.setAttribute('aria-label', `Translate ${t}`);
+    trBtn.append(icon('translate'));
+    trBtn.onclick = () => import('./zh-select.js').then(({ openTranslation }) => openTranslation(t, { near: win.el, replace: ctx.replace || null }));
+    facts.prepend(trBtn);
     if (canSpeak(script())) {
       const speakBtn = el('button', 'zh-lk-say');
       speakBtn.type = 'button';
@@ -329,18 +439,25 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     }
     // ── Structure ──
     const c = result.char;
+    const partChip = (ch) => {
+      const m = partMeanings[ch];
+      if (!m) return link(ch);
+      const wrap = el('span', 'zh-lk-part');
+      wrap.append(link(ch), el('span', 'zh-lk-part-gloss muted', m));
+      return wrap;
+    };
     if (c && (c.radical || c.decomposition || c.etymology)) {
       const s = section('Structure');
       if (c.radical?.char) {
         const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', 'Radical'), link(c.radical.char), el('span', 'muted', `No. ${c.radical.number}${c.radical.residual ? ` + ${c.radical.residual} strokes` : ''}`));
+        row.append(el('span', 'zh-lk-label', 'Radical'), partChip(c.radical.char), el('span', 'muted', `No. ${c.radical.number}${c.radical.residual ? ` + ${c.radical.residual} strokes` : ''}`));
         s.append(row);
       }
       if (c.decomposition && c.decomposition !== t) {
         const row = el('div', 'zh-lk-row');
         row.append(el('span', 'zh-lk-label', 'Parts'));
         const layout = IDC_NAMES[[...c.decomposition][0]];
-        for (const p of [...c.decomposition]) if (!IDC.test(p)) row.append(HAN.test(p) ? link(p) : el('span', 'muted', p));
+        for (const p of [...c.decomposition]) if (!IDC.test(p)) row.append(HAN.test(p) ? partChip(p) : el('span', 'muted', p));
         if (layout) row.append(el('span', 'muted', layout));
         s.append(row);
       }
@@ -349,8 +466,8 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
         const row = el('div', 'zh-lk-row');
         row.append(el('span', 'zh-lk-label', ETYMOLOGY[e.type] || e.type));
         if (e.type === 'pictophonetic' && (e.semantic || e.phonetic)) {
-          if (e.semantic) row.append(link(e.semantic), el('span', 'muted', `meaning${e.hint ? ` (${e.hint})` : ''}`));
-          if (e.phonetic) row.append(link(e.phonetic), el('span', 'muted', 'sound'));
+          if (e.semantic) row.append(partChip(e.semantic), el('span', 'muted', `meaning${e.hint ? ` (${e.hint})` : ''}`));
+          if (e.phonetic) row.append(partChip(e.phonetic), el('span', 'muted', 'sound'));
         } else if (e.hint) row.append(el('span', '', e.hint));
         s.append(row);
       }

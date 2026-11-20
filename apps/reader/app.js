@@ -290,13 +290,18 @@ const selection = new SelectionController({
 let statusTimer = 0;
 // Never over the tool bars: above the lowest bar that sits at the bottom (phones, a
 // tablet's dock held upright), also after the screen turns.
+function uiZoom() {
+  const z = parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
 function placeStatus() {
+  const z = uiZoom(), vh = innerHeight / z;
   let bottom = 0;
   for (const bar of document.querySelectorAll("#toolbar, .navigation, #tabletDock")) {
     const r = bar.getBoundingClientRect();
-    if (r.height && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top);
+    if (r.height && r.top / z > vh / 2) bottom = Math.max(bottom, vh - r.top / z);
   }
-  $("status").style.setProperty("--above-bars", `${bottom}px`);
+  $("status").style.setProperty("--above-bars", `${Math.round(bottom)}px`);
 }
 addEventListener("resize", () => { if ($("status").classList.contains("show")) placeStatus(); });
 function status(text, error = false) {
@@ -912,9 +917,8 @@ function buildPages(sizes) {
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
       const chosen = selectedText(window.getSelection());
-      // Chinese selected in the text layer: look it up, make cards (chinese/zh-menu.js).
-      if (chosen && hasHan(chosen)) return pageZhSelection(chosen, event.clientX, event.clientY);
-      if (chosen) return status("Press Ctrl+C to copy the selected text.");
+      // Text selected in the page text layer: Translate (with favorites/search), Chinese lookup, and Copy.
+      if (chosen) return pageZhSelection(chosen, event.clientX, event.clientY);
       if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
       const zh = hasHan(p.el.textContent) && svgHit(p.el, event.clientX, event.clientY);
       if (zh && !zh.item && await pageZhLongPress(p, event.clientX, event.clientY)) return;
@@ -2062,10 +2066,11 @@ function placeToolOptions() {
   const opts = $("toolOptions"), placed = !!toolOptionsPlace && !opts.classList.contains("inline");
   opts.classList.toggle("placed", placed);
   if (!placed) { opts.style.top = ""; if (opts.style.position) opts.style.position = ""; return; }
-  // Kept inside the window, however it was resized since.
+  // Kept inside the window, however it was resized or zoomed since.
+  const z = uiZoom(), vw = innerWidth / z, vh = innerHeight / z;
   const w = opts.offsetWidth || 200, h = opts.offsetHeight || 40;
-  opts.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, toolOptionsPlace.x))}px`;
-  opts.style.top = `${Math.max(4, Math.min(innerHeight - h - 4, toolOptionsPlace.y))}px`;
+  opts.style.left = `${Math.max(4, Math.min(vw - w - 4, toolOptionsPlace.x))}px`;
+  opts.style.top = `${Math.max(4, Math.min(vh - h - 4, toolOptionsPlace.y))}px`;
 }
 function resetToolOptionsPlace() {
   toolOptionsPlace = null;
@@ -2076,11 +2081,12 @@ function resetToolOptionsPlace() {
 $("toolOptionsGrip").addEventListener("pointerdown", (down) => {
   if (down.button !== 0) return;
   down.preventDefault();
-  const opts = $("toolOptions"), r = opts.getBoundingClientRect(), dx = down.clientX - r.left, dy = down.clientY - r.top;
+  const z0 = uiZoom();
+  const opts = $("toolOptions"), r = opts.getBoundingClientRect(), dx = down.clientX / z0 - r.left / z0, dy = down.clientY / z0 - r.top / z0;
   const grip = $("toolOptionsGrip");
   try { grip.setPointerCapture(down.pointerId); } catch { /* Released already. */ }
   opts.classList.add("dragging");
-  const move = (e) => { toolOptionsPlace = { x: Math.round(e.clientX - dx), y: Math.round(e.clientY - dy) }; placeToolOptions(); };
+  const move = (e) => { const z = uiZoom(); toolOptionsPlace = { x: Math.round(e.clientX / z - dx), y: Math.round(e.clientY / z - dy) }; placeToolOptions(); };
   const up = () => {
     grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
     opts.classList.remove("dragging");
@@ -2747,9 +2753,9 @@ const hideTip = () => { clearTimeout(tipTimer); clearTimeout(tipHide); tip.hidde
 function showTip(el) {
   tip.textContent = tipText(el).split("\n")[0];
   tip.hidden = false; tipFor = el;
-  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
-  tip.style.top = `${r.top - h - 8 > 4 ? r.top - h - 8 : r.bottom + 8}px`;
+  const z = uiZoom(), r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = `${Math.max(8, Math.min(innerWidth / z - w - 8, (r.left + r.width / 2) / z - w / 2))}px`;
+  tip.style.top = `${r.top / z - h - 8 > 4 ? r.top / z - h - 8 : r.bottom / z + 8}px`;
   clearTimeout(tipHide); tipHide = setTimeout(hideTip, 2800);
 }
 document.addEventListener("pointerdown", (e) => {
@@ -5159,7 +5165,7 @@ $("notesResize").onpointerdown = (down) => {
   down.preventDefault();
   const start = down.clientX, width = $("notesPanel").offsetWidth;
   $("notesResize").setPointerCapture(down.pointerId);
-  $("notesResize").onpointermove = (e) => { $("notesPanel").style.width = `${Math.max(240, Math.min(innerWidth * 0.7, width + start - e.clientX))}px`; };
+  $("notesResize").onpointermove = (e) => { const z = uiZoom(); $("notesPanel").style.width = `${Math.max(240, Math.min((innerWidth / z) * 0.7, width + (start - e.clientX) / z))}px`; };
   $("notesResize").onpointerup = () => {
     $("notesResize").onpointermove = $("notesResize").onpointerup = null;
     try { localStorage.setItem("notecomplete-notes-width", String($("notesPanel").offsetWidth)); } catch { /* Optional. */ }
@@ -5492,7 +5498,7 @@ try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } c
 $("audioToggle").onclick = () => toggleAudio();
 // Floating windows may cover the whole screen below the top bar (menus stay reachable).
 // Floating windows may go anywhere on the screen, over the top bar too (floating.js `.over-bar`).
-const screenArea = () => ({ left: 0, top: 0, width: innerWidth, height: innerHeight });
+const screenArea = () => { const z = uiZoom(); return { left: 0, top: 0, width: Math.round(innerWidth / z), height: Math.round(innerHeight / z) }; };
 floatingWindow($("audioBar"), { screen: screenArea, key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
 floatingWindow($("chatPanel"), { screen: screenArea, key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
 $("audioClose").onclick = () => toggleAudio(false);
@@ -5909,6 +5915,7 @@ function drawPlantuml(text) {
 const textView = textViewer({
   root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
   zoom: { out: $("textZoomOut"), into: $("textZoomIn"), value: $("textZoomValue") },
+  editorZoom: { out: $("textEditorZoomOut"), into: $("textEditorZoomIn"), value: $("textEditorZoomValue") },
   toHtml: (value) => call("markdownHtml", { text: value }),
   imageUrl: textImageUrl,
   // PlantUML files are drawn by the desktop app's PlantUML; includes come from the file's folder.
@@ -8711,11 +8718,12 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
-// The stroke order editor for `target`, put on the page (or in the Markdown being edited).
+// The stroke order editor for `target`, put on the page (or in the Markdown being edited/viewed).
 async function openTracePrefab(target) {
+  const inTextDoc = textView.visible && !textView.diagram;
   const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
   if (!chosen) return;
-  if (textView.visible && textView.editing && textView.insertTraceSpec) {
+  if (inTextDoc && textView.insertTraceSpec) {
     await textView.insertTraceSpec(chosen);
     status(`${prefabName(chosen)} inserted into Markdown.`);
     return;

@@ -13,6 +13,66 @@ export const LANGS = Object.freeze({ es: 'Español', en: 'English' });
 export const zhLang = () => (zhSettings().lang in LANGS ? zhSettings().lang : 'en');
 export const setZhLang = (lang) => { if (lang in LANGS) zhSettings({ lang }); };
 
+// Universal translation languages (favorites default to Spanish, English, Simplified Chinese).
+export const TRANSLATE_LANGUAGES = Object.freeze([
+  { code: 'es', name: 'Spanish', native: 'Español' },
+  { code: 'en', name: 'English', native: 'English' },
+  { code: 'zh-CN', name: 'Chinese (Simplified)', native: '中文 (简体)' },
+  { code: 'zh-TW', name: 'Chinese (Traditional)', native: '中文 (繁體)' },
+  { code: 'fr', name: 'French', native: 'Français' },
+  { code: 'de', name: 'German', native: 'Deutsch' },
+  { code: 'it', name: 'Italian', native: 'Italiano' },
+  { code: 'pt', name: 'Portuguese', native: 'Português' },
+  { code: 'ja', name: 'Japanese', native: '日本語' },
+  { code: 'ko', name: 'Korean', native: '한국어' },
+  { code: 'ru', name: 'Russian', native: 'Русский' },
+  { code: 'ar', name: 'Arabic', native: 'العربية' },
+  { code: 'hi', name: 'Hindi', native: 'हिन्दी' },
+  { code: 'ca', name: 'Catalan', native: 'Català' },
+  { code: 'eu', name: 'Basque', native: 'Euskara' },
+  { code: 'gl', name: 'Galician', native: 'Galego' },
+  { code: 'nl', name: 'Dutch', native: 'Nederlands' },
+  { code: 'pl', name: 'Polish', native: 'Polski' },
+  { code: 'sv', name: 'Swedish', native: 'Svenska' },
+  { code: 'tr', name: 'Turkish', native: 'Türkçe' },
+  { code: 'uk', name: 'Ukrainian', native: 'Українська' },
+  { code: 'vi', name: 'Vietnamese', native: 'Tiếng Việt' },
+  { code: 'th', name: 'Thai', native: 'ไทย' },
+  { code: 'id', name: 'Indonesian', native: 'Bahasa Indonesia' },
+  { code: 'el', name: 'Greek', native: 'Ελληνικά' },
+  { code: 'he', name: 'Hebrew', native: 'עברית' },
+  { code: 'cs', name: 'Czech', native: 'Čeština' },
+  { code: 'ro', name: 'Romanian', native: 'Română' },
+  { code: 'hu', name: 'Hungarian', native: 'Magyar' },
+  { code: 'da', name: 'Danish', native: 'Dansk' },
+  { code: 'fi', name: 'Finnish', native: 'Suomi' },
+  { code: 'no', name: 'Norwegian', native: 'Norsk' },
+  { code: 'la', name: 'Latin', native: 'Latina' },
+]);
+export const DEFAULT_FAV_LANGS = Object.freeze(['es', 'en', 'zh-CN']);
+const FAV_LANGS_KEY = 'notecomplete-translate-favs';
+const LANG_MAP = new Map(TRANSLATE_LANGUAGES.map((l) => [l.code, l]));
+export const translateLangInfo = (code) => LANG_MAP.get(code) || { code, name: code, native: code };
+export function favoriteTranslateLangs() {
+  try {
+    const raw = JSON.parse(store()?.getItem(FAV_LANGS_KEY) || 'null');
+    if (Array.isArray(raw)) {
+      const valid = raw.filter((c) => LANG_MAP.has(c));
+      if (valid.length) return valid;
+    }
+  } catch { /* Default. */ }
+  return [...DEFAULT_FAV_LANGS];
+}
+export function toggleFavoriteTranslateLang(code) {
+  if (!LANG_MAP.has(code)) return favoriteTranslateLangs();
+  const cur = favoriteTranslateLangs();
+  const next = cur.includes(code)
+    ? (cur.length > 1 ? cur.filter((c) => c !== code) : cur)
+    : [...cur, code];
+  try { store()?.setItem(FAV_LANGS_KEY, JSON.stringify(next)); } catch { /* Optional. */ }
+  return next;
+}
+
 const HAN = /\p{Script=Han}/u;
 // Pinyin written out (with tone marks or numbers), such as "nǐ hǎo" or "ni3 hao3": two syllables
 // or more, nearly every word one, so English words are not taken for it.
@@ -61,7 +121,7 @@ export const SERVICES = [
     name: 'MyMemory',
     // Up to 500 bytes a request; longer text goes to the first service only.
     fits: (q) => new TextEncoder().encode(q).length <= 500,
-    url: (q, from, to) => `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${from === 'zh-CN' ? 'zh-CN' : from}|${to}`,
+    url: (q, from, to) => `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${from === 'auto' ? 'autodetect' : from}|${to}`,
     read: (j) => (Number(j?.responseStatus) === 200 && j?.responseData?.translatedText ? String(j.responseData.translatedText) : null),
   },
 ];

@@ -221,9 +221,12 @@ export function addExportMenu(item, { label, pick }) {
       return b;
     }));
     exportMenu.hidden = false;
+    const zRaw = parseFloat(document.documentElement.style.zoom);
+    const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+    const vw = innerWidth / z, vh = innerHeight / z;
     const r = more.getBoundingClientRect(), w = exportMenu.offsetWidth, h = exportMenu.offsetHeight;
-    exportMenu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    exportMenu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    exportMenu.style.left = `${Math.max(8, Math.min(vw - w - 8, r.right / z - w))}px`;
+    exportMenu.style.top = `${vh - r.bottom / z > h + 12 ? r.bottom / z + 6 : Math.max(8, r.top / z - h - 6)}px`;
   };
   item.append(more);
 }

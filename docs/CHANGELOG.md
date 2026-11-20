@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.59
+
+- **Markdown editor & viewer side spacing and 3-way snap alignment.** Added a content-width / side-spacing selector (**Compact**, **Narrow**, **Normal**, **Wide**, **Extra wide**, **Full width**) and the same 3-way snap alignment control (**Left**, **Center**, **Right**) as the main page editor directly to the Markdown toolbar. Uses container-query sizing (`100cqi`) so both the Markdown viewer, single-pane editor, plain text editor, toolbar, and split preview respect your chosen width and side alignment cleanly (and remember them across sessions).
+
 ## 1.2.58
 
 - **Mobile layout, dropdowns & Stroke order prefab fixes.** Eliminated double top safe-area padding inside the Android APK (`nc-native-app`), fixed lost bottom space when zooming out on mobile web (`calc(100dvh / var(--ui-zoom, 1))`), reparented and zoom-clamped mobile dropdowns (`File`, `Google Drive / Services`, Home filters, top bar menus, selects, and context menus) with automatic above/below flipping, and anchored phone prefab windows cleanly below `#commandBar` with compact mobile stroke squares so `Cancel / Insert` and `Show this step on the page` are always reachable.

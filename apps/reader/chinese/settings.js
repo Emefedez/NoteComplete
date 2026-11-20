@@ -8,7 +8,7 @@ export const ZH_DEFAULTS = Object.freeze({
   shortcut: true,       // Ctrl+Shift+Space cycles Off → Hanzi → Pinyin
   shiftLatin: true,     // Shift alone: Latin letters for a while
   enter: 'auto',        // Enter with a buffer in Hanzi mode: auto | letters | marks
-  fullWidth: true,      // ， 。 ？ ！ in Hanzi mode
+  fullWidth: false,     // ， 。 ？ ！ in Hanzi mode (opt-in; normal ASCII punctuation by default)
   perPage: 9,           // 5 | 9 candidates
   bothScripts: false,   // the other script's form beside a candidate
   toneColours: true,    // tone colours on the pinyin over candidates

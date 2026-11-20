@@ -43,7 +43,8 @@ export function strokePlayer(host, { text = '', data = null, size = 180, grid = 
   el.append(stage);
   host.append(el);
   let chars = [], glyphs = {}, plan = [], masks = [];
-  const cellLoops = new Map(); // k -> { active, raf, timer, btn }
+  const cellLoops = new Map(); // k -> { loop, btn }
+  let inRepeatCycle = false;
   const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
   const info = (at) => {
@@ -60,117 +61,86 @@ export function strokePlayer(host, { text = '', data = null, size = 180, grid = 
     const i = info(at);
     return `${i.char} · stroke ${i.s + 1} of ${i.total}${chars.length > 1 ? ` · ${at} of ${plan.length}` : ''}${note}`;
   };
-  const player = stepPlayer(el, { steps: 0, key: 'hanzi', duration: (i) => STROKE_MS(plan[i]), gap: 160, caption: captionOf, draw, onChange: (at) => onStep?.(at, plan.length) });
+  // Single synchronized playback engine: repeat toggles ONLY set a checked state that stepPlayer
+  // checks between cycles. Paused always means completely paused.
+  function nextStep(at, { repeating = false, recheck = false } = {}) {
+    if (!plan.length) return null;
+    if (!repeating && !recheck) {
+      if (at < plan.length) return at;
+      const firstLoop = plan.findIndex((p) => cellLoops.get(p.c)?.loop);
+      if (firstLoop < 0) return null;
+      return { start: firstLoop, wait: 520 };
+    }
+    if (recheck) {
+      const firstLoop = plan.findIndex((p) => cellLoops.get(p.c)?.loop);
+      if (firstLoop < 0) { inRepeatCycle = false; return null; }
+      inRepeatCycle = true;
+      return firstLoop;
+    }
+    // Mid-repeat cycle: continue through remaining strokes of looped characters, then check again at end.
+    for (let idx = at; idx < plan.length; idx++) {
+      if (cellLoops.get(plan[idx].c)?.loop) return idx;
+    }
+    const firstLoop = plan.findIndex((p) => cellLoops.get(p.c)?.loop);
+    if (firstLoop < 0) { inRepeatCycle = false; return null; }
+    return { start: firstLoop, wait: 520 };
+  }
+  const player = stepPlayer(el, {
+    steps: 0,
+    key: 'hanzi',
+    duration: (i) => STROKE_MS(plan[i]),
+    gap: 160,
+    caption: captionOf,
+    draw,
+    nextStep,
+    onChange: (at) => onStep?.(at, plan.length),
+    onStop: () => { inRepeatCycle = false; },
+  });
 
-  // Toggle-all loop button in the player controls row: alternates all characters on / off.
+  // Toggle-all repeat button in the player controls row: toggles the checked repeat state for all
+  // characters without restarting or interrupting playback.
   const loopAllBtn = document.createElement('button');
   loopAllBtn.type = 'button';
   loopAllBtn.className = 'pk-button pk-icon hz-loop-all';
   loopAllBtn.append(loopIcon());
   loopAllBtn.setAttribute('aria-pressed', 'false');
-  loopAllBtn.title = 'Loop animation for all characters';
-  loopAllBtn.setAttribute('aria-label', 'Loop animation for all characters');
+  loopAllBtn.title = 'Repeat animation for all characters';
+  loopAllBtn.setAttribute('aria-label', 'Repeat animation for all characters');
   player.controls.append(loopAllBtn);
 
   const loopableIndices = () => chars.map((c, k) => (glyphs[c] ? k : -1)).filter((k) => k >= 0);
   function syncLoopAll() {
     const ks = loopableIndices();
-    const allOn = ks.length > 0 && ks.every((k) => cellLoops.get(k)?.active);
-    const someOn = ks.some((k) => cellLoops.get(k)?.active);
+    const allOn = ks.length > 0 && ks.every((k) => cellLoops.get(k)?.loop);
+    const someOn = ks.some((k) => cellLoops.get(k)?.loop);
     loopAllBtn.disabled = ks.length === 0;
     loopAllBtn.setAttribute('aria-pressed', String(allOn));
     loopAllBtn.classList.toggle('is-partial', someOn && !allOn);
-    const label = allOn ? 'Stop looping all characters' : 'Loop animation for all characters';
+    const label = allOn ? 'Disable repeat for all characters' : 'Repeat animation for all characters';
     loopAllBtn.title = label;
     loopAllBtn.setAttribute('aria-label', label);
   }
-  function paintCell(k, strokeIndex, t) {
-    const indices = [];
-    plan.forEach((p, idx) => { if (p.c === k) indices.push(idx); });
-    indices.forEach((planIdx, localS) => {
-      const m = masks[planIdx];
-      if (!m) return;
-      const len = plan[planIdx].len;
-      const f = localS < strokeIndex ? 1 : localS === strokeIndex ? t : 0;
-      m.setAttribute('stroke-dashoffset', String(Math.round(len * (1 - f))));
-      m.setAttribute('stroke', localS === strokeIndex && t > 0 && t < 1 ? opts.active : opts.colour);
-    });
-  }
-  function stopCellLoop(k, repaint = true) {
+  function setCellLoop(k, next) {
     const st = cellLoops.get(k);
     if (!st) return;
-    cancelAnimationFrame(st.raf);
-    clearTimeout(st.timer);
-    st.raf = 0; st.timer = 0; st.active = false;
-    st.btn?.setAttribute('aria-pressed', 'false');
+    st.loop = Boolean(next);
+    st.btn?.setAttribute('aria-pressed', String(st.loop));
     syncLoopAll();
-    if (repaint) draw(player.index, 0);
-  }
-  function stopAllLoops(repaint = false) {
-    for (const k of [...cellLoops.keys()]) stopCellLoop(k, repaint);
-  }
-  function startCellLoop(k) {
-    const st = cellLoops.get(k);
-    if (!st || !glyphs[chars[k]]) return;
-    cancelAnimationFrame(st.raf);
-    clearTimeout(st.timer);
-    st.active = true;
-    st.btn?.setAttribute('aria-pressed', 'true');
-    syncLoopAll();
-    const indices = [];
-    plan.forEach((p, idx) => { if (p.c === k) indices.push(idx); });
-    if (!indices.length) return;
-    let s = 0;
-    const step = () => {
-      if (!st.active) return;
-      if (s >= indices.length) {
-        paintCell(k, indices.length, 0);
-        st.timer = setTimeout(() => { if (!st.active) return; s = 0; step(); }, Math.round(520 / (player.speed || 1)));
-        return;
-      }
-      const planIdx = indices[s];
-      const ms = STROKE_MS(plan[planIdx]) / (player.speed || 1);
-      if (reduced.matches || ms <= 0) {
-        s++;
-        paintCell(k, s, 0);
-        st.timer = setTimeout(step, Math.round(280 / (player.speed || 1)));
-        return;
-      }
-      const t0 = performance.now();
-      const frame = (now) => {
-        if (!st.active) return;
-        const t = Math.min(1, (now - t0) / ms);
-        if (t < 1) {
-          paintCell(k, s, t);
-          st.raf = requestAnimationFrame(frame);
-          return;
-        }
-        st.raf = 0;
-        s++;
-        paintCell(k, s, 0);
-        st.timer = setTimeout(step, Math.round(150 / (player.speed || 1)));
-      };
-      paintCell(k, s, 0);
-      st.raf = requestAnimationFrame(frame);
-    };
-    step();
   }
   function toggleCellLoop(k) {
     const st = cellLoops.get(k);
     if (!st) return;
-    if (st.active) stopCellLoop(k, true);
-    else startCellLoop(k);
+    setCellLoop(k, !st.loop);
   }
   loopAllBtn.onclick = () => {
     const ks = loopableIndices();
     if (!ks.length) return;
-    const allOn = ks.every((k) => cellLoops.get(k)?.active);
-    if (allOn) { for (const k of ks) stopCellLoop(k, true); }
-    else { for (const k of ks) if (!cellLoops.get(k)?.active) startCellLoop(k); }
+    const allOn = ks.every((k) => cellLoops.get(k)?.loop);
+    for (const k of ks) setCellLoop(k, !allOn);
   };
 
   function build(keepLoopSet = null) {
-    stopAllLoops(false);
+    inRepeatCycle = false;
     cellLoops.clear();
     const gap = Math.round(opts.size * 0.08);
     stage.style.gap = `${gap}px`;
@@ -187,33 +157,33 @@ export function strokePlayer(host, { text = '', data = null, size = 180, grid = 
       if (d) d.strokes.forEach((_, s) => plan.push({ c: k, char: c, s }));
       cell.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${opts.size} ${opts.size}" width="${opts.size}" height="${opts.size}" style="display:block;max-width:100%;height:auto" role="img" aria-label="Stroke order of ${c}">${inner}</svg>`;
       if (d) {
+        const on = Boolean(keepLoopSet?.has(k));
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'hz-cell-loop';
         btn.append(loopIcon());
-        btn.setAttribute('aria-pressed', 'false');
-        btn.title = `Loop animation for ${c}`;
-        btn.setAttribute('aria-label', `Loop animation for ${c}`);
+        btn.setAttribute('aria-pressed', String(on));
+        btn.title = `Repeat animation for ${c}`;
+        btn.setAttribute('aria-label', `Repeat animation for ${c}`);
         btn.onclick = (e) => { e.stopPropagation(); toggleCellLoop(k); };
         cell.append(btn);
-        cellLoops.set(k, { active: false, raf: 0, timer: 0, btn });
+        cellLoops.set(k, { loop: on, btn });
       }
       stage.append(cell);
     });
     masks = plan.map((p) => stage.querySelector(`[data-g="${p.c}"] [data-i="${p.s}"]`));
     plan.forEach((p, i) => { p.len = Number(masks[i]?.dataset.len) || 600; });
     syncLoopAll();
-    if (keepLoopSet?.size) {
-      for (const k of keepLoopSet) if (cellLoops.has(k)) startCellLoop(k);
-    }
   }
-  // Strokes < i whole, stroke i at t (skipping cells running their own independent loop).
+  // Strokes < i whole, stroke i at t. On subset repeat cycles, non-repeating characters stay whole.
   function draw(i, t) {
     masks.forEach((m, k) => {
-      if (!m || cellLoops.get(plan[k].c)?.active) return;
-      const len = plan[k].len, f = k < i ? 1 : k === i ? t : 0;
+      if (!m) return;
+      const len = plan[k].len;
+      const keepDone = inRepeatCycle && !cellLoops.get(plan[k].c)?.loop;
+      const f = keepDone ? 1 : (k < i ? 1 : k === i ? t : 0);
       m.setAttribute('stroke-dashoffset', String(Math.round(len * (1 - f))));
-      m.setAttribute('stroke', k === i && t > 0 && t < 1 ? opts.active : opts.colour);
+      m.setAttribute('stroke', !keepDone && k === i && t > 0 && t < 1 ? opts.active : opts.colour);
     });
   }
   async function setText(next, given = null) {
@@ -235,12 +205,12 @@ export function strokePlayer(host, { text = '', data = null, size = 180, grid = 
     setText: (t, d) => { autoplay = false; return setText(t, d); },
     set(next) {
       const at = player.index;
-      const activeLoops = new Set([...cellLoops.entries()].filter(([, st]) => st.active).map(([k]) => k));
+      const activeLoops = new Set([...cellLoops.entries()].filter(([, st]) => st.loop).map(([k]) => k));
       Object.assign(opts, next);
       build(activeLoops);
       player.setSteps(plan.length, at);
     },
     focus: () => player.el.focus({ preventScroll: true }),
-    destroy() { stopAllLoops(false); player.destroy(); el.remove(); },
+    destroy() { inRepeatCycle = false; player.destroy(); el.remove(); },
   };
 }

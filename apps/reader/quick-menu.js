@@ -280,11 +280,14 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
       }
     }
     if (panel.children.length < 2) { panel = null; return; }
+    const zRaw = parseFloat(document.documentElement.style.zoom);
+    const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+    const vw = innerWidth / z, vh = innerHeight / z;
     const r = button?.getBoundingClientRect();
     root.append(panel);
     const w = panel.offsetWidth, h = panel.offsetHeight;
-    const left = r ? Math.min(innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2)) : centre.x - w / 2;
-    const top = r ? (r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) : centre.y - h / 2;
+    const left = r ? Math.min(vw - w - 8, Math.max(8, (r.left + r.width / 2) / z - w / 2)) : centre.x - w / 2;
+    const top = r ? (r.bottom / z + h + 8 < vh ? r.bottom / z + 6 : Math.max(8, r.top / z - h - 6)) : centre.y - h / 2;
     Object.assign(panel.style, { left: `${left}px`, top: `${top}px` });
     panel.addEventListener('pointerdown', (e) => e.stopPropagation());
     panel.querySelector('button:not([disabled])')?.focus({ preventScroll: true });
@@ -292,7 +295,9 @@ export function quickMenu({ inner, outer, items = null, onReorder = () => {}, on
   function closePanel() { panel?.remove(); panel = null; }
   function open(x, y) {
     close();
-    centre = fitCentre(x, y, 140 + SIZE / 2, { width: innerWidth, height: innerHeight });
+    const zRaw = parseFloat(document.documentElement.style.zoom);
+    const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+    centre = fitCentre(x / z, y / z, 140 + SIZE / 2, { width: innerWidth / z, height: innerHeight / z });
     hovered = null;
     root = document.createElement('div');
     // Only opening animates; a redraw after a choice does not flash.

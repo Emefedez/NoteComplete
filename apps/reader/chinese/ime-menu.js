@@ -15,7 +15,7 @@ function build(doc) {
   m.setAttribute('role', 'listbox');
   m.setAttribute('aria-label', 'Chinese candidates');
   m.innerHTML = '<div class="zh-ime-reading" aria-live="polite"></div><ol class="zh-ime-list"></ol>'
-    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Hold Space and press a number to choose that candidate; Space alone writes the highlighted one">Space+1–9 picks</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
+    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Hold Space or Shift and press 1–9 to pick that candidate; Space alone writes the highlighted one">Space / Shift+1–9 picks</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
     + '<button type="button" class="zh-ime-page" data-page="1" aria-label="More candidates">›</button>'
     + '<button type="button" class="zh-ime-expand" aria-label="Show more candidates" title="More candidates">▾</button>'
     + '<button type="button" class="zh-ime-script" title="Simplified / traditional"></button></div>';
@@ -62,6 +62,41 @@ export function hideImeMenu(field) {
   owner?.removeAttribute('aria-activedescendant');
   owner = view = null;
   listen(false);
+}
+
+// 2D vertical navigation across wrapped candidate rows: returns { index } for the closest visual
+// column in the next/previous row (with coherent top↔bottom wrap on a single page), or null when
+// the page is a single row or moving past the page boundary so the caller can step pages.
+export function verticalStep(dir) {
+  if (!el || el.hidden || !view) return null;
+  const nodes = [...el.querySelectorAll('.zh-ime-list li[data-i]')];
+  if (nodes.length < 2) return null;
+  const boxes = nodes.map((n) => {
+    const r = n.getBoundingClientRect();
+    return { i: Number(n.dataset.i), top: r.top, cx: r.left + r.width / 2, sel: n.getAttribute('aria-selected') === 'true' };
+  });
+  const rows = [];
+  for (const b of boxes) {
+    const row = rows.find((r) => Math.abs(r.top - b.top) <= 8);
+    if (row) row.items.push(b);
+    else rows.push({ top: b.top, items: [b] });
+  }
+  rows.sort((a, b) => a.top - b.top);
+  if (rows.length <= 1) return null;
+  let rIdx = rows.findIndex((r) => r.items.some((it) => it.sel));
+  if (rIdx < 0) rIdx = dir > 0 ? 0 : rows.length - 1;
+  const cur = rows[rIdx].items.find((it) => it.sel) || rows[rIdx].items[0];
+  let nextRow = rIdx + dir;
+  if (nextRow < 0 || nextRow >= rows.length) {
+    if ((view.pages || 1) > 1) return null;
+    nextRow = (nextRow + rows.length) % rows.length;
+  }
+  let best = rows[nextRow].items[0], bestDist = Math.abs(best.cx - cur.cx);
+  for (const cand of rows[nextRow].items) {
+    const d = Math.abs(cand.cx - cur.cx);
+    if (d < bestDist) { best = cand; bestDist = d; }
+  }
+  return { index: best.i };
 }
 
 const TONE = (syl) => { const m = /([1-4])$/.exec(marksToNumbers(syl)); return m ? m[1] : '5'; };

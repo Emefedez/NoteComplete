@@ -18,7 +18,7 @@ export const imeInitial = (mode = 'off', opts = {}) => ({
   mode, latin: false, composing: false, buffer: '', chosen: [], cands: null, page: 0, sel: 0, justChose: false,
   // Space held in Hanzi mode (it chooses on release); chord: a digit or letter was pressed while held.
   spaceHeld: false, chord: false, hadInput: false,
-  opts: { perPage: 9, fullWidth: true, enter: 'auto', digits: 'tone', ...opts },
+  opts: { perPage: 9, fullWidth: false, enter: 'auto', digits: 'tone', ...opts },
 });
 
 const clear = (s) => ({ ...s, buffer: '', chosen: [], cands: null, page: 0, sel: s.mode === 'hanzi' ? 0 : -1, justChose: false });
@@ -53,13 +53,25 @@ function choose(s, i) {
 function move(s, delta) {
   const n = items(s).length;
   if (!n) return { state: s, handled: true };
-  const sel = Math.max(0, Math.min(n - 1, (s.sel < 0 ? (delta > 0 ? -1 : 0) : s.sel) + delta));
+  const start = s.sel < 0 ? (delta > 0 ? -1 : 0) : s.sel;
+  const sel = ((start + delta) % n + n) % n;
   return { state: { ...s, sel, page: Math.floor(sel / s.opts.perPage) }, handled: true };
+}
+function moveVertical(s, delta) {
+  const n = items(s).length, per = s.opts.perPage;
+  if (!n) return { state: s, handled: true };
+  const pages = Math.max(1, Math.ceil(n / per));
+  if (pages <= 1) return move(s, delta);
+  const col = s.sel < 0 ? 0 : s.sel % per;
+  const nextPage = ((s.page + delta) % pages + pages) % pages;
+  const sel = Math.min(n - 1, nextPage * per + col);
+  return { state: { ...s, sel, page: nextPage }, handled: true };
 }
 function page(s, delta) {
   const n = items(s).length, per = s.opts.perPage;
-  const last = Math.max(0, Math.ceil(n / per) - 1);
-  const p = Math.max(0, Math.min(last, s.page + delta));
+  if (!n) return { state: s, handled: true };
+  const pages = Math.max(1, Math.ceil(n / per));
+  const p = ((s.page + delta) % pages + pages) % pages;
   return { state: { ...s, page: p, sel: s.sel < 0 && s.mode === 'pinyin' ? -1 : p * per }, handled: true };
 }
 
@@ -74,15 +86,18 @@ export function imeReduce(state, k) {
     return { state: { ...s, cands: { input: k.input, items: k.items || [], loading: !!k.loading, reading: k.reading || '' }, page: 0, sel: s.mode === 'hanzi' ? 0 : -1 } };
   }
   if (k.type === 'composition') return { state: { ...clear(s), composing: !!k.active, spaceHeld: false, chord: false, hadInput: false } };
-  // Hanzi mode: holding Space never spams spaces. With empty buffer, releasing without typing a
-  // digit or letter inserts one space; with pinyin typed, Space chooses on release (Space+digit picks).
+  // Hanzi & Pinyin modes: holding Space never spams spaces. With empty buffer, releasing without
+  // typing a digit or letter inserts one space; with pinyin typed, Space chooses on release (or
+  // Space+digit picks in Hanzi mode).
   if (k.type === 'spaceDown') {
     if (s.spaceHeld) {
-      return (s.mode === 'hanzi' && !s.latin && !s.composing)
+      return (s.mode !== 'off' && !s.latin && !s.composing)
         ? { state: s, handled: true }
         : { state: { ...s, spaceHeld: false, chord: false, hadInput: false } };
     }
-    if (s.mode !== 'hanzi' || s.latin || s.composing) return { state: s };
+    if (s.mode === 'off' || s.latin || s.composing) return { state: s };
+    // Never start a new space commit from a stray key-repeat event.
+    if (k.repeat) return { state: s, handled: true };
     return { state: { ...s, spaceHeld: true, chord: false, hadInput: !!(s.buffer || s.chosen.length) }, handled: true };
   }
   if (k.type === 'spaceUp') {
@@ -93,11 +108,31 @@ export function imeReduce(state, k) {
         ? { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true }
         : { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true, commit: ' ' };
     }
+    if (s.mode === 'pinyin') {
+      if (s.sel >= 0 && fresh(s) && items(s).length) {
+        const out = choose(s, s.sel);
+        return { ...out, state: { ...out.state, spaceHeld: false, chord: false, hadInput: false }, handled: true };
+      }
+      return { state: { ...clear(s), spaceHeld: false, chord: false, hadInput: false }, handled: true, commit: typed(s) + numbersToMarks(s.buffer) + ' ' };
+    }
     if (!fresh(s) && s.buffer) return { state: { ...s, spaceHeld: false, chord: false, hadInput: false }, handled: true, wait: true };
     const out = imeReduce({ ...s, spaceHeld: false, hadInput: false }, { key: ' ' });
     return { ...out, state: { ...out.state, spaceHeld: false, chord: false, hadInput: false }, handled: true };
   }
   if (k.type === 'spaceCancel') return { state: { ...s, spaceHeld: false, chord: false, hadInput: false } };
+  if (k.type === 'select') {
+    const n = items(s).length;
+    if (!n) return { state: s, handled: true };
+    const sel = Math.max(0, Math.min(n - 1, Number(k.index) || 0));
+    return { state: { ...s, sel, page: Math.floor(sel / s.opts.perPage) }, handled: true };
+  }
+  if (k.type === 'pickSlot') {
+    const d = Number(k.d);
+    if (!d || d < 1 || d > 9 || (!s.buffer && !s.chosen.length)) return { state: s };
+    if (!fresh(s)) return { state: s, handled: true, wait: true };
+    const out = choose(s, s.page * s.opts.perPage + d - 1);
+    return s.spaceHeld ? { ...out, state: { ...out.state, spaceHeld: true, chord: true } } : out;
+  }
   if (k.type === 'digit') return imeReduce(s, { key: String(k.d) });
   if (k.type === 'mode') {
     const pending = typed(s) + s.buffer;
@@ -204,8 +239,10 @@ export function imeReduce(state, k) {
     if (!buffer && !s.chosen.length) return { state: clear(s), handled: true };
     return { state: { ...s, buffer, justChose: false, cands: buffer ? s.cands : null }, handled: true, query: buffer || undefined };
   }
-  if (key === 'ArrowRight' || key === 'ArrowDown' || (key === 'Tab' && !k.shift)) return move(s, 1);
-  if (key === 'ArrowLeft' || key === 'ArrowUp' || (key === 'Tab' && k.shift)) return move(s, -1);
+  if (key === 'ArrowRight' || (key === 'Tab' && !k.shift)) return move(s, 1);
+  if (key === 'ArrowLeft' || (key === 'Tab' && k.shift)) return move(s, -1);
+  if (key === 'ArrowDown') return moveVertical(s, 1);
+  if (key === 'ArrowUp') return moveVertical(s, -1);
   if (key in PAGE_KEYS) return page(s, PAGE_KEYS[key]);
   if (key.length === 1) {
     // Other punctuation: Hanzi mode writes the highlighted candidate then the mark; Pinyin mode the pinyin.
@@ -225,8 +262,8 @@ export function imeReduce(state, k) {
 
 // ---- The controller (DOM) ----
 
-let menuModule = null;
-const menu = () => (menuModule ||= import('./ime-menu.js'));
+let menuModule = null, menuApi = null;
+const menu = () => (menuModule ||= import('./ime-menu.js').then((m) => (menuApi = m)));
 let clientPromise = null;
 // The dictionary (client.js, docs §15): null while it is not there; Pinyin mode needs none.
 export function zhClient() {
@@ -238,7 +275,32 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   if (el.__zhIme) return el.__zhIme;
   let st = imeInitial(getMode(), zhSettings());
   let pending = null, shiftAlone = false, identified = false, rafId = 0, seq = 0;
+  let deadPending = false, deadComposing = false;
   const doc = el.ownerDocument;
+  const DEAD_ACCENT = /^[´`¨^~¸˛ˇ˘˙˚˝'ˊˋˇˉ]$/;
+
+  function removeInserted(len) {
+    if (!len) return;
+    if ('selectionStart' in el) {
+      const end = el.selectionStart, start = Math.max(0, end - len);
+      if (end > start) {
+        el.setRangeText('', start, end, 'end');
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      }
+      return;
+    }
+    const sel = doc.getSelection?.();
+    if (sel?.rangeCount && sel.isCollapsed) {
+      const r = sel.getRangeAt(0);
+      if (r.startContainer.nodeType === 3 && r.startOffset >= len) {
+        r.setStart(r.startContainer, r.startOffset - len);
+        r.deleteContents();
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+        return;
+      }
+    }
+    for (let i = 0; i < len; i++) doc.execCommand?.('delete', false);
+  }
 
   const sync = () => { st = { ...st, opts: { ...st.opts, ...zhSettings() } }; };
   const busy = () => !!(st.buffer || st.chosen.length);
@@ -341,18 +403,35 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     if (identified) setTimeout(() => { identified = false; }, 0);
     if (e.key !== 'Shift') shiftAlone = false;
     else if (!e.repeat) shiftAlone = !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (e.key === 'Dead') { deadPending = true; return; }
     if (e.isComposing || e.keyCode === 229) return;
+    deadPending = false;
     // Ctrl+Shift+Space: Off → Hanzi → Pinyin → Off.
     if (e.code === 'Space' && e.ctrlKey && e.shiftKey && !e.altKey && zhSettings().shortcut) {
       e.preventDefault(); e.stopImmediatePropagation();
       setModeTo(nextMode(st.mode));
       return;
     }
-    // Space in Hanzi mode: held (absorbs repeats; with empty buffer inserts one space on release
-    // unless a digit/letter was pressed; with pinyin typed chooses on release or Space+digit picks).
-    if (e.key === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey && (st.spaceHeld || (st.mode === 'hanzi' && !st.latin && !st.composing))) {
+    // Space in Hanzi or Pinyin mode: held (absorbs repeats; with empty buffer inserts one space on
+    // release unless a digit/letter was pressed; with pinyin typed chooses on release / Space+digit).
+    if ((e.key === ' ' || e.code === 'Space') && !e.ctrlKey && !e.altKey && !e.metaKey && (st.spaceHeld || (st.mode !== 'off' && !st.latin && !st.composing))) {
       const out = apply({ type: 'spaceDown', repeat: e.repeat });
       if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    }
+    // Shift+1..9 while composing: pick candidate 1..9 on the current page (layout-independent via
+    // e.code Digit1..Digit9; does nothing when Shift is pressed alone or buffer is empty).
+    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && /^Digit[1-9]$/.test(e.code || '') && busy() && st.mode !== 'off' && !st.latin && !st.composing) {
+      const out = apply({ type: 'pickSlot', d: Number(e.code.slice(5)) });
+      if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    }
+    // 2D vertical arrow navigation across wrapped visual candidate rows (coherent wrap).
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && busy() && st.mode !== 'off' && !st.latin && !st.composing && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      const step = menuApi?.verticalStep?.(dir);
+      if (step && Number.isInteger(step.index)) {
+        const out = apply({ type: 'select', index: step.index });
+        if (out.handled) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+      }
     }
     const k = keyOf(e);
     const out = apply(k);
@@ -365,7 +444,8 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   }
   // Android and other on-screen keyboards without key codes: letters come as beforeinput.
   function onBeforeInput(e) {
-    if (st.mode === 'off' || st.latin || st.composing || e.isComposing) return;
+    if (st.mode === 'off' || st.latin || st.composing || e.isComposing || deadComposing) return;
+    if (st.spaceHeld && e.inputType === 'insertText' && e.data === ' ') { e.preventDefault(); return; }
     if (identified) return;
     let key = null;
     if (e.inputType === 'insertText' && e.data && [...e.data].length === 1) key = e.data;
@@ -377,14 +457,44 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
     if (out.handled) e.preventDefault();
   }
   let hinted = false;
-  function onCompositionStart() {
+  function onCompositionStart(e) {
+    // Dead-key accents (e.g. Spanish ´ + e → é) fire compositionstart; keep the IME buffer intact!
+    if (st.mode !== 'off' && !st.latin && (deadPending || !e.data || DEAD_ACCENT.test(e.data))) {
+      deadComposing = true;
+      deadPending = false;
+      return;
+    }
+    deadPending = false;
+    deadComposing = false;
     apply({ type: 'composition', active: true });
     if (st.mode !== 'off' && !hinted && matchMedia?.('(pointer: coarse)').matches) {
       hinted = true;
       import('./ime-menu.js').then((m) => m.imeHint(el, 'Your keyboard is typing Chinese itself; NoteComplete’s Chinese mode works with its own keys only.'));
     }
   }
-  const onCompositionEnd = () => apply({ type: 'composition', active: false });
+  function onCompositionUpdate(e) {
+    if (!deadComposing) return;
+    const d = String(e.data || '').normalize('NFC');
+    // If the OS IME starts composing multi-character or CJK text, hand off to normal composition.
+    if (d && !DEAD_ACCENT.test(d) && !LETTER.test(d)) {
+      deadComposing = false;
+      apply({ type: 'composition', active: true });
+    }
+  }
+  function onCompositionEnd(e) {
+    deadPending = false;
+    if (deadComposing) {
+      deadComposing = false;
+      const d = String(e.data || '').normalize('NFC');
+      if (d && LETTER.test(d) && st.mode !== 'off' && !st.latin) {
+        // Remove the dead-key composed vowel the browser inserted, and feed it into our IME buffer.
+        removeInserted(String(e.data || '').length);
+        apply({ key: d, lineBefore: lineBeforeOf() });
+      }
+      return;
+    }
+    apply({ type: 'composition', active: false });
+  }
   const onBlur = () => setTimeout(() => {
     if (st.spaceHeld) st = imeReduce(st, { type: 'spaceCancel' }).state;
     if (doc.activeElement === el) return;
@@ -401,6 +511,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
   el.addEventListener?.('keyup', onKeyUp, true);
   el.addEventListener?.('beforeinput', onBeforeInput, true);
   el.addEventListener?.('compositionstart', onCompositionStart);
+  el.addEventListener?.('compositionupdate', onCompositionUpdate);
   el.addEventListener?.('compositionend', onCompositionEnd);
   el.addEventListener?.('blur', onBlur);
   el.addEventListener?.('pointerdown', onPointerDown);
@@ -425,6 +536,7 @@ export function attachIme(el, { kind = 'textarea', getMode = () => 'off', setMod
       el.removeEventListener?.('keyup', onKeyUp, true);
       el.removeEventListener?.('beforeinput', onBeforeInput, true);
       el.removeEventListener?.('compositionstart', onCompositionStart);
+      el.removeEventListener?.('compositionupdate', onCompositionUpdate);
       el.removeEventListener?.('compositionend', onCompositionEnd);
       el.removeEventListener?.('blur', onBlur);
       el.removeEventListener?.('pointerdown', onPointerDown);

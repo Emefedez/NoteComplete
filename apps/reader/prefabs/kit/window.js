@@ -69,9 +69,10 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
   // First time: on the right, under the app's bars (its #viewport, when there is one), so the
   // middle of the page stays in sight.
   const firstRect = () => {
+    const z = uiZoom();
     const area = windowArea();
     const pages = document.getElementById('viewport')?.getBoundingClientRect();
-    const top = pages && pages.height > 200 ? Math.max(area.top, pages.top + 12) : area.top + 40;
+    const top = pages && pages.height / z > 200 ? Math.max(area.top, pages.top / z + 12) : area.top + 40;
     return { left: area.left + area.width - Math.min(width, area.width) - 16, top, width, height };
   };
   const saved = remembered(key);
@@ -156,15 +157,17 @@ export function movableWindow({ key = 'module', title = '', width = 560, height 
     const target = e.currentTarget, id = e.pointerId;
     try { target.setPointerCapture(id); } catch { /* Synthetic pointer. */ }
     // Moving starts from where it is (whole, even while pushed); resizing from what is drawn.
+    const z0 = uiZoom();
     const box = el.getBoundingClientRect();
     const start = mode === 'move'
-      ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height ?? rect.naturalHeight ?? box.height }
-      : { left: box.left, top: box.top, width: box.width, height: box.height };
+      ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height ?? rect.naturalHeight ?? box.height / z0 }
+      : { left: box.left / z0, top: box.top / z0, width: box.width / z0, height: box.height / z0 };
     const x0 = e.clientX, y0 = e.clientY;
     el.classList.add(mode === 'move' ? 'moving' : 'sizing');
     const move = (m) => {
       if (m.pointerId !== id) return;
-      const dx = m.clientX - x0, dy = m.clientY - y0;
+      const z = uiZoom();
+      const dx = (m.clientX - x0) / z, dy = (m.clientY - y0) / z;
       if (mode === 'move') apply({ ...start, left: start.left + dx, top: start.top + dy });
       else {
         const vertical = /[tb]/.test(mode);

@@ -353,6 +353,11 @@ main {
 .link-error { color: var(--danger); }
 #textView .html-bar { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
 #textView .html-bar .spacer { flex: 1; }
+/* In Markdown editor mode, Chinese input controls replace #textDark on the left and expand cleanly. */
+#textView.text-markdown-edit #textDark { display: none; }
+.text-zh-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.text-zh-slot .zh-toggle { flex: none; min-width: 28px; min-height: 26px; padding: 0 7px; border-radius: var(--radius); }
+#textView.diagram-editing .text-zh-slot { display: none; }
 /* A phone: the bar wraps to a second row instead of pushing MD and the zoom off the screen. */
 @media (max-width: 600px) { #textView .html-bar { flex-wrap: wrap; row-gap: 4px; gap: 6px; } #textView .html-bar .spacer { flex-basis: 0; } }
 #textMarkdown[aria-pressed="true"], #textSplitToggle[aria-pressed="true"], #textRubyToggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
@@ -361,13 +366,23 @@ main {
 #textRubyToggle rt { font-size: 8px; line-height: 1; font-weight: 500; }
 .text-body-pane { flex: 1; min-width: 0; display: flex; container-type: inline-size; }
 .text-body-pane:has(> #textBody[hidden]) { display: none; }
-#textView.split-preview #textEditor { order: 1; flex: 1 1 50%; min-width: 0; border-right: 1px solid var(--line); }
-#textView.split-preview .text-body-pane { order: 2; flex: 1 1 50%; min-width: 0; }
+.text-split-resize { display: none; flex: none; position: relative; touch-action: none; user-select: none; }
+.text-split-resize::after { content: ""; position: absolute; inset: 0; margin: auto; width: 1px; height: 100%; background: var(--line); transition: background .15s ease, width .15s ease; }
+.text-split-resize:hover::after, .text-split-resize.dragging::after { width: 3px; background: var(--accent); }
+#textView.split-preview #textEditor { order: 1; flex: 0 0 var(--split-editor-basis, 50%); min-width: 160px; border-right: 0; }
+#textView.split-preview .text-split-resize { order: 2; display: block; width: 7px; cursor: col-resize; }
+#textView.split-preview .text-body-pane { order: 3; flex: 1 1 0; min-width: 160px; }
 #textView.split-preview #textBody { padding-top: 22px; padding-bottom: 30vh; }
 @media (max-width: 720px) {
   #textView.split-preview .side-body { flex-direction: column; }
-  #textView.split-preview #textEditor { border-right: 0; border-bottom: 1px solid var(--line); }
+  #textView.split-preview #textEditor { flex: 0 0 var(--split-editor-basis, 50%); min-width: 0; min-height: 120px; border-right: 0; border-bottom: 0; }
+  #textView.split-preview .text-split-resize { width: auto; height: 8px; cursor: row-resize; }
+  #textView.split-preview .text-split-resize::after { width: 100%; height: 1px; }
+  #textView.split-preview .text-split-resize:hover::after, #textView.split-preview .text-split-resize.dragging::after { width: 100%; height: 3px; }
+  #textView.split-preview .text-body-pane { flex: 1 1 0; min-width: 0; min-height: 120px; }
 }
+.html-bar .zoom-tag { display: none; font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 0 2px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+#textView.split-preview .html-bar .zoom-tag { display: inline; }
 /* Markdown / text viewer & editor side spacing + snap alignment (left / center / right). */
 .text-layout-controls { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .text-width-select { height: 26px; min-height: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--fill); color: var(--ink); font-size: 11.5px; font-weight: 500; cursor: pointer; }
@@ -376,9 +391,9 @@ main {
 #textView .page-align button { min-width: 26px; width: 26px; height: 24px; min-height: 24px; padding: 0; border: 0; background: transparent; }
 #textView .page-align button[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
 #textView.diagram-editing .html-bar > .text-layout-controls { display: none; }
-.notes-render.text-doc { flex: 1; min-height: 0; width: 100%; overflow: auto; padding: 28px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); line-height: 1.65; background: var(--surface); }
+.notes-render.text-doc { flex: 1; min-height: 0; width: 100%; overflow: auto; padding: 28px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-preview-zoom, var(--text-zoom, 1))); line-height: 1.65; background: var(--surface); }
 .text-doc:focus { outline: none; }
-.notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; }
+.notes-render.text-doc.text-plain { white-space: pre-wrap; overflow-wrap: anywhere; font: calc(14px * var(--text-preview-zoom, var(--text-zoom, 1)))/1.6 ui-monospace, "JetBrains Mono", monospace; }
 /* A .puml file in the UML editor (diagram-doc.js): the editor fills the document view. */
 .notes-render.text-doc.text-diagram-editor { padding: 0; display: flex; overflow: hidden; }
 .text-diagram-editor .diagram-editor-host { flex: 1; min-width: 0; min-height: 0; height: auto; font-size: 14px; line-height: 1.4; }
@@ -407,8 +422,8 @@ body.pages-dark .text-diagram .diagram-view img { filter: invert(0.88) hue-rotat
 .side-body > .doc-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); container-type: inline-size; }
 .doc-editor[hidden] { display: none; }
 .doc-editor .notes-commands .TMCommandBar { padding-inline: max(16px, calc((100cqi - var(--text-width, 760px)) / 2)); }
-.doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-zoom, 1)); }
-.doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-zoom, 1))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
+.doc-editor .notes-editor .TinyMDE { padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; font-size: calc(15px * var(--text-editor-zoom, var(--text-zoom, 1))); }
+.doc-editor-plain { flex: 1; min-height: 0; width: 100%; box-sizing: border-box; margin: 0; border: 0; border-radius: 0; resize: none; padding: 20px max(24px, calc((100cqi - var(--text-width, 760px)) / 2)) 30vh; background: var(--surface); color: var(--ink); font: calc(14px * var(--text-editor-zoom, var(--text-zoom, 1)))/1.6 ui-monospace, "JetBrains Mono", monospace; tab-size: 4; }
 #textView[data-text-align="left"] :is(.notes-render.text-doc:not(.text-diagram-editor), .doc-editor .notes-editor .TinyMDE, .doc-editor-plain) {
   padding-left: 24px;
   padding-right: max(24px, calc(100cqi - var(--text-width, 760px) - 24px));
@@ -4574,6 +4589,8 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .zh-lk-stage { width: 100%; }
 .zh-lk-stage .pk-step-player { margin-top: 4px; }
 .zh-lk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.zh-lk-part { display: inline-flex; align-items: center; gap: 4px; }
+.zh-lk-part-gloss { font-size: 11.5px; }
 .zh-lk-label { min-width: 6.5em; color: var(--muted); font-size: 12px; }
 .zh-lk-section > summary { cursor: pointer; padding: 2px 0; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 .zh-lk-section[open] > summary { margin-bottom: 4px; }
@@ -5050,3 +5067,18 @@ html.nc-native-app .math-keypad { padding-bottom: 6px; }
 .cg-actions-inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cg-actions-inline button, .cg-actions-inline a { height: 28px; min-height: 0; padding: 0 10px; font-size: 12px; }
 .cloud-guide-dialog[open] { height: min(560px, calc(100dvh / var(--ui-zoom, 1) - 24px)); max-height: calc(100dvh / var(--ui-zoom, 1) - 24px); }
+
+/* Universal translation window: favorite languages pills + searchable language picker */
+.zh-tr-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.zh-tr-lang-btn { height: 26px; min-height: 0; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; }
+.zh-tr-lang-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.zh-tr-search-btn { width: 26px; height: 26px; min-height: 0; padding: 0; flex: none; }
+.zh-tr-search-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.zh-tr-search-panel { display: grid; gap: 6px; padding: 8px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); }
+.zh-tr-search-input { height: 28px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: 12.5px; }
+.zh-tr-lang-list { max-height: 180px; overflow-y: auto; display: grid; gap: 2px; }
+.zh-tr-lang-row { display: flex; align-items: center; gap: 4px; }
+.zh-tr-lang-pick { flex: 1; min-width: 0; justify-content: space-between; min-height: 28px; padding: 3px 8px; border: 0; border-radius: var(--radius); background: transparent; text-align: left; font-size: 12.5px; }
+.zh-tr-lang-pick:hover { background: var(--surface); }
+.zh-tr-lang-pick[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.zh-tr-lang-star { width: 26px; height: 26px; min-height: 0; padding: 0; flex: none; }

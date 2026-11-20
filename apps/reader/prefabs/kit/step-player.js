@@ -16,9 +16,11 @@ const typing = (t) => t?.closest?.('input:not([type=range]):not([type=checkbox])
 
 // `steps`: how many; `start`: steps done at first (default 0); `duration(i)`: ms of step i at 1×;
 // `gap`: ms between steps while playing; `key`: names the remembered speed; `onChange(at)`.
-export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n) => `${at} / ${n}`, duration = () => 700, gap = 220, key = 'steps', onChange = null, keys = true } = {}) {
+// `nextStep(at, { repeating })`: optional custom stepper returning the next step index to animate,
+// or `{ start, wait }` to begin a repeat cycle after `wait` ms, or `null` to finish playback.
+export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n) => `${at} / ${n}`, duration = () => 700, gap = 220, key = 'steps', onChange = null, onStop = null, nextStep = null, keys = true } = {}) {
   loadKitStyles();
-  let n = steps, at = Math.max(0, Math.min(n, start)), raf = 0, timer = 0, playing = false;
+  let n = steps, at = Math.max(0, Math.min(n, start)), raf = 0, timer = 0, playing = false, repeating = false;
   let speed = Number(remembered(`pk-speed:${key}`, '1')) || 1;
   const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
@@ -66,25 +68,52 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
     draw?.(i, 0);
     raf = requestAnimationFrame(frame);
   }
+  function advance() {
+    if (!playing) return;
+    const planNext = nextStep ? nextStep(at, { repeating }) : (at < n ? at : null);
+    if (planNext == null) {
+      playing = false; repeating = false; onStop?.(false); playIcon();
+      return;
+    }
+    if (typeof planNext === 'object') {
+      const wait = Math.max(0, Number(planNext.wait ?? 520)) / speed;
+      timer = setTimeout(() => {
+        if (!playing) return;
+        // Re-check repeat condition right when the beat ends (in case repeat was unchecked during the pause).
+        const recheck = nextStep ? nextStep(at, { repeating: true, recheck: true }) : null;
+        if (recheck == null) { playing = false; repeating = false; onStop?.(false); playIcon(); return; }
+        const startIdx = typeof recheck === 'object' ? recheck.start : recheck;
+        repeating = true;
+        at = Math.max(0, Math.min(n - 1, startIdx));
+        paint(); onChange?.(at);
+        advance();
+      }, wait);
+      return;
+    }
+    if (planNext !== at) { at = planNext; paint(); onChange?.(at); }
+    animate(() => {
+      if (!playing) return;
+      const after = nextStep ? nextStep(at, { repeating }) : (at < n ? at : null);
+      if (after == null) { playing = false; repeating = false; onStop?.(false); playIcon(); return; }
+      if (typeof after === 'object') { advance(); return; }
+      timer = setTimeout(advance, (reduced.matches ? Math.max(gap, duration(after)) : gap) / speed);
+    });
+  }
   function play() {
     if (!n) return;
     halt();
+    repeating = false;
     if (at >= n) { at = 0; paint(); onChange?.(at); }
     playing = true; playIcon();
-    const next = () => {
-      if (!playing) return;
-      if (at >= n) { playing = false; playIcon(); return; }
-      animate(() => { if (playing && at < n) timer = setTimeout(next, (reduced.matches ? Math.max(gap, duration(at)) : gap) / speed); else { playing = false; playIcon(); } });
-    };
-    next();
+    advance();
   }
-  function pause() { halt(); playing = false; paint(); }
-  function go(i) { halt(); playing = false; at = Math.max(0, Math.min(n, i)); paint(); onChange?.(at); }
+  function pause() { halt(); playing = false; repeating = false; onStop?.(true); paint(); }
+  function go(i) { halt(); playing = false; repeating = false; onStop?.(true); at = Math.max(0, Math.min(n, i)); paint(); onChange?.(at); }
   // A step pressed while one animates: that one ends at once, the next animates.
   function forward() {
     if (raf) { halt(); at = Math.min(n, at + 1); paint(); onChange?.(at); }
     if (at >= n) return;
-    halt(); playing = false; playIcon(); animate();
+    halt(); playing = false; repeating = false; onStop?.(true); playIcon(); animate();
   }
 
   firstBtn.onclick = () => go(0);

@@ -112,8 +112,12 @@ test('Enter: Auto follows the text before the caret; Shift+Enter writes the lett
 });
 
 test('full-width punctuation in Hanzi mode', () => {
-  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT }).text, '你好？');
-  assert.equal(run('hanzi', [...keys('nihao '), ',', '\\'], { dict: DICT }).text, '你好，、');
+  // Default: normal ASCII punctuation (e.g. . stays . instead of 。).
+  assert.equal(run('hanzi', keys('nihao.'), { dict: DICT }).text, '你好.');
+  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT }).text, '你好?');
+  // Opt-in full-width punctuation converts ? , \ to Chinese marks.
+  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT, opts: { fullWidth: true } }).text, '你好？');
+  assert.equal(run('hanzi', [...keys('nihao '), ',', '\\'], { dict: DICT, opts: { fullWidth: true } }).text, '你好，、');
   assert.equal(run('hanzi', ['!'], { opts: { fullWidth: false } }).text, '!');
 });
 
@@ -225,8 +229,47 @@ test('a repeated Space keydown does not commit twice', () => {
   const rolled = imeReduce(hold, { key: 'n' });
   assert.equal(rolled.state.buffer, 'n');
   assert.equal(imeReduce(rolled.state, { type: 'spaceUp' }).commit, undefined);
-  // Pinyin mode keeps Space as it was.
-  assert.equal(imeReduce(imeInitial('pinyin'), { type: 'spaceDown' }).handled, undefined);
+  // Pinyin mode also holds Space without spamming repeats and commits on release.
+  const pDown = imeReduce(imeInitial('pinyin'), { type: 'spaceDown' });
+  assert.equal(pDown.handled, true);
+  assert.equal(imeReduce(pDown.state, { type: 'spaceDown', repeat: true }).commit, undefined);
+  assert.equal(imeReduce(pDown.state, { type: 'spaceUp' }).commit, ' ');
+});
+
+test('arrow keys navigate candidates with coherent wrap and vertical page stepping', () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({ text: String.fromCharCode(0x4e00 + i), pinyin: 'a', consumed: 1, level: 1, gloss: '' }));
+  let s = imeInitial('hanzi', { perPage: 5 });
+  s = imeReduce(s, { key: 'a' }).state;
+  s = imeReduce(s, { type: 'cands', input: 'a', items: many }).state;
+  // ArrowLeft from 0 wraps cleanly to last candidate (11, page 2).
+  s = imeReduce(s, { key: 'ArrowLeft' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  // ArrowRight from last wraps back to 0 (page 0).
+  s = imeReduce(s, { key: 'ArrowRight' }).state;
+  assert.equal(s.sel, 0);
+  assert.equal(s.page, 0);
+  // ArrowRight once -> col 1 (sel=1), ArrowDown steps vertically to page 1 col 1 (sel=6), then page 2 col 1 (sel=11), then wraps to page 0 col 1 (sel=1).
+  s = imeReduce(s, { key: 'ArrowRight' }).state;
+  assert.equal(s.sel, 1);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 6);
+  assert.equal(s.page, 1);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 1);
+  assert.equal(s.page, 0);
+  // ArrowUp wraps back to last page same column (sel=11).
+  s = imeReduce(s, { key: 'ArrowUp' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  // Shift+1..9 (pickSlot) picks candidate on current page when composing, and is ignored when empty.
+  const picked = imeReduce(s, { type: 'pickSlot', d: 2 });
+  assert.equal(picked.handled, true);
+  assert.equal(picked.commit, String.fromCharCode(0x4e00 + 11));
+  assert.equal(imeReduce(imeInitial('hanzi'), { type: 'pickSlot', d: 1 }).handled, undefined);
 });
 
 test('mid-syllable tone digits, accented vowels, and digits before vowels wait cleanly without spacing', () => {
@@ -272,8 +315,8 @@ test('partial pick + Backspace emptying buffer never stalls Space or punctuation
   assert.equal(spaceOut.wait, undefined);
   assert.equal(spaceOut.commit, '你');
   // Comma and period must commit immediately instead of paging candidates.
-  assert.equal(run('hanzi', [...seq('ni'), ','], { dict: DICT }).text, '你，');
-  assert.equal(run('hanzi', [...seq('ni'), '.'], { dict: DICT }).text, '你。');
+  assert.equal(run('hanzi', [...seq('ni'), ','], { dict: DICT }).text, '你,');
+  assert.equal(run('hanzi', [...seq('ni'), '.'], { dict: DICT }).text, '你.');
   // spaceUp while waiting clears spaceHeld so a follow-up letter is not treated as a chord.
   let s = imeInitial('hanzi');
   for (const k of 'nihao') s = imeReduce(s, { key: k }).state;

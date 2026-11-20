@@ -76,9 +76,14 @@ export function windowOf(el) { return el ? windows.get(el) || null : null; }
 // user put it, so it is not hidden under the bar.
 function restack() { stack.forEach((w, i) => { w.style.zIndex = `calc(max(var(--window-z, 26), var(--window-floor, 0)) + ${i})`; }); }
 // Whether a rect drawn on the screen covers part of the top bar (header.chrome).
+function uiZoom() {
+  if (typeof document === 'undefined') return 1;
+  const z = parseFloat(document.documentElement?.style?.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
 export function overBar(top) {
   const bar = typeof document !== 'undefined' && typeof document.querySelector === 'function' ? document.querySelector('header.chrome')?.getBoundingClientRect?.() : null;
-  return !!bar && bar.height > 0 && top < bar.bottom;
+  return !!bar && bar.height > 0 && top < bar.bottom / uiZoom();
 }
 function raise(el) {
   if (stack.at(-1) === el) return;
@@ -129,17 +134,18 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
   key = `${key}:screen`;
   const fixed = () => getComputedStyle(el).position === 'fixed';
   const area = () => {
-    if (fixed()) return screen?.() || { left: 0, top: 0, width: innerWidth, height: innerHeight };
+    const z = uiZoom();
+    if (fixed()) return screen?.() || { left: 0, top: 0, width: Math.round(innerWidth / z), height: Math.round(innerHeight / z) };
     const r = (el.offsetParent || document.body).getBoundingClientRect();
-    return { left: r.left, top: r.top, width: r.width, height: r.height };
+    return { left: r.left / z, top: r.top / z, width: r.width / z, height: r.height / z };
   };
   const min = { width: minWidth, height: minHeight };
   const isCompact = () => !!compact && el.classList.contains(compact.cls);
   let large = false, beforeLarge = null;
   // The window's rect relative to its area, as drawn now.
   function drawn() {
-    const r = el.getBoundingClientRect(), a = area();
-    return { left: r.left - a.left, top: r.top - a.top, width: r.width, height: r.height };
+    const z = uiZoom(), r = el.getBoundingClientRect(), a = area();
+    return { left: r.left / z - a.left, top: r.top / z - a.top, width: r.width / z, height: r.height / z };
   }
   // Where it is: the full rect while it is pushed over an edge (what is drawn is smaller).
   let pushed = false, want = null;
@@ -185,8 +191,8 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       const r = el.getBoundingClientRect(), stretched = getComputedStyle(el).bottom !== 'auto' && getComputedStyle(el).top !== 'auto';
       el.classList.add('screen-window');
       if (!s) {
-        const a = area();
-        apply({ left: r.left - a.left, top: r.top - a.top, width: r.width, height: r.height });
+        const z = uiZoom(), a = area();
+        apply({ left: r.left / z - a.left, top: r.top / z - a.top, width: r.width / z, height: r.height / z });
         if (!stretched && !isCompact()) el.style.height = '';
         return;
       }
@@ -260,7 +266,8 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     const move = e => {
       if (e.pointerId !== down.pointerId) return;
       if (!e.buttons) return up();
-      apply({ ...start, left: start.left + e.clientX - x, top: start.top + e.clientY - y });
+      const z = uiZoom();
+      apply({ ...start, left: start.left + (e.clientX - x) / z, top: start.top + (e.clientY - y) / z });
     };
     el.classList.add('dragging');
     addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up); addEventListener('blur', up);
@@ -300,7 +307,8 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
     const move = e => {
       if (e.pointerId !== down.pointerId) return;
       if (!e.buttons) return up(e);
-      const dx = e.clientX - down.clientX, dy = e.clientY - down.clientY;
+      const z = uiZoom();
+      const dx = (e.clientX - down.clientX) / z, dy = (e.clientY - down.clientY) / z;
       apply(moving ? { ...start, left: start.left + dx, top: start.top + dy } : resizeRect(start, dx, dy, edges, min, a));
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
@@ -326,7 +334,8 @@ export function floatingWindow(el, { key, head, close, label, compact = null, en
       grip.onpointermove = e => {
         if (e.pointerId !== down.pointerId) return;
         if (!e.buttons) return finish();
-        apply(resizeRect(start, e.clientX - down.clientX, e.clientY - down.clientY, edges, min, a));
+        const z = uiZoom();
+        apply(resizeRect(start, (e.clientX - down.clientX) / z, (e.clientY - down.clientY) / z, edges, min, a));
       };
       grip.onpointerup = grip.onpointercancel = finish;
     };
