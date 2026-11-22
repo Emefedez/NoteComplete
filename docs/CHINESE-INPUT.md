@@ -34,7 +34,7 @@ estimates.
 
 **Keys and IME.** There is no `compositionstart`/`compositionend` handling anywhere in
 `apps/reader`; only `modal-dialogs.js` checks `e.isComposing` (for Esc). Global shortcuts are
-gated by `typingIn(t)` in `app.js` (line 6965: inputs except buttons/sliders, textareas, selects,
+gated by `typingIn(t)` in `item-clipboard.js` (inputs except buttons/sliders, textareas, selects,
 contenteditable) and `quickKeyAllowed`. The text box's own keydown stops propagation, so keys
 typed in it never reach tool shortcuts. Today an OS IME (fcitx5, Gboard pinyin, iPad pinyin)
 already works in all of these fields because nothing intercepts composition, but text-box Esc

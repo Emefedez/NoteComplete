@@ -202,6 +202,27 @@ Done in four commits (`f989e9e`, `2f7e953`, `abe5334`, and the `text-box.js` com
 each with its tests, the parts that have a clear edge: auto-save, the download queue's
 window, page export wiring, the text box editor. No behaviour change; one commit each.
 
+### Q2b `app.js` grew back to 10,074 lines `[P]`
+
+By v1.2.71 it had 123 module-level `let`s and 319 functions. Moved out the parts that only
+read the note's state, each a factory that `app.js` calls once with what it needs (as
+`textBoxController`): `media-open.js` (audio, video and R files), `page-dialogs.js` (Pages →
+Insert and Change PDF background), `pen-setup.js` (Pen button… and the pen test),
+`pen-hover.js` (pen hover ring and touch tooltips), `figures.js` (graphs, tables, prefabs,
+UML and their editors), `item-clipboard.js` (copy, cut, paste), `item-menus.js` (the item
+and page menus, pictures of items) and `study-import.js`. Code moved verbatim; mutable state
+is read through an `app` object of getters (and a setter where a module writes it, as
+`penProfile`), so there is still one copy of each variable. `app.js` is 8,269 lines, 104
+`let`s, 250 functions. Checked with `tsc --checkJs` (no unresolved names), a walk of what
+runs at load (no `const` read before it is set that was not read early before), and the
+same browser run before and after (open a note, insert a page, the dialogs, item and page
+menus, copy and paste, the prefab chooser, a study import).
+
+Next, the parts that write the note's state: the pointer handlers (`pointerDown`,
+`pointerUp`, `appendPoint`), page rendering (`renderPage`, `buildPages`, thumbnails), the
+layer panel, `load`/`save`/`reset`, and collaboration (`startCollab`, `collabHost`). Those
+need the state itself in one object (`doc`, `page`, `panels`, `tool`, `editing`, …) first.
+
 ### Q3 Errors that are dropped `[D]`
 
 Done: every bare `.catch(() => {})` in `apps/reader/` either documents why it is optional (`/* Optional. */`, `/* Reported by load(). */`, `/* Handled via race. */`, `/* Returned to caller. */`) or reports the failure via `console.warn` or `status(..., true)`.

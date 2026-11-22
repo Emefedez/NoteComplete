@@ -12,10 +12,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
-import { isAudioName, isVideoName, isRDataName, isRScriptName } from "./text-types.js";
-import { savedUmlView } from "./uml.js";
-import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
-import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
+import { isRScriptName } from "./text-types.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -23,7 +20,7 @@ import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { dropboxBrowser } from "./dropbox-browser.js";
 import { githubBrowser, webdavBrowser, setupCloudGuideDialog } from "./cloud-collab.js";
-import { Library, entrySourceLabel, entryTitle } from "./library.js";
+import { Library, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
 import { isNotebookCover } from "./note-cover.js";
 import { archiveBrowser } from "./archive-browser.js";
@@ -35,7 +32,6 @@ import { createDownloadQueue } from "./download-queue.js";
 import { queueWindow } from "./queue-controls.js";
 import { commandPalette } from "./command-palette.js";
 import { findController, noteFingerprint } from "./find.js";
-import { sideDocument } from "./side-document.js";
 import { rememberFingerprint } from "./content-search.js";
 import { studyController, ankiDecks, studyGroups } from "./study.js";
 import { allQuizzes } from "./all-quizzes.js";
@@ -49,7 +45,7 @@ import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { floatingWindow } from "./floating.js";
-import { pageExporter, packPages } from "./page-export.js";
+import { pageExporter } from "./page-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
@@ -66,8 +62,7 @@ import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
 import { qualitySettings } from "./quality.js";
 import { PdfBackgrounds, backgroundPlacement, openPdf, copyCanvas } from "./pdf-background.js";
-import { PRESETS, SPACE, blankSize, pdfPages, insertAt, unitsToMm, mmToUnits, UNITS_PER_POINT } from "./insert-pages.js";
-import { buildPageBackgroundChanges, bytesToBase64, formatBytes, parsePageSelection, shouldSuggestCompact, usedPdfPageIndices } from "./page-background.js";
+import { PRESETS, SPACE, insertAt, unitsToMm, mmToUnits } from "./insert-pages.js";
 import { handwritingConverter } from "./convert.js";
 import { examController } from "./exam.js";
 import { batchNotesController } from "./batch-notes.js";
@@ -83,14 +78,9 @@ import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
-import { textBoxController, holdInk, letGo, keepHeld, rgbaOf, boxText } from "./text-box.js";
+import { textBoxController, holdInk, letGo, keepHeld, boxText } from "./text-box.js";
 import { pdfEditController } from "./pdf-edit.js";
-import { graphItems } from "./graph.js";
-import { tableItems } from "./table.js";
-import { editGraph, editTable } from "./compound-dialogs.js";
-import { editorKind, canBeExercise } from "./chart-model.js";
-import { moduleOf, editorOf } from "./prefab-registry.js";
-import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
+import { PREFABS, prefabName, recentPrefabs } from "./prefabs.js";
 import { syncStickyNotes } from "./sticky-notes.js";
 import { createMathBar } from "./math/math-bar.js";
 import { openNewRDialog } from "./math/new-r-dialog.js";
@@ -103,15 +93,23 @@ import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js
 import { sortable } from "./reorder.js";
 import { quickMenu } from "./quick-menu.js";
 import { autosaveController } from "./autosave.js";
-import { penButtonDetector, loadPenProfile, profileFrom, describeProfile, PROFILE_KEY } from "./pen-button.js";
+import { penButtonDetector, loadPenProfile } from "./pen-button.js";
 import { sharedAI } from "./local-ai.js";
 import { runAI, smallSetting } from "./small-model.js";
 import { installModalDialogs } from "./modal-dialogs.js";
 import { chineseField, imeMenuOpen, openSettings as openZhSettings } from "./chinese/ime.js";
 import { configureRuby, noteOpened as zhNoteOpened, rubySvg, rubyForExport, wireRubyControls } from "./chinese/ruby.js";
-import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
+import { configureZh, installZhContext, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
 import { installZhSelection, showBar as showZhBar } from "./chinese/zh-select.js";
 import { embedChineseFont } from "./chinese/fonts.js";
+import { pageDialogs } from "./page-dialogs.js";
+import { studyImport } from "./study-import.js";
+import { penSetup } from "./pen-setup.js";
+import { penHoverAndTips } from "./pen-hover.js";
+import { figureInserts } from "./figures.js";
+import { itemClipboard } from "./item-clipboard.js";
+import { itemMenus } from "./item-menus.js";
+import { mediaOpener } from "./media-open.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -119,92 +117,16 @@ const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1
 enhanceSelects();
 decorateIcons();
 const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
-const isMp3Name = (name, type = "") => isAudioName(name, type);
-const isMp4Name = (name, type = "") => isVideoName(name, type);
-async function rememberMediaInRecent(file, { path = "", name = "", origin = "Imported" } = {}) {
-  try {
-    const fileName = file?.name || name || (path ? path.split(/[\\/]/).pop() : "");
-    if (!fileName) return;
-    if (path && typeof library !== "undefined" && library?.rememberLocal) {
-      await library.rememberLocal(path, fileName, file?.size || 0);
-    } else if (file && typeof library !== "undefined" && library?.rememberImported) {
-      await library.rememberImported(file, { origin });
-    }
-    if (typeof home !== "undefined" && home?.visible) home.renderRecent?.();
-  } catch { /* Best-effort Recent tracking. */ }
-}
-async function openExternalVideo(path, name = "video.mp4", file = null, { origin = "Imported" } = {}) {
-  await rememberMediaInRecent(file, { path, name, origin });
-  if (path && window.notecompleteFiles?.openExternalPath) {
-    await window.notecompleteFiles.openExternalPath(path);
-    status(`Opened ${name} in your system player.`);
-    return true;
-  }
-  if (file) {
-    const blobUrl = URL.createObjectURL(file.type ? file : new Blob([file], { type: "video/mp4" }));
-    const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = name;
-      a.click();
-    }
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    status(`Opened ${name} in an external player.`);
-    return true;
-  }
-  status(`Could not open ${name} in an external player.`, true);
-  return true;
-}
-async function openRStudioTarget({ filePath = "", folderPath = "", title = "", code = "", kind = "r", embed = false } = {}) {
-  if (!window.notecompleteRBridge) {
-    status("R Commander Studio bridge requires the NoteComplete desktop app.", true);
-    return false;
-  }
-  const res = await window.notecompleteRBridge.openInStudio({ filePath, folderPath, title, code, kind, embed });
-  if (res?.ok) {
-    status(res.connected ? "Opened in R Commander Studio." : "Launching R Commander Studio…");
-    return true;
-  }
-  if (res?.notInstalled) {
-    await openNewRDialog({
-      status,
-      onOpenStudio: openRStudioTarget,
-      onCreatedWorkspace: async (created) => {
-        if (created?.folderPath && created?.folderListing) {
-          await groups.openFolder({ folder: created.folderPath, name: created.name, files: created.folderListing });
-          home?.renderRecent?.();
-        }
-      },
-      onCreatedFile: async (created) => {
-        if (created?.filePath) {
-          await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
-          home?.renderRecent?.();
-        }
-      },
-    });
-    return true;
-  }
-  status(res?.error || "Could not open R Commander Studio.", true);
-  return false;
-}
-async function openMediaFile(file, { path = "", origin = "Imported" } = {}) {
-  if (!file) return false;
-  if (isRDataName(file.name)) {
-    await rememberMediaInRecent(file, { path, name: file.name, origin });
-    await openRStudioTarget({ filePath: path, title: file.name });
-    return true;
-  }
-  if (isMp3Name(file.name, file.type)) {
-    await rememberMediaInRecent(file, { path, name: file.name, origin });
-    await globalAudio.playFile(file);
-    return true;
-  }
-  if (isMp4Name(file.name, file.type)) {
-    return openExternalVideo(path, file.name, file, { origin });
-  }
-  return false;
-}
+// Audio, video and R files opened from anywhere (media-open.js).
+const { isMp3Name, isMp4Name, openExternalVideo, openMediaFile, openRStudioTarget } = mediaOpener({
+  globalAudio,
+  status,
+  app: {
+    get groups() { return groups; },
+    get home() { return home; },
+    get library() { return library; },
+  },
+});
 if ($("helpGithub")) {
   $("helpGithub").onclick = () => window.open("https://github.com/Emefedez", "_blank", "noopener,noreferrer");
 }
@@ -2826,196 +2748,19 @@ $("penSmoothToggle").onclick = () => {
   smoothingSwitch();
   status(smoothingOn ? "Pen smoothing on." : "Pen smoothing off: strokes follow the pen exactly.");
 };
-// Pen hover preview: a ring at the pen's tip, as wide as it would draw, while it hovers (pointer
-// events with no button held). Enabled by default on iOS and Android so stylus hover detection
-// is immediately visible; can be toggled off per device in View → Pen hover preview.
-const appleDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-const HOVER_TOOLS = [
-  ["pan", "Pan"],
-  ["select", "Select"],
-  ["text", "Text"],
-  ["draw", "Pen"],
-  ["highlight", "Highlighter"],
-  ["erase", "Eraser"],
-  ["shape", "Shapes"],
-  ["tape", "Tape"],
-  ["grab", "Grab text"],
-];
-let penHoverOn = appleDevice || /Android/i.test(navigator.userAgent);
-try { const saved = localStorage.getItem("notecomplete-pen-hover"); if (saved === "1" || saved === "0") penHoverOn = saved === "1"; } catch { /* Optional. */ }
-let penHoverTools = new Set(HOVER_TOOLS.map(([id]) => id));
-try {
-  const savedTools = JSON.parse(localStorage.getItem("notecomplete-pen-hover-tools") || "null");
-  if (Array.isArray(savedTools)) {
-    const valid = new Set(HOVER_TOOLS.map(([id]) => id));
-    penHoverTools = new Set(savedTools.filter((id) => valid.has(id)));
-  }
-} catch { /* Optional. */ }
-function savePenHoverTools() {
-  try { localStorage.setItem("notecomplete-pen-hover-tools", JSON.stringify([...penHoverTools])); } catch { /* Optional. */ }
-}
-const penHoverRing = document.createElement("div");
-penHoverRing.id = "penHover"; penHoverRing.hidden = true; penHoverRing.setAttribute("aria-hidden", "true");
-document.body.append(penHoverRing);
-let penHoverTimer = 0, penHoverLast = 0, penHoverFrame = 0, penHoverEvent = null;
-const penHoverShown = { size: 0, tool: "", color: "" };
-const hidePenHover = () => {
-  penHoverEvent = null;
-  if (penHoverFrame) { cancelAnimationFrame(penHoverFrame); penHoverFrame = 0; }
-  if (penHoverTimer) { clearTimeout(penHoverTimer); penHoverTimer = 0; }
-  if (!penHoverRing.hidden) penHoverRing.hidden = true;
-};
-// Leaving hover range is not always reported (the pen-out event can be lost, or name another
-// element): a ring with no pen move for a while is taken away. One timer checks the time
-// of the last move, rather than a timer started again on every move.
-const PEN_HOVER_IDLE_MS = 1200;
-const penHoverIdle = () => {
-  const left = PEN_HOVER_IDLE_MS - (performance.now() - penHoverLast);
-  penHoverTimer = left > 0 ? setTimeout(penHoverIdle, left) : 0;
-  if (left <= 0) hidePenHover();
-};
-// A pen reports moves far more often than the screen draws (up to 240 a second on an
-// iPad): the ring is placed once a frame, from the latest move, and only what changed is
-// written, so hovering costs next to nothing.
-function showPenHover(e) {
-  if (!penHoverOn || !doc || e.pointerType !== "pen" || e.buttons) return penHoverRing.hidden && !penHoverFrame ? undefined : hidePenHover();
-  penHoverEvent = e;
-  penHoverLast = performance.now();
-  if (!penHoverFrame) penHoverFrame = requestAnimationFrame(placePenHover);
-}
-function placePenHover() {
-  penHoverFrame = 0;
-  const e = penHoverEvent;
-  if (!e) return;
-  const sheet = e.target.closest?.(".sheet"), p = sheet && panels[Number(sheet.dataset.page)];
-  if (!p || !penHoverTools.has(tool)) return hidePenHover();
-  const scale = p.el.getBoundingClientRect().width / p.size[0];
-  const strokeTool = ["draw", "highlight", "erase", "tape"].includes(tool);
-  const size = Math.round(strokeTool
-    ? Math.max(6, (tool === "erase" ? eraserRadius() * 2 : Number($("width").value) || 2) * scale)
-    : tool === "shape"
-      ? Math.max(8, (Number($("width").value) || 2) * scale)
-      : 12);
-  const style = penHoverRing.style;
-  if (size !== penHoverShown.size) { style.width = style.height = `${size}px`; penHoverShown.size = size; }
-  style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
-  if (tool !== penHoverShown.tool) { penHoverRing.dataset.tool = tool; penHoverShown.tool = tool; }
-  const color = tool === "erase" ? "#ed6b55" : strokeTool || tool === "shape" ? $("color").value : "var(--accent)";
-  if (color !== penHoverShown.color) { style.setProperty("--hover-color", color); penHoverShown.color = color; }
-  if (penHoverRing.hidden) penHoverRing.hidden = false;
-  if (!penHoverTimer) penHoverTimer = setTimeout(penHoverIdle, PEN_HOVER_IDLE_MS);
-}
-window.addEventListener("pointermove", showPenHover, { capture: true, passive: true });
-window.addEventListener("pointerdown", hidePenHover, { capture: true, passive: true });
-// Out of range or off the page: no element under the pen, or one outside the document.
-window.addEventListener("pointerout", (e) => { if (e.pointerType === "pen" && !document.documentElement.contains(e.relatedTarget)) hidePenHover(); }, { capture: true, passive: true });
-document.documentElement.addEventListener("pointerleave", (e) => { if (e.pointerType === "pen") hidePenHover(); }, { passive: true });
-window.addEventListener("pointercancel", hidePenHover, { capture: true, passive: true });
-window.addEventListener("blur", hidePenHover);
-document.addEventListener("visibilitychange", () => { if (document.hidden) hidePenHover(); });
-// What a button does, as on a computer: a mouse hover shows the title natively, but a finger has
-// no hover. Pressing an icon for a moment (or a pen hovering over it) shows its name; a long
-// press that showed it does not also press the button.
-const tip = document.createElement("div");
-tip.id = "touchTip"; tip.setAttribute("role", "tooltip"); tip.hidden = true;
-document.body.append(tip);
-let tipTimer = 0, tipHide = 0, tipFor = null, tipSuppress = null;
-const tipText = (el) => (el.getAttribute("title") || el.getAttribute("aria-label") || "").trim();
-const tipTarget = (node) => {
-  if (!node?.closest || node.closest(".qm-disc, .qm-item-menu, .text-editor, input, textarea, select")) return null;
-  const el = node.closest("button, a, summary, label.icon-toggle, [role=menuitem], [role=radio], [role=tab]");
-  return el && tipText(el) ? el : null;
-};
-const hideTip = () => { clearTimeout(tipTimer); clearTimeout(tipHide); tip.hidden = true; tipFor = null; };
-function showTip(el) {
-  tip.textContent = tipText(el).split("\n")[0];
-  tip.hidden = false; tipFor = el;
-  const z = uiZoom(), r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-  tip.style.left = `${Math.max(8, Math.min(innerWidth / z - w - 8, (r.left + r.width / 2) / z - w / 2))}px`;
-  tip.style.top = `${r.top / z - h - 8 > 4 ? r.top / z - h - 8 : r.bottom / z + 8}px`;
-  clearTimeout(tipHide); tipHide = setTimeout(hideTip, 2800);
-}
-document.addEventListener("pointerdown", (e) => {
-  hideTip();
-  // A pen shows the name by hovering; its press, however long, is a click.
-  if (e.pointerType !== "touch") return;
-  const el = tipTarget(e.target);
-  if (!el) return;
-  const x = e.clientX, y = e.clientY;
-  tipTimer = setTimeout(() => {
-    showTip(el); tipSuppress = el;
-    setTimeout(() => { if (tipSuppress === el) tipSuppress = null; }, 1500);
-  }, 450);
-  const stop = (m) => { if (m.type !== "pointermove" || Math.hypot(m.clientX - x, m.clientY - y) > 10) { clearTimeout(tipTimer); document.removeEventListener("pointermove", stop, true); document.removeEventListener("pointerup", stop, true); document.removeEventListener("pointercancel", stop, true); } };
-  document.addEventListener("pointermove", stop, true); document.addEventListener("pointerup", stop, true); document.addEventListener("pointercancel", stop, true);
-}, { capture: true, passive: true });
-document.addEventListener("click", (e) => {
-  if (tipSuppress && tipSuppress.contains(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); tipSuppress = null; }
-}, true);
-document.addEventListener("pointerover", (e) => {
-  if (e.pointerType !== "pen") return;
-  const el = tipTarget(e.target);
-  if (!el || el === tipFor) return;
-  clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => showTip(el), 400);
-}, { capture: true, passive: true });
-document.addEventListener("pointerout", (e) => { if (e.pointerType === "pen") hideTip(); }, { capture: true, passive: true });
-document.addEventListener("scroll", hideTip, { capture: true, passive: true });
-const penHoverSwitch = () => {
-  $("penHoverToggle").setAttribute("aria-checked", String(penHoverOn));
-  if ($("hoverToolsMaster")) $("hoverToolsMaster").checked = penHoverOn;
-};
-penHoverSwitch();
-$("penHoverToggle").onclick = () => {
-  penHoverOn = !penHoverOn;
-  try { localStorage.setItem("notecomplete-pen-hover", penHoverOn ? "1" : "0"); } catch { /* Optional. */ }
-  if (!penHoverOn) hidePenHover();
-  penHoverSwitch();
-  status(penHoverOn ? "Pen hover preview on: a cursor shows over the page." : "Pen hover preview off.");
-};
-function renderHoverToolsDialog() {
-  $("hoverToolsMaster").checked = penHoverOn;
-  $("hoverToolsList").replaceChildren(...HOVER_TOOLS.map(([id, label]) => {
-    const row = document.createElement("label");
-    row.className = "hover-tool-opt";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = penHoverTools.has(id);
-    cb.onchange = () => {
-      if (cb.checked) penHoverTools.add(id);
-      else penHoverTools.delete(id);
-      savePenHoverTools();
-      if (!penHoverTools.has(tool)) hidePenHover();
-    };
-    const ic = icon(id);
-    const span = document.createElement("span");
-    span.textContent = label;
-    row.append(cb, ic, span);
-    return row;
-  }));
-}
-$("hoverToolsOpen").onclick = () => {
-  closeMenus();
-  renderHoverToolsDialog();
-  $("hoverToolsDialog").showModal();
-};
-$("hoverToolsMaster").onchange = () => {
-  penHoverOn = $("hoverToolsMaster").checked;
-  try { localStorage.setItem("notecomplete-pen-hover", penHoverOn ? "1" : "0"); } catch { /* Optional. */ }
-  if (!penHoverOn) hidePenHover();
-  penHoverSwitch();
-};
-$("hoverToolsReset").onclick = () => {
-  penHoverTools = new Set(HOVER_TOOLS.map(([id]) => id));
-  savePenHoverTools();
-  if (!penHoverOn) {
-    penHoverOn = true;
-    try { localStorage.setItem("notecomplete-pen-hover", "1"); } catch { /* Optional. */ }
-    penHoverSwitch();
-  }
-  renderHoverToolsDialog();
-};
-$("hoverToolsClose").onclick = () => $("hoverToolsDialog").close();
+// Pen hover preview and touch tooltips (pen-hover.js).
+const { penHoverEnabled } = penHoverAndTips({
+  $,
+  closeMenus,
+  status,
+  uiZoom,
+  app: {
+    get doc() { return doc; },
+    get eraserRadius() { return eraserRadius; },
+    get panels() { return panels; },
+    get tool() { return tool; },
+  },
+});
 const penActive = () => performance.now() - lastPen < PEN_ACTIVE_MS;
 // Select and Grab text too: with a stylus in hand, a finger drag moves the page, as in drawing apps.
 const FINGER_PANS = new Set(["draw", "highlight", "erase", "tape", "shape", "select", "grab"]);
@@ -4251,7 +3996,7 @@ const snapEntry = {
 };
 const pressureEntry = { key: "pressure", label: "Pen pressure", icon: icon("pressure"), active: () => pressureOn(), stay: () => true, run: () => { $("pressure").value = pressureOn() ? "off" : "on"; $("pressure").dispatchEvent(new Event("change")); syncChoices(); status(pressureOn() ? "Pen pressure on." : "Pen pressure off: even width."); } };
 const smoothEntry = { key: "smoothing", label: "Pen smoothing", icon: icon("smooth"), active: () => smoothingOn, stay: () => true, run: () => $("penSmoothToggle").click() };
-const hoverEntry = { key: "hoverPreview", label: "Pen hover preview", icon: icon("draw"), active: () => penHoverOn, stay: () => true, run: () => $("penHoverToggle").click() };
+const hoverEntry = { key: "hoverPreview", label: "Pen hover preview", icon: icon("draw"), active: () => penHoverEnabled(), stay: () => true, run: () => $("penHoverToggle").click() };
 const textGlyphIcon = (label, font = "Georgia, serif") => {
   const s = document.createElementNS(ns, "svg");
   s.setAttribute("viewBox", "0 0 24 24");
@@ -5552,7 +5297,7 @@ function prefabFlyout(button, panel) {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const recent = recentPrefabs(6);
-      if (!recent.length || editing || figureOpen || document.querySelector("dialog[open], .pk-window")) return;
+      if (!recent.length || editing || figureIsOpen() || document.querySelector("dialog[open], .pk-window")) return;
       const r = button.getBoundingClientRect();
       if (!r.width && !r.height) return;
       menu = openContextMenu(r.left, r.bottom + 4, [
@@ -5573,7 +5318,7 @@ function textToolFlyout(button) {
   let timer = 0, menu = null;
   const close = () => { clearTimeout(timer); if (menu?.isConnected) closeContextMenu(); menu = null; };
   const openMenu = () => {
-    if (!doc || editing || figureOpen || document.querySelector("dialog[open], .pk-window")) return;
+    if (!doc || editing || figureIsOpen() || document.querySelector("dialog[open], .pk-window")) return;
     const r = button.getBoundingClientRect();
     if (!r.width && !r.height) return;
     const isZh = $("zhModeToggle")?.getAttribute("aria-pressed") === "true";
@@ -7458,533 +7203,48 @@ $("resizeAll").onclick = async () => {
   if (!pages.length) return status("Every page already has that size.");
   action("resizePages", { pages, focus: page });
 };
-// Pages → Insert: blank pages of a chosen size, or pages of another PDF at native scale.
-let insertPdfSource = null;
-for (const [value, { label }] of Object.entries(PRESETS)) $("insertPreset").add(new Option(label, value));
-for (const [value, { label }] of Object.entries(SPACE)) $("insertSpace").add(new Option(label, value));
-$("insertPreset").onchange = () => {
-  $("insertCustom").hidden = $("insertPreset").value !== "custom";
-};
-function openInsert(pdf) {
-  insertPdfSource = pdf;
-  $("insertTitle").textContent = pdf ? "Insert PDF pages" : "Insert blank pages";
-  $("insertSource").textContent = pdf ? `${pdf.name}: ${pdf.sizes.length} ${pdf.sizes.length === 1 ? "page" : "pages"}. The PDF keeps its scale; extra space is blank paper beside it.` : "New pages use white paper.";
-  $("insertBlankOptions").hidden = !!pdf;
-  $("insertPdfOptions").hidden = !pdf;
-  const [w, h] = panels[page].size.map(unitsToMm);
-  $("insertWidth").value = Math.round(w);
-  $("insertHeight").value = Math.round(h);
-  $("insertCustom").hidden = $("insertPreset").value !== "custom";
-  if (pdf) {
-    $("insertFrom").max = $("insertTo").max = pdf.sizes.length;
-    $("insertFrom").value = 1;
-    $("insertTo").value = pdf.sizes.length;
-  }
-  $("insertStatus").textContent = "";
-  $("insertDialog").showModal();
-}
-$("insertBlank").onclick = () => doc && openInsert(null);
-// Graphs and tables (graph.js, table.js, compound-dialogs.js): drawn as ordinary items, parts
-// of one object (part.rs) so that any of it selects all of it and its editor brings back
-// what it is. Insert → Graph or Table, a box dragged with the Shapes tool's Graph or Table,
-// or the math keypad's graph key; Edit graph / Edit table on the selected object.
-const COMPOUND_SIZE = { graph: [420, 300], table: [360, 132] };
-const compoundId = (kind) => `${kind[0]}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const penStyle = () => { const pen = { ...TOOL_DEFAULTS.draw, ...toolPrefs.draw }; return { rgba: [...rgbaOf(pen.color).slice(0, 3), 1], width: Number(pen.width) || 2 }; };
-function compoundItems(kind, box, spec, id = compoundId(kind)) {
-  return kind === "graph" ? graphItems(box, spec, { ...penStyle(), layer: activeLayer, id }) : tableItems(box, spec, { layer: activeLayer, id });
-}
-// A box on the page for a new graph or table: centred on `at` (or the middle of the view),
-// inside the page with room for a graph's axis names past its edges.
-function compoundBox(p, kind, box = null, size = COMPOUND_SIZE[kind]) {
-  if (box && box[2] >= 40 && box[3] >= 30) return box;
-  const [w, h] = [Math.min(size[0], p.size[0] - 60), size[1]];
-  let x, y;
-  if (box) [x, y] = box;
-  else {
-    const r = p.el.getBoundingClientRect(), v = $("viewport").getBoundingClientRect();
-    y = (((Math.max(r.top, v.top) + Math.min(r.bottom, v.bottom)) / 2 - r.top) / r.height) * p.size[1] - h / 2;
-    x = (p.size[0] - w) / 2;
-  }
-  return [Math.max(20, Math.min(x, p.size[0] - w - 40)), Math.max(30, Math.min(y, p.size[1] - h - 30)), w, h];
-}
-// The editor for a new graph or table, then the object in `box` (one undo step).
-// If no document is open, edits first and opens a fresh note once accepted.
-async function insertCompound(p, kind, box = null, spec = {}) {
-  const startedEmpty = !doc;
-  if (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer())) return false;
-  const note = epoch;
-  const chosen = await oneFigure(() => compoundEditor(kind, spec));
-  if (!chosen || !sameNote(note, startedEmpty)) return false;
-  if (startedEmpty) {
-    p = await openBlankNoteForPrefab(kind === "graph" ? "Graph" : "Table");
-    if (!p || !ensureEditableLayer()) return false;
-  }
-  let items;
-  try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
-  await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
-  status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
-  return true;
-}
-// The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
-// over the page, compound-dialogs.js), or the editor.js of a module put in their place.
-async function compoundEditor(kind, spec = {}, editing = false) {
-  const { editor } = editorOf({ module: kind });
-  if (editor === "module") return openFigureEditor({ module: kind, ...spec }, { editing });
-  return (editor || kind) === "table" ? editTable({ spec, editing }) : editGraph({ spec, editing, rgba: penStyle().rgba, keypad: textBox.mathKeys });
-}
-$("insertGraph").onclick = () => insertPrefab(panels[page]);
-// Prefabs (prefabs.js): the picker, then a graph or table's own editor, or an exam figure's.
-// `box`: dragged with the Shapes tool's Prefab, or null for the middle of the view.
-// `choice`: a PREFABS entry already chosen (a recent one), or null for the picker.
-// One picker or figure editor at a time: on a slow first load, more taps on Insert prefab (or
-// a card) opened one over another, and the ones under the last were left without a way out.
-let figureOpen = false;
-async function oneFigure(open) {
-  if (figureOpen) return null;
-  figureOpen = true;
-  try { return await open(); } finally { figureOpen = false; }
-}
-async function svgToPngFile(svgText, baseName = "diagram") {
-  const { imageReady } = await import("./image-ready.js");
-  const img = new Image();
-  await imageReady(img, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`);
-  const scale = 2, w = Math.max(1, Math.round((img.naturalWidth || 600) * scale)), h = Math.max(1, Math.round((img.naturalHeight || 400) * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  return new File([blob], `${baseName.replace(/\.[^.]+$/, "")}.png`, { type: "image/png" });
-}
-async function importDiagramSpec(text, fileName = "") {
-  if (/@startuml/i.test(text)) {
-    const { parsePlantUml, layoutFromPlantuml } = await import("./uml-plantuml.js");
-    const parsed = parsePlantUml(text);
-    if (!parsed.laidOut) {
-      try { const drawn = await drawPlantuml(text); if (drawn?.svg) layoutFromPlantuml(parsed.model, drawn.svg); } catch { /* Auto-laid-out fallback. */ }
-    }
-    if (parsed.preamble.length) parsed.model.preamble = parsed.preamble;
-    if (!parsed.model.name && fileName) parsed.model.name = fileName.replace(/\.[^.]+$/, "");
-    return parsed.model;
-  }
-  const { importUml, detectFormat, vpDiagrams } = await import("./uml-xml.js");
-  const list = detectFormat(text) === "vp-xml" ? vpDiagrams(text).filter((d) => d.shapes) : [];
-  return importUml(text, list.length > 1 ? { diagram: list[0].index } : undefined);
-}
-async function insertPrefab(p, box = null, choice = null) {
-  const startedEmpty = !doc;
-  if (editing || figureOpen) return false;
-  if (startedEmpty ? !canReplace() : !p) return false;
-  choice ||= await oneFigure(() => choosePrefab());
-  if (!choice) return false;
-  if (choice.kind === "uml-import") {
-    if (!startedEmpty && !ensureEditableLayer()) return false;
-    try {
-      const imported = await importDiagramSpec(choice.text, choice.fileName);
-      const note = epoch;
-      const spec = await umlEditor(imported, false);
-      if (!spec || !sameNote(note, startedEmpty)) return false;
-      if (startedEmpty) p = await openBlankNoteForPrefab(prefabName(spec) || choice.fileName || "Diagram");
-      if (!p || !ensureEditableLayer()) return false;
-      const done = await placePrefab(p, spec, box);
-      if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
-      return done;
-    } catch (e) {
-      // Non-editable PlantUML diagrams (activity, sequence, state…) insert as a rendered picture.
-      if (/picture/i.test(e.message) && /@startuml/i.test(choice.text)) {
-        const res = await drawPlantuml(choice.text);
-        if (res?.svg) {
-          if (startedEmpty) await openBlankNoteForPrefab(choice.fileName?.replace(/\.[^.]+$/, "") || "Diagram");
-          await importImages([await svgToPngFile(res.svg, choice.fileName)]);
-          return true;
-        }
-      }
-      status(e.message, true);
-      return false;
-    }
-  }
-  notePrefabUsed(choice.id);
-  if (choice.kind !== "prefab" && choice.kind !== "uml") return insertCompound(p, choice.kind, box);
-  if (!startedEmpty && !ensureEditableLayer()) return false;
-  const note = epoch;
-  // A card of a type module draws a type another module owns: its spec names its own module,
-  // so that it edits in that module's base editor (and keeps its name) from the start.
-  const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
-  const spec = await figureEditor(start);
-  if (!spec || !sameNote(note, startedEmpty)) return false;
-  if (startedEmpty) {
-    p = await openBlankNoteForPrefab(prefabName(spec) || choice.label || "Prefab");
-    if (!p || !ensureEditableLayer()) return false;
-  }
-  const done = await placePrefab(p, spec, box);
-  if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
-  return done;
-}
-// The editor of a prefab's figure: the diagram editor for UML and node graphs, the chart
-// editor (chart-editor.js) for process states, CPU timelines, charts and plots, and the JSON
-// one for the rest or when asked (`mode` "json"). `mode` "answer" fills an exercise in.
-// Snippets kept from the Grab tool (Keep for exercises), shown while filling a figure in; for
-// this session only.
-const exerciseRefs = [];
-let keptRefsWin = null;
-function syncKeptRefsUi() {
-  const n = exerciseRefs.length;
-  const pill = $("keptRefsPill");
-  const count = $("keptRefsCount");
-  if (pill) pill.hidden = !n;
-  if (count) count.textContent = `Kept (${n})`;
-  const menuBtn = $("keptRefsOpen");
-  if (menuBtn) {
-    const label = n ? `Kept for exercises (${n})…` : "Kept for exercises…";
-    const textNode = [...menuBtn.childNodes].find((c) => c.nodeType === 3 && c.textContent.trim());
-    if (textNode) textNode.textContent = label;
-    else menuBtn.append(document.createTextNode(label));
-  }
-  keptRefsWin?.render?.();
-}
-async function openExerciseRefsWindow() {
-  if (keptRefsWin) { keptRefsWin.show(); keptRefsWin.render(); return; }
-  const { movableWindow } = await import("./prefabs/kit/window.js");
-  const win = movableWindow({
-    key: "kept-refs",
-    title: "Kept for exercises",
-    width: 420,
-    height: 520,
-    minWidth: 280,
-    minHeight: 240,
-    onClose: () => { win.destroy(); keptRefsWin = null; },
-  });
-  const host = document.createElement("div");
-  host.className = "kept-refs-window";
-  const bar = document.createElement("div");
-  bar.className = "kept-refs-bar";
-  const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/*", multiple: true, hidden: true });
-  const addBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip" });
-  addBtn.append(icon("image"), document.createTextNode("Add picture…"));
-  addBtn.onclick = () => fileIn.click();
-  fileIn.onchange = () => {
-    for (const f of fileIn.files || []) {
-      exerciseRefs.push({ name: f.name, src: URL.createObjectURL(f), kind: "image" });
-    }
-    fileIn.value = "";
-    syncKeptRefsUi();
-  };
-  const clearBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip danger" });
-  clearBtn.append(icon("trash"), document.createTextNode("Clear all"));
-  clearBtn.onclick = () => { exerciseRefs.length = 0; syncKeptRefsUi(); };
-  bar.append(addBtn, fileIn, Object.assign(document.createElement("span"), { className: "spacer" }), clearBtn);
-  const list = document.createElement("div");
-  list.className = "kept-refs-list";
-  host.append(bar, list);
-  win.body.append(host);
-  const render = () => {
-    clearBtn.hidden = !exerciseRefs.length;
-    if (!exerciseRefs.length) {
-      list.replaceChildren(Object.assign(document.createElement("p"), {
-        className: "muted",
-        textContent: "No snippets kept yet. Use the Grab tool on any page and tap ★ Keep for exercises, or add a picture above. Kept snippets also appear inside figure/chart editors.",
-      }));
-      return;
-    }
-    list.replaceChildren(...exerciseRefs.map((ref, i) => {
-      const fig = document.createElement("figure");
-      fig.className = "kept-ref-card";
-      const cap = document.createElement("figcaption");
-      const nameSpan = Object.assign(document.createElement("span"), { textContent: ref.name || `Snippet ${i + 1}` });
-      const copyBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Copy image", ariaLabel: "Copy image" });
-      copyBtn.append(icon("copy"));
-      copyBtn.onclick = async () => {
-        try {
-          const blob = await (await fetch(ref.src)).blob();
-          await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
-          status("Copied snippet image.");
-        } catch { status("Could not copy image on this browser.", true); }
-      };
-      const rmBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Remove", ariaLabel: `Remove ${ref.name || "snippet"}` });
-      rmBtn.append(icon("close"));
-      rmBtn.onclick = () => { exerciseRefs.splice(i, 1); syncKeptRefsUi(); };
-      cap.append(nameSpan, copyBtn, rmBtn);
-      fig.append(cap);
-      if (ref.src && ref.kind === "image") {
-        const img = Object.assign(document.createElement("img"), { src: ref.src, alt: ref.name || "Kept snippet" });
-        img.onclick = () => {
-          const viewer = $("imageViewer"), vImg = $("imageViewerImg");
-          if (viewer && vImg) { vImg.src = ref.src; vImg.alt = ref.name || ""; viewer.showModal(); }
-        };
-        fig.append(img);
-      }
-      return fig;
-    }));
-  };
-  keptRefsWin = { show: () => { win.el.classList.remove("in-tray"); win.el.style.zIndex = "44"; }, render };
-  render();
-}
-if ($("keptRefsOpen")) $("keptRefsOpen").onclick = () => { closeMenus(); openExerciseRefsWindow(); };
-if ($("keptRefsPill")) $("keptRefsPill").onclick = () => openExerciseRefsWindow();
-// The menu bar stays usable over the editors: if another note was opened (or this one closed)
-// meanwhile, what the editor returns is not put on it.
-function sameNote(note, startedEmpty = false) {
-  if (startedEmpty ? (!doc && note === epoch) : (doc && note === epoch)) return true;
-  status("Another note was opened while the editor was open; nothing was changed.", true);
-  return false;
-}
-// A module loaded the first time an editor opens can take a while on a tablet: past a
-// moment, a toast says it is on its way (and goes once it is there).
-async function loading(promise, text = "Opening the editor…") {
-  let shown = false;
-  const timer = setTimeout(() => { shown = true; status(text); clearTimeout(statusTimer); }, 350);
-  try { return await promise; } finally { clearTimeout(timer); if (shown) status(""); }
-}
-function figureEditor(spec, options = {}) {
-  return oneFigure(() => openFigureEditor(spec, options));
-}
-async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
-  // The editor its module's manifest names (prefab-registry.js editorOf): its own editor.js,
-  // the chart or diagram editor, a window, or the JSON one; a type module edits in its base.
-  // A manifest that names none: chosen by the spec's type, as before modules.
-  const { editor, module: owner } = editorOf(spec);
-  const keepModule = (result) => (result && spec?.module && result.module !== spec.module ? { ...result, module: spec.module } : result);
-  if (editor === "module") {
-    try {
-      const { openModuleEditor } = await loading(import("./prefab-host.js"));
-      return keepModule(await openModuleEditor(owner, spec, { editing, mode }));
-    } catch (e) {
-      status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
-      return null;
-    }
-  }
-  if (editor === "graph" || editor === "table") return keepModule(await compoundEditor(editor, spec, editing));
-  if (editor === "data") return keepModule(await editPrefab({ spec, editing }));
-  if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing));
-  if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
-    try {
-      const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) { exerciseRefs.push(ref); syncKeptRefsUi(); } }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
-    } catch (e) {
-      status(`The chart editor could not open: ${e.message}`, true);
-      return null;
-    }
-  }
-  // The chart module's figures the chart editor does not paint (custom SVG), and the rest.
-  return keepModule(await editPrefab({ spec, editing }));
-}
-// "To look at" in the chart editors: another note's pages as pictures. The note opens in an
-// engine worker of its own (the open note's stays as it is), its pages are drawn like the
-// page snapshots (pageCanvas), and the worker goes away again.
-async function notePages(file, maxPages = 20) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const kind = fileKind(file.name, bytes);
-  if (kind === "pdf" || kind === "image") return { kind, src: URL.createObjectURL(file) };
-  if (!["note", "notecomplete", "project", "notebook"].includes(kind)) throw Error("only notes, notebooks, PDFs and pictures can be shown here");
-  const side = sideDocument();
-  try {
-    const first = await side.open(file, { kind, bytes: bytes.buffer });
-    const count = Math.min(Number(first.pages) || 1, maxPages);
-    const source = { view: (i) => (i === 0 ? first : side.view(i)), backgrounds: side.backgrounds };
-    const pages = [];
-    for (let i = 0; i < count; i++) {
-      const { canvas } = await pageCanvas(i, 1200, {}, source);
-      pages.push(canvas.toDataURL("image/jpeg", 0.85));
-      canvas.width = canvas.height = 0;
-    }
-    return { pages };
-  } finally {
-    side.close();
-  }
-}
-// Recent notes the editor can show: the ones this device can read without a download.
-async function recentReferenceNotes() {
-  const entries = await library.recent(30).catch(() => []);
-  return entries
-    .filter((entry) => entry && entry.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb|pdf)$/i.test(entry.name || ""))
-    .map((entry) => ({
-      title: entryTitle(entry),
-      open: async () => {
-        const file = await library.open(entry);
-        if (!file) throw Error("this note is not on this device");
-        return notePages(file);
-      },
-    }));
-}
-// The UML diagram editor (uml-editor.js), loaded the first time it is needed.
-function umlEditor(spec, editing = false) {
-  return oneFigure(() => openUmlEditor(spec, editing));
-}
-async function openUmlEditor(spec, editing = false) {
-  try {
-    const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
-    // A new diagram opens in the view chosen in Insert prefab (drawing, PlantUML or both).
-    return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml });
-  } catch (e) {
-    status(`The diagram editor could not open: ${e.message}`, true);
-    return null;
-  }
-}
-// An exam figure drawn into `box` (its width kept, its height from the figure), or a new box;
-// `replace`: the items of the prefab it replaces, in the same undo step.
-async function placePrefab(p, spec, box = null, replace = null, id = undefined) {
-  const aspect = prefabAspect(spec);
-  let at;
-  if (box && box[2] >= 40) at = [box[0], box[1], box[2], box[2] * aspect];
-  else {
-    // A tap (no box dragged) places it from that point; nothing, in the middle of the view.
-    // A UML diagram keeps its own size (its units are the page's), when it fits.
-    const natural = spec?.type === "uml" || spec?.type === "stickynote" ? prefabSvg(spec)?.width || (spec?.type === "stickynote" ? 256 : 440) : 440;
-    const w = Math.min(natural, p.size[0] - 60, (p.size[1] - 60) / aspect), h = w * aspect;
-    at = box ? [Math.max(20, Math.min(box[0], p.size[0] - w - 20)), Math.max(20, Math.min(box[1], p.size[1] - h - 20)), w, h] : compoundBox(p, "graph", null, [w, h]);
-  }
-  try {
-    const png = await prefabPng(spec, [at[2], at[3]]);
-    const items = prefabItems(at, spec, png, { layer: activeLayer, ...(id ? { id } : {}) });
-    await action("drawMany", { page: p.index, ...(replace ? { replace } : {}), lines: items.lines, images: items.images });
-    return true;
-  } catch (e) {
-    status(e.message, true);
-    return false;
-  }
-}
-$("insertTable").onclick = () => insertCompound(panels[page], "table");
-// A UML diagram straight away (the picker's UML cards do the same): a class diagram to start.
-async function insertUml(p, box = null, diagram = "class") {
-  const startedEmpty = !doc;
-  if (editing || (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer()))) return false;
-  const { starterModel } = await import("./uml.js");
-  const note = epoch;
-  const spec = await umlEditor(starterModel(diagram));
-  if (!spec || !sameNote(note, startedEmpty)) return false;
-  if (startedEmpty) {
-    p = await openBlankNoteForPrefab(prefabName(spec) || "UML Diagram");
-    if (!p || !ensureEditableLayer()) return false;
-  }
-  const done = await placePrefab(p, spec, box);
-  if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
-  return done;
-}
-$("insertUml").onclick = () => insertUml(panels[page]);
-// The editor on a page of its own (a window of its own in the desktop app).
-$("openUmlPage").onclick = () => { if (!window.open("./uml.html", "_blank")) status("The UML editor page could not open here; it is at uml.html next to the app.", true); };
-$("openChartsPage").onclick = () => { if (!window.open("./charts.html", "_blank")) status("The chart editor page could not open here; it is at charts.html next to the app.", true); };
-// The box a graph or table has now: its frame's (moved or resized since it was drawn).
-async function compoundFrame(item) {
-  const c = item.compound, info = await call("selection", { page: item.page, itemId: c.frame });
-  const [x, y, w, h] = info.bounds, a = info.adjustment, pad = info.base_width / 2;
-  const cw = (w - 2 * pad) * a.scale[0], ch = (h - 2 * pad) * a.scale[1], cx = x + w / 2 + a.translation[0], cy = y + h / 2 + a.translation[1];
-  return [cx - cw / 2, cy - ch / 2, cw, ch];
-}
-// Edit graph / Edit table: its editor with what it is, then drawn again where it is now.
-async function editCompound(item, mode = "author") {
-  const c = item?.compound;
-  if (!c || !doc) return;
-  let spec = {};
-  try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
-  if (c.kind === "prefab") {
-    // Filling in: the page the exercise is on, to read its statement beside the canvas.
-    let references = [];
-    if (mode === "answer") {
-      try {
-        const { canvas } = await pageCanvas(item.page, 1400);
-        references = [{ name: `Page ${item.page + 1}`, src: canvas.toDataURL("image/jpeg", 0.85), kind: "image" }];
-        canvas.width = canvas.height = 0;
-      } catch { /* The editor opens without it. */ }
-    }
-    const note = epoch;
-    const chosen = await figureEditor(spec, { editing: true, mode, references });
-    if (!chosen || !sameNote(note)) return;
-    const frame = await compoundFrame(item);
-    selection.clear();
-    if (await placePrefab(panels[item.page], chosen, frame, c.items, c.id)) status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
-    return;
-  }
-  const note = epoch;
-  const chosen = await oneFigure(() => compoundEditor(c.kind, spec, true));
-  if (!chosen || !sameNote(note)) return;
-  let items;
-  // The page stayed usable behind the window: it may have been moved, or deleted meanwhile.
-  try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
-  selection.clear();
-  await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
-  status(`${c.kind === "graph" ? "Graph" : "Table"} changed. One undo brings back the one before.`);
-}
-// A graph, table or prefab resized with Select: drawn again into the box it was given, from
-// what it is (its spec), so text and lines stay sharp at any size, in one undo step. A prefab
-// keeps its own proportions (its width decides); a graph or table takes the box as it is.
-async function redrawResized(item, adjustment) {
-  const c = item.compound, p = panels[item.page];
-  if (!c || !p || !doc) return false;
-  let spec = {};
-  try { spec = JSON.parse(c.spec || "{}"); } catch { return false; }
-  try {
-    const [fx, fy, fw, fh] = await compoundFrame(item), [bx, by, bw, bh] = item.bounds;
-    const cx = bx + bw / 2, cy = by + bh / 2, [sx, sy] = adjustment.scale, [tx, ty] = adjustment.translation;
-    let targetW = Math.max(20, fw * sx), targetH = Math.max(12, fh * sy);
-    if (c.kind === "prefab") {
-      const aspect = prefabAspect(spec) || (fh / Math.max(1, fw));
-      const scale = Math.abs(sy - 1) > Math.abs(sx - 1) ? sy : sx;
-      targetW = Math.max(40, fw * scale);
-      targetH = Math.max(20, targetW * aspect);
-    }
-    // Anchored as the drag scaled the frame (its offset from the item's centre scales too), so
-    // a graph whose labels stick out of its frame does not jump on each resize.
-    const box = [cx + (fx - cx) * (targetW / Math.max(1, fw)) + tx, cy + (fy - cy) * (targetH / Math.max(1, fh)) + ty, targetW, targetH];
-    selection.clear();
-    if (c.kind === "prefab") {
-      if (!(await placePrefab(p, spec, box, c.items, c.id))) return false;
-    } else {
-      const items = compoundItems(c.kind, box, spec, c.id);
-      await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
-    }
-    // Still selected, as it was.
-    const again = await pickWhole({ page: item.page, x: box[0] + box[2] / 2, y: box[1] + box[3] / 2, tolerance: 4 }).catch(() => null);
-    if (again?.compound?.id === c.id) selection.show(again);
-    return true;
-  } catch (e) {
-    status(e.message, true);
-    return false;
-  }
-}
-// Any part picked selects the whole graph or table: a group of its parts, with what it is.
-async function pickWhole(args) {
-  const item = await call("pick", args);
-  const parts = panels[args.page]?.view?.parts;
-  let part = item && parts?.find((q) => q.item === item.id);
-  if (!part && parts?.length && Number.isFinite(args.x) && Number.isFinite(args.y)) {
-    // A click beside the drawn parts but inside a figure's frame: the frames asked for together
-    // (one round trip's wait, not one per figure), the topmost hit wins.
-    const frames = parts.filter((q) => q.spec);
-    const infos = await Promise.all(frames.map((f) => call("selection", { page: args.page, itemId: f.item }).catch(() => null)));
-    for (let i = frames.length - 1; i >= 0; i--) {
-      const f = frames[i], info = infos[i];
-      if (!info?.bounds) continue;
-      const [bx, by, bw, bh] = info.bounds, a = info.adjustment || { translation: [0, 0], scale: [1, 1] };
-      const cx = bx + bw / 2 + a.translation[0], cy = by + bh / 2 + a.translation[1];
-      const hw = (bw * Math.abs(a.scale[0])) / 2, hh = (bh * Math.abs(a.scale[1])) / 2;
-      if (args.x >= cx - hw && args.x <= cx + hw && args.y >= cy - hh && args.y <= cy + hh) {
-        part = f;
-        break;
-      }
-    }
-  }
-  if (!part) return item;
-  const own = parts.filter((q) => q.id === part.id), frame = own.find((q) => q.spec);
-  if (!frame) return item;
-  const members = (await Promise.all(own.map((q) => call("selection", { page: args.page, itemId: q.item }).catch(() => null)))).filter(Boolean);
-  if (members.length < 2) return item;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const m of members) {
-    const [x, y, w, h] = m.bounds, a = m.adjustment, cx = x + w / 2 + a.translation[0], cy = y + h / 2 + a.translation[1], hw = (w * Math.abs(a.scale[0])) / 2, hh = (h * Math.abs(a.scale[1])) / 2;
-    x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
-  }
-  return {
-    kind: "group", page: args.page, id: `group:${part.id}`, bounds: [x0, y0, x1 - x0, y1 - y0],
-    base_rotation: 0, base_width: 1, base_rgba: [0, 0, 0, 1], styled: false,
-    adjustment: { translation: [0, 0], scale: [1, 1], rotation: 0 }, members,
-    compound: { id: part.id, kind: part.kind, spec: frame?.spec, frame: frame?.item ?? own[0].item, items: own.map((q) => q.item) },
-  };
-}
-$("editCompound").onclick = () => editCompound(selection.item);
+// Pages → Insert and Pages → Change PDF background (page-dialogs.js).
+const { openPageBackground } = pageDialogs({
+  $,
+  action,
+  busy,
+  call,
+  status,
+  app: {
+    get backgrounds() { return backgrounds; },
+    get doc() { return doc; },
+    get page() { return page; },
+    get panels() { return panels; },
+  },
+});
+// Graphs, tables, prefabs, UML and the figure editors on the page (figures.js).
+const { editCompound, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, svgToPngFile, syncKeptRefsUi } = figureInserts({
+  $,
+  TOOL_DEFAULTS,
+  action,
+  call,
+  canReplace,
+  closeMenus,
+  drawPlantuml,
+  ensureEditableLayer,
+  importImages,
+  library,
+  openBlankNoteForPrefab,
+  pageCanvas,
+  selection,
+  status,
+  textBox,
+  app: {
+    get activeLayer() { return activeLayer; },
+    get doc() { return doc; },
+    get editing() { return editing; },
+    get epoch() { return epoch; },
+    get page() { return page; },
+    get panels() { return panels; },
+    get statusTimer() { return statusTimer; },
+    get toolPrefs() { return toolPrefs; },
+  },
+});
 // The menu at the pointer (context-menu.js): right-click on a page, a finger held still, or a
 // selection's ⋯ circle. What is under it can be edited without changing tools first.
 const ITEM_NAMES = { ink: "Ink", shape: "Shape", image: "Image", text: "Text box", group: "Group" };
@@ -8029,851 +7289,80 @@ async function removeItem(item) {
   else await action("remove", { page: item.page, itemId: item.id });
   status("Removed. Press Ctrl+Z to bring it back.");
 }
-// Copy, cut and paste of items (Ctrl C / X / V, and the item and page menus), and items let go
-// over another page. A copy is kept here as lines and pictures (the engine's copyItems, as
-// they are drawn now); Noteful's own pictures and text go as a picture of how they look. The
-// system clipboard gets a marker, so a paste knows the copy is still the last thing copied.
-const CLIP_MARK = "NoteComplete items (paste them in NoteComplete)";
-let clip = null; // { page, lines, images, box, pastes }
-// Whether keys pressed in `t` are typing: text fields, lists and editable text. A colour
-// picker, slider, check box or button keeps the focus after it is used (the pen's colour),
-// and the shortcuts and Ctrl Z must still work there.
-const NOT_TYPED = new Set(["color", "range", "checkbox", "radio", "button", "submit", "reset", "file", "image"]);
-function typingIn(t) {
-  if (t instanceof HTMLInputElement) return !NOT_TYPED.has(t.type);
-  return t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || !!t?.isContentEditable;
-}
-const itemIds = (item) => (item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
-const blobBase64 = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(r.error); r.readAsDataURL(blob); });
-// The items of `item` as lines and pictures that can go on any page.
-async function copiedItems(item) {
-  const copied = await call("copyItems", { page: item.page, ids: itemIds(item) });
-  if (copied.others.length) {
-    const out = {};
-    const blob = await itemPicture({ page: item.page, kind: "group", members: copied.others.map((id) => ({ id })) }, 3, "image/png", undefined, out);
-    copied.images.push({ base64: await blobBase64(blob), mime: "image/png", bounds: out.box, layer: activeLayer });
-  }
-  return copied;
-}
-// Lines and pictures moved by [dx, dy]; a graph's or prefab's parts get an id of their own
-// (`fresh`), so the copy is a figure apart from the one it came from.
-function shifted({ lines, images }, [dx, dy], fresh = true) {
-  const ids = new Map(), rename = (part) => {
-    if (!part || !fresh) return part;
-    if (!ids.has(part.id)) ids.set(part.id, `${part.kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`);
-    return { ...part, id: ids.get(part.id) };
-  };
-  const at = ([x, y]) => [x + dx, y + dy];
-  return {
-    lines: lines.map((l) => ({ ...l, points: l.points.map(at), ...(l.shape ? { shape: { ...l.shape, start: at(l.shape.start), end: at(l.shape.end) } } : {}), ...(l.part ? { part: rename(l.part) } : {}) })),
-    images: images.map((i) => ({ ...i, bounds: [i.bounds[0] + dx, i.bounds[1] + dy, i.bounds[2], i.bounds[3]], ...(i.part ? { part: rename(i.part) } : {}) })),
-  };
-}
-function clipBox({ lines, images }) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const l of lines) for (const [x, y] of l.points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-  for (const { bounds: [x, y, w, h] } of images) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h); }
-  return Number.isFinite(x0) ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0];
-}
-// The system clipboard after a copy: a picture of the items that carries them (png-clip.js),
-// so it pastes as a picture in other apps and as the items again in NoteComplete, and the
-// marker text. On the desktop the PNG goes as it is (desktop png-clipboard.js); a browser
-// re-encodes it, so there other apps get the picture only (the copy here still pastes).
-async function clipToSystem(item, c) {
-  let png = null;
-  try {
-    const blob = await itemPicture(item, 2);
-    const { page: _page, pastes: _pastes, ...kept } = c;
-    png = await addClipChunk(new Uint8Array(await blob.arrayBuffer()), kept);
-  } catch { /* Not drawn (page off screen…): the marker only. */ }
-  try {
-    if (png && window.notecompleteClipboard?.writePng) return void await window.notecompleteClipboard.writePng(png, CLIP_MARK);
-    if (png && navigator.clipboard?.write && window.ClipboardItem)
-      return void await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([png], { type: "image/png" }), "text/plain": new Blob([CLIP_MARK], { type: "text/plain" }) })]);
-  } catch { /* Fall back to the marker. */ }
-  try { await navigator.clipboard?.writeText?.(CLIP_MARK); } catch { /* The copy is still kept here. */ }
-}
-// The copy carried by a picture (pasted, dropped or imported), or null.
-async function pictureClip(file) {
-  try {
-    if (!file || file.size > 96 * 1024 * 1024) return null;
-    if (!(file.type === "image/png" || /\.png$/i.test(file.name || "") || isPng(new Uint8Array(await file.slice(0, 8).arrayBuffer())))) return null;
-    const c = await readClipChunk(new Uint8Array(await file.arrayBuffer()));
-    return validClip(c) ? c : null;
-  } catch { return null; }
-}
-// Items from a picture: this tab's own copy pastes as Ctrl V does; one from elsewhere goes
-// with its parts given new ids, centred on `at` ({ page, point }) or where it was.
-async function pasteFromPicture(c, at = null) {
-  if (clip && c.id && c.id === clip.id) return pasteClip(at ? panels[at.page] : panels[page]);
-  const restored = { lines: c.lines, images: c.images, box: clipBox(c), pastes: 0 };
-  const p = at ? panels[at.page] : panels[page];
-  const done = await pasteClip(p, at?.point ? cornerFor(restored.box, at.point) : null, restored);
-  if (done) status("Pasted from a NoteComplete picture: editable again.");
-}
-const cornerFor = ([, , w, h], [x, y]) => [x - w / 2, y - h / 2];
-async function copyItem(item, { cut = false } = {}) {
-  if (!doc || !item) return;
-  try {
-    const copied = await copiedItems(item);
-    clip = { page: item.page, lines: copied.lines, images: copied.images, box: clipBox(copied), pastes: 0, at: Date.now(), id: Math.random().toString(36).slice(2, 12) };
-    // A prefab's spec is on its frame line's part (the core), or on its picture in older copies.
-    const parts = [...copied.lines.map((l) => l.part), ...copied.images.map((i) => i.part || i.prefab)].filter((q) => q?.spec);
-    const specRaw = new Set(parts.map((q) => q.id)).size === 1 ? parts[0].spec : null;
-    if (specRaw) { try { const spec = typeof specRaw === "string" ? JSON.parse(specRaw) : specRaw; if (spec?.type === "uml") saveNoteUmlClip(spec); } catch { /* Ignored. */ } }
-    await clipToSystem(item, clip);
-    if (cut) { await removeItem(item); status("Cut. Ctrl V (or right-click → Paste) puts it back, on any page."); }
-    else status("Copied. Ctrl V (or right-click → Paste) puts a copy on any page.");
-  } catch (e) { status(e.message, true); }
-}
-async function pasteUmlIntoPage(parsedClip, p = panels[page], at = null) {
-  if (!doc || !p || editing || !ensureEditableLayer() || !parsedClip?.elements?.length) return false;
-  let spec = { type: "uml", diagram: parsedClip.diagram || "class", elements: parsedClip.elements, connectors: parsedClip.connectors || [], ...(parsedClip.preamble?.length ? { preamble: parsedClip.preamble } : {}) };
-  if (parsedClip.laidOut === false) {
-    try {
-      const { toPlantUml, layoutFromPlantuml } = await import("./uml-plantuml.js");
-      const drawn = await drawPlantuml(toPlantUml(spec, { preamble: spec.preamble || [], layout: false }));
-      if (drawn?.svg) layoutFromPlantuml(spec, drawn.svg);
-    } catch { /* Auto-layout fallback. */ }
-  }
-  const done = await placePrefab(p, spec, at);
-  if (done) status(`${prefabName(spec)} pasted on page ${p.index + 1}. Right-click it to edit; one undo takes it away.`);
-  return done;
-}
-// The copy on page `p`: at page point `at` (its top left corner), else where it was (a little
-// lower and to the right on its own page, again with each paste), kept on the page.
-async function pasteClip(p = panels[page], at = null, c = clip) {
-  if (!doc || !c || !p || editing || !ensureEditableLayer()) return false;
-  const [x, y, w, h] = c.box;
-  let to;
-  if (at) to = at;
-  else { const step = p.index === c.page ? 16 * ++c.pastes : 0; to = [x + step, y + step]; }
-  to = [Math.max(0, Math.min(p.size[0] - w, to[0])), Math.max(0, Math.min(p.size[1] - h, to[1]))];
-  const moved = shifted(c, [to[0] - x, to[1] - y]);
-  const layer = activeLayer;
-  await action("drawMany", { page: p.index, lines: moved.lines.map((l) => ({ ...l, layer })), images: moved.images.map((i) => ({ ...i, layer })) });
-  status(`Pasted on page ${p.index + 1}. One undo takes it away.`);
-  return true;
-}
-// Items let go over another page (selection.js): taken off theirs and put where they were
-// let go, in one undo step.
-async function moveToPage(item, target, start, client) {
-  const from = panels[item.page], to = panels[target];
-  if (!doc || !from || !to || editing) return from && renderPage(from);
-  try {
-    const copied = await copiedItems(item);
-    const r = to.el.getBoundingClientRect();
-    const there = [((client[0] - r.left) / r.width) * to.size[0], ((client[1] - r.top) / r.height) * to.size[1]];
-    const moved = shifted(copied, [there[0] - start[0], there[1] - start[1]], false);
-    await action("drawMany", { page: target, cut: { page: item.page, ids: itemIds(item) }, lines: moved.lines, images: moved.images });
-    status(`Moved to page ${target + 1}. One undo moves it back.`);
-  } catch (e) { status(e.message, true); } finally { await renderPage(from); }
-}
-// Ctrl C / X with an item selected, Ctrl V with a copy kept. The keys do it (Safari sends no
-// copy or paste event when nothing on the page is selected or editable); the clipboard
-// events, where they come, only carry the marker.
-let clipKeyAt = -Infinity, pastedAt = -Infinity;
-// Where pasted pictures and text go: the pointer's place on a page, when it was last over one
-// still on screen, else the middle of what is shown of the current page.
+// The pointer's last place over a page (set by the pointer handlers; paste puts things there).
 let pagePointer = null;
-function pasteSpot() {
-  const q = pagePointer?.p;
-  if (q?.el?.isConnected && q.view) {
-    const r = q.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect();
-    if (r.bottom > vp.top && r.top < vp.bottom) return { page: q.index, point: point(pagePointer, q) };
-  }
-  const p = panels[page];
-  if (!p) return null;
-  const r = p.el.getBoundingClientRect(), vp = $("viewport").getBoundingClientRect(), k = p.size[0] / r.width;
-  const top = Math.max(r.top, vp.top), bottom = Math.min(r.bottom, vp.bottom);
-  return { page: p.index, point: [p.size[0] / 2, Math.min(p.size[1], Math.max(0, ((top + bottom) / 2 - r.top) * k))] };
-}
-const itemKeys = (e) => !e.defaultPrevented && !typingIn(e.target) && !window.getSelection()?.toString() && doc && !editing;
-document.addEventListener("keydown", (e) => {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !itemKeys(e)) return;
-  const key = e.key.toLowerCase();
-  // Whatever the tool: a selection (left from Select, or a long press) copies; a copy pastes.
-  if ((key === "c" || key === "x") && selection.item) {
-    if (key === "x" && !selection.editable()) return;
-    clipKeyAt = e.timeStamp;
-    copyItem(selection.item, { cut: key === "x" });
-  } else if (key === "v") {
-    // The paste event says whether the copy is still the last thing copied; without one
-    // (Safari), fall back to the local page clip or shared UML clip.
-    const at = e.timeStamp;
-    setTimeout(async () => {
-      if (pastedAt >= at) return;
-      const shared = getSharedUmlClip();
-      if (clip && (!shared || (clip.at || 0) >= (shared.at || 0))) return pasteClip();
-      if (shared) return pasteUmlIntoPage(shared);
-      try {
-        const txt = await navigator.clipboard?.readText?.();
-        const uml = readUmlClipFromText(txt);
-        if (uml) return pasteUmlIntoPage(uml);
-      } catch { /* Unavailable. */ }
-      if (clip) pasteClip();
-    }, 60);
-  }
+// Copy, cut and paste of items (item-clipboard.js).
+const { copyItem, currentClip, moveToPage, pasteClip, pasteFromPicture, pasteUmlIntoPage, pictureClip, typingIn } = itemClipboard({
+  $,
+  action,
+  call,
+  drawPlantuml,
+  ensureEditableLayer,
+  importImages,
+  itemPicture: (...a) => itemPicture(...a),
+  placePrefab,
+  point,
+  removeItem,
+  renderPage,
+  selection,
+  status,
+  textBox,
+  app: {
+    get activeLayer() { return activeLayer; },
+    get doc() { return doc; },
+    get editing() { return editing; },
+    get middleMouseAt() { return middleMouseAt; },
+    get page() { return page; },
+    get pagePointer() { return pagePointer; },
+    get panels() { return panels; },
+  },
 });
-for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
-  if (performance.now() - clipKeyAt > 1000 || !itemKeys(event)) return;
-  event.preventDefault();
-  event.clipboardData?.setData("text/plain", CLIP_MARK);
+// The item and page menus at the pointer, and pictures of items (item-menus.js).
+const { itemMenu, itemPicture, longPress, pageMenu } = itemMenus({
+  $,
+  ITEM_NAMES,
+  SHAPE_NAMES,
+  SWATCHES,
+  WIDTH_LADDER,
+  action,
+  blankPageEntries,
+  busy,
+  call,
+  cancelGesture,
+  compoundLabel,
+  copyItem,
+  currentClip,
+  editCompound,
+  editTextItem,
+  insertCompound,
+  insertPrefab,
+  insertShapeAt,
+  insertUml,
+  pageCanvas,
+  palettes,
+  pasteClip,
+  pasteUmlIntoPage,
+  patchItem,
+  pickColor,
+  pickWhole,
+  point,
+  quick,
+  removeItem,
+  selection,
+  setTapeMode,
+  status,
+  tapeOpen,
+  textBox,
+  toggleTape,
+  app: {
+    get doc() { return doc; },
+    get editing() { return editing; },
+    get gesture() { return gesture; },
+    get panels() { return panels; },
+    get tapeMode() { return tapeMode; },
+    get widthPresets() { return widthPresets; },
+  },
 });
-document.addEventListener("paste", (event) => {
-  if (!itemKeys(event)) return;
-  // Middle-click (click wheel) on Linux fires a primary-selection paste event on mouseup;
-  // never turn an accidental wheel click into a text box on the page.
-  if (performance.now() - middleMouseAt < 400) {
-    event.preventDefault();
-    return;
-  }
-  const text = event.clipboardData?.getData("text/plain") || "";
-  const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
-  // A copy made in NoteComplete: this tab's own, or (its picture carrying another copy) one
-  // made in another tab or window.
-  if (text === CLIP_MARK && (clip || images.length)) {
-    pastedAt = event.timeStamp;
-    event.preventDefault();
-    const spot = pasteSpot();
-    (async () => {
-      const c = images.length ? await pictureClip(images[0]) : null;
-      if (c && c.id !== clip?.id) return pasteFromPicture(c, spot);
-      if (clip) return pasteClip();
-      if (images.length) return importImages(images, { at: spot, any: true });
-    })().catch((e) => status(e.message, true));
-    return;
-  }
-  const umlClip = readUmlClipFromText(text);
-  if (umlClip) {
-    pastedAt = event.timeStamp;
-    event.preventDefault();
-    pasteUmlIntoPage(umlClip);
-    return;
-  }
-  // From other apps: a picture goes on the page where the pointer is (selected, to move it);
-  // plain text becomes a text box there. A picture copied from NoteComplete brings its items.
-  if (images.length) {
-    pastedAt = event.timeStamp;
-    event.preventDefault();
-    importImages(images, { at: pasteSpot(), any: true });
-    return;
-  }
-  if (text.trim() && text !== CLIP_MARK) {
-    const spot = pasteSpot();
-    if (!spot) return;
-    pastedAt = event.timeStamp;
-    event.preventDefault();
-    textBox.placeText(panels[spot.page], spot.point, text.replace(/\r\n?/g, "\n").trimEnd());
-  }
-});
-// Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
-// fields (one undo step). A closed shape's fill (rectangle, ellipse, triangle, star) changes too.
-const hexOf = (rgba) => "#" + rgba.slice(0, 3).map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
-const COLOUR_NAMES = { "#1f2328": "Black", "#246bce": "Blue", "#d13b2f": "Red", "#2a9d63": "Green", "#8a4fd0": "Purple", "#ff9f1c": "Orange", "#ffdf38": "Yellow", "#e3c6e6": "Pink" };
-async function restyle(item, change) {
-  const adjustment = { ...structuredClone(item.adjustment), ...change };
-  if (selection.item?.page === item.page && selection.item?.id === item.id) return selection.commit(adjustment);
-  return patchItem(item, adjustment);
-}
-function styleEntries(item) {
-  if (!item.styled) return [];
-  const rgba = item.adjustment?.rgba || item.base_rgba, width = item.adjustment?.width ?? item.base_width, now = hexOf(rgba);
-  const tool = item.kind === "ink" ? "draw" : "shape";
-  const colours = [...new Set([...palettes[tool], ...SWATCHES].map((c) => c.toLowerCase()))].slice(0, 10);
-  const widths = [...new Set([...widthPresets[tool], ...WIDTH_LADDER.slice(0, 5)])].sort((a, b) => a - b);
-  return [
-    { label: "Colour", icon: "draw", submenu: () => [
-      ...colours.map((c) => ({ label: COLOUR_NAMES[c] || c.toUpperCase(), swatch: c, checked: c === now, run: () => restyle(item, { rgba: [...rgbaOf(c).slice(0, 3), rgba[3]] }) })),
-      "-",
-      { label: "Other colour…", icon: "settings", run: () => pickColor(now, (v) => restyle(item, { rgba: [...rgbaOf(v).slice(0, 3), rgba[3]] })) },
-    ] },
-    { label: "Thickness", icon: "minus", submenu: () => widths.map((w) => ({ label: `${w} px`, icon: "minus", checked: Math.abs(w - width) < 0.01, run: () => restyle(item, { width: w }) })) },
-    { label: "Opacity", icon: "eye", submenu: () => [100, 75, 50, 25].map((o) => ({ label: `${o}%`, icon: "eye", checked: Math.round(rgba[3] * 100) === o, run: () => restyle(item, { rgba: [...rgba.slice(0, 3), o / 100] }) })) },
-    "fill" in item && { label: "Fill", icon: "shape", submenu: () => fillEntries(item, rgba, colours) },
-  ];
-}
-// A closed shape's inside: none, a light tint or solid, in its colour or another one.
-function fillEntries(item, rgba, colours) {
-  const fill = item.fill || null, base = fill ? fill.slice(0, 3) : rgba.slice(0, 3), now = fill && hexOf(fill);
-  const tint = !!fill && fill[3] < 0.6, set = (rgb, alpha) => restyle(item, { fill: [...rgb, alpha] });
-  return [
-    { label: "No fill", icon: "close", checked: !fill, run: () => set([0, 0, 0], 0) },
-    { label: "Light tint", icon: "shape", checked: tint, run: () => set(base, 0.25) },
-    { label: "Solid", icon: "shape", checked: !!fill && !tint, run: () => set(base, 1) },
-    "-",
-    ...colours.map((c) => ({ label: COLOUR_NAMES[c] || c.toUpperCase(), swatch: c, checked: c === now, run: () => set(rgbaOf(c).slice(0, 3), fill ? fill[3] : 0.25) })),
-    { label: "Other colour…", icon: "settings", run: () => pickColor(now || hexOf(rgba), (v) => set(rgbaOf(v).slice(0, 3), fill ? fill[3] : 0.25)) },
-  ];
-}
-// The tape under page point `at`, the top one.
-function tapeAt(p, at) {
-  return [...(p.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => at[0] >= x && at[0] <= x + w && at[1] >= y && at[1] <= y + h) || null;
-}
-function tapeEntries(p, tape) {
-  if (!tape) return [];
-  const open = tapeOpen(p, tape);
-  return [
-    { label: open ? "Cover with this tape" : "Lift this tape", icon: open ? "eyeOff" : "eye", run: () => toggleTape(p, tape) },
-    { label: "All tape", icon: "tape", submenu: [
-      { label: "Lift all", icon: "eye", checked: tapeMode === "revealed", run: () => setTapeMode("revealed") },
-      { label: "Cover all", icon: "eyeOff", checked: tapeMode === "covered", run: () => setTapeMode("covered") },
-      { label: "As saved in the note", icon: "tape", checked: tapeMode === "note", run: () => setTapeMode("note") },
-    ] },
-  ];
-}
-// A picture of an item (as drawn, on nothing) or of a page, to download, copy, share or send by
-// QR. `make(scale, type, quality)` draws it.
-const safeName = (name) => String(name || "NoteComplete").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").slice(0, 80);
-async function itemPicture(item, scale = 3, type = "image/png", quality, out = null) {
-  const p = panels[item.page];
-  const ids = new Set(item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id]);
-  const svgNow = p?.render?.querySelector("svg");
-  if (!svgNow) throw Error("The page is not shown.");
-  // Where it is now, from what is drawn (moves, turns and crops included).
-  const frame = svgNow.getBoundingClientRect(), k = p.size[0] / frame.width;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const id of ids) {
-    const r = p.render.querySelector(`[data-item="${CSS.escape(String(id))}"]`)?.getBoundingClientRect();
-    if (!r || (!r.width && !r.height)) continue;
-    x0 = Math.min(x0, (r.left - frame.left) * k); y0 = Math.min(y0, (r.top - frame.top) * k);
-    x1 = Math.max(x1, (r.right - frame.left) * k); y1 = Math.max(y1, (r.bottom - frame.top) * k);
-  }
-  if (!(x1 > x0 && y1 > y0)) throw Error("Nothing to export here.");
-  const pad = 4, box = [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad];
-  if (out) out.box = box;
-  const view = await call("view", { page: item.page });
-  const holder = document.createElement("div");
-  holder.innerHTML = view.svg;
-  for (const el of holder.querySelectorAll("[data-item]")) if (!ids.has(el.dataset.item)) el.remove();
-  holder.querySelector("[data-background]")?.replaceChildren();
-  // Tape as it is on the page now (lifted or covering).
-  for (const tape of holder.querySelectorAll("[data-tape]")) tape.setAttribute("opacity", p.render.querySelector(`[data-tape="${CSS.escape(tape.dataset.tape)}"]`)?.dataset.revealed === "1" ? "0.18" : "1");
-  const svg = holder.querySelector("svg"), w = Math.max(1, Math.round(box[2] * scale)), h = Math.max(1, Math.round(box[3] * scale));
-  svg.setAttribute("viewBox", box.join(" "));
-  svg.setAttribute("width", w);
-  svg.setAttribute("height", h);
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
-  try {
-    const image = new Image();
-    await imageReady(image, url);
-    const canvas = Object.assign(document.createElement("canvas"), { width: w, height: h });
-    const context = canvas.getContext("2d");
-    if (type !== "image/png") { context.fillStyle = "#fff"; context.fillRect(0, 0, w, h); }
-    context.drawImage(image, 0, 0, w, h);
-    return await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not draw the picture."))), type, quality));
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-async function pagePicture(index, scale = 1, type = "image/png", quality) {
-  const { canvas } = await pageCanvas(index, Math.round(Math.min(2200, panels[index].size[0] * 2) * scale));
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not draw the page."))), type, quality));
-}
-const QR_MAX = 48 * 1024;
-function exportEntries(name, make) {
-  const file = safeName(name), fail = (e) => e?.name !== "AbortError" && status(e?.message || String(e), true);
-  return { label: "Export", icon: "export", subtitle: name, submenu: () => [
-    { label: "Download PNG", icon: "save", run: () => make(3).then((b) => download(b, `${file}.png`, "image/png")).then(() => status(`Saved “${file}.png”.`)).catch(fail) },
-    navigator.clipboard?.write && window.ClipboardItem && { label: "Copy picture", icon: "copy", run: () => navigator.clipboard.write([new ClipboardItem({ "image/png": make(2) })]).then(() => status("Copied as a picture: paste it anywhere.")).catch(fail) },
-    navigator.share && { label: "Share…", icon: "share", run: async () => {
-      try {
-        const picture = new File([await make(2)], `${file}.png`, { type: "image/png" });
-        if (!navigator.canShare?.({ files: [picture] })) return status("This browser cannot share pictures. Download it instead.", true);
-        await navigator.share({ files: [picture], title: name });
-      } catch (e) { fail(e); }
-    } },
-    { label: "Send by QR…", icon: "qr", run: () => sendPictureByQr(name, file, make).catch(fail) },
-  ] };
-}
-// Offline, as a stream of QR codes: small pictures only (the smallest of a few renderings).
-async function sendPictureByQr(name, file, make) {
-  let blob = null, ext = "png";
-  for (const [scale, type, quality] of [[1.5, "image/png"], [1, "image/png"], [1, "image/jpeg", 0.8], [0.7, "image/jpeg", 0.65]]) {
-    blob = await make(scale, type, quality);
-    ext = type === "image/png" ? "png" : "jpg";
-    if (blob.size <= QR_MAX) break;
-  }
-  if (blob.size > QR_MAX) return status(`Too big to send by QR (${Math.round(blob.size / 1024)} KB). Download or share it instead.`, true);
-  const { showQrTransfer, base64UrlEncode } = await import("./qr-transfer.js");
-  await showQrTransfer({
-    title: `Send “${name}” by QR`,
-    subtitle: "On the other device: Import, export and share → Receive note via QR / P2P → Scan QR stream.",
-    payload: { kind: "file", name: `${file}.${ext}`, mime: blob.type, base64: base64UrlEncode(new Uint8Array(await blob.arrayBuffer())) },
-    onDownloadFallback: () => download(blob, `${file}.${ext}`, blob.type),
-    fallbackLabel: "Save the picture instead",
-    status,
-  });
-}
-function itemMenu(item, x, y, { tape = null, zh = [] } = {}) {
-  if (!doc || !item) return;
-  const p = panels[item.page];
-  // The tape itself, or something under (or over) it.
-  const isTape = tape && (p.render?.querySelector(`[data-tape="${CSS.escape(String(tape.id))}"]`)?.closest("[data-item]")?.dataset.item === String(item.id));
-  const c = item.compound, name = c ? compoundLabel(c) : isTape ? "Tape" : ITEM_NAMES[item.kind] || "Item";
-  let figure = null;
-  if (c?.kind === "prefab") { try { figure = JSON.parse(c.spec || "{}"); } catch { /* Not one. */ } }
-  const chart = Boolean(editorKind(figure)), solvable = chart && canBeExercise(figure), exercise = solvable && Boolean(figure.exercise);
-  const uml = c?.kind === "prefab" && /"type":\s*"uml"/.test(c.spec || "");
-  // "Edit histogram…", "Edit UML class diagram…": words in capitals stay so; a "Topic: Name"
-  // (an algorithm, "Greedy: Dijkstra") is kept as it is.
-  const lower = name.includes(": ") ? name : name.split(" ").map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase())).join(" ");
-  openContextMenu(x, y, [
-    ...zh,
-    ...tapeEntries(p, tape),
-    tape && "-",
-    solvable && { label: `${exercise ? "Fill in" : "Solve"} ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
-    // A module's own entries (module.json "menu": [{ label, icon, mode }]): its editor opens
-    // in that mode (host.mode), as "Play…" for an algorithm.
-    ...((figure && moduleOf(figure)?.manifest.menu) || []).filter((m) => m?.label && m.mode).map((m) => ({ label: String(m.label), icon: m.icon || "graph", run: () => editCompound(item, String(m.mode)) })),
-    c && { label: `Edit ${lower}…`, icon: uml ? "uml" : c.kind === "table" ? "table" : "graph", run: () => editCompound(item) },
-    chart && { label: "Edit its data as JSON…", icon: "note", run: () => editCompound(item, "json") },
-    item.kind === "text" && { label: "Edit text", icon: "text", run: () => editTextItem(item) },
-    item.kind === "image" && !c && { label: "Crop", icon: "crop", run: () => { selection.show(item); selection.startCrop(); } },
-    ...styleEntries(item),
-    { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
-    { label: "Cut", icon: "scissors", key: "Ctrl X", run: () => copyItem(item, { cut: true }) },
-    { label: "Copy", icon: "copy", key: "Ctrl C", run: () => copyItem(item) },
-    !c && item.kind !== "group" && { label: "Lock in place", icon: "lock", run: () => action("lock", { page: item.page, itemId: item.id, locked: true }).then(() => status("Locked: Select passes over it. Right-click it to unlock it.")) },
-    "-",
-    exportEntries(`${doc.title || "Note"} - ${name}`, (scale, type, quality) => itemPicture(item, scale, type, quality)),
-    "-",
-    { label: "Delete", icon: "trash", danger: true, key: "⇧ Right-click", run: () => removeItem(item).catch((e) => status(e.message, true)) },
-  ], { title: name });
-}
-// The page menu's entries (menu-config.js keeps which, and their order).
-const PAGE_ACTIONS = [
-  { id: "prefab", label: "Insert prefab here…", icon: "graph" },
-  { id: "shape", label: "Insert shape", icon: "shape" },
-  { id: "text", label: "Type text here", icon: "text" },
-  { id: "image", label: "Insert image…", icon: "image" },
-  { id: "uml", label: "Insert UML diagram here…", icon: "uml" },
-  { id: "table", label: "Insert table here…", icon: "table" },
-  { id: "export", label: "Export this page", icon: "export" },
-  { id: "tape", label: "Tape (lift or cover all)", icon: "tape" },
-  { id: "quick", label: "Quick menu", icon: "menu" },
-  { id: "undo", label: "Undo", icon: "undo" },
-  { id: "redo", label: "Redo", icon: "redo" },
-];
-function pageEntry(id, p, at, x, y) {
-  const box = [at[0], at[1], 0, 0];
-  if (id === "-") return "-";
-  if (id.startsWith("prefab:")) {
-    const choice = PREFABS.find((q) => q.id === id.slice(7));
-    return choice && { label: `Insert ${choice.label}`, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) };
-  }
-  switch (id) {
-    case "prefab": return { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, box), subtitle: "Recently used", submenu: () => {
-      const recent = recentPrefabs(6);
-      return [...recent.map((choice) => ({ label: choice.label, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) })), recent.length && "-", { label: "All prefabs…", icon: "search", run: () => insertPrefab(p, box) }];
-    } };
-    case "shape": return { label: "Insert shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
-      label, icon: "shape", iconEl: document.querySelector(`#shapePicker [data-shape="${kind}"] svg`), run: () => insertShapeAt(p, at, kind),
-    })) };
-    case "text": return { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
-    case "image": return { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() };
-    case "uml": return { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, box) };
-    case "table": return { label: "Insert table here…", icon: "table", run: () => insertCompound(p, "table", box) };
-    case "export": return { ...exportEntries(`${doc.title || "Note"} - page ${p.index + 1}`, (scale, type, quality) => pagePicture(p.index, scale, type, quality)), label: "Export this page" };
-    case "tape": return p.view?.tapes?.length ? { label: "Tape", icon: "tape", submenu: tapeEntries(p, p.view.tapes[0])[1].submenu } : null;
-    case "quick": return { label: "Quick menu", icon: "menu", key: "⇧S", run: () => quick.open(x, y) };
-    case "undo": return { label: "Undo", icon: "undo", key: "Ctrl Z", disabled: $("undo").disabled, run: () => $("undo").click() };
-    case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Shift Z", disabled: $("redo").disabled, run: () => $("redo").click() };
-  }
-  return null;
-}
-function customizePageMenuNow() {
-  import("./menu-config.js").then(({ customizePageMenu }) => customizePageMenu({
-    actions: PAGE_ACTIONS,
-    prefabs: PREFABS.map((q) => ({ id: q.id, label: q.label, icon: q.icon })),
-  })).then((order) => order && status("Page menu saved. Right-click the page to see it.")).catch((e) => status(e.message, true));
-}
-// What is at page point `at` of `p`: its menu (and it selected), or the page's.
-async function pageMenu(p, at, x, y) {
-  if (!doc || !p?.view) return;
-  const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
-  const tape = tapeAt(p, at);
-  // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js).
-  const zh = await pageZhEntries(p, x, y).catch(() => []);
-  try {
-    const item = await pickWhole(args);
-    if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh }); }
-    const locked = await call("pickLock", args);
-    if (locked?.locked) {
-      return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
-    }
-  } catch (e) { return status(e.message, true); }
-  const { pageMenuOrder } = await import("./menu-config.js");
-  const sharedUml = getSharedUmlClip();
-  const canPastePage = Boolean(clip || sharedUml);
-  const runPagePaste = () => (clip && (!sharedUml || (clip.at || 0) >= (sharedUml.at || 0)) ? pasteClip(p, at) : pasteUmlIntoPage(sharedUml, p, at));
-  openContextMenu(x, y, [
-    ...zh,
-    ...tapeEntries(p, tape),
-    tape && "-",
-    canPastePage && { label: "Paste here", icon: "copy", key: "Ctrl V", run: runPagePaste },
-    canPastePage && "-",
-    ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
-    "-",
-    ...(doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
-    { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
-  ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
-}
-// A finger held still for a moment opens the menu (as a right-click). Not while it draws: a
-// finger that pans, selects or types does; a second finger (two-finger hold, pinch) cancels it.
-const longPress = (() => {
-  let timer = 0, at = null;
-  const end = () => { clearTimeout(timer); timer = 0; at = null; };
-  return {
-    end,
-    down(e, p) {
-      if (timer) return end();
-      if (e.pointerType !== "touch" || !doc || editing) return;
-      at = { x: e.clientX, y: e.clientY, id: e.pointerId, p };
-      timer = setTimeout(() => {
-        const a = at;
-        end();
-        if (!a || editing || busy()) return;
-        if (gesture && !(gesture.id === a.id && gesture.tool === "pan")) return;
-        cancelGesture();
-        selection.cancel?.();
-        navigator.vibrate?.(12);
-        // On a Chinese character: its panel at once (chinese/zh-menu.js); else the menu.
-        pageZhLongPress(a.p, a.x, a.y).catch(() => false).then((opened) => opened || pageMenu(a.p, point({ clientX: a.x, clientY: a.y }, a.p), a.x, a.y));
-      }, 550);
-    },
-    move(e) {
-      if (at && e.pointerId === at.id && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 10) end();
-    },
-  };
-})();
-$("insertPdf").onclick = () => doc && $("pdfPagesFile").click();
-$("pdfPagesFile").onchange = async (event) => {
-  const file = event.target.files[0];
-  event.target.value = "";
-  if (!file || !doc) return;
-  try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const pdf = await openPdf(bytes.slice());
-    const sizes = [];
-    try {
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
-        sizes.push([viewport.width, viewport.height]);
-        p.cleanup();
-      }
-    } finally {
-      await pdf.loadingTask.destroy();
-    }
-    openInsert({ name: file.name, bytes, sizes });
-  } catch (error) {
-    status(`Could not read that PDF: ${error.message}`, true);
-  }
-};
-// Units per PDF point in this note: from the current page's PDF when it has one.
-async function noteUnitsPerPoint() {
-  const view = panels[page]?.view;
-  if (!view?.pdf_background || !backgrounds) return UNITS_PER_POINT;
-  try {
-    const pdf = await backgrounds.document(view.pdf_background.resource_id);
-    const p = await pdf.getPage(view.pdf_background.page_index + 1);
-    const width = p.getViewport({ scale: 1 }).width;
-    p.cleanup();
-    const ratio = backgroundPlacement(view.pdf_background, view.size).width / width;
-    return Number.isFinite(ratio) && ratio > 0 ? ratio : UNITS_PER_POINT;
-  } catch {
-    return UNITS_PER_POINT;
-  }
-}
-$("insertCancel").onclick = () => $("insertDialog").close();
-$("insertConfirm").onclick = async () => {
-  if (!doc || busy()) return;
-  const at = insertAt($("insertWhere").value, page, doc.pages);
-  let pages, pdf;
-  if (insertPdfSource) {
-    const count = insertPdfSource.sizes.length;
-    const from = Math.max(1, Math.min(count, Number($("insertFrom").value) || 1)) - 1;
-    const to = Math.max(from + 1, Math.min(count, Number($("insertTo").value) || count)) - 1;
-    const id = "pdf-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
-    pages = pdfPages(id, insertPdfSource.sizes, from, to, $("insertSpace").value, await noteUnitsPerPoint());
-    let binary = "";
-    for (let i = 0; i < insertPdfSource.bytes.length; i += 0x8000)
-      binary += String.fromCharCode(...insertPdfSource.bytes.subarray(i, i + 0x8000));
-    pdf = { id, base64: btoa(binary) };
-  } else {
-    const size = blankSize($("insertPreset").value, panels[page].size, [Number($("insertWidth").value), Number($("insertHeight").value)]);
-    if (size.some((v) => !(v >= 10))) {
-      $("insertStatus").textContent = "Enter a width and height of at least 20 mm.";
-      return;
-    }
-    const count = Math.max(1, Math.min(100, Number($("insertCount").value) || 1));
-    pages = Array.from({ length: count }, () => ({ size }));
-  }
-  $("insertDialog").close();
-  await action("insertPages", { at, pages, pdf, focus: at });
-};
-// Pages -> Change PDF background: swap, reuse, or clear the PDF on selected pages while keeping size sane.
-let pageBgState = { existing: [], uploaded: null, sizesCache: new Map(), compactTouched: false };
-async function readPdfSizes(bytes) {
-  const pdf = await openPdf(bytes.slice());
-  const sizes = [];
-  try {
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
-      sizes.push([viewport.width, viewport.height]);
-      p.cleanup();
-    }
-  } finally {
-    await pdf.loadingTask.destroy();
-  }
-  return sizes;
-}
-async function ensureBgPdfSizes(sourceKey) {
-  if (sourceKey === "none") return [];
-  if (sourceKey === "uploaded") return pageBgState.uploaded?.sizes || [];
-  if (pageBgState.sizesCache.has(sourceKey)) return pageBgState.sizesCache.get(sourceKey);
-  if (!backgrounds) return [];
-  const pdf = await backgrounds.document(sourceKey);
-  const sizes = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const p = await pdf.getPage(i), viewport = p.getViewport({ scale: 1 });
-    sizes.push([viewport.width, viewport.height]);
-    p.cleanup();
-  }
-  pageBgState.sizesCache.set(sourceKey, sizes);
-  return sizes;
-}
-async function extractPdfPagesAsCompactPdf(bytes, indices, title) {
-  const src = await openPdf(bytes.slice());
-  const drawn = [];
-  try {
-    for (const i of indices) {
-      const p = await src.getPage(i + 1);
-      const vp1 = p.getViewport({ scale: 1 });
-      const scale = Math.min(2.2, Math.max(1, 2200 / Math.max(vp1.width, vp1.height)));
-      const viewport = p.getViewport({ scale });
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(viewport.width));
-      canvas.height = Math.max(1, Math.round(viewport.height));
-      const ctx = canvas.getContext("2d", { alpha: false });
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await p.render({ canvasContext: ctx, viewport }).promise;
-      p.cleanup();
-      const blob = await new Promise((resolve, reject) =>
-        canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Could not render PDF page."))), "image/jpeg", 0.86),
-      );
-      drawn.push({
-        bytes: new Uint8Array(await blob.arrayBuffer()),
-        widthPx: canvas.width,
-        heightPx: canvas.height,
-        widthPt: vp1.width,
-        heightPt: vp1.height,
-      });
-      canvas.width = canvas.height = 0;
-    }
-  } finally {
-    await src.loadingTask.destroy();
-  }
-  const { data, layout } = packPages(drawn);
-  return await call("jpegPagesPdf", { data, layout, title });
-}
-function updatePageBgDialog() {
-  const sourceVal = $("pageBgSource").value;
-  const isNone = sourceVal === "none";
-  const isUploaded = sourceVal === "uploaded" && !!pageBgState.uploaded;
-  $("pageBgPdfOptions").hidden = isNone;
-  $("pageBgPicked").hidden = !isUploaded;
-  if (isUploaded) {
-    const up = pageBgState.uploaded;
-    $("pageBgPicked").textContent = `${up.name} (${up.sizes.length} page${up.sizes.length === 1 ? "" : "s"}, ${formatBytes(up.bytes.length)})`;
-  }
-  const parsed = parsePageSelection($("pageBgTarget").value, doc?.pages || 0);
-  $("pageBgError").hidden = !parsed.error;
-  $("pageBgError").textContent = parsed.error || "";
-  const sizes = isNone ? [] : isUploaded ? pageBgState.uploaded.sizes : pageBgState.sizesCache.get(sourceVal) || [];
-  if (!isNone && sizes.length) $("pageBgFrom").max = String(sizes.length);
-  const noteEl = $("pageBgSizeNote");
-  noteEl.classList.remove("warn");
-  if (isNone) {
-    $("pageBgCompactRow").hidden = true;
-    noteEl.textContent = parsed.indices
-      ? `Clears PDF background on ${parsed.indices.length} page${parsed.indices.length === 1 ? "" : "s"}. Unused PDFs are pruned when exporting or compacting.`
-      : "Clears the PDF background to plain paper.";
-    $("pageBgApply").disabled = !!parsed.error;
-    return;
-  }
-  if (!sizes.length) {
-    $("pageBgCompactRow").hidden = true;
-    noteEl.textContent = isUploaded ? "" : "Loading PDF info…";
-    $("pageBgApply").disabled = !!parsed.error || (sourceVal === "uploaded" && !isUploaded);
-    return;
-  }
-  const startPdf = Math.max(0, Math.min(sizes.length - 1, (Number($("pageBgFrom").value) || 1) - 1));
-  const used = usedPdfPageIndices({
-    noteCount: parsed.indices?.length || 1,
-    pdfPageCount: sizes.length,
-    startPdfPage: startPdf,
-    mode: $("pageBgMode").value,
-  });
-  if (isUploaded) {
-    const up = pageBgState.uploaded;
-    const suggest = shouldSuggestCompact(up.bytes.length, up.sizes.length, used.length);
-    $("pageBgCompactRow").hidden = used.length >= up.sizes.length;
-    if (!pageBgState.compactTouched) $("pageBgCompact").checked = suggest;
-    const compact = !$("pageBgCompactRow").hidden && $("pageBgCompact").checked;
-    if (compact) {
-      noteEl.textContent = `Extracts ${used.length} of ${up.sizes.length} pages (~${formatBytes(used.length * 160 * 1024)} est. instead of ${formatBytes(up.bytes.length)}).`;
-    } else if (suggest) {
-      noteEl.textContent = `Warning: keeping full PDF embeds ${formatBytes(up.bytes.length)} even though only ${used.length} of ${up.sizes.length} pages are used.`;
-      noteEl.classList.add("warn");
-    } else {
-      noteEl.textContent = `Embeds ${formatBytes(up.bytes.length)}${$("pageBgMode").value === "sequence" && parsed.indices && startPdf + parsed.indices.length > sizes.length ? " (PDF reaches its last page and repeats it)" : ""}.`;
-      if (up.bytes.length >= 4 * 1024 * 1024) noteEl.classList.add("warn");
-    }
-  } else {
-    $("pageBgCompactRow").hidden = true;
-    const existing = pageBgState.existing.find((e) => e.id === sourceVal);
-    noteEl.textContent = `Reuses PDF already in note (${existing ? formatBytes(existing.bytes) : "in note"}, +0 B added).`;
-  }
-  $("pageBgApply").disabled = !!parsed.error;
-}
-async function openPageBackground(initialTarget = String(page + 1)) {
-  if (!doc || doc.canvas || busy()) return;
-  pageBgState = {
-    existing: await call("pdfResources").catch(() => []),
-    uploaded: null,
-    sizesCache: pageBgState.sizesCache,
-    compactTouched: false,
-  };
-  const select = $("pageBgSource");
-  select.replaceChildren();
-  const currentRes = panels[page]?.view?.pdf_background?.resource_id;
-  for (const [idx, item] of pageBgState.existing.entries()) {
-    const label = `${item.id === currentRes ? "Current PDF in note" : `PDF #${idx + 1} in note`} (${formatBytes(item.bytes)}, +0 B)`;
-    select.add(new Option(label, item.id));
-  }
-  select.add(new Option("Plain white paper (clear PDF)", "none"));
-  if (currentRes && pageBgState.existing.some((e) => e.id === currentRes)) select.value = currentRes;
-  $("pageBgTarget").value = initialTarget;
-  $("pageBgFrom").value = String((panels[page]?.view?.pdf_background?.page_index ?? 0) + 1);
-  $("pageBgMode").value = "sequence";
-  $("pageBgSizeMode").value = "fit";
-  $("pageBgCompact").checked = false;
-  refreshSelects($("pageBgDialog"));
-  updatePageBgDialog();
-  if (select.value !== "none") {
-    ensureBgPdfSizes(select.value).then(() => { if ($("pageBgDialog").open) updatePageBgDialog(); }).catch(() => {});
-  }
-  $("pageBgDialog").showModal();
-}
-$("changePageBg").onclick = () => openPageBackground(String(page + 1));
-$("pagesChangeBg").onclick = () => openPageBackground(String(page + 1));
-$("pageBgTargetCurrent").onclick = () => { $("pageBgTarget").value = String(page + 1); updatePageBgDialog(); };
-$("pageBgTargetAll").onclick = () => { $("pageBgTarget").value = doc?.pages > 1 ? `1-${doc.pages}` : "1"; updatePageBgDialog(); };
-$("pageBgTarget").oninput = updatePageBgDialog;
-$("pageBgFrom").oninput = updatePageBgDialog;
-$("pageBgMode").onchange = updatePageBgDialog;
-$("pageBgSizeMode").onchange = updatePageBgDialog;
-$("pageBgCompact").onchange = () => { pageBgState.compactTouched = true; updatePageBgDialog(); };
-$("pageBgSource").onchange = () => {
-  const val = $("pageBgSource").value;
-  updatePageBgDialog();
-  if (val !== "none" && val !== "uploaded") {
-    ensureBgPdfSizes(val).then(() => { if ($("pageBgDialog").open) updatePageBgDialog(); }).catch((e) => status(e.message, true));
-  }
-};
-$("pageBgPick").onclick = () => $("pdfBgFile").click();
-$("pdfBgFile").onchange = async (event) => {
-  const file = event.target.files[0];
-  event.target.value = "";
-  if (!file || !doc) return;
-  try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const sizes = await readPdfSizes(bytes);
-    pageBgState.uploaded = { name: file.name, bytes, sizes };
-    pageBgState.compactTouched = false;
-    const select = $("pageBgSource");
-    let opt = select.querySelector('option[value="uploaded"]');
-    if (!opt) {
-      opt = new Option("", "uploaded");
-      select.prepend(opt);
-    }
-    opt.textContent = `${file.name} (${formatBytes(bytes.length)})`;
-    select.value = "uploaded";
-    refreshSelects($("pageBgDialog"));
-    $("pageBgFrom").value = "1";
-    updatePageBgDialog();
-  } catch (error) {
-    status(`Could not read that PDF: ${error.message}`, true);
-  }
-};
-$("pageBgCancel").onclick = () => $("pageBgDialog").close();
-$("pageBgApply").onclick = async () => {
-  if (!doc || busy()) return;
-  const parsed = parsePageSelection($("pageBgTarget").value, doc.pages);
-  if (parsed.error) return updatePageBgDialog();
-  const noteIndices = parsed.indices;
-  const currentSizes = panels.map((p) => p.size);
-  const sourceVal = $("pageBgSource").value;
-  if (sourceVal === "none") {
-    $("pageBgDialog").close();
-    const pages = buildPageBackgroundChanges({ noteIndices, currentSizes, source: { kind: "none" } });
-    await action("setPageBackgrounds", { pages, focus: noteIndices[0] });
-    return;
-  }
-  const startPdf = Math.max(0, (Number($("pageBgFrom").value) || 1) - 1);
-  const mode = $("pageBgMode").value;
-  const sizeMode = $("pageBgSizeMode").value;
-  const upp = await noteUnitsPerPoint();
-  if (sourceVal === "uploaded") {
-    const up = pageBgState.uploaded;
-    if (!up) return;
-    const used = usedPdfPageIndices({ noteCount: noteIndices.length, pdfPageCount: up.sizes.length, startPdfPage: startPdf, mode });
-    const useCompact = !$("pageBgCompactRow").hidden && $("pageBgCompact").checked && used.length < up.sizes.length;
-    let pdfBytes = up.bytes;
-    let remap = null;
-    if (useCompact) {
-      $("pageBgApply").disabled = true;
-      $("pageBgSizeNote").textContent = `Extracting ${used.length} page${used.length === 1 ? "" : "s"}…`;
-      try {
-        pdfBytes = await extractPdfPagesAsCompactPdf(up.bytes, used, up.name);
-        remap = new Map(used.map((srcIdx, i) => [srcIdx, i]));
-      } catch (error) {
-        updatePageBgDialog();
-        return status(`Could not extract PDF pages: ${error.message}`, true);
-      }
-    }
-    const id = "pdf-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
-    const pages = buildPageBackgroundChanges({
-      noteIndices,
-      currentSizes,
-      source: { kind: "pdf", resourceId: id },
-      pdfSizesPt: up.sizes,
-      startPdfPage: startPdf,
-      mode,
-      sizeMode,
-      unitsPerPoint: upp,
-      remapIndices: remap,
-    });
-    $("pageBgDialog").close();
-    await action("setPageBackgrounds", { pages, pdf: { id, base64: bytesToBase64(pdfBytes) }, focus: noteIndices[0] });
-    return;
-  }
-  const sizesPt = await ensureBgPdfSizes(sourceVal);
-  const pages = buildPageBackgroundChanges({
-    noteIndices,
-    currentSizes,
-    source: { kind: "pdf", resourceId: sourceVal },
-    pdfSizesPt: sizesPt,
-    startPdfPage: startPdf,
-    mode,
-    sizeMode,
-    unitsPerPoint: upp,
-  });
-  $("pageBgDialog").close();
-  await action("setPageBackgrounds", { pages, focus: noteIndices[0] });
-};
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
 // `inkOnly` keeps just the handwriting, in black on white: no PDF, images,
 // typed text or highlighter, so recognition sees the ink alone (null when there is none).
@@ -9374,125 +7863,16 @@ $("shortcutsOpen").onclick = () => {
   $("shortcutsDialog").showModal();
 };
 $("shortcutsClose").onclick = () => $("shortcutsDialog").close();
-// View → Pen button…: learns what this pen's side button sends in this browser
-// (pen-button.js profileFrom), plus the opt-in long-press and an off switch.
-let penSetupRun = 0, penSetupFound = null;
-function openPenSetup() {
-  closeMenus();
-  penSetupFound = null;
-  $("penSetupResult").textContent = penProfile?.v ? describeProfile(penProfile) : "";
-  $("penSetupLongPress").checked = !!penProfile?.longPress;
-  $("penSetupOff").checked = !!penProfile?.off;
-  $("penSetupStart").textContent = "Start";
-  $("penSetupDialog").showModal();
-}
-$("penSetupOpen").onclick = openPenSetup;
-$("penSetupClose").onclick = () => { penSetupRun++; $("penSetupDialog").close(); };
-$("penSetupDialog").addEventListener("close", () => { penSetupRun++; });
-$("penSetupStart").onclick = async () => {
-  const run = ++penSetupRun, pad = $("penSetupPad"), step = $("penSetupStep");
-  const seen = { hover: [], taps: [], keys: [] };
-  let phase = "baseline";
-  const wait = (ms, until = () => false) => new Promise((done) => {
-    const started = Date.now();
-    const tick = () => (run !== penSetupRun || until() || Date.now() - started > ms ? done() : setTimeout(tick, 50));
-    tick();
-  });
-  // Hovering means no pointerdown since the last pointerup (Android reports the button as
-  // buttons 1 while hovering, the same as a touching tip).
-  let touching = false;
-  const down = (e) => { if (e.pointerType === "pen") touching = true; };
-  const up = (e) => { if (e.pointerType === "pen") touching = false; };
-  // Presses as the app will see them: a hover rising edge, or an entry with the button held.
-  const probe = penButtonDetector();
-  seen.presses = [];
-  // What the pen sends, live, so a step that seems to do nothing says why.
-  const live = (e, type) => {
-    if (phase === "baseline" || phase === "press") $("penSetupResult").textContent = `Pen ${type === "pointerleave" ? "out of range" : touching ? "touching" : "hovering"} · buttons ${e.buttons} · presses seen: ${seen.presses.length}`;
-  };
-  const feed = (e, type = e.type) => {
-    if (e.pointerType !== "pen") return;
-    if (probe.pointer({ ...fields(e), type }) === "menu" && phase === "press") seen.presses.push({ buttons: e.buttons });
-    live(e, type);
-  };
-  const move = (e) => {
-    if (e.pointerType === "pen" && !touching) seen.hover.push({ phase, buttons: e.buttons, pressure: e.pressure });
-    feed(e);
-  };
-  const over = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e); };
-  const out = (e) => { if (!e.relatedTarget || !pad.contains(e.relatedTarget)) feed(e, "pointerleave"); };
-  const menu = (e) => { e.preventDefault(); window.getSelection()?.removeAllRanges(); seen.taps.push({ phase, pointerType: e.pointerType || "", button: e.button }); };
-  const key = (e) => seen.keys.push({ phase, key: e.key, code: e.code });
-  pad.addEventListener("pointermove", move);
-  pad.addEventListener("pointerover", over);
-  pad.addEventListener("pointerout", out);
-  pad.addEventListener("pointerdown", down);
-  addEventListener("pointerup", up, true);
-  addEventListener("pointercancel", up, true);
-  pad.addEventListener("contextmenu", menu);
-  addEventListener("keydown", key, true);
-  try {
-    $("penSetupStart").textContent = "Try again";
-    $("penSetupResult").textContent = "";
-    step.textContent = "1 of 3 · Hold your pen just above the box, without touching it.";
-    await wait(2500);
-    phase = "press";
-    step.textContent = "2 of 3 · Press the side button while hovering, twice. If nothing happens, hold the button, lift the pen away and bring it back over the box.";
-    const presses = () => seen.presses.length;
-    await wait(6000, () => presses() >= 2);
-    await wait(400);
-    phase = "tap";
-    step.textContent = "3 of 3 · Hold the side button and tap the box once.";
-    await wait(6000, () => seen.taps.some((t) => t.phase === "tap"));
-    if (run !== penSetupRun) return;
-    penSetupFound = profileFrom({ hover: seen.hover, presses: seen.presses, taps: seen.taps.filter((t) => t.phase === "tap"), keys: seen.keys.filter((k) => k.phase !== "baseline") }, navigator.userAgent);
-    step.textContent = "Done. Save to use it, or Try again.";
-    $("penSetupResult").textContent = describeProfile(penSetupFound);
-  } finally {
-    pad.removeEventListener("pointermove", move);
-    pad.removeEventListener("pointerover", over);
-    pad.removeEventListener("pointerout", out);
-    pad.removeEventListener("pointerdown", down);
-    removeEventListener("pointerup", up, true);
-    removeEventListener("pointercancel", up, true);
-    pad.removeEventListener("contextmenu", menu);
-    removeEventListener("keydown", key, true);
-  }
-};
-$("penSetupSave").onclick = () => {
-  const profile = { ...(penSetupFound || penProfile || { v: 1 }), v: 1, longPress: $("penSetupLongPress").checked, off: $("penSetupOff").checked };
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* Kept for this session only. */ }
-  penProfile = profile;
-  $("penSetupDialog").close();
-  status(profile.off ? "Pen button off." : "Pen button saved.");
-};
-// Help → Test pen and stylus: what the browser reports for a pen (its type, buttons and
-// pressure), so a pen button that does not open the quick menu can be told apart.
-{
-  const pad = $("penTestPad"), log = $("penTestLog"), lines = [];
-  const note = (text) => {
-    if (lines.at(-1)?.text === text) { lines.at(-1).count++; } else lines.push({ text, count: 1 });
-    while (lines.length > 14) lines.shift();
-    log.replaceChildren(...lines.map((l) => { const li = document.createElement("li"); li.textContent = l.count > 1 ? `${l.text} ×${l.count}` : l.text; return li; }));
-  };
-  for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "pointerover", "pointerout"])
-    pad.addEventListener(type, (e) => {
-      // Entering and leaving between the box's own children are not the pen coming or going.
-      if ((type === "pointerover" || type === "pointerout") && e.relatedTarget && pad.contains(e.relatedTarget)) return;
-      e.preventDefault();
-      const state = e.pointerType === "pen"
-        ? (type === "pointerover" ? "hover enter" : type === "pointerout" ? "hover exit" : type === "pointermove" ? (e.buttons || e.pressure > 0 ? "contact" : "hover") : "")
-        : "";
-      note(`${type}${state ? ` · ${state}` : ""} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
-    });
-  pad.addEventListener("contextmenu", (e) => { e.preventDefault(); note(`contextmenu · ${e.pointerType || "?"} · button ${e.button}`); });
-  pad.addEventListener("touchstart", (e) => note(`touchstart · ${[...e.changedTouches].map((t) => t.touchType || "direct").join(", ")}`), { passive: true });
-  $("penTestDialog").addEventListener("keydown", (e) => { if (e.key !== "Escape") note(`key · ${e.key} (${e.code})`); });
-  $("penTestOpen").onclick = () => { closeMenus(); lines.length = 0; log.replaceChildren(); $("penTestDialog").showModal(); };
-  $("penTestClose").onclick = () => $("penTestDialog").close();
-  $("penTestSetup").onclick = () => { $("penTestDialog").close(); openPenSetup(); };
-  $("penTestCopy").onclick = () => navigator.clipboard.writeText(lines.map((l) => l.text + (l.count > 1 ? ` ×${l.count}` : "")).join("\n")).then(() => status("Copied."), () => status("Select the lines and copy them.", true));
-}
+// View → Pen button… and the pen test (pen-setup.js).
+penSetup({
+  $,
+  closeMenus,
+  fields,
+  status,
+  app: {
+    get penProfile() { return penProfile; }, set penProfile(v) { penProfile = v; },
+  },
+});
 $("studyCards").onclick = () => study.cards();
 $("studyQuiz").onclick = () => study.quiz();
 $("studyCheck").onclick = () => study.check();
@@ -9812,206 +8192,21 @@ $("studyShare").onclick = async () => {
 };
 // The note on screen (the same one Study → All quizzes calls current).
 const quizIndexFp = () => (doc && !$("editor").hidden ? find.fingerprint : studyText() && textView.visible ? sideFp : "");
-// Study material (.ncstudy, flashcard deck JSON, or Quiz Toolkit Markdown) kept on this device.
-async function pickImportTarget(pack, { preferOpen = false } = {}) {
-  const { describePack } = await import("./study-pack.js");
-  const openFp = quizIndexFp();
-  const options = [];
-  const seenKeys = new Set();
-  const seenFps = new Set();
-
-  if (openFp) {
-    const openTitle = doc?.title || sideView()?.name || $("title").textContent || "Current note";
-    seenFps.add(openFp);
-    if (noteEntryKey) seenKeys.add(noteEntryKey);
-    options.push({
-      id: `fp:${openFp}`,
-      fingerprint: openFp,
-      title: openTitle,
-      entryKey: noteEntryKey || "",
-      meta: pack.fingerprint === openFp ? "Open now · matches this pack" : "Open now",
-      matched: pack.fingerprint === openFp,
-    });
-  }
-
-  const settingKeys = (await library.store.keys("settings").catch(() => [])) || [];
-  const storedDocs = [];
-  for (const key of settingKeys) {
-    if (typeof key !== "string" || !key.startsWith("doc:")) continue;
-    const fp = key.slice(4);
-    if (!fp || fp.startsWith("general:") || fp.startsWith("received:") || seenFps.has(fp)) continue;
-    const rec = await library.store.get("settings", key).catch(() => null);
-    if (!rec?.title) continue;
-    storedDocs.push({ fp, rec });
-  }
-  storedDocs.sort((a, b) => (b.fp === pack.fingerprint ? 1 : 0) - (a.fp === pack.fingerprint ? 1 : 0) || (b.rec.at || 0) - (a.rec.at || 0));
-  for (const { fp, rec } of storedDocs) {
-    seenFps.add(fp);
-    if (rec.entryKey) seenKeys.add(rec.entryKey);
-    options.push({
-      id: `fp:${fp}`,
-      fingerprint: fp,
-      title: rec.title,
-      entryKey: rec.entryKey || "",
-      meta: fp === pack.fingerprint ? "Matches this pack" : "Saved note on this device",
-      matched: fp === pack.fingerprint,
-    });
-  }
-
-  for (const entry of await library.recent(60).catch(() => [])) {
-    if (!entry?.key || seenKeys.has(entry.key)) continue;
-    seenKeys.add(entry.key);
-    const cleanTitle = String(entry.name || "Note").replace(/\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i, "");
-    options.push({
-      id: `entry:${entry.key}`,
-      entry,
-      title: cleanTitle,
-      entryKey: entry.key,
-      meta: entrySourceLabel(entry) + (entry.modifiedTime ? ` · ${new Date(entry.modifiedTime).toLocaleDateString()}` : ""),
-      matched: false,
-    });
-  }
-
-  options.push({
-    id: "__general__",
-    general: true,
-    title: "General (not tied to a note)",
-    meta: "Always playable in Study → All quizzes and decks…",
-    matched: false,
-  });
-
-  const defaultChoice =
-    options.find((o) => o.matched) ||
-    (preferOpen && openFp ? options.find((o) => o.fingerprint === openFp) : null) ||
-    options.find((o) => o.general);
-
-  return new Promise((resolve) => {
-    const dialogEl = $("importTargetDialog");
-    const listEl = $("importTargetList");
-    const filterEl = $("importTargetFilter");
-    const statusEl = $("importTargetStatus");
-    const confirmBtn = $("importTargetConfirm");
-    let chosen = defaultChoice;
-
-    $("importTargetTitle").textContent = `Import “${pack.title}”`;
-    $("importTargetSummary").textContent = `${describePack(pack)}. Pick which note this belongs to, or keep it as a general study set.`;
-    filterEl.value = "";
-    statusEl.textContent = "";
-    confirmBtn.disabled = false;
-
-    const renderList = () => {
-      const q = filterEl.value.trim().toLowerCase();
-      const shown = options.filter((o) => o.general || !q || o.title.toLowerCase().includes(q) || o.meta.toLowerCase().includes(q));
-      listEl.replaceChildren(...shown.map((opt) => {
-        const row = document.createElement("label");
-        row.className = "migrate-row";
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = "importTargetChoice";
-        radio.value = opt.id;
-        radio.checked = chosen?.id === opt.id;
-        radio.onchange = () => { chosen = opt; statusEl.textContent = ""; };
-        const name = document.createElement("span");
-        name.textContent = opt.title;
-        const meta = document.createElement("span");
-        meta.className = "muted";
-        meta.textContent = opt.meta;
-        row.append(radio, name, meta);
-        return row;
-      }));
-    };
-    filterEl.oninput = renderList;
-    renderList();
-
-    const finish = (value) => {
-      dialogEl.oncancel = null;
-      if (dialogEl.open) dialogEl.close();
-      resolve(value);
-    };
-    $("importTargetCancel").onclick = () => finish(null);
-    dialogEl.oncancel = (event) => { event.preventDefault(); finish(null); };
-    confirmBtn.onclick = async () => {
-      if (!chosen) return;
-      if (chosen.general) return finish({ general: true, title: pack.title });
-      if (chosen.fingerprint) return finish({ fingerprint: chosen.fingerprint, title: chosen.title, entryKey: chosen.entryKey || "" });
-      confirmBtn.disabled = true;
-      statusEl.textContent = `Reading “${chosen.title}”…`;
-      try {
-        const file = await library.open(chosen.entry);
-        if (!file) throw Error(`${chosen.title} is no longer kept on this device. Open it once first.`);
-        const fp = await noteFingerprint(file);
-        if (!fp) throw Error(`Could not identify “${chosen.title}”.`);
-        finish({ fingerprint: fp, title: chosen.title, entryKey: chosen.entryKey });
-      } catch (err) {
-        confirmBtn.disabled = false;
-        statusEl.textContent = err.message;
-      }
-    };
-    if (!dialogEl.open) dialogEl.showModal();
-  });
-}
-
-async function importStudyWithChoice(pack, { preferOpen = false, openAfter = true, extraNote = "" } = {}) {
-  const { importPack, describePack } = await import("./study-pack.js");
-  const target = await pickImportTarget(pack, { preferOpen });
-  if (!target) return { cancelled: true };
-  const result = await importPack(library.store, pack, { target });
-  const where = result.general
-    ? `as “${pack.title}${pack.from ? ` (from ${pack.from})` : ""}” (General) in Study → All quizzes and decks`
-    : `into “${target.title}”`;
-  status(`Imported ${describePack(pack)} ${where}.${extraNote}`);
-  if (openAfter) {
-    if (pack.quizzes?.length === 1 && !pack.decks?.length) {
-      quizzes.open(pack.quizzes[0], `quizzes:${result.fingerprint}`);
-    } else if (!pack.quizzes?.length && pack.decks?.length === 1) {
-      await study.openDeck(pack.decks[0].id, result.fingerprint);
-    } else {
-      const inCurrent = !result.general && result.fingerprint === quizIndexFp();
-      await quizIndex.open({ scope: inCurrent ? "note" : "all" });
-    }
-  }
-  return { ...result, targetTitle: target.title };
-}
-
-async function importStudyFile(file, kindHint = null) {
-  try {
-    const { readPack } = await import("./study-pack.js");
-    if (file.size > 24 * 1024 * 1024) throw Error("That file is too large to be study material.");
-    const text = await file.text();
-    let pack;
-    let preferOpen = false;
-    let extraNote = "";
-    const effectiveKind = kindHint || (/\.(md|markdown)$/i.test(file.name) ? "quiz-markdown" : null);
-    if (effectiveKind === "quiz-markdown") {
-      const { packFromMarkdown } = await import("./quiz-import.js");
-      let skipped = 0, skippedNoAnswer = 0, missingImages = 0;
-      ({ pack, skipped, skippedNoAnswer, missingImages } = packFromMarkdown(text, file.name.replace(/\.[^.]+$/, "")));
-      pack = readPack(pack);
-      // One file is one battery: all its tests together as a single quiz, named after the file.
-      if (pack.quizzes.length > 1) pack.quizzes = [{ ...pack.quizzes[0], title: pack.title, questions: pack.quizzes.flatMap((z) => z.questions) }];
-      preferOpen = true;
-      extraNote = `${skipped ? ` ${skipped} skipped${skippedNoAnswer ? `: ${skippedNoAnswer} have no recorded answer, ${skipped - skippedNoAnswer} are matching, blanks, numeric or short answer` : ": not multiple choice"}.` : ""}${missingImages ? ` ${missingImages} picture${missingImages === 1 ? "" : "s"} left out: they were separate files; use “For NoteComplete .md” in Quiz Toolkit.` : ""}`;
-    } else if (effectiveKind === "deck") {
-      const value = JSON.parse(text);
-      const decks = (Array.isArray(value) ? value : [value])
-        .map((d, i) => ({
-          id: `${Date.now()}-${i}`,
-          title: String(d?.title || file.name.replace(/\.[^.]+$/, "") || "Flashcards"),
-          created: Number(d?.created) || Date.now(),
-          cards: (Array.isArray(d?.cards) ? d.cards : [])
-            .map((c) => ({ front: String(c?.front || "").trim(), back: String(c?.back || "").trim(), ...(c?.page ? { page: c.page } : {}) }))
-            .filter((c) => c.front && c.back),
-        }))
-        .filter((d) => d.cards.length);
-      if (!decks.length) throw Error("No flashcards found in that file.");
-      pack = readPack({ format: "notecomplete-study", version: 1, title: decks[0].title, created: Date.now(), decks });
-      preferOpen = true;
-    } else {
-      pack = readPack(text);
-    }
-    await importStudyWithChoice(pack, { preferOpen, openAfter: true, extraNote });
-  } catch (e) { status(e.message, true); }
-}
+// Importing study material into a note (study-import.js).
+const { importStudyFile, importStudyWithChoice } = studyImport({
+  $,
+  library,
+  quizIndex,
+  quizIndexFp,
+  quizzes,
+  sideView,
+  status,
+  study,
+  app: {
+    get doc() { return doc; },
+    get noteEntryKey() { return noteEntryKey; },
+  },
+});
 
 async function openImportedFile(file, meta = {}) {
   if (!file) return;
