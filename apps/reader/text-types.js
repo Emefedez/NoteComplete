@@ -40,6 +40,12 @@ export const VIDEO_NAME = new RegExp(`\\.(${VIDEO_EXTENSIONS.join('|')})$`, 'i')
 export const isVideoName = (name, type = '') => VIDEO_NAME.test(String(name || '')) || /^video\//i.test(String(type || ''));
 export const isMediaName = (name, type = '') => isAudioName(name, type) || isVideoName(name, type);
 
+// R workspaces / serialized R data objects handed off directly to R Commander Studio.
+export const RDATA_EXTENSIONS = ['rdata', 'rda', 'rds'];
+export const RDATA_NAME = new RegExp(`\\.(${RDATA_EXTENSIONS.join('|')})$`, 'i');
+export const isRDataName = (name) => RDATA_NAME.test(String(name || ''));
+export const isRScriptName = (name) => /\.(r|rmd|qmd)$/i.test(String(name || ''));
+
 export const hasExtension = (name) => /[^/\\]\.[^./\\]+$/.test(String(name || ''));
 export const isMarkdownName = (name) => /\.(md|markdown)$/i.test(name || '');
 // By name alone: a text extension, or no extension at all (the content decides then).

@@ -31,7 +31,7 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock.
 - **Quick menu & gestures:** `Shift+S`, pen side button, or two-finger hold; two-finger pinch/scroll/undo, three-finger redo; drag tools to reorder; dockable toolbar (top, bottom, left, right).
-- **Pages & canvas:** Infinite canvas or fixed pages; insert blank/PDF pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes.
+- **Pages & canvas:** Infinite canvas or fixed pages; insert blank/PDF pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
 - **Auto-save & export:** Automatic local recovery slots; export pages to PDF, SVG, PNG/JPEG, or Anki study decks.
 
 </details>
@@ -61,7 +61,8 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Prefabs &amp; Diagrams</b></summary>
 
-- **Editable exam figures & sticky notes (`Shift+X`):** Sticky notes (coloured cards with folded corner, optional title/body/lines that stay under handwriting — also imported directly from Goodnotes sticky notes), function graphs, histograms, bar charts, process states & CPU timelines (tap-to-paint exercises), trees, node graphs, tables (`Shift+Y`), stroke-order sheets, and UML diagrams (Visual Paradigm XML & XMI import/export).
+- **Editable exam figures, sticky notes & R statistics plots (`Shift+X`):** Sticky notes (coloured cards with anti-aliased folded corner, optional title/body/lines, and click-top-strip peek/hide that smoothly fades both the card and its owned ink/text to reveal anything underneath — also imported directly from Goodnotes sticky notes with parented strokes & author text), function graphs, histograms, bar charts, process states & CPU timelines (tap-to-paint exercises), trees, node graphs, tables (`Shift+Y`), stroke-order sheets, UML diagrams (Visual Paradigm XML & XMI import/export), and **R Math & Statistics prefabs** (Normal, Student *t*, Chi-squared, Binomial, Histogram + Density, Boxplot, Scatterplot + Fit, and Custom R rendered as sanitized portable SVGs via local `Rscript` or **R Commander Studio**).
+- **Math Mode (`∑ Math` / `Ctrl+Shift+M`) & R Commander Studio Integration:** Toggleable formula bar with live KaTeX preview, built-in numeric/symbolic CAS (`=` evaluate, `d/dx` derivative, `∫` definite integral, `Solve`), one-click **Plot** to Function Graph, **`+ Box`** Math Text Box insertion, and direct **R Plot** / **R Studio** launch (configured in **View → Math Mode & R Bridge…**). From **File → New note…** (or Home's **File** menu), create single `.R` / `.Rmd` files or full **R Workspace folders** (`analysis.R`, `report.Rmd`, `data/`, `.Rproj`), automatically download and install **R Commander Studio** for your platform (Linux x64/ARM64, Windows x64, macOS ARM64), and open `.R`, `.Rmd`, `.qmd`, and `.RData`/`.rds` files with live disk sync.
 - **Kept for exercises:** Keep Grab snippets in a floating viewer / top-bar `★ Kept` pill while building charts or solving problems.
 
 <p align="center"><img src="docs/images/prefabs-menu.png" alt="Prefabs picker menu" width="100%"></p>

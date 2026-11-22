@@ -906,6 +906,25 @@ export function textBoxController({
     status("Pasted as a text box: drag it into place, double-click to edit.");
   }
 
+  // Math Mode formula onto a page: a math-enabled text box near the top of what is in view.
+  async function placeMath(p, tex) {
+    const currentDoc = getDoc(), activeLayer = getActiveLayer();
+    const layer = currentDoc?.layers.find((l) => l.id === activeLayer);
+    const cleaned = String(tex || "").trim();
+    if (!currentDoc || !p?.view || !cleaned || isEditing() || isBusy()) return false;
+    if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
+    const style = { ...textDefaults, math: true };
+    const [w, h] = await boxSize(cleaned, style);
+    const rect = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect(), scale = rect.width / p.size[0] || 1;
+    const y = Math.min(Math.max(20, (view.top - rect.top) / scale + 60), Math.max(20, p.size[1] - h - 20));
+    const x = Math.max(20, Math.min((p.size[0] - w) / 2, p.size[0] - w - 20));
+    await action("image", { page: p.index, image: { base64: "", mime: "", bounds: [x, y, w, h], layer: activeLayer, text: textPayload(cleaned, style) } });
+    doc.querySelector('#toolbar [data-tool="select"]')?.click();
+    await selection.selectId(p.index, `image:${getDoc().edit_count - 1}`);
+    status("Formula inserted as a Math Text Box: drag it into place, double-click to edit.");
+    return true;
+  }
+
   function isTypingOn(p) {
     return textEditor?.p === p && (doc.activeElement === textEditor.area || (textEditor.field && doc.activeElement === textEditor.field));
   }
@@ -976,6 +995,7 @@ export function textBoxController({
     restoreOnRender,
     answerToTextBox,
     placeText,
+    placeMath,
     mathKeys,
   };
 }

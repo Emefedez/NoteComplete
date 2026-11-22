@@ -12,7 +12,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
-import { isAudioName, isVideoName } from "./text-types.js";
+import { isAudioName, isVideoName, isRDataName, isRScriptName } from "./text-types.js";
 import { savedUmlView } from "./uml.js";
 import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
 import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
@@ -91,6 +91,9 @@ import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
 import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
+import { syncStickyNotes } from "./sticky-notes.js";
+import { createMathBar } from "./math/math-bar.js";
+import { openNewRDialog } from "./math/new-r-dialog.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { globalAudioController } from "./global-audio.js";
@@ -118,7 +121,20 @@ decorateIcons();
 const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
 const isMp3Name = (name, type = "") => isAudioName(name, type);
 const isMp4Name = (name, type = "") => isVideoName(name, type);
-async function openExternalVideo(path, name = "video.mp4", file = null) {
+async function rememberMediaInRecent(file, { path = "", name = "", origin = "Imported" } = {}) {
+  try {
+    const fileName = file?.name || name || (path ? path.split(/[\\/]/).pop() : "");
+    if (!fileName) return;
+    if (path && typeof library !== "undefined" && library?.rememberLocal) {
+      await library.rememberLocal(path, fileName, file?.size || 0);
+    } else if (file && typeof library !== "undefined" && library?.rememberImported) {
+      await library.rememberImported(file, { origin });
+    }
+    if (typeof home !== "undefined" && home?.visible) home.renderRecent?.();
+  } catch { /* Best-effort Recent tracking. */ }
+}
+async function openExternalVideo(path, name = "video.mp4", file = null, { origin = "Imported" } = {}) {
+  await rememberMediaInRecent(file, { path, name, origin });
   if (path && window.notecompleteFiles?.openExternalPath) {
     await window.notecompleteFiles.openExternalPath(path);
     status(`Opened ${name} in your system player.`);
@@ -140,14 +156,52 @@ async function openExternalVideo(path, name = "video.mp4", file = null) {
   status(`Could not open ${name} in an external player.`, true);
   return true;
 }
-async function openMediaFile(file, { path = "" } = {}) {
+async function openRStudioTarget({ filePath = "", folderPath = "", title = "", code = "", kind = "r", embed = false } = {}) {
+  if (!window.notecompleteRBridge) {
+    status("R Commander Studio bridge requires the NoteComplete desktop app.", true);
+    return false;
+  }
+  const res = await window.notecompleteRBridge.openInStudio({ filePath, folderPath, title, code, kind, embed });
+  if (res?.ok) {
+    status(res.connected ? "Opened in R Commander Studio." : "Launching R Commander Studio…");
+    return true;
+  }
+  if (res?.notInstalled) {
+    await openNewRDialog({
+      status,
+      onOpenStudio: openRStudioTarget,
+      onCreatedWorkspace: async (created) => {
+        if (created?.folderPath && created?.folderListing) {
+          await groups.openFolder({ folder: created.folderPath, name: created.name, files: created.folderListing });
+          home?.renderRecent?.();
+        }
+      },
+      onCreatedFile: async (created) => {
+        if (created?.filePath) {
+          await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
+          home?.renderRecent?.();
+        }
+      },
+    });
+    return true;
+  }
+  status(res?.error || "Could not open R Commander Studio.", true);
+  return false;
+}
+async function openMediaFile(file, { path = "", origin = "Imported" } = {}) {
   if (!file) return false;
+  if (isRDataName(file.name)) {
+    await rememberMediaInRecent(file, { path, name: file.name, origin });
+    await openRStudioTarget({ filePath: path, title: file.name });
+    return true;
+  }
   if (isMp3Name(file.name, file.type)) {
+    await rememberMediaInRecent(file, { path, name: file.name, origin });
     await globalAudio.playFile(file);
     return true;
   }
   if (isMp4Name(file.name, file.type)) {
-    return openExternalVideo(path, file.name, file);
+    return openExternalVideo(path, file.name, file, { origin });
   }
   return false;
 }
@@ -273,7 +327,39 @@ lagLog.start();
   $("lagLogSave").onclick = () => download(new Blob([lagLog.report()], { type: "text/plain" }), `NoteComplete lag log ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}.txt`, "text/plain");
   $("lagLogClose").onclick = () => dialog.close();
 }
-qualitySettings((value, rasterChanged, detail) => {
+function preloadMargin() {
+  const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
+  return `${count * 950}px 0px`;
+}
+function preloadCacheSize() {
+  const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
+  return Math.max(6, Math.min(48, count * 2 + 4));
+}
+function attachPageObserver() {
+  observer?.disconnect();
+  if (!panels.length) return;
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const p = panels[Number(entry.target.dataset.page)];
+        if (!p || p.el !== entry.target) continue;
+        p.near = entry.isIntersecting;
+        if (p.near) {
+          if (!p.view) renderPage(p);
+        } else if (gesture?.panel !== p) {
+          p.token++;
+          p.view = null;
+          p.ink = null;
+          p.pdfReady = false;
+          placeholder(p);
+        }
+      }
+    },
+    { root: $("viewport"), rootMargin: preloadMargin() },
+  );
+  for (const p of panels) observer.observe(p.el);
+}
+qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   displayQuality = value;
   zoomDetail = detail;
   // A filter list (never "none"): dark pages append invert() to it, and "none invert()" is
@@ -281,6 +367,10 @@ qualitySettings((value, rasterChanged, detail) => {
   // identity filter still makes every page a filtered layer, redrawn whole on each change.
   if (value.contrast === 100 && value.brightness === 100) document.documentElement.style.removeProperty("--page-filter");
   else document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
+  if (preloadChanged) {
+    backgrounds?.setMaxKept(preloadCacheSize());
+    attachPageObserver();
+  }
   if (rasterChanged) redrawPdfPages();
 });
 // PDF pages drawn again: another quality, or a screen with another pixel density (the window
@@ -760,7 +850,7 @@ async function load(file, preparedDocument = null) {
     backgrounds = new PdfBackgrounds((resource) => {
       if (token !== epoch) throw Error("Document closed");
       return call("pdf", { resource });
-    });
+    }, { maxKept: preloadCacheSize() });
     $("title").textContent = result.title || "Untitled note";
     document.title = `${$("title").textContent} — NoteComplete`;
     tabBar.update({ title: $("title").textContent, dirty: dirty && changed });
@@ -1013,26 +1103,7 @@ function buildPages(sizes) {
   buildPageList();
   resize();
   $("viewport").scrollTop = 0;
-  observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const p = panels[Number(entry.target.dataset.page)];
-        if (!p || p.el !== entry.target) continue;
-        p.near = entry.isIntersecting;
-        if (p.near) {
-          if (!p.view) renderPage(p);
-        } else if (gesture?.panel !== p) {
-          p.token++;
-          p.view = null;
-          p.ink = null;
-          p.pdfReady = false;
-          placeholder(p);
-        }
-      }
-    },
-    { root: $("viewport"), rootMargin: "600px 0px" },
-  );
-  for (const p of panels) observer.observe(p.el);
+  attachPageObserver();
 }
 async function movePage(from, to) {
   if (!doc || doc.canvas || editing || busy()) return;
@@ -1230,6 +1301,27 @@ const textBox = textBoxController({
 // Chinese input (chinese/ime.js) in the other places text is typed; Settings → Chinese in View.
 for (const id of ["chatInput", "findInput", "quizCheckText", "practiceFixFront", "practiceFixBack", "practiceExplainedArea", "practiceAskInput"]) if ($(id)) chineseField($(id));
 if ($("zhSettingsOpen")) $("zhSettingsOpen").onclick = openZhSettings;
+// Math Mode toolbar & R Statistics Bridge (math/math-bar.js).
+const mathBar = createMathBar({
+  container: $("mathModeBar"),
+  status,
+  onInsertMathBox: async (tex) => {
+    const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
+    if (!p || !ensureEditableLayer()) return;
+    await textBox.placeMath(p, tex);
+  },
+  onPlotFunction: async (expr) => {
+    const cleaned = String(expr || "").replace(/^\s*(?:y|f\(x\))\s*=\s*/i, "").trim();
+    await insertCompound(panels[page], "graph", null, { functions: [cleaned || "x^2"] });
+  },
+  onInsertRPrefab: async () => {
+    const rCard = PREFABS.find((c) => c.id === "r-normal") || { id: "r-normal", kind: "prefab", module: "r-math", label: "Normal distribution (R)", spec: { type: "r_figure", schemaVersion: 1, preset: "normal", title: "Normal(0, 1) — 95% Interval", params: { mean: 0, sd: 1, from: -1.96, to: 1.96, region: "between", color: "#245dc4" }, width: 480, height: 300 } };
+    await insertPrefab(panels[page], null, rCard);
+  },
+});
+if ($("mathModePill")) $("mathModePill").onclick = () => mathBar.toggle();
+if ($("viewMathMode")) $("viewMathMode").onclick = () => { closeMenus?.(); mathBar.toggle(); };
+if ($("mathSettingsOpen")) $("mathSettingsOpen").onclick = () => { closeMenus?.(); mathBar.openSettings("math"); };
 // Edit PDF (pdf-edit.js): a PDF's printed text turned into text boxes, block by block.
 const pdfEdit = pdfEditController({
   call,
@@ -1754,15 +1846,37 @@ async function renderPage(p, provided) {
     // placeholder until the sharper one arrives.
     const inkItems = result.pdf_background ? inkCount(result.svg) : null;
     const kind = result.pdf_background && (inkItems > INK_HEAVY ? "url" : "canvas");
-    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality, globalThis.devicePixelRatio || 1, kind]);
+    const rasterQual = displayQuality ? { scale: displayQuality.scale, megapixels: displayQuality.megapixels } : displayQuality;
+    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, rasterQual, globalThis.devicePixelRatio || 1, kind]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
       ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image:not(.pdf-detail)") : null;
     // A canvas (this page's, or the previous one kept until the new raster is ready) lies
     // beneath the SVG, so the SVG's paper must let it through.
     if (kind === "canvas" || previous?.localName === "canvas") underPaper(render);
-    if (previous?.localName === "canvas") render.prepend(previous);
-    else if (previous) render.querySelector("[data-background]")?.append(previous);
-    const kept = pdfKey === p.pdfKey ? previous : null;
+    let kept = pdfKey === p.pdfKey ? previous : null;
+    if (kept) {
+      if (kept.localName === "canvas") render.prepend(kept);
+      else render.querySelector("[data-background]")?.append(kept);
+    } else if (result.pdf_background) {
+      // Synchronous cache hit: attach preloaded PDF raster immediately with zero scrollPause flicker.
+      const place = backgroundPlacement(result.pdf_background, p.size);
+      const cached = backgrounds?.peekRaster(result.pdf_background, p.size, displayWidth * place.share, displayQuality, kind);
+      if (cached) {
+        if (typeof cached === "string") render.querySelector("[data-background]")?.append(pdfImage(cached, place));
+        else {
+          underPaper(render);
+          const canvas = cached.isConnected && cached.parentNode !== render ? copyCanvas(cached) : cached;
+          render.prepend(placeRaster(canvas, place, p.size));
+        }
+        if (previous) backgrounds?.release(previous.localName === "canvas" ? previous : previous.getAttribute("href"));
+        p.pdfKey = pdfKey;
+        p.rasterWidth = displayWidth;
+        kept = cached;
+      } else if (previous) {
+        if (previous.localName === "canvas") render.prepend(previous);
+        else render.querySelector("[data-background]")?.append(previous);
+      }
+    }
     applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
     overlay.classList.add("overlay");
@@ -1784,6 +1898,7 @@ async function renderPage(p, provided) {
     // Text boxes made from a PDF are drawn in its own font (pdf-edit.js), also in a later session.
     pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
+    syncStickyNotes({ ...p, view: result }, render, `${epoch}`);
     // Pinyin over the Chinese in text boxes, when on (chinese/ruby.js).
     // Math and Chinese pinyin overlays on page text boxes, drawn on the SVG after render.
     const svgEl = render.querySelector(":scope > svg");
@@ -4717,6 +4832,11 @@ document.addEventListener("keydown", (e) => {
     $("newWindow").click();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "m") {
+    e.preventDefault();
+    mathBar.toggle();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "j" && doc) {
     e.preventDefault();
     showDocument();
@@ -5130,6 +5250,56 @@ if ($("newNoteMenuDialog")) {
 }
 if ($("newMarkdownDoc")) $("newMarkdownDoc").onclick = () => openNewMarkdown();
 if ($("homeNewMarkdown")) $("homeNewMarkdown").onclick = () => { closeHomeFileMenu(); openNewMarkdown(); };
+const launchNewRDialog = () => {
+  if ($("newNoteMenuDialog")?.open) $("newNoteMenuDialog").close();
+  closeHomeFileMenu();
+  openNewRDialog({
+    status,
+    onOpenStudio: openRStudioTarget,
+    onCreatedWorkspace: async (created) => {
+      if (created?.folderPath && created?.folderListing) {
+        await groups.openFolder({ folder: created.folderPath, name: created.name, files: created.folderListing });
+        home?.renderRecent?.();
+      }
+    },
+    onCreatedFile: async (created) => {
+      if (created?.filePath) {
+        await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
+        home?.renderRecent?.();
+      }
+    },
+  });
+};
+if ($("newRStudioDoc")) $("newRStudioDoc").onclick = launchNewRDialog;
+if ($("homeMenuRStudio")) $("homeMenuRStudio").onclick = launchNewRDialog;
+if ($("textOpenRStudio")) {
+  $("textOpenRStudio").onclick = async () => {
+    const filePath = docMember?.source === "local" ? docMember.path : "";
+    const name = docMember?.name || `${textView.name || "script"}.R`;
+    const kind = /\.(rmd|qmd)$/i.test(name) ? "rmd" : "r";
+    await openRStudioTarget({ filePath, title: name, code: filePath ? "" : textView.text, kind });
+  };
+}
+// When an R script or text file opened from disk is edited externally in R Commander Studio,
+// focusing NoteComplete reloads the updated file cleanly if there are no unsaved in-app edits.
+window.addEventListener("focus", async () => {
+  if (!textView?.visible || !textView?.hasDocument || (dirty && changed)) return;
+  if (docMember?.source !== "local" || !docMember?.path || !window.notecompleteFiles?.readRecent) return;
+  try {
+    const bytes = await window.notecompleteFiles.readRecent(docMember.path);
+    if (!bytes) return;
+    const diskText = new TextDecoder("utf-8").decode(bytes);
+    if (diskText && diskText !== textView.text) {
+      await textView.open({
+        text: diskText,
+        name: textView.name,
+        markdown: textView.markdown,
+        key: docMember.name,
+      });
+      status(`Synced ${docMember.name} from disk.`);
+    }
+  } catch { /* File moved or unreadable. */ }
+});
 if ($("homeCreatePrefab")) $("homeCreatePrefab").onclick = () => insertPrefab(panels[page]);
 if ($("homeMenuNewHub")) $("homeMenuNewHub").onclick = () => { closeHomeFileMenu(); $("newNoteOpen")?.click(); };
 if ($("homeMenuBlank")) $("homeMenuBlank").onclick = () => { closeHomeFileMenu(); $("newDocument")?.click(); };
@@ -5682,9 +5852,10 @@ $("audioBar").addEventListener("keydown", (e) => {
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
-async function openChosen(file) {
+async function openChosen(file, entry = null) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
-  if (await openMediaFile(file)) return false;
+  const localPath = entry?.source === "local" ? (entry.path || "") : "";
+  if (await openMediaFile(file, { path: localPath, origin: entry?.origin || "Recent" })) return false;
   if (await openArchiveFile(file)) return false;
   if (!canReplace()) return false;
   await load(file);
@@ -5971,7 +6142,7 @@ async function restoreAfterUpdate() {
 }
 async function openFromLibrary(file, entry) {
   if (await openArchiveFile(file, { key: entry?.key || "", entry })) return false;
-  const opened = await openChosen(file);
+  const opened = await openChosen(file, entry);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
     // Search inside notes from Recent finds this note's kept text without reading it again.
@@ -6879,6 +7050,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
+  if ($("textOpenRStudio")) $("textOpenRStudio").hidden = !(textView.hasDocument && isRScriptName(docMember?.name || textView.key || textView.name));
   for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
@@ -7797,6 +7969,7 @@ async function pickWhole(args) {
   }
   if (!part) return item;
   const own = parts.filter((q) => q.id === part.id), frame = own.find((q) => q.spec);
+  if (!frame) return item;
   const members = (await Promise.all(own.map((q) => call("selection", { page: args.page, itemId: q.item }).catch(() => null)))).filter(Boolean);
   if (members.length < 2) return item;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;

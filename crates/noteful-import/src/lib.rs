@@ -1,7 +1,8 @@
 //! Goodnotes (`.goodnotes`) and Notability (`.ntb`) notebooks made into Noteful notes that
 //! NoteComplete edits. The notebook is read with oblyx and rebuilt as a Noteful note: ink as
-//! strokes, typed text as text boxes, pictures as images, shapes as real editable shapes,
-//! sticky notes as editable sticky-note prefabs, and the notebook's own PDF pages as page
+//! strokes (smoothed curves, highlighters under ink with multiply blend), typed text as text
+//! boxes, pictures as images, shapes as real editable shapes, sticky notes as editable
+//! sticky-note prefabs with owned ink/text on top, and the notebook's own PDF pages as page
 //! backgrounds. What Noteful cannot hold as an item (paper templates, arbitrary filled paths)
 //! is drawn into a vector PDF behind the page, so the page still looks as it did; anything else
 //! is left out with a warning. The original file is kept with the project as its `origin`.
@@ -20,6 +21,8 @@ pub mod pdf_edit;
 
 /// Noteful page units per PDF point.
 const UNITS_PER_POINT: f64 = 11. / 6.;
+/// Default translucent fill alpha Goodnotes 6 applies to shape boxes whose proto3 fill omits `a`.
+const GOODNOTES_SHAPE_FILL_ALPHA: f32 = 0.18;
 
 /// A note made from a notebook, with what could not be brought over.
 pub struct Imported {
@@ -121,7 +124,7 @@ fn goodnotes(bytes: &[u8]) -> Result<(Document, Vec<Page>, f64), String> {
             let mut page = doc
                 .decode_page(source, false)
                 .unwrap_or_else(|_| Page::new(src.uuid.clone(), Vec::new()));
-            clear_transparent_k21_fills(source, &mut page);
+            normalize_k21_shape_fills(source, &mut page);
             page
         })
         .collect();
@@ -129,15 +132,16 @@ fn goodnotes(bytes: &[u8]) -> Result<(Document, Vec<Page>, f64), String> {
     Ok((doc, pages, 1.))
 }
 
-/// Goodnotes 6 encodes `Color.a == 0.0` (unfilled shapes) by omitting proto3 field 4 in a
-/// kind-21 element's fill message (field 30). `oblyx::decode_rgba` defaults an absent field 4
-/// to `1.0`, turning unfilled outline shapes into opaque fills; clear `fill[3]` on those shapes.
-fn clear_transparent_k21_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
+/// Goodnotes 6 filled shape boxes (kind 21) store `{r, g, b}` in field 30 and omit field 4 (`a`)
+/// when using Goodnotes' default translucent fill tint (~18% opacity). `oblyx::decode_rgba`
+/// defaults an absent field 4 to `1.0` (solid opaque fill); normalize those shapes to
+/// `GOODNOTES_SHAPE_FILL_ALPHA` so the background tint shows cleanly without hiding ink.
+fn normalize_k21_shape_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
     use oblyx::pb::{bytes_of, fixed32_of, parse, records, varint_of};
     let Ok(recs) = records(&src.data) else {
         return;
     };
-    let mut unfilled = HashSet::new();
+    let mut translucent = HashSet::new();
     for rec in recs {
         let Ok(fs) = parse(rec) else { continue };
         if fs.len() != 1 || fs[0].num != 21 {
@@ -160,15 +164,15 @@ fn clear_transparent_k21_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
             .and_then(|b| parse(b).ok())
             .unwrap_or(one);
         let alpha_bits = fixed32_of(&color, 4).or_else(|| varint_of(&color, 4).map(|v| v as u32));
-        let is_zero = alpha_bits.is_none_or(|bits| {
+        let omitted = alpha_bits.is_none_or(|bits| {
             let a = f32::from_bits(bits);
             !a.is_finite() || a <= 0.0
         });
-        if is_zero {
-            unfilled.insert(uuid.to_owned());
+        if omitted {
+            translucent.insert(uuid.to_owned());
         }
     }
-    if unfilled.is_empty() {
+    if translucent.is_empty() {
         return;
     }
     for item in &mut page.items {
@@ -176,9 +180,9 @@ fn clear_transparent_k21_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
             if sh
                 .uuid
                 .as_deref()
-                .is_some_and(|u| unfilled.contains(u))
+                .is_some_and(|u| translucent.contains(u))
             {
-                sh.fill[3] = 0.0;
+                sh.fill[3] = GOODNOTES_SHAPE_FILL_ALPHA;
             }
         }
     }
@@ -193,18 +197,10 @@ fn is_header(keys: &[u32]) -> bool {
             .all(|k| matches!(k, 1 | 2 | 3 | 4 | 8 | 9 | 14 | 16 | 20 | 22 | 23))
 }
 
-/// A Goodnotes page with its elements in the order they were last written: ink written later
-/// is over ink written before it (a white pen over a mistake, a highlighter over its text). The
-/// page file does not keep that order (a real notebook stores its records in no particular
-/// order, with the strokes of one minute scattered over the file); each element's header has a
-/// clock that grows with every change (field 9, the writer's sequence number), so the records
-/// are put back in clock order, each header with its element record. A record without a header
-/// stays after the element before it. `None` when the page is already in order or its records
-/// cannot be read (oblyx reads it as it is). Pictures are then put under all ink (`Stacking`).
+/// A Goodnotes page with its elements in the order they were last written.
 fn chronological(src: &oblyx::doc::PageSource) -> Option<oblyx::doc::PageSource> {
     use oblyx::pb::{field_nums, parse, records, varint_of};
     let recs = records(&src.data).ok()?;
-    // Units of one or two records, with the clock they sort by.
     let mut units: Vec<(u64, &[&[u8]])> = Vec::new();
     let (mut i, mut last) = (0, 0);
     while i < recs.len() {
@@ -332,36 +328,40 @@ enum Element {
 }
 
 impl Element {
-    /// A picture (not a text box).
-    fn is_picture(&self) -> bool {
-        matches!(self, Element::Image(image) if image.text.is_none())
+    /// Stacking rank for Goodnotes: 0 = picture, 1 = highlighter stroke, 2 = opaque ink & text.
+    fn stack_rank(&self) -> u8 {
+        match self {
+            Element::Image(image) if image.text.is_none() => 0,
+            Element::Line(line) if line.tool == 1 => 1,
+            _ => 2,
+        }
     }
 }
 
 /// An editable NoteComplete overlay kept above the base `.noteful` (locked under the undo floor)
-/// so native shapes stay real resizable shapes and sticky notes stay editable prefabs.
+/// so native shapes stay real resizable shapes and sticky notes stay editable prefabs with their
+/// own strokes and text sitting cleanly on top of the card.
 enum Overlay {
     Shape {
         line: Line,
         adjustment: Option<Adjustment>,
     },
     Sticky {
+        id: String,
+        bounds: [f64; 4],
         frame: Line,
         picture: Image,
+        owned_texts: Vec<Image>,
+        owned_lines: Vec<Line>,
     },
 }
 
 /// What one page becomes.
 #[derive(Default)]
 struct PageOut {
-    /// Ink, pictures and text boxes in the notebook's order (for Goodnotes, the order they were
-    /// written in). The note draws them in the order they are added (`Stacking`).
     elements: Vec<Element>,
-    /// Real shapes and sticky-note prefabs kept editable in the project layer.
     overlays: Vec<Overlay>,
-    /// Vector drawing for the paper PDF behind the page, in PDF points.
     paper: Option<Content>,
-    /// The notebook's PDF behind the page: attachment, 0-based page, rect in units.
     pdf: Option<(String, u64, [f64; 4])>,
 }
 
@@ -375,14 +375,76 @@ fn over_white(c: [f32; 4]) -> [f32; 3] {
     [0, 1, 2].map(|i| c[i].clamp(0., 1.) * a + (1. - a))
 }
 
-/// How a notebook stacks pictures and ink on a page.
+/// Smooths sparse Goodnotes stroke control points using quadratic midpoint subdivision so curved
+/// handwriting (e.g. parentheses, letters) renders cleanly instead of polygonal straight segments,
+/// while preserving sharp corners and keeping total point counts well below Noteful's 8192 limit.
+fn smooth_stroke_points(pts: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
+    let n = pts.len();
+    if n < 3 || n > 2000 {
+        return pts;
+    }
+    let mut out = Vec::with_capacity(n * 3);
+    out.push(pts[0]);
+    for i in 1..n - 1 {
+        let p0 = pts[i - 1];
+        let p1 = pts[i];
+        let p2 = pts[i + 1];
+        let m0 = if i == 1 {
+            p0
+        } else {
+            [(p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5]
+        };
+        let m1 = if i == n - 2 {
+            p2
+        } else {
+            [(p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5]
+        };
+        let v1 = [p1[0] - p0[0], p1[1] - p0[1]];
+        let v2 = [p2[0] - p1[0], p2[1] - p1[1]];
+        let l1 = v1[0].hypot(v1[1]);
+        let l2 = v2[0].hypot(v2[1]);
+        // Keep genuine sharp corners crisp (e.g. acute cusps) and avoid subdividing tiny micro-steps.
+        let sharp = l1 > 1e-4
+            && l2 > 1e-4
+            && ((v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)) < -0.2;
+        let span = (m1[0] - m0[0]).hypot(m1[1] - m0[1]);
+        if sharp || span < 0.6 {
+            out.push(p1);
+            continue;
+        }
+        let steps = if span > 8.0 {
+            4usize
+        } else if span > 2.5 {
+            3usize
+        } else {
+            2usize
+        };
+        for s in 1..=steps {
+            let t = s as f64 / steps as f64;
+            let u = 1.0 - t;
+            out.push([
+                u * u * m0[0] + 2.0 * u * t * p1[0] + t * t * m1[0],
+                u * u * m0[1] + 2.0 * u * t * p1[1] + t * t * m1[1],
+            ]);
+        }
+    }
+    if let Some(&last) = pts.last() {
+        if out
+            .last()
+            .is_none_or(|p| (p[0] - last[0]).hypot(p[1] - last[1]) > 1e-4)
+        {
+            out.push(last);
+        }
+    }
+    out
+}
+
+/// How a notebook stacks pictures, highlighters and ink on a page.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stacking {
-    /// Goodnotes: pictures are always under the ink, typed text and shapes, whichever came
-    /// first, so handwriting over a pasted picture stays visible (a picture pasted later does
-    /// not cover it); pictures keep their order among themselves, and so does the rest.
+    /// Goodnotes: pictures under highlighters under opaque pen ink & typed text.
     PicturesUnderInk,
-    /// Everything in the notebook's order.
+    /// Highlighters under opaque ink; otherwise in notebook order.
     AsDrawn,
 }
 
@@ -485,8 +547,14 @@ fn build_bytes(
     for (slot, mut out) in outs.into_iter().enumerate() {
         page_overlays.push(std::mem::take(&mut out.overlays));
         if stacking == Stacking::PicturesUnderInk {
-            // A stable sort: pictures first, in their order, then the rest in theirs.
-            out.elements.sort_by_key(|e| !e.is_picture());
+            // Stable sort: pictures first, then highlighters (tool 1), then opaque pen ink & text.
+            out.elements.sort_by_key(Element::stack_rank);
+        } else {
+            // Even in AsDrawn notebooks, highlighters stay underneath opaque pen ink.
+            out.elements.sort_by_key(|e| match e {
+                Element::Line(l) if l.tool == 1 => 0u8,
+                _ => 1u8,
+            });
         }
         for element in out.elements {
             match element {
@@ -509,25 +577,41 @@ fn build_bytes(
         return Ok(base_noteful);
     }
 
-    // Reopen the base .noteful and attach real shapes and sticky-note prefabs as locked-floor
-    // project items so NoteComplete edits them natively instead of flattening them into ink bands.
+    // Reopen the base .noteful and attach real shapes and sticky-note prefabs (plus sticky-owned
+    // ink/text right on top of each sticky note) as locked-floor project items.
     let mut editor = Editor::open(&base_noteful).map_err(|e| e.message)?;
     for (slot, overlays) in page_overlays.into_iter().enumerate() {
         for overlay in overlays {
             match overlay {
-                Overlay::Sticky { frame, picture } => {
-                    if editor.add_line(slot, frame).is_err()
-                        || editor.add_image(slot, picture).is_err()
-                    {
-                        warnings.add("Sticky notes that could not be read");
-                    }
-                }
                 Overlay::Shape { line, adjustment } => {
                     let next_id = format!("new:{}", editor.history_mark().map_or(0, |(c, _)| c));
                     if editor.add_line(slot, line).is_err() {
                         warnings.add("Strokes or shapes that could not be read");
                     } else if let Some(adj) = adjustment {
                         let _ = editor.adjust_item(slot, &next_id, adj);
+                    }
+                }
+                Overlay::Sticky {
+                    frame,
+                    picture,
+                    owned_texts,
+                    owned_lines,
+                    ..
+                } => {
+                    if editor.add_line(slot, frame).is_err()
+                        || editor.add_image(slot, picture).is_err()
+                    {
+                        warnings.add("Sticky notes that could not be read");
+                        continue;
+                    }
+                    // Highlighters written on the sticky note go before opaque strokes on the sticky.
+                    let mut lines = owned_lines;
+                    lines.sort_by_key(|l| if l.tool == 1 { 0u8 } else { 1u8 });
+                    for l in lines {
+                        let _ = editor.add_line(slot, l);
+                    }
+                    for txt in owned_texts {
+                        let _ = editor.add_image(slot, txt);
                     }
                 }
             }
@@ -551,7 +635,6 @@ fn paper_pdf<'a>(sizes: &[[f32; 2]], contents: impl Iterator<Item = &'a [u8]>) -
         page.parent(tree);
         page.contents(content_id);
         page.finish();
-        // A page's content: white paper, then what was drawn on it.
         let mut white = Content::new();
         white.set_fill_rgb(1., 1., 1.);
         white.rect(0., 0., size[0], size[1]);
@@ -593,7 +676,6 @@ fn shape_outline(sh: &ShapeEl) -> Vec<[f32; 2]> {
         ]
         .map(|p| turn(p, [x, y]))
         .to_vec(),
-        // An ellipse is its centre and radii.
         Kind::Ellipse => (0..48)
             .map(|i| {
                 let a = i as f32 * std::f32::consts::TAU / 48.;
@@ -608,8 +690,6 @@ fn shape_outline(sh: &ShapeEl) -> Vec<[f32; 2]> {
     pts
 }
 
-/// Computes the NoteComplete `Adjustment` needed to rotate a shape `[start, end]` around `pivot`
-/// by `rot_rad` (since NoteComplete rotates items around their bounding-box centre).
 fn rotation_around(
     pivot: [f64; 2],
     start: [f64; 2],
@@ -632,7 +712,6 @@ fn rotation_around(
     })
 }
 
-/// Recognises a 4-point (or 5-point closed) Goodnotes polygon that forms a rectangle.
 fn polygon_as_rect(
     points: &[[f32; 2]],
     s: impl Fn(f32) -> f64,
@@ -659,7 +738,6 @@ fn polygon_as_rect(
     if l0 < 1e-2 || l1 < 1e-2 || l2 < 1e-2 || l3 < 1e-2 {
         return None;
     }
-    // Opposite edges must match in length and adjacent edges must be near-orthogonal (~4°).
     if (l0 - l2).abs() > l0.max(l2) * 0.04 + 2.0 || (l1 - l3).abs() > l1.max(l3) * 0.04 + 2.0 {
         return None;
     }
@@ -668,7 +746,6 @@ fn polygon_as_rect(
     if cos01 > 0.07 || cos12 > 0.07 {
         return None;
     }
-    // Axis-aligned rectangle?
     if (e0[1].abs() / l0 < 0.03) || (e0[0].abs() / l0 < 0.03) {
         let min_x = pts.iter().map(|p| p[0]).fold(f64::INFINITY, f64::min);
         let max_x = pts.iter().map(|p| p[0]).fold(f64::NEG_INFINITY, f64::max);
@@ -691,8 +768,6 @@ fn polygon_as_rect(
     ))
 }
 
-/// Converts a Goodnotes/Notability `ShapeEl` into a native NoteComplete `Shape` (plus optional
-/// rotation adjustment) whenever possible.
 fn native_shape(
     sh: &ShapeEl,
     s: impl Fn(f32) -> f64 + Copy,
@@ -734,103 +809,124 @@ fn native_shape(
     }
 }
 
-/// Renders a crisp transparent-margin RGBA PNG for a Sticky Note prefab (matching
-/// `apps/reader/prefabs/stickynote/render.js`) so imported sticky notes look sharp immediately.
+/// Renders a crisp 2×2 supersampled anti-aliased RGBA PNG for a Sticky Note prefab, anchored
+/// flush at top-left (0, 0) with a soft bottom-right shadow, subtle darker top adhesive strip,
+/// and smooth folded bottom-right corner.
 fn sticky_note_png(width: f64, height: f64, rgb: [f32; 3], fold: bool) -> Vec<u8> {
     let w_u = width.clamp(60., 800.);
     let h_u = height.clamp(60., 800.);
-    let scale = (384.0 / w_u.max(h_u)).clamp(1.0, 2.0);
-    let pw = (w_u * scale).round().clamp(64., 512.) as usize;
-    let ph = (h_u * scale).round().clamp(64., 512.) as usize;
-    let pad = (4.0 * scale).round() as i32;
-    let bx = pad;
-    let by = pad;
-    let bw = (pw as i32 - pad * 2).max(16);
-    let bh = (ph as i32 - pad * 2).max(16);
+    let scale = (512.0 / w_u.max(h_u)).clamp(1.0, 2.0);
+    let pw = (w_u * scale).round().clamp(96., 512.) as usize;
+    let ph = (h_u * scale).round().clamp(96., 512.) as usize;
+    let sh_pad = 4.0 * scale;
+    let bw = (pw as f64 - sh_pad).max(24.0);
+    let bh = (ph as f64 - sh_pad).max(24.0);
     let fold_px = if fold {
-        ((bw.min(bh) as f64) * 0.12).round() as i32
+        (bw.min(bh) * 0.115).round()
     } else {
-        0
+        0.0
     };
-    let strip_h = ((bh as f64) * 0.095).round().clamp(10. * scale, 26. * scale) as i32;
-    let border_w = scale.round().max(1.0) as i32;
+    let strip_h = (bh * 0.095).clamp(12.0 * scale, 26.0 * scale);
+    let border_w = (1.1 * scale).max(1.0);
 
     let base = [
-        (rgb[0].clamp(0., 1.) * 255.).round() as u8,
-        (rgb[1].clamp(0., 1.) * 255.).round() as u8,
-        (rgb[2].clamp(0., 1.) * 255.).round() as u8,
+        (rgb[0].clamp(0., 1.) * 255.),
+        (rgb[1].clamp(0., 1.) * 255.),
+        (rgb[2].clamp(0., 1.) * 255.),
     ];
-    let darken = |c: [u8; 3], amt: f64| -> [u8; 3] {
-        [0, 1, 2].map(|i| ((f64::from(c[i])) * (1. - amt)).round().clamp(0., 255.) as u8)
+    let darken = |c: [f32; 3], amt: f32| -> [f64; 3] {
+        [0, 1, 2].map(|i| f64::from((c[i] * (1. - amt)).clamp(0., 255.)))
     };
-    let header = darken(base, 0.065);
-    let border = darken(base, 0.18);
-    let fold_col = darken(base, 0.13);
-    let fold_shadow = darken(base, 0.22);
+    let c_base = darken(base, 0.0);
+    let c_header = darken(base, 0.065);
+    let c_border = darken(base, 0.18);
+    let c_fold = darken(base, 0.12);
+    let c_fold_sh = darken(base, 0.21);
 
-    let in_body = |x: i32, y: i32, ox: i32, oy: i32| -> bool {
-        let lx = x - (bx + ox);
-        let ly = y - (by + oy);
-        if lx < 0 || ly < 0 || lx >= bw || ly >= bh {
+    let in_body = |x: f64, y: f64, ox: f64, oy: f64| -> bool {
+        let lx = x - ox;
+        let ly = y - oy;
+        if lx < 0.0 || ly < 0.0 || lx > bw || ly > bh {
             return false;
         }
-        if fold_px > 0 && lx >= bw - fold_px && ly >= bh - fold_px {
-            // Cut away the bottom-right corner diagonal.
+        if fold_px > 0.0 && lx > bw - fold_px && ly > bh - fold_px {
             (lx - (bw - fold_px)) + (ly - (bh - fold_px)) <= fold_px
         } else {
             true
         }
     };
 
-    let sh_ox = (2.0 * scale).round() as i32;
-    let sh_oy = (3.0 * scale).round() as i32;
-    let fx = bx + bw - fold_px;
-    let fy = by + bh - fold_px;
+    let fx = bw - fold_px;
+    let fy = bh - fold_px;
+    let sh_ox = 2.2 * scale;
+    let sh_oy = 3.0 * scale;
 
-    let mut raw = Vec::with_capacity(ph * (1 + pw * 4));
-    for y in 0..ph as i32 {
-        raw.push(0); // PNG filter type: None
-        for x in 0..pw as i32 {
-            let mut px = [0u8, 0, 0, 0];
-            if in_body(x, y, sh_ox, sh_oy) {
-                px = [15, 23, 42, 31];
-            }
-            if in_body(x, y, 0, 0) {
-                let lx = x - bx;
-                let ly = y - by;
-                let on_edge = lx < border_w
-                    || ly < border_w
-                    || lx >= bw - border_w
-                    || ly >= bh - border_w
-                    || (fold_px > 0
-                        && lx >= bw - fold_px
-                        && ly >= bh - fold_px
-                        && ((lx - (bw - fold_px)) + (ly - (bh - fold_px))) >= fold_px - border_w);
-                let c = if on_edge {
-                    border
-                } else if fold_px > 0 && x >= fx && y >= fy {
-                    // Folded triangle inside the clipped corner (upper-left half of fold square)
-                    if x - fx < border_w || y - fy < border_w {
-                        border
-                    } else {
-                        fold_col
-                    }
-                } else if fold_px > 0
-                    && y >= fy
-                    && x < fx
-                    && x >= fx - (3.0 * scale).round() as i32
-                    && (y - fy) * (3.0 * scale).round().max(1.) as i32
-                        >= (fx - x) * fold_px.max(1)
-                {
-                    fold_shadow
-                } else if ly < strip_h {
-                    header
+    let sample = |sx: f64, sy: f64| -> [f64; 4] {
+        let mut px = [0.0, 0.0, 0.0, 0.0];
+        if in_body(sx, sy, sh_ox, sh_oy) {
+            px = [15.0, 23.0, 42.0, 30.0];
+        }
+        if in_body(sx, sy, 0.0, 0.0) {
+            let diag_dist = if fold_px > 0.0 && sx >= fx && sy >= fy {
+                (fold_px - ((sx - fx) + (sy - fy))) * std::f64::consts::FRAC_1_SQRT_2
+            } else {
+                999.0
+            };
+            let on_edge = sx < border_w
+                || sy < border_w
+                || sx > bw - border_w
+                || sy > bh - border_w
+                || diag_dist < border_w;
+            let c = if on_edge {
+                c_border
+            } else if fold_px > 0.0 && sx >= fx && sy >= fy {
+                if sx - fx < border_w * 0.9 || sy - fy < border_w * 0.9 {
+                    c_border
                 } else {
-                    base
-                };
-                px = [c[0], c[1], c[2], 255];
+                    c_fold
+                }
+            } else if fold_px > 0.0
+                && sy >= fy
+                && sx < fx
+                && sx >= fx - 3.2 * scale
+                && (sy - fy) * (3.2 * scale) >= (fx - sx) * fold_px
+            {
+                c_fold_sh
+            } else if sy < strip_h {
+                c_header
+            } else {
+                c_base
+            };
+            px = [c[0], c[1], c[2], 255.0];
+        }
+        px
+    };
+
+    // 2×2 supersampling for crisp anti-aliased folded corner and borders.
+    let offsets = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
+    let mut raw = Vec::with_capacity(ph * (1 + pw * 4));
+    for y in 0..ph {
+        raw.push(0);
+        for x in 0..pw {
+            let (mut r, mut g, mut b, mut a) = (0.0, 0.0, 0.0, 0.0);
+            for (ox, oy) in offsets {
+                let s = sample(x as f64 + ox, y as f64 + oy);
+                let sa = s[3] / 255.0;
+                r += s[0] * sa;
+                g += s[1] * sa;
+                b += s[2] * sa;
+                a += sa;
             }
-            raw.extend_from_slice(&px);
+            let out_a = (a * 0.25).clamp(0.0, 1.0);
+            let (or, og, ob) = if a > 1e-6 {
+                ((r / a).clamp(0., 255.), (g / a).clamp(0., 255.), (b / a).clamp(0., 255.))
+            } else {
+                (0.0, 0.0, 0.0)
+            };
+            raw.push(or.round() as u8);
+            raw.push(og.round() as u8);
+            raw.push(ob.round() as u8);
+            raw.push((out_a * 255.0).round() as u8);
         }
     }
 
@@ -843,7 +939,7 @@ fn sticky_note_png(width: f64, height: f64, rgb: [f32; 3], fold: bool) -> Vec<u8
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&(pw as u32).to_be_bytes());
     ihdr.extend_from_slice(&(ph as u32).to_be_bytes());
-    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
     write_png_chunk(&mut png, b"IHDR", &ihdr);
     write_png_chunk(&mut png, b"IDAT", &compressed);
     write_png_chunk(&mut png, b"IEND", &[]);
@@ -878,6 +974,13 @@ fn rgb_to_hex(rgb: [f32; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c(rgb[0]), c(rgb[1]), c(rgb[2]))
 }
 
+fn point_in_rect(p: [f64; 2], r: [f64; 4], pad: f64) -> bool {
+    p[0] >= r[0] - pad
+        && p[0] <= r[0] + r[2] + pad
+        && p[1] >= r[1] - pad
+        && p[1] <= r[1] + r[3] + pad
+}
+
 fn convert_page(
     doc: &Document,
     page: &Page,
@@ -894,7 +997,6 @@ fn convert_page(
         .items
         .iter()
         .any(|it| matches!(it, Item::PdfBackground(_)));
-    // Fills drawn into the page's paper PDF, or `false` when the page shows a notebook PDF.
     let fill = |out: &mut PageOut, contours: &[Vec<[f32; 2]>], c: [f32; 4]| -> bool {
         if has_pdf {
             return false;
@@ -918,15 +1020,16 @@ fn convert_page(
     };
     let rect =
         |x: f32, y: f32, w: f32, h: f32| vec![[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
-    let line = |points: &[[f32; 2]], width: f32, c: [f32; 4]| -> Option<Line> {
+    let make_line = |points: &[[f32; 2]], width: f32, c: [f32; 4], smooth: bool| -> Option<Line> {
         let mut points: Vec<[f64; 2]> = points.iter().map(|p| [s(p[0]), s(p[1])]).collect();
         if points.is_empty() || points.iter().flatten().any(|v| !v.is_finite()) {
             return None;
         }
         if points.len() == 1 {
             points.push(points[0]);
+        } else if smooth {
+            points = smooth_stroke_points(points);
         }
-        // Noteful keeps at most 8192 points a stroke: very long ones are thinned.
         if points.len() > 8192 {
             let step = points.len().div_ceil(8000);
             let last = *points.last().expect("not empty");
@@ -939,27 +1042,182 @@ fn convert_page(
         } else {
             1.
         };
-        Some(Line::new(points, width, rgba(c)))
+        let mut col = rgba(c);
+        let is_highlighter = col[3] < 0.95 && col[3] >= 0.01;
+        let mut l = Line::new(points, width, col);
+        if is_highlighter {
+            // Noteful highlighter (`tool = 1`) renders with `mix-blend-mode: multiply` and
+            // halves stored alpha (`scene::composite`), so double alpha up to 1.0 to match.
+            l.tool = 1;
+            col[3] = (col[3] * 2.0).min(1.0);
+            l.rgba = col;
+        }
+        Some(l)
     };
 
+    // Pass 1: create sticky note overlays first so we can bind their author text and `parented`
+    // handwritten strokes directly onto them.
+    let mut sticky_indices: Vec<usize> = Vec::new();
+    let mut consumed_texts: HashSet<usize> = HashSet::new();
     let mut sticky_idx = 0usize;
-    for item in &page.items {
+    for (idx, item) in page.items.iter().enumerate() {
+        let Item::Sticky(st) = item else { continue };
+        let (x, y, w, h) = (s(st.x), s(st.y), s(st.w).max(20.), s(st.h).max(20.));
+        if ![x, y, w, h].iter().all(|v| v.is_finite()) {
+            continue;
+        }
+        let id = format!("sticky-{slot}-{sticky_idx}");
+        let ink_part_id = format!("{id}:ink");
+        sticky_idx += 1;
+        let mut owned_texts = Vec::new();
+        let mut author_name = String::new();
+        // Goodnotes/oblyx emits the sticky note's author footer as the Item::Text right after it.
+        if let Some(Item::Text(t)) = page.items.get(idx + 1) {
+            let tx = s(t.x);
+            let ty = s(t.y);
+            if point_in_rect([tx, ty], [x, y, w, h], 10.) && t.size <= 14.5 {
+                let text: String = t.text.trim().chars().take(200).collect();
+                if !text.is_empty() {
+                    consumed_texts.insert(idx + 1);
+                    author_name = text.clone();
+                    let size = s(t.size).clamp(8., 16.);
+                    // Place cleanly inside the bottom-left padding so it never clips the border.
+                    let pad_x = 12.0_f64.min(w * 0.12);
+                    let box_h = size * 1.45;
+                    let box_y = (y + h - box_h - 8.0).max(y + 18.0);
+                    let box_w = (w - pad_x * 2.0 - 24.0).max(40.0);
+                    owned_texts.push(Image {
+                        base64: String::new(),
+                        mime: String::new(),
+                        bounds: [x + pad_x, box_y, box_w, box_h],
+                        layer: 0,
+                        text: Some(TextBox {
+                            text,
+                            font_size: size,
+                            rgba: [t.rgb[0], t.rgb[1], t.rgb[2], 0.78]
+                                .map(|v| f64::from(v).clamp(0., 1.)),
+                            bold: t.bold,
+                            italic: false,
+                            font: "Helvetica".into(),
+                            align: 0,
+                            underline: false,
+                            strikethrough: false,
+                            math: false,
+                            line_height: None,
+                            spans: vec![],
+                        }),
+                        joined: false,
+                        part: Some(Part {
+                            id: ink_part_id.clone(),
+                            kind: "prefab".into(),
+                            spec: None,
+                        }),
+                        under: false,
+                    });
+                }
+            }
+        }
+        let hex = rgb_to_hex(st.rgb);
+        let spec = serde_json::json!({
+            "module": "stickynote",
+            "type": "stickynote",
+            "color": hex,
+            "title": "",
+            "text": "",
+            "author": author_name,
+            "fontSize": 15,
+            "fold": true,
+            "lines": false,
+            "width": w.round().clamp(120., 800.) as i64,
+            "height": h.round().clamp(120., 800.) as i64,
+        })
+        .to_string();
+        let png = sticky_note_png(w, h, st.rgb, true);
+        let mut frame = Line::new(vec![[x, y], [x + w, y + h]], 0.5, [0., 0., 0., 0.]);
+        frame.shape = Some(Shape {
+            kind: ShapeKind::Rectangle,
+            start: [x, y],
+            end: [x + w, y + h],
+            fill: None,
+        });
+        frame.part = Some(Part {
+            id: id.clone(),
+            kind: "prefab".into(),
+            spec: Some(spec),
+        });
+        let picture = Image {
+            base64: STANDARD.encode(&png),
+            mime: "image/png".into(),
+            bounds: [x, y, w, h],
+            layer: 0,
+            text: None,
+            joined: true,
+            part: Some(Part {
+                id: id.clone(),
+                kind: "prefab".into(),
+                spec: None,
+            }),
+            under: false,
+        };
+        let overlay_pos = out.overlays.len();
+        out.overlays.push(Overlay::Sticky {
+            id,
+            bounds: [x, y, w, h],
+            frame,
+            picture,
+            owned_texts,
+            owned_lines: Vec::new(),
+        });
+        sticky_indices.push(overlay_pos);
+    }
+
+    // Pass 2: convert all other items, attaching `parented` strokes to their sticky note overlay.
+    for (idx, item) in page.items.iter().enumerate() {
         match item {
-            Item::Stroke(st) => match line(&st.points, st.width, st.rgba) {
-                Some(l) => out.elements.push(Element::Line(l)),
+            Item::Stroke(st) => match make_line(&st.points, st.width, st.rgba, true) {
+                Some(mut l) => {
+                    if st.parented && !sticky_indices.is_empty() {
+                        // Find the sticky note containing this parented stroke (or the only sticky).
+                        let mid = l.points[l.points.len() / 2];
+                        let target = sticky_indices
+                            .iter()
+                            .copied()
+                            .find(|&oi| match &out.overlays[oi] {
+                                Overlay::Sticky { bounds, .. } => point_in_rect(mid, *bounds, 12.),
+                                _ => false,
+                            })
+                            .or_else(|| (sticky_indices.len() == 1).then_some(sticky_indices[0]));
+                        if let Some(oi) = target {
+                            if let Overlay::Sticky {
+                                id, owned_lines, ..
+                            } = &mut out.overlays[oi]
+                            {
+                                l.part = Some(Part {
+                                    id: format!("{id}:ink"),
+                                    kind: "prefab".into(),
+                                    spec: None,
+                                });
+                                owned_lines.push(l);
+                                continue;
+                            }
+                        }
+                    }
+                    out.elements.push(Element::Line(l));
+                }
                 None => warnings.add("Strokes that could not be read"),
             },
             Item::Path(p) => {
                 if p.points.len() >= 2 && p.width > 0. {
                     out.elements
-                        .extend(line(&p.points, p.width, p.rgba).map(Element::Line));
+                        .extend(make_line(&p.points, p.width, p.rgba, false).map(Element::Line));
                 }
                 if let Some(head) = p.head {
                     let mut contour = head.to_vec();
                     contour.push(head[0]);
                     if !fill(&mut out, &[head.to_vec()], p.rgba) {
-                        out.elements
-                            .extend(line(&contour, p.width.max(1.), p.rgba).map(Element::Line));
+                        out.elements.extend(
+                            make_line(&contour, p.width.max(1.), p.rgba, false).map(Element::Line),
+                        );
                     }
                 }
             }
@@ -967,7 +1225,6 @@ fn convert_page(
                 let has_fill = sh.fill[3] >= 0.004;
                 let has_stroke = sh.stroke[3] >= 0.004 && sh.width > 0.;
                 if let Some((kind, a, b, adjustment)) = native_shape(sh, s) {
-                    // Keep as a real editable NoteComplete shape instead of flattening into ink.
                     let (c, width) = if has_stroke {
                         (sh.stroke, sh.width)
                     } else {
@@ -987,7 +1244,7 @@ fn convert_page(
                             end: b,
                             fill: has_fill.then(|| rgba(sh.fill)),
                         });
-                        // Filled shapes sit cleanly below imported ink so handwriting on top stays legible.
+                        // Filled shapes sit cleanly below imported ink so handwriting stays legible.
                         l.under = has_fill;
                         out.overlays.push(Overlay::Shape {
                             line: l,
@@ -1006,7 +1263,7 @@ fn convert_page(
                 if has_stroke || !has_fill {
                     let c = if has_stroke { sh.stroke } else { sh.fill };
                     out.elements
-                        .extend(line(&outline, sh.width.max(0.5), c).map(Element::Line));
+                        .extend(make_line(&outline, sh.width.max(0.5), c, false).map(Element::Line));
                 }
             }
             Item::FillPath(fp) => {
@@ -1014,59 +1271,10 @@ fn convert_page(
                     warnings.add("Filled drawings over a PDF page left out");
                 }
             }
-            Item::Sticky(st) => {
-                let (x, y, w, h) = (s(st.x), s(st.y), s(st.w).max(20.), s(st.h).max(20.));
-                if [x, y, w, h].iter().all(|v| v.is_finite()) {
-                    let id = format!("sticky-{slot}-{sticky_idx}");
-                    sticky_idx += 1;
-                    let hex = rgb_to_hex(st.rgb);
-                    let spec = serde_json::json!({
-                        "module": "stickynote",
-                        "type": "stickynote",
-                        "color": hex,
-                        "title": "",
-                        "text": "",
-                        "author": "",
-                        "fontSize": 15,
-                        "fold": true,
-                        "lines": false,
-                        "width": w.round().clamp(120., 800.) as i64,
-                        "height": h.round().clamp(120., 800.) as i64,
-                    })
-                    .to_string();
-                    let png = sticky_note_png(w, h, st.rgb, true);
-                    let mut frame = Line::new(vec![[x, y], [x + w, y + h]], 0.5, [0., 0., 0., 0.]);
-                    frame.under = true;
-                    frame.shape = Some(Shape {
-                        kind: ShapeKind::Rectangle,
-                        start: [x, y],
-                        end: [x + w, y + h],
-                        fill: None,
-                    });
-                    frame.part = Some(Part {
-                        id: id.clone(),
-                        kind: "prefab".into(),
-                        spec: Some(spec),
-                    });
-                    let picture = Image {
-                        base64: STANDARD.encode(&png),
-                        mime: "image/png".into(),
-                        bounds: [x, y, w, h],
-                        layer: 0,
-                        text: None,
-                        joined: true,
-                        part: Some(Part {
-                            id,
-                            kind: "prefab".into(),
-                            spec: None,
-                        }),
-                        under: true,
-                    };
-                    out.overlays.push(Overlay::Sticky { frame, picture });
-                }
+            Item::Sticky(_) => {
+                // Already handled in Pass 1.
             }
             Item::Background(bg) => {
-                // The paper template; a page showing a PDF shows that instead.
                 for (x, y, w, h, rgb) in &bg.rects {
                     fill(
                         &mut out,
@@ -1076,6 +1284,9 @@ fn convert_page(
                 }
             }
             Item::Text(t) => {
+                if consumed_texts.contains(&idx) {
+                    continue;
+                }
                 let text: String = t.text.chars().take(20_000).collect();
                 if text.trim().is_empty() {
                     continue;
@@ -1088,7 +1299,6 @@ fn convert_page(
                     .max()
                     .unwrap_or(1)
                     .max(1) as f64;
-                // oblyx places text at its baseline.
                 let bounds = [
                     s(t.x),
                     s(t.y) - size * 0.95,
@@ -1168,7 +1378,6 @@ fn convert_page(
 mod tests {
     use super::*;
 
-    /// The first x of each stroke of a page, in the order oblyx reads them.
     fn stroke_order(doc: &Document, src: &oblyx::doc::PageSource) -> Vec<f32> {
         let page = doc.decode_page(src, false).unwrap();
         page.items
@@ -1197,11 +1406,8 @@ mod tests {
             oblyx::goodnotes_write::write_goodnotes_to_vec(&[page], &Document::empty()).unwrap();
         let doc = Document::from_bytes(bytes).unwrap();
         let src = &doc.pages[0];
-        // Written in clock order: nothing to do.
         assert!(chronological(src).is_none());
         assert_eq!(stroke_order(&doc, src), [10., 20., 30., 40.]);
-        // The same records stored in another order (header and element stay together), as
-        // Goodnotes stores them: read back in the order they were written.
         let recs = oblyx::pb::records(&src.data).unwrap();
         let mut data = Vec::new();
         for unit in recs.chunks(2).rev() {
@@ -1271,21 +1477,22 @@ mod tests {
     fn sticky_note_png_is_valid_rgba_png() {
         let png = sticky_note_png(256., 256., [0.98, 0.91, 0.47], true);
         assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
-        assert!(png.len() > 100 && png.len() < 32_768);
+        assert!(png.len() > 100 && png.len() < 65_536);
     }
 
     #[test]
-    fn sticky_notes_become_editable_prefabs_under_handwriting() {
+    fn sticky_notes_cover_page_ink_and_own_their_parented_strokes() {
         use oblyx::doc::{Sticky, Stroke};
         let page = Page::new(
             "page",
             vec![
+                // Background page stroke underneath the sticky note (not parented)
                 Item::Stroke(Stroke {
-                    points: vec![[120., 140.], [180., 160.]],
+                    points: vec![[80., 280.], [160., 280.]],
                     width: 2.,
                     rgba: [0.1, 0.1, 0.1, 1.],
                     dash: None,
-                    parented: true,
+                    parented: false,
                 }),
                 Item::Sticky(Sticky {
                     x: 60.,
@@ -1293,6 +1500,24 @@ mod tests {
                     w: 256.,
                     h: 256.,
                     rgb: [0.98, 0.91, 0.47],
+                }),
+                // Author text immediately following sticky
+                Item::Text(oblyx::doc::TextBox {
+                    x: 68.,
+                    y: 324.,
+                    size: 12.,
+                    text: "Ana".into(),
+                    font: None,
+                    rgb: [0.3, 0.15, 0.0],
+                    bold: false,
+                }),
+                // Stroke written ON TOP of the sticky note (parented)
+                Item::Stroke(Stroke {
+                    points: vec![[100., 120.], [140., 140.], [180., 130.]],
+                    width: 2.,
+                    rgba: [0.1, 0.1, 0.1, 1.],
+                    dash: None,
+                    parented: true,
                 }),
             ],
         );
@@ -1311,19 +1536,67 @@ mod tests {
         let editor = Editor::open_project_bytes(&bytes).unwrap();
         let view = editor.view(0).unwrap();
         let parts = view["parts"].as_array().unwrap();
-        assert_eq!(parts.len(), 2);
-        assert!(parts.iter().all(|p| p["kind"] == "prefab"));
-        let spec: serde_json::Value =
-            serde_json::from_str(parts[0]["spec"].as_str().unwrap()).unwrap();
-        assert_eq!(spec["type"], "stickynote");
-        assert_eq!(spec["module"], "stickynote");
-        assert_eq!(spec["color"], "#fae878");
+        assert_eq!(parts.len(), 4, "frame + picture + owned stroke + author text");
+        let sticky_parts: Vec<_> = parts
+            .iter()
+            .filter(|p| p["id"] == "sticky-0-0")
+            .collect();
+        let owned_parts: Vec<_> = parts
+            .iter()
+            .filter(|p| p["id"] == "sticky-0-0:ink")
+            .collect();
+        assert_eq!(sticky_parts.len(), 2);
+        assert_eq!(owned_parts.len(), 2);
         let svg = view["svg"].as_str().unwrap();
+        let bg_stroke_at = svg.find("data-item=\"stroke:").unwrap();
         let img_at = svg.find("<image").unwrap();
-        let stroke_at = svg.find("data-item=\"stroke:").unwrap();
-        assert!(img_at < stroke_at, "sticky note must render under ink");
-        let picked = editor.pick_item(0, [280., 300.], 4.).unwrap().unwrap();
-        assert!(picked["id"].as_str().unwrap().starts_with("image:"));
+        let owned_stroke_at = svg.find("data-item=\"new:2\"").unwrap();
+        assert!(
+            bg_stroke_at < img_at && img_at < owned_stroke_at,
+            "page ink < sticky card < owned sticky ink"
+        );
         assert_eq!(view["can_undo"], false);
+    }
+
+    #[test]
+    fn highlighters_render_under_opaque_ink_with_multiply_and_curves_smooth() {
+        use oblyx::doc::Stroke;
+        let page = Page::new(
+            "page",
+            vec![
+                Item::Stroke(Stroke {
+                    points: vec![[40., 60.], [80., 80.], [120., 60.], [160., 80.]],
+                    width: 2.,
+                    rgba: [0.1, 0.1, 0.1, 1.0],
+                    dash: None,
+                    parented: false,
+                }),
+                // Translucent highlighter drawn AFTER the pen stroke
+                Item::Stroke(Stroke {
+                    points: vec![[35., 70.], [165., 70.]],
+                    width: 18.,
+                    rgba: [1.0, 0.9, 0.2, 0.4],
+                    dash: None,
+                    parented: false,
+                }),
+            ],
+        );
+        let mut warnings = Warnings::default();
+        let bytes = build_bytes(
+            "HL",
+            &Document::empty(),
+            &[page],
+            1.,
+            Stacking::PicturesUnderInk,
+            &mut warnings,
+        )
+        .unwrap();
+        let editor = Editor::open(&bytes).unwrap();
+        let svg = editor.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
+        let hl_at = svg.find("mix-blend-mode:multiply").expect("highlighter multiply");
+        let pen_at = svg.rfind("data-item=\"stroke:").unwrap();
+        assert!(hl_at < pen_at, "highlighter must sit underneath opaque pen ink");
+        let smoothed = smooth_stroke_points(vec![[0., 0.], [10., 10.], [20., 0.]]);
+        assert!(smoothed.len() > 3, "curved strokes should be subdivided smoothly");
     }
 }

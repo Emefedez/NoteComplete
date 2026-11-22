@@ -83,8 +83,7 @@ export function normalize(raw = {}) {
 export function render(raw) {
   const s = normalize(raw);
   const w = s.width, h = s.height;
-  const pad = 4; // shadow margin inside viewBox
-  const bx = pad, by = pad, bw = w - pad * 2, bh = h - pad * 2;
+  const bx = 0.5, by = 0.5, bw = w - 4.5, bh = h - 4.5;
   const fold = s.fold ? Math.round(Math.min(bw, bh) * 0.12) : 0;
   const rgb = hexToRgb(s.color);
   const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;

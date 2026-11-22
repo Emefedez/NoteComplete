@@ -331,6 +331,7 @@ const SHIPPED_PREFAB_NOTES: &str = concat!(
     include_str!("../../../apps/reader/prefabs/stickynote/ai.md"),
     include_str!("../../../apps/reader/prefabs/charts/ai.md"),
     include_str!("../../../apps/reader/prefabs/uml/ai.md"),
+    include_str!("../../../apps/reader/prefabs/r-math/ai.md"),
     include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
     include_str!("../../../apps/reader/prefabs/truthtable/ai.md"),
     include_str!("../../../apps/reader/prefabs/algorithms/ai.md"),

@@ -5301,3 +5301,220 @@ header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-read
   .global-audio-bar { flex: 1 1 180px; gap: 2px; padding: 0 4px; }
   .global-audio-bar .ga-time { display: none; }
 }
+
+/* Interactive sticky note top-strip peek/hide toggle (sticky-notes.js) */
+.sticky-toggle-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.sticky-top-toggle {
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px 6px;
+  min-height: 0;
+  border: none;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  cursor: pointer;
+}
+.sticky-top-toggle:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+.sticky-top-pill {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #242830;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  white-space: nowrap;
+}
+.sticky-top-toggle:hover .sticky-top-pill,
+.sticky-top-toggle:focus-visible .sticky-top-pill,
+.sticky-top-toggle.is-hidden .sticky-top-pill {
+  opacity: 1;
+}
+.sticky-top-toggle.is-hidden {
+  justify-content: flex-start;
+  background: color-mix(in srgb, var(--sticky-color, #fae778) 44%, transparent);
+  border-top: 2px solid color-mix(in srgb, var(--sticky-color, #fae778) 85%, #4a3800);
+}
+.sticky-owned-hidden {
+  opacity: 0.13 !important;
+  pointer-events: none !important;
+  transition: opacity 0.16s ease;
+}
+
+/* Math Mode bar & R Bridge settings (matching NoteComplete's chrome tokens) */
+.math-mode-pill {
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.math-mode-pill[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.math-mode-bar {
+  flex: none;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line);
+  padding: 5px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.math-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.math-bar-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+.math-bar-input {
+  flex: 1 1 220px;
+  min-width: 160px;
+  height: var(--control);
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+.math-bar-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  max-width: 360px;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.math-bar-preview:empty {
+  display: none;
+}
+.math-bar-preview.is-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: var(--danger-soft);
+}
+.math-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.math-bar-actions button {
+  padding: 2px 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.math-bar-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.math-bar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 2px;
+}
+.math-bar-int {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.math-bar-int input {
+  width: 72px;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.math-bridge-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--chrome);
+  padding: 12px;
+}
+.math-bridge-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.math-bridge-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.math-bridge-dot[data-state="studio"] { background: var(--ok); }
+.math-bridge-dot[data-state="rscript"] { background: var(--accent); }
+.math-bridge-dot[data-state="offline"] { background: var(--warn); }
+.math-bridge-pkgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.math-pkg-chip {
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.math-pkg-chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.math-pkg-chip.missing { color: var(--muted); }
+.math-bridge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.math-bridge-preview {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: auto;
+}
+.math-bridge-preview svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}

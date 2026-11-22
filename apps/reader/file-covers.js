@@ -1,6 +1,6 @@
 // Clean, color-coded SVG card icons/covers for media, office documents, e-books, notebooks,
 // HTML pages and archives, so Recent, Folders and Cloud cards never show a blank striped box.
-import { isAudioName, isVideoName } from './text-types.js';
+import { isAudioName, isVideoName, isRDataName, isRScriptName } from './text-types.js';
 
 export const ICON_COVER = 'data-cover="icon1"';
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -69,6 +69,12 @@ const GLYPHS = {
     <rect x="114" y="84" width="92" height="62" rx="5" fill="${accent}" fill-opacity="0.08"/>
     <rect x="144" y="100" width="32" height="9" rx="4" fill="${accent}"/>
   </g>`,
+  // R script / R Markdown / RData emblem
+  rdata: (accent) => `<g fill="none" stroke="${accent}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="112" y="58" width="96" height="86" rx="10" fill="${accent}" fill-opacity="0.10"/>
+    <path d="M126 124c14-2 22-34 34-34s20 32 34 34" stroke-width="4" opacity="0.55"/>
+    <text x="160" y="114" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="800" fill="${accent}" stroke="none" text-anchor="middle">R</text>
+  </g>`,
 };
 
 function describeCover(name) {
@@ -76,6 +82,8 @@ function describeCover(name) {
   if (!n) return null;
   if (isAudioName(n)) return { glyph: 'audio', bg: '#eef2ff', card: '#ffffff', stroke: '#c7d2fe', accent: '#4f46e5', pill: extOf(n) || 'AUDIO', sub: 'Audio' };
   if (isVideoName(n)) return { glyph: 'video', bg: '#fff1f2', card: '#ffffff', stroke: '#fecdd3', accent: '#e11d48', pill: extOf(n) || 'VIDEO', sub: 'Video' };
+  if (isRDataName(n)) return { glyph: 'rdata', bg: '#f3f0ff', card: '#ffffff', stroke: '#d8b4fe', accent: '#7c3aed', pill: extOf(n) || 'RDATA', sub: 'R Data' };
+  if (isRScriptName(n)) return { glyph: 'rdata', bg: '#eff6ff', card: '#ffffff', stroke: '#bfdbfe', accent: '#245dc4', pill: extOf(n) || 'R', sub: 'R Studio' };
   if (WORD_EXT.test(n)) return { glyph: 'doc', bg: '#eff6ff', card: '#ffffff', stroke: '#bfdbfe', accent: '#2563eb', pill: extOf(n), sub: 'Document' };
   if (SHEET_EXT.test(n)) return { glyph: 'sheet', bg: '#ecfdf5', card: '#ffffff', stroke: '#a7f3d0', accent: '#059669', pill: extOf(n), sub: 'Spreadsheet' };
   if (SLIDE_EXT.test(n)) return { glyph: 'slides', bg: '#fff7ed', card: '#ffffff', stroke: '#fed7aa', accent: '#ea580c', pill: extOf(n), sub: 'Presentation' };

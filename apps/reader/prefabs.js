@@ -370,8 +370,8 @@ export function prefabAspect(spec) {
 // a frame that keeps the spec (invisible under the picture) and the picture, parts of `id`.
 export function prefabItems(box, spec, png, { layer = 0, id = `p${Date.now().toString(36)}` } = {}) {
   const [x, y, w, h] = box;
-  const under = spec?.type === 'stickynote';
-  const frame = { points: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]], width: 0.5, rgba: under ? [0, 0, 0, 0] : [0.8, 0.84, 0.9, 1], tool: 0, layer, ...(under ? { under: true } : {}), shape: { kind: 'rectangle', start: [x, y], end: [x + w, y + h] }, part: { id, kind: 'prefab', spec: JSON.stringify(stamp(spec)) } };
-  const picture = { base64: png.base64, mime: png.mime, bounds: [x, y, w, h], layer, ...(under ? { under: true } : {}), part: { id, kind: 'prefab' } };
+  const sticky = spec?.type === 'stickynote';
+  const frame = { points: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]], width: 0.5, rgba: sticky ? [0, 0, 0, 0] : [0.8, 0.84, 0.9, 1], tool: 0, layer, shape: { kind: 'rectangle', start: [x, y], end: [x + w, y + h] }, part: { id, kind: 'prefab', spec: JSON.stringify(stamp(spec)) } };
+  const picture = { base64: png.base64, mime: png.mime, bounds: [x, y, w, h], layer, part: { id, kind: 'prefab' } };
   return { lines: [frame], images: [picture] };
 }

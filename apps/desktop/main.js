@@ -23,6 +23,7 @@ import { readerPermissionAllowed } from './permissions.js';
 import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 import { appLog } from './app-log.js';
 import { diagramRenderer } from './diagrams.js';
+import { createRBridge } from './r-bridge.js';
 import { pngClipboard, processRunner } from './png-clipboard.js';
 import { spawn } from 'node:child_process';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
@@ -216,7 +217,7 @@ const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
-const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico', 'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'aac', 'weba', 'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'docx', 'docm', 'dotx', 'doc', 'rtf', 'odt', 'fodt', 'xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'pptx', 'pptm', 'ppt', 'odp', 'epub', 'ipynb', 'txt', 'md', 'markdown', 'rst', 'adoc', 'asciidoc', 'org', 'rmd', 'qmd', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
+const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico', 'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'aac', 'weba', 'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'docx', 'docm', 'dotx', 'doc', 'rtf', 'odt', 'fodt', 'xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'pptx', 'pptm', 'ppt', 'odp', 'epub', 'ipynb', 'rdata', 'rda', 'rds', 'txt', 'md', 'markdown', 'rst', 'adoc', 'asciidoc', 'org', 'rmd', 'qmd', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 // Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
 // in their own session so sign-ins stay apart from the reader's storage.
@@ -598,10 +599,39 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:trash-opened', guarded((_event, file) => files.trashOpened(file)));
   // PlantUML diagrams drawn by the PlantUML installed here (diagrams.js).
   const diagrams = diagramRenderer({ folderOf: file => files.documentFolder(file) });
+  // R Math & Statistics Bridge (r-bridge.js): connects to R Commander Studio or local Rscript.
+  const rBridge = createRBridge({ openPath: (p) => shell.openPath(p) });
   // Copied items as a picture that keeps them (png-clipboard.js): the PNG byte for byte.
   const pictures = pngClipboard({ clipboard, ClipboardItem, run: processRunner(spawn) });
   ipcMain.handle('clipboard:write-png', guarded((_event, bytes, text) => pictures.write(bytes, typeof text === 'string' ? text : '')));
   ipcMain.handle('diagrams:plantuml', guarded((_event, text, file) => diagrams.plantuml(text, typeof file === 'string' ? file : '')));
+  ipcMain.handle('rbridge:status', guarded(() => rBridge.status()));
+  ipcMain.handle('rbridge:eval-figure', guarded((_event, request) => rBridge.evalFigure(request || {})));
+  ipcMain.handle('rbridge:eval-code', guarded((_event, request) => rBridge.evalCode(request || {})));
+  ipcMain.handle('rbridge:open-studio', guarded((_event, request) => rBridge.openInStudio(request || {})));
+  ipcMain.handle('rbridge:install-studio', guarded((event) => rBridge.installStudio({
+    onProgress: (p) => { if (!event.sender.isDestroyed()) event.sender.send('rbridge:install-progress', p); },
+  })));
+  ipcMain.handle('rbridge:pick-folder', guarded(async (event, defaultPath) => {
+    const startDir = typeof defaultPath === 'string' && defaultPath ? defaultPath : await files.folder();
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), {
+      title: 'Choose folder for R file or workspace',
+      defaultPath: startDir,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return chosen.canceled ? null : chosen.filePaths[0];
+  }));
+  ipcMain.handle('rbridge:create-item', guarded(async (_event, request) => {
+    const parentDir = request?.parentDir || await files.folder();
+    const created = await rBridge.createRItem({ ...(request || {}), parentDir });
+    if (created?.mode === 'workspace' && created.folderPath) {
+      await files.rememberFolder(created.folderPath);
+      for (const f of created.files || []) await files.remember(f);
+      return { ...created, folderListing: await files.listFolder(created.folderPath) };
+    }
+    if (created?.filePath) await files.remember(created.filePath);
+    return created;
+  }));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
   // by the reader's cancel message or when its tab goes away (archive-download.js).
   const downloads = downloadRegistry();

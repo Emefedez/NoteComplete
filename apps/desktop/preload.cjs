@@ -160,3 +160,17 @@ contextBridge.exposeInMainWorld('notecompleteCollab', {
   minimize: () => ipcRenderer.invoke('collab:minimize'),
   onEnded: callback => ipcRenderer.on('collab:ended', (_event, detail) => callback(detail)),
 });
+// R Math & Statistics Bridge (r-bridge.js): connects to R Commander Studio or local Rscript fallback.
+contextBridge.exposeInMainWorld('notecompleteRBridge', {
+  status: () => ipcRenderer.invoke('rbridge:status'),
+  evalFigure: request => ipcRenderer.invoke('rbridge:eval-figure', request || {}),
+  evalCode: request => ipcRenderer.invoke('rbridge:eval-code', request || {}),
+  openInStudio: request => ipcRenderer.invoke('rbridge:open-studio', request || {}),
+  installStudio: onProgress => {
+    const listener = (_event, p) => { if (typeof onProgress === 'function') onProgress(p); };
+    ipcRenderer.on('rbridge:install-progress', listener);
+    return ipcRenderer.invoke('rbridge:install-studio').finally(() => ipcRenderer.removeListener('rbridge:install-progress', listener));
+  },
+  pickFolder: defaultPath => ipcRenderer.invoke('rbridge:pick-folder', typeof defaultPath === 'string' ? defaultPath : ''),
+  createItem: request => ipcRenderer.invoke('rbridge:create-item', request || {}),
+});

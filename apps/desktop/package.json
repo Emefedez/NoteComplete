@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.2.67",
+  "version": "1.2.68",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -32,6 +32,7 @@
       "html-pdf.js",
       "library-files.js",
       "diagrams.js",
+      "r-bridge.js",
       "open-with.js",
       "linux-integration.js",
       "ai-runner.js",

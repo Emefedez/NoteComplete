@@ -1,0 +1,144 @@
+{
+  "id": "r-math",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 45,
+  "label": "R Math & Statistics",
+  "kind": "custom",
+  "output": "picture",
+  "types": ["r_figure"],
+  "names": { "r_figure": "R figure" },
+  "editor": "editor.js",
+  "groups": { "stats": "Statistics & R" },
+  "prefabs": [
+    {
+      "id": "r-normal",
+      "group": "stats",
+      "label": "Normal distribution (R)",
+      "hint": "Normal density curve with shaded tail or confidence interval rendered via R",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "normal",
+        "title": "Normal(0, 1) — 95% Interval",
+        "params": { "mean": 0, "sd": 1, "from": -1.96, "to": 1.96, "region": "between", "color": "#245dc4" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-t",
+      "group": "stats",
+      "label": "Student t distribution (R)",
+      "hint": "Student t density with degrees of freedom and shaded critical region",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "t",
+        "title": "Student t (df = 12)",
+        "params": { "df": 12, "from": 2.179, "to": 5, "region": "upper", "color": "#b83228" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-chisq",
+      "group": "stats",
+      "label": "Chi-squared distribution (R)",
+      "hint": "Chi-squared density curve with shaded upper rejection region",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "chisq",
+        "title": "Chi-Squared (df = 5)",
+        "params": { "df": 5, "from": 11.07, "to": 20, "region": "upper", "color": "#9a6200" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-binomial",
+      "group": "stats",
+      "label": "Binomial PMF (R)",
+      "hint": "Discrete binomial probability mass function bar plot",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "binomial",
+        "title": "Binomial(n = 15, p = 0.4)",
+        "params": { "size": 15, "prob": 0.4, "color": "#1d7a4a" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-histogram",
+      "group": "stats",
+      "label": "Histogram + Density (R)",
+      "hint": "Histogram of numeric values with overlaid kernel density curve",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "histogram",
+        "title": "Sample Histogram & Density",
+        "params": { "values": "12, 15, 14, 18, 19, 21, 17, 16, 22, 24, 18, 15, 20, 19, 17, 23", "bins": 7, "density": true, "xlab": "Value", "color": "#245dc4" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-boxplot",
+      "group": "stats",
+      "label": "Boxplot comparison (R)",
+      "hint": "Side-by-side boxplots comparing two or more numeric groups",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "boxplot",
+        "title": "Group Comparison",
+        "params": { "groupA": "14, 16, 15, 19, 18, 17, 21", "labelA": "Control", "groupB": "19, 22, 24, 21, 25, 23, 27", "labelB": "Treatment", "ylab": "Score", "color": "#245dc4" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-scatter",
+      "group": "stats",
+      "label": "Scatterplot + Linear Fit (R)",
+      "hint": "Scatterplot with ordinary least-squares regression line and R² summary",
+      "icon": "graph",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "scatter",
+        "title": "Linear Regression Fit",
+        "params": { "x": "1, 2, 3, 4, 5, 6, 7, 8", "y": "2.1, 3.8, 6.2, 7.9, 10.4, 11.7, 14.2, 15.8", "xlab": "x", "ylab": "y", "fit": true, "color": "#245dc4" },
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "r-custom",
+      "group": "stats",
+      "label": "Custom R plot",
+      "hint": "Write any base R or ggplot2 plotting snippet and cache its vector SVG inside the note",
+      "icon": "code",
+      "spec": {
+        "type": "r_figure",
+        "schemaVersion": 1,
+        "preset": "custom",
+        "title": "Custom R Figure",
+        "rCode": "x <- seq(-2*pi, 2*pi, length.out = 300)\nplot(x, sin(x), type = 'l', lwd = 2, col = '#245dc4', main = 'sin(x) and cos(x)', ylab = 'y')\nlines(x, cos(x), lwd = 2, col = '#b83228', lty = 2)\nlegend('topright', legend = c('sin(x)', 'cos(x)'), col = c('#245dc4', '#b83228'), lty = c(1, 2), lwd = 2, bty = 'n')",
+        "params": {},
+        "width": 480,
+        "height": 300
+      }
+    }
+  ]
+}

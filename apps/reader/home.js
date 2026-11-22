@@ -250,7 +250,10 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       }
       const file = await library.open(entry);
       // A file listed in a folder but never opened joins Recent now.
-      if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
+      if (file && entry.listed && entry.source === 'local') {
+        await library.rememberLocal(entry.path, entry.name, file.size || entry.size || 0);
+        delete entry.listed;
+      }
       if (!file) {
         status(`${entry.name} is no longer in the downloads folder. Open it again from ${entry.source === 'dropbox' ? 'Dropbox' : 'Drive'}.`, true);
         await library.forget(entry.key);
@@ -264,6 +267,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       }
       await library.touch(entry.key);
       await open(file, entry);
+      if (!$('empty')?.hidden) renderRecent();
     } catch (error) { status(error.message, true); }
   }
   async function renderRecent() {
@@ -376,6 +380,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isGithub = entry.source === 'github', isWebdav = entry.source === 'webdav';
     const isCloud = isDrive || isDropbox || isGithub || isWebdav, now = current();
+    const canTrashDisk = entry.source === 'local' && Boolean(entry.path && globalThis.notecompleteFiles?.trashOpened);
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
     $('forgetTitle').textContent = entryTitle(entry);
     $('forgetTitle').title = entry.name;
@@ -388,7 +393,9 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
           ? 'Deletes the copy kept on this device and its cover. The repository on GitHub stays as it is.'
           : isWebdav
             ? 'Deletes the copy kept on this device and its cover. The file in Nextcloud / WebDAV stays as it is.'
-            : 'Removes it from Recent. The file on your computer is not deleted.';
+            : entry.listed
+              ? 'Moves the file on your computer to the system Trash.'
+              : 'Removes it from Recent (or move the file on your computer to the system Trash).';
     $('forgetUpload').hidden = !changed;
     $('forgetDanger').hidden = !isDrive;
     $('forgetDanger').open = false;
@@ -398,7 +405,24 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     const close = () => { $('forgetDialog').hidden = true; $('renameRow').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
     const outside = event => { if (!$('forgetDialog').contains(event.target) && event.target !== anchor) close(); };
     const done = async (text) => { await library.forget(entry.key, { deleteFile: isCloud }); close(); status(text); renderRecent(); };
+    $('forgetLocal').hidden = Boolean(entry.listed && canTrashDisk);
     $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : isDropbox ? 'Removed from this device. Dropbox is unchanged.' : 'Removed from Recent.');
+    const trashBtn = $('forgetTrashLocal');
+    if (trashBtn) {
+      trashBtn.hidden = !canTrashDisk;
+      trashBtn.onclick = async () => {
+        try {
+          await globalThis.notecompleteFiles.trashOpened(entry.path);
+          await library.forget(entry.key);
+          await groups?.forget?.(entry.key);
+          close();
+          status(`${entry.name} moved to the trash.`);
+          renderRecent();
+        } catch (error) {
+          $('forgetStatus').textContent = error.message;
+        }
+      };
+    }
     $('forgetUpload').onclick = async () => {
       try {
         $('forgetStatus').textContent = 'Exporting the note…';
