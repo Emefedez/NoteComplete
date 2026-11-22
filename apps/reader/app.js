@@ -81,7 +81,7 @@ import { typesetMath } from "./math-boxes.js";
 import { textBoxController, holdInk, letGo, keepHeld, boxText } from "./text-box.js";
 import { pdfEditController } from "./pdf-edit.js";
 import { PREFABS, prefabName, recentPrefabs } from "./prefabs.js";
-import { syncStickyNotes } from "./sticky-notes.js";
+import { syncStickyNotes, stickyAt } from "./sticky-notes.js";
 import { createMathBar } from "./math/math-bar.js";
 import { openNewRDialog } from "./math/new-r-dialog.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
@@ -1001,6 +1001,13 @@ function buildPages(sizes) {
       if (tape) {
         p.audioTap = null;
         toggleTape(p, tape);
+        return;
+      }
+      // Tapping a sticky note makes it (and the ink and text on it) see-through, or solid again.
+      const sticky = stickyAt(p.render, tx, ty);
+      if (sticky) {
+        p.audioTap = null;
+        status(sticky.toggle() ? "Sticky note see-through: tap it again to show it." : "Sticky note shown.");
         return;
       }
       if (!p.view?.timings.length && !audio.recording?.timings?.length) return;

@@ -2,6 +2,7 @@
 // a selection's ⋯ circle. The item menu restyles, edits, copies or exports what is under it;
 // the page menu inserts, pastes and acts on the page. Also pictures of items and pages
 // (PNG, JPEG, SVG, or sent by QR). app.js wires it in with itemMenus().
+import { stickyAt } from "./sticky-notes.js";
 import { rgbaOf } from "./text-box.js";
 import { imageReady } from "./image-ready.js";
 import { download } from "./download.js";
@@ -67,6 +68,14 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
         { label: "As saved in the note", icon: "tape", checked: app.tapeMode === "note", run: () => setTapeMode("note") },
       ] },
     ];
+  }
+  // A sticky note under the pointer: make it (and the ink and text on it) see-through, or solid.
+  function stickyEntries(sticky) {
+    if (!sticky) return [];
+    const hidden = sticky.hidden();
+    return [{ label: hidden ? "Show this sticky note" : "See through this sticky note", icon: hidden ? "eye" : "eyeOff", run: () => {
+      status(sticky.toggle() ? "Sticky note see-through: tap it with Pan or right-click to show it." : "Sticky note shown.");
+    } }];
   }
   // A picture of an item (as drawn, on nothing) or of a page, to download, copy, share or send by
   // QR. `make(scale, type, quality)` draws it.
@@ -151,7 +160,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       status,
     });
   }
-  function itemMenu(item, x, y, { tape = null, zh = [] } = {}) {
+  function itemMenu(item, x, y, { tape = null, zh = [], sticky = null } = {}) {
     if (!app.doc || !item) return;
     const p = app.panels[item.page];
     // The tape itself, or something under (or over) it.
@@ -168,6 +177,8 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       ...zh,
       ...tapeEntries(p, tape),
       tape && "-",
+      ...stickyEntries(sticky),
+      sticky && "-",
       solvable && { label: `${exercise ? "Fill in" : "Solve"} ${lower}…`, icon: "draw", run: () => editCompound(item, "answer") },
       // A module's own entries (module.json "menu": [{ label, icon, mode }]): its editor opens
       // in that mode (host.mode), as "Play…" for an algorithm.
@@ -239,14 +250,15 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
     if (!app.doc || !p?.view) return;
     const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
     const tape = tapeAt(p, at);
+    const sticky = stickyAt(p.render, at[0], at[1]);
     // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js).
     const zh = await pageZhEntries(p, x, y).catch(() => []);
     try {
       const item = await pickWhole(args);
-      if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh }); }
+      if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh, sticky }); }
       const locked = await call("pickLock", args);
       if (locked?.locked) {
-        return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
+        return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", ...stickyEntries(sticky), sticky && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
       }
     } catch (e) { return status(e.message, true); }
     const { pageMenuOrder } = await import("./menu-config.js");
@@ -257,6 +269,8 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       ...zh,
       ...tapeEntries(p, tape),
       tape && "-",
+      ...stickyEntries(sticky),
+      sticky && "-",
       canPastePage && { label: "Paste here", icon: "copy", key: "Ctrl V", run: runPagePaste },
       canPastePage && "-",
       ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),

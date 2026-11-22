@@ -4,8 +4,24 @@
 // - Clicking the top adhesive strip toggles pseudo-transparent peek mode, fading both the sticky
 //   note card and all its owned ink/text to ~13% opacity (pointer-events: none) so the page
 //   content underneath can be read and interacted with, while leaving a sleek top pill to restore.
+// - The same toggle as tape has: a tap on the note with Pan (app.js) and its item and page menus
+//   (item-menus.js) find it with stickyAt(). What it owns is found again at each toggle, so ink
+//   or typed text added on it since the page was drawn fades with it.
 
 const collapsedByNote = new Map();
+// The sticky notes drawn in each page's render: [{ id, bounds, hidden(), toggle() }].
+const stickiesByRender = new WeakMap();
+
+// The top sticky note under page point (x, y) of this render, or null.
+export function stickyAt(render, x, y) {
+  const list = render ? stickiesByRender.get(render) : null;
+  if (!list) return null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const [bx, by, bw, bh] = list[i].bounds;
+    if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) return list[i];
+  }
+  return null;
+}
 
 function stickySetFor(noteKey) {
   let set = collapsedByNote.get(noteKey);
@@ -85,6 +101,7 @@ function findOwnedElements(svgEl, stickyId, pictureGroup, bounds, parts) {
 
 export function syncStickyNotes(panel, render, noteKey = 'default') {
   render.querySelector('.sticky-toggle-layer')?.remove();
+  stickiesByRender.delete(render);
   const parts = panel?.view?.parts;
   const svgEl = render?.querySelector(':scope > svg');
   if (!svgEl || !Array.isArray(parts) || !parts.length) return;
@@ -110,8 +127,9 @@ export function syncStickyNotes(panel, render, noteKey = 'default') {
   const layer = document.createElement('div');
   layer.className = 'sticky-toggle-layer';
 
+  const registered = [];
   for (const st of stickies) {
-    const owned = findOwnedElements(svgEl, st.id, st.picEl, st.bounds, parts);
+    let owned = findOwnedElements(svgEl, st.id, st.picEl, st.bounds, parts);
     const [bx, by, bw, bh] = st.bounds;
     const topStripH = Math.max(18, Math.min(34, bh * 0.13));
 
@@ -130,6 +148,9 @@ export function syncStickyNotes(panel, render, noteKey = 'default') {
 
     const applyState = () => {
       const hidden = collapsedSet.has(st.id);
+      // Ink or typed text drawn on the note since this page was rendered fades with it too.
+      for (const el of owned) el.classList.remove('sticky-owned-hidden');
+      if (svgEl.isConnected) owned = findOwnedElements(svgEl, st.id, st.picEl, st.bounds, parts);
       btn.classList.toggle('is-hidden', hidden);
       btn.setAttribute('aria-pressed', String(hidden));
       btn.title = hidden
@@ -148,14 +169,20 @@ export function syncStickyNotes(panel, render, noteKey = 'default') {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
+      toggle();
+    });
+    const toggle = () => {
       if (collapsedSet.has(st.id)) collapsedSet.delete(st.id);
       else collapsedSet.add(st.id);
       applyState();
-    });
+      return collapsedSet.has(st.id);
+    };
 
     applyState();
     layer.append(btn);
+    registered.push({ id: st.id, bounds: st.bounds, hidden: () => collapsedSet.has(st.id), toggle });
   }
 
+  stickiesByRender.set(render, registered);
   render.append(layer);
 }

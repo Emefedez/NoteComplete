@@ -65,6 +65,53 @@ function wrapText(text, maxChars) {
   return out;
 }
 
+// Rough width of `text` in em for a sans-serif face: narrow, wide and capital letters differ
+// enough that one average either wraps a title early or lets W and M run off the card.
+function emWidth(text, bold = false) {
+  let w = 0;
+  for (const ch of text) {
+    if (/[ilj.,:;'!|]/.test(ch)) w += 0.28;
+    else if (/[ frtI()\-\[\]]/.test(ch)) w += 0.36;
+    else if (/[mwMW@]/.test(ch)) w += 0.86;
+    else if (/[A-Z0-9]/.test(ch)) w += 0.66;
+    else if (/[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(ch)) w += 1;
+    else w += 0.55;
+  }
+  return w * (bold ? 1.07 : 1);
+}
+
+// Words of `text` in lines at most `maxEm` wide; a word wider than a line is split.
+function wrapToWidth(text, maxEm, bold) {
+  const out = [];
+  let line = '';
+  for (const word of String(text || '').replace(/\s+/g, ' ').trim().split(' ')) {
+    if (!word) continue;
+    const next = line ? `${line} ${word}` : word;
+    if (emWidth(next, bold) <= maxEm) { line = next; continue; }
+    if (line) out.push(line);
+    line = word;
+    while (emWidth(line, bold) > maxEm && line.length > 1) {
+      let cut = line.length - 1;
+      while (cut > 1 && emWidth(line.slice(0, cut), bold) > maxEm) cut--;
+      out.push(line.slice(0, cut));
+      line = line.slice(cut);
+    }
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+// The first `count` lines of a wrapped title; when there is more, the last one ends in "…".
+function titleLines(title, maxEm, count) {
+  const lines = wrapToWidth(title, maxEm, true);
+  if (lines.length <= count) return lines;
+  const kept = lines.slice(0, count);
+  let last = kept[count - 1];
+  while (last && emWidth(`${last}…`, true) > maxEm) last = last.slice(0, -1);
+  kept[count - 1] = `${last.trimEnd()}…`;
+  return kept;
+}
+
 export function normalize(raw = {}) {
   return {
     type: 'stickynote',
@@ -113,7 +160,11 @@ export function render(raw) {
   // Optional subtle ruled lines
   const textPadX = Math.max(14, Math.round(bw * 0.07));
   const lineStep = Math.round(s.fontSize * 1.42);
-  const topStart = by + stripH + Math.max(12, Math.round(s.fontSize * 0.8));
+  const titleSize = Math.round(s.fontSize * 1.12);
+  // The first line clears the adhesive strip by its own size: a title is larger than the text.
+  const topStart = s.title
+    ? by + stripH + 4 + Math.round(titleSize * 0.92)
+    : by + stripH + Math.max(12, Math.round(s.fontSize * 0.8));
   const bottomLimit = by + bh - (s.author ? 26 : 14);
   if (s.lines) {
     for (let ly = topStart + lineStep * 0.3; ly < bottomLimit; ly += lineStep) {
@@ -125,9 +176,7 @@ export function render(raw) {
   let cy = topStart;
   const availW = Math.max(40, bw - textPadX * 2);
   if (s.title) {
-    const titleSize = Math.round(s.fontSize * 1.12);
-    const titleMax = Math.max(8, Math.floor(availW / (titleSize * 0.58)));
-    for (const line of wrapText(s.title, titleMax).slice(0, 2)) {
+    for (const line of titleLines(s.title, availW / titleSize, 2)) {
       if (cy > bottomLimit) break;
       parts.push(`<text x="${bx + textPadX}" y="${cy}" font-size="${titleSize}" font-weight="700" fill="${ink}">${escapeHtml(line)}</text>`);
       cy += Math.round(titleSize * 1.35);
